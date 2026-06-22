@@ -3,7 +3,6 @@ package inventory
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
-	"github.com/crmarques/bootwright/internal/render/installer"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
@@ -24,7 +23,7 @@ func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
 func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
@@ -89,7 +88,7 @@ func infraComponentReferencedHosts(state v1alpha1.State) map[string]bool {
 func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
@@ -128,7 +127,7 @@ func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}

@@ -1,4 +1,4 @@
-package installer
+package inventory
 
 import "testing"
 
@@ -23,8 +23,8 @@ func TestAnsibleUUIDv5MatchesToUUIDFilter(t *testing.T) {
 		{"sno-libvirt-net", "0099bd38-a6a7-5a38-a220-bcbed899c71e"},
 	}
 	for _, tc := range cases {
-		if got := AnsibleUUIDv5(tc.name); got != tc.want {
-			t.Errorf("AnsibleUUIDv5(%q): got %s, want %s", tc.name, got, tc.want)
+		if got := ansibleUUIDv5(tc.name); got != tc.want {
+			t.Errorf("ansibleUUIDv5(%q): got %s, want %s", tc.name, got, tc.want)
 		}
 	}
 }

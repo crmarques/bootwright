@@ -36,7 +36,7 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 	env := stateview.Environment(state)
 	clusters := make([]any, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}

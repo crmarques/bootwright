@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/render/installer"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -20,7 +19,7 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 	// Container-cluster endpoints (api/api-int/apps) plus any additional ingress
 	// hosts pinned to the cluster ingress VIP.
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil || !clusterUsesNameResolution(state, ci, entryName) {
 			continue
 		}

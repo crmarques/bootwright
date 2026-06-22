@@ -7,7 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/ownership"
-	"github.com/crmarques/bootwright/internal/render/installer"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
@@ -254,7 +253,7 @@ func machineTaskHostSets(state v1alpha1.State) (map[string]bool, map[string]map[
 		group[hostName] = true
 	}
 	for _, cluster := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, cluster)
+		ci, err := clusterInstallForOCP(state, cluster)
 		if err != nil {
 			continue
 		}
@@ -307,7 +306,7 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 		out[hostName] = entry
 	}
 	for _, cluster := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, cluster)
+		ci, err := clusterInstallForOCP(state, cluster)
 		if err != nil {
 			continue
 		}

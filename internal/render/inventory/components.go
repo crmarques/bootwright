@@ -5,7 +5,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
-	"github.com/crmarques/bootwright/internal/render/installer"
 	"github.com/crmarques/bootwright/internal/roles"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
@@ -163,7 +162,7 @@ func usesVSphere(state v1alpha1.State) bool {
 
 func usesManagedHAProxy(state v1alpha1.State) bool {
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
@@ -189,7 +188,7 @@ func usesManagedProxy(state v1alpha1.State) bool {
 
 func usesManagedDNS(state v1alpha1.State) bool {
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
@@ -202,7 +201,7 @@ func usesManagedDNS(state v1alpha1.State) bool {
 
 func usesManagedArtifacts(state v1alpha1.State) bool {
 	for _, ocp := range state.ContainerClusters {
-		ci, err := installer.ClusterInstallForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
-	"github.com/crmarques/bootwright/internal/render/installer"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -104,7 +103,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	if d := libvirt.BMCEmulationDefaults; d != nil && d.Auth != nil {
 		credRef = d.Auth.CredentialsRef.Name
 	}
-	systemID := installer.AnsibleUUIDv5(clusterName + "-" + m.Name)
+	systemID := ansibleUUIDv5(clusterName + "-" + m.Name)
 
 	stageDir := fmt.Sprintf("/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/%s/vmedia", m.Source.ProviderRef.Name)
 	return map[string]any{
