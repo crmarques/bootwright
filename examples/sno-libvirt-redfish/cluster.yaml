@@ -11,12 +11,15 @@ spec:
     nodeSSH:
       keyPairRef: sno-libvirt-cluster-admin-ssh-key
     endpoints:
+      # Single-node OpenShift has no load balancer or VIP: the API and ingress
+      # are served on the node's own IP (Machine spec.addresses ip), so both
+      # endpoints resolve there.
       api:
-        address: 192.168.132.10
+        address: 192.168.132.20
         source:
           type: external
       ingress:
-        address: 192.168.132.11
+        address: 192.168.132.20
         source:
           type: external
 

@@ -38,8 +38,8 @@ func TestSNOLibvirtExampleMaterializesDefaults(t *testing.T) {
 	if !ok {
 		t.Fatal("api-int endpoint was not materialized from api")
 	}
-	if apiInt.Address != "192.168.132.10" || apiInt.Source.Type != v1alpha1.EndpointSourceExternal {
-		t.Fatalf("api-int endpoint = %+v, want address 192.168.132.10 source external", apiInt)
+	if apiInt.Address != "192.168.132.20" || apiInt.Source.Type != v1alpha1.EndpointSourceExternal {
+		t.Fatalf("api-int endpoint = %+v, want address 192.168.132.20 source external", apiInt)
 	}
 
 	platform := cluster.Spec.Install.Platform

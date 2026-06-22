@@ -15,7 +15,7 @@ emulated Redfish BMC.
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
 - `infra-component.yaml`: managed dnsmasq — bind address, upstream forwarders,
   and the ingress hostnames it publishes.
-- `cluster-machines.yaml`: API/app VIPs, per-machine IP, and platform render mode.
+- `cluster-machines.yaml`: per-machine IP, root device hints, and platform render mode.
 - `cluster.yaml`: OpenShift release, install endpoints, networking, and node
   binding.
 
@@ -64,7 +64,7 @@ else, the gate will fail listing the missing names; point the host resolver at
 
 ```bash
 sudo tee -a /etc/hosts >/dev/null <<'EOF'
-192.168.132.10 api.sno-libvirt.bootwright.test api-int.sno-libvirt.bootwright.test
-192.168.132.11 console-openshift-console.apps.sno-libvirt.bootwright.test oauth-openshift.apps.sno-libvirt.bootwright.test
+192.168.132.20 api.sno-libvirt.bootwright.test api-int.sno-libvirt.bootwright.test
+192.168.132.20 console-openshift-console.apps.sno-libvirt.bootwright.test oauth-openshift.apps.sno-libvirt.bootwright.test
 EOF
 ```
