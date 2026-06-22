@@ -12,18 +12,10 @@ type StorageAttachment struct {
 }
 
 func storageAttachmentsByStorageCluster(state v1alpha1.State) map[string][]StorageAttachment {
-	exports := map[string]v1alpha1.StorageExport{}
-	for _, export := range state.StorageExports {
-		exports[export.Metadata.Name] = export
-	}
 	out := map[string][]StorageAttachment{}
-	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
-		export, ok := exports[exportRef.Name]
-		if !ok {
-			continue
-		}
-		out[export.Spec.StorageClusterRef.Name] = append(out[export.Spec.StorageClusterRef.Name], StorageAttachment{
+	for _, effect := range addoninputs.StorageExportAttachments(state) {
+		key := effect.Export.Spec.StorageClusterRef.Name
+		out[key] = append(out[key], StorageAttachment{
 			Binding: effect.Binding,
 			Addon:   effect.Addon,
 			Input:   effect.Input,

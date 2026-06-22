@@ -112,6 +112,38 @@ func EffectBindings(state v1alpha1.State, effectType, provider string) []EffectB
 	return out
 }
 
+// StorageExportAttachment is one DataFoundation storage-export attachment
+// resolved to its target StorageExport. It carries the effect binding's
+// addon/input identity and the StorageExport its exportRef input names.
+type StorageExportAttachment struct {
+	Binding v1alpha1.ClusterAddonBinding
+	Addon   v1alpha1.ClusterAddonBindingAddon
+	Input   v1alpha1.ClusterAddonBindingInput
+	Export  v1alpha1.StorageExport
+}
+
+// StorageExportAttachments is the single traversal of the dataFoundation
+// storageExportAttachment effect bindings, resolving each binding's exportRef
+// input to its StorageExport. It is the one owner of the "walk the attachment
+// bindings and resolve the export" pattern; callers that need a subset filter
+// on the returned Export rather than re-walking the bindings.
+func StorageExportAttachments(state v1alpha1.State) []StorageExportAttachment {
+	exports := map[string]v1alpha1.StorageExport{}
+	for _, export := range state.StorageExports {
+		exports[export.Metadata.Name] = export
+	}
+	var out []StorageExportAttachment
+	for _, effect := range EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		exportRef := LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		export, ok := exports[exportRef.Name]
+		if !ok {
+			continue
+		}
+		out = append(out, StorageExportAttachment{Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input, Export: export})
+	}
+	return out
+}
+
 func LocalObjectReferenceValue(values map[string]any, field string) v1alpha1.LocalObjectReference {
 	return v1alpha1.LocalObjectReference{Name: namedValue(values, field)}
 }

@@ -17,20 +17,12 @@ type StorageAttachmentPlan struct {
 }
 
 func planStorageAttachmentActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
-	exportByName := map[string]v1alpha1.StorageExport{}
-	for _, export := range state.StorageExports {
-		exportByName[export.Metadata.Name] = export
-	}
-	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+	for _, effect := range addoninputs.StorageExportAttachments(state) {
 		cluster := effect.Binding.Spec.ClusterRef.Name
 		if !stateHasContainerCluster(state, cluster) {
 			continue
 		}
-		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
-		export, ok := exportByName[exportRef.Name]
-		if !ok {
-			continue
-		}
+		export := effect.Export
 		deps := []string{}
 		if installPhasePlanned {
 			deps = append(deps, "wait."+cluster)

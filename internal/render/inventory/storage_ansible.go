@@ -163,20 +163,13 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 }
 
 func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster string) []any {
-	exports := map[string]v1alpha1.StorageExport{}
-	for _, export := range state.StorageExports {
-		if export.Spec.StorageClusterRef.Name == storageCluster && export.Spec.DataFoundation != nil {
-			if cluster, ok := stateview.ClusterByName(state, storageCluster); ok && !datafoundation.ExternalDetailsSourceGenerated(export, cluster) {
-				continue
-			}
-			exports[export.Metadata.Name] = export
-		}
-	}
 	var out []any
-	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
-		export, ok := exports[exportRef.Name]
-		if !ok {
+	for _, effect := range addoninputs.StorageExportAttachments(state) {
+		export := effect.Export
+		if export.Spec.StorageClusterRef.Name != storageCluster || export.Spec.DataFoundation == nil {
+			continue
+		}
+		if cluster, ok := stateview.ClusterByName(state, storageCluster); ok && !datafoundation.ExternalDetailsSourceGenerated(export, cluster) {
 			continue
 		}
 		entry := map[string]any{
