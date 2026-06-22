@@ -1401,7 +1401,7 @@ func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 		t.Fatalf("targets = %#v, want %#v", targets, want)
 	}
 	root := t.TempDir()
-	if err := writeStorageExportSSHAnsibleFiles(filepath.Join(root, "inventory.yaml"), filepath.Join(root, "vars.yaml"), filepath.Join(root, "playbook.yaml"), targets[0], filepath.Join(root, "details.json"), storageExportExternalDetailsExporterArgs(ssh.Config, "demo")); err != nil {
+	if err := writeStorageExportSSHAnsibleFiles(filepath.Join(root, "inventory.yaml"), filepath.Join(root, "vars.yaml"), filepath.Join(root, "playbook.yaml"), targets[0], filepath.Join(root, "details.json"), datafoundation.ExternalDetailsExporterArgs(ssh.Config, "demo")); err != nil {
 		t.Fatalf("writeStorageExportSSHAnsibleFiles: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "inventory.yaml"))
