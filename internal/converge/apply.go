@@ -82,32 +82,22 @@ func ApplyModePreflight(mode workflow.ApplyMode, tasks []workflow.ApplyTask, run
 // The become password file is captured by the CLI's credential prompt and
 // passed in.
 func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable string, runScope Scope, plan WorkflowPlan, check bool, becomePasswordFile string, dryRun bool, label string, mode workflow.ApplyMode, streamAnsible bool) workflow.RunOptions {
-	return workflow.RunOptions{
-		State:              plan.State,
-		RenderedDir:        ctx.RenderedDir,
-		ClustersDir:        clustersDir,
-		RunsDir:            ctx.RunsDir,
-		ContextName:        ctx.Name,
-		SecretsDir:         ctx.SecretsDir,
-		ManagedServicesDir: ctx.ManagedServicesDir,
-		ProviderStateDir:   ctx.ProviderStateDir,
-		OwnershipDir:       ctx.OwnershipDir,
-		Executable:         executable,
-		Playbook:           runScope.ApplyPlaybook,
-		Limit:              plan.Limit,
-		Forks:              workflow.AnsibleForksForLimit(plan.State, plan.Limit),
-		ExtraVarPairs:      plan.ExtraVarPairs,
-		ArtifactsBaseName:  runScope.ArtifactsBaseName,
-		Check:              check,
-		AskBecomePass:      plan.AskBecomePass && becomePasswordFile == "",
-		BecomePasswordFile: becomePasswordFile,
-		UseControllingTTY:  UseControllingTTYForWorkflow(plan.Selected, plan.AskBecomePass && becomePasswordFile == ""),
-		DryRun:             dryRun,
-		ResolveInstaller:   plan.TargetsClusters,
-		Label:              label,
-		ApplyMode:          mode,
-		StreamAnsible:      streamAnsible,
-	}
+	opts := runOptionsForContext(ctx, clustersDir, executable, plan.State)
+	opts.Playbook = runScope.ApplyPlaybook
+	opts.Limit = plan.Limit
+	opts.Forks = workflow.AnsibleForksForLimit(plan.State, plan.Limit)
+	opts.ExtraVarPairs = plan.ExtraVarPairs
+	opts.ArtifactsBaseName = runScope.ArtifactsBaseName
+	opts.Check = check
+	opts.AskBecomePass = plan.AskBecomePass && becomePasswordFile == ""
+	opts.BecomePasswordFile = becomePasswordFile
+	opts.UseControllingTTY = UseControllingTTYForWorkflow(plan.Selected, plan.AskBecomePass && becomePasswordFile == "")
+	opts.DryRun = dryRun
+	opts.ResolveInstaller = plan.TargetsClusters
+	opts.Label = label
+	opts.ApplyMode = mode
+	opts.StreamAnsible = streamAnsible
+	return opts
 }
 
 // ApplyRunReporter is the progress surface ExecuteApply drives. The CLI's

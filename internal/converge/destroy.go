@@ -95,33 +95,23 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 	if streamAnsible {
 		runner = ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 	}
-	result, err := workflow.Run(cmdCtx, workflow.RunOptions{
-		State:              plan.State,
-		RenderedDir:        ctx.RenderedDir,
-		ClustersDir:        clustersDir,
-		RunsDir:            ctx.RunsDir,
-		ContextName:        ctx.Name,
-		SecretsDir:         ctx.SecretsDir,
-		ManagedServicesDir: ctx.ManagedServicesDir,
-		ProviderStateDir:   ctx.ProviderStateDir,
-		OwnershipDir:       ctx.OwnershipDir,
-		Executable:         executable,
-		BundleDir:          bundleDir,
-		Playbook:           playbook,
-		Limit:              plan.Limit,
-		ExtraVarPairs:      plan.ExtraVarPairs,
-		ArtifactsBaseName:  artifactsBaseName,
-		OutputLogPath:      logPath,
-		Check:              check,
-		AskBecomePass:      plan.AskBecomePass && becomePasswordFile == "",
-		BecomePasswordFile: becomePasswordFile,
-		UseControllingTTY:  UseControllingTTYForWorkflow(plan.Selected, plan.AskBecomePass && becomePasswordFile == ""),
-		DryRun:             dryRun,
-		Label:              label,
-		// Destroy mutates outside the apply scheduler; hold the run lease for
-		// the teardown so it is mutually exclusive with a concurrent apply.
-		AcquireRunLease: true,
-	}, runner, reporter)
+	opts := runOptionsForContext(ctx, clustersDir, executable, plan.State)
+	opts.BundleDir = bundleDir
+	opts.Playbook = playbook
+	opts.Limit = plan.Limit
+	opts.ExtraVarPairs = plan.ExtraVarPairs
+	opts.ArtifactsBaseName = artifactsBaseName
+	opts.OutputLogPath = logPath
+	opts.Check = check
+	opts.AskBecomePass = plan.AskBecomePass && becomePasswordFile == ""
+	opts.BecomePasswordFile = becomePasswordFile
+	opts.UseControllingTTY = UseControllingTTYForWorkflow(plan.Selected, plan.AskBecomePass && becomePasswordFile == "")
+	opts.DryRun = dryRun
+	opts.Label = label
+	// Destroy mutates outside the apply scheduler; hold the run lease for the
+	// teardown so it is mutually exclusive with a concurrent apply.
+	opts.AcquireRunLease = true
+	result, err := workflow.Run(cmdCtx, opts, runner, reporter)
 	return result, logPath, err
 }
 
@@ -140,23 +130,12 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err
 	}
-	runOpts := workflow.RunOptions{
-		State:              plan.State,
-		RenderedDir:        ctx.RenderedDir,
-		ClustersDir:        clustersDir,
-		RunsDir:            ctx.RunsDir,
-		ContextName:        ctx.Name,
-		SecretsDir:         ctx.SecretsDir,
-		ManagedServicesDir: ctx.ManagedServicesDir,
-		ProviderStateDir:   ctx.ProviderStateDir,
-		OwnershipDir:       ctx.OwnershipDir,
-		Executable:         executable,
-		BundleDir:          bundleDir,
-		Check:              check,
-		AskBecomePass:      plan.AskBecomePass && becomePasswordFile == "",
-		BecomePasswordFile: becomePasswordFile,
-		StreamAnsible:      streamAnsible,
-	}
+	runOpts := runOptionsForContext(ctx, clustersDir, executable, plan.State)
+	runOpts.BundleDir = bundleDir
+	runOpts.Check = check
+	runOpts.AskBecomePass = plan.AskBecomePass && becomePasswordFile == ""
+	runOpts.BecomePasswordFile = becomePasswordFile
+	runOpts.StreamAnsible = streamAnsible
 	prepared, err := workflow.PrepareDestroyTaskGraph(ctx.RunsDir, runOpts, tasks, workflow.ConcurrencyLimits{})
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err

@@ -19,25 +19,15 @@ import (
 func RunScopePreflight(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scope Scope, state v1alpha1.State, limit string, dryRun bool, streamAnsible bool, reporter workflow.Reporter) (string, error) {
 	logPath := workflow.PreflightLogPath(ctx.RunsDir, scope.Name)
 	runner := preflightRunner(stdout, stderr, streamAnsible)
-	_, err := workflow.Run(cmdCtx, workflow.RunOptions{
-		State:              state,
-		RenderedDir:        ctx.RenderedDir,
-		ClustersDir:        clustersDir,
-		RunsDir:            ctx.RunsDir,
-		ContextName:        ctx.Name,
-		SecretsDir:         ctx.SecretsDir,
-		ManagedServicesDir: ctx.ManagedServicesDir,
-		ProviderStateDir:   ctx.ProviderStateDir,
-		OwnershipDir:       ctx.OwnershipDir,
-		Executable:         executable,
-		BundleDir:          bundleDir,
-		Playbook:           PreflightPlaybook,
-		Limit:              limit,
-		ArtifactsBaseName:  "preflight-" + scope.Name,
-		OutputLogPath:      logPath,
-		DryRun:             dryRun,
-		Label:              scope.Name + " preflight",
-	}, runner, reporter)
+	opts := runOptionsForContext(ctx, clustersDir, executable, state)
+	opts.BundleDir = bundleDir
+	opts.Playbook = PreflightPlaybook
+	opts.Limit = limit
+	opts.ArtifactsBaseName = "preflight-" + scope.Name
+	opts.OutputLogPath = logPath
+	opts.DryRun = dryRun
+	opts.Label = scope.Name + " preflight"
+	_, err := workflow.Run(cmdCtx, opts, runner, reporter)
 	return logPath, err
 }
 

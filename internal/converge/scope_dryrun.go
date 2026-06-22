@@ -89,29 +89,19 @@ type DryRunDestroySafety struct {
 func BuildScopeDryRunReport(cmdCtx context.Context, ctx workspace.Context, executable string, bundleDir string, scope Scope, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, destroySafety *DryRunDestroySafety, forks int) (DryRunReport, error) {
 	clustersDir := workspace.ControllerClustersDir(ctx.Name)
 	runner := ansible.CommandRunner{Stdout: io.Discard, Stderr: io.Discard}
-	runResult, err := workflow.Run(cmdCtx, workflow.RunOptions{
-		State:              state,
-		RenderedDir:        ctx.RenderedDir,
-		ClustersDir:        clustersDir,
-		RunsDir:            ctx.RunsDir,
-		ContextName:        ctx.Name,
-		SecretsDir:         ctx.SecretsDir,
-		ManagedServicesDir: ctx.ManagedServicesDir,
-		ProviderStateDir:   ctx.ProviderStateDir,
-		OwnershipDir:       ctx.OwnershipDir,
-		Executable:         executable,
-		BundleDir:          bundleDir,
-		Playbook:           playbook,
-		Limit:              limit,
-		Forks:              forks,
-		ExtraVarPairs:      extraVarPairs,
-		ArtifactsBaseName:  artifactsBaseName,
-		Check:              check,
-		AskBecomePass:      askBecomePass,
-		DryRun:             true,
-		ResolveInstaller:   resolveInstaller,
-		Label:              scope.Name + " " + action,
-	}, runner, nil)
+	opts := runOptionsForContext(ctx, clustersDir, executable, state)
+	opts.BundleDir = bundleDir
+	opts.Playbook = playbook
+	opts.Limit = limit
+	opts.Forks = forks
+	opts.ExtraVarPairs = extraVarPairs
+	opts.ArtifactsBaseName = artifactsBaseName
+	opts.Check = check
+	opts.AskBecomePass = askBecomePass
+	opts.DryRun = true
+	opts.ResolveInstaller = resolveInstaller
+	opts.Label = scope.Name + " " + action
+	runResult, err := workflow.Run(cmdCtx, opts, runner, nil)
 	if err != nil {
 		return DryRunReport{}, err
 	}
