@@ -200,7 +200,7 @@ func validateSNOOpenShiftEndpoints(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 	}
 	var errs []string
 	for _, role := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
-		refName := containerEndpointRefName(ocp, role)
+		refName := containerEndpointRefName(role)
 		endpoint, ok := ci.Endpoints[refName]
 		if ok && endpoint.Source.Type == v1alpha1.EndpointSourceOpenShift {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s single-node clusters forbid spec.install.endpoints.%s source.type=openshift",
@@ -213,7 +213,7 @@ func validateSNOOpenShiftEndpoints(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 func validateContainerEndpointRefs(ocp v1alpha1.ContainerCluster, ci v1alpha1.ClusterInstall) []string {
 	var errs []string
 	for _, role := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
-		refName := containerEndpointRefName(ocp, role)
+		refName := containerEndpointRefName(role)
 		prefix := fmt.Sprintf("ContainerCluster/%s spec.install.endpoints.%s", ocp.Metadata.Name, role)
 		if refName == "" {
 			errs = append(errs, prefix+" is required")
@@ -240,7 +240,7 @@ func validateContainerEndpointRefs(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 	return errs
 }
 
-func containerEndpointRefName(ocp v1alpha1.ContainerCluster, role string) string {
+func containerEndpointRefName(role string) string {
 	switch role {
 	case v1alpha1.EndpointAPI:
 		return role

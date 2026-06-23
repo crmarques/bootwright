@@ -155,7 +155,7 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 	return errs
 }
 
-func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster) []string {
+func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
 	for _, gw := range items {
 		if e := validateName(v1alpha1.KindStorageObjectGateway, gw.Metadata.Name); e != "" {

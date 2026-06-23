@@ -3339,8 +3339,8 @@ spec:
           name: net-b
           namespace: ns-b
 `,
-		"infra-a.yaml":   kubeVirtCycleInfraYAML("infra-a", "provider-a", "net-a", "192.168.140.20", "192.168.140.21"),
-		"infra-b.yaml":   kubeVirtCycleInfraYAML("infra-b", "provider-b", "net-b", "192.168.141.20", "192.168.141.21"),
+		"infra-a.yaml":   kubeVirtCycleInfraYAML("infra-a", "provider-a", "net-a", "192.168.140.20"),
+		"infra-b.yaml":   kubeVirtCycleInfraYAML("infra-b", "provider-b", "net-b", "192.168.141.20"),
 		"cluster-a.yaml": kubeVirtCycleClusterYAML("cluster-a", "infra-a"),
 		"cluster-b.yaml": kubeVirtCycleClusterYAML("cluster-b", "infra-b"),
 		"extension.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -3403,7 +3403,7 @@ spec:
 `
 }
 
-func kubeVirtCycleInfraYAML(name, provider, network, nodeIP, ingressIP string) string {
+func kubeVirtCycleInfraYAML(name, provider, network, nodeIP string) string {
 	return `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: { name: ` + name + `-master-0 }

@@ -81,10 +81,7 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 	out := make([]ClusterSummary, 0, len(names))
 	for _, name := range names {
 		cluster := clustersByName[name]
-		asset, ok := assetsByName[name]
-		if !ok {
-			asset = render.InstallerAsset{ClusterName: name}
-		}
+		asset := assetsByName[name]
 		clusterSecretsDir := asset.ClusterSecretsDir
 		if clusterSecretsDir == "" && asset.WorkDir != "" {
 			clusterSecretsDir = filepath.Join(filepath.Dir(asset.WorkDir), "..", "secrets")

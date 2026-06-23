@@ -38,7 +38,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
-	errs = append(errs, validateStorageObjectGateways(state, state.StorageObjectGateways, clusters)...)
+	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters)...)
 	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, machines)...)
 	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
