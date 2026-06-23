@@ -127,7 +127,9 @@ func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPHostSpec) stri
 	for _, node := range nodes {
 		ref := node.MachineRef.Name
 		if ref == machineName {
-			return node.Role
+			// Load-balancer backend selection keys on the install-pool role, so
+			// an infra host is a worker here (the same as at install time).
+			return installer.InstallerNodeRole(node.Role)
 		}
 	}
 	return ""

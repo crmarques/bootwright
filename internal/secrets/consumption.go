@@ -62,6 +62,12 @@ func ConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
+		// The explicit cephadm cluster identity key is consumed by the cluster
+		// itself (Bootwright authorizes it on every host), independent of any
+		// node's access key.
+		if cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name == name {
+			return true
+		}
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 			machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
 			if ok && machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.KeyRef.Name == name {

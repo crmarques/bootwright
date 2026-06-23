@@ -92,7 +92,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephImage(prefix, ceph.Image)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
-	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines)...)
+	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, env)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.publicCIDRs[%d]", prefix, i), cidr)...)
 	}
@@ -240,7 +240,7 @@ func storageCephDistributionSupportsRHELVersion(distribution, version string) bo
 	return v1alpha1.StorageCephSupportsRHELVersion(version)
 }
 
-func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, env *v1alpha1.Environment) []string {
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.Host == "" {
@@ -249,6 +249,16 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 		errs = append(errs, fmt.Sprintf("%s.bootstrap.host %q is not listed in spec.ceph.topology.hosts", prefix, adm.Bootstrap.Host))
 	} else {
 		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.addressRef", cluster, adm.Bootstrap.Host, adm.Bootstrap.AddressRef.Name, machines, adm.AddressRef.Name)...)
+	}
+	if ref := adm.ClusterSSHKeyRef.Name; ref != "" && env != nil {
+		// The cephadm cluster identity must be a declared SSH key pair: a
+		// generated.sshKeyPair, or a file-sourced/context-local key pair the
+		// operator provides. A generated secret of any other kind is rejected.
+		if spec, ok := env.Spec.Secrets[ref]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q does not match any Environment.spec.secrets[] entry", prefix, ref))
+		} else if spec.Generated != nil && spec.Generated.SSHKeyPair == nil {
+			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q must reference an sshKeyPair secret", prefix, ref))
+		}
 	}
 	return errs
 }
@@ -319,6 +329,11 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 	sshUser := ""
 	sshKeyRef := ""
 	sshSeen := false
+	// An explicit cephadm cluster SSH key is the cluster's shared identity, so
+	// each node may connect with its own access key (e.g. a provided-OS arbiter
+	// reached over an operator-authorized key). Without it, the cluster identity
+	// is borrowed from the first host's access key, so every node must share it.
+	uniformAccessKeyRequired := cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name == ""
 	for i, node := range nodes {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
 		if node.Hostname == "" {
@@ -344,15 +359,15 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 				}
 				if machine.Spec.Access.SSH == nil {
 					errs = append(errs, fmt.Sprintf("Machine/%s spec.access.ssh is required for %s.machineRef", machine.Metadata.Name, owner))
-				} else {
+				} else if uniformAccessKeyRequired {
 					if !sshSeen {
 						sshUser = machine.Spec.Access.SSH.User
 						sshKeyRef = machine.Spec.Access.SSH.KeyRef.Name
 						sshSeen = true
 					} else if machine.Spec.Access.SSH.User != sshUser {
-						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
+						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q (set spec.ceph.cephadm.clusterSSHKeyRef to allow per-node access keys)", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
 					} else if machine.Spec.Access.SSH.KeyRef.Name != sshKeyRef {
-						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.keyRef %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
+						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.keyRef %q; all storage node Machines in one StorageCluster must use %q (set spec.ceph.cephadm.clusterSSHKeyRef to allow per-node access keys)", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
 					}
 				}
 				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef", cluster.Metadata.Name), cluster, node.Hostname, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)

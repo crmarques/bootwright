@@ -389,6 +389,9 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		if err := planStorageAttachmentActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
 			return nil, err
 		}
+		if err := planNodeConfigActivities(graph, state, phaseSet[ApplyPhaseBase]); err != nil {
+			return nil, err
+		}
 	}
 	return graph.Lower()
 }

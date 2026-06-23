@@ -127,12 +127,31 @@ type OCPHostSpec struct {
 	// <machineRef>.<cluster>.<baseDomain>, the OpenShift node convention; set
 	// it explicitly to pin a different name (kept verbatim). A node opts out to
 	// the bare machine name with hostname.source: machineName on its install
-	// profile.
+	// profile. This is also the node name the day-2 node-config step targets
+	// when applying labels/taints (for role infra and authored labels/taints),
+	// so it must match the name the node registers under.
 	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-	Role     string `yaml:"role" json:"role"`
+	// Role is master, worker, or infra. infra is an authoring role: the node
+	// installs as a worker and Bootwright promotes it day-2 (infra role label,
+	// NoSchedule taint, infra MachineConfigPool). See NodeRoleInfra.
+	Role string `yaml:"role" json:"role"`
 	// MachineRef selects the Machine that backs this node. It is required: it
 	// seeds the default hostname's left-most label and a Machine is node-bound
 	// by at most one cluster (and at most one host entry) across every
 	// ContainerCluster and StorageCluster.
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
+	// Labels are extra node labels Bootwright applies to this node day-2 (in
+	// addition to the infra role label for role infra). Optional.
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+	// Taints are extra node taints Bootwright applies to this node day-2 (in
+	// addition to the infra NoSchedule taint for role infra). Optional.
+	Taints []OCPNodeTaint `yaml:"taints,omitempty" json:"taints,omitempty"`
+}
+
+// OCPNodeTaint is a Kubernetes node taint applied day-2. Effect must be one of
+// NoSchedule, PreferNoSchedule, or NoExecute.
+type OCPNodeTaint struct {
+	Key    string `yaml:"key" json:"key"`
+	Value  string `yaml:"value,omitempty" json:"value,omitempty"`
+	Effect string `yaml:"effect" json:"effect"`
 }

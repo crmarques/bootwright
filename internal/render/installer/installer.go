@@ -105,7 +105,7 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 		"compute": []any{
 			map[string]any{
 				"name":     "worker",
-				"replicas": nodeRoleCount(ocp, v1alpha1.NodeRoleWorker),
+				"replicas": computeReplicaCount(ocp),
 			},
 		},
 		"controlPlane": map[string]any{

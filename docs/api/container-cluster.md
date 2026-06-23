@@ -38,7 +38,7 @@ spec: {}
 | `spec.distribution` | No | `type: openshift` | OpenShift or OKD release selection. |
 | `spec.install` | No | — | Install method, mode, platform, endpoints, artifact access, trust, serving certificates, and node SSH. |
 | `spec.controlPlane.replicas` | No | — | Control-plane replica count; when set, must equal the master host count. |
-| `spec.compute[].replicas` | No | — | Worker replica count per pool; their sum must equal the worker host count when any compute pool is declared. |
+| `spec.compute[].replicas` | No | — | Worker replica count per pool; their sum must equal the worker+infra host count when any compute pool is declared (infra hosts install as workers). |
 | `spec.networking` | No | Defaulted networks (see [Networking](#networking)) | Cluster and service networks and the OpenShift network type. |
 | `spec.hosts[]` | Yes | — | Node-to-machine bindings for the agent install. |
 
@@ -245,9 +245,10 @@ offending line.
     `controlPlane.replicas`, when set (non-zero), must equal the number of
     `master` hosts in `spec.hosts[]`; omitting it or setting `0` skips the
     check. The sum of `compute[].replicas` must equal the number of `worker`
-    hosts when any compute pool is declared. The master count is the
-    control-plane node count and the worker count is the worker node count, so
-    these fields restate the host roster rather than scaling it independently.
+    plus `infra` hosts when any compute pool is declared (infra hosts install in
+    the worker pool). The master count is the control-plane node count and the
+    worker count is the worker node count, so these fields restate the host
+    roster rather than scaling it independently.
 
 ## Hosts
 
@@ -256,9 +257,22 @@ offending line.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `hosts[].hostname` | Yes | — | Node hostname inside the cluster; unique within the cluster. |
-| `hosts[].role` | Yes | — | `master` or `worker`. |
+| `hosts[].hostname` | Yes | — | Node hostname inside the cluster; unique within the cluster. Also the node name the day-2 node-config step targets when applying labels/taints. |
+| `hosts[].role` | Yes | — | `master`, `worker`, or `infra`. |
 | `hosts[].machineRef` | Yes | — | `Machine` that backs this node; no default is derived. |
+| `hosts[].labels` | No | — | Extra node labels Bootwright applies day-2. |
+| `hosts[].taints` | No | — | Extra node taints (`key`, optional `value`, `effect` ∈ {`NoSchedule`, `PreferNoSchedule`, `NoExecute`}) applied day-2. |
+
+!!! note "Infra nodes are an authoring role"
+    OpenShift has no install-time `infra` pool, so an `infra` host installs as a
+    `worker` (it counts toward `compute[].replicas`) and Bootwright promotes it
+    day-2 against the running cluster: it adds the
+    `node-role.kubernetes.io/infra` label, a `node-role.kubernetes.io/infra:NoSchedule`
+    taint, and the `infra` `MachineConfigPool`, plus any `hosts[].labels`/`taints`
+    you author. Moving ingress, monitoring and other operands onto infra (the
+    matching tolerations/nodeSelectors) is left to you. Authored `labels`/`taints`
+    on a plain `master`/`worker` host are applied day-2 too, without the infra
+    label/MCP.
 
 !!! note "Where host binding rules are enforced"
     A referenced `Machine` must carry the `openshift-node` capability and may be

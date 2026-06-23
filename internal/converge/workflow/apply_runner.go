@@ -31,6 +31,9 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if task.Entry.Kind == ApplyTaskKindStorageAttachmentApply {
 		return runOneStorageAttachmentTask(ctx, stdout, stderr, runsDir, runID, opts, task, runnerFactory)
 	}
+	if task.Entry.Kind == ApplyTaskKindNodeConfigApply {
+		return runOneNodeConfigTask(ctx, stdout, stderr, runsDir, runID, opts, task)
+	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")
 	taskOpts := opts

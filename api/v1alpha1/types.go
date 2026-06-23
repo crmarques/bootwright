@@ -81,6 +81,20 @@ const (
 	// Node roles as rendered into agent-config.yaml.
 	NodeRoleMaster = "master"
 	NodeRoleWorker = "worker"
+	// NodeRoleInfra is an authoring role only: OpenShift has no install-time
+	// infra role, so an infra host installs as a worker and Bootwright promotes
+	// it day-2 (the node-role.kubernetes.io/infra label, a NoSchedule taint, and
+	// the infra MachineConfigPool). See OCPHostSpec.
+	NodeRoleInfra = "infra"
+
+	// InfraNodeRoleLabel is the OpenShift node-role label Bootwright applies to
+	// every infra host day-2; it also keys the infra MachineConfigPool selector.
+	InfraNodeRoleLabel = "node-role.kubernetes.io/infra"
+
+	// Kubernetes node taint effects, validated on OCPHostSpec.Taints.
+	TaintEffectNoSchedule       = "NoSchedule"
+	TaintEffectPreferNoSchedule = "PreferNoSchedule"
+	TaintEffectNoExecute        = "NoExecute"
 
 	// Installer platform render types. The baremetal spelling is the
 	// install-config platform key, used verbatim as type value and arm key.

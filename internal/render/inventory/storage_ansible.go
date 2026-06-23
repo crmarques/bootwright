@@ -6,6 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	cephrender "github.com/crmarques/bootwright/internal/render/ceph"
 	secret "github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
@@ -125,9 +126,32 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	return out
 }
 
+// storageClusterSSHVars renders the cephadm cluster SSH identity: the key
+// cephadm distributes and reaches every host with. When spec.ceph.cephadm
+// .clusterSSHKeyRef is set it is the explicit source (independent of any node's
+// access key), and the controller-side known_hosts is the cluster-wide managed
+// trust store so it covers every host cephadm adds. Omitted, it falls back to
+// the first topology host's access SSH key — the legacy behavior the
+// uniform-key validation backs.
 func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
 	if len(cluster.Spec.Ceph.Topology.Hosts) == 0 {
 		return nil
+	}
+	if ref := cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name; ref != "" {
+		out := map[string]any{}
+		if user := cluster.Spec.Ceph.Cephadm.ClusterSSHUser; user != "" {
+			out["user"] = user
+		}
+		if privatePath := secret.ResolveSSHPrivateKeyPath(ref, env, paths.SecretsDir); privatePath != "" {
+			out["privateKeyPath"] = privatePath
+		}
+		if publicPath := secret.ResolveSSHPublicKeyPath(ref, env, paths.SecretsDir); publicPath != "" {
+			out["publicKeyPath"] = publicPath
+		}
+		if knownHostsPath := sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()); knownHostsPath != "" {
+			out["knownHostsPath"] = knownHostsPath
+		}
+		return out
 	}
 	machine, ok := topology.NodeMachine(state, cluster, cluster.Spec.Ceph.Topology.Hosts[0].Hostname)
 	if !ok || machine.Spec.Access.SSH == nil {

@@ -24,6 +24,7 @@ const (
 	ActivityKindStorageAttachmentApply     ActivityKind = "StorageAttachmentApply"
 	ActivityKindClusterAddonApply          ActivityKind = "ClusterAddonApply"
 	ActivityKindClusterAddonWait           ActivityKind = "ClusterAddonWait"
+	ActivityKindNodeConfigApply            ActivityKind = "NodeConfigApply"
 )
 
 type CapabilityRef struct {

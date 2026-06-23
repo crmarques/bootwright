@@ -118,8 +118,23 @@ type StorageCephCommunitySpec struct {
 }
 
 type StorageCephadmSpec struct {
-	AddressRef LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
-	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+	AddressRef LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+	// ClusterSSHKeyRef names the sshKeyPair secret that becomes cephadm's own
+	// cluster management identity — the key cephadm distributes to and uses to
+	// reach every host. It is independent of each Machine's access.ssh.keyRef
+	// (how Bootwright connects to run the install phase). Omitted: the cluster
+	// SSH identity defaults to the first topology host's access.ssh key (the
+	// legacy behavior), which requires every node to share that one access key.
+	// Setting it lets storage nodes connect with their own access keys (e.g. a
+	// provided-OS arbiter reached over an operator-authorized key) while
+	// Bootwright authorizes this shared cluster key on every host.
+	ClusterSSHKeyRef LocalObjectReference `yaml:"clusterSSHKeyRef,omitempty" json:"clusterSSHKeyRef,omitempty"`
+	// ClusterSSHUser is the OS user cephadm manages every host as (cephadm
+	// --ssh-user); it must exist on every topology host. Defaults to root when
+	// clusterSSHKeyRef is set; ignored (the first host's access user is used)
+	// when it is omitted.
+	ClusterSSHUser string                  `yaml:"clusterSSHUser,omitempty" json:"clusterSSHUser,omitempty"`
+	Bootstrap      StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
 }
 
 type StorageCephadmBootstrap struct {

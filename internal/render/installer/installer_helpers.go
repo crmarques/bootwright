@@ -178,8 +178,18 @@ func ClusterInstallForOCP(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (
 	return v1alpha1.ClusterInstall{}, fmt.Errorf("%s: no machines or install infrastructure declared", ocp.Metadata.Name)
 }
 
+// InstallerNodeRole maps an authored host role to the install-pool role
+// (master or worker); an infra host installs as a worker. Exported so the
+// inventory renderer can keep load-balancer/install vars on the install role
+// while the desired role (infra) drives only the day-2 node-config step.
+func InstallerNodeRole(role string) string {
+	return installerNodeRole(role)
+}
+
 func installerNodeRole(role string) string {
-	if role == v1alpha1.NodeRoleWorker {
+	// OpenShift installs only master and worker pools; an infra host is a worker
+	// at install time and is promoted to infra day-2.
+	if role == v1alpha1.NodeRoleWorker || role == v1alpha1.NodeRoleInfra {
 		return "worker"
 	}
 	return "master"
@@ -193,6 +203,12 @@ func nodeRoleCount(ocp v1alpha1.ContainerCluster, role string) int {
 		}
 	}
 	return count
+}
+
+// computeReplicaCount is the install-time worker pool size: authored workers
+// plus infra hosts (which install as workers).
+func computeReplicaCount(ocp v1alpha1.ContainerCluster) int {
+	return nodeRoleCount(ocp, v1alpha1.NodeRoleWorker) + nodeRoleCount(ocp, v1alpha1.NodeRoleInfra)
 }
 
 // pullSecretPlaceholder encodes the SecretRef name as the auths-key of

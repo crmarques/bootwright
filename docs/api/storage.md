@@ -47,6 +47,8 @@ below cover each `spec` only.
 | `ceph.community.mirror` | No | `https://download.ceph.com` | Upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Environment.spec.entitlements[]` entry. Must resolve to a Red Hat Ceph (for `redhat`) or IBM Storage Ceph (for `ibm`) entitlement. Must be empty for `oss`. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
+| `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node, so nodes may use their own `access.ssh.keyRef` (e.g. a provided-OS arbiter reached over an operator-authorized key). |
+| `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
 | `ceph.cephadm.bootstrap.host` | Yes | — | Topology host that cephadm bootstraps on. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the host machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |

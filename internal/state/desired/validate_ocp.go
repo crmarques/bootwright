@@ -148,6 +148,7 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	}
 	master := 0
 	worker := 0
+	infra := 0
 	seenHostnames := map[string]bool{}
 	for i, node := range ocp.Spec.Hosts {
 		prefix := fmt.Sprintf("ContainerCluster/%s spec.hosts[%d]", ocp.Metadata.Name, i)
@@ -162,9 +163,12 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 			master++
 		case v1alpha1.NodeRoleWorker:
 			worker++
+		case v1alpha1.NodeRoleInfra:
+			infra++
 		default:
-			errs = append(errs, fmt.Sprintf("%s.role %q must be master or worker", prefix, node.Role))
+			errs = append(errs, fmt.Sprintf("%s.role %q must be master, worker, or infra", prefix, node.Role))
 		}
+		errs = append(errs, validateNodePlacement(prefix, node)...)
 		if node.MachineRef.Name == "" {
 			errs = append(errs, fmt.Sprintf("%s.machineRef is required", prefix))
 			continue
@@ -187,9 +191,35 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	for _, pool := range ocp.Spec.Compute {
 		workerReplicas += pool.Replicas
 	}
-	if len(ocp.Spec.Compute) > 0 && workerReplicas != worker {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.compute worker replicas %d does not match worker node count %d",
-			ocp.Metadata.Name, workerReplicas, worker))
+	// Infra hosts install in the worker pool, so the compute replica count
+	// covers workers and infra together.
+	if computeNodes := worker + infra; len(ocp.Spec.Compute) > 0 && workerReplicas != computeNodes {
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.compute worker replicas %d does not match worker+infra node count %d",
+			ocp.Metadata.Name, workerReplicas, computeNodes))
+	}
+	return errs
+}
+
+// validateNodePlacement checks the optional day-2 node labels and taints: label
+// keys must be non-empty and taint effects must be a valid Kubernetes effect.
+func validateNodePlacement(prefix string, node v1alpha1.OCPHostSpec) []string {
+	var errs []string
+	for key := range node.Labels {
+		if strings.TrimSpace(key) == "" {
+			errs = append(errs, prefix+".labels contains an empty key")
+		}
+	}
+	for j, taint := range node.Taints {
+		owner := fmt.Sprintf("%s.taints[%d]", prefix, j)
+		if strings.TrimSpace(taint.Key) == "" {
+			errs = append(errs, owner+".key is required")
+		}
+		switch taint.Effect {
+		case v1alpha1.TaintEffectNoSchedule, v1alpha1.TaintEffectPreferNoSchedule, v1alpha1.TaintEffectNoExecute:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.effect %q must be one of {%s, %s, %s}", owner, taint.Effect,
+				v1alpha1.TaintEffectNoSchedule, v1alpha1.TaintEffectPreferNoSchedule, v1alpha1.TaintEffectNoExecute))
+		}
 	}
 	return errs
 }

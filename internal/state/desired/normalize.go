@@ -292,6 +292,12 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if adm.Bootstrap.AddressRef.Name == "" {
 		adm.Bootstrap.AddressRef = adm.AddressRef
 	}
+	// An explicit cephadm cluster SSH key carries an explicit manage user;
+	// default it to root. Leaving it empty when no clusterSSHKeyRef is set keeps
+	// the legacy path, where the user is borrowed from the first host's access.
+	if adm.ClusterSSHKeyRef.Name != "" && adm.ClusterSSHUser == "" {
+		adm.ClusterSSHUser = "root"
+	}
 	// A topology host's cephadm hostname defaults to the fully-qualified node
 	// name; normalizeNodeHostnames fills it once baseDomain and the backing
 	// machine's install profile are in scope. The explicit field is a signal
