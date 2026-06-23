@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -127,23 +128,29 @@ context entirely and recreate it from the source.`,
 		p := output.New(stdout)
 		p.Command("context init")
 		p.Section("Context")
-		p.Fields(contextFields(ctx))
-		p.Section("Input")
-		p.Status(output.StatusOK, "copied from", source)
-		p.Status(output.StatusOK, "input dir", ctx.InputDir+"; re-run `bootwright context update -f <dir>` to refresh it")
-		p.Section("Runtime")
-		if bundleSkipped {
-			p.Status(output.StatusSkip, "Ansible bundle", "embedded bundle not synced in this build")
-		} else if bundle.Reused {
-			p.Status(output.StatusOK, "Ansible bundle", "cache current at "+bundle.Dir)
-		} else {
-			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
-		}
-		p.Summary(output.StatusOK, name, "current context")
+		p.Status(output.StatusOK, name, "created at "+ctx.BaseDir)
+		p.Status(output.StatusOK, "input", "copied from "+source)
+		p.Status(output.StatusOK, "input dir", ctx.InputDir)
+		printBundleStatus(p, bundle, bundleSkipped)
+		p.Summary(output.StatusOK, "context "+name, "initialized and set as the current context")
 		printNextStatusHint(stdout)
 		return nil
 	}
 	return cmd
+}
+
+// printBundleStatus reports how the embedded Ansible bundle was prepared during
+// context init: skipped (build without an embedded bundle), reused from cache,
+// or freshly extracted.
+func printBundleStatus(p *output.Printer, result bundle.AnsibleBundleResult, skipped bool) {
+	switch {
+	case skipped:
+		p.Status(output.StatusSkip, "Ansible bundle", "embedded bundle not synced in this build")
+	case result.Reused:
+		p.Status(output.StatusOK, "Ansible bundle", "cache current at "+result.Dir)
+	default:
+		p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s)", result.Files))
+	}
 }
 
 func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -200,11 +207,11 @@ state — is preserved.`,
 		p := output.New(stdout)
 		p.Command("context update")
 		p.Section("Context")
-		p.Fields(contextFields(ctx))
-		p.Section("Input")
-		p.Status(output.StatusOK, "copied from", source)
+		p.Status(output.StatusOK, ctx.Name, "input replaced")
+		p.Status(output.StatusOK, "input", "copied from "+source)
+		p.Status(output.StatusOK, "input dir", ctx.InputDir)
 		p.Status(output.StatusOK, "state", "preserved (secrets, runs, rendered, clusters, ownership)")
-		p.Summary(output.StatusOK, ctx.Name, "input replaced")
+		p.Summary(output.StatusOK, "context "+ctx.Name, "input replaced from "+source)
 		printNextStatusHint(stdout)
 		return nil
 	}

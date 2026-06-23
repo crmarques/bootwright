@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -123,19 +125,50 @@ func (cf *commonFlags) resolveWithLocality(checkLocality bool) (workspace.Contex
 //     the user typed a subcommand-shaped typo followed by a child's flag
 //     (e.g. `cluster acces --cluster X`). Without it, pflag bails on the
 //     unknown `--cluster` before Cobra ever sees `acces`.
-//   - ValidArgs is derived from the subcommands so OnlyValidArgs can emit
-//     Cobra's built-in "Did you mean ...?" suggestion.
+//   - Args rejects any positional that is not a registered subcommand and
+//     reproduces Cobra's "Did you mean ...?" suggestion. It deliberately does
+//     NOT set ValidArgs: a ValidArgs slice mirroring the subcommand names makes
+//     shell completion list every subcommand twice — once described from the
+//     subcommand walk and once bare from ValidArgs (see Cobra's getCompletions)
+//     — so the dispatcher leaves completion to the subcommand walk alone.
 //   - RunE = Help is needed because Cobra skips ValidateArgs on commands
 //     with no Run* defined, falling through to a silent help dump instead.
 //
 // Call after AddCommand so c.Commands() is populated.
 func requireSubcommand(cmd *cobra.Command) {
 	cmd.FParseErrWhitelist = cobra.FParseErrWhitelist{UnknownFlags: true}
-	names := make([]string, 0, len(cmd.Commands()))
-	for _, sub := range cmd.Commands() {
-		names = append(names, sub.Name())
-	}
-	cmd.ValidArgs = names
-	cmd.Args = cobra.OnlyValidArgs
+	cmd.Args = rejectUnknownSubcommandArgs
 	cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+}
+
+// rejectUnknownSubcommandArgs is a cobra.PositionalArgs for dispatcher commands:
+// no positional is fine (the command then prints help), and the first positional
+// that did not match a subcommand is rejected with Cobra's own wording. Cobra
+// only invokes a parent's Args when no child matched, so the rejected positional
+// is always a genuine typo, never a valid subcommand.
+func rejectUnknownSubcommandArgs(c *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	return unknownSubcommandError(c, args[0])
+}
+
+// unknownSubcommandError formats the message cobra.OnlyValidArgs produces for an
+// unknown positional, including the subcommand-derived "Did you mean this?"
+// suggestion, so callers get that UX without populating ValidArgs (which would
+// pollute shell completion with description-less duplicate entries).
+func unknownSubcommandError(c *cobra.Command, arg string) error {
+	msg := fmt.Sprintf("invalid argument %q for %q", arg, c.CommandPath())
+	if !c.DisableSuggestions {
+		if c.SuggestionsMinimumDistance <= 0 {
+			c.SuggestionsMinimumDistance = 2
+		}
+		if suggestions := c.SuggestionsFor(arg); len(suggestions) > 0 {
+			msg += "\n\nDid you mean this?\n"
+			for _, s := range suggestions {
+				msg += fmt.Sprintf("\t%v\n", s)
+			}
+		}
+	}
+	return errors.New(msg)
 }

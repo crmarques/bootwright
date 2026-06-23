@@ -80,6 +80,7 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		p.Section("Objects")
 		p.Fields(stateCountFields(state))
 		checks := []preflightCheck{okCheck("Desired state", "context input", "loads, normalizes, and validates")}
+		checks = append(checks, contextSecretChecks(cf, files, state)...)
 		checks = append(checks, environmentSelectionChecks(exclusions)...)
 		checks = append(checks, storageBestPracticeChecks(state)...)
 		checks = append(checks, stretchPoolInheritanceChecks(state)...)
@@ -89,6 +90,24 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		return nil
 	}
 	return cmd
+}
+
+// contextSecretChecks reports declared-secret material status during `validate`
+// against the current context, mirroring the secret checks `status` shows so
+// validate makes plain which declared secrets are still missing locally.
+// Missing material is a WARN, not a failure: offline validation checks
+// desired-state YAML, and unsynced secrets are a readiness concern that must not
+// fail validate. It returns nothing when validating explicit -f input, which has
+// no context secrets directory to inspect.
+func contextSecretChecks(cf *commonFlags, files []string, state v1alpha1.State) []preflightCheck {
+	if len(files) > 0 || cf.ctx.Name == "" {
+		return nil
+	}
+	checks := declaredSecretContextChecks(cf.ctx.Name, cf.ctx.SecretsDir, state)
+	for i := range checks {
+		checks[i].Group = "Declared secrets"
+	}
+	return checks
 }
 
 func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, desiredstate.ClusterSelectionExclusions, error) {

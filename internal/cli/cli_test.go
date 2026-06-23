@@ -359,6 +359,110 @@ func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
 	}
 }
 
+// TestValidateReportsDeclaredSecretStatus locks in that `validate` against the
+// current context names the declared secrets and flags the missing ones, instead
+// of silently passing. Missing material is a non-fatal WARN: offline validate
+// still succeeds.
+func TestValidateReportsDeclaredSecretStatus(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	stdout, stderr, code := runCLI(t, "validate")
+	if code != 0 {
+		t.Fatalf("validate exited %d, stderr=%q\nstdout:\n%s", code, stderr, stdout)
+	}
+	for _, want := range []string{
+		"Declared secrets",
+		"[WARN] openshift-pull-secret",
+		"bootwright secret set openshift-pull-secret",
+		"[OK] validate",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("validate output missing %q:\n%s", want, stdout)
+		}
+	}
+
+	// Validating explicit -f input has no context secrets directory to inspect,
+	// so it must not pretend to report secret status.
+	stdout, stderr, code = runCLI(t, "validate", "-f", fixturePath("001-sno-libvirt"))
+	if code != 0 {
+		t.Fatalf("validate -f exited %d, stderr=%q\nstdout:\n%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "Declared secrets") {
+		t.Fatalf("validate -f without a context still reports declared secrets:\n%s", stdout)
+	}
+}
+
+// TestDispatcherCompletionListsSubcommandsOnce guards the shell-completion
+// regression where a dispatcher's ValidArgs mirrored its subcommand names, so
+// completion listed every subcommand twice — once described from the subcommand
+// walk, once bare from ValidArgs. Each subcommand must appear exactly once, with
+// its description.
+func TestDispatcherCompletionListsSubcommandsOnce(t *testing.T) {
+	setTestHomeAndRoot(t)
+	for _, parent := range []string{"context", "render"} {
+		stdout, stderr, code := runCLI(t, cobra.ShellCompRequestCmd, parent, "")
+		if code != 0 {
+			t.Fatalf("__complete %s exited %d, stderr=%q\nstdout:\n%s", parent, code, stderr, stdout)
+		}
+		seen := map[string]int{}
+		for _, line := range strings.Split(stdout, "\n") {
+			line = strings.TrimRight(line, "\r")
+			if line == "" || strings.HasPrefix(line, ":") {
+				continue
+			}
+			name := line
+			desc := ""
+			if i := strings.IndexByte(line, '\t'); i >= 0 {
+				name, desc = line[:i], line[i+1:]
+			}
+			seen[name]++
+			// The bare ValidArgs duplicate carried no description; requiring one
+			// proves the surviving entry is the described subcommand.
+			if desc == "" {
+				t.Fatalf("%s completion %q has no description (bare ValidArgs duplicate?):\n%s", parent, name, stdout)
+			}
+		}
+		if len(seen) == 0 {
+			t.Fatalf("%s completion produced no subcommands:\n%s", parent, stdout)
+		}
+		for name, n := range seen {
+			if n != 1 {
+				t.Fatalf("%s completion lists %q %d times, want once:\n%s", parent, name, n, stdout)
+			}
+		}
+	}
+}
+
+// TestContextInitOutputIsConcise locks in that context init confirms what
+// happened without dumping every per-context directory path. It still names the
+// owned input directory and the bundle step.
+func TestContextInitOutputIsConcise(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"initialized and set as the current context",
+		"Ansible bundle",
+		ctx.InputDir,
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("context init output missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, reject := range []string{"managed-services-dir", "provider-state-dir", "ownership-dir"} {
+		if strings.Contains(stdout, reject) {
+			t.Fatalf("context init still dumps the %q path layout:\n%s", reject, stdout)
+		}
+	}
+}
+
 func TestValidateJSONFailureIncludesDiagnostics(t *testing.T) {
 	setTestHomeAndRoot(t)
 	inputDir := t.TempDir()

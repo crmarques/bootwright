@@ -94,12 +94,10 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "render [target]",
 		Short: "Render generated artifacts",
-		Args: func(c *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return nil
-			}
-			return cobra.OnlyValidArgs(c, args)
-		},
+		// render takes either a subcommand target or --output-dir; reject an
+		// unknown positional without a ValidArgs slice, which would otherwise
+		// duplicate every target in shell completion.
+		Args: rejectUnknownSubcommandArgs,
 		Example: `  # Export concrete tool input files for external execution
   bootwright render --output-dir ./rendered --sensitive
 
@@ -121,9 +119,6 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		newRenderClusterInstallFilesCmd(stdout, stderr),
 		newRenderStorageCmd(stdout, stderr),
 	)
-	for _, sub := range cmd.Commands() {
-		cmd.ValidArgs = append(cmd.ValidArgs, sub.Name())
-	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if outputDir == "" {
 			return c.Help()
