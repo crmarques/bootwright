@@ -11,16 +11,11 @@ import (
 func validateInfraComponents(state v1alpha1.State) []string {
 	var errs []string
 	machines := indexMachines(state.Machines)
-	seen := map[string]bool{}
 	for _, component := range state.InfraComponents {
 		if e := validateName(v1alpha1.KindInfraComponent, component.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[component.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate InfraComponent %q", component.Metadata.Name))
-		}
-		seen[component.Metadata.Name] = true
 		errs = append(errs, validateInfraComponentSpec(component, machines)...)
 	}
 	return errs

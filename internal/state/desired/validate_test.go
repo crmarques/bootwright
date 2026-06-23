@@ -3117,6 +3117,36 @@ func TestSameKindDuplicateClusterNamesKeepPerKindErrors(t *testing.T) {
 	}
 }
 
+// TestDuplicateNameFindingsAreStructured locks the F2 improvement: duplicate
+// findings name their owning object and value at the source, so the CLI routes
+// them without reparsing the message (the legacy heuristic produced an empty
+// object for "duplicate <Kind> %q").
+func TestDuplicateNameFindingsAreStructured(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{
+			{Metadata: v1alpha1.Metadata{Name: "ceph"}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph"}},
+		},
+	}
+	verr, ok := Validate(state).(ValidationError)
+	if !ok {
+		t.Fatal("expected ValidationError")
+	}
+	found := false
+	for _, finding := range verr.Findings {
+		if finding.Message != `duplicate StorageCluster "ceph"` {
+			continue
+		}
+		found = true
+		if finding.Object != "StorageCluster/ceph" || finding.Value != "ceph" {
+			t.Fatalf("duplicate finding not structured: object=%q value=%q", finding.Object, finding.Value)
+		}
+	}
+	if !found {
+		t.Fatalf("duplicate StorageCluster finding missing: %+v", verr.Findings)
+	}
+}
+
 func TestMachineNodeBindingExclusivityAcrossClusters(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()

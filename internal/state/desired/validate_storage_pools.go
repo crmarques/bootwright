@@ -9,16 +9,11 @@ import (
 
 func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, clusters map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, policy := range items {
 		if e := validateName(v1alpha1.KindStoragePlacementPolicy, policy.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[policy.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StoragePlacementPolicy %q", policy.Metadata.Name))
-		}
-		seen[policy.Metadata.Name] = true
 		prefix := fmt.Sprintf("StoragePlacementPolicy/%s spec", policy.Metadata.Name)
 		if policy.Spec.StorageClusterRef.Name == "" {
 			errs = append(errs, prefix+".storageClusterRef is required")
@@ -36,16 +31,11 @@ func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, c
 
 func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1alpha1.StorageCluster, policies map[string]v1alpha1.StoragePlacementPolicy) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, pool := range items {
 		if e := validateName(v1alpha1.KindStoragePool, pool.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[pool.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StoragePool %q", pool.Metadata.Name))
-		}
-		seen[pool.Metadata.Name] = true
 		prefix := fmt.Sprintf("StoragePool/%s spec", pool.Metadata.Name)
 		cluster, ok := clusters[pool.Spec.StorageClusterRef.Name]
 		if pool.Spec.StorageClusterRef.Name == "" {
@@ -111,16 +101,11 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 
 func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map[string]v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, fs := range items {
 		if e := validateName(v1alpha1.KindStorageFilesystem, fs.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[fs.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StorageFilesystem %q", fs.Metadata.Name))
-		}
-		seen[fs.Metadata.Name] = true
 		prefix := fmt.Sprintf("StorageFilesystem/%s spec", fs.Metadata.Name)
 		cluster, ok := clusters[fs.Spec.StorageClusterRef.Name]
 		if fs.Spec.StorageClusterRef.Name == "" {
@@ -172,16 +157,11 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 
 func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, gw := range items {
 		if e := validateName(v1alpha1.KindStorageObjectGateway, gw.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[gw.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StorageObjectGateway %q", gw.Metadata.Name))
-		}
-		seen[gw.Metadata.Name] = true
 		prefix := fmt.Sprintf("StorageObjectGateway/%s spec", gw.Metadata.Name)
 		cluster, ok := clusters[gw.Spec.StorageClusterRef.Name]
 		if gw.Spec.StorageClusterRef.Name == "" {

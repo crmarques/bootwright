@@ -13,16 +13,11 @@ func validateProviders(state v1alpha1.State) []string {
 	var errs []string
 	machines := indexMachines(state.Machines)
 	clusters := indexContainerClusters(state.ContainerClusters)
-	seen := map[string]bool{}
 	for _, provider := range state.InfraProviders {
 		if e := validateName(v1alpha1.KindInfraProvider, provider.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[provider.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate InfraProvider %q", provider.Metadata.Name))
-		}
-		seen[provider.Metadata.Name] = true
 		errs = append(errs, validateProviderSpec(provider, machines, clusters)...)
 	}
 	errs = append(errs, validateLibvirtBMCEmulationHostPorts(state)...)

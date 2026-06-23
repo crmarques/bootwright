@@ -11,16 +11,11 @@ import (
 
 func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, filesystems map[string]v1alpha1.StorageFilesystem, gateways map[string]v1alpha1.StorageObjectGateway, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, export := range state.StorageExports {
 		if e := validateName(v1alpha1.KindStorageExport, export.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[export.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StorageExport %q", export.Metadata.Name))
-		}
-		seen[export.Metadata.Name] = true
 		prefix := fmt.Sprintf("StorageExport/%s spec", export.Metadata.Name)
 		cluster, clusterOK := clusters[export.Spec.StorageClusterRef.Name]
 		if export.Spec.StorageClusterRef.Name == "" {

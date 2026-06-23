@@ -30,10 +30,64 @@ func Validate(state v1alpha1.State) error {
 	errs = append(errs, notes(validateStorage(state))...)
 	errs = append(errs, notes(validateCrossLayer(state))...)
 	errs = append(errs, notes(validateSecretReferences(state))...)
+	errs = append(errs, duplicateNameFindings(state)...)
 	if len(errs) == 0 {
 		return nil
 	}
 	return newValidationError(errs)
+}
+
+// duplicateNameFindings reports every metadata.name that appears more than once
+// within a kind, as a structured finding naming the owning object. It replaces
+// the per-validator inline dedup loops so the duplicate diagnostics are routed
+// at the source (with a real Object) instead of the CLI reconstructing them
+// from the message text. NetworkConfig keeps its own structured check; an
+// Environment count is reported by validateEnvironments.
+func duplicateNameFindings(state v1alpha1.State) []Finding {
+	var out []Finding
+	out = append(out, duplicateFindings(v1alpha1.KindMachine, objectNames(state.Machines, func(m v1alpha1.Machine) string { return m.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindMachineImage, objectNames(state.MachineImages, func(m v1alpha1.MachineImage) string { return m.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindMachineInstallProfile, objectNames(state.MachineInstallProfiles, func(p v1alpha1.MachineInstallProfile) string { return p.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindInfraProvider, objectNames(state.InfraProviders, func(p v1alpha1.InfraProvider) string { return p.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindInfraComponent, objectNames(state.InfraComponents, func(c v1alpha1.InfraComponent) string { return c.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindContainerCluster, objectNames(state.ContainerClusters, func(c v1alpha1.ContainerCluster) string { return c.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStorageCluster, objectNames(state.StorageClusters, func(c v1alpha1.StorageCluster) string { return c.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStoragePlacementPolicy, objectNames(state.StoragePlacementPolicies, func(p v1alpha1.StoragePlacementPolicy) string { return p.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStoragePool, objectNames(state.StoragePools, func(p v1alpha1.StoragePool) string { return p.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStorageFilesystem, objectNames(state.StorageFilesystems, func(f v1alpha1.StorageFilesystem) string { return f.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStorageObjectGateway, objectNames(state.StorageObjectGateways, func(g v1alpha1.StorageObjectGateway) string { return g.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStorageExport, objectNames(state.StorageExports, func(e v1alpha1.StorageExport) string { return e.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindClusterAddon, objectNames(state.ClusterAddons, func(a v1alpha1.ClusterAddon) string { return a.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindClusterAddonProfile, objectNames(state.ClusterAddonProfiles, func(p v1alpha1.ClusterAddonProfile) string { return p.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindClusterAddonBinding, objectNames(state.ClusterAddonBindings, func(b v1alpha1.ClusterAddonBinding) string { return b.Metadata.Name }))...)
+	return out
+}
+
+func objectNames[T any](items []T, name func(T) string) []string {
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = name(item)
+	}
+	return out
+}
+
+// duplicateFindings reports each name that appears more than once. The dedup
+// mirrors the per-validator checks it replaces: only names that pass
+// validateName participate (an invalid name is reported as a name error, not a
+// duplicate), and the second and later occurrences are flagged.
+func duplicateFindings(kind string, names []string) []Finding {
+	var out []Finding
+	seen := map[string]bool{}
+	for _, name := range names {
+		if validateName(kind, name) != "" {
+			continue
+		}
+		if seen[name] {
+			out = append(out, diagValue(kind+"/"+name, "", name, fmt.Sprintf("duplicate %s %q", kind, name)))
+		}
+		seen[name] = true
+	}
+	return out
 }
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)

@@ -29,16 +29,11 @@ func validateMachines(state v1alpha1.State) []string {
 	providers := indexProviders(state.InfraProviders)
 	networks := indexNetworkConfigs(state.NetworkConfigs)
 	installProfiles := indexMachineInstallProfiles(state.MachineInstallProfiles)
-	seen := map[string]bool{}
 	for _, machine := range state.Machines {
 		if e := validateName(v1alpha1.KindMachine, machine.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[machine.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate Machine %q", machine.Metadata.Name))
-		}
-		seen[machine.Metadata.Name] = true
 		prefix := fmt.Sprintf("Machine/%s spec", machine.Metadata.Name)
 		provider, providerOK := providers[machine.Spec.Substrate.ProviderRef.Name]
 		errs = append(errs, validateMachineLabels(prefix, machine.Metadata.Labels)...)
@@ -463,16 +458,11 @@ func machineConfigInterfaceAddresses(machine v1alpha1.Machine, config v1alpha1.M
 
 func validateMachineImages(state v1alpha1.State) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, image := range state.MachineImages {
 		if e := validateName(v1alpha1.KindMachineImage, image.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[image.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate MachineImage %q", image.Metadata.Name))
-		}
-		seen[image.Metadata.Name] = true
 		prefix := fmt.Sprintf("MachineImage/%s spec", image.Metadata.Name)
 		if image.Spec.Type != v1alpha1.MachineImageTypeISO {
 			errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, image.Spec.Type, v1alpha1.MachineImageTypeISO))
@@ -498,16 +488,11 @@ func validateMachineImages(state v1alpha1.State) []string {
 func validateMachineInstallProfiles(state v1alpha1.State) []string {
 	var errs []string
 	images := indexMachineImages(state.MachineImages)
-	seen := map[string]bool{}
 	for _, profile := range state.MachineInstallProfiles {
 		if e := validateName(v1alpha1.KindMachineInstallProfile, profile.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[profile.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate MachineInstallProfile %q", profile.Metadata.Name))
-		}
-		seen[profile.Metadata.Name] = true
 		prefix := fmt.Sprintf("MachineInstallProfile/%s spec", profile.Metadata.Name)
 		if profile.Spec.OS.Family == "" {
 			errs = append(errs, prefix+".os.family is required")

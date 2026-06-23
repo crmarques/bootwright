@@ -22,6 +22,13 @@ func diag(object, field, message string) Finding {
 	return Finding{Object: object, Field: field, Message: message}
 }
 
+// diagValue is diag with an explicit offending value (used for messages whose
+// value is not naturally the first quoted token, and to keep the value
+// structured rather than re-extracted).
+func diagValue(object, field, value, message string) Finding {
+	return Finding{Object: object, Field: field, Value: value, Message: message}
+}
+
 // note is an unstructured finding: the CLI reconstructs object/field from the
 // message text. Used where the owning object/field are not cleanly available
 // at the emission site, and by validators not yet migrated to structured

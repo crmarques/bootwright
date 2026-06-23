@@ -13,16 +13,11 @@ import (
 
 func validateClusterAddons(state v1alpha1.State) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, extension := range state.ClusterAddons {
 		if e := validateName(v1alpha1.KindClusterAddon, extension.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[extension.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate ClusterAddon %q", extension.Metadata.Name))
-		}
-		seen[extension.Metadata.Name] = true
 		prefix := fmt.Sprintf("ClusterAddon/%s spec", extension.Metadata.Name)
 		switch extension.Spec.Type {
 		case "":
@@ -383,16 +378,11 @@ func validateClusterAddonProfiles(state v1alpha1.State) []string {
 	var errs []string
 	addons := indexClusterAddons(state.ClusterAddons)
 	sets := indexClusterAddonProfiles(state.ClusterAddonProfiles)
-	seen := map[string]bool{}
 	for _, set := range state.ClusterAddonProfiles {
 		if e := validateName(v1alpha1.KindClusterAddonProfile, set.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[set.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate ClusterAddonProfile %q", set.Metadata.Name))
-		}
-		seen[set.Metadata.Name] = true
 		if len(set.Spec.ProfileRefs) == 0 && len(set.Spec.AddonRefs) == 0 {
 			errs = append(errs, fmt.Sprintf("ClusterAddonProfile/%s spec must include at least one of profileRefs or addonRefs", set.Metadata.Name))
 		}
@@ -459,17 +449,12 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 	addons := indexClusterAddons(state.ClusterAddons)
 	sets := indexClusterAddonProfiles(state.ClusterAddonProfiles)
 	loaded := selectedResourceKeys(state)
-	seen := map[string]bool{}
 	effectiveApplications := map[string]string{}
 	for _, binding := range state.ClusterAddonBindings {
 		if e := validateName(v1alpha1.KindClusterAddonBinding, binding.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[binding.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate ClusterAddonBinding %q", binding.Metadata.Name))
-		}
-		seen[binding.Metadata.Name] = true
 		if binding.Spec.ClusterRef.Name == "" {
 			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef is required", binding.Metadata.Name))
 		} else if _, ok := clusters[binding.Spec.ClusterRef.Name]; !ok {

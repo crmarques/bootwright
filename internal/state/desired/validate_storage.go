@@ -46,16 +46,11 @@ func validateStorage(state v1alpha1.State) []string {
 
 func validateStorageClusters(state v1alpha1.State, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, cluster := range state.StorageClusters {
 		if e := validateName(v1alpha1.KindStorageCluster, cluster.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[cluster.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StorageCluster %q", cluster.Metadata.Name))
-		}
-		seen[cluster.Metadata.Name] = true
 		prefix := fmt.Sprintf("StorageCluster/%s spec", cluster.Metadata.Name)
 		switch cluster.Spec.Type {
 		case v1alpha1.StorageClusterTypeCeph:

@@ -16,16 +16,11 @@ func validateContainerClusters(state v1alpha1.State) []string {
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
 	components := indexInfraComponents(state.InfraComponents)
 	env := primaryEnvironment(&state)
-	seen := map[string]bool{}
 	for _, ocp := range state.ContainerClusters {
 		if e := validateName(v1alpha1.KindContainerCluster, ocp.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
 		}
-		if seen[ocp.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate ContainerCluster %q", ocp.Metadata.Name))
-		}
-		seen[ocp.Metadata.Name] = true
 		switch v1alpha1.InstallMode(ocp) {
 		case v1alpha1.InstallModeConnected, v1alpha1.InstallModeDisconnected:
 		default:
