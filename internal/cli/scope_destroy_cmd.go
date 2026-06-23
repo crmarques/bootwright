@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
@@ -27,15 +28,16 @@ type scopeDestroyOptions struct {
 
 func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
-		flags         scopeCommonFlags
-		dryRun        bool
-		check         bool
-		askBecomePass bool
-		yes           bool
-		override      bool
-		forceUnowned  bool
-		stage         string
-		streamAnsible bool
+		flags            scopeCommonFlags
+		dryRun           bool
+		check            bool
+		askBecomePass    bool
+		yes              bool
+		override         bool
+		forceUnowned     bool
+		stage            string
+		streamAnsible    bool
+		scopedValidation bool
 	)
 	use := "destroy"
 	if options.use != "" {
@@ -70,6 +72,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters (default: full teardown of clusters then infra)")
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
+		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, "validate only the resources within the selected --clusters/--stage scope, ignoring desired-state errors in objects outside it (no effect without --clusters)")
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
@@ -110,7 +113,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
-		state, err := loadDesiredState(cf)
+		var state v1alpha1.State
+		if scopedValidation {
+			state, err = loadDesiredStateScopedValidation(cf, runScope.Name, flags.clusterScope)
+		} else {
+			state, err = loadDesiredState(cf)
+		}
 		if err != nil {
 			return failErr(1, err)
 		}

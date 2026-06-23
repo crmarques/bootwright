@@ -137,7 +137,10 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("apply --override help must name its destructive scope, missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, reject := range []string{"--scope", "--cluster ", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
+	// Match the removed --scope flag at its token boundary (trailing space) so
+	// the assertion still rejects a resurrected --scope without snagging the
+	// legitimate --scoped-validation flag, whose name shares the prefix.
+	for _, reject := range []string{"--scope ", "--cluster ", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("apply help exposes removed flag or help section %q:\n%s", reject, stdout)
 		}
@@ -164,7 +167,7 @@ func TestDestroyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("destroy help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, reject := range []string{"--scope", "--cluster ", "Subcommand Flags"} {
+	for _, reject := range []string{"--scope ", "--cluster ", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("destroy help exposes removed flag or help section %q:\n%s", reject, stdout)
 		}
@@ -1168,6 +1171,49 @@ func TestApplyKubeVirtParentAndChildSelectionAccepted(t *testing.T) {
 	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp,dc1-child-ocp", "--dry-run", "--output", "json", "--ask-become-pass=false")
 	if code != 0 {
 		t.Fatalf("parent+child apply exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestScopedValidationIgnoresOutOfScopeErrors(t *testing.T) {
+	setTestHomeAndRoot(t)
+	if stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt")); code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := workspace.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Inject a StorageCluster that fails validation (spec.type must be ceph) and
+	// is independent of the sno-libvirt container cluster. Scoping a run to
+	// sno-libvirt drops it from the work set, so --scoped-validation must not
+	// validate it. Written after context init because init validates the input.
+	orphan := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata:\n  name: orphan-ceph\nspec:\n  type: bogus\n"
+	if err := os.WriteFile(filepath.Join(ctx.InputDir, "orphan-storage-cluster.yaml"), []byte(orphan), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Default whole-input validation catches the broken StorageCluster and
+	// blocks the scoped apply, naming the offending object.
+	stdout, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code == 0 {
+		t.Fatalf("apply without --scoped-validation ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
+	}
+	if !strings.Contains(stdout+stderr, "orphan-ceph") {
+		t.Fatalf("apply error does not name the out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
+	}
+
+	// --scoped-validation narrows validation to the sno-libvirt scope, so the
+	// out-of-scope error no longer blocks apply or destroy.
+	if stdout, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--scoped-validation", "--ask-become-pass=false"); code != 0 {
+		t.Fatalf("apply --scoped-validation exited %d despite the error being out of scope, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if stdout, stderr, code := runCLI(t, "destroy", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--scoped-validation", "--ask-become-pass=false"); code != 0 {
+		t.Fatalf("destroy --scoped-validation exited %d despite the error being out of scope, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+
+	// Without the flag, destroy validates the whole input too and stays blocked.
+	if stdout, stderr, code := runCLI(t, "destroy", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false"); code == 0 {
+		t.Fatalf("destroy without --scoped-validation ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
 	}
 }
 

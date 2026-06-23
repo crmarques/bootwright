@@ -84,6 +84,25 @@ and leaves the rest of the infrastructure standing:
 bootwright destroy --stage infra --clusters artifact-server
 ```
 
+## Validating only the selected scope
+
+By default `apply` and `destroy` validate the **whole** input before doing any
+work, so a desired-state error anywhere — even in a cluster you did not select —
+blocks the run. When you are deliberately acting on part of the workspace,
+`--scoped-validation` narrows that check to the resources the
+`--clusters`/`--stage` selection will actually touch:
+
+```text
+bootwright apply --clusters ocp1,ocp2 --scoped-validation
+```
+
+With the flag set, a desired-state error in an out-of-scope object — for example
+a broken `StorageCluster` you are not applying — no longer blocks the scoped run.
+It has no effect without a narrowing selector: a run over the whole graph still
+validates everything. Dependencies are still validated — if a selected cluster
+pulls another object in transitively (such as a Data Foundation storage
+attachment), that object stays in scope and is validated with it.
+
 ## Destroy protection
 
 Set `Environment.spec.safety.destroyProtection: requiredOverride` to guard a

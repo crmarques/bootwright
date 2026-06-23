@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
@@ -30,20 +31,21 @@ type scopeApplyOptions struct {
 func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := converge.ScopeUsesAnsible(scope)
 	var (
-		flags           scopeCommonFlags
-		dryRun          = options.defaultPlan
-		check           bool
-		askBecomePass   bool
-		yes             bool
-		strictSecrets   bool
-		override        bool
-		expectNew       bool
-		trustOnFirstUse bool
-		parallelism     int
-		perHost         int
-		redfish         int
-		stage           string
-		streamAnsible   bool
+		flags            scopeCommonFlags
+		dryRun           = options.defaultPlan
+		check            bool
+		askBecomePass    bool
+		yes              bool
+		strictSecrets    bool
+		override         bool
+		expectNew        bool
+		trustOnFirstUse  bool
+		parallelism      int
+		perHost          int
+		redfish          int
+		stage            string
+		streamAnsible    bool
+		scopedValidation bool
 	)
 	use := "apply"
 	if options.use != "" {
@@ -103,6 +105,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to apply: infra|clusters families, or a sub-phase fabric|machines|deps|base|addons (default full graph)")
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply")
+		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, "validate only the resources within the selected --clusters/--stage scope, ignoring desired-state errors in objects outside it (no effect without --clusters)")
 	} else {
 		registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
 	}
@@ -155,7 +158,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
-		state, err := loadDesiredState(cf)
+		var state v1alpha1.State
+		if scopedValidation {
+			state, err = loadDesiredStateScopedValidation(cf, runScope.Name, flags.clusterScope)
+		} else {
+			state, err = loadDesiredState(cf)
+		}
 		if err != nil {
 			return failErr(1, err)
 		}

@@ -45,6 +45,31 @@ func (e ClusterSelectionExclusions) Empty() bool {
 // the loaded cluster names the Environment cluster selection excluded from
 // the effective state. `bootwright validate` reports them as warnings.
 func LoadNormalizeValidateWithExclusions(paths []string) (v1alpha1.State, ClusterSelectionExclusions, error) {
+	selected, exclusions, err := loadNormalizeSelect(paths)
+	if err != nil {
+		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
+	}
+	if err := Validate(selected); err != nil {
+		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
+	}
+	return selected, exclusions, nil
+}
+
+// LoadNormalizeInputFiles loads and normalizes the effective selected State
+// without validating it. It exists for callers that validate only a narrower
+// scope — `apply`/`destroy --scoped-validation` load with this and run Validate
+// on just the --clusters/--stage subset, so a desired-state error in an
+// out-of-scope object does not block a scoped run. Every other caller must use
+// LoadNormalizeValidateInputFiles, which validates the whole effective state.
+func LoadNormalizeInputFiles(paths []string) (v1alpha1.State, error) {
+	selected, _, err := loadNormalizeSelect(paths)
+	return selected, err
+}
+
+// loadNormalizeSelect discovers, loads, normalizes, and applies Environment
+// cluster selection, returning the effective state and the clusters that
+// selection excluded. It does not validate; callers decide what to validate.
+func loadNormalizeSelect(paths []string) (v1alpha1.State, ClusterSelectionExclusions, error) {
 	files, err := discoverFiles(paths)
 	if err != nil {
 		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
@@ -56,9 +81,6 @@ func LoadNormalizeValidateWithExclusions(paths []string) (v1alpha1.State, Cluste
 	Normalize(&state)
 	selected := applyEnvironmentClusterSelection(state)
 	exclusions := clusterSelectionExclusions(state, selected)
-	if err := Validate(selected); err != nil {
-		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
-	}
 	return selected, exclusions, nil
 }
 
