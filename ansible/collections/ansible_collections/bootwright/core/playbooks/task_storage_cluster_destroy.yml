@@ -27,12 +27,15 @@
     # directly-selected storage roots (bootwright_destroy_storage_scope). A
     # render-reference StorageCluster pulled into the render-inclusive state for
     # a container cluster's data-foundation attachment is rendered into this
-    # group but not selected, so end its hosts before any OSD wipe. Unset means
-    # no --clusters narrowing (tear down every rendered managed storage host).
+    # group but not selected, so end its hosts before any OSD wipe. The var is
+    # defined whenever a --clusters narrowing is in force and holds the exact
+    # allowlist: an empty value tears down no storage at all (a container-only
+    # scope). Undefined means no narrowing (tear down every rendered managed
+    # storage host).
     - name: End hosts outside the selected storage clusters
       ansible.builtin.meta: end_host
       when:
-        - (bootwright_destroy_storage_scope | default('') | length) > 0
+        - bootwright_destroy_storage_scope is defined
         - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
 
     - name: Validate selected storage cluster context

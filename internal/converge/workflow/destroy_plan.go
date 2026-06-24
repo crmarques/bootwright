@@ -26,10 +26,12 @@ const (
 // apply's applyTarget.StorageClusterNames: the storage destroy playbook
 // end_hosts any rendered storage node whose cluster is not in the allowlist, so
 // a render-reference StorageCluster present in the (render-inclusive) state is
-// never wiped. Emitted only when a --clusters selection narrows storage to a
-// non-empty set; a selection that names no storage cluster drops the storage
-// teardown step entirely, and no selection at all leaves it unset (tear down
-// every storage host the state renders).
+// never wiped. It is composed onto the plan once, centrally, by
+// converge.ApplyDestroyScopeExtraVars from the resolved storage work set, so
+// every execution path (task graph and single playbook) carries the same gate.
+// The var is present (defined) whenever a --clusters selection narrows storage —
+// an empty value tears down none — and absent when there is no narrowing (tear
+// down every storage host the state renders).
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
 
 // PlanDestroyTasks decomposes a scoped destroy into the task graph the apply
@@ -44,12 +46,14 @@ const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
 // teardown (e.g. which Ceph cluster a storage host belongs to) is driven by
 // rendered per-host inventory vars, not by per-task parameters, so running a
 // task playbook once against its host group tears down every cluster correctly.
-// storageWorkNames restricts the storage teardown to the directly-selected
-// storage roots (the destroy mirror of apply's applyTarget.StorageClusterNames):
-// nil means no --clusters narrowing (tear down every StorageCluster the state
-// renders); a non-nil empty slice means a selection that names no storage
-// cluster (drop the storage teardown step); a non-empty slice restricts teardown
-// to those names via DestroyStorageScopeExtraVar.
+// storageWorkNames shapes the storage teardown step in the graph (the destroy
+// mirror of apply's applyTarget.StorageClusterNames): nil means no --clusters
+// narrowing (tear down every StorageCluster the state renders); a non-nil empty
+// slice means a selection that names no storage cluster (drop the storage
+// teardown step); a non-empty slice labels the step with those roots. The
+// allowlist that actually gates the wipe (DestroyStorageScopeExtraVar) is
+// composed centrally onto extraVars by converge.ApplyDestroyScopeExtraVars and
+// flows in unchanged, so this only decides the graph's shape.
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
@@ -92,14 +96,17 @@ type destroyStep struct {
 // destroyChain turns the ordered steps into a sequential task chain (each task
 // depends on the previous emitted step), preserving the monolith's teardown
 // order. When a --clusters selection narrows storage teardown, the storage step
-// is dropped if no storage cluster is selected, or restricted to the selected
-// roots via DestroyStorageScopeExtraVar otherwise; skipped steps do not break
-// the dependency chain because prev only advances for emitted steps.
+// is dropped if no storage cluster is selected, or labelled with the selected
+// roots otherwise; skipped steps do not break the dependency chain because prev
+// only advances for emitted steps. The DestroyStorageScopeExtraVar allowlist
+// that actually gates the wipe is composed once onto the plan's extra-vars
+// (converge.ApplyDestroyScopeExtraVars) and flows in via extraVars, so the
+// task-graph and single-playbook paths share one gate; this only decides the
+// graph's shape (drop the step) and progress label.
 func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) []ApplyTask {
 	tasks := make([]ApplyTask, 0, len(steps))
 	prev := ""
 	for _, step := range steps {
-		stepExtraVars := extraVars
 		resourceKeys := destroyStepClusters(state, step.kind)
 		if step.kind == DestroyTaskKindStorageCluster && storageWorkNames != nil {
 			if len(storageWorkNames) == 0 {
@@ -109,7 +116,6 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			}
 			resourceKeys = append([]string(nil), storageWorkNames...)
 			sort.Strings(resourceKeys)
-			stepExtraVars = append(append([]string(nil), extraVars...), DestroyStorageScopeExtraVar+"="+strings.Join(resourceKeys, ","))
 		}
 		entry := TaskLedgerEntry{
 			ID:           step.id,
@@ -125,7 +131,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			Entry:         entry,
 			Playbook:      step.playbook,
 			Limit:         limit,
-			ExtraVarPairs: append([]string(nil), stepExtraVars...),
+			ExtraVarPairs: append([]string(nil), extraVars...),
 			State:         state,
 		})
 		prev = step.id

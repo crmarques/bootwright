@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -105,8 +106,10 @@ func TestPlanDestroyTasksRejectsUnknownScope(t *testing.T) {
 // storage cluster (storageWorkNames is a non-nil empty slice) must NOT plan a
 // storage teardown step, even though the render-inclusive state still carries
 // the managed StorageCluster pulled in by the container cluster's
-// data-foundation attachment. A non-empty work set restricts teardown to the
-// named roots via the storage-scope allowlist extra-var.
+// data-foundation attachment. A non-empty work set keeps the step and labels it
+// with the named roots. The allowlist extra-var that gates the wipe is composed
+// centrally (converge.ApplyDestroyScopeExtraVars), not by the planner, so this
+// also locks that the planner does NOT re-emit it.
 func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 	state := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{
@@ -126,8 +129,10 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 		}
 	}
 
-	// Storage-narrowed selection: the step runs but is restricted to the named
-	// root via the allowlist extra-var, and the render reference is excluded.
+	// Storage-narrowed selection: the step runs and is labelled with the named
+	// root only; the render reference is excluded. The planner must NOT emit the
+	// allowlist extra-var itself — that is the central composer's job, so the gate
+	// is single-sourced across the task-graph and single-playbook paths.
 	narrowed, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{"ceph-selected"})
 	if err != nil {
 		t.Fatal(err)
@@ -144,15 +149,10 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 	if len(storageTask.Entry.ResourceKeys) != 1 || storageTask.Entry.ResourceKeys[0] != "ceph-selected" {
 		t.Fatalf("storage step must cover only the selected root; got %v", storageTask.Entry.ResourceKeys)
 	}
-	wantVar := DestroyStorageScopeExtraVar + "=ceph-selected"
-	found := false
 	for _, pair := range storageTask.ExtraVarPairs {
-		if pair == wantVar {
-			found = true
+		if strings.HasPrefix(pair, DestroyStorageScopeExtraVar+"=") {
+			t.Fatalf("planner must not emit the storage-scope allowlist (composed centrally); got %q", pair)
 		}
-	}
-	if !found {
-		t.Fatalf("storage step must carry the allowlist extra-var %q; got %v", wantVar, storageTask.ExtraVarPairs)
 	}
 
 	// No selection (nil): teardown covers every rendered storage cluster.

@@ -1,6 +1,10 @@
 package converge
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+)
 
 // Teardown-scoping executor gate variables. These mirror the apply path, where
 // converge.PlanScopedApply stamps bootwright_apply_mode: the executor-coupling
@@ -29,6 +33,13 @@ const (
 // applies to any destroy. Cluster-name resolution stays a CLI concern; the
 // already-resolved roots are passed in (mirroring how PlanScopedApply takes the
 // already-scoped state).
+//
+// The storage-teardown gate is composed here too, from the work set the caller
+// already resolved onto plan.StorageWorkNames (clusteraccess.Selection): this is
+// the single place every destroy-scoping executor var is stamped, so the
+// task-graph executor and the single-playbook (dry-run / no-remote-work) path
+// carry an identical gate and a dry-run faithfully previews what the graph run
+// tears down.
 func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, forceUnowned bool) {
 	if infraScope {
 		if strings.TrimSpace(clusterScope) == "" {
@@ -36,6 +47,17 @@ func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScop
 		} else {
 			plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyClusterScopeExtraVar+"="+strings.Join(resolvedClusterRoots, ","))
 		}
+	}
+	// plan.StorageWorkNames is the destroy mirror of apply's
+	// applyTarget.StorageClusterNames: nil means no --clusters narrowing (tear
+	// down every rendered managed StorageCluster, so emit nothing and the
+	// playbook gate stays inactive), a non-nil slice is the exact allowlist
+	// (empty string = tear down none). The storage destroy playbook end_hosts any
+	// rendered storage node whose cluster is absent from this allowlist, so a
+	// render-reference StorageCluster pulled in only by a container cluster's
+	// data-foundation attachment is never wiped.
+	if plan.StorageWorkNames != nil {
+		plan.ExtraVarPairs = append(plan.ExtraVarPairs, workflow.DestroyStorageScopeExtraVar+"="+strings.Join(plan.StorageWorkNames, ","))
 	}
 	if forceUnowned {
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyForceUnownedExtraVar+"=true")
