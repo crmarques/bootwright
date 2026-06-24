@@ -82,7 +82,7 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 	for _, want := range []string{
 		"bootwright example init lab",
 		"bootwright validate -f ./lab-input",
-		"bootwright context init lab",
+		"bootwright context init --name lab",
 		"bootwright bastion setup --yes",
 		"bootwright preflight all",
 		"bootwright render effective",

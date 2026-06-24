@@ -119,7 +119,7 @@ Set the e2e case name and initialize a context from the mounted fixture:
 
 ```bash
 export CASE=<case-directory>
-bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --yes
+bootwright context init --name "$CASE" -f "/work/test/e2e/$CASE" --yes
 bootwright status
 eval "$(bootwright print-env)"
 ```

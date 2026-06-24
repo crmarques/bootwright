@@ -18,7 +18,7 @@ Single-node OpenShift on real bare metal through Redfish virtual media.
 
 ```text
 bootwright validate -f <input-dir>
-bootwright context init lab -f <input-dir>
+bootwright context init --name lab -f <input-dir>
 bootwright secret generate
 bootwright bastion setup --yes
 bootwright preflight all

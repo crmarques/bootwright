@@ -38,7 +38,7 @@ host-trust workflow.
 
 ```text
 bootwright validate -f <input-dir>
-bootwright context init lab -f <input-dir>
+bootwright context init --name lab -f <input-dir>
 bootwright secret set openshift-pull-secret --pull-secret <path>
 printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
 printf '%s\n' "${REGISTRY_PASS}" | bootwright secret set ceph-registry-credentials --username "${REGISTRY_USER}" --password-stdin

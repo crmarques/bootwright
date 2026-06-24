@@ -957,7 +957,7 @@ Rules:
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
-- `context init <name> -f <dir>` (`-f` required, exactly one directory) creates
+- `context init --name <name> -f <dir>` (`--name` and `-f` required, exactly one directory) creates
   a context by copying the whole source directory tree into the context's input
   directory at `/var/lib/bootwright/contexts/<name>/input/`. The context is
   self-contained: every command reads the copy, so the context keeps working
@@ -966,14 +966,15 @@ Rules:
   exists; `--yes` drops the existing context entirely and recreates it from the
   source. The whole tree is copied (not only YAML) so `file:`-sourced secrets and
   SSH keys, resolved relative to the loaded YAML, remain available.
-- `context update -f <dir>` (`-f` required, exactly one directory) replaces the
-  current context's input directory with a fresh copy of the source and
-  preserves all other context state (secrets, runs, rendered output, clusters,
-  ownership, provider state). It does not change the current-context selection.
+- `context update --name <name> -f <dir>` (`--name` and `-f` required, exactly one
+  directory) replaces the named context's input directory with a fresh copy of the
+  source and preserves all other context state (secrets, runs, rendered output,
+  clusters, ownership, provider state). It does not change the current-context
+  selection.
 - An input directory that is missing, unreadable, or not a directory is a named
   failure at context resolution/readiness time that names the context and the
-  input directory and points at `context update -f` (or `context init … --yes`)
-  to repopulate it; there is no silent degradation.
+  input directory and points at `context update --name <name> -f` (or `context init
+  --name <name> … --yes`) to repopulate it; there is no silent degradation.
 - A mutating `apply` records the loaded input YAML files as a forensic output
   under the run's history directory (`runs/history/<run-id>/input/`); a
   mutating `destroy` records them under `runs/last-destroy-input/`. The

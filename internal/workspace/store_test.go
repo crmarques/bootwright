@@ -340,7 +340,7 @@ func TestValidateInputDirNamesContextAndRemediation(t *testing.T) {
 	if err == nil {
 		t.Fatal("ValidateInputDir accepted a missing input directory")
 	}
-	for _, want := range []string{`context "lab"`, ctx.InputDir, "is missing", "context update -f", "context init lab -f <dir> --yes"} {
+	for _, want := range []string{`context "lab"`, ctx.InputDir, "is missing", "context update --name lab -f", "context init --name lab -f <dir> --yes"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q missing %q", err, want)
 		}

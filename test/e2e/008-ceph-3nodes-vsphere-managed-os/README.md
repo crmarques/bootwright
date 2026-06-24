@@ -107,7 +107,7 @@ spec:
 ## Run
 
 ```bash
-bootwright context init 008-ceph-3nodes-vsphere-managed-os \
+bootwright context init --name 008-ceph-3nodes-vsphere-managed-os \
   -f test/e2e/008-ceph-3nodes-vsphere-managed-os --yes
 bootwright secret generate
 bootwright host trust --hosts bastion --yes

@@ -93,9 +93,9 @@ func commandDiagnostics(err error) []Diagnostic {
 func commandErrorRemediation(message string) string {
 	switch {
 	case strings.Contains(message, "legacy context registry map"):
-		return "remove the legacy context registry and recreate contexts with bootwright context init <name> -f <path> --yes"
+		return "remove the legacy context registry and recreate contexts with bootwright context init --name <name> -f <path> --yes"
 	case strings.Contains(message, "current context") && strings.Contains(message, "not available in shared storage"):
-		return "run bootwright context list, then bootwright context use <name> or bootwright context init <name> -f <path> --yes"
+		return "run bootwright context list, then bootwright context use --name <name> or bootwright context init --name <name> -f <path> --yes"
 	case strings.Contains(message, "context") && strings.Contains(message, "not ready"):
 		return "run bootwright status and fix the reported checks"
 	case strings.Contains(message, "would write OpenShift installer files with secret material"):

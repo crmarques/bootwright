@@ -188,7 +188,7 @@ func Save(path string, store Store) error {
 func Current(store Store) (Context, error) {
 	current := strings.TrimSpace(store.Current)
 	if current == "" {
-		return Context{}, errors.New("no current context; run `bootwright context init <name> -f <path>` or `bootwright context use <name>`")
+		return Context{}, errors.New("no current context; run `bootwright context init --name <name> -f <path>` or `bootwright context use --name <name>`")
 	}
 	ctx, err := ResolveExistingContext(current)
 	if err != nil {
@@ -428,7 +428,7 @@ func rejectLegacyContextMapRegistry(path string, data []byte) error {
 	root := node.Content[0]
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		if root.Content[i].Value == "contexts" && root.Content[i+1].Kind == yaml.MappingNode {
-			return fmt.Errorf("validate %s: legacy context registry map is not supported; remove %s and recreate contexts with `bootwright context init <name> -f <path> --yes`", path, path)
+			return fmt.Errorf("validate %s: legacy context registry map is not supported; remove %s and recreate contexts with `bootwright context init --name <name> -f <path> --yes`", path, path)
 		}
 	}
 	return nil

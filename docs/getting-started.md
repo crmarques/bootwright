@@ -219,7 +219,7 @@ context is self-contained and keeps working even if the source is moved or
 deleted.
 
 ```bash
-bootwright context init lab -f ./my-sno-lab
+bootwright context init --name lab -f ./my-sno-lab
 bootwright context current
 bootwright status
 ```
@@ -229,7 +229,7 @@ command at every step; lean on it as you go. Because the input is a copy,
 editing `./my-sno-lab` later has no effect until you refresh it:
 
 ```bash
-bootwright context update -f ./my-sno-lab
+bootwright context update --name lab -f ./my-sno-lab
 ```
 
 `context init` fails if `lab` already exists; rerun with `--yes` to drop the

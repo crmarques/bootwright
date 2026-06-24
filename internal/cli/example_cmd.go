@@ -66,7 +66,7 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		})
 		p.Section("Written inputs")
 		p.Artifacts([]output.ArtifactGroup{{Paths: written}})
-		p.Summary(output.StatusOK, "example init", "import with bootwright context init <ctx> -f "+filepath.Clean(outputDir))
+		p.Summary(output.StatusOK, "example init", "import with bootwright context init --name <ctx> -f "+filepath.Clean(outputDir))
 		return nil
 	}
 	return cmd

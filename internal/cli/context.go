@@ -36,10 +36,11 @@ func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 }
 
 func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	var name string
 	var files []string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "init <ctx-name>",
+		Use:   "init --name <ctx-name> -f <dir>",
 		Short: "Create a context by copying a source directory into it",
 		Long: `Create a context that owns a copy of a source directory.
 
@@ -48,14 +49,14 @@ context is self-contained: it keeps working even if the source is later moved
 or deleted, and editing the source has no effect until ` + "`context update`" + `. Init
 fails if the context already exists; rerun with --yes to drop the existing
 context entirely and recreate it from the source.`,
-		Args: cobra.ExactArgs(1),
-		Example: `  bootwright context init lab -f ./examples/sno-libvirt-redfish
-  bootwright context init lab -f ~/lab-input --yes`,
+		Args: cobra.NoArgs,
+		Example: `  bootwright context init --name lab -f ./examples/sno-libvirt-redfish
+  bootwright context init --name lab -f ~/lab-input --yes`,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory with Bootwright YAML; its contents are copied into the context (required)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "drop an existing context and recreate it from the source directory")
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		name := args[0]
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
@@ -69,7 +70,7 @@ context entirely and recreate it from the source.`,
 			return failErr(2, err)
 		}
 		if shouldRunContextRootChild() {
-			rootArgs := []string{"context", "init", name, "-f", source}
+			rootArgs := []string{"context", "init", "--name", name, "-f", source}
 			if yes {
 				rootArgs = append(rootArgs, "--yes")
 			}
@@ -154,19 +155,24 @@ func printBundleStatus(p *output.Printer, result bundle.AnsibleBundleResult, ski
 }
 
 func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	var name string
 	var files []string
 	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "Replace the current context's input from a source directory",
-		Long: `Replace the input of the current context by copying a source directory into
+		Use:   "update --name <ctx-name> -f <dir>",
+		Short: "Replace a context's input from a source directory",
+		Long: `Replace the input of the named context by copying a source directory into
 it. The copied input fully replaces the previous input; the rest of the
 context — secrets, runs, rendered output, clusters, ownership, and provider
 state — is preserved.`,
 		Args:    cobra.NoArgs,
-		Example: `  bootwright context update -f ./examples/sno-libvirt-redfish`,
+		Example: `  bootwright context update --name lab -f ./examples/sno-libvirt-redfish`,
 	}
-	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the current context input (required)")
+	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the context input (required)")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		if err := workspace.ValidateName(name); err != nil {
+			return failErr(2, err)
+		}
 		if len(files) != 1 {
 			return failf(2, "context update copies exactly one source directory; pass a single -f <dir>")
 		}
@@ -178,7 +184,7 @@ state — is preserved.`,
 		}
 		if shouldRunContextRootChild() {
 			// update keeps the current pointer, so the registry is not synced back.
-			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "update", "-f", source}, stdin, stdout, stderr, false)
+			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "update", "--name", name, "-f", source}, stdin, stdout, stderr, false)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -187,7 +193,7 @@ state — is preserved.`,
 			}
 			return nil
 		}
-		ctx, err := workspace.CurrentContext()
+		ctx, err := workspace.RequireExistingContext(name)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -219,13 +225,15 @@ state — is preserved.`,
 }
 
 func newContextUseCmd(stdout io.Writer) *cobra.Command {
+	var name string
 	cmd := &cobra.Command{
-		Use:   "use <ctx-name>",
-		Short: "Set the current context",
-		Args:  cobra.ExactArgs(1),
+		Use:     "use --name <ctx-name>",
+		Short:   "Set the current context",
+		Args:    cobra.NoArgs,
+		Example: `  bootwright context use --name lab`,
 	}
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
-		name := args[0]
+	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
@@ -323,17 +331,19 @@ func newContextCurrentCmd(stdout io.Writer) *cobra.Command {
 }
 
 func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	var name string
 	var purge bool
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <ctx-name>",
-		Short: "Delete a context",
-		Args:  cobra.ExactArgs(1),
+		Use:     "delete --name <ctx-name>",
+		Short:   "Delete a context",
+		Args:    cobra.NoArgs,
+		Example: `  bootwright context delete --name lab --purge --yes`,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
 	cmd.Flags().BoolVar(&purge, "purge", false, "also delete the context base directory")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip confirmation when purging context files")
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		name := args[0]
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
@@ -348,7 +358,7 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
 				return failErr(1, errors.New("context delete aborted"))
 			}
-			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "delete", name, "--purge", "--yes"}, stdin, stdout, stderr, true)
+			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "delete", "--name", name, "--purge", "--yes"}, stdin, stdout, stderr, true)
 			if err != nil {
 				return failErr(1, err)
 			}

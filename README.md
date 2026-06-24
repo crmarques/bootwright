@@ -34,7 +34,7 @@ The CLI covers the normal convergence path:
 ```text
 bootwright example init lab --output ./lab-input
 bootwright validate -f ./lab-input
-bootwright context init lab -f ./lab-input
+bootwright context init --name lab -f ./lab-input
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret check
@@ -179,7 +179,7 @@ add-on inputs. IPMI is not apply-supported today.
 ```text
 bootwright example init lab --output ./lab-input
 bootwright validate -f ./lab-input
-bootwright context init lab -f ./lab-input
+bootwright context init --name lab -f ./lab-input
 bootwright context current
 bootwright cluster list
 bootwright cluster access

@@ -154,10 +154,10 @@ func skipInputDir(name string) bool {
 func ValidateInputDir(ctx Context) error {
 	dir := strings.TrimSpace(ctx.InputDir)
 	if dir == "" {
-		return fmt.Errorf("context %q has no input directory; re-run `bootwright context init %s -f <dir>`", ctx.Name, ctx.Name)
+		return fmt.Errorf("context %q has no input directory; re-run `bootwright context init --name %s -f <dir>`", ctx.Name, ctx.Name)
 	}
 	fail := func(reason string) error {
-		return fmt.Errorf("context %q input directory %s %s; re-run `bootwright context update -f <dir>` or `bootwright context init %s -f <dir> --yes` to repopulate it", ctx.Name, dir, reason, ctx.Name)
+		return fmt.Errorf("context %q input directory %s %s; re-run `bootwright context update --name %s -f <dir>` or `bootwright context init --name %s -f <dir> --yes` to repopulate it", ctx.Name, dir, reason, ctx.Name, ctx.Name)
 	}
 	info, err := os.Stat(dir)
 	if errors.Is(err, os.ErrNotExist) {

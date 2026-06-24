@@ -126,7 +126,7 @@ func initHostTrustTestContext(t *testing.T) workspace.Context {
 	setTestHomeAndRoot(t)
 	inputDir := t.TempDir()
 	writeHostTrustTestInput(t, inputDir)
-	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", inputDir)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", inputDir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}

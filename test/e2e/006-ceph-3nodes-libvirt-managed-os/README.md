@@ -104,7 +104,7 @@ spec:
 ## Run
 
 ```bash
-bootwright context init 006-ceph-3nodes-libvirt-managed-os \
+bootwright context init --name 006-ceph-3nodes-libvirt-managed-os \
   -f test/e2e/006-ceph-3nodes-libvirt-managed-os --yes
 bootwright secret generate
 bootwright host trust --hosts bastion --yes

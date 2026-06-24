@@ -439,7 +439,7 @@ func TestDispatcherCompletionListsSubcommandsOnce(t *testing.T) {
 func TestContextInitOutputIsConcise(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1194,7 +1194,7 @@ func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 	}
 
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "kubevirt-lab", "-f", dir)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "kubevirt-lab", "-f", dir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1207,7 +1207,7 @@ func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 func TestApplyAllScopedKubeVirtChildDryRunReportsHostDependency(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
-	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "nested", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1224,7 +1224,7 @@ func TestApplyAllScopedKubeVirtChildDryRunReportsHostDependency(t *testing.T) {
 func TestApplyKubeVirtChildOnlySelectionAcceptsReadyParent(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
-	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "nested", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1268,7 +1268,7 @@ func TestApplyKubeVirtChildOnlySelectionAcceptsReadyParent(t *testing.T) {
 func TestApplyKubeVirtParentAndChildSelectionAccepted(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
-	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "nested", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1280,7 +1280,7 @@ func TestApplyKubeVirtParentAndChildSelectionAccepted(t *testing.T) {
 
 func TestScopedValidationIgnoresOutOfScopeErrors(t *testing.T) {
 	setTestHomeAndRoot(t)
-	if stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt")); code != 0 {
+	if stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt")); code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	ctx, err := workspace.NewContext("test")
@@ -1326,7 +1326,7 @@ func TestContextInitPreparesAnsibleBundle(t *testing.T) {
 		t.Skip("embedded bundle has not been synced")
 	}
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"))
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1366,7 +1366,7 @@ func TestContextInitHelpUsesYesForReplacement(t *testing.T) {
 func TestContextInitRejectsOldConsentFlag(t *testing.T) {
 	setTestHomeAndRoot(t)
 	oldFlag := "--" + "force"
-	_, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), oldFlag)
+	_, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt"), oldFlag)
 	if code == 0 {
 		t.Fatalf("context init %s unexpectedly succeeded", oldFlag)
 	}
@@ -1374,7 +1374,7 @@ func TestContextInitRejectsOldConsentFlag(t *testing.T) {
 		t.Fatalf("stderr does not reject %s: %q", oldFlag, stderr)
 	}
 
-	_, stderr, code = runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), "--base-dir", t.TempDir())
+	_, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt"), "--base-dir", t.TempDir())
 	if code == 0 {
 		t.Fatal("context init --base-dir unexpectedly succeeded")
 	}
@@ -1386,11 +1386,11 @@ func TestContextInitRejectsOldConsentFlag(t *testing.T) {
 func TestContextInitRequiresYesForExistingContext(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	_, stderr, code = runCLI(t, "context", "init", "test", "-f", source)
+	_, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code == 0 {
 		t.Fatal("second context init without --yes unexpectedly succeeded")
 	}
@@ -1406,7 +1406,7 @@ func TestContextInitRequiresYesForExistingContext(t *testing.T) {
 func TestContextInitCopiesWorkspaceIntoContext(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1441,7 +1441,7 @@ func TestContextInitCopiesWorkspaceIntoContext(t *testing.T) {
 func TestContextInitYesDropsAndRecreates(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1454,7 +1454,7 @@ func TestContextInitYesDropsAndRecreates(t *testing.T) {
 		t.Fatal(err)
 	}
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
-	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
+	stdout, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", replacement, "--yes")
 	if code != 0 {
 		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1474,7 +1474,7 @@ func TestContextInitYesDropsAndRecreates(t *testing.T) {
 func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1489,7 +1489,7 @@ func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
 	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  retiredField: true\n\n  secrets:\n")
-	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
+	stdout, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", replacement, "--yes")
 	if code == 0 {
 		t.Fatalf("context init --yes unexpectedly accepted invalid replacement:\n%s", stdout)
 	}
@@ -1509,7 +1509,7 @@ func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 func TestContextInitYesAcceptsUnselectedInvalidFilesWithResourceSelection(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1525,7 +1525,7 @@ spec:
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
+	stdout, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", replacement, "--yes")
 	if code != 0 {
 		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1541,7 +1541,7 @@ spec:
 func TestContextInitRejectsWorkspaceInsideBootwrightRoot(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1549,7 +1549,7 @@ func TestContextInitRejectsWorkspaceInsideBootwrightRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code = runCLI(t, "context", "init", "test", "-f", ctx.BaseDir, "--yes")
+	_, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", ctx.BaseDir, "--yes")
 	if code == 0 {
 		t.Fatal("context init unexpectedly recorded a workspace inside the context directory")
 	}
@@ -1560,7 +1560,7 @@ func TestContextInitRejectsWorkspaceInsideBootwrightRoot(t *testing.T) {
 
 func TestContextInitRequiresSingleWorkspaceDirectory(t *testing.T) {
 	setTestHomeAndRoot(t)
-	_, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
+	_, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
 	if code == 0 {
 		t.Fatal("context init accepted multiple -f source paths")
 	}
@@ -1571,7 +1571,7 @@ func TestContextInitRequiresSingleWorkspaceDirectory(t *testing.T) {
 	if err := os.WriteFile(file, []byte("apiVersion: bootwright.io/v1alpha1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code = runCLI(t, "context", "init", "test", "-f", file)
+	_, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", file)
 	if code == 0 {
 		t.Fatal("context init accepted a file as workspace")
 	}
@@ -1583,7 +1583,7 @@ func TestContextInitRequiresSingleWorkspaceDirectory(t *testing.T) {
 func TestSourceEditsRequireContextUpdate(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1606,7 +1606,7 @@ func TestSourceEditsRequireContextUpdate(t *testing.T) {
 		t.Fatalf("source edit leaked into the context input before update (err=%v)", err)
 	}
 	// context update copies the edited source in; the next read sees it.
-	if _, stderr, code := runCLI(t, "context", "update", "-f", source); code != 0 {
+	if _, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", source); code != 0 {
 		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
 	}
 	after, err := os.ReadFile(inputEnv)
@@ -1618,7 +1618,7 @@ func TestSourceEditsRequireContextUpdate(t *testing.T) {
 func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1635,7 +1635,7 @@ func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(replacement, "extra-note.txt"), []byte("note\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code = runCLI(t, "context", "update", "-f", replacement)
+	stdout, stderr, code = runCLI(t, "context", "update", "--name", "test", "-f", replacement)
 	if code != 0 {
 		t.Fatalf("context update exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1654,7 +1654,7 @@ func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 
 func TestContextUpdateRequiresSingleSourceDirectory(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	_, stderr, code := runCLI(t, "context", "update", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
+	_, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
 	if code == 0 {
 		t.Fatal("context update accepted multiple -f source paths")
 	}
@@ -1718,7 +1718,7 @@ func TestContextCurrentRejectsStaleCurrent(t *testing.T) {
 func TestContextDeleteWithoutPurgeFails(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
-	_, stderr, code := runCLI(t, "context", "delete", "test")
+	_, stderr, code := runCLI(t, "context", "delete", "--name", "test")
 	if code == 0 {
 		t.Fatal("context delete without --purge unexpectedly succeeded")
 	}
@@ -1734,7 +1734,7 @@ func TestContextDeleteWithoutPurgeLeavesSharedContextData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, code := runCLI(t, "context", "delete", "test")
+	_, _, code := runCLI(t, "context", "delete", "--name", "test")
 	if code == 0 {
 		t.Fatal("context delete without --purge unexpectedly succeeded")
 	}
@@ -1750,7 +1750,7 @@ func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, stderr, code := runCLI(t, "context", "delete", "test", "--purge", "--yes")
+	_, stderr, code := runCLI(t, "context", "delete", "--name", "test", "--purge", "--yes")
 	if code != 0 {
 		t.Fatalf("context delete --purge exited %d, stderr=%q", code, stderr)
 	}
@@ -1777,17 +1777,17 @@ func TestContextSelectionIsPerHomeWithSharedStorage(t *testing.T) {
 	homeB := t.TempDir()
 
 	t.Setenv("HOME", homeA)
-	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", fixturePath("001-sno-libvirt"))
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("user A context init lab exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	t.Setenv("HOME", homeB)
-	stdout, stderr, code = runCLI(t, "context", "use", "lab")
+	stdout, stderr, code = runCLI(t, "context", "use", "--name", "lab")
 	if code != 0 {
 		t.Fatalf("user B context use lab exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	t.Setenv("HOME", homeA)
-	stdout, stderr, code = runCLI(t, "context", "init", "other", "-f", fixturePath("001-sno-libvirt"))
+	stdout, stderr, code = runCLI(t, "context", "init", "--name", "other", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("user A context init other exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1809,17 +1809,17 @@ func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
 	homeB := t.TempDir()
 
 	t.Setenv("HOME", homeA)
-	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", fixturePath("001-sno-libvirt"))
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("user A context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	t.Setenv("HOME", homeB)
-	stdout, stderr, code = runCLI(t, "context", "use", "lab")
+	stdout, stderr, code = runCLI(t, "context", "use", "--name", "lab")
 	if code != 0 {
 		t.Fatalf("user B context use exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	t.Setenv("HOME", homeA)
-	_, stderr, code = runCLI(t, "context", "delete", "lab", "--purge", "--yes")
+	_, stderr, code = runCLI(t, "context", "delete", "--name", "lab", "--purge", "--yes")
 	if code != 0 {
 		t.Fatalf("user A context delete --purge exited %d, stderr=%q", code, stderr)
 	}
@@ -2043,7 +2043,7 @@ func TestStatusReportsReadyAndMissingSetupChecks(t *testing.T) {
 	}
 	// The named input-dir error must identify the context, the input directory,
 	// and the repopulate remediation.
-	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update -f", "context init test -f <dir> --yes"} {
+	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update --name test -f", "context init --name test -f <dir> --yes"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("stderr %q missing %q", stderr, want)
 		}
@@ -2133,7 +2133,7 @@ func TestContextBackedCommandRequiresReadyContext(t *testing.T) {
 	}
 	// A missing input directory is a hard, named error: it names the context,
 	// the input directory, and the repopulate remediation.
-	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update -f"} {
+	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update --name test -f"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("stderr %q missing %q", stderr, want)
 		}
@@ -2147,14 +2147,14 @@ func TestLocalRootGateArgs(t *testing.T) {
 	}{
 		{args: []string{"context", "list"}, want: true},
 		{args: []string{"context", "current"}, want: true},
-		{args: []string{"context", "use", "lab"}, want: true},
-		{args: []string{"context", "init", "lab", "-f", "."}, want: false},
+		{args: []string{"context", "use", "--name", "lab"}, want: true},
+		{args: []string{"context", "init", "--name", "lab", "-f", "."}, want: false},
 		// context update self-escalates inside the command, like init, so the
 		// generic gate must not double-escalate.
-		{args: []string{"context", "update", "-f", "."}, want: false},
-		{args: []string{"context", "delete", "lab"}, want: false},
-		{args: []string{"context", "delete", "lab", "--purge"}, want: false},
-		{args: []string{"context", "delete", "lab", "--purge=true"}, want: false},
+		{args: []string{"context", "update", "--name", "lab", "-f", "."}, want: false},
+		{args: []string{"context", "delete", "--name", "lab"}, want: false},
+		{args: []string{"context", "delete", "--name", "lab", "--purge"}, want: false},
+		{args: []string{"context", "delete", "--name", "lab", "--purge=true"}, want: false},
 		{args: []string{"help", "preflight"}, want: false},
 		{args: []string{"completion", "bash"}, want: false},
 		{args: []string{cobra.ShellCompRequestCmd, ""}, want: false},
@@ -2769,7 +2769,7 @@ func TestContextInitPassesWorkspacePathAndSyncsRegistryAroundSudo(t *testing.T) 
 		},
 	}
 
-	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", source)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -2815,10 +2815,10 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	}
 	registry := strings.TrimPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=")
 	rootArgs = rootArgs[8:]
-	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
+	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "--name" || rootArgs[3] != "lab" || rootArgs[4] != "-f" {
 		os.Exit(2)
 	}
-	if _, err := os.Stat(filepath.Join(rootArgs[4], "environment.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(rootArgs[5], "environment.yaml")); err != nil {
 		os.Exit(2)
 	}
 	if registry == "" {
@@ -2847,7 +2847,7 @@ func TestContextUseSyncsRegistryAroundSudo(t *testing.T) {
 		},
 	}
 
-	stdout, stderr, code := runCLI(t, "context", "use", "lab")
+	stdout, stderr, code := runCLI(t, "context", "use", "--name", "lab")
 	if code != 0 {
 		t.Fatalf("context use exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -2882,7 +2882,7 @@ func TestContextDeletePurgeSyncsRegistryAroundSudo(t *testing.T) {
 		},
 	}
 
-	stdout, stderr, code := runCLI(t, "context", "delete", "lab", "--purge", "--yes")
+	stdout, stderr, code := runCLI(t, "context", "delete", "--name", "lab", "--purge", "--yes")
 	if code != 0 {
 		t.Fatalf("context delete --purge exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -2918,11 +2918,11 @@ func TestContextRegistrySyncRootHelperProcess(t *testing.T) {
 	registry := strings.TrimPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=")
 	command := rootArgs[8:]
 	switch {
-	case reflect.DeepEqual(command, []string{"context", "use", "lab"}):
+	case reflect.DeepEqual(command, []string{"context", "use", "--name", "lab"}):
 		if err := workspace.Save(registry, workspace.Store{Current: "lab"}); err != nil {
 			os.Exit(2)
 		}
-	case reflect.DeepEqual(command, []string{"context", "delete", "lab", "--purge", "--yes"}):
+	case reflect.DeepEqual(command, []string{"context", "delete", "--name", "lab", "--purge", "--yes"}):
 		if err := workspace.Save(registry, workspace.Store{}); err != nil {
 			os.Exit(2)
 		}
@@ -4094,7 +4094,7 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
-	stdout, stderr, code := runCLI(t, "context", "init", "mixed", "-f", example)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "mixed", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -4128,7 +4128,7 @@ func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
-	stdout, stderr, code := runCLI(t, "context", "init", "mixed-destroy", "-f", example)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "mixed-destroy", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -4297,7 +4297,7 @@ spec:
 `), 0o600); err != nil {
 		t.Fatalf("write addon binding: %v", err)
 	}
-	if stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", inputDir); code != 0 {
+	if stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", inputDir); code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
@@ -4426,7 +4426,7 @@ func initTestContext(t *testing.T, fixtureName string) workspace.Context {
 	t.Helper()
 	workspaceDir := copyFixtureYAML(t, fixtureName)
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", workspaceDir)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", workspaceDir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -4455,7 +4455,7 @@ func initProtectedTestContext(t *testing.T, fixtureName string) workspace.Contex
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write protected environment fixture: %v", err)
 	}
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", inputDir)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", inputDir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}

@@ -163,7 +163,7 @@ Run everything from this directory:
 cd /path/to/bootwright/examples/ceph-ibm-libvirt-lab
 
 bootwright validate -f .
-bootwright context init ceph-ibm-lab -f .
+bootwright context init --name ceph-ibm-lab -f .
 bootwright context current
 bootwright validate             # re-validate the imported context
 bootwright secret list          # shows which secrets still need bytes

@@ -33,7 +33,7 @@ Run from the repository root:
 ```bash
 make build
 make list-e2e-cases
-bin/bootwright context init 001-sno-libvirt -f test/e2e/001-sno-libvirt --yes
+bin/bootwright context init --name 001-sno-libvirt -f test/e2e/001-sno-libvirt --yes
 bin/bootwright validate
 bin/bootwright render installer --clusters sno-libvirt
 ```
@@ -68,10 +68,10 @@ KVM and permission to manage libvirt on the provider host.
    export CASE=<case-directory>
 
    # Machine or VM bastion; run this from the repo path on the bastion.
-   bootwright context init "$CASE" -f "test/e2e/$CASE" --yes
+   bootwright context init --name "$CASE" -f "test/e2e/$CASE" --yes
 
    # Containerized bastion alternative; the repo is mounted at /work.
-   # bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --yes
+   # bootwright context init --name "$CASE" -f "/work/test/e2e/$CASE" --yes
    ```
 4. Validate the context and edit the workspace desired state for the target
    hosts, addresses, BMC endpoints, and secret references. Edits are picked up
@@ -98,7 +98,7 @@ for case_dir in test/e2e/[0-9]*; do
   case_name=$(basename "$case_dir")
 
   make e2e CASE="$case_name"
-  bin/bootwright context init "$case_name" -f "$case_dir" --yes
+  bin/bootwright context init --name "$case_name" -f "$case_dir" --yes
   bin/bootwright destroy --stage clusters --yes
   bin/bootwright destroy --stage infra --yes
   make clean-e2e-state CASE="$case_name"

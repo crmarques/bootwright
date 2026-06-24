@@ -121,7 +121,7 @@ on the bastion:
 
 ```bash
 export CASE=<case-directory>
-bootwright context init "$CASE" -f "test/e2e/$CASE" --yes
+bootwright context init --name "$CASE" -f "test/e2e/$CASE" --yes
 bootwright status
 eval "$(bootwright print-env)"
 ```

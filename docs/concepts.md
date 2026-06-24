@@ -115,7 +115,7 @@ directory:
 | Run logs and ledgers | `/var/lib/bootwright/contexts/<context>/runs` |
 | Cluster outputs | `/var/lib/bootwright/contexts/<context>/clusters/<cluster>` |
 
-`context init <name> -f <dir>` copies the whole source directory into the
+`context init --name <name> -f <dir>` copies the whole source directory into the
 context's `input/` directory, so the context is self-contained: every command
 reads the copy and it keeps working even if the source is moved or deleted.
 Because the input is a copy, editing the source has no effect until you refresh
@@ -123,11 +123,11 @@ it with `context update`. Init fails if the context already exists; `--yes`
 drops the existing context and recreates it from the source.
 
 !!! note "Refresh input with `context update`"
-    `context update -f <dir>` replaces the current context's `input/` with a
-    fresh copy of the source and preserves everything else (secrets, runs,
+    `context update --name <name> -f <dir>` replaces the named context's `input/`
+    with a fresh copy of the source and preserves everything else (secrets, runs,
     rendered output, clusters, ownership). An `input/` directory that becomes
     missing or unreadable is a named failure at context-resolution time, with a
-    `context update -f` remediation.
+    `context update --name <name> -f` remediation.
 
 Run Bootwright as your user. The CLI re-executes through `sudo` when it needs
 protected state.

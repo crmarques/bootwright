@@ -62,11 +62,11 @@ func currentContextValidation() (workspace.Context, []output.Check) {
 	store, err := workspace.Load(registry)
 	if err != nil {
 		checks[0] = missingContextCheck("registry", err.Error(), "fix or remove "+registry)
-		return workspace.Context{}, append(checks, missingContextCheck("current", "registry cannot be loaded", "bootwright context init <name> -f <path>"))
+		return workspace.Context{}, append(checks, missingContextCheck("current", "registry cannot be loaded", "bootwright context init --name <name> -f <path>"))
 	}
 	ctx, err := workspace.Current(store)
 	if err != nil {
-		return workspace.Context{}, append(checks, missingContextCheck("current", err.Error(), "bootwright context init <name> -f <path>"))
+		return workspace.Context{}, append(checks, missingContextCheck("current", err.Error(), "bootwright context init --name <name> -f <path>"))
 	}
 	checks = append(checks, okContextCheck("current", ctx.Name))
 	checks = append(checks, validateContextChecks(ctx)...)
@@ -158,12 +158,12 @@ func secretContextRemediation(entry secretListEntry) string {
 func contextReadinessChecks(ctx workspace.Context) []output.Check {
 	checks := []output.Check{}
 	if err := workspace.ValidateName(ctx.Name); err != nil {
-		checks = append(checks, missingContextCheck("name", err.Error(), "bootwright context init <name> -f <path>"))
+		checks = append(checks, missingContextCheck("name", err.Error(), "bootwright context init --name <name> -f <path>"))
 	} else {
 		checks = append(checks, okContextCheck("name", ctx.Name))
 	}
 	if err := workspace.ValidateContext(ctx); err != nil {
-		checks = append(checks, missingContextCheck("path layout", err.Error(), "bootwright context init <name> -f <path> --yes"))
+		checks = append(checks, missingContextCheck("path layout", err.Error(), "bootwright context init --name <name> -f <path> --yes"))
 		return checks
 	}
 	checks = append(checks,
@@ -183,10 +183,10 @@ func contextReadinessChecks(ctx workspace.Context) []output.Check {
 
 // inputDirContextCheck reports whether the owned input directory (the copy of
 // the operator's source) exists and is readable. Evidence names the input
-// directory; remediation is repopulating it with context update -f.
+// directory; remediation is repopulating it with context update --name -f.
 func inputDirContextCheck(ctx workspace.Context) output.Check {
 	if err := workspace.ValidateInputDir(ctx); err != nil {
-		return missingContextCheck("input", err.Error(), fmt.Sprintf("bootwright context update -f <dir> (or bootwright context init %s -f <dir> --yes)", ctx.Name))
+		return missingContextCheck("input", err.Error(), fmt.Sprintf("bootwright context update --name %s -f <dir> (or bootwright context init --name %s -f <dir> --yes)", ctx.Name, ctx.Name))
 	}
 	return okContextCheck("input", ctx.InputDir)
 }
@@ -194,7 +194,7 @@ func inputDirContextCheck(ctx workspace.Context) output.Check {
 func fileContextCheck(name, path string) output.Check {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return missingContextCheck(name, path+" missing", "bootwright context init <name> -f <path>")
+		return missingContextCheck(name, path+" missing", "bootwright context init --name <name> -f <path>")
 	}
 	if err != nil {
 		return missingContextCheck(name, err.Error(), "fix "+path)
@@ -208,7 +208,7 @@ func fileContextCheck(name, path string) output.Check {
 func dirContextCheck(name, path string) output.Check {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return missingContextCheck(name, path+" missing", "bootwright context init <name> -f <path> --yes")
+		return missingContextCheck(name, path+" missing", "bootwright context init --name <name> -f <path> --yes")
 	}
 	if err != nil {
 		return missingContextCheck(name, err.Error(), "fix "+path)
@@ -222,7 +222,7 @@ func dirContextCheck(name, path string) output.Check {
 func secretsDirModeCheck(path string) output.Check {
 	info, err := os.Stat(path)
 	if err != nil {
-		return missingContextCheck("secrets-dir mode", path+" cannot be checked", "bootwright context init <name> -f <path> --yes")
+		return missingContextCheck("secrets-dir mode", path+" cannot be checked", "bootwright context init --name <name> -f <path> --yes")
 	}
 	if !info.IsDir() {
 		return missingContextCheck("secrets-dir mode", path+" is not a directory", "replace it with a directory")

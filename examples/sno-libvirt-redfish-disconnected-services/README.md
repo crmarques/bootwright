@@ -21,7 +21,7 @@ managed NTP, trust material, and installer artifact publication.
 
 ```text
 bootwright validate -f <input-dir>
-bootwright context init lab -f <input-dir>
+bootwright context init --name lab -f <input-dir>
 bootwright secret generate
 bootwright host trust
 bootwright bastion setup --yes

@@ -45,7 +45,7 @@ make clean-e2e-state CASE=001-sno-libvirt
 The user-facing equivalent is plain `bootwright`:
 
 ```text
-bootwright context init <case> -f test/e2e/<case> --yes
+bootwright context init --name <case> -f test/e2e/<case> --yes
 bootwright preflight bastion
 bootwright preflight infra --dry-run
 bootwright preflight all --dry-run
@@ -77,7 +77,7 @@ for case_dir in test/e2e/[0-9]*; do
   case_name=$(basename "$case_dir")
 
   make e2e CASE="$case_name"
-  bin/bootwright context init "$case_name" -f "$case_dir" --yes
+  bin/bootwright context init --name "$case_name" -f "$case_dir" --yes
   bin/bootwright destroy --stage clusters --yes
   bin/bootwright destroy --stage infra --yes
   make clean-e2e-state CASE="$case_name"
