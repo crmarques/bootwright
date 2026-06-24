@@ -46,6 +46,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		perHost          int
 		redfish          int
 		stage            string
+		through          string
 		streamAnsible    bool
 		scopedValidation bool
 	)
@@ -107,6 +108,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to %s: %s families, or a sub-phase %s (default full graph)", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerStageCompletion(cmd, converge.ApplyStageNames())
+		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("%s from the beginning up to and including a stage: %s families, or a sub-phase %s (cumulative prefix; mutually exclusive with --stage)", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply")
 		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, "validate only the resources within the selected --clusters/--stage scope, ignoring desired-state errors in objects outside it (no effect without --clusters)")
 	} else {
@@ -137,12 +140,20 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		runScope := scope
 		runCommandLabel := commandLabel
 		if options.stageSelector {
+			if stage != "" && through != "" {
+				return failErr(2, errors.New("--stage and --through are mutually exclusive: --stage runs exactly that phase, --through runs every phase from the beginning up to and including it"))
+			}
 			var err error
-			runScope, err = converge.ApplyStageScope(stage)
+			if through != "" {
+				runScope, err = converge.ApplyThroughScope(through)
+				runCommandLabel = converge.ApplyThroughCommandLabel(through, action, commandLabel)
+			} else {
+				runScope, err = converge.ApplyStageScope(stage)
+				runCommandLabel = converge.ApplyStageCommandLabel(stage, action, commandLabel)
+			}
 			if err != nil {
 				return failErr(2, err)
 			}
-			runCommandLabel = converge.ApplyStageCommandLabel(stage, action, commandLabel)
 		}
 		ctx, err := cf.resolve()
 		if err != nil {

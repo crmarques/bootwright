@@ -60,7 +60,10 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
   bootwright apply --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
 
   # Install selected container and storage clusters, addons, and integrations
-  bootwright apply --stage clusters --clusters dc1-ocp,ceph-storage --yes`,
+  bootwright apply --stage clusters --clusters dc1-ocp,ceph-storage --yes
+
+  # Run everything from the beginning up to and including a stage
+  bootwright apply --through base --yes`,
 	})
 }
 
@@ -79,6 +82,9 @@ func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 
   # Preview only infrastructure for selected clusters
   bootwright plan --stage infra --clusters managed-01
+
+  # Preview everything from the beginning up to and including a stage
+  bootwright plan --through base
 
   # Machine-readable output for automation
   bootwright plan --output json`,

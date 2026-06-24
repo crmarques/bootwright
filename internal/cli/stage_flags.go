@@ -10,14 +10,20 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 )
 
-// registerStageCompletion wires shell completion for a command's --stage flag to
-// a fixed value set. Callers pass the values from internal/converge's stage
-// accessors (ApplyStageNames/DestroyStageNames), so completion, validation, and
-// the error/help text all derive from one source and never drift.
-func registerStageCompletion(cmd *cobra.Command, values []string) {
-	_ = cmd.RegisterFlagCompletionFunc("stage", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+// registerFlagCompletion wires shell completion for a command flag to a fixed
+// value set. Callers pass the values from internal/converge's stage accessors
+// (ApplyStageNames/DestroyStageNames), so completion, validation, and the
+// error/help text all derive from one source and never drift. --stage and
+// --through share the same vocabulary through this one helper.
+func registerFlagCompletion(cmd *cobra.Command, flag string, values []string) {
+	_ = cmd.RegisterFlagCompletionFunc(flag, func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return values, cobra.ShellCompDirectiveNoFileComp
 	})
+}
+
+// registerStageCompletion is the --stage shorthand for registerFlagCompletion.
+func registerStageCompletion(cmd *cobra.Command, values []string) {
+	registerFlagCompletion(cmd, "stage", values)
 }
 
 // printStageScopeNotices annotates a scoped dry-run/plan so a narrow --stage

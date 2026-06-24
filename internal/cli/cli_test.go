@@ -123,7 +123,7 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply --help exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster or StorageCluster"} {
+	for _, want := range []string{"--stage", "--through", "infra|clusters", "--clusters", "ContainerCluster or StorageCluster"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
@@ -227,6 +227,47 @@ func TestStageRejectionMessagesListCanonicalVocabulary(t *testing.T) {
 	_, destroyErr, destroyCode := runCLI(t, "destroy", "--stage", "bogus", "--dry-run")
 	if destroyCode != 2 || !strings.Contains(destroyErr, "--stage must be one of infra, clusters (sub-phases fabric, machines, deps, base, addons are apply-only)") {
 		t.Fatalf("destroy --stage bogus code=%d stderr=%q, want family list + apply-only note", destroyCode, destroyErr)
+	}
+	// --through derives the same canonical vocabulary as --stage.
+	_, throughErr, throughCode := runCLI(t, "apply", "--through", "bogus", "--dry-run")
+	if throughCode != 2 || !strings.Contains(throughErr, "--through must be one of infra, clusters, fabric, machines, deps, base, addons") {
+		t.Fatalf("apply --through bogus code=%d stderr=%q, want full through vocabulary", throughCode, throughErr)
+	}
+}
+
+func TestApplyThroughAndStageMutuallyExclusive(t *testing.T) {
+	_, stderr, code := runCLI(t, "apply", "--stage", "infra", "--through", "base", "--dry-run")
+	if code != 2 {
+		t.Fatalf("apply --stage infra --through base exited %d, want 2; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "--stage and --through are mutually exclusive") {
+		t.Fatalf("apply --stage+--through stderr = %q, want mutual-exclusion message", stderr)
+	}
+}
+
+func TestApplyThroughBaseDryRunReportsTrailingOmissionsWithoutPriorWarning(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "apply", "--through", "base", "--dry-run", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("apply --through base --dry-run exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "phases not in this plan: addons") {
+		t.Fatalf("apply --through base dry-run should report only addons omitted:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "assumes a prior apply completed") {
+		t.Fatalf("apply --through base dry-run must not warn about assumed prior phases:\n%s", stdout)
+	}
+}
+
+func TestStateCheckHelpDocumentsThrough(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "state-check", "--help")
+	if code != 0 {
+		t.Fatalf("state-check --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"--stage", "--through", "infra|clusters"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("state-check help missing %q:\n%s", want, stdout)
+		}
 	}
 }
 

@@ -39,6 +39,85 @@ func ApplyStageScope(stage string) (Scope, error) {
 	}
 }
 
+// ApplyThroughScope builds a cumulative prefix scope: every canonical phase from
+// fabric up to and including the named endpoint, in AllScope order. It is the
+// --through counterpart to ApplyStageScope's exact-slice --stage. A family
+// endpoint resolves to the last phase of that family (infra->machines,
+// clusters->addons); "" means the full graph. Where a prefix coincides with an
+// existing named scope it returns that scope unchanged so playbook, artifact
+// name, and limit stay canonical. Because the prefix always begins at fabric,
+// StageScopeOmissions reports no assumedPrior phases for any --through scope.
+func ApplyThroughScope(stage string) (Scope, error) {
+	s := strings.TrimSpace(stage)
+	if s == "" {
+		return AllScope, nil
+	}
+	end, ok := throughEndPhase(s)
+	if !ok {
+		return Scope{}, fmt.Errorf("--through must be one of %s", strings.Join(ApplyStageNames(), ", "))
+	}
+	idx := slices.Index(AllScope.PhaseNames, end)
+	prefix := append([]string(nil), AllScope.PhaseNames[:idx+1]...) // own the slice; fabric..end inclusive
+	switch {
+	case len(prefix) == len(AllScope.PhaseNames):
+		return AllScope, nil // through addons / through clusters
+	case slices.Equal(prefix, InfraScope.PhaseNames):
+		return InfraScope, nil // through machines / through infra
+	default:
+		return prefixStageScope(prefix), nil // through fabric / through deps / through base
+	}
+}
+
+// throughEndPhase maps a --through endpoint token to its last canonical phase.
+// Families collapse to their final phase; a sub-phase is its own endpoint.
+func throughEndPhase(stage string) (string, bool) {
+	switch stage {
+	case "infra":
+		return PhaseMachines, true
+	case "clusters":
+		return PhaseAddons, true
+	default:
+		if slices.Contains(SubPhaseStageNames(), stage) {
+			return stage, true
+		}
+		return "", false
+	}
+}
+
+// prefixStageScope is the single constructor for a from-beginning prefix that
+// does NOT coincide with InfraScope/AllScope (it ends at fabric, deps, or base).
+// Apply runs it through the task graph (PlanApplyTasksChecked filters by
+// PhaseNames), so no per-prefix ApplyPlaybook is needed — identical to
+// subPhaseStageScope. A prefix that reaches deps spans both the infra and
+// clusters host groups, so it adopts AllScope's empty AnsibleLimit (= all
+// groups) rather than a single family's limit; a prefix wholly within infra
+// ([fabric]) keeps infraAnsibleLimit.
+func prefixStageScope(prefix []string) Scope {
+	end := prefix[len(prefix)-1]
+	reachesClusters := slices.Contains(prefix, PhaseDeps) // prefix always contains fabric
+	limit := infraAnsibleLimit
+	if reachesClusters {
+		limit = ""
+	}
+	return Scope{
+		Name:                    "through-" + end,
+		PhaseNames:              prefix,
+		ArtifactsBaseName:       "through-" + end,
+		NoAnsible:               false,           // fabric is always present and uses ansible
+		TargetsContainerInstall: reachesClusters, // deps/base drive openshift-install
+		AnsibleLimit:            limit,
+	}
+}
+
+// ApplyThroughCommandLabel mirrors ApplyStageCommandLabel but prefixes "through "
+// so the run banner distinguishes a cumulative prefix from a --stage slice.
+func ApplyThroughCommandLabel(stage, action, defaultLabel string) string {
+	if strings.TrimSpace(stage) == "" {
+		return defaultLabel
+	}
+	return "through " + strings.TrimSpace(stage) + " " + action
+}
+
 // subPhaseStageScope builds the scope that selects exactly one sub-phase. It is
 // the single constructor for every sub-phase scope; ApplyStageScope only calls
 // it for a validated sub-phase name, so a sub-phase has no second hand-written

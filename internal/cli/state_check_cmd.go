@@ -17,6 +17,7 @@ import (
 func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 	var (
 		stage        string
+		through      string
 		clusterScope string
 		output       string
 		override     bool
@@ -34,12 +35,17 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
   # Limit to the infrastructure stage
   bootwright state-check --stage infra
 
+  # Check everything up to and including the clusters stage
+  bootwright state-check --through clusters
+
   # Machine-readable drift report
   bootwright state-check --output json`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("limit to a stage: %s families, or a sub-phase %s", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 	registerStageCompletion(cmd, converge.ApplyStageNames())
+	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to everything up to and including a stage: a %s family or a sub-phase %s (cumulative prefix; mutually exclusive with --stage)", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check")
 	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json")
 	cmd.Flags().BoolVar(&override, "override", false, "rejected: state-check never mutates state or suppresses drift")
@@ -50,7 +56,13 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if override {
 			return failErr(2, errors.New("--override is not valid for state-check; it never mutates state or suppresses drift"))
 		}
+		if stage != "" && through != "" {
+			return failErr(2, errors.New("--stage and --through are mutually exclusive: --stage limits to exactly that phase, --through limits to every phase from the beginning up to and including it"))
+		}
 		scope, err := converge.ApplyStageScope(stage)
+		if through != "" {
+			scope, err = converge.ApplyThroughScope(through)
+		}
 		if err != nil {
 			return failErr(2, err)
 		}
