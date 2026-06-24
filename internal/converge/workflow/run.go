@@ -136,7 +136,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if reporter != nil {
 		reporter.RenderStart()
 	}
-	ownershipRecords, err := loadOwnershipRecordsForRun(opts.Playbook, ownershipDir)
+	ownershipRecords, err := loadOwnershipRecordsForRun(opts.Playbook, ownershipDir, opts.ContextName)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -241,11 +241,20 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	return RunResult{Render: result, Command: command}, nil
 }
 
-func loadOwnershipRecordsForRun(playbook, ownershipDir string) ([]ownership.ResourceRecord, error) {
+func loadOwnershipRecordsForRun(playbook, ownershipDir, contextName string) ([]ownership.ResourceRecord, error) {
 	if !strings.Contains(playbook, "destroy") {
 		return nil, nil
 	}
-	return ownership.LoadResources(ownershipDir)
+	records, err := ownership.LoadResources(ownershipDir)
+	if err != nil {
+		return nil, err
+	}
+	// Filter by context to match destroy planning (LoadContextOwnershipRecords)
+	// and the operator-facing orphan preview. Without this, the inventory the
+	// teardown actually executes against could include a foreign-context record
+	// that shares the ownership dir — a host the preview and confirmation prompt
+	// already excluded. The execution path must not be wider than the gate.
+	return ownership.FilterByContext(records, contextName), nil
 }
 
 func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {
