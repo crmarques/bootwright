@@ -113,6 +113,13 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 			"credentialsRef": credRef,
 			"validateCerts":  false,
 			"setBootSource":  false,
+			// The emulated sushy-tools BMC builds its VirtualMedia driver
+			// lazily on the first /Systems/<id>/VirtualMedia GET, initializing
+			// a shared sqlite state DB under a WAL lock that parallel boots
+			// race. This flag tells the boot role to serialize and retry that
+			// first probe through the cold-init lock. Real per-server BMCs
+			// share no such state, so they leave it unset (default false).
+			"vmediaColdInitRetry": true,
 		},
 		"readiness": map[string]any{
 			"type": "ssh",

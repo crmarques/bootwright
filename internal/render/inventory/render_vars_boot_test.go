@@ -253,6 +253,12 @@ func TestEmulatedLibvirtBootProjectsMediaBackend(t *testing.T) {
 	if got := redfish["setBootSource"]; got != false {
 		t.Fatalf("setBootSource got %v, want false for media backend", got)
 	}
+	// The emulated sushy-tools BMC shares a lazily-built VirtualMedia sqlite
+	// state DB, so the boot role must serialize and retry the first probe
+	// through that cold-init lock.
+	if got := redfish["vmediaColdInitRetry"]; got != true {
+		t.Fatalf("vmediaColdInitRetry got %v, want true for emulated sushy BMC", got)
+	}
 }
 
 func TestBareMetalBootDoesNotProjectMediaBackend(t *testing.T) {
@@ -273,6 +279,12 @@ func TestBareMetalBootDoesNotProjectMediaBackend(t *testing.T) {
 	redfish := boot["redfish"].(map[string]any)
 	if got := redfish["setBootSource"]; got != true {
 		t.Fatalf("setBootSource got %v, want true for real BMC", got)
+	}
+	// Real per-server BMCs share no VirtualMedia state, so they must not carry
+	// the cold-init retry flag -- the boot role makes a single best-effort
+	// probe instead of serially burning the retry window on every host.
+	if _, ok := redfish["vmediaColdInitRetry"]; ok {
+		t.Fatalf("bare-metal redfish unexpectedly has vmediaColdInitRetry: %v", redfish)
 	}
 }
 
