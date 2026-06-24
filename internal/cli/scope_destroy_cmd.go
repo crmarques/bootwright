@@ -274,7 +274,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			renderResult = result
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, streamAnsible)
-			result, ledger, _, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
+			result, ledger, _, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
 			if gerr != nil {
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
