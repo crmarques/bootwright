@@ -20,7 +20,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			if !ok {
 				continue
 			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Hostname, machine.Metadata.Name), []string{"deps", "base"}, machine, true)...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Hostname, machine.Metadata.Name), []string{"deps", "base"}, machine, true, secretRefOwner{storageCluster: cluster.Metadata.Name})...)
 		}
 	}
 	clusterByName := map[string]v1alpha1.StorageCluster{}
@@ -45,7 +45,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			if !ok {
 				continue
 			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false)...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false, secretRefOwner{})...)
 		}
 		if len(ssh.MachineRefs) == 0 {
 			cluster, ok := clusterByName[export.Spec.StorageClusterRef.Name]
@@ -58,7 +58,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 					if !ok {
 						continue
 					}
-					out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false)...)
+					out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false, secretRefOwner{})...)
 				}
 			}
 		}
@@ -75,7 +75,7 @@ func machineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
 	return v1alpha1.Machine{}, false
 }
 
-func machineSSHSecretRequirements(label string, phases []string, machine v1alpha1.Machine, requirePair bool) []secretRefRequirement {
+func machineSSHSecretRequirements(label string, phases []string, machine v1alpha1.Machine, requirePair bool, owner secretRefOwner) []secretRefRequirement {
 	var out []secretRefRequirement
 	if machine.Spec.Access.SSH == nil {
 		return out
@@ -86,6 +86,7 @@ func machineSSHSecretRequirements(label string, phases []string, machine v1alpha
 			label:   label + " keyRef",
 			phases:  phases,
 			role:    secret.MaterialSSHPrivate,
+			owner:   owner,
 		}
 		if requirePair {
 			req.role = secret.MaterialSSHPublic
@@ -99,6 +100,7 @@ func machineSSHSecretRequirements(label string, phases []string, machine v1alpha
 			label:   label + " knownHostsRef",
 			phases:  phases,
 			role:    secret.MaterialPrimary,
+			owner:   owner,
 		})
 	}
 	return out

@@ -8,7 +8,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 		entitlementsByName[entitlement.Name] = entitlement
 	}
 	var out []secretRefRequirement
-	appendEntitlement := func(refName, label string, phases []string) {
+	appendEntitlement := func(refName, label string, phases []string, owner secretRefOwner) {
 		entitlement, ok := entitlementsByName[refName]
 		if !ok {
 			return
@@ -28,6 +28,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 					refName: rhsm.OrganizationRef.Name,
 					label:   label + " rhsm organizationRef",
 					phases:  phases,
+					owner:   owner,
 				})
 			}
 			if rhsm.ActivationKeyRef.Name != "" {
@@ -35,6 +36,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 					refName: rhsm.ActivationKeyRef.Name,
 					label:   label + " rhsm activationKeyRef",
 					phases:  phases,
+					owner:   owner,
 				})
 			}
 		}
@@ -44,6 +46,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 					refName: entitlement.Registry.CredentialsRef.Name,
 					label:   label + " registry credentialsRef",
 					phases:  phases,
+					owner:   owner,
 				})
 			}
 			if entitlement.Registry.TrustBundleRef.Name != "" {
@@ -51,6 +54,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 					refName: entitlement.Registry.TrustBundleRef.Name,
 					label:   label + " registry trustBundleRef",
 					phases:  phases,
+					owner:   owner,
 				})
 			}
 		}
@@ -63,6 +67,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 			image.Spec.InstallSource.EntitlementRef.Name,
 			"MachineImage/"+image.Metadata.Name+" installSource entitlementRef",
 			[]string{"machines"},
+			secretRefOwner{},
 		)
 	}
 	for _, cluster := range state.StorageClusters {
@@ -73,6 +78,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 			cluster.Spec.Ceph.EntitlementRef.Name,
 			"StorageCluster/"+cluster.Metadata.Name+" ceph entitlementRef",
 			[]string{"deps", "base"},
+			secretRefOwner{storageCluster: cluster.Metadata.Name},
 		)
 	}
 	return out

@@ -24,6 +24,10 @@ type secretRefRequirement struct {
 	role          secret.MaterialRole
 	tlsPair       bool
 	sshPair       bool
+	// owner ties the requirement to the work object whose lifecycle needs it (see
+	// secretRefOwner in scope.go), so a scoped run can drop secrets owned by
+	// render-reference pull-ins.
+	owner secretRefOwner
 }
 
 type secretRefSource string
@@ -34,16 +38,15 @@ const (
 	secretRefSourceGenerated secretRefSource = "generated"
 )
 
-func secretRefChecks(state v1alpha1.State, secretsDir string, selected []Phase, deps Deps) []Check {
-	return secretRefChecksWithLocalityPolicy(state, secretsDir, selected, deps, locality.DefaultPolicy)
-}
-
-func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, selected []Phase, deps Deps, localPolicy locality.Policy) []Check {
+func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, selected []Phase, deps Deps, localPolicy locality.Policy, secretScope *SecretScope) []Check {
 	requirements := collectSecretRefRequirementsWithLocalityPolicy(state, localPolicy)
 	var inScope []secretRefRequirement
 	needsSecretsDir := false
 	for _, req := range requirements {
 		if !anyPhaseInScope(req.phases, selected) {
+			continue
+		}
+		if !secretScope.allowsMachine(req.owner.machine) || !secretScope.allowsStorageCluster(req.owner.storageCluster) {
 			continue
 		}
 		if req.source == secretRefSourceGenerated || req.source == secretRefSourceContext {
@@ -133,7 +136,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		if locality.IsControllerLocalMachine(machine, localPolicy) {
 			continue
 		}
-		out = append(out, machineSSHSecretRequirements(fmt.Sprintf("machine %s", machine.Metadata.Name), []string{"fabric", "machines", "deps", "base"}, machine, false)...)
+		out = append(out, machineSSHSecretRequirements(fmt.Sprintf("machine %s", machine.Metadata.Name), []string{"fabric", "machines", "deps", "base"}, machine, false, secretRefOwner{machine: machine.Metadata.Name})...)
 	}
 	for _, p := range state.InfraProviders {
 		if l := p.Spec.Libvirt; l != nil && l.BMCEmulationDefaults != nil && l.BMCEmulationDefaults.Auth != nil && l.BMCEmulationDefaults.Auth.CredentialsRef.Name != "" {
@@ -171,6 +174,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			refName: machine.Spec.Hardware.Management.BMC.CredentialsRef.Name,
 			label:   fmt.Sprintf("machine %s hardware management bmc credentialsRef", machine.Metadata.Name),
 			phases:  []string{"fabric", "deps", "base"},
+			owner:   secretRefOwner{machine: machine.Metadata.Name},
 		})
 	}
 

@@ -81,7 +81,7 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
 	var tools []string
 	for _, check := range checks {
 		if check.Group == checkGroupInstallerTools {
@@ -129,7 +129,7 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		UID: func() int { return 1000 },
 	}
 
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, deps, nil)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, deps, nil, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
 }
@@ -351,12 +351,122 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	}, nil)
+	}, nil, nil)
 
 	for _, name := range []string{"ansible-playbook", "python3", "ssh", "scp"} {
 		assertPreflightCheckStatus(t, checks, name, "OK")
 	}
 	assertPreflightCheckStatus(t, checks, "StorageCluster/ceph ceph entitlementRef registry credentialsRef", "FAIL")
+}
+
+// A scoped apply pulls a managed StorageCluster into the plan state only as a
+// render reference for a container cluster's data-foundation attachment. Its
+// bootstrap secrets and cephadm SSH/scp tooling belong to the storage cluster's
+// own lifecycle, so a SecretScope that omits it must drop those checks while the
+// in-scope container cluster's secrets stay required.
+func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
+					"redhat-org":                {},
+					"redhat-activation-key":     {},
+					"ceph-registry-credentials": {},
+				},
+				Entitlements: []v1alpha1.EnvironmentEntitlement{{
+					Name:     "rhcs",
+					Provider: v1alpha1.EntitlementProviderRedHat,
+					Product:  v1alpha1.EntitlementProductCeph,
+					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+					},
+					Registry: &v1alpha1.EnvironmentEntitlementRegistry{
+						CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+					},
+				}},
+			},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+				OS:           v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
+				Addresses:    []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{
+						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+						KeyRef:     v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+					},
+				},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ocp"},
+			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
+				PullSecretRef: v1alpha1.SecretRef{Name: "openshift-pull-secret"},
+			}},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Distribution:   v1alpha1.StorageCephDistributionRedHat,
+					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+					Topology: v1alpha1.StorageCephTopology{
+						Hosts: []v1alpha1.StorageCephHost{{
+							Hostname:   "ceph-0",
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Site:       "dc1",
+							Roles:      []string{v1alpha1.StorageCephRoleMON},
+						}},
+					},
+				},
+			},
+		}},
+	}
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) { return "/bin/" + name, nil },
+		StatPath: func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+	}
+	// Scope to the container cluster only: the Ceph cluster and its node are
+	// render references, so neither is a work object.
+	scope := &SecretScope{Machines: map[string]bool{}, StorageClusters: map[string]bool{}}
+	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, scope)
+
+	for _, name := range []string{
+		"StorageCluster/ceph ceph entitlementRef rhsm organizationRef",
+		"StorageCluster/ceph ceph entitlementRef registry credentialsRef",
+		"StorageCluster/ceph node/ceph-0 Machine/ceph-0 keyRef private",
+		"machine ceph-0 keyRef",
+		"ssh",
+		"scp",
+	} {
+		if checkPresent(checks, name) {
+			t.Errorf("render-reference Ceph check %q must be dropped by the secret scope: %+v", name, checkNames(checks))
+		}
+	}
+	// The in-scope container cluster still requires its pull secret.
+	assertPreflightCheckStatus(t, checks, "ocp pullSecretRef", "FAIL")
+}
+
+func checkPresent(checks []Check, name string) bool {
+	for _, check := range checks {
+		if check.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func checkNames(checks []Check) []string {
+	out := make([]string, 0, len(checks))
+	for _, check := range checks {
+		out = append(out, check.Name)
+	}
+	return out
 }
 
 func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
@@ -396,7 +506,7 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	}, nil)
+	}, nil, nil)
 
 	assertPreflightCheckStatus(t, checks, "oc", "OK")
 	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
@@ -513,7 +623,7 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 		Hostname: func() (string, error) {
 			return "controller", nil
 		},
-	}})
+	}}, nil)
 
 	for _, check := range checks {
 		if check.Name == "machine bastion keyRef" {
@@ -551,7 +661,7 @@ func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
 		Hostname: func() (string, error) {
 			return "bastion", nil
 		},
-	}})
+	}}, nil)
 
 	for _, check := range checks {
 		if check.Name == "machine bastion keyRef" {
@@ -620,7 +730,7 @@ func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
 
 	for _, name := range []string{"oc", "openshift-install"} {
 		for _, check := range checks {

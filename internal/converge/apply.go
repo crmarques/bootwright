@@ -30,28 +30,29 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State) error {
 }
 
 // PlanScopedApply stamps the apply safety mode onto the plan's extra vars,
-// builds the apply target (widening the storage selection to the scoped
-// state's transitive closure when a --clusters selection is active), plans
-// the checked task graph, and resolves concurrency limits. The returned
-// dryRunTasks carry dry-run cluster log annotations for plan/JSON output.
-func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode, storageSelectionActive bool, limits workflow.ConcurrencyLimits, clustersDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
+// builds the apply target (restricting storage provisioning to the explicitly
+// selected storage roots when a --clusters selection is active), plans the
+// checked task graph, and resolves concurrency limits. The returned dryRunTasks
+// carry dry-run cluster log annotations for plan/JSON output.
+//
+// selectedStorageNames is the StorageCluster names named directly in --clusters
+// (empty when only container clusters are selected); clusterSelectionActive
+// reports whether any --clusters selection is in force.
+func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, limits workflow.ConcurrencyLimits, clustersDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
 	// The explicit safety mode drives both the Go object preflight and the
 	// per-role Ansible gate (create/continue/override). It replaces the legacy
 	// bootwright_install_override boolean.
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_apply_mode="+string(mode))
 	applyTarget := runScope.ApplyTarget()
-	if storageSelectionActive {
-		// plan.State already includes the transitive closure of storage clusters
-		// required by the selected container clusters' data-foundation
-		// attachments (FilterStateToClusters -> filterStorageToClusters).
-		// Schedule provision for all of them; selecting only the literal
-		// --clusters storage names would skip a transitively-required managed
-		// StorageCluster, failing the attachment task after nodes have booted.
-		names := make([]string, 0, len(plan.State.StorageClusters))
-		for _, sc := range plan.State.StorageClusters {
-			names = append(names, sc.Metadata.Name)
-		}
-		applyTarget.StorageClusterNames = names
+	if clusterSelectionActive {
+		// plan.State includes managed StorageClusters pulled in only as render
+		// references for a selected container cluster's data-foundation
+		// attachment. Per ADR-0004 a scoped apply does not implicitly provision a
+		// cross-cluster dependency, so provision only the storage roots named
+		// directly in --clusters; co-select the storage cluster (or apply it
+		// first) to provision it alongside its consumers. A non-nil empty slice
+		// keeps every render-reference cluster out of the provisioning set.
+		applyTarget.StorageClusterNames = append([]string{}, selectedStorageNames...)
 	}
 	tasks, err := workflow.PlanApplyTasksChecked(applyTarget, plan.State)
 	if err != nil {

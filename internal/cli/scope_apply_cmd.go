@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -173,13 +174,22 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
 		}
 		storageSelectionActive := false
+		var selectedStorageNames []string
+		var secretScope *preflight.SecretScope
 		if options.stageSelector && strings.TrimSpace(flags.clusterScope) != "" {
-			// Validate the requested names here; the effective storage selection is
-			// derived from the scoped plan.State below so it includes
-			// Data Foundation attachment targets pulled in transitively.
-			if _, _, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope); err != nil {
+			// Resolve the selected cluster roots. Only storage roots named directly
+			// in --clusters are provisioned; a managed StorageCluster pulled into
+			// plan.State only as a render reference for a data-foundation attachment
+			// is left out of both the provisioning set and the readiness checks, so
+			// scoping a container cluster never requires its external storage's
+			// bootstrap secrets or host trust (ADR-0004).
+			containerNames, storageNames, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
+			if err != nil {
 				return failErr(1, err)
 			}
+			selectedStorageNames = storageNames
+			machines, storageClusters := clusteraccess.ApplyWorkObjects(state, containerNames, storageNames)
+			secretScope = &preflight.SecretScope{Machines: machines, StorageClusters: storageClusters}
 			storageSelectionActive = true
 		}
 		if err := clusteraccess.ValidateScopedApplySharedServices(state, runScope.Name, flags.clusterScope); err != nil {
@@ -212,7 +222,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				}
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, storageSelectionActive, workflow.ConcurrencyLimits{
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, selectedStorageNames, storageSelectionActive, workflow.ConcurrencyLimits{
 			Parallelism:        parallelism,
 			ParallelismPerHost: perHost,
 			ParallelismRedfish: redfish,
@@ -258,7 +268,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, err)
 				}
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, hostTrustScope); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, hostTrustScope, secretScope); err != nil {
 				return err
 			}
 		}

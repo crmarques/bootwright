@@ -11,14 +11,15 @@ import (
 )
 
 func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string) error {
-	// Standalone preflight/check has no planned task graph; check every
-	// managed-trust machine (nil scope). The apply path narrows the scope to the
-	// machines its tasks will SSH into via runApplyHostCheck.
-	return runApplyHostCheck(stdout, stderr, state, selected, contextName, secretsDir, clustersDir, nil)
+	// Standalone preflight/check has no planned task graph and no --clusters
+	// narrowing; check every managed-trust machine and every declared object's
+	// secrets (nil scopes). The apply path narrows the host-trust scope to the
+	// machines its tasks will SSH into and the secret scope to its work objects.
+	return runApplyHostCheck(stdout, stderr, state, selected, contextName, secretsDir, clustersDir, nil, nil)
 }
 
-func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string, hostTrustScope map[string]bool) error {
-	checks := preflight.CollectChecks(state, preflightPhases(selected), true, contextName, secretsDir, clustersDir, preflight.DefaultDeps, hostTrustScope)
+func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) error {
+	checks := preflight.CollectChecks(state, preflightPhases(selected), true, contextName, secretsDir, clustersDir, preflight.DefaultDeps, hostTrustScope, secretScope)
 	return renderCheckResults(stdout, "host check", preflightChecksToOutput(checks))
 }
 

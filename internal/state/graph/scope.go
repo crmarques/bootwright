@@ -312,6 +312,58 @@ func addSelectedServiceMachines(out map[string]bool, state v1alpha1.State, selec
 	}
 }
 
+// ApplyWorkObjects returns the Machine and StorageCluster names a scoped apply
+// genuinely acts on for the given selected cluster roots. Unlike
+// FilterStateToClusterRoots it deliberately does NOT follow the data-foundation
+// attachment edge: a managed StorageCluster reached only through a selected
+// container cluster's attachment (and that StorageCluster's nodes) is a render
+// reference in the apply plan state, not a provisioning target. The storage set
+// therefore holds only directly-selected storage roots. Readiness checks use
+// these sets so a render-reference object's bootstrap secrets and tools do not
+// block a run that never provisions it.
+func ApplyWorkObjects(state v1alpha1.State, containerNames, storageNames []string) (machines map[string]bool, storageClusters map[string]bool) {
+	selectedContainer := nameSet(containerNames)
+	selectedStorage := nameSet(storageNames)
+	machines = map[string]bool{}
+	for _, ocp := range state.ContainerClusters {
+		if selectedContainer[ocp.Metadata.Name] {
+			addContainerClusterMachines(machines, ocp)
+		}
+	}
+	for _, cluster := range state.StorageClusters {
+		if selectedStorage[cluster.Metadata.Name] {
+			addStorageClusterMachines(machines, cluster)
+		}
+	}
+	selectedClusters := map[string]bool{}
+	for name := range selectedContainer {
+		selectedClusters[name] = true
+	}
+	for name := range selectedStorage {
+		selectedClusters[name] = true
+	}
+	addSelectedServiceMachines(machines, state, selectedClusters)
+	addProviderHostMachines(machines, state)
+	return machines, selectedStorage
+}
+
+// addProviderHostMachines pulls in the provider host Machine (e.g. a libvirt
+// hypervisor's machineRef) backing any already-selected machine's provider, so
+// its SSH material stays in scope alongside the guests it hosts.
+func addProviderHostMachines(machines map[string]bool, state v1alpha1.State) {
+	providers := map[string]bool{}
+	for _, machine := range state.Machines {
+		if machines[machine.Metadata.Name] && machine.Spec.Substrate.ProviderRef.Name != "" {
+			providers[machine.Spec.Substrate.ProviderRef.Name] = true
+		}
+	}
+	for _, provider := range state.InfraProviders {
+		if providers[provider.Metadata.Name] && provider.Spec.Libvirt != nil && provider.Spec.Libvirt.MachineRef.Name != "" {
+			machines[provider.Spec.Libvirt.MachineRef.Name] = true
+		}
+	}
+}
+
 func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bool) v1alpha1.State {
 	selectedSets := map[string]bool{}
 	selectedAddons := map[string]bool{}

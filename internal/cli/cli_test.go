@@ -4139,6 +4139,42 @@ func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	}
 }
 
+// A scoped container-cluster apply attaches to its data-foundation Ceph but,
+// per ADR-0004, does not implicitly provision it: the managed StorageCluster is
+// pulled into the plan state only as a render reference, so its provisioning
+// tasks must not be scheduled unless it is co-selected (see the mixed-selection
+// test, which names ceph-storage and does schedule them).
+func TestApplyClustersDryRunJSONContainerOnlyDoesNotProvisionAttachedStorage(t *testing.T) {
+	setTestHomeAndRoot(t)
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "container-only", "-f", example)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("apply container-only dry-run json exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
+	}
+	gotIDs := make([]string, 0, len(report.ApplyPlan.Tasks))
+	for _, task := range report.ApplyPlan.Tasks {
+		gotIDs = append(gotIDs, task.ID)
+	}
+	for _, want := range []string{"iso.dc1-metal-ocp", "wait.dc1-metal-ocp"} {
+		if !slices.Contains(gotIDs, want) {
+			t.Fatalf("container-only apply task IDs missing %s: %v", want, gotIDs)
+		}
+	}
+	for _, reject := range []string{"storage.ceph-storage", "storageinfra.ceph-storage"} {
+		if slices.Contains(gotIDs, reject) {
+			t.Fatalf("container-only apply must not provision the render-reference Ceph; task IDs include %s: %v", reject, gotIDs)
+		}
+	}
+}
+
 func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")

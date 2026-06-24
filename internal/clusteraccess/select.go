@@ -261,6 +261,15 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 	return stategraph.FilterStateToClusters(state, names)
 }
 
+// ApplyWorkObjects returns the Machine and StorageCluster names a scoped apply
+// acts on for the given selected cluster roots, excluding render-reference
+// pull-ins (a managed StorageCluster reached only through a container cluster's
+// data-foundation attachment, and its nodes). Readiness checks use it so those
+// render references do not require their own bootstrap secrets.
+func ApplyWorkObjects(state v1alpha1.State, containerNames, storageNames []string) (machines map[string]bool, storageClusters map[string]bool) {
+	return stategraph.ApplyWorkObjects(state, containerNames, storageNames)
+}
+
 func StorageClusterNamesForTarget(state v1alpha1.State, scope string) ([]string, error) {
 	if strings.TrimSpace(scope) != "" {
 		names, err := parseClusterScope(scope)

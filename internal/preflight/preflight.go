@@ -123,7 +123,9 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 // hostTrustScope, when non-nil, restricts the SSH host-trust check to that set
 // of Machine names — the apply path passes the machines its planned tasks will
 // connect to. A nil scope checks every managed-trust machine in the state.
-func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps, hostTrustScope map[string]bool) []Check {
+// secretScope, when non-nil, restricts secret-material and storage-tool checks
+// to the run's genuine work targets, ignoring render-reference pull-ins.
+func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps, hostTrustScope map[string]bool, secretScope *SecretScope) []Check {
 	var checks []Check
 	addonsNeedAnsible := phaseInScope("addons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
@@ -146,14 +148,14 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 	if phaseInScope("addons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
-	if (phaseInScope("deps", selected, hasState) || phaseInScope("base", selected, hasState)) && stateHasManagedStorageClusters(state) {
+	if (phaseInScope("deps", selected, hasState) || phaseInScope("base", selected, hasState)) && stateHasManagedStorageClustersInScope(state, secretScope) {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ssh", nil, "install ssh on PATH", deps),
 			binaryCheck(checkGroupControllerTools, "scp", nil, "install scp on PATH", deps),
 		)
 	}
 	if hasState {
-		checks = append(checks, secretRefChecks(state, secretsDir, selected, deps)...)
+		checks = append(checks, secretRefChecksScoped(state, secretsDir, selected, deps, secretScope)...)
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps, hostTrustScope)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
@@ -212,15 +214,6 @@ func stateNeedsKubeVirt(state v1alpha1.State) bool {
 	for _, machine := range state.Machines {
 		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
 		if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
-			return true
-		}
-	}
-	return false
-}
-
-func stateHasManagedStorageClusters(state v1alpha1.State) bool {
-	for _, cluster := range state.StorageClusters {
-		if v1alpha1.StorageClusterManaged(cluster) {
 			return true
 		}
 	}
