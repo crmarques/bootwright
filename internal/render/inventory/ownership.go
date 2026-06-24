@@ -27,14 +27,23 @@ func ownershipInventory(records []ownership.ResourceRecord) ownershipInventoryFa
 			continue
 		}
 		out.Hosts[record.Host] = ownershipHostEntry(record)
-		switch record.Kind {
-		case "bmc-emulator":
+		group, known := ownership.InventoryGroupForKind(record.Kind)
+		if !known {
+			// An unrecognized but Bootwright-owned record: fall back to the infra
+			// teardown group so a destroy sweep can still reclaim its host instead
+			// of silently dropping it from every inventory group. A fitness test
+			// keeps ownership's kind table in sync with the kinds the Ansible roles
+			// emit, so this fallback is only ever a defensive guard against drift.
+			group = ownership.GroupInfra
+		}
+		switch group {
+		case ownership.GroupProvider:
 			out.ProviderHosts[record.Host] = true
-		case "infra-component":
+		case ownership.GroupInfraComponent:
 			out.InfraComponentHosts[record.Host] = true
-		case "storage-cluster":
+		case ownership.GroupStorage:
 			out.StorageHosts[record.Host] = true
-		case "libvirt-domain", "libvirt-network", "kubevirt-machine", "vsphere-machine", "vsphere-vmedia", "managed-os-install":
+		case ownership.GroupInfra:
 			out.InfraHosts[record.Host] = true
 		}
 	}
