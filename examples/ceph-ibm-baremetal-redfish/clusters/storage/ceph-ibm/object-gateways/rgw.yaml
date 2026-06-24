@@ -1,0 +1,36 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: rgw
+spec:
+  storageClusterRef: ceph-ibm
+
+  # Public S3 endpoint. Resolves to the ingress VIP below (10.20.30.80); this
+  # name must exist in the external DNS.
+
+  public:
+    dnsName: rgw.ceph-ibm.example.com
+    scheme: http
+    port: 80
+
+  ceph:
+    serviceID: ceph-ibm
+    # RGW daemons on both full nodes.
+    placement:
+      hosts:
+        - ceph-1
+        - ceph-2
+      countPerHost: 1
+    frontendPort: 8080
+    # cephadm ingress (haproxy + keepalived) fronts the two RGW daemons with a
+    # single floating VIP on the node network.
+    ingresses:
+      - name: rgw
+        address: 10.20.30.80
+        prefixLength: 24
+        virtualInterfaceNetworks:
+          - 10.20.30.0/24
+        placement:
+          hosts:
+            - ceph-1
+            - ceph-2

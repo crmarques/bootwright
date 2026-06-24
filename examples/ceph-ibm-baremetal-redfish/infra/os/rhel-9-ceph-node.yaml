@@ -1,0 +1,61 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-ceph-node
+spec:
+  os:
+    family: rhel
+    # IBM Storage Ceph 9 supports RHEL 9.6, 9.7, 10, or 10.1 on storage nodes.
+    version: "9.7"
+    architecture: x86_64
+
+  installer:
+    # Anaconda installs RHEL onto each node from the DVD ISO BEFORE cephadm runs.
+    type: anaconda
+    anaconda:
+      imageRef: rhel-9-7-dvd
+
+  customizations:
+    hostname:
+      # Anaconda sets the OS hostname to the Machine name (e.g. ceph-1), so the
+      # cephadm topology host identity (which defaults to machineRef) holds by
+      # construction. machineName is currently the only supported value.
+      source: machineName
+    ssh:
+      # Authorize the generated ceph-node-ssh public key for root login; cephadm
+      # reaches every node over it.
+      authorizeMachineSSHKey: true
+      passwordAuthentication: false
+    storage:
+      rootDevice:
+        # Install to the machine's declared rootDeviceHints (/dev/sda); every
+        # other blank disk is left for cephadm to claim as an OSD.
+        source: machineRootDeviceHints
+      wipe: true
+    packages:
+      # Minimal base. cephadm/ceph-common are NOT on the RHEL DVD — the storage
+      # cephadm role installs them after RHSM + IBM repos are enabled. Stage only
+      # the runtime prerequisites here.
+      environment: minimal
+      installWeakDeps: false
+      excludeDocs: true
+      languages:
+        - en_US.UTF-8
+      install:
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
+    services:
+      enabled:
+        - sshd
+        - chronyd
+        - firewalld
+      disabled:
+        - cockpit.socket
+        - kdump
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true

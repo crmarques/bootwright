@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: cephfs
+spec:
+  storageClusterRef: ceph-ibm
+
+  cephfs:
+    metadataPoolRef: cephfs-metadata
+    dataPoolRefs:
+      - name: cephfs-data
+        default: true
+    mds:
+      # One active MDS, with a standby on the other full node.
+      activeCount: 1
+      placement:
+        hosts:
+          - ceph-1
+          - ceph-2

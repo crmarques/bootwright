@@ -1,0 +1,149 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-ibm-baremetal-redfish
+spec:
+  # DNS suffix for node hostnames, the RGW S3 endpoint, and the dashboard VIP.
+  # The node FQDNs are <machine>.<storageCluster>.<baseDomain>, e.g.
+  # ceph-1.ceph-ibm.example.com — these must exist in the external DNS (below).
+  baseDomain: example.com
+
+  # Refuse any `destroy` touching this environment unless --override is passed,
+  # so a routine `destroy --yes` cannot tear down real bare-metal hosts by
+  # accident. Decommission/rebuild must pass --override deliberately.
+
+  safety:
+    destroyProtection: requiredOverride
+
+  # Single-cluster environment, so no fleet selection list is needed: every
+  # loaded cluster is active. (Add a storageClusters selection list only when
+  # one tree holds several clusters and you want apply to touch a subset. Note a
+  # bare-metal storage cluster relies on the bastion artifact server for its OS
+  # install, and that machine survives a selection only via the cluster graph.)
+  # ---------------------------------------------------------------------------
+  # Secrets are referenced by name only; bytes live in the encrypted context
+  # store and are written with `bootwright secret set` / `secret generate`.
+  # See the README for the exact set commands.
+  # ---------------------------------------------------------------------------
+
+  secrets:
+    # Operator-owned SSH key Bootwright uses to reach the bastion/artifact host.
+    - bastion-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+
+    # SSH key pair Bootwright/cephadm use to reach the Ceph nodes. Auto-generated
+    # at `secret generate`, authorized for root by the install profile.
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            type: ed25519
+            comment: bootwright-ceph-ibm-baremetal
+
+    # Real Redfish BMC username/password (iDRAC/iLO/etc.). Operator-provided,
+    # context-local — Bootwright does not generate credentials for physical BMCs.
+    - bmc-credentials
+
+    # Red Hat subscription (RHSM) organization ID — context-local, set via raw-file.
+    - rhel-org
+
+    # Red Hat subscription (RHSM) activation key — context-local, set via raw-file.
+    - rhel-activation-key
+
+    # IBM entitlement key for the cp.icr.io registry — username "cp", key as password.
+    - ibm-ceph-registry
+
+    # Corporate proxy username/password — context-local. Drop this secret and the
+    # `auth` block below if your proxy does not require authentication.
+    - proxy-credentials
+
+  # ---------------------------------------------------------------------------
+  # Entitlement bundle for IBM Storage Ceph (distribution: ibm).
+  #   - rhsm.*    registers each RHEL node with subscription-manager so the RHEL
+  #               BaseOS/AppStream repos are available for cephadm/ceph-common.
+  #   - registry  logs each node into cp.icr.io/cp (default URL) to pull the
+  #               IBM Storage Ceph container images.
+  #   - license   accepts the IBM Storage Ceph license (required for ibm distro).
+  # provider/product MUST be ibm / ibm-storage-ceph for distribution: ibm.
+  # ---------------------------------------------------------------------------
+
+  entitlements:
+    - name: ibm-storage-ceph
+      provider: ibm
+      product: ibm-storage-ceph
+      rhsm:
+        organizationRef: rhel-org
+        activationKeyRef: rhel-activation-key
+      registry:
+        # url defaults to cp.icr.io/cp for the ibm distribution; override only
+        # for a mirror. Username "cp" + IBM entitlement key go in ibm-ceph-registry.
+        credentialsRef: ibm-ceph-registry
+      license:
+        accept: true
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure services. Everything here except the artifact server is
+  # EXTERNAL (existing site infrastructure that Bootwright only consumes):
+  #   - artifactServers  managed: Bootwright runs an HTTPS server on the bastion
+  #                      that serves the RHEL install media to each BMC over
+  #                      Redfish virtual media (see defaults.artifactAccess).
+  #   - proxies          external: the corporate forward proxy nodes use to reach
+  #                      RHSM, cp.icr.io, and IBM's repo host.
+  #   - nameResolution   external: the site DNS resolvers (two, for redundancy).
+  #   - ntp              external: the site NTP servers (two, for redundancy).
+  # ---------------------------------------------------------------------------
+
+  infraComponents:
+    artifactServers:
+      - name: default
+        management: managed
+        componentRef: artifact-server
+
+    proxies:
+      - name: default
+        management: external
+        connection:
+          httpProxy: http://proxy.example.com:3128
+          httpsProxy: http://proxy.example.com:3128
+          noProxy:
+            # Never proxy local traffic: the site domain, the node network, and
+            # the BMC network. Add any internal mirror/registry hosts here too.
+            - .example.com
+            - 10.20.30.0/24
+            - 10.20.40.0/24
+          auth:
+            proxyAuthRef: proxy-credentials
+
+    nameResolution:
+      # Existing site resolvers. They MUST already serve the node FQDNs, the RGW
+      # endpoint, the dashboard VIP, and the BMC names — see the README.
+      - name: dns-1
+        management: external
+        address: 10.20.30.2
+      - name: dns-2
+        management: external
+        address: 10.20.30.3
+
+    ntp:
+      # Existing site NTP servers (chrony sources on every managed node).
+      - name: ntp-1
+        management: external
+        address: ntp1.example.com
+      - name: ntp-2
+        management: external
+        address: ntp2.example.com
+
+  # Send Bootwright's own node-side operations (RHSM registration, repo enable,
+  # cp.icr.io login, cephadm image pulls) through the proxy declared above.
+
+  proxyFor:
+    bootwright: default
+
+  # Serve install artifacts from the `default` artifact server and let each
+  # machine's BMC mount the RHEL ISO over Redfish virtual media via the `bmc`
+  # endpoint. This is what makes the bare-metal anaconda install boot.
+
+  defaults:
+    artifactAccess:
+      serverRef: default
+      redfishVirtualMedia:
+        endpointRef: bmc

@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: cephfs-metadata
+spec:
+  storageClusterRef: ceph-ibm
+
+  placementPolicyRef: replicated-host
+
+  ceph:
+    # CephFS metadata pool.
+    role: cephfs-metadata

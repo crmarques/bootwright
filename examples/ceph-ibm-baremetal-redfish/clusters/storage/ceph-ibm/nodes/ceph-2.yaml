@@ -1,0 +1,54 @@
+# Bare-metal Ceph node (full). Bootwright installs RHEL 9.7 via anaconda +
+# Redfish virtual media, then cephadm builds IBM Storage Ceph on it.
+# Roles (../cluster.yaml): mon, mgr, osd, mds, rgw, ingress.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-2
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef: baremetal
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-ceph-node
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+
+  network:
+    config:
+      networkConfigRef: ceph-net
+      attachmentRef: ceph-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ssh
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: primary
+        interfaceName: primary
+
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:ca:fe:02
+    boot:
+      nicRef: primary
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://ceph-2-bmc.example.com/redfish/v1/Systems/1
+        credentialsRef: bmc-credentials
+        disableCertificateVerification: true
+
+  addresses:
+    - name: ssh
+      address: 10.20.30.22
+
+  access:
+    ssh:
+      user: root
+      keyRef: ceph-node-ssh
+      addressRef: ssh

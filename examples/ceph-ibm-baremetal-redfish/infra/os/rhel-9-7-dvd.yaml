@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-7-dvd
+spec:
+  type: iso
+
+  mediaType: dvd
+
+  # RHEL 9.7 DVD served from the managed media store. Stage it first:
+  #   bootwright media add rhel-9.7-x86_64-dvd.iso --from-file ./rhel-9.7-x86_64-dvd.iso
+
+  url: local-media:rhel-9.7-x86_64-dvd.iso
+  # Optional: pin the ISO content for reproducible installs.
+  # checksum: sha256:<hex>

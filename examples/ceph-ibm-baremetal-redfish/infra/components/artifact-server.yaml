@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
+spec:
+  type: artifactServer
+
+  artifactServer:
+    # Runs on the bastion. The `bmc` endpoint is what each Machine's BMC connects
+    # to (over HTTPS, on the bastion's `lan` address) to mount the RHEL ISO as
+    # virtual media. environment.yaml wires it via
+    # defaults.artifactAccess.redfishVirtualMedia.endpointRef: bmc.
+    machineRef: bastion
+    endpoints:
+      - name: bmc
+        listenerRef: https
+        addressRef: lan
