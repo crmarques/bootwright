@@ -175,3 +175,46 @@ func TestFilterByContextEmptyContextKeepsAll(t *testing.T) {
 		t.Fatalf("FilterByContext with empty context kept %d records, want %d", len(got), len(records))
 	}
 }
+
+// One unreadable/invalid record must not hide every other recorded resource: a
+// destroy sweep has to be able to reclaim the good ones (and a record can be
+// written by the Ansible role, which does not run Go's validation, so an invalid
+// record can land on disk). LoadResources skips it; LoadResourcesWithWarnings
+// surfaces the skip.
+func TestLoadResourcesSkipsBadRecordWithoutDroppingGood(t *testing.T) {
+	root := t.TempDir()
+	good := ResourceRecord{Kind: "libvirt-domain", Name: "good-machine", Owner: Owner, Host: "h"}
+	if err := SaveResource(root, good); err != nil {
+		t.Fatalf("SaveResource: %v", err)
+	}
+	// A corrupt file the atomic writer could leave behind, plus a syntactically
+	// valid record that trips the load-time sensitive scan (as an Ansible-written
+	// hostFact could): both must be skipped, not fatal.
+	corruptDir := filepath.Join(root, ResourceDirName, "libvirt-domain")
+	if err := os.WriteFile(filepath.Join(corruptDir, "truncated.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatalf("write corrupt: %v", err)
+	}
+	sensitiveDir := filepath.Join(root, ResourceDirName, "infra-component")
+	if err := os.MkdirAll(sensitiveDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sensitiveDir, "leaky.json"),
+		[]byte(`{"kind":"infra-component","name":"leaky","hostFacts":{"ansible_ssh_common_args":"-o ProxyCommand=ssh token-bastion"}}`), 0o600); err != nil {
+		t.Fatalf("write sensitive: %v", err)
+	}
+
+	records, err := LoadResources(root)
+	if err != nil {
+		t.Fatalf("LoadResources must not fail on a bad record: %v", err)
+	}
+	if len(records) != 1 || records[0].Name != "good-machine" {
+		t.Fatalf("expected only the good record, got %+v", records)
+	}
+	_, warnings, err := LoadResourcesWithWarnings(root)
+	if err != nil {
+		t.Fatalf("LoadResourcesWithWarnings: %v", err)
+	}
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 skip warnings (corrupt + sensitive), got %d: %v", len(warnings), warnings)
+	}
+}

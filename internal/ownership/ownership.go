@@ -153,9 +153,25 @@ func SaveResource(root string, record ResourceRecord) error {
 	return nil
 }
 
+// LoadResources loads every ownership resource record under root. A single file
+// that cannot be read, decoded, or validated is SKIPPED rather than failing the
+// whole load: the ownership store is the safety net a destroy sweep relies on, so
+// one corrupt or policy-rejected record must never hide every other recorded
+// resource (and block the very sweep that would reclaim it). Only a genuine
+// directory-traversal failure is returned as an error. Use LoadResourcesWithWarnings
+// to surface which records were skipped.
 func LoadResources(root string) ([]ResourceRecord, error) {
+	records, _, err := LoadResourcesWithWarnings(root)
+	return records, err
+}
+
+// LoadResourcesWithWarnings is LoadResources plus the per-record skip reasons, so
+// a caller (state-check, destroy preview) can report which records were dropped
+// instead of letting them vanish silently.
+func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {
 	base := filepath.Join(root, ResourceDirName)
 	var records []ResourceRecord
+	var warnings []error
 	err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -165,23 +181,26 @@ func LoadResources(root string) ([]ResourceRecord, error) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("read ownership resource %s: %w", path, err)
+			warnings = append(warnings, fmt.Errorf("read ownership resource %s: %w", path, err))
+			return nil
 		}
 		var record ResourceRecord
 		if err := json.Unmarshal(data, &record); err != nil {
-			return fmt.Errorf("decode ownership resource %s: %w", path, err)
+			warnings = append(warnings, fmt.Errorf("skip undecodable ownership resource %s: %w", path, err))
+			return nil
 		}
 		if err := ValidateResource(record); err != nil {
-			return fmt.Errorf("validate ownership resource %s: %w", path, err)
+			warnings = append(warnings, fmt.Errorf("skip invalid ownership resource %s: %w", path, err))
+			return nil
 		}
 		records = append(records, record)
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, warnings, err
 	}
 	sort.Slice(records, func(i, j int) bool {
 		if records[i].Kind != records[j].Kind {
@@ -189,7 +208,7 @@ func LoadResources(root string) ([]ResourceRecord, error) {
 		}
 		return records[i].Name < records[j].Name
 	})
-	return records, nil
+	return records, warnings, nil
 }
 
 // FilterByContext drops records explicitly stamped with a different context, so a
