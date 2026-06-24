@@ -29,7 +29,11 @@ func PrepareScopedWorkflowPlan(state v1alpha1.State, scope Scope, phaseList []Ph
 	}
 	selected := PhasesForState(phaseList, scopedState)
 	limit := AnsibleLimitForScope(scope.Name)
-	ansibleNoHosts := !dryRun && workflow.LimitMatchesNoHostsWithOwnershipRecords(limit, scopedState, records)
+	// A scope that runs no ansible (addons) has no ansible hosts by definition.
+	// Its limit is empty, and LimitMatchesNoHosts returns false for an empty
+	// limit, so without this it could never reach NoRemoteWork — an addons run
+	// with zero bindings would still prompt and start on an empty plan.
+	ansibleNoHosts := !dryRun && (!ScopeUsesAnsible(scope) || workflow.LimitMatchesNoHostsWithOwnershipRecords(limit, scopedState, records))
 	noRemoteWork := ansibleNoHosts && !selectedHasExtensionWork(selected, scopedState)
 	askBecomeForRun := askBecomePass && RootPhaseCount(selected) > 0 && !ansibleNoHosts
 	return WorkflowPlan{
