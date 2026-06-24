@@ -46,10 +46,6 @@ func secretRefChecksScoped(state v1alpha1.State, secretsDir string, selected []P
 	return secretRefChecksWithLocalityPolicy(state, secretsDir, selected, deps, locality.DefaultPolicy, secretScope)
 }
 
-func stateHasManagedStorageClusters(state v1alpha1.State) bool {
-	return stateHasManagedStorageClustersInScope(state, nil)
-}
-
 // stateHasManagedStorageClustersInScope reports whether the run will provision a
 // managed StorageCluster. secretScope, when non-nil, excludes clusters present
 // only as render references so a container-cluster apply that merely attaches to
