@@ -46,7 +46,7 @@ func OwnershipOrphans(state v1alpha1.State, records []ownership.ResourceRecord) 
 
 	var out []UndeclaredResource
 	for _, r := range records {
-		if r.Owner != "" && r.Owner != ConvergeSafetyOwner {
+		if r.Owner != "" && r.Owner != ownership.Owner {
 			continue // never report a resource Bootwright does not own
 		}
 		declared := true

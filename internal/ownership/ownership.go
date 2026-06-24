@@ -16,6 +16,13 @@ import (
 
 const ResourceDirName = "resources"
 
+// Owner is the canonical owner stamp for a Bootwright-created ownership record.
+// SaveResource defaults Owner to this, and consumers that decide whether
+// Bootwright owns a record (for example orphan reporting) compare against it.
+// The Ansible ownership_record role writes the same literal independently
+// (resource.yml owner: bootwright); keep the two in sync.
+const Owner = "bootwright"
+
 type ResourceRecord struct {
 	APIVersion string            `json:"apiVersion"`
 	Kind       string            `json:"kind"`
@@ -117,7 +124,7 @@ func SaveResource(root string, record ResourceRecord) error {
 		record.APIVersion = "bootwright.io/ownership/v1alpha1"
 	}
 	if strings.TrimSpace(record.Owner) == "" {
-		record.Owner = "bootwright"
+		record.Owner = Owner
 	}
 	if record.UpdatedAt.IsZero() {
 		record.UpdatedAt = time.Now().UTC()
