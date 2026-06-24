@@ -6,6 +6,28 @@ import (
 	"testing"
 )
 
+func TestScopeProvisionsClusterWorkload(t *testing.T) {
+	gated := []string{"", "infra", "clusters", "machines", "deps", "base"}
+	for _, stage := range gated {
+		scope, err := ApplyStageScope(stage)
+		if err != nil {
+			t.Fatalf("ApplyStageScope(%q): %v", stage, err)
+		}
+		if !ScopeProvisionsClusterWorkload(scope) {
+			t.Errorf("stage %q should gate KubeVirt host readiness", stage)
+		}
+	}
+	for _, stage := range []string{"fabric", "addons"} {
+		scope, err := ApplyStageScope(stage)
+		if err != nil {
+			t.Fatalf("ApplyStageScope(%q): %v", stage, err)
+		}
+		if ScopeProvisionsClusterWorkload(scope) {
+			t.Errorf("stage %q should not gate KubeVirt host readiness", stage)
+		}
+	}
+}
+
 func TestApplyStageScopeResolvesFamiliesAndSubPhases(t *testing.T) {
 	cases := []struct {
 		stage      string

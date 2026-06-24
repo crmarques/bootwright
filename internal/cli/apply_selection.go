@@ -15,9 +15,9 @@ func validateKubeVirtClusterSelection(state v1alpha1.State, scope converge.Scope
 	if strings.TrimSpace(clusters) == "" {
 		return nil
 	}
-	switch scope.Name {
-	case "infra", "clusters", "all", "machines", "deps", "base":
-	default:
+	if !converge.ScopeProvisionsClusterWorkload(scope) {
+		// fabric/addons-only scopes do not provision onto cluster nodes, so the
+		// KubeVirt host-cluster readiness gate does not apply.
 		return nil
 	}
 	containerNames, _, err := clusteraccess.ClusterRootNamesForTarget(state, clusters)

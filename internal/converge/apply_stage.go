@@ -97,3 +97,20 @@ func ScopeTargetsContainerInstall(scope Scope) bool {
 		return false
 	}
 }
+
+// ScopeProvisionsClusterWorkload reports whether the scope's phases include a
+// phase that provisions onto cluster nodes — machine instantiation (machines)
+// or the deps/base cluster phases — i.e. the phases whose --clusters selection
+// needs the KubeVirt host cluster to be ready. fabric (provider/network) and
+// addons (post-install manifests) do not, so selecting one of those sub-phases
+// alone is not gated; a family scope that contains them still gates via its
+// machines/deps/base phases.
+func ScopeProvisionsClusterWorkload(scope Scope) bool {
+	for _, name := range scope.PhaseNames {
+		switch name {
+		case "machines", "deps", "base":
+			return true
+		}
+	}
+	return false
+}
