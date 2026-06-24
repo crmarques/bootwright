@@ -39,9 +39,11 @@ func ApplyStageScope(stage string) (Scope, error) {
 	}
 }
 
-// subPhaseStageScope builds an ad-hoc scope that selects exactly one sub-phase.
-// Apply runs through the task graph (PlanApplyTasksChecked), so no per-phase
-// applyPlaybook is needed; artifacts are keyed by the phase name.
+// subPhaseStageScope builds the scope that selects exactly one sub-phase. It is
+// the single constructor for every sub-phase scope; ApplyStageScope only calls
+// it for a validated sub-phase name, so a sub-phase has no second hand-written
+// Scope var. Apply runs it through the task graph (PlanApplyTasksChecked), so no
+// per-phase ApplyPlaybook is needed; artifacts are keyed by the phase name.
 func subPhaseStageScope(name string) Scope {
 	return Scope{
 		Name:              name,

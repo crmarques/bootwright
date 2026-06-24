@@ -72,13 +72,6 @@ var StorageClusterScope = Scope{
 	ClusterKind:       workflow.ApplyClusterKindStorage,
 }
 
-var AddonsScope = Scope{
-	Name:              "addons",
-	Short:             "Apply post-install cluster addons",
-	PhaseNames:        []string{PhaseAddons},
-	ArtifactsBaseName: "addons",
-}
-
 var AllScope = Scope{
 	Name:              "all",
 	Short:             "Apply infrastructure, storage, OpenShift clusters, and addons",

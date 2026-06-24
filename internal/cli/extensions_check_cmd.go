@@ -47,7 +47,7 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		state, err = clusteraccess.ScopeState(state, converge.AddonsScope.Name, clusterScope)
+		state, err = clusteraccess.ScopeState(state, converge.PhaseAddons, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
