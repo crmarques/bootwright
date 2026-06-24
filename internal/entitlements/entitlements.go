@@ -52,11 +52,21 @@ func Resolve(env *v1alpha1.Environment, name, defaultRegistryURL, secretsDir str
 		Provider: entitlement.Provider,
 		Product:  entitlement.Product,
 	}
-	if entitlement.RHSM != nil {
+	// An entitlement either carries rhsm inline (redhat/rhel, redhat/ceph) or,
+	// for ibm/ibm-storage-ceph, defers it to a referenced redhat/rhel
+	// entitlement. Either way the resolved RHSM is populated identically, so
+	// downstream rendering does not distinguish the two.
+	rhsm := entitlement.RHSM
+	if rhsm == nil && entitlement.RHELEntitlementRef.Name != "" {
+		if rhel, ok := Find(env, entitlement.RHELEntitlementRef.Name); ok {
+			rhsm = rhel.RHSM
+		}
+	}
+	if rhsm != nil {
 		out.RHSM = RHSM{
-			OrganizationPath:  secret.ResolveMaterialPath(entitlement.RHSM.OrganizationRef.Name, env, secretsDir, secret.MaterialPrimary),
-			ActivationKeyPath: secret.ResolveMaterialPath(entitlement.RHSM.ActivationKeyRef.Name, env, secretsDir, secret.MaterialPrimary),
-			ConnectToInsights: entitlement.RHSM.ConnectToInsights,
+			OrganizationPath:  secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, env, secretsDir, secret.MaterialPrimary),
+			ActivationKeyPath: secret.ResolveMaterialPath(rhsm.ActivationKeyRef.Name, env, secretsDir, secret.MaterialPrimary),
+			ConnectToInsights: rhsm.ConnectToInsights,
 		}
 	}
 	if entitlement.Registry != nil {

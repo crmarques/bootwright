@@ -28,7 +28,10 @@ upstream community packages and images), `redhat` (Red Hat Ceph Storage), or
 `ibm` (IBM Storage Ceph). The subscription distributions install from
 entitlement-backed repositories, so `spec.ceph.entitlementRef` must name an
 `Environment.spec.entitlements[]` entry that resolves a Red Hat or IBM Ceph
-entitlement; `oss` takes no entitlement.
+entitlement; `oss` takes no entitlement. An `ibm/ibm-storage-ceph` entitlement
+carries only the IBM registry and license and names a separate `redhat/rhel`
+entitlement (via `rhelEntitlementRef`) for the RHEL subscription cephadm
+registers each node with.
 
 `spec.ceph.release` selects which release to install for the chosen
 distribution. For `oss` it is an upstream release name (`squid`, `reef`,

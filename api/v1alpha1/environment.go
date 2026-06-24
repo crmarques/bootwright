@@ -81,14 +81,28 @@ type EnvironmentSecretStorageSpec struct {
 //	redhat/openshift      none
 //	redhat/rhel           rhsm
 //	redhat/ceph           rhsm + registry.credentialsRef
-//	ibm/ibm-storage-ceph  rhsm + registry.credentialsRef + license.accept: true
+//	ibm/ibm-storage-ceph  registry.credentialsRef + license.accept: true + rhelEntitlementRef
+//
+// IBM Storage Ceph ships its own image registry (cp.icr.io) and product license
+// but runs on RHEL it does not itself entitle: its packages come from a public
+// IBM repo, while the RHEL BaseOS/AppStream repos cephadm needs are reached
+// through a separate Red Hat subscription. So an ibm/ibm-storage-ceph
+// entitlement carries registry + license and names a redhat/rhel entitlement
+// via rhelEntitlementRef for that subscription; an inline rhsm arm on it is
+// rejected. (redhat/ceph stays bundled: a single Red Hat subscription entitles
+// both RHEL and the rhceph tools repo, so its own rhsm arm covers both.)
 type EnvironmentEntitlement struct {
-	Name     string                          `yaml:"name" json:"name"`
-	Provider string                          `yaml:"provider" json:"provider"`
-	Product  string                          `yaml:"product" json:"product"`
-	RHSM     *EnvironmentEntitlementRHSM     `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
-	Registry *EnvironmentEntitlementRegistry `yaml:"registry,omitempty" json:"registry,omitempty"`
-	License  *EnvironmentEntitlementLicense  `yaml:"license,omitempty" json:"license,omitempty"`
+	Name     string `yaml:"name" json:"name"`
+	Provider string `yaml:"provider" json:"provider"`
+	Product  string `yaml:"product" json:"product"`
+	// RHELEntitlementRef names a redhat/rhel entitlement supplying the RHEL
+	// subscription (rhsm) this entitlement depends on but does not itself
+	// carry. Required for ibm/ibm-storage-ceph (which takes no inline rhsm
+	// arm); rejected on every other pair.
+	RHELEntitlementRef LocalObjectReference            `yaml:"rhelEntitlementRef,omitempty" json:"rhelEntitlementRef,omitempty"`
+	RHSM               *EnvironmentEntitlementRHSM     `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
+	Registry           *EnvironmentEntitlementRegistry `yaml:"registry,omitempty" json:"registry,omitempty"`
+	License            *EnvironmentEntitlementLicense  `yaml:"license,omitempty" json:"license,omitempty"`
 }
 
 type EnvironmentEntitlementRHSM struct {

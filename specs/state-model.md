@@ -125,11 +125,13 @@ Rules:
   - `redhat`: `ceph`, `rhel`, `openshift`
   - `ibm`: `ibm-storage-ceph`
 
-  A `rhel` entitlement and any `redhat`/`ceph` or `ibm-storage-ceph` entitlement
-  require `rhsm` (`organizationRef`, `activationKeyRef`); `redhat`/`ceph` and
-  `ibm-storage-ceph` also require `registry.credentialsRef`; `ibm-storage-ceph`
-  also requires `license.accept: true`. Referenced secret material still lives
-  in `Environment.spec.secrets`.
+  A `rhel` entitlement and a `redhat`/`ceph` entitlement require `rhsm`
+  (`organizationRef`, `activationKeyRef`); `redhat`/`ceph` also requires
+  `registry.credentialsRef`. An `ibm-storage-ceph` entitlement requires
+  `registry.credentialsRef`, `license.accept: true`, and `rhelEntitlementRef`
+  naming a `redhat`/`rhel` entitlement for the RHEL subscription it runs on; it
+  takes no inline `rhsm` arm. Referenced secret material still lives in
+  `Environment.spec.secrets`.
 
 Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
@@ -633,8 +635,10 @@ Rules:
   packages or images.
 - `distribution: ibm` requires `entitlementRef` to resolve to an IBM
   `ibm-storage-ceph` entitlement with accepted license terms. IBM Storage Ceph
-  repositories, registry access, and license acceptance come from that
-  entitlement and must not mix with upstream Ceph packages or images.
+  registry access and license acceptance come from that entitlement; the RHEL
+  BaseOS/AppStream repos cephadm needs come from the `redhat`/`rhel` entitlement
+  it names via `rhelEntitlementRef`. Neither must mix with upstream Ceph packages
+  or images.
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.bootstrap.host` names a storage topology host. The rendered

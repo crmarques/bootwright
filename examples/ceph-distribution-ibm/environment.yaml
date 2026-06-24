@@ -15,12 +15,23 @@ spec:
     - ibm-registry-credentials
 
   entitlements:
-    - name: ibm-storage-ceph
-      provider: ibm
-      product: ibm-storage-ceph
+    # The RHEL subscription IBM Storage Ceph runs on, as its own redhat/rhel
+    # item: cephadm registers each storage node with it (rhsm) to reach the RHEL
+    # BaseOS/AppStream repos. Reusable by any RHEL machine, Ceph or not.
+    - name: rhel
+      provider: redhat
+      product: rhel
       rhsm:
         organizationRef: ibm-rhsm-org
         activationKeyRef: ibm-rhsm-activation-key
+
+    # IBM Storage Ceph product access only: images from cp.icr.io/cp and the
+    # product license. It names the rhel item above for the RHEL subscription it
+    # depends on (an inline rhsm arm on an ibm item is rejected).
+    - name: ibm-storage-ceph
+      provider: ibm
+      product: ibm-storage-ceph
+      rhelEntitlementRef: rhel
       registry:
         credentialsRef: ibm-registry-credentials
       license:

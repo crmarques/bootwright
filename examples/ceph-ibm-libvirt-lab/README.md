@@ -134,7 +134,9 @@ need an **IBM entitlement key**:
 3. The registry login is username **`cp`** with that key as the password.
 
 > The IBM Storage Ceph license is accepted automatically on each node because
-> the Environment entitlement sets `license.accept: true`.
+> the `ibm-storage-ceph` entitlement sets `license.accept: true`. That entitlement
+> holds only the IBM registry + license and names the separate `rhel` entitlement
+> (the org ID + activation key from step 1a) via `rhelEntitlementRef`.
 
 **Version:** the StorageCluster pins `spec.ceph.release: "9"` — IBM Storage Ceph
 **9**, the latest published stream (`public.dhe.ibm.com/.../ceph` ships

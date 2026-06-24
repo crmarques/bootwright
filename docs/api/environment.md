@@ -163,8 +163,8 @@ must set exactly one of `credentials`, `selfSignedCertificate`, or `sshKeyPair`.
 
 Each entitlement declares named vendor-controlled access for one
 provider/product pair. `name`, `provider`, and `product` are always required;
-the `rhsm`, `registry`, and `license` arms become required per pair (see
-[Required arms](#required-arms)).
+the `rhsm`, `registry`, `license`, and `rhelEntitlementRef` arms become required
+per pair (see [Required arms](#required-arms)).
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -178,6 +178,7 @@ the `rhsm`, `registry`, and `license` arms become required per pair (see
 | `entitlements[].registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat/ceph` and `ibm/ibm-storage-ceph`. |
 | `entitlements[].registry.trustBundleRef` | No | — | Registry trust bundle. |
 | `entitlements[].license.accept` | Conditional | `false` | Must be `true` for `ibm/ibm-storage-ceph`. |
+| `entitlements[].rhelEntitlementRef` | Conditional | — | Names a `redhat/rhel` entitlement supplying the RHEL subscription. Required for `ibm/ibm-storage-ceph`; rejected on every other pair (which carry `rhsm` inline). |
 
 ### Provider and product pairs
 
@@ -191,8 +192,8 @@ Only the following pairs are accepted; any other combination is rejected.
 
 ### Required arms
 
-The required `rhsm`/`registry`/`license` arms follow from the provider/product
-pair rather than a discriminator field:
+The required `rhsm`/`registry`/`license`/`rhelEntitlementRef` arms follow from
+the provider/product pair rather than a discriminator field:
 
 | Provider / product | Required arms |
 | --- | --- |
@@ -201,7 +202,14 @@ pair rather than a discriminator field:
 | `redhat/openshift` | none |
 | `redhat/rhel` | `rhsm` (`organizationRef` + `activationKeyRef`) |
 | `redhat/ceph` | `rhsm` + `registry.credentialsRef` |
-| `ibm/ibm-storage-ceph` | `rhsm` + `registry.credentialsRef` + `license.accept: true` |
+| `ibm/ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` + `rhelEntitlementRef` (no inline `rhsm`) |
+
+IBM Storage Ceph ships its own image registry (`cp.icr.io`) and product license
+but runs on RHEL it does not itself entitle, so its RHEL subscription is a
+separate `redhat/rhel` entitlement named via `rhelEntitlementRef` — an inline
+`rhsm` arm on an `ibm/ibm-storage-ceph` entitlement is rejected. (`redhat/ceph`
+stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
+tools repo, so its own `rhsm` arm covers both.)
 
 ## Component images
 

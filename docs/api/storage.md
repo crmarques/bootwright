@@ -76,7 +76,7 @@ Distribution requirements:
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
 | `redhat` | `entitlementRef` must resolve to a Red Hat Ceph entitlement; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
-| `ibm` | `entitlementRef` must resolve to an IBM Storage Ceph entitlement with accepted license terms; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
+| `ibm` | `entitlementRef` must resolve to an IBM Storage Ceph entitlement with accepted license terms, which names a `redhat/rhel` entitlement via `rhelEntitlementRef` for the RHEL subscription; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
 
 ### Monitoring
 

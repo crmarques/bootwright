@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/entitlements"
 )
 
 // ntpHostname matches a DNS hostname suitable for additionalNTPSources:
@@ -142,14 +143,37 @@ func validateEnvironmentEntitlements(env v1alpha1.Environment) []string {
 				errs = append(errs, validateEnvironmentEntitlementRegistryCredentialsRequired(owner+".registry", entitlement.Registry)...)
 			}
 		case v1alpha1.EntitlementProductIBMStorageCeph:
-			errs = append(errs, validateEnvironmentEntitlementRHSMRequired(owner+".rhsm", entitlement.RHSM)...)
 			errs = append(errs, validateEnvironmentEntitlementRegistryCredentialsRequired(owner+".registry", entitlement.Registry)...)
 			if entitlement.License == nil || !entitlement.License.Accept {
 				errs = append(errs, owner+".license.accept must be true for IBM Storage Ceph")
 			}
+			if entitlement.RHSM != nil {
+				errs = append(errs, owner+".rhsm is not allowed for IBM Storage Ceph; reference a redhat/rhel entitlement via rhelEntitlementRef for the RHEL subscription")
+			}
+			errs = append(errs, validateEnvironmentEntitlementRHELRef(owner+".rhelEntitlementRef", entitlement.RHELEntitlementRef, env)...)
+		}
+		if entitlement.Product != v1alpha1.EntitlementProductIBMStorageCeph && entitlement.RHELEntitlementRef.Name != "" {
+			errs = append(errs, owner+".rhelEntitlementRef is only valid for the ibm/ibm-storage-ceph product")
 		}
 	}
 	return errs
+}
+
+// validateEnvironmentEntitlementRHELRef checks that an ibm/ibm-storage-ceph
+// entitlement's rhelEntitlementRef names an existing redhat/rhel entitlement —
+// the RHEL subscription IBM Storage Ceph runs on but does not itself carry.
+func validateEnvironmentEntitlementRHELRef(owner string, ref v1alpha1.LocalObjectReference, env v1alpha1.Environment) []string {
+	if ref.Name == "" {
+		return []string{owner + " is required for IBM Storage Ceph; name a redhat/rhel entitlement for the RHEL subscription"}
+	}
+	target, ok := entitlements.Find(&env, ref.Name)
+	if !ok {
+		return []string{fmt.Sprintf("%s %q does not match any Environment.spec.entitlements[].name", owner, ref.Name)}
+	}
+	if target.Provider != v1alpha1.EntitlementProviderRedHat || target.Product != v1alpha1.EntitlementProductRHEL {
+		return []string{fmt.Sprintf("%s %q resolves to %s/%s, want %s/%s", owner, ref.Name, target.Provider, target.Product, v1alpha1.EntitlementProviderRedHat, v1alpha1.EntitlementProductRHEL)}
+	}
+	return nil
 }
 
 func validateEnvironmentEntitlementProviderProduct(owner string, entitlement v1alpha1.EnvironmentEntitlement) []string {

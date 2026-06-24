@@ -13,17 +13,26 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 		if !ok {
 			return
 		}
-		if entitlement.RHSM != nil {
-			if entitlement.RHSM.OrganizationRef.Name != "" {
+		// rhsm is either inline or, for ibm/ibm-storage-ceph, deferred to a
+		// referenced redhat/rhel entitlement; collect its secrets from
+		// whichever carries it so they stay required.
+		rhsm := entitlement.RHSM
+		if rhsm == nil && entitlement.RHELEntitlementRef.Name != "" {
+			if rhel, ok := entitlementsByName[entitlement.RHELEntitlementRef.Name]; ok {
+				rhsm = rhel.RHSM
+			}
+		}
+		if rhsm != nil {
+			if rhsm.OrganizationRef.Name != "" {
 				out = append(out, secretRefRequirement{
-					refName: entitlement.RHSM.OrganizationRef.Name,
+					refName: rhsm.OrganizationRef.Name,
 					label:   label + " rhsm organizationRef",
 					phases:  phases,
 				})
 			}
-			if entitlement.RHSM.ActivationKeyRef.Name != "" {
+			if rhsm.ActivationKeyRef.Name != "" {
 				out = append(out, secretRefRequirement{
-					refName: entitlement.RHSM.ActivationKeyRef.Name,
+					refName: rhsm.ActivationKeyRef.Name,
 					label:   label + " rhsm activationKeyRef",
 					phases:  phases,
 				})

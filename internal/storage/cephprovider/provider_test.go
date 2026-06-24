@@ -237,24 +237,38 @@ func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
 }
 
 func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-		Name:     "ibm-ceph",
-		Provider: v1alpha1.EntitlementProviderIBM,
-		Product:  v1alpha1.EntitlementProductIBMStorageCeph,
-		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-			OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
-			ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
+	// The ibm item carries registry + license only; its RHSM is sourced from the
+	// referenced redhat/rhel item, yet the projected vars are identical.
+	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{
+		{
+			Name:     "rhel",
+			Provider: v1alpha1.EntitlementProviderRedHat,
+			Product:  v1alpha1.EntitlementProductRHEL,
+			RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+				OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
+				ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
+			},
 		},
-		Registry: &v1alpha1.EnvironmentEntitlementRegistry{
-			CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
+		{
+			Name:               "ibm-ceph",
+			Provider:           v1alpha1.EntitlementProviderIBM,
+			Product:            v1alpha1.EntitlementProductIBMStorageCeph,
+			RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+			Registry: &v1alpha1.EnvironmentEntitlementRegistry{
+				CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
+			},
+			License: &v1alpha1.EnvironmentEntitlementLicense{Accept: true},
 		},
-		License: &v1alpha1.EnvironmentEntitlementLicense{Accept: true},
-	}}}}
+	}}}
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution:   v1alpha1.StorageCephDistributionIBM,
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "ibm-ceph"},
 	}}}
 	vars := Vars(Select(cluster, env, "/context/secrets"))
+	rhsm := vars["rhsm"].(map[string]any)
+	if rhsm["organizationPath"] != "/context/secrets/ibm-org" || rhsm["activationKeyPath"] != "/context/secrets/ibm-key" {
+		t.Fatalf("rhsm vars (via rhelEntitlementRef) = %#v", rhsm)
+	}
 	registry := vars["registry"].(map[string]any)
 	if registry["url"] != IBMRegistryURL {
 		t.Fatalf("registry url = %v, want %s", registry["url"], IBMRegistryURL)

@@ -52,22 +52,30 @@ spec:
     - ibm-ceph-registry
 
   # ---------------------------------------------------------------------------
-  # Entitlement bundle for IBM Storage Ceph (distribution: ibm).
-  #   - rhsm.*    registers each RHEL node with subscription-manager so the RHEL
-  #               BaseOS/AppStream repos are available for cephadm/ceph-common.
-  #   - registry  logs each node into cp.icr.io/cp (default URL) to pull the
-  #               IBM Storage Ceph container images.
-  #   - license   accepts the IBM Storage Ceph license (required for ibm distro).
-  # provider/product MUST be ibm / ibm-storage-ceph for distribution: ibm.
+  # Two entitlements, decoupled by concern. IBM Storage Ceph runs on RHEL it
+  # does not itself entitle, so the RHEL subscription is its own redhat/rhel
+  # item and the ibm item references it:
+  #   - rhel               registers each node with subscription-manager (rhsm)
+  #                        so the RHEL BaseOS/AppStream repos are available for
+  #                        cephadm/ceph-common. Reusable by any RHEL machine.
+  #   - ibm-storage-ceph   logs each node into cp.icr.io/cp (registry, default
+  #                        URL) for the IBM images, accepts the product license,
+  #                        and names the rhel item via rhelEntitlementRef.
+  # provider/product MUST be ibm / ibm-storage-ceph for distribution: ibm; an
+  # inline rhsm arm on the ibm item is rejected.
   # ---------------------------------------------------------------------------
 
   entitlements:
-    - name: ibm-storage-ceph
-      provider: ibm
-      product: ibm-storage-ceph
+    - name: rhel
+      provider: redhat
+      product: rhel
       rhsm:
         organizationRef: rhel-org
         activationKeyRef: rhel-activation-key
+    - name: ibm-storage-ceph
+      provider: ibm
+      product: ibm-storage-ceph
+      rhelEntitlementRef: rhel
       registry:
         # url defaults to cp.icr.io/cp for the ibm distribution; override only
         # for a mirror. Username "cp" + IBM entitlement key go in ibm-ceph-registry.
