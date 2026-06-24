@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -51,9 +52,20 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.Name + " preflight"}})
 		}
-		state, err = clusteraccess.ScopeState(state, scope.Name, flags.clusterScope)
+		// Resolve the cluster selection through the same component apply uses, so
+		// scoped preflight narrows the same way (ScopeStateForApply render set,
+		// work-object readiness scopes) — a green scoped apply implies a green
+		// scoped preflight and vice-versa.
+		sel, err := clusteraccess.Resolve(state, scope.Name, flags.clusterScope)
 		if err != nil {
 			return failErr(1, err)
+		}
+		state = sel.RenderState
+		var hostTrustScope map[string]bool
+		var secretScope *preflight.SecretScope
+		if sel.Active {
+			hostTrustScope = sel.WorkMachines
+			secretScope = &preflight.SecretScope{Machines: sel.WorkMachines, StorageClusters: sel.WorkStorageClusters}
 		}
 		limit := scope.AnsibleLimit
 		if flags.output == outputJSON {
@@ -67,11 +79,11 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		// with no recorded key. Dry-run and JSON runs fail closed on missing
 		// trust exactly as before.
 		if trustOnFirstUse && !dryRun {
-			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, nil); err != nil {
+			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, hostTrustScope); err != nil {
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, hostTrustScope, secretScope); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)

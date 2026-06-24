@@ -66,7 +66,9 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir); err != nil {
+		// preflight all is whole-context: no --clusters narrowing, so nil scopes
+		// check every managed-trust machine and declared object's secrets.
+		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, nil, nil); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)

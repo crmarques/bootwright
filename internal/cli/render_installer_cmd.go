@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -39,7 +38,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
   bootwright render installer --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster and StorageCluster names to render")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to render (the openshift-install agent inputs are container-cluster only)")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under /var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/ with secret material inlined for direct openshift-install consumption (mode 0600)")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
@@ -53,11 +52,11 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 		ctx := cf.ctx
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-		names, err := clusteraccess.ClusterNamesForTarget(state, clusterScope)
+		sel, err := clusteraccess.Resolve(state, "container-cluster", clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		state = clusteraccess.FilterStateToClusters(state, names)
+		state = sel.RenderState
 		result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, state)
 		if err != nil {
 			return failErr(1, err)
@@ -91,13 +90,11 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	}
 	ctx := cf.ctx
 	warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-	if strings.TrimSpace(clusterScope) != "" {
-		names, err := clusteraccess.ClusterNamesForTarget(state, clusterScope)
-		if err != nil {
-			return failErr(1, err)
-		}
-		state = clusteraccess.FilterStateToClusters(state, names)
+	sel, err := clusteraccess.Resolve(state, "container-cluster", clusterScope)
+	if err != nil {
+		return failErr(1, err)
 	}
+	state = sel.RenderState
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {
 		return failErr(1, fmt.Errorf("resolve --output-dir %s: %w", outputDir, err))

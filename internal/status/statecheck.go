@@ -1,8 +1,6 @@
 package status
 
 import (
-	"strings"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -17,16 +15,14 @@ func StateCheck(state v1alpha1.State, clusterScope string, applyTarget workflow.
 	// desired state, before --clusters scoping narrows it (otherwise a scoped check
 	// would report other clusters' resources as undeclared).
 	fullState := state
-	scoped := strings.TrimSpace(clusterScope) != ""
-	if scoped {
-		if _, _, err := clusteraccess.ClusterRootNamesForTarget(state, clusterScope); err != nil {
-			return workflow.StateCheckReport{}, err
-		}
-	}
-	state, err := clusteraccess.ScopeStateForApply(state, "all", clusterScope)
+	// Resolve through the shared selector so the scoped state matches scoped
+	// apply (same name validation, same ScopeStateForApply render set).
+	sel, err := clusteraccess.Resolve(state, "all", clusterScope)
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}
+	scoped := sel.Active
+	state = sel.RenderState
 	if scoped {
 		// Match scoped apply: report the transitive data-foundation
 		// attachment-target storage clusters present in the scoped state, not

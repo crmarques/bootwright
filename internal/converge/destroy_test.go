@@ -49,7 +49,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 		t.Fatalf("precondition: expected storage drift, got %v", err)
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, InfraScope, after)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, InfraScope, after, nil)
 
 	objects, err = workflow.ClassifyApplyObjects(afterTasks, runsDir)
 	if err != nil {

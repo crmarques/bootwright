@@ -21,6 +21,17 @@ const (
 	DestroyTaskKindContainerCluster = "destroyContainerCluster"
 )
 
+// DestroyStorageScopeExtraVar is the comma-separated allowlist of StorageCluster
+// names the storage teardown is restricted to. It is the destroy mirror of
+// apply's applyTarget.StorageClusterNames: the storage destroy playbook
+// end_hosts any rendered storage node whose cluster is not in the allowlist, so
+// a render-reference StorageCluster present in the (render-inclusive) state is
+// never wiped. Emitted only when a --clusters selection narrows storage to a
+// non-empty set; a selection that names no storage cluster drops the storage
+// teardown step entirely, and no selection at all leaves it unset (tear down
+// every storage host the state renders).
+const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
+
 // PlanDestroyTasks decomposes a scoped destroy into the task graph the apply
 // scheduler runs. The workflow_*_destroy playbooks are thin import wrappers that
 // run the task playbooks in teardown order in a single ansible process; this
@@ -33,18 +44,24 @@ const (
 // teardown (e.g. which Ceph cluster a storage host belongs to) is driven by
 // rendered per-host inventory vars, not by per-task parameters, so running a
 // task playbook once against its host group tears down every cluster correctly.
-func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string) ([]ApplyTask, error) {
+// storageWorkNames restricts the storage teardown to the directly-selected
+// storage roots (the destroy mirror of apply's applyTarget.StorageClusterNames):
+// nil means no --clusters narrowing (tear down every StorageCluster the state
+// renders); a non-nil empty slice means a selection that names no storage
+// cluster (drop the storage teardown step); a non-empty slice restricts teardown
+// to those names via DestroyStorageScopeExtraVar.
+func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
-		return destroyChain(state, limit, extraVars, infraDestroySteps()), nil
+		return destroyChain(state, limit, extraVars, infraDestroySteps(), storageWorkNames), nil
 	case "clusters":
-		return destroyChain(state, limit, extraVars, clusterDestroySteps()), nil
+		return destroyChain(state, limit, extraVars, clusterDestroySteps(), storageWorkNames), nil
 	case "all":
 		// Whole-context teardown: tear the clusters down before the infra they
 		// run on (the reverse of the apply order, infra then clusters). One
 		// sequential chain so each step waits for the previous, exactly as the
 		// stage chains do, with the clusters steps ahead of the infra steps.
-		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), infraDestroySteps()...)), nil
+		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), infraDestroySteps()...), storageWorkNames), nil
 	default:
 		return nil, fmt.Errorf("granular destroy is only supported for the infra, clusters, and all stages, not %q", scopeName)
 	}
@@ -73,16 +90,32 @@ type destroyStep struct {
 }
 
 // destroyChain turns the ordered steps into a sequential task chain (each task
-// depends on the previous), preserving the monolith's teardown order.
-func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep) []ApplyTask {
+// depends on the previous emitted step), preserving the monolith's teardown
+// order. When a --clusters selection narrows storage teardown, the storage step
+// is dropped if no storage cluster is selected, or restricted to the selected
+// roots via DestroyStorageScopeExtraVar otherwise; skipped steps do not break
+// the dependency chain because prev only advances for emitted steps.
+func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) []ApplyTask {
 	tasks := make([]ApplyTask, 0, len(steps))
 	prev := ""
 	for _, step := range steps {
+		stepExtraVars := extraVars
+		resourceKeys := destroyStepClusters(state, step.kind)
+		if step.kind == DestroyTaskKindStorageCluster && storageWorkNames != nil {
+			if len(storageWorkNames) == 0 {
+				// Selection names no storage cluster (e.g. a container-only scope):
+				// tear down none, so emit no storage teardown step at all.
+				continue
+			}
+			resourceKeys = append([]string(nil), storageWorkNames...)
+			sort.Strings(resourceKeys)
+			stepExtraVars = append(append([]string(nil), extraVars...), DestroyStorageScopeExtraVar+"="+strings.Join(resourceKeys, ","))
+		}
 		entry := TaskLedgerEntry{
 			ID:           step.id,
 			Kind:         step.kind,
 			Label:        step.label,
-			ResourceKeys: destroyStepClusters(state, step.kind),
+			ResourceKeys: resourceKeys,
 			Status:       TaskStatusPending,
 		}
 		if prev != "" {
@@ -92,7 +125,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			Entry:         entry,
 			Playbook:      step.playbook,
 			Limit:         limit,
-			ExtraVarPairs: append([]string(nil), extraVars...),
+			ExtraVarPairs: append([]string(nil), stepExtraVars...),
 			State:         state,
 		})
 		prev = step.id

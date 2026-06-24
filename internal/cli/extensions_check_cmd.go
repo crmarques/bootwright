@@ -47,11 +47,11 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		state, err = clusteraccess.ScopeState(state, converge.PhaseAddons, clusterScope)
+		sel, err := clusteraccess.Resolve(state, converge.PhaseAddons, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), state)
+		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), sel.RenderState)
 		failed := 0
 		for _, check := range results {
 			if check.Status != cliout.StatusOK {

@@ -44,7 +44,7 @@ echo destroy-stderr-line >&2
 	}
 	// Empty limit so the fake ansible actually runs (a real limit against an
 	// empty inventory would correctly skip as no-hosts).
-	tasks, err := PlanDestroyTasks("infra", state, "", nil)
+	tasks, err := PlanDestroyTasks("infra", state, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

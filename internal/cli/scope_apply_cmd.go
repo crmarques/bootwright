@@ -184,24 +184,21 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
 		}
-		storageSelectionActive := false
-		var selectedStorageNames []string
+		// Resolve the cluster selection once: the render state to plan over, the
+		// storage roots actually provisioned, and the readiness work objects. A
+		// managed StorageCluster pulled into the render state only as a render
+		// reference for a selected container cluster's data-foundation attachment
+		// is left out of both the provisioning set and the readiness checks, so
+		// scoping a container cluster never requires its external storage's
+		// bootstrap secrets or host trust (ADR-0004). This holds for every apply
+		// command that accepts --clusters, not only the stage-selector apply.
+		sel, err := clusteraccess.Resolve(state, runScope.Name, flags.clusterScope)
+		if err != nil {
+			return failErr(1, err)
+		}
 		var secretScope *preflight.SecretScope
-		if options.stageSelector && strings.TrimSpace(flags.clusterScope) != "" {
-			// Resolve the selected cluster roots. Only storage roots named directly
-			// in --clusters are provisioned; a managed StorageCluster pulled into
-			// plan.State only as a render reference for a data-foundation attachment
-			// is left out of both the provisioning set and the readiness checks, so
-			// scoping a container cluster never requires its external storage's
-			// bootstrap secrets or host trust (ADR-0004).
-			containerNames, storageNames, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
-			if err != nil {
-				return failErr(1, err)
-			}
-			selectedStorageNames = storageNames
-			machines, storageClusters := clusteraccess.ApplyWorkObjects(state, containerNames, storageNames)
-			secretScope = &preflight.SecretScope{Machines: machines, StorageClusters: storageClusters}
-			storageSelectionActive = true
+		if sel.Active {
+			secretScope = &preflight.SecretScope{Machines: sel.WorkMachines, StorageClusters: sel.WorkStorageClusters}
 		}
 		if err := clusteraccess.ValidateScopedApplySharedServices(state, runScope.Name, flags.clusterScope); err != nil {
 			return failErr(1, err)
@@ -211,7 +208,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		plan, err := prepareScopedApplyWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun)
+		plan, err := prepareScopedApplyWorkflow(sel.RenderState, runScope, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -233,7 +230,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				}
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, selectedStorageNames, storageSelectionActive, workflow.ConcurrencyLimits{
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, sel.StorageWorkNames(), sel.Active, workflow.ConcurrencyLimits{
 			Parallelism:        parallelism,
 			ParallelismPerHost: perHost,
 			ParallelismRedfish: redfish,

@@ -9,7 +9,7 @@ import (
 func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	limit := "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"
 	extra := []string{"bootwright_infra_destroy_context_sweep=true"}
-	tasks, err := PlanDestroyTasks("infra", v1alpha1.State{}, limit, extra)
+	tasks, err := PlanDestroyTasks("infra", v1alpha1.State{}, limit, extra, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 }
 
 func TestPlanDestroyTasksClustersChain(t *testing.T) {
-	tasks, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "limit", nil)
+	tasks, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "limit", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 func TestPlanDestroyTasksAllChain(t *testing.T) {
 	limit := ""
 	extra := []string{"bootwright_infra_destroy_context_sweep=true"}
-	tasks, err := PlanDestroyTasks("all", v1alpha1.State{}, limit, extra)
+	tasks, err := PlanDestroyTasks("all", v1alpha1.State{}, limit, extra, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,78 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 }
 
 func TestPlanDestroyTasksRejectsUnknownScope(t *testing.T) {
-	if _, err := PlanDestroyTasks("bogus", v1alpha1.State{}, "", nil); err == nil {
+	if _, err := PlanDestroyTasks("bogus", v1alpha1.State{}, "", nil, nil); err == nil {
 		t.Fatal("expected an error for an unsupported destroy scope")
+	}
+}
+
+// TestPlanDestroyTasksStorageWorkSetGate is the regression guard for the scoped
+// destroy bug: a --clusters selection that names container clusters but no
+// storage cluster (storageWorkNames is a non-nil empty slice) must NOT plan a
+// storage teardown step, even though the render-inclusive state still carries
+// the managed StorageCluster pulled in by the container cluster's
+// data-foundation attachment. A non-empty work set restricts teardown to the
+// named roots via the storage-scope allowlist extra-var.
+func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{
+			{Metadata: v1alpha1.Metadata{Name: "ceph-render-ref"}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph-selected"}},
+		},
+	}
+
+	// Container-only selection: empty (non-nil) storage work set drops the step.
+	containerOnly, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range containerOnly {
+		if task.Entry.Kind == DestroyTaskKindStorageCluster {
+			t.Fatalf("container-only selection must plan no storage teardown step; got %+v", task.Entry)
+		}
+	}
+
+	// Storage-narrowed selection: the step runs but is restricted to the named
+	// root via the allowlist extra-var, and the render reference is excluded.
+	narrowed, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{"ceph-selected"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var storageTask *ApplyTask
+	for i := range narrowed {
+		if narrowed[i].Entry.Kind == DestroyTaskKindStorageCluster {
+			storageTask = &narrowed[i]
+		}
+	}
+	if storageTask == nil {
+		t.Fatal("storage-narrowed selection must plan a storage teardown step")
+	}
+	if len(storageTask.Entry.ResourceKeys) != 1 || storageTask.Entry.ResourceKeys[0] != "ceph-selected" {
+		t.Fatalf("storage step must cover only the selected root; got %v", storageTask.Entry.ResourceKeys)
+	}
+	wantVar := DestroyStorageScopeExtraVar + "=ceph-selected"
+	found := false
+	for _, pair := range storageTask.ExtraVarPairs {
+		if pair == wantVar {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("storage step must carry the allowlist extra-var %q; got %v", wantVar, storageTask.ExtraVarPairs)
+	}
+
+	// No selection (nil): teardown covers every rendered storage cluster.
+	unscoped, err := PlanDestroyTasks("clusters", state, "limit", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unscopedStorage *ApplyTask
+	for i := range unscoped {
+		if unscoped[i].Entry.Kind == DestroyTaskKindStorageCluster {
+			unscopedStorage = &unscoped[i]
+		}
+	}
+	if unscopedStorage == nil || len(unscopedStorage.Entry.ResourceKeys) != 2 {
+		t.Fatalf("unscoped destroy must tear down every storage cluster; got %+v", unscopedStorage)
 	}
 }

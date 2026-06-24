@@ -12,9 +12,8 @@ import (
 // AnsibleLimitForScope("addons")=="" empty-limit handling, this stayed false
 // and an empty addons run still prompted and started.
 func TestPrepareScopedWorkflowPlanAddonsNoBindingsIsNoRemoteWork(t *testing.T) {
-	passthrough := func(s v1alpha1.State, _, _ string) (v1alpha1.State, error) { return s, nil }
 	scope := subPhaseStageScope("addons")
-	plan, err := PrepareScopedWorkflowPlan(v1alpha1.State{}, scope, scope.ApplyPhases(), "", false, false, passthrough, nil)
+	plan, err := PrepareScopedWorkflowPlan(v1alpha1.State{}, scope, scope.ApplyPhases(), false, false, nil)
 	if err != nil {
 		t.Fatalf("PrepareScopedWorkflowPlan: %v", err)
 	}

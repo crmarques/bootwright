@@ -122,7 +122,7 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err
 	}
-	tasks, err := workflow.PlanDestroyTasks(scopeName, plan.State, plan.Limit, plan.ExtraVarPairs)
+	tasks, err := workflow.PlanDestroyTasks(scopeName, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err
 	}
@@ -148,14 +148,23 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 // missing: the default reconcile creates rather than skips a gone object as
 // already-applied, and --expect-new no longer refuses it. Best-effort — a
 // cleanup miss must not fail an otherwise-successful destroy. state is
-// already scoped to the selected roots, so the planned tasks cover exactly
-// what was destroyed.
-func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State) {
+// render-inclusive, so the storage work set (the directly-selected storage
+// roots; nil for an unscoped destroy) gates the storage reset exactly as it
+// gates the teardown — a render-reference StorageCluster the destroy did not
+// tear down keeps its records.
+func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State, storageWorkNames []string) {
 	resetScope := runScope
 	if runScope.Name == InfraScope.Name {
 		resetScope = AllScope
 	}
-	if tasks, perr := workflow.PlanApplyTasksChecked(resetScope.ApplyTarget(), state); perr == nil {
+	target := resetScope.ApplyTarget()
+	if storageWorkNames != nil {
+		// Mirror apply's applyTarget.StorageClusterNames so the planned reset
+		// tasks cover only the storage clusters actually torn down, never a
+		// render-reference cluster pulled into state for attachment rendering.
+		target.StorageClusterNames = append([]string{}, storageWorkNames...)
+	}
+	if tasks, perr := workflow.PlanApplyTasksChecked(target, state); perr == nil {
 		for _, task := range tasks {
 			_ = workflow.RemoveApplyTaskConvergeSafety(runsDir, task)
 		}
@@ -171,7 +180,22 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 	// backing task; a destroyed cluster rm-cluster --zap-osds removes them
 	// all, so reset their records too or a later apply would mis-report a
 	// gone pool as match/drift instead of recreating it.
-	for _, cluster := range state.StorageClusters {
-		_ = workflow.RemoveStorageSubObjectsConvergeSafety(runsDir, state, cluster.Metadata.Name)
+	for _, name := range destroyStorageResetNames(state, storageWorkNames) {
+		_ = workflow.RemoveStorageSubObjectsConvergeSafety(runsDir, state, name)
 	}
+}
+
+// destroyStorageResetNames returns the StorageCluster names whose convergence
+// records a destroy should reset: the directly-selected storage roots when a
+// --clusters selection narrowed storage (storageWorkNames non-nil, possibly
+// empty), else every StorageCluster the render-inclusive state carries.
+func destroyStorageResetNames(state v1alpha1.State, storageWorkNames []string) []string {
+	if storageWorkNames != nil {
+		return storageWorkNames
+	}
+	names := make([]string, 0, len(state.StorageClusters))
+	for _, cluster := range state.StorageClusters {
+		names = append(names, cluster.Metadata.Name)
+	}
+	return names
 }

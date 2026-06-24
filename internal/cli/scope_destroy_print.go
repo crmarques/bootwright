@@ -42,33 +42,49 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 // very different things: cluster destroy removes cluster-stage runtime and
 // managed storage state; infra destroy tears down VMs, networks, provider
 // services, infra component services, and provider-owned machine disks.
-func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State) {
+func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State, storageWorkNames []string) {
 	switch {
 	case converge.DestroyIsFullScope(scope):
 		// Whole-context destroy runs both stages in teardown order: clusters
 		// first, then the infra they ran on. Preview both so the operator sees
 		// the full blast radius before the confirmation prompt.
-		printDestroyClustersPreview(w, clustersDir, state)
-		printDestroyInfraPreview(w, state)
+		printDestroyClustersPreview(w, clustersDir, state, storageWorkNames)
+		printDestroyInfraPreview(w, state, storageWorkNames)
 	case scope.Name == "clusters" || scope.Name == "container-cluster":
-		printDestroyClustersPreview(w, clustersDir, state)
+		printDestroyClustersPreview(w, clustersDir, state, storageWorkNames)
 	case scope.Name == "infra":
-		printDestroyInfraPreview(w, state)
+		printDestroyInfraPreview(w, state, storageWorkNames)
 	}
 }
 
-func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1.State) {
-	if len(state.ContainerClusters) == 0 && len(state.StorageClusters) == 0 {
+// destroyStoragePreviewNames lists the StorageClusters a destroy preview shows
+// as teardown targets: the directly-selected storage roots when a --clusters
+// selection narrowed storage (storageWorkNames non-nil, possibly empty), else
+// every StorageCluster the render-inclusive state carries. This keeps the
+// preview aligned with the work-set gate — a render-reference StorageCluster is
+// never shown as a teardown target for a container-only scope.
+func destroyStoragePreviewNames(state v1alpha1.State, storageWorkNames []string) []string {
+	if storageWorkNames != nil {
+		out := append([]string(nil), storageWorkNames...)
+		sort.Strings(out)
+		return out
+	}
+	out := make([]string, 0, len(state.StorageClusters))
+	for _, cluster := range state.StorageClusters {
+		out = append(out, cluster.Metadata.Name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1.State, storageWorkNames []string) {
+	storageNames := destroyStoragePreviewNames(state, storageWorkNames)
+	if len(state.ContainerClusters) == 0 && len(storageNames) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
 	p.Section("Will destroy")
 	var items []output.Item
-	storageNames := make([]string, 0, len(state.StorageClusters))
-	for _, cluster := range state.StorageClusters {
-		storageNames = append(storageNames, cluster.Metadata.Name)
-	}
-	sort.Strings(storageNames)
 	for _, name := range storageNames {
 		items = append(items, output.Item{Label: "storage cluster " + name, Detail: "managed services and generated attachment records"})
 	}
@@ -85,8 +101,9 @@ func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1
 	p.Status(output.StatusInfo, "destroy clusters", "machine substrate cleanup is handled by destroy --stage infra")
 }
 
-func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
-	if len(state.Machines) == 0 && len(state.ContainerClusters) == 0 && len(state.StorageClusters) == 0 {
+func printDestroyInfraPreview(w io.Writer, state v1alpha1.State, storageWorkNames []string) {
+	storageNames := destroyStoragePreviewNames(state, storageWorkNames)
+	if len(state.Machines) == 0 && len(state.ContainerClusters) == 0 && len(storageNames) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
@@ -116,11 +133,6 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 		}
 		items = append(items, output.Item{Label: "cluster " + name + " infra", Detail: detail})
 	}
-	storageNames := make([]string, 0, len(state.StorageClusters))
-	for _, cluster := range state.StorageClusters {
-		storageNames = append(storageNames, cluster.Metadata.Name)
-	}
-	sort.Strings(storageNames)
 	for _, name := range storageNames {
 		items = append(items, output.Item{Label: "storage cluster " + name + " infra", Detail: "provider-owned machines and declared managed disks"})
 	}

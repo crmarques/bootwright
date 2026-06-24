@@ -21,7 +21,7 @@ func TestPrepareScopedWorkflowDestroyCountsOwnershipRecords(t *testing.T) {
 		Host: "provider-0",
 	}}
 
-	withRecords, err := prepareScopedWorkflow(v1alpha1.State{}, converge.InfraScope, "", false, false, records)
+	withRecords, err := prepareScopedWorkflow(v1alpha1.State{}, converge.InfraScope, false, false, records)
 	if err != nil {
 		t.Fatalf("prepareScopedWorkflow with records: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestPrepareScopedWorkflowDestroyCountsOwnershipRecords(t *testing.T) {
 		t.Fatal("noRemoteWork = true with host-bearing ownership records: the destroy prompt would be skipped while workflow.Run tears down recorded hosts")
 	}
 
-	withoutRecords, err := prepareScopedWorkflow(v1alpha1.State{}, converge.InfraScope, "", false, false, nil)
+	withoutRecords, err := prepareScopedWorkflow(v1alpha1.State{}, converge.InfraScope, false, false, nil)
 	if err != nil {
 		t.Fatalf("prepareScopedWorkflow without records: %v", err)
 	}

@@ -23,6 +23,18 @@
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') | length == 0
 
+    # A scoped --clusters destroy narrows the storage teardown to the
+    # directly-selected storage roots (bootwright_destroy_storage_scope). A
+    # render-reference StorageCluster pulled into the render-inclusive state for
+    # a container cluster's data-foundation attachment is rendered into this
+    # group but not selected, so end its hosts before any OSD wipe. Unset means
+    # no --clusters narrowing (tear down every rendered managed storage host).
+    - name: End hosts outside the selected storage clusters
+      ansible.builtin.meta: end_host
+      when:
+        - (bootwright_destroy_storage_scope | default('') | length) > 0
+        - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
+
     - name: Validate selected storage cluster context
       ansible.builtin.assert:
         that:

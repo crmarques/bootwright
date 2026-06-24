@@ -41,9 +41,16 @@ func ScopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 		return stategraph.FilterStateToClusterRoots(state, containerNames, storageNames), nil
 	}
 	if strings.TrimSpace(scope) != "" {
-		return state, fmt.Errorf("--clusters is not supported for %s", target)
+		return state, unsupportedClusterScopeError(target)
 	}
 	return state, nil
+}
+
+// unsupportedClusterScopeError is the single spelling of the "--clusters is not
+// supported for this target" error, shared by ScopeState and Selection.Resolve
+// so the message cannot drift between the filter and the selector.
+func unsupportedClusterScopeError(target string) error {
+	return fmt.Errorf("--clusters is not supported for %s", target)
 }
 
 func ScopeStateForApply(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
@@ -223,15 +230,24 @@ func ValidateAccessClusterName(state v1alpha1.State, name string, includeStorage
 // lists every shared machine service and names the unscoped clusters
 // that would break if the destroy proceeded.
 func FormatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict, flagName string) error {
+	return formatScopeConflicts(conflicts,
+		flagName+" would destroy shared machine service(s) that other clusters still depend on:",
+		"re-run without "+flagName+" to destroy everything, or extend "+flagName+" to include the unscoped clusters")
+}
+
+// formatScopeConflicts renders the shared shared-machine-service conflict list
+// both the destroy and apply scope guards report; only the lead-in and closing
+// guidance differ by verb (destroy "would destroy" / apply "would narrow").
+func formatScopeConflicts(conflicts []stategraph.DestroyScopeConflict, lead, closing string) error {
 	var b strings.Builder
-	b.WriteString(flagName + " would destroy shared machine service(s) that other clusters still depend on:\n")
+	b.WriteString(lead + "\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - %s %s/%s shared by scoped {%s} and unscoped {%s}\n",
 			c.Slot, c.Provider, c.Name,
 			strings.Join(c.ScopedClusters, ", "),
 			strings.Join(c.UnscopedClusters, ", ")))
 	}
-	b.WriteString("re-run without " + flagName + " to destroy everything, or extend " + flagName + " to include the unscoped clusters")
+	b.WriteString(closing)
 	return fmt.Errorf("%s", b.String())
 }
 
@@ -271,20 +287,9 @@ func scopeProvisionsSharedMachineLayer(target string) bool {
 }
 
 func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {
-	var b strings.Builder
-	b.WriteString("--clusters would narrow shared machine service(s) that other clusters still depend on:\n")
-	for _, c := range conflicts {
-		b.WriteString(fmt.Sprintf("  - %s %s/%s shared by scoped {%s} and unscoped {%s}\n",
-			c.Slot, c.Provider, c.Name,
-			strings.Join(c.ScopedClusters, ", "),
-			strings.Join(c.UnscopedClusters, ", ")))
-	}
-	b.WriteString("re-run without --clusters to apply every consumer, or extend --clusters to include the unscoped clusters")
-	return fmt.Errorf("%s", b.String())
-}
-
-func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State {
-	return stategraph.FilterStateToClusters(state, names)
+	return formatScopeConflicts(conflicts,
+		"--clusters would narrow shared machine service(s) that other clusters still depend on:",
+		"re-run without --clusters to apply every consumer, or extend --clusters to include the unscoped clusters")
 }
 
 // ApplyWorkObjects returns the Machine and StorageCluster names a scoped apply
@@ -314,7 +319,11 @@ func StorageClusterNamesForTarget(state v1alpha1.State, scope string) ([]string,
 		}
 		if len(missing) > 0 {
 			sort.Strings(missing)
-			return nil, fmt.Errorf("unknown storage cluster(s): %s", strings.Join(missing, ", "))
+			var available []string
+			for name := range known {
+				available = append(available, name)
+			}
+			return nil, fmt.Errorf("unknown storage cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
 		}
 		return names, nil
 	}

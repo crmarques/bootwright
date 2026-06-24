@@ -124,16 +124,25 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, err)
 		}
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
+		// Resolve the cluster selection once: the render set destroy plans over,
+		// the directly-named storage roots it actually tears down (so a
+		// render-reference StorageCluster pulled in by a selected container
+		// cluster's data-foundation attachment is not destroyed), and the resolved
+		// roots the executor cleanup gate consumes. The artifact-server literal is
+		// not a cluster name, so it bypasses Selection.
+		var sel clusteraccess.Selection
+		if !artifactServerOnly {
+			sel, err = clusteraccess.Resolve(state, runScope.Name, flags.clusterScope)
+			if err != nil {
+				return failErr(1, err)
+			}
+		}
 		// For scoped infra destroy, refuse to proceed when selected clusters
 		// share a provider service component with unscoped clusters: the
 		// renderer keys container names and state dirs per (provider, name), so
 		// destroying a shared instance breaks the unscoped consumers silently.
-		if runScope.Name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
-			selectedNames, _, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
-			if err != nil {
-				return failErr(1, err)
-			}
-			if conflicts := stategraph.SharedDestroyConflicts(state, selectedNames); len(conflicts) > 0 {
+		if runScope.Name == "infra" && sel.Active {
+			if conflicts := stategraph.SharedDestroyConflicts(state, sel.ContainerRoots); len(conflicts) > 0 {
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
@@ -154,10 +163,15 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			artifactsBaseName = converge.InfraDestroyArtifactServerArtifactsBaseName
 			workflowLabel = "infra destroy artifact-server"
 		} else {
-			plan, err = prepareScopedWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun, ownershipRecords)
+			plan, err = prepareScopedWorkflow(sel.RenderState, runScope, askBecomePass, dryRun, ownershipRecords)
 			if err != nil {
 				return failErr(1, err)
 			}
+			// Gate storage teardown to the directly-selected storage roots. State
+			// stays render-inclusive (so a container cluster's data-foundation
+			// attachment still renders), but the work set decides what is actually
+			// torn down — the destroy mirror of apply's applyTarget.StorageClusterNames.
+			plan.StorageWorkNames = sel.StorageWorkNames()
 		}
 		// Compose the teardown-scoping executor gate variables in converge (the
 		// service that runs the plan) rather than as raw literals here. Cluster
@@ -168,12 +182,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		// gates that cleanup.
 		infraScope := !artifactServerOnly && (runScope.Name == "infra" || fullDestroy)
 		var resolvedClusterRoots []string
-		if infraScope && strings.TrimSpace(flags.clusterScope) != "" {
-			containerNames, storageNames, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
-			if err != nil {
-				return failErr(1, err)
-			}
-			resolvedClusterRoots = append(append([]string{}, containerNames...), storageNames...)
+		if infraScope && sel.Active {
+			resolvedClusterRoots = sel.AllRoots
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned)
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
@@ -188,7 +198,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if fullDestroy {
 				// Full destroy has no single playbook; report the ordered task
 				// chain the teardown would run instead of a single ansible command.
-				tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs)
+				tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 				if terr != nil {
 					return failErr(1, terr)
 				}
@@ -208,7 +218,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.State)
 		} else {
-			printDestroyPreview(stdout, runScope, clustersDir, plan.State)
+			printDestroyPreview(stdout, runScope, clustersDir, plan.State, plan.StorageWorkNames)
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
@@ -261,7 +271,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		var renderResult render.Result
 		switch {
 		case fullDestroy && dryRun:
-			tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs)
+			tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 			if terr != nil {
 				return failErr(1, terr)
 			}
@@ -281,7 +291,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				}
 				return failErr(1, gerr)
 			}
-			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State)
+			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames)
 			renderResult = result
 		default:
 			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
@@ -289,7 +299,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly {
-				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State)
+				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames)
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)
