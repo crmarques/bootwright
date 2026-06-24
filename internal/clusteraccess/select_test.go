@@ -22,7 +22,12 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	}
 }
 
-func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds(t *testing.T) {
+// A scoped apply refuses only the shared services a scoped provision would
+// DEGRADE (load balancer, name resolution, NTP — their config is rendered from the
+// in-state cluster/machine set). Self-contained shared services (artifact server,
+// proxy, registry) render from the spec, which scoping keeps in full, so they are
+// allowed through and must not appear in the refusal.
+func TestValidateScopedApplySharedServicesRefusesOnlyDegradingKinds(t *testing.T) {
 	state := cliStateWithAllSharedMachineServices()
 	for _, target := range []string{"infra", "all"} {
 		t.Run(target, func(t *testing.T) {
@@ -31,15 +36,21 @@ func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds
 				t.Fatal("expected shared service conflict, got nil")
 			}
 			for _, fragment := range []string{
-				"artifactServer InfraComponent/artifact-server",
 				"loadBalancer InfraComponent/load-balancer",
 				"nameResolution InfraComponent/name-resolution",
 				"ntp InfraComponent/ntp-server",
+			} {
+				if !strings.Contains(err.Error(), fragment) {
+					t.Fatalf("%s error %q missing degrading service %q", target, err, fragment)
+				}
+			}
+			for _, fragment := range []string{
+				"artifactServer InfraComponent/artifact-server",
 				"proxy InfraComponent/proxy",
 				"registry InfraComponent/registry",
 			} {
-				if !strings.Contains(err.Error(), fragment) {
-					t.Fatalf("%s error %q missing %q", target, err, fragment)
+				if strings.Contains(err.Error(), fragment) {
+					t.Fatalf("%s error %q must not refuse self-contained service %q", target, err, fragment)
 				}
 			}
 		})

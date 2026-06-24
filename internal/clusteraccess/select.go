@@ -266,10 +266,24 @@ func ValidateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 		return nil
 	}
 	conflicts := stategraph.SharedDestroyConflicts(state, selectedNames)
-	if len(conflicts) == 0 {
+	// Apply only needs to refuse the shared services a scoped provision would
+	// DEGRADE: those whose config is rendered from the in-state cluster/machine set
+	// (load balancer, name resolution, NTP). A self-contained shared service
+	// (artifact server, proxy, registry, emulated BMC) renders from the
+	// InfraComponent/provider spec, which scoping keeps in full, so a scoped apply
+	// re-provisions it identically and must not be blocked. The destroy path keeps
+	// refusing on the full structural conflict set — it tears down the shared
+	// instance regardless of how its config is derived.
+	degrading := make([]stategraph.DestroyScopeConflict, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		if stategraph.SharedServiceDegradesUnderScope(conflict.Slot) {
+			degrading = append(degrading, conflict)
+		}
+	}
+	if len(degrading) == 0 {
 		return nil
 	}
-	return formatApplyScopeConflicts(conflicts)
+	return formatApplyScopeConflicts(degrading)
 }
 
 // scopeProvisionsSharedMachineLayer reports whether a resolved apply scope

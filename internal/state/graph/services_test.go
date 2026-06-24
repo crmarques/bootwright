@@ -8,6 +8,33 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 )
 
+// SharedServiceDegradesUnderScope classifies which shared machine services a
+// scoped apply must refuse (config rendered from the in-state cluster/machine set)
+// versus those it may provision in full (config from the spec). Unknown slots
+// default to degrading so a new service is not silently allowed under scope.
+func TestSharedServiceDegradesUnderScope(t *testing.T) {
+	for _, slot := range []string{
+		v1alpha1.ComponentSlotLoadBalancer,
+		v1alpha1.ComponentSlotNameResolution,
+		v1alpha1.ComponentSlotNTP,
+		"future-unclassified-service",
+	} {
+		if !SharedServiceDegradesUnderScope(slot) {
+			t.Errorf("slot %q should be degrading-under-scope (refused)", slot)
+		}
+	}
+	for _, slot := range []string{
+		v1alpha1.ComponentSlotArtifactServer,
+		v1alpha1.ComponentSlotProxy,
+		v1alpha1.ComponentSlotRegistry,
+		v1alpha1.ProviderServiceKindBMC,
+	} {
+		if SharedServiceDegradesUnderScope(slot) {
+			t.Errorf("slot %q should be self-contained (allowed under scope)", slot)
+		}
+	}
+}
+
 func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
 	state := sharedManagedServiceState()
 

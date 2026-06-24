@@ -235,6 +235,31 @@ func SharedDestroyConflicts(state v1alpha1.State, selected []string) []DestroySc
 	return ResolveMachineServices(state).ScopeConflicts(selected)
 }
 
+// selfContainedSharedServiceSlots render their config from the InfraComponent or
+// provider spec, which survives a --clusters scope in full (mergeFilteredStates
+// keeps InfraComponents and Environment). A scoped apply re-provisions them with
+// identical config, so it cannot degrade the unscoped consumers.
+var selfContainedSharedServiceSlots = map[string]bool{
+	v1alpha1.ComponentSlotArtifactServer: true,
+	v1alpha1.ComponentSlotProxy:          true,
+	v1alpha1.ComponentSlotRegistry:       true,
+	v1alpha1.ProviderServiceKindBMC:      true,
+}
+
+// SharedServiceDegradesUnderScope reports whether provisioning a shared machine
+// service under a --clusters scoped apply would degrade the unscoped consumers'
+// view of it. Degrading services (load balancer, name resolution, NTP) render
+// their whole config from the in-state cluster/machine set — haproxy backends,
+// dnsmasq node records, chrony allow lists — so a scoped apply drops the unscoped
+// clusters' entries and overwrites the running shared config. Self-contained
+// services render from the spec, which scoping keeps in full, so a scoped apply
+// re-provisions them identically. Unknown slots default to degrading (the apply is
+// refused) so a new shared service must be explicitly classified self-contained
+// before a scoped apply is allowed to provision it.
+func SharedServiceDegradesUnderScope(slot string) bool {
+	return !selfContainedSharedServiceSlots[slot]
+}
+
 func machineServiceConsumers(state v1alpha1.State) []MachineServiceConsumer {
 	var out []MachineServiceConsumer
 	for _, cluster := range state.ContainerClusters {
