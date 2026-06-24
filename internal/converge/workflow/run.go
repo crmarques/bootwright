@@ -245,16 +245,10 @@ func loadOwnershipRecordsForRun(playbook, ownershipDir, contextName string) ([]o
 	if !strings.Contains(playbook, "destroy") {
 		return nil, nil
 	}
-	records, err := ownership.LoadResources(ownershipDir)
-	if err != nil {
-		return nil, err
-	}
-	// Filter by context to match destroy planning (LoadContextOwnershipRecords)
-	// and the operator-facing orphan preview. Without this, the inventory the
-	// teardown actually executes against could include a foreign-context record
-	// that shares the ownership dir — a host the preview and confirmation prompt
-	// already excluded. The execution path must not be wider than the gate.
-	return ownership.FilterByContext(records, contextName), nil
+	// Go through the shared context-scoped loader so the inventory the teardown
+	// executes against is exactly the set destroy planning gated and the operator
+	// preview showed — never a wider, foreign-context-inclusive set.
+	return ownership.LoadContext(ownershipDir, contextName)
 }
 
 func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {

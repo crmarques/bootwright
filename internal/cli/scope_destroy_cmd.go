@@ -152,7 +152,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
-		ownershipRecords, err := converge.LoadContextOwnershipRecords(ctx.OwnershipDir, ctx.Name)
+		ownershipRecords, ownershipSkipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -215,6 +215,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		printDestroySafety(stdout, destroySafety, override, dryRun)
+		printSkippedOwnershipRecords(stdout, ownershipSkipped)
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.State)
 		} else {

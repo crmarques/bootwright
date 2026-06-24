@@ -35,6 +35,21 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 	}
 }
 
+// printSkippedOwnershipRecords warns about ownership records that could not be
+// read, decoded, or validated and were skipped on load. The destroy sweep cannot
+// reclaim a record it could not read, so the operator is told which files to
+// repair or remove rather than letting them vanish silently.
+func printSkippedOwnershipRecords(w io.Writer, warnings []error) {
+	if len(warnings) == 0 {
+		return
+	}
+	p := output.NewContinuation(w)
+	p.Section("Skipped ownership records")
+	for _, warning := range warnings {
+		p.Status(output.StatusWarn, "skipped", warning.Error())
+	}
+}
+
 // printDestroyPreview lists the user-visible resources `destroy` will
 // remove for the current scope, before the confirmation prompt. The
 // preview is concise on purpose: the user can read the YAML for full

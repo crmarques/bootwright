@@ -71,11 +71,15 @@ func DestroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, override
 // destroy must never tear down resources recorded for another Bootwright
 // context that share a host or a misconfigured context directory.
 func LoadContextOwnershipRecords(ownershipDir, contextName string) ([]ownership.ResourceRecord, error) {
-	records, err := ownership.LoadResources(ownershipDir)
-	if err != nil {
-		return nil, err
-	}
-	return ownership.FilterByContext(records, contextName), nil
+	return ownership.LoadContext(ownershipDir, contextName)
+}
+
+// LoadContextOwnershipRecordsWithWarnings is LoadContextOwnershipRecords plus the
+// per-record skip reasons, so the destroy preview can tell the operator which
+// recorded resources were dropped on load (corrupt or policy-rejected) and so will
+// not be reclaimed by the sweep, instead of losing them silently.
+func LoadContextOwnershipRecordsWithWarnings(ownershipDir, contextName string) ([]ownership.ResourceRecord, []error, error) {
+	return ownership.LoadContextWithWarnings(ownershipDir, contextName)
 }
 
 // ExecuteDestroy assembles the destroy run options and runs the workflow.

@@ -43,8 +43,10 @@ func StateCheck(state v1alpha1.State, clusterScope string, applyTarget workflow.
 	}
 	// Best-effort: report Bootwright-owned resources that are no longer declared
 	// (orphans). Read-only — a failure to read records must not break the check.
-	if records, lerr := ownership.LoadResources(ownershipDir); lerr == nil {
-		report.Undeclared = workflow.OwnershipOrphans(fullState, ownership.FilterByContext(records, contextName))
+	// Goes through the shared context-scoped loader so the record set matches what
+	// destroy plans and executes over.
+	if records, lerr := ownership.LoadContext(ownershipDir, contextName); lerr == nil {
+		report.Undeclared = workflow.OwnershipOrphans(fullState, records)
 	}
 	return report, nil
 }

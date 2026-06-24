@@ -211,6 +211,32 @@ func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {
 	return records, warnings, nil
 }
 
+// LoadContext is the single context-scoped entry point for reading ownership
+// records: it loads every record under dir and drops any stamped with a different
+// context (defense in depth for a shared or misconfigured ownership dir). Every
+// consumer — destroy planning, the destroy run inventory, and state-check orphan
+// reporting — goes through this, so the records that gate a destroy, the records it
+// executes against, and the records the operator preview shows are always the same
+// set. An empty contextName applies no context filter (FilterByContext semantics).
+func LoadContext(dir, contextName string) ([]ResourceRecord, error) {
+	records, err := LoadResources(dir)
+	if err != nil {
+		return nil, err
+	}
+	return FilterByContext(records, contextName), nil
+}
+
+// LoadContextWithWarnings is LoadContext plus the per-record skip reasons, so a
+// caller can report records that were dropped on load instead of silently losing
+// them. Context filtering is applied to the records that loaded cleanly.
+func LoadContextWithWarnings(dir, contextName string) ([]ResourceRecord, []error, error) {
+	records, warnings, err := LoadResourcesWithWarnings(dir)
+	if err != nil {
+		return nil, warnings, err
+	}
+	return FilterByContext(records, contextName), warnings, nil
+}
+
 // FilterByContext drops records explicitly stamped with a different context, so a
 // destroy never consumes an ownership record that belongs to another Bootwright
 // context (for example a record misplaced into a shared context directory).
