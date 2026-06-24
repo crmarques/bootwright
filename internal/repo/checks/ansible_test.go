@@ -3753,6 +3753,40 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 	}
 }
 
+func TestInstallAgentRequiresInstallStateForWaitAction(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/validate.yml")
+	stateStat := tasks[findAnsibleTask(t, tasks, "Verify agent install state exists for wait")]
+	stateFail := tasks[findAnsibleTask(t, tasks, "Fail when agent install state is missing for wait")]
+
+	statBody, ok := stateStat["ansible.builtin.stat"].(map[string]any)
+	if !ok {
+		t.Fatalf("wait state stat has no stat body: %v", stateStat)
+	}
+	if got := statBody["path"]; got != "{{ bootwright_install_work_dir }}/.openshift_install_state.json" {
+		t.Fatalf("wait state stat path got %v", got)
+	}
+	for _, want := range []string{
+		"bootwright_install_agent_action_effective == 'wait_install'",
+		"not bootwright_install_already_complete",
+	} {
+		if !stringListContains(stateStat["when"], want) {
+			t.Fatalf("wait state stat when missing %q: %v", want, stateStat["when"])
+		}
+	}
+	for _, want := range []string{
+		"bootwright_install_agent_action_effective == 'wait_install'",
+		"not bootwright_install_already_complete",
+		"not bootwright_install_state_stat.stat.exists",
+	} {
+		if !stringListContains(stateFail["when"], want) {
+			t.Fatalf("wait state failure when missing %q: %v", want, stateFail["when"])
+		}
+	}
+	if failBody := fmt.Sprint(stateFail["ansible.builtin.fail"]); !strings.Contains(failBody, "deps phase") {
+		t.Fatalf("wait state failure message must point at the deps phase: %v", stateFail["ansible.builtin.fail"])
+	}
+}
+
 func TestInstallAgentStagesExtraManifestsWhenPresent(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/inputs.yml")
 	stat := tasks[findAnsibleTask(t, tasks, "Check local installer extra manifests")]
