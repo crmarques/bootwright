@@ -81,7 +81,7 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil)
 	var tools []string
 	for _, check := range checks {
 		if check.Group == checkGroupInstallerTools {
@@ -129,7 +129,7 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		UID: func() int { return 1000 },
 	}
 
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, deps)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
 }
@@ -351,7 +351,7 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	})
+	}, nil)
 
 	for _, name := range []string{"ansible-playbook", "python3", "ssh", "scp"} {
 		assertPreflightCheckStatus(t, checks, name, "OK")
@@ -396,7 +396,7 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	})
+	}, nil)
 
 	assertPreflightCheckStatus(t, checks, "oc", "OK")
 	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
@@ -620,7 +620,7 @@ func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil)
 
 	for _, name := range []string{"oc", "openshift-install"} {
 		for _, check := range checks {

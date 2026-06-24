@@ -39,7 +39,7 @@ func preflightPhases(selected []converge.Phase) []preflight.Phase {
 }
 
 func contextHostTrustChecks(ctxBaseDir string, state v1alpha1.State) []preflightCheck {
-	checks := preflightChecksToOutput(preflight.ManagedHostTrustChecks(state, sshtrustKnownSecretsDir(ctxBaseDir), preflight.DefaultDeps, controllerLocalityPolicy, preflight.StatusWarn))
+	checks := preflightChecksToOutput(preflight.ManagedHostTrustChecks(state, sshtrustKnownSecretsDir(ctxBaseDir), preflight.DefaultDeps, controllerLocalityPolicy, preflight.StatusWarn, nil))
 	for i := range checks {
 		if checks[i].Status == output.StatusWarn {
 			checks[i].Group = "SSH host trust"

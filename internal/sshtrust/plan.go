@@ -186,6 +186,23 @@ func ManagedTrustMachines(state v1alpha1.State, policy locality.Policy) []v1alph
 	return machines
 }
 
+// MachinesInScope keeps only the machines whose name is present in scope. A nil
+// scope imposes no restriction and returns the input unchanged. It narrows the
+// managed host-trust surface to the machines a scoped run will actually connect
+// to, so a trust record is required only where a scheduled task SSHes.
+func MachinesInScope(machines []v1alpha1.Machine, scope map[string]bool) []v1alpha1.Machine {
+	if scope == nil {
+		return machines
+	}
+	out := make([]v1alpha1.Machine, 0, len(machines))
+	for _, machine := range machines {
+		if scope[machine.Metadata.Name] {
+			out = append(out, machine)
+		}
+	}
+	return out
+}
+
 func MachineNeedsManagedHostTrust(machine v1alpha1.Machine, policy locality.Policy) bool {
 	return machine.Spec.Access.SSH != nil &&
 		machine.Spec.Access.SSH.KnownHostsRef.Name == "" &&

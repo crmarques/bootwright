@@ -240,15 +240,23 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
+			// Host trust is required only for machines the planned tasks will
+			// actually SSH into. A scoped run can pull an object into plan.State
+			// purely as a render reference (e.g. a managed StorageCluster pulled in
+			// by an OCP cluster's data-foundation attachment); its provided-OS nodes
+			// that no selected phase connects to must not block the run on missing
+			// trust. When a phase that connects to them is in scope its tasks select
+			// them and trust is required again.
+			hostTrustScope := workflow.ApplyTaskConnectedMachines(tasks)
 			// Trust-on-first-use: only in interactive text runs, and only for
 			// hosts with no recorded key. --yes and JSON runs fail closed on
 			// missing trust exactly as before.
 			if trustOnFirstUse && !yes && flags.output == outputText {
-				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps); err != nil {
+				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps, hostTrustScope); err != nil {
 					return failErr(1, err)
 				}
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, hostTrustScope); err != nil {
 				return err
 			}
 		}

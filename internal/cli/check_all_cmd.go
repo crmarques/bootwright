@@ -62,7 +62,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		// with no recorded key. Dry-run and JSON runs fail closed on missing
 		// trust exactly as before.
 		if trustOnFirstUse && !dryRun {
-			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps); err != nil {
+			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, nil); err != nil {
 				return failErr(1, err)
 			}
 		}

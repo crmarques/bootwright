@@ -49,7 +49,7 @@ func TestOfferTrustOnFirstUseRecordsAcceptedKey(t *testing.T) {
 		t.Fatalf("fingerprint: %v", err)
 	}
 	var stdout strings.Builder
-	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), hostTrustScanDeps(map[string]string{"provider-01.example.test": hostTrustKeyA})); err != nil {
+	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), hostTrustScanDeps(map[string]string{"provider-01.example.test": hostTrustKeyA}), nil); err != nil {
 		t.Fatalf("offerTrustOnFirstUse: %v", err)
 	}
 	out := stdout.String()
@@ -88,7 +88,7 @@ func TestOfferTrustOnFirstUseDeclineWritesNothing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			contextDir := t.TempDir()
 			var stdout strings.Builder
-			if err := offerTrustOnFirstUse(context.Background(), strings.NewReader(input), &stdout, contextDir, hostTrustTestState(), hostTrustScanDeps(map[string]string{"provider-01.example.test": hostTrustKeyA})); err != nil {
+			if err := offerTrustOnFirstUse(context.Background(), strings.NewReader(input), &stdout, contextDir, hostTrustTestState(), hostTrustScanDeps(map[string]string{"provider-01.example.test": hostTrustKeyA}), nil); err != nil {
 				t.Fatalf("offerTrustOnFirstUse: %v", err)
 			}
 			if !strings.Contains(stdout.String(), "not trusted; run bootwright host trust to record it later") {
@@ -133,7 +133,7 @@ func TestOfferTrustOnFirstUseSkipsRecordedHostWithoutScan(t *testing.T) {
 		},
 	}
 	var stdout strings.Builder
-	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), deps); err != nil {
+	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), deps, nil); err != nil {
 		t.Fatalf("offerTrustOnFirstUse: %v", err)
 	}
 	if stdout.String() != "" {
@@ -155,7 +155,7 @@ func TestOfferTrustOnFirstUseScanErrorWarnsAndContinues(t *testing.T) {
 		},
 	}
 	var stdout strings.Builder
-	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), deps); err != nil {
+	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), deps, nil); err != nil {
 		t.Fatalf("offerTrustOnFirstUse: %v", err)
 	}
 	out := stdout.String()
@@ -182,7 +182,7 @@ func TestOfferTrustOnFirstUseMissingKeyscanIsSilent(t *testing.T) {
 		},
 	}
 	var stdout strings.Builder
-	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), deps); err != nil {
+	if err := offerTrustOnFirstUse(context.Background(), strings.NewReader("y\n"), &stdout, contextDir, hostTrustTestState(), deps, nil); err != nil {
 		t.Fatalf("offerTrustOnFirstUse: %v", err)
 	}
 	if stdout.String() != "" {

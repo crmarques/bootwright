@@ -18,7 +18,7 @@ import (
 // key only after an explicit per-host yes. Callers gate this on interactive
 // text runs; non-interactive runs keep failing closed without recording
 // anything.
-func offerTrustOnFirstUse(ctx context.Context, stdin io.Reader, stdout io.Writer, contextDir string, state v1alpha1.State, deps sshtrust.Deps) error {
+func offerTrustOnFirstUse(ctx context.Context, stdin io.Reader, stdout io.Writer, contextDir string, state v1alpha1.State, deps sshtrust.Deps, hostTrustScope map[string]bool) error {
 	if deps.Scan == nil {
 		deps.Scan = sshtrust.ScanHostKeys
 	}
@@ -34,5 +34,5 @@ func offerTrustOnFirstUse(ctx context.Context, stdin io.Reader, stdout io.Writer
 		Confirm: func(record sshtrust.HostRecord) bool {
 			return confirm(stdin, stdout, fmt.Sprintf("Trust %s %s for Machine/%s at %s? [y/N] (default: no): ", record.KeyType, record.FingerprintSHA256, record.Name, record.Address))
 		},
-	})
+	}, hostTrustScope)
 }

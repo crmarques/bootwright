@@ -31,8 +31,8 @@ type FirstUseInteraction struct {
 // without recording anything. A declined or unreachable host is left for the
 // host check that follows, which fails with the `bootwright host trust`
 // remediation.
-func OfferTrustOnFirstUse(ctx context.Context, contextDir string, state v1alpha1.State, policy locality.Policy, deps Deps, interact FirstUseInteraction) error {
-	machines := ManagedTrustMachines(state, policy)
+func OfferTrustOnFirstUse(ctx context.Context, contextDir string, state v1alpha1.State, policy locality.Policy, deps Deps, interact FirstUseInteraction, scope map[string]bool) error {
+	machines := MachinesInScope(ManagedTrustMachines(state, policy), scope)
 	if len(machines) == 0 {
 		return nil
 	}

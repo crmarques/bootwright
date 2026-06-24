@@ -119,7 +119,11 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 	return d.StatPath(path)
 }
 
-func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps) []Check {
+// CollectChecks gathers the readiness checks for the selected phases.
+// hostTrustScope, when non-nil, restricts the SSH host-trust check to that set
+// of Machine names — the apply path passes the machines its planned tasks will
+// connect to. A nil scope checks every managed-trust machine in the state.
+func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps, hostTrustScope map[string]bool) []Check {
 	var checks []Check
 	addonsNeedAnsible := phaseInScope("addons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
@@ -150,7 +154,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 	}
 	if hasState {
 		checks = append(checks, secretRefChecks(state, secretsDir, selected, deps)...)
-		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps)...)
+		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps, hostTrustScope)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
 		checks = append(checks, vsphereVCenterChecks(state, selected, contextName, secretsDir, deps)...)

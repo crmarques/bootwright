@@ -67,7 +67,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		// with no recorded key. Dry-run and JSON runs fail closed on missing
 		// trust exactly as before.
 		if trustOnFirstUse && !dryRun {
-			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps); err != nil {
+			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, nil); err != nil {
 				return failErr(1, err)
 			}
 		}

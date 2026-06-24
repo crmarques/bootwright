@@ -12,12 +12,12 @@ import (
 
 const checkGroupHostTrust = "SSH host trust"
 
-func hostTrustChecks(state v1alpha1.State, secretsDir string, selected []Phase, deps Deps) []Check {
+func hostTrustChecks(state v1alpha1.State, secretsDir string, selected []Phase, deps Deps, scope map[string]bool) []Check {
 	if !anyPhaseInScope([]string{"fabric", "machines", "deps", "base", "addons"}, selected) {
 		return nil
 	}
 	deps = hostTrustPreflightDeps(deps)
-	checks := ManagedHostTrustChecks(state, secretsDir, deps, locality.DefaultPolicy, StatusFail)
+	checks := ManagedHostTrustChecks(state, secretsDir, deps, locality.DefaultPolicy, StatusFail, scope)
 	if len(checks) == 0 || !hostTrustHasFailure(checks) {
 		return checks
 	}
@@ -44,8 +44,13 @@ func hostTrustPreflightDeps(deps Deps) Deps {
 	return deps
 }
 
-func ManagedHostTrustChecks(state v1alpha1.State, secretsDir string, deps Deps, policy locality.Policy, missingStatus Status) []Check {
-	machines := sshtrust.ManagedTrustMachines(state, policy)
+// ManagedHostTrustChecks reports the trust records the run still needs. scope,
+// when non-nil, restricts the check to that set of Machine names — the apply
+// path passes the machines its planned tasks will actually SSH into so a host
+// pulled into scope only as a render reference (and never connected to) does not
+// block the run. A nil scope checks every managed-trust machine in the state.
+func ManagedHostTrustChecks(state v1alpha1.State, secretsDir string, deps Deps, policy locality.Policy, missingStatus Status, scope map[string]bool) []Check {
+	machines := sshtrust.MachinesInScope(sshtrust.ManagedTrustMachines(state, policy), scope)
 	if len(machines) == 0 {
 		return nil
 	}
@@ -91,7 +96,7 @@ func ManagedHostTrustChecks(state v1alpha1.State, secretsDir string, deps Deps, 
 // `bootwright host trust` before the workflow reaches a strict SSH check, so
 // the spine stops silently skipping a mandatory step on remote-host layouts.
 func NeedsHostTrust(state v1alpha1.State, secretsDir string) bool {
-	checks := ManagedHostTrustChecks(state, secretsDir, DefaultDeps, locality.DefaultPolicy, StatusFail)
+	checks := ManagedHostTrustChecks(state, secretsDir, DefaultDeps, locality.DefaultPolicy, StatusFail, nil)
 	return hostTrustHasFailure(checks)
 }
 

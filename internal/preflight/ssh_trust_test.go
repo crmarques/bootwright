@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/locality"
 )
 
 func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
@@ -21,7 +22,7 @@ func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	})
+	}, nil)
 	if !hasCheck(checks, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
 		t.Fatalf("checks missing host trust failure: %+v", checks)
 	}
@@ -38,7 +39,7 @@ func TestHostTrustPreflightSkipsMachinesWithManagedOS(t *testing.T) {
 			t.Fatalf("unexpected stat %s", path)
 			return nil, errors.New("unexpected stat")
 		},
-	})
+	}, nil)
 	if len(checks) != 0 {
 		t.Fatalf("checks = %+v, want no host trust checks for managed OS machines", checks)
 	}
@@ -117,6 +118,30 @@ func hostTrustManagedOSTestState() v1alpha1.State {
 			},
 		},
 	}}}
+}
+
+func TestManagedHostTrustChecksScopeExcludesOutOfScopeMachine(t *testing.T) {
+	state := hostTrustTestState()
+	deps := Deps{
+		StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+	}
+	// Nil scope flags the provided-OS machine (and the missing known_hosts file).
+	full := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, nil)
+	if !hasCheck(full, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
+		t.Fatalf("nil scope should flag provider-01: %+v", full)
+	}
+	// A scope that excludes the machine drops both its check and the now-moot
+	// managed known_hosts check, so a host the run never connects to does not
+	// block it.
+	scoped := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, map[string]bool{})
+	if len(scoped) != 0 {
+		t.Fatalf("empty scope should yield no host trust checks, got %+v", scoped)
+	}
+	// A scope that includes the machine still flags it.
+	inScope := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, map[string]bool{"provider-01": true})
+	if !hasCheck(inScope, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
+		t.Fatalf("in-scope machine should be flagged: %+v", inScope)
+	}
 }
 
 func hasCheck(checks []Check, group, name, remediation string) bool {
