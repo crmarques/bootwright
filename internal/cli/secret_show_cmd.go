@@ -1,16 +1,19 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
-func newSecretShowCmd(stdout io.Writer) *cobra.Command {
+func newSecretShowCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var name string
 	part := "primary"
 	cmd := &cobra.Command{
@@ -22,7 +25,7 @@ func newSecretShowCmd(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&part, "part", part, "secret material part: primary|private|public|tls-key")
 	_ = cmd.MarkFlagRequired("name")
 	cf := addCommonFlags()
-	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
@@ -36,12 +39,12 @@ func newSecretShowCmd(stdout io.Writer) *cobra.Command {
 		}
 		store := secret.NewContextStore(ctx.Name, ctx.SecretsDir)
 		key := secret.MaterialKey{Name: name, Role: role}
-		exists, err := store.Exists(key)
+		status, err := store.Inspect(key)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if !exists {
-			return failf(1, "secret %q not found in %s", name, ctx.SecretsDir)
+		if status.State != secret.MaterialStateEncrypted {
+			return failErr(1, secretShowUnavailable(store, name, part, ctx.SecretsDir, status, c.Flags().Changed("part")))
 		}
 		data, err := store.Read(key)
 		if err != nil {
@@ -49,6 +52,9 @@ func newSecretShowCmd(stdout io.Writer) *cobra.Command {
 		}
 		if _, err := stdout.Write(data); err != nil {
 			return failErr(1, fmt.Errorf("write secret %s: %w", name, err))
+		}
+		if !c.Flags().Changed("part") {
+			noteOtherSecretParts(stderr, store, name, part)
 		}
 		return nil
 	}
@@ -68,4 +74,87 @@ func localSecretPartRole(part string) (secret.MaterialRole, error) {
 	default:
 		return "", fmt.Errorf("--part must be one of primary, private, public, tls-key")
 	}
+}
+
+// secretShowParts lists the material parts `secret show` can print, in the order
+// they are offered to the user. A failed or part-ambiguous lookup uses it to
+// report which parts a secret actually provides: SSH key pairs expose
+// private/public, certificates expose primary/tls-key, and plain context
+// secrets expose primary.
+var secretShowParts = []struct {
+	part string
+	role secret.MaterialRole
+}{
+	{"primary", secret.MaterialPrimary},
+	{"private", secret.MaterialSSHPrivate},
+	{"public", secret.MaterialSSHPublic},
+	{"tls-key", secret.MaterialTLSKey},
+}
+
+// presentSecretParts reports the parts of name that hold readable encrypted
+// material, skipping the named excluded part.
+func presentSecretParts(store *secret.ContextStore, name, exclude string) []string {
+	var parts []string
+	for _, p := range secretShowParts {
+		if p.part == exclude {
+			continue
+		}
+		status, err := store.Inspect(secret.MaterialKey{Name: name, Role: p.role})
+		if err == nil && status.State == secret.MaterialStateEncrypted {
+			parts = append(parts, p.part)
+		}
+	}
+	return parts
+}
+
+// secretShowUnavailable explains why the requested part could not be printed and
+// points at the parts that are present (or at sudo when the store is root-owned),
+// instead of a bare "not found". A keypair shown without --part lands here
+// because it has no primary material, and the message names its private/public
+// parts; a root-owned store read without sudo surfaces the ownership reason.
+func secretShowUnavailable(store *secret.ContextStore, name, part, secretsDir string, status secret.MaterialStatus, partSpecified bool) error {
+	present := presentSecretParts(store, name, part)
+	var b strings.Builder
+	switch {
+	case len(present) > 0 && !partSpecified:
+		b.WriteString(fmt.Sprintf("secret %q needs an explicit --part; it provides: %s", name, strings.Join(present, ", ")))
+	case len(present) > 0:
+		b.WriteString(fmt.Sprintf("secret %q has no %s material; it provides: %s", name, part, strings.Join(present, ", ")))
+	default:
+		b.WriteString(fmt.Sprintf("secret %q not found in %s", name, secretsDir))
+	}
+	// Surface the underlying reason only when it is genuinely diagnostic: an
+	// unsafe path (wrong owner/mode) or a state with no present parts. When
+	// other parts are present, the requested part's status is just the
+	// primary/private file-collision artifact and would mislead.
+	if status.Message != "" && (status.State == secret.MaterialStateUnsafe || len(present) == 0) {
+		b.WriteString(fmt.Sprintf("\n%s: %s", status.State, status.Message))
+	}
+	switch {
+	case len(present) > 0:
+		b.WriteString("\nre-run with " + strings.Join(partFlags(present), " or "))
+	case status.State == secret.MaterialStateUnsafe:
+		b.WriteString("\nre-run with sudo if the secret store is root-owned")
+	}
+	return errors.New(b.String())
+}
+
+// noteOtherSecretParts tells a user who did not select a --part that the secret
+// exposes more than the one just printed (e.g. a certificate's tls-key beside
+// its primary), writing to stderr so the material on stdout stays clean.
+func noteOtherSecretParts(stderr io.Writer, store *secret.ContextStore, name, shown string) {
+	other := presentSecretParts(store, name, shown)
+	if len(other) == 0 {
+		return
+	}
+	detail := fmt.Sprintf("showed %s; also available: %s", shown, strings.Join(partFlags(other), ", "))
+	output.New(stderr).Status(output.StatusInfo, "secret "+name, detail)
+}
+
+func partFlags(parts []string) []string {
+	flags := make([]string, 0, len(parts))
+	for _, p := range parts {
+		flags = append(flags, "--part "+p)
+	}
+	return flags
 }

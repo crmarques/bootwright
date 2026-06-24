@@ -43,6 +43,30 @@ func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
 	}
 }
 
+// TestSecretShowWithoutPartListsAvailableParts verifies that showing an SSH key
+// pair without --part fails with guidance naming the parts it provides instead
+// of a bare "not found", and does not leak the private material.
+func TestSecretShowWithoutPartListsAvailableParts(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	if _, stderr, code := runCLI(t, "secret", "generate"); code != 0 {
+		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
+	}
+
+	stdout, stderr, code := runCLI(t, "secret", "show", "--name", "sno-libvirt-cluster-admin-ssh-key")
+	if code == 0 {
+		t.Fatalf("secret show without --part should fail for an SSH key pair; stdout=%q", stdout)
+	}
+	if strings.Contains(stdout, "PRIVATE KEY") {
+		t.Fatalf("secret show without --part leaked private material:\n%s", stdout)
+	}
+	for _, want := range []string{"needs an explicit --part", "--part private", "--part public"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("secret show error should mention %q, stderr=%q", want, stderr)
+		}
+	}
+}
+
 // TestSecretCheckGatesOnMissingSecrets verifies `secret check` fails while a
 // declared context secret is unset and passes once it is provided.
 func TestSecretCheckGatesOnMissingSecrets(t *testing.T) {
