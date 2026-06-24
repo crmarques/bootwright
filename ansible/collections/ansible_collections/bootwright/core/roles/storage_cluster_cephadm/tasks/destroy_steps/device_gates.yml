@@ -106,6 +106,7 @@
       ({{ bootwright_ceph_recorded_osd_devices | default([]) | join(', ') }}), so it was not
       provisioned by Bootwright as an OSD. It may have been added to the devices list after
       apply. Re-apply to re-record OSD devices, or verify and wipe it manually.
+      (--force-unowned does not relax this device data-safety gate.)
   loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
