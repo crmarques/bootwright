@@ -55,7 +55,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		if err != nil {
 			return failErr(1, err)
 		}
-		limit := converge.AnsibleLimitForScope(scope.Name)
+		limit := scope.AnsibleLimit
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped preflight commands"))

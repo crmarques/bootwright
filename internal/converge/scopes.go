@@ -21,6 +21,14 @@ type Scope struct {
 	// kind for the single-kind scopes; empty plans both. Mirrors
 	// workflow.ApplyClusterKind{Storage,Container}.
 	ClusterKind string
+	// Per-scope policy, declared with the scope rather than in separate
+	// name-keyed switches: NoAnsible marks scopes whose work runs no ansible
+	// (addons, storage-cluster); TargetsContainerInstall marks scopes that drive
+	// the openshift-install agent; AnsibleLimit is the inventory --limit the
+	// scope targets ("" means no limit / all groups).
+	NoAnsible               bool
+	TargetsContainerInstall bool
+	AnsibleLimit            string
 }
 
 // Phase names of the five sub-phases, aliased from the workflow package's
@@ -42,26 +50,31 @@ var InfraScope = Scope{
 	ApplyPlaybook:     roles.PlaybookWorkflowInfraApply,
 	DestroyPlaybook:   roles.PlaybookWorkflowInfraDestroy,
 	ArtifactsBaseName: "infra",
+	AnsibleLimit:      infraAnsibleLimit,
 }
 
 var ClustersScope = Scope{
-	Name:              "clusters",
-	Short:             "Provision storage, OpenShift clusters, addons, and integrations",
-	PhaseNames:        []string{PhaseDeps, PhaseBase, PhaseAddons},
-	ApplyPlaybook:     roles.PlaybookWorkflowClustersApply,
-	DestroyPlaybook:   roles.PlaybookWorkflowClustersDestroy,
-	ArtifactsBaseName: "clusters",
+	Name:                    "clusters",
+	Short:                   "Provision storage, OpenShift clusters, addons, and integrations",
+	PhaseNames:              []string{PhaseDeps, PhaseBase, PhaseAddons},
+	ApplyPlaybook:           roles.PlaybookWorkflowClustersApply,
+	DestroyPlaybook:         roles.PlaybookWorkflowClustersDestroy,
+	ArtifactsBaseName:       "clusters",
+	TargetsContainerInstall: true,
+	AnsibleLimit:            clustersAnsibleLimit,
 }
 
 var ContainerClusterScope = Scope{
-	Name:              "container-cluster",
-	Short:             "Install and configure managed OpenShift clusters via openshift-install agent",
-	PhaseNames:        []string{PhaseDeps, PhaseBase},
-	ApplyPhaseNames:   []string{PhaseDeps, PhaseBase, PhaseAddons},
-	ClusterKind:       workflow.ApplyClusterKindContainer,
-	ApplyPlaybook:     roles.PlaybookWorkflowContainerClusterApply,
-	DestroyPlaybook:   roles.PlaybookWorkflowClustersDestroy,
-	ArtifactsBaseName: "container-cluster",
+	Name:                    "container-cluster",
+	Short:                   "Install and configure managed OpenShift clusters via openshift-install agent",
+	PhaseNames:              []string{PhaseDeps, PhaseBase},
+	ApplyPhaseNames:         []string{PhaseDeps, PhaseBase, PhaseAddons},
+	ClusterKind:             workflow.ApplyClusterKindContainer,
+	ApplyPlaybook:           roles.PlaybookWorkflowContainerClusterApply,
+	DestroyPlaybook:         roles.PlaybookWorkflowClustersDestroy,
+	ArtifactsBaseName:       "container-cluster",
+	TargetsContainerInstall: true,
+	AnsibleLimit:            clusterAnsibleLimit,
 }
 
 var StorageClusterScope = Scope{
@@ -70,14 +83,16 @@ var StorageClusterScope = Scope{
 	PhaseNames:        []string{PhaseDeps, PhaseBase},
 	ArtifactsBaseName: "storage-cluster",
 	ClusterKind:       workflow.ApplyClusterKindStorage,
+	NoAnsible:         true,
 }
 
 var AllScope = Scope{
-	Name:              "all",
-	Short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
-	PhaseNames:        []string{PhaseFabric, PhaseMachines, PhaseDeps, PhaseBase, PhaseAddons},
-	ApplyPlaybook:     roles.PlaybookWorkflowAllApply,
-	ArtifactsBaseName: "all",
+	Name:                    "all",
+	Short:                   "Apply infrastructure, storage, OpenShift clusters, and addons",
+	PhaseNames:              []string{PhaseFabric, PhaseMachines, PhaseDeps, PhaseBase, PhaseAddons},
+	ApplyPlaybook:           roles.PlaybookWorkflowAllApply,
+	ArtifactsBaseName:       "all",
+	TargetsContainerInstall: true,
 }
 
 func (s Scope) Phases() []Phase {
@@ -122,16 +137,3 @@ const (
 	clustersAnsibleLimit = "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts:bootwright_storage_hosts"
 	clusterAnsibleLimit  = "bootwright_ocp_hosts:bootwright_boot_hosts"
 )
-
-func AnsibleLimitForScope(name string) string {
-	switch name {
-	case "infra", PhaseFabric, PhaseMachines:
-		return infraAnsibleLimit
-	case "clusters", PhaseDeps, PhaseBase:
-		return clustersAnsibleLimit
-	case "container-cluster":
-		return clusterAnsibleLimit
-	default:
-		return ""
-	}
-}

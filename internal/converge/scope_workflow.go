@@ -28,7 +28,7 @@ func PrepareScopedWorkflowPlan(state v1alpha1.State, scope Scope, phaseList []Ph
 		return WorkflowPlan{}, err
 	}
 	selected := PhasesForState(phaseList, scopedState)
-	limit := AnsibleLimitForScope(scope.Name)
+	limit := scope.AnsibleLimit
 	// A scope that runs no ansible (addons) has no ansible hosts by definition.
 	// Its limit is empty, and LimitMatchesNoHosts returns false for an empty
 	// limit, so without this it could never reach NoRemoteWork — an addons run

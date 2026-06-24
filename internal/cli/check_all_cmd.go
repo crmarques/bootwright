@@ -50,7 +50,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 			}
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
 			selected := converge.PhasesForState(converge.AllScope.Phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AnsibleLimitForScope(converge.AllScope.Name), nil, "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AllScope.AnsibleLimit, nil, "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		outputpkg(stdout).Command("all preflight")
 		if err := runBastionChecks(stdout); err != nil {

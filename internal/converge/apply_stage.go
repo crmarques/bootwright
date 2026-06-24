@@ -11,7 +11,7 @@ import (
 // apply/plan/state-check accept both families and the five sub-phases; destroy
 // accepts the families only — a sub-phase has no single destroy playbook.
 // Each accessor returns a fresh slice so callers may append freely.
-func FamilyStageNames() []string   { return []string{"infra", "clusters"} }
+func FamilyStageNames() []string { return []string{"infra", "clusters"} }
 func SubPhaseStageNames() []string {
 	return []string{PhaseFabric, PhaseMachines, PhaseDeps, PhaseBase, PhaseAddons}
 }
@@ -49,6 +49,8 @@ func subPhaseStageScope(name string) Scope {
 		Name:              name,
 		PhaseNames:        []string{name},
 		ArtifactsBaseName: name,
+		NoAnsible:         name == PhaseAddons,
+		AnsibleLimit:      phases[name].AnsibleLimit,
 	}
 }
 
@@ -90,16 +92,11 @@ func ApplyStageCommandLabel(stage, action, defaultLabel string) string {
 }
 
 func ScopeUsesAnsible(scope Scope) bool {
-	return scope.Name != "addons" && scope.Name != "storage-cluster"
+	return !scope.NoAnsible
 }
 
 func ScopeTargetsContainerInstall(scope Scope) bool {
-	switch scope.Name {
-	case "clusters", "container-cluster", "all":
-		return true
-	default:
-		return false
-	}
+	return scope.TargetsContainerInstall
 }
 
 // ScopeProvisionsClusterWorkload reports whether the scope's phases include a
