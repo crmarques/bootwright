@@ -138,6 +138,30 @@ func TestResourceRecordRejectsSecretLikeData(t *testing.T) {
 	}
 }
 
+// The sensitive scan must tolerate benign connection strings and paths (ssh args,
+// known-hosts paths, FQDNs) that merely contain a word like token/kubeconfig, so a
+// recorded host stays loadable and reclaimable, while still rejecting actual
+// embedded credential material and fields named like a secret.
+func TestSensitiveScanTolersBenignConnectionDataButRejectsCredentials(t *testing.T) {
+	benign := ResourceRecord{
+		Kind: "libvirt-domain", Name: "node0", Owner: Owner, Host: "h",
+		HostFacts: map[string]string{
+			"ansible_ssh_common_args": "-o UserKnownHostsFile=/var/lib/bootwright/token-lab/known_hosts -o ProxyCommand=ssh kubeconfig-bastion",
+		},
+	}
+	if err := ValidateResource(benign); err != nil {
+		t.Fatalf("benign connection string must validate, got: %v", err)
+	}
+	pem := ResourceRecord{Kind: "libvirt-domain", Name: "node1", Owner: Owner, Attributes: map[string]string{"blob": "-----BEGIN PRIVATE KEY-----abc"}}
+	if err := ValidateResource(pem); err == nil {
+		t.Fatal("embedded PEM value accepted; value scan too narrow")
+	}
+	keyed := ResourceRecord{Kind: "libvirt-domain", Name: "node2", Owner: Owner, Attributes: map[string]string{"kubeconfig": "/some/path"}}
+	if err := ValidateResource(keyed); err == nil {
+		t.Fatal("field named like a secret accepted")
+	}
+}
+
 func TestResourceRecordRejectsPathTraversal(t *testing.T) {
 	err := SaveResource(t.TempDir(), ResourceRecord{
 		Kind:  "libvirt-domain",
@@ -188,8 +212,8 @@ func TestLoadResourcesSkipsBadRecordWithoutDroppingGood(t *testing.T) {
 		t.Fatalf("SaveResource: %v", err)
 	}
 	// A corrupt file the atomic writer could leave behind, plus a syntactically
-	// valid record that trips the load-time sensitive scan (as an Ansible-written
-	// hostFact could): both must be skipped, not fatal.
+	// valid record that trips the load-time sensitive scan (a field named like a
+	// secret): both must be skipped, not fatal.
 	corruptDir := filepath.Join(root, ResourceDirName, "libvirt-domain")
 	if err := os.WriteFile(filepath.Join(corruptDir, "truncated.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("write corrupt: %v", err)
@@ -199,7 +223,7 @@ func TestLoadResourcesSkipsBadRecordWithoutDroppingGood(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(sensitiveDir, "leaky.json"),
-		[]byte(`{"kind":"infra-component","name":"leaky","hostFacts":{"ansible_ssh_common_args":"-o ProxyCommand=ssh token-bastion"}}`), 0o600); err != nil {
+		[]byte(`{"kind":"infra-component","name":"leaky","attributes":{"password":"abc"}}`), 0o600); err != nil {
 		t.Fatalf("write sensitive: %v", err)
 	}
 

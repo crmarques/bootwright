@@ -240,13 +240,13 @@ func ValidateResource(record ResourceRecord) error {
 	}
 	for _, values := range []map[string]string{record.HostFacts, record.Labels, record.Attributes} {
 		for key, value := range values {
-			if sensitiveString(key) || sensitiveString(value) {
+			if sensitiveKey(key) || sensitiveValue(value) {
 				return fmt.Errorf("ownership resource %s/%s contains sensitive field %q", record.Kind, record.Name, key)
 			}
 		}
 	}
 	for _, value := range append([]string{record.Owner, record.Context, record.Host, record.Provider, record.Cluster, record.Machine}, record.Paths...) {
-		if sensitiveString(value) {
+		if sensitiveValue(value) {
 			return fmt.Errorf("ownership resource %s/%s contains sensitive value", record.Kind, record.Name)
 		}
 	}
@@ -272,20 +272,47 @@ func validateSegment(value string) error {
 	return nil
 }
 
-func sensitiveString(value string) bool {
+// sensitiveKeyMarkers flag a field whose NAME looks like it carries a secret.
+// Field names are role/operator-authored and short, so a broad list here has no
+// realistic false-positive cost.
+var sensitiveKeyMarkers = []string{
+	"password",
+	"token",
+	"private_key",
+	"private-key",
+	"privatekey",
+	"bearer",
+	"authorization",
+	"client-secret",
+	"kubeconfig",
+	"secret",
+}
+
+// sensitiveValueMarkers flag a VALUE as embedded secret material. They are
+// deliberately narrower than the key markers: recorded values include connection
+// strings and filesystem paths (ssh ProxyCommand args, UserKnownHostsFile paths,
+// FQDNs) that legitimately contain a word like "token" or "kubeconfig", and a
+// substring match on those would reject the record — stranding the very resource
+// the record exists to let destroy reclaim. Only markers that do not occur in
+// benign connection/path data are scanned in values; an actual leaked credential
+// (a PEM block, an auth header, explicit key material) still trips.
+var sensitiveValueMarkers = []string{
+	"-----begin ", // PEM private key / certificate block
+	"private_key",
+	"privatekey",
+	"client-secret",
+	"authorization:", // HTTP auth header
+	"bearer ",        // HTTP bearer token header
+}
+
+func sensitiveKey(key string) bool { return containsAnyLower(key, sensitiveKeyMarkers) }
+func sensitiveValue(value string) bool {
+	return containsAnyLower(value, sensitiveValueMarkers)
+}
+
+func containsAnyLower(value string, markers []string) bool {
 	value = strings.ToLower(value)
-	for _, marker := range []string{
-		"password",
-		"token",
-		"private_key",
-		"private-key",
-		"privatekey",
-		"bearer ",
-		"authorization:",
-		"client-secret",
-		"kubeconfig",
-		"-----begin ",
-	} {
+	for _, marker := range markers {
 		if strings.Contains(value, marker) {
 			return true
 		}
