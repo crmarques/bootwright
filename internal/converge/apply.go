@@ -38,7 +38,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State) error {
 // selectedStorageNames is the StorageCluster names named directly in --clusters
 // (empty when only container clusters are selected); clusterSelectionActive
 // reports whether any --clusters selection is in force.
-func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, limits workflow.ConcurrencyLimits, clustersDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
+func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, limits workflow.ConcurrencyLimits, runsDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
 	// The explicit safety mode drives both the Go object preflight and the
 	// per-role Ansible gate (create/continue/override). It replaces the legacy
 	// bootwright_install_override boolean.
@@ -59,7 +59,7 @@ func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode
 		return workflow.ApplyTarget{}, nil, workflow.ConcurrencyLimits{}, nil, err
 	}
 	limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
-	dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(clustersDir, "dry-run", tasks)
+	dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(runsDir, "dry-run", tasks)
 	return applyTarget, tasks, limits, dryRunTasks, nil
 }
 

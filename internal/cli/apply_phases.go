@@ -9,13 +9,13 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func applyClusterPhaseLines(clustersDir string, ledger workflow.RunLedger) []output.ClusterPhaseLine {
+func applyClusterPhaseLines(runsDir string, clustersDir string, ledger workflow.RunLedger) []output.ClusterPhaseLine {
 	names := ledger.ClusterNames()
 	lines := make([]output.ClusterPhaseLine, 0, len(names))
 	for _, name := range names {
 		tasks := ledger.TasksForCluster(name)
 		kind := applyClusterKind(tasks)
-		fields := []output.Field{{Key: "Bootwright log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, name)}}
+		fields := []output.Field{{Key: "Bootwright log", Value: workflow.ApplyClusterLogPath(runsDir, ledger.RunID, name)}}
 		if kind == "ContainerCluster" {
 			fields = append(fields, output.Field{Key: "Installation log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, name)})
 		}

@@ -50,7 +50,7 @@ func (r *applyReporter) StageSnapshot(ledger workflow.RunLedger) {
 
 func (r *applyReporter) RunSummary(ledger workflow.RunLedger) {
 	r.view.Finish(applyRunFrame(ledger, r.displays))
-	printApplyRunSummary(r.stdout, r.clustersDir, r.displays, ledger)
+	printApplyRunSummary(r.stdout, r.runsDir, r.clustersDir, r.displays, ledger)
 }
 
 func (r *applyReporter) PromptGap() {
@@ -82,7 +82,7 @@ func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, le
 	p.Fields(fields)
 }
 
-func printApplyRunSummary(stdout io.Writer, clustersDir string, displays map[string]clusterDisplay, ledger workflow.RunLedger) {
+func printApplyRunSummary(stdout io.Writer, runsDir string, clustersDir string, displays map[string]clusterDisplay, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	p.Section("Summary")
 	status := output.StatusOK
@@ -110,8 +110,8 @@ func printApplyRunSummary(stdout io.Writer, clustersDir string, displays map[str
 		})
 	}
 	p.Tasks(lines)
-	p.Fields(applyClusterLogFields(clustersDir, ledger))
-	printApplyFailureDetails(stdout, clustersDir, ledger)
+	p.Fields(applyClusterLogFields(runsDir, clustersDir, ledger))
+	printApplyFailureDetails(stdout, runsDir, clustersDir, ledger)
 }
 
 // applyClusterLogFields points the operator at the on-disk logs, ordered by
@@ -120,11 +120,11 @@ func printApplyRunSummary(stdout io.Writer, clustersDir string, displays map[str
 // only for a container cluster that did not finish cleanly — that is the only
 // time its detail is wanted — so a green fleet is not buried under an installer
 // path for every healthy cluster.
-func applyClusterLogFields(clustersDir string, ledger workflow.RunLedger) []output.Field {
+func applyClusterLogFields(runsDir string, clustersDir string, ledger workflow.RunLedger) []output.Field {
 	var fields []output.Field
 	for _, cluster := range orderClusterNames(ledger.ClusterNames(), nil) {
 		tasks := ledger.TasksForCluster(cluster)
-		fields = append(fields, output.Field{Key: cluster + " log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, cluster)})
+		fields = append(fields, output.Field{Key: cluster + " log", Value: workflow.ApplyClusterLogPath(runsDir, ledger.RunID, cluster)})
 		if applyClusterKind(tasks) == "ContainerCluster" && !applyClusterFullyDone(tasks) {
 			fields = append(fields, output.Field{Key: cluster + " installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, cluster)})
 		}
@@ -147,7 +147,7 @@ func applyClusterFullyDone(tasks []workflow.TaskLedgerEntry) bool {
 	return true
 }
 
-func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
+func printApplyFailureDetails(stdout io.Writer, runsDir string, clustersDir string, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	for _, task := range ledger.FailedTasks() {
 		fields := []output.Field{
@@ -177,7 +177,7 @@ func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workf
 		} else if task.LogPath != "" {
 			fields = append(fields, output.Field{Key: "cluster log", Value: task.LogPath})
 		} else if task.Cluster != "" {
-			fields = append(fields, output.Field{Key: "cluster log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, task.Cluster)})
+			fields = append(fields, output.Field{Key: "cluster log", Value: workflow.ApplyClusterLogPath(runsDir, ledger.RunID, task.Cluster)})
 		}
 		p.Details(fields)
 	}

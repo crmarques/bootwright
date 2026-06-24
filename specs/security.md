@@ -162,9 +162,10 @@ Generated output boundaries are part of the safety contract:
   `/var/lib/bootwright/contexts/<context>/rendered/storage/<storageCluster>/`.
 - Kubeconfigs produced for installed clusters live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/secrets/kubeconfig`.
-- Apply logs live under `/var/lib/bootwright/contexts/<context>/runs/` and
-  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runs/` with
-  restrictive file modes.
+- Apply logs live under `/var/lib/bootwright/contexts/<context>/runs/` with
+  restrictive file modes: the shared run log at `runs/history/<run-id>/
+  bootwright.log` and each cluster's split-out flow log at
+  `runs/history/<run-id>/bootwright-<cluster>.log`.
 - Per-cluster install records live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/install-record.json`.
 - Per-resource convergence safety records live under

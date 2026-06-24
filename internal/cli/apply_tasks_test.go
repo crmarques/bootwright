@@ -157,7 +157,9 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 }
 
 func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) {
-	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	base := t.TempDir()
+	runsDir := filepath.Join(base, "runs")
+	clustersDir := filepath.Join(base, "clusters")
 	now := time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "infra.cluster-a", Kind: workflow.ApplyTaskKindClusterInstall, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
@@ -169,7 +171,7 @@ func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) 
 		{ID: "storageattachment.cluster-a.openshift-data-foundation.external-storage.apply", Kind: workflow.ApplyTaskKindStorageAttachmentApply, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
 	}, now)
 
-	lines := applyClusterPhaseLines(clustersDir, ledger)
+	lines := applyClusterPhaseLines(runsDir, clustersDir, ledger)
 	byName := map[string]output.ClusterPhaseLine{}
 	for _, line := range lines {
 		byName[line.Name] = line
@@ -237,7 +239,9 @@ func phasePresent(line output.ClusterPhaseLine, label string) bool {
 }
 
 func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
-	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	base := t.TempDir()
+	runsDir := filepath.Join(base, "runs")
+	clustersDir := filepath.Join(base, "clusters")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:          "wait.sno-libvirt",
 		Kind:        workflow.ApplyTaskKindInstallWait,
@@ -249,7 +253,7 @@ func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(clustersDir, "ansible-output.log"), time.Now())
 
 	var stdout bytes.Buffer
-	printApplyRunSummary(&stdout, clustersDir, nil, ledger)
+	printApplyRunSummary(&stdout, runsDir, clustersDir, nil, ledger)
 
 	want := workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt")
 	if !strings.Contains(stdout.String(), want) {
@@ -258,8 +262,10 @@ func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 }
 
 func TestApplySummaryPrintsClusterLogPaths(t *testing.T) {
-	clustersDir := filepath.Join(t.TempDir(), "clusters")
-	clusterLogPath := workflow.ApplyClusterLogPath(clustersDir, "apply-test", "sno-libvirt")
+	base := t.TempDir()
+	runsDir := filepath.Join(base, "runs")
+	clustersDir := filepath.Join(base, "clusters")
+	clusterLogPath := workflow.ApplyClusterLogPath(runsDir, "apply-test", "sno-libvirt")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:             "wait.sno-libvirt",
 		Kind:           workflow.ApplyTaskKindInstallWait,
@@ -271,7 +277,7 @@ func TestApplySummaryPrintsClusterLogPaths(t *testing.T) {
 	}}, time.Now())
 
 	var stdout bytes.Buffer
-	printApplyRunSummary(&stdout, clustersDir, nil, ledger)
+	printApplyRunSummary(&stdout, runsDir, clustersDir, nil, ledger)
 
 	for _, want := range []string{
 		clusterLogPath,
@@ -506,7 +512,7 @@ echo "ansible stderr ${cluster}" >&2
 		}
 	}
 	for _, cluster := range []string{"cluster-a", "cluster-b"} {
-		logPath := workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, cluster)
+		logPath := workflow.ApplyClusterLogPath(runsDir, ledger.RunID, cluster)
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			t.Fatalf("read cluster log %s: %v", logPath, err)
@@ -521,6 +527,26 @@ echo "ansible stderr ${cluster}" >&2
 		}
 		if !strings.Contains(string(taskLog), "ansible stdout "+cluster) || !strings.Contains(string(taskLog), "ansible stderr "+cluster) {
 			t.Fatalf("task log %s missing ansible output:\n%s", cluster, taskLog)
+		}
+	}
+	// The shared run log keeps cluster ansible output out and carries only the
+	// per-cluster lifecycle markers, so it stays a readable index of the run.
+	runLog, err := os.ReadFile(workflow.ApplyRunLogPath(runsDir, ledger.RunID))
+	if err != nil {
+		t.Fatalf("read run log: %v", err)
+	}
+	if strings.Contains(string(runLog), "ansible stdout") || strings.Contains(string(runLog), "ansible stderr") {
+		t.Fatalf("run log leaked cluster ansible output:\n%s", runLog)
+	}
+	for _, cluster := range []string{"cluster-a", "cluster-b"} {
+		clusterLog := workflow.ApplyClusterLogPath(runsDir, ledger.RunID, cluster)
+		for _, want := range []string{
+			cluster + " apply initiated. flow logs in: " + clusterLog,
+			cluster + " apply finished successfully",
+		} {
+			if !strings.Contains(string(runLog), want) {
+				t.Fatalf("run log missing marker %q:\n%s", want, runLog)
+			}
 		}
 	}
 }

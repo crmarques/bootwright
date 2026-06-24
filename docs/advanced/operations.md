@@ -270,6 +270,8 @@ there.
 | Path under `…/contexts/<context>/` | Holds |
 | --- | --- |
 | `runs/` | Apply and destroy logs in restrictive modes, the durable run ledger, and the short-lived local lease for the updating process. |
+| `runs/history/<run-id>/bootwright.log` | The shared apply flow log: shared-stage tool output plus one `<cluster> apply initiated … / finished successfully \| failed` marker per cluster that points at its split-out log. |
+| `runs/history/<run-id>/bootwright-<cluster>.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
 | `runs/history/<run-id>/input/` | The forensic snapshot of the input YAML an `apply` loaded, written at the start of the mutating run. |
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
 | `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `state-check` classifies against. |

@@ -237,7 +237,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			Parallelism:        parallelism,
 			ParallelismPerHost: perHost,
 			ParallelismRedfish: redfish,
-		}, clustersDir)
+		}, ctx.RunsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

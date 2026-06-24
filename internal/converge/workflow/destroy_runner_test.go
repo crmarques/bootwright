@@ -79,4 +79,13 @@ echo destroy-stderr-line >&2
 			t.Fatalf("task %s log missing ansible output:\n%s", task.ID, logData)
 		}
 	}
+	// Destroy tasks carry no Entry.Cluster (they use ResourceKeys), so the shared
+	// scheduler must not emit the per-cluster apply lifecycle markers for them.
+	runLog, err := os.ReadFile(ApplyRunLogPath(runsDir, ledger.RunID))
+	if err != nil {
+		t.Fatalf("read run log: %v", err)
+	}
+	if strings.Contains(string(runLog), "apply initiated") || strings.Contains(string(runLog), "apply finished") {
+		t.Fatalf("destroy run log emitted per-cluster apply markers:\n%s", runLog)
+	}
 }

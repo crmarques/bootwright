@@ -31,7 +31,7 @@ func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions,
 		return PreparedApplyTaskGraph{}, fmt.Errorf("runs dir is required")
 	}
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
-	tasks = AnnotateApplyTaskClusterLogPaths(opts.ClustersDir, runID, tasks)
+	tasks = AnnotateApplyTaskClusterLogPaths(runsDir, runID, tasks)
 	var err error
 	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, opts.State, tasks, opts.ApplyMode, opts.ClusterAvailabilityChecker, startedAt)
 	if err != nil {
@@ -120,7 +120,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		}
 		return RemoveRunLease(runsDir)
 	}
-	logs, err := openApplyLogs(runsDir, opts.ClustersDir, ledger)
+	logs, err := openApplyLogs(runsDir, ledger)
 	if err != nil {
 		_ = finishRun(RunStatusFailed)
 		return ledger, err
@@ -152,6 +152,12 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	running := 0
 	runningRedfish := 0
 	completed := initiallyCompletedApplyTasks(tasks)
+	// Per-cluster lifecycle markers: "initiated" is written to the shared run
+	// log the first time any task of a cluster starts running; "finished" once
+	// every task of an initiated cluster reaches a terminal state. Destroy
+	// graphs carry no Entry.Cluster, so neither marker fires there.
+	clusterInitiated := map[string]bool{}
+	clusterFinished := map[string]bool{}
 	var fatalErr error
 	var firstTaskErr error
 
@@ -183,6 +189,10 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			if err := SaveRunLedger(runsDir, ledger); err != nil && fatalErr == nil {
 				fatalErr = err
 				cancel()
+			}
+			if cluster := task.Entry.Cluster; cluster != "" && !clusterInitiated[cluster] {
+				clusterInitiated[cluster] = true
+				logs.writeRunLine(applyClusterInitiatedLine(time.Now(), cluster, ApplyClusterLogPath(runsDir, ledger.RunID, cluster)))
 			}
 			if reporter != nil {
 				reporter.StageSnapshot(ledger)
@@ -241,6 +251,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			cancel()
 		}
 		completed = terminalApplyTasks(ledger.Tasks)
+		flushFinishedClusterMarkers(logs, ledger, clusterInitiated, clusterFinished, time.Now())
 		if reporter != nil {
 			reporter.StageSnapshot(ledger)
 		}
@@ -260,6 +271,17 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			}
 		}
 	}
+	// If a fatal ledger/lease error aborted the graph mid-run, tasks that never
+	// launched are still non-terminal (the no-progress block above is gated on
+	// fatalErr == nil). Terminalize them so an already-initiated cluster still
+	// gets its closing run-log marker. Idempotent: a no-op when every task is
+	// already terminal.
+	if fatalErr != nil {
+		blockUnfinishedApplyTasks(&ledger, time.Now())
+	}
+	// Final sweep: clusters whose last tasks were blocked or cancelled as the
+	// graph drained reach terminal here, after the per-event flushes stopped.
+	flushFinishedClusterMarkers(logs, ledger, clusterInitiated, clusterFinished, time.Now())
 	if fatalErr != nil {
 		_ = finishRun(RunStatusFailed)
 		if reporter != nil {
@@ -496,12 +518,12 @@ func TaskLedgerEntries(tasks []ApplyTask) []TaskLedgerEntry {
 	return entries
 }
 
-func AnnotateApplyTaskClusterLogPaths(clustersDir, runID string, tasks []ApplyTask) []ApplyTask {
+func AnnotateApplyTaskClusterLogPaths(runsDir, runID string, tasks []ApplyTask) []ApplyTask {
 	out := make([]ApplyTask, len(tasks))
 	copy(out, tasks)
 	for i := range out {
 		if out[i].Entry.Cluster != "" {
-			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(clustersDir, runID, out[i].Entry.Cluster)
+			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(runsDir, runID, out[i].Entry.Cluster)
 		}
 	}
 	return out
