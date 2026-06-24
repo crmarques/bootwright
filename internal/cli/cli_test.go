@@ -702,6 +702,40 @@ func TestScopedApplyDryRunJSON(t *testing.T) {
 	}
 }
 
+// --through resolves an endpoint to a synthetic "through-<phase>" prefix scope;
+// combining it with --clusters must narrow that prefix to the named cluster
+// roots instead of rejecting --clusters as an unsupported target.
+func TestApplyThroughWithClusterScopeDryRunJSON(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"apply",
+		"--through", "deps",
+		"--clusters", "sno-libvirt",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("apply --through deps --clusters dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.Target != "through-deps" || report.Action != "apply" || !report.DryRun {
+		t.Fatalf("unexpected dry-run report header: %+v", report)
+	}
+	// The cumulative prefix stops at deps: base and addons must be omitted.
+	for _, omitted := range []string{"base", "addons"} {
+		if slices.Contains(report.Phases, omitted) {
+			t.Fatalf("through-deps plan unexpectedly includes %q: %#v", omitted, report.Phases)
+		}
+	}
+	if !slices.Contains(report.Phases, "deps") {
+		t.Fatalf("through-deps plan missing deps phase: %#v", report.Phases)
+	}
+}
+
 func TestPlanDryRunJSON(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t, "plan", "--output", "json", "--ask-become-pass=false")

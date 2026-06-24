@@ -29,7 +29,8 @@ func ScopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 			return state, err
 		}
 		return stategraph.FilterStateToStorageClusters(state, names), nil
-	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
+	}
+	if isClusterRootScopeTarget(target) {
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
@@ -38,17 +39,15 @@ func ScopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 			return state, err
 		}
 		return stategraph.FilterStateToClusterRoots(state, containerNames, storageNames), nil
-	default:
-		if strings.TrimSpace(scope) != "" {
-			return state, fmt.Errorf("--clusters is not supported for %s", target)
-		}
-		return state, nil
 	}
+	if strings.TrimSpace(scope) != "" {
+		return state, fmt.Errorf("--clusters is not supported for %s", target)
+	}
+	return state, nil
 }
 
 func ScopeStateForApply(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
-	switch target {
-	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
+	if isClusterRootScopeTarget(target) {
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
@@ -57,9 +56,24 @@ func ScopeStateForApply(state v1alpha1.State, target, scope string) (v1alpha1.St
 			return state, err
 		}
 		return stategraph.FilterStateToApplyClusterRoots(state, containerNames, storageNames), nil
-	default:
-		return ScopeState(state, target, scope)
 	}
+	return ScopeState(state, target, scope)
+}
+
+// isClusterRootScopeTarget reports whether a resolved apply/plan/state-check
+// scope name narrows its --clusters value to ContainerCluster/StorageCluster
+// roots. It covers the canonical families (infra/clusters/all) and sub-phases
+// (fabric/machines/deps/base) plus the synthetic "through-<phase>" prefix scopes
+// that converge.ApplyThroughScope mints for `--through fabric|deps|base` (the
+// other --through endpoints already resolve to the canonical infra/all scopes).
+// Every such scope is cluster-root-scopable; the single-cluster-type targets
+// (container-cluster/storage-cluster/addons) are handled by ScopeState directly.
+func isClusterRootScopeTarget(target string) bool {
+	switch target {
+	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
+		return true
+	}
+	return strings.HasPrefix(target, "through-")
 }
 
 func ClusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []string, error) {
@@ -225,9 +239,7 @@ func ValidateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 	if strings.TrimSpace(scope) == "" {
 		return nil
 	}
-	switch target {
-	case "infra", "all", "fabric", "machines":
-	default:
+	if !scopeProvisionsSharedMachineLayer(target) {
 		return nil
 	}
 	selectedNames, _, err := ClusterRootNamesForTarget(state, scope)
@@ -242,6 +254,20 @@ func ValidateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 		return nil
 	}
 	return formatApplyScopeConflicts(conflicts)
+}
+
+// scopeProvisionsSharedMachineLayer reports whether a resolved apply scope
+// (re)provisions the shared machine/fabric layer, so a --clusters narrowing must
+// be checked against shared-service consumers other clusters still depend on.
+// Cluster-workload-only scopes (clusters/deps/base/addons) do not. Every
+// synthetic "through-<phase>" prefix scope begins at fabric, so it always
+// provisions that layer and is treated like infra/fabric here.
+func scopeProvisionsSharedMachineLayer(target string) bool {
+	switch target {
+	case "infra", "all", "fabric", "machines":
+		return true
+	}
+	return strings.HasPrefix(target, "through-")
 }
 
 func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {

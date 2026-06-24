@@ -46,6 +46,63 @@ func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds
 	}
 }
 
+// --through fabric|deps|base resolve to the synthetic "through-<phase>" prefix
+// scopes (converge.ApplyThroughScope); the cluster-scope filter must narrow them
+// to the named cluster roots exactly like the canonical --stage scopes rather
+// than rejecting --clusters as an unsupported target.
+func TestScopeStateForApplyNarrowsThroughPrefixScopes(t *testing.T) {
+	state := cliStateWithSharedDNS() // cluster-a, cluster-b
+	for _, target := range []string{"through-fabric", "through-deps", "through-base"} {
+		t.Run(target, func(t *testing.T) {
+			scoped, err := ScopeStateForApply(state, target, "cluster-a")
+			if err != nil {
+				t.Fatalf("ScopeStateForApply(%s, cluster-a) returned error: %v", target, err)
+			}
+			names := containerClusterNames(scoped)
+			if len(names) != 1 || names[0] != "cluster-a" {
+				t.Fatalf("%s scoped container clusters = %v, want [cluster-a]", target, names)
+			}
+		})
+	}
+}
+
+// A through-<phase> prefix scope always begins at fabric, so it provisions the
+// shared machine layer and must trigger the same shared-service narrowing guard
+// as --stage infra/fabric/machines.
+func TestValidateScopedApplySharedServicesFailsForThroughPrefixScopes(t *testing.T) {
+	state := cliStateWithSharedDNS()
+	for _, target := range []string{"through-fabric", "through-deps", "through-base"} {
+		t.Run(target, func(t *testing.T) {
+			err := ValidateScopedApplySharedServices(state, target, "cluster-a")
+			if err == nil {
+				t.Fatalf("%s: expected shared service conflict, got nil", target)
+			}
+			if !strings.Contains(err.Error(), "--clusters would narrow shared machine service") {
+				t.Fatalf("%s error %q does not explain scoped apply conflict", target, err)
+			}
+		})
+	}
+}
+
+// Cluster-workload-only scopes do not re-provision the shared machine layer, so
+// narrowing them with --clusters stays exempt from the shared-service guard.
+func TestValidateScopedApplySharedServicesAllowsClusterWorkloadScopes(t *testing.T) {
+	state := cliStateWithSharedDNS()
+	for _, target := range []string{"clusters", "deps", "base", "addons"} {
+		if err := ValidateScopedApplySharedServices(state, target, "cluster-a"); err != nil {
+			t.Fatalf("%s should not validate shared machine services: %v", target, err)
+		}
+	}
+}
+
+func containerClusterNames(state v1alpha1.State) []string {
+	names := make([]string, 0, len(state.ContainerClusters))
+	for _, ocp := range state.ContainerClusters {
+		names = append(names, ocp.Metadata.Name)
+	}
+	return names
+}
+
 func TestValidateScopedApplySharedServicesAllowsContainerClusterScope(t *testing.T) {
 	if err := ValidateScopedApplySharedServices(cliStateWithSharedDNS(), "container-cluster", "cluster-a"); err != nil {
 		t.Fatalf("container-cluster apply scope should not validate machine services: %v", err)
