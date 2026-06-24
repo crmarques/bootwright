@@ -939,6 +939,31 @@ func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	assertTaskDeps(t, tasks, "addon.demo.b.wait", "addon.demo.b.apply")
 }
 
+func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+
+	// base-only (`apply --stage base`): the iso task lives in the deps phase and
+	// is not planned, so boot/wait must NOT carry a dependency on it. Otherwise
+	// the scheduler blocks on iso.<cluster> "(missing)" and the surgical rerun the
+	// flag is meant to support fails. The rerun reuses the ISO a prior deps run
+	// published.
+	baseOnly, err := PlanApplyTasksChecked(ApplyTarget{Name: "base", PhaseNames: []string{ApplyPhaseBase}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked base-only: %v", err)
+	}
+	assertTaskMissing(t, baseOnly, "iso.sno-libvirt")
+	assertTaskDeps(t, baseOnly, "boot.sno-libvirt")
+	assertTaskDeps(t, baseOnly, "wait.sno-libvirt", "boot.sno-libvirt")
+
+	// deps+base together: the iso task is planned, so boot orders behind it.
+	depsBase, err := PlanApplyTasksChecked(ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked deps+base: %v", err)
+	}
+	assertTaskPresent(t, depsBase, "iso.sno-libvirt")
+	assertTaskDeps(t, depsBase, "boot.sno-libvirt", "iso.sno-libvirt")
+}
+
 func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 	state := storageAttachmentPlanningState()
 

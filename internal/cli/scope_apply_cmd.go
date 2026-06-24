@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -103,7 +104,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		}
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
-		cmd.Flags().StringVar(&stage, "stage", "", "stage to apply: infra|clusters families, or a sub-phase fabric|machines|deps|base|addons (default full graph)")
+		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to %s: %s families, or a sub-phase %s (default full graph)", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		registerStageCompletion(cmd, converge.ApplyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply")
 		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, "validate only the resources within the selected --clusters/--stage scope, ignoring desired-state errors in objects outside it (no effect without --clusters)")
 	} else {
@@ -296,6 +298,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, check, become.PasswordFile, dryRun, runCommandLabel, mode, streamAnsible)
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
+			if options.stageSelector {
+				printStageScopeNotices(stdout, runScope)
+			}
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printExtensionDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)

@@ -70,7 +70,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		flags.output = outputText
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
-		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters (default: full teardown of clusters then infra)")
+		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to destroy: %s (sub-phases %s are apply-only; default: full teardown of clusters then infra)", strings.Join(converge.DestroyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		registerStageCompletion(cmd, converge.DestroyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
 		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, "validate only the resources within the selected --clusters/--stage scope, ignoring desired-state errors in objects outside it (no effect without --clusters)")
 	} else {
@@ -133,7 +134,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 			if conflicts := stategraph.SharedDestroyConflicts(state, selectedNames); len(conflicts) > 0 {
-				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, destroyClusterScopeFlag(options.stageSelector)))
+				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
 		if flags.output == outputText {
@@ -193,7 +194,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				}
 				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, override))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, converge.DestroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, check, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, check, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
 		}
 		if !dryRun && destroySafety.RequiredOverride {
 			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))
@@ -315,11 +316,4 @@ func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecisio
 	if dryRun {
 		cliout.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --override")
 	}
-}
-
-func destroyClusterScopeFlag(stageSelector bool) string {
-	if stageSelector {
-		return "--clusters"
-	}
-	return "--clusters"
 }

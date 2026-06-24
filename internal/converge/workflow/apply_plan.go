@@ -315,12 +315,18 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}
 		}
 		// base (clusters): boot nodes then wait for openshift-install to converge.
-		// boot keeps its explicit dep on the ISO task; when only base is in scope
-		// that dep prunes at Lower() and relies on a prior deps run having
-		// published the ISO (same graceful-degradation contract as storage).
+		// boot/wait depend on the ISO task only when deps is also in scope (the
+		// iso activity exists in this graph). When only base is selected, the dep
+		// is omitted so the run reuses the ISO a prior deps run published, instead
+		// of blocking on a task that was never planned. Same conditional-omit
+		// pattern the storage/addons extension activities use (installPhasePlanned).
 		if phaseSet[ApplyPhaseBase] && includeContainer {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			machineNames := applyClusterMachineNames(state, name)
+			isoDeps := []string(nil)
+			if phaseSet[ApplyPhaseDeps] {
+				isoDeps = []string{isoTaskID}
+			}
 			bootTaskID := ""
 			if len(machineNames) > 0 {
 				bootTaskID = "boot." + name
@@ -328,7 +334,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					ID:                   bootTaskID,
 					Kind:                 ActivityKindContainerNodeBoot,
 					Requires:             kubeVirtReqsByCluster[name],
-					ExplicitDependencies: []string{isoTaskID},
+					ExplicitDependencies: isoDeps,
 					Task: ApplyTask{
 						Entry: TaskLedgerEntry{
 							ID:           bootTaskID,
@@ -354,7 +360,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			if bootTaskID != "" {
 				waitDeps = append(waitDeps, bootTaskID)
 			} else {
-				waitDeps = append(waitDeps, isoTaskID)
+				// No machines to boot: wait orders behind the ISO task when deps
+				// is in scope, else nothing (isoDeps is empty) so a base-only run
+				// reuses a prior deps run's ISO instead of blocking on it.
+				waitDeps = append(waitDeps, isoDeps...)
 			}
 			waitID := "wait." + name
 			if err := graph.Add(Activity{

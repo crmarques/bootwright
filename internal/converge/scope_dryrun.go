@@ -12,31 +12,34 @@ import (
 )
 
 type DryRunReport struct {
-	Target             string               `json:"target"`
-	Action             string               `json:"action"`
-	DryRun             bool                 `json:"dryRun"`
-	PlanOnly           bool                 `json:"planOnly"`
-	ReadinessChecked   bool                 `json:"readinessChecked"`
-	ReadinessChecks    string               `json:"readinessChecks"`
-	Phases             []string             `json:"phases"`
-	RenderedDir        string               `json:"renderedDir"`
-	ClustersDir        string               `json:"clustersDir"`
-	RunsDir            string               `json:"runsDir"`
-	SecretsDir         string               `json:"secretsDir"`
-	ManagedServicesDir string               `json:"managedServicesDir"`
-	ProviderStateDir   string               `json:"providerStateDir"`
-	ContextDir         string               `json:"contextDir"`
-	BundleDir          string               `json:"bundleDir"`
-	Playbook           string               `json:"playbook"`
-	Limit              string               `json:"limit,omitempty"`
-	Check              bool                 `json:"check,omitempty"`
-	ResolveInstaller   bool                 `json:"resolveInstaller"`
-	Command            []string             `json:"command"`
-	Render             DryRunRender         `json:"render"`
-	ExtraVars          []string             `json:"extraVars,omitempty"`
-	ApplyPlan          *DryRunApply         `json:"applyPlan,omitempty"`
-	DestroyPlan        *DryRunDestroyPlan   `json:"destroyPlan,omitempty"`
-	DestroySafety      *DryRunDestroySafety `json:"destroySafety,omitempty"`
+	Target             string   `json:"target"`
+	Action             string   `json:"action"`
+	DryRun             bool     `json:"dryRun"`
+	PlanOnly           bool     `json:"planOnly"`
+	ReadinessChecked   bool     `json:"readinessChecked"`
+	ReadinessChecks    string   `json:"readinessChecks"`
+	Phases             []string `json:"phases"`
+	RenderedDir        string   `json:"renderedDir"`
+	ClustersDir        string   `json:"clustersDir"`
+	RunsDir            string   `json:"runsDir"`
+	SecretsDir         string   `json:"secretsDir"`
+	ManagedServicesDir string   `json:"managedServicesDir"`
+	ProviderStateDir   string   `json:"providerStateDir"`
+	ContextDir         string   `json:"contextDir"`
+	BundleDir          string   `json:"bundleDir"`
+	// Playbook is the single workflow playbook for family scopes; sub-phase
+	// stages (fabric/machines/deps/base/addons) run via the task graph in
+	// applyPlan instead, so they have no single playbook and it is omitted.
+	Playbook         string               `json:"playbook,omitempty"`
+	Limit            string               `json:"limit,omitempty"`
+	Check            bool                 `json:"check,omitempty"`
+	ResolveInstaller bool                 `json:"resolveInstaller"`
+	Command          []string             `json:"command"`
+	Render           DryRunRender         `json:"render"`
+	ExtraVars        []string             `json:"extraVars,omitempty"`
+	ApplyPlan        *DryRunApply         `json:"applyPlan,omitempty"`
+	DestroyPlan      *DryRunDestroyPlan   `json:"destroyPlan,omitempty"`
+	DestroySafety    *DryRunDestroySafety `json:"destroySafety,omitempty"`
 }
 
 // DryRunDestroyPlan reports the ordered task chain a full (whole-context)

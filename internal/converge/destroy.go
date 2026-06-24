@@ -27,7 +27,10 @@ func DestroyStageScope(stage string) (Scope, error) {
 	case "clusters":
 		return ClustersScope, nil
 	default:
-		return Scope{}, fmt.Errorf("--stage must be one of infra, clusters")
+		// Educate users who learned apply's wider vocabulary: the sub-phases are
+		// apply-only because a sub-phase has no single destroy playbook.
+		return Scope{}, fmt.Errorf("--stage must be one of %s (sub-phases %s are apply-only)",
+			strings.Join(DestroyStageNames(), ", "), strings.Join(SubPhaseStageNames(), ", "))
 	}
 }
 
@@ -44,13 +47,6 @@ func DestroyStageCommandLabel(stage, defaultLabel string) string {
 		return defaultLabel
 	}
 	return strings.TrimSpace(stage) + " destroy"
-}
-
-func DestroyDryRunReportScope(scope Scope, stage string, stageSelector bool) Scope {
-	if stageSelector && strings.TrimSpace(stage) == "clusters" {
-		scope.Name = "clusters"
-	}
-	return scope
 }
 
 func DestroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, override bool) *DryRunDestroySafety {

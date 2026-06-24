@@ -35,6 +35,34 @@ func TestApplyStageScopeResolvesFamiliesAndSubPhases(t *testing.T) {
 	}
 }
 
+func TestStageScopeOmissions(t *testing.T) {
+	cases := []struct {
+		stage            string
+		wantOmitted      []string
+		wantAssumedPrior []string
+	}{
+		{"", nil, nil},
+		{"infra", []string{"deps", "base", "addons"}, nil},
+		{"clusters", []string{"fabric", "machines"}, []string{"fabric", "machines"}},
+		{"fabric", []string{"machines", "deps", "base", "addons"}, nil},
+		{"base", []string{"fabric", "machines", "deps", "addons"}, []string{"fabric", "machines", "deps"}},
+		{"addons", []string{"fabric", "machines", "deps", "base"}, []string{"fabric", "machines", "deps", "base"}},
+	}
+	for _, tc := range cases {
+		scope, err := ApplyStageScope(tc.stage)
+		if err != nil {
+			t.Fatalf("ApplyStageScope(%q): %v", tc.stage, err)
+		}
+		omitted, assumedPrior := StageScopeOmissions(scope)
+		if !reflect.DeepEqual(omitted, tc.wantOmitted) {
+			t.Fatalf("StageScopeOmissions(%q) omitted = %#v, want %#v", tc.stage, omitted, tc.wantOmitted)
+		}
+		if !reflect.DeepEqual(assumedPrior, tc.wantAssumedPrior) {
+			t.Fatalf("StageScopeOmissions(%q) assumedPrior = %#v, want %#v", tc.stage, assumedPrior, tc.wantAssumedPrior)
+		}
+	}
+}
+
 func TestApplyStageScopeRejectsUnknownStage(t *testing.T) {
 	for _, stage := range []string{"provider", "machine-infra", "storage-cluster", "container-cluster", "bogus"} {
 		if _, err := ApplyStageScope(stage); err == nil {

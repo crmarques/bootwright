@@ -216,6 +216,20 @@ func TestDestroyRejectsRemovedStagesAndFlags(t *testing.T) {
 	}
 }
 
+func TestStageRejectionMessagesListCanonicalVocabulary(t *testing.T) {
+	// Lock the exact --stage error wording so the family/sub-phase vocabularies in
+	// internal/converge stay the single source the CLI error messages, flag help,
+	// and completion all derive from. A drift here means one surface fell behind.
+	_, applyErr, applyCode := runCLI(t, "apply", "--stage", "bogus", "--dry-run")
+	if applyCode != 2 || !strings.Contains(applyErr, "--stage must be one of infra, clusters, fabric, machines, deps, base, addons") {
+		t.Fatalf("apply --stage bogus code=%d stderr=%q, want full apply vocabulary", applyCode, applyErr)
+	}
+	_, destroyErr, destroyCode := runCLI(t, "destroy", "--stage", "bogus", "--dry-run")
+	if destroyCode != 2 || !strings.Contains(destroyErr, "--stage must be one of infra, clusters (sub-phases fabric, machines, deps, base, addons are apply-only)") {
+		t.Fatalf("destroy --stage bogus code=%d stderr=%q, want family list + apply-only note", destroyCode, destroyErr)
+	}
+}
+
 func TestDestroyHelpUsesArtifactServerScope(t *testing.T) {
 	stdout, stderr, code := runCLI(t, "destroy", "--help")
 	if code != 0 {
