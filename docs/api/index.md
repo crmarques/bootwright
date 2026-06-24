@@ -141,7 +141,7 @@ Desired state references secrets by name only and never carries secret bytes,
 so it is safe to commit. A reference names an entry in `Environment.spec.secrets`;
 the bytes live in the context secret store or operator-owned local files. See
 [Secrets](../advanced/secrets.md) for the source/context storage modes and
-`secret sync`.
+`secret generate`.
 
 !!! note "Environment.spec.secrets uses a bespoke codec"
     `Environment.spec.secrets` is the API's one bespoke collection codec: it is

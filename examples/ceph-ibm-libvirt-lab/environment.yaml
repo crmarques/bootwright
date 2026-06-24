@@ -20,7 +20,7 @@ spec:
 
   # ---------------------------------------------------------------------------
   # Secrets are referenced by name only; bytes live in the encrypted context
-  # store and are written with `bootwright secret set` / `secret sync`.
+  # store and are written with `bootwright secret set` / `secret generate`.
   # See the README for the exact set commands.
   # ---------------------------------------------------------------------------
 

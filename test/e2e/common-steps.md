@@ -51,7 +51,7 @@ bootwright secret set proxy-credentials \
 Materialize every remaining `generated:` entry:
 
 ```bash
-bootwright secret sync
+bootwright secret generate
 bootwright secret list
 sudo find "/var/lib/bootwright/contexts/$CASE/secrets" -maxdepth 1 -type f -printf '%f\n' | sort
 ```

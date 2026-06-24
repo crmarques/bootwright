@@ -319,7 +319,7 @@ func secretFileCheck(refName, path, label string, publicKey, contextBacked, exte
 		case (strings.Contains(label, " keyRef") || strings.Contains(label, "nodeSSH")) && !contextBacked:
 			remediation = "create the file declared by Environment.spec.secrets[" + refName + "].file"
 		case contextBacked:
-			remediation = "bootwright secret sync or create " + path + " with bootwright secret set"
+			remediation = "bootwright secret generate or create " + path + " with bootwright secret set"
 		}
 		return failCheck(checkGroupSecretMaterial, name, path+" missing", "Referenced secret material is required before apply", remediation)
 	}
@@ -338,14 +338,14 @@ func generatedSecretCheck(refName, path, label, generatedKind string, deps Deps)
 	name := label
 	info, err := deps.StatPath(path)
 	if err != nil {
-		remediation := "bootwright secret sync"
+		remediation := "bootwright secret generate"
 		if generatedKind == "credentials" {
-			remediation = "bootwright secret sync or bootwright secret set " + refName + " --from-file <path>"
+			remediation = "bootwright secret generate or bootwright secret set " + refName + " --from-file <path>"
 		}
 		return failCheck(checkGroupSecretMaterial, name, path+" missing", "Generated secret material is required before apply", remediation)
 	}
 	if info.IsDir() {
-		return failCheck(checkGroupSecretMaterial, name, path+" is a directory", "Generated secret material must be a regular file", "remove "+path+" and run bootwright secret sync")
+		return failCheck(checkGroupSecretMaterial, name, path+" is a directory", "Generated secret material must be a regular file", "remove "+path+" and run bootwright secret generate")
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; expected 0600", path, got), "Secret file permissions are too broad or too narrow", "chmod 0600 "+path)

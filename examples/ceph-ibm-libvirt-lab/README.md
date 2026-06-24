@@ -191,7 +191,7 @@ printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
 
 # Converge the auto-managed secrets: generates the ceph-node-ssh keypair and
 # bmc-credentials, and copies the bastion-host-ssh file: source into the context.
-bootwright secret sync
+bootwright secret generate
 
 # Record SSH host-key trust for the libvirt host, then re-check.
 bootwright host trust

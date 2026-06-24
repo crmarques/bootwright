@@ -109,7 +109,7 @@ spec:
 ```bash
 bootwright context init 008-ceph-3nodes-vsphere-managed-os \
   -f test/e2e/008-ceph-3nodes-vsphere-managed-os --yes
-bootwright secret sync
+bootwright secret generate
 bootwright host trust --hosts bastion --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-vsphere --yes

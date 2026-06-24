@@ -122,7 +122,7 @@ The scaffold declares four secrets:
 | Secret name | Purpose | How it is supplied |
 | --- | --- | --- |
 | `openshift-pull-secret` | OpenShift pull secret | You set it: `bootwright secret set` |
-| `my-sno-lab-cluster-admin-ssh-key` | Node (core user) SSH key pair | Generated for you: `bootwright secret sync` |
+| `my-sno-lab-cluster-admin-ssh-key` | Node (core user) SSH key pair | Generated for you: `bootwright secret generate` |
 | `bastion-host-ssh` | SSH private key to reach the bastion | `file:` reference to a key you own |
 | `bmc-credentials` | Credentials for the emulated Redfish BMC | You set it: `bootwright secret set` |
 
@@ -235,23 +235,24 @@ bootwright context update -f ./my-sno-lab
 `context init` fails if `lab` already exists; rerun with `--yes` to drop the
 existing context and recreate it from the source.
 
-## 6. Set And Sync Secrets
+## 6. Set And Generate Secrets
 
 Load the secret bytes the YAML named into the encrypted context store. The
-generated and `file:`-sourced entries are converged by `secret sync`; the two
-operator-supplied entries you set yourself:
+generated and `file:`-sourced entries are converged by `secret generate`; the
+two operator-supplied entries you set yourself:
 
 ```bash
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
-bootwright secret sync
+bootwright secret generate
+bootwright secret check
 bootwright secret list
 ```
 
-`secret sync` generates the cluster admin SSH key pair, brings the
-`bastion-host-ssh` file material into the context, and reports any declared
-secret still missing (exiting non-zero if so). Context-local secret material is
-encrypted at rest.
+`secret generate` generates the cluster admin SSH key pair and brings the
+`bastion-host-ssh` file material into the context. `secret check` then reports
+any declared secret still missing (exiting non-zero if so). Context-local secret
+material is encrypted at rest.
 
 ## 7. Record Host Trust
 

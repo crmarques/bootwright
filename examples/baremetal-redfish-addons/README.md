@@ -20,7 +20,7 @@ checks, and a manifestSet add-on.
 
 ## Validate And Apply
 
-`secret sync` only materializes the `generated:` entries; set the operator
+`secret generate` only materializes the `generated:` entries; set the operator
 secrets this example declares (`openshift-pull-secret`, `bmc-credentials`)
 yourself first. `bastion-host-ssh` points at a local key file. After each step,
 run `bootwright status` for the suggested next command. See
@@ -32,7 +32,7 @@ bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
 bootwright secret set openshift-pull-secret --pull-secret <path>
 printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
-bootwright secret sync
+bootwright secret generate
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright plan

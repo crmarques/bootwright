@@ -192,7 +192,7 @@ Consumers reference those names through fields such as `pullSecretRef`,
 Context-local secret material is encrypted at rest. Generated installer files
 that inline secret material are runtime outputs and must stay unversioned.
 
-Generated material is converged by `bootwright secret sync`, which creates
+Generated material is converged by `bootwright secret generate`, which creates
 `generated:` secrets and, in context storage mode, copies `file:`-sourced
 material into the encrypted store. See [Secrets](advanced/secrets.md) for the
 full model.

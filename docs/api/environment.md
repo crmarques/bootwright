@@ -41,7 +41,7 @@ cell means there is no default — an omitted optional field stays unset.
 | `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [ContainerCluster](container-cluster.md)). |
 | `spec.defaults.artifactAccess` | No | — | Default artifact endpoint binding for active artifact consumers. See [Artifact access](#artifact-access). |
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
-| `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret sync` to copy `file:`-sourced material into the context store before workflows read it. |
+| `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
 | `spec.proxyFor.bootwright` | No | — | Proxy catalog entry used by Bootwright runtime actions; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
 | `spec.proxyFor.containerClusterInstall` | No | — | Proxy catalog entry rendered into cluster install input; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
 | `spec.infraComponents` | No | — | Catalog of external or managed service access entries. See [Infra-component catalog](#infra-component-catalog). |

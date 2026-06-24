@@ -28,7 +28,7 @@ file matching the `file:` secret source in `environment.yaml`.
 ```text
 bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
-bootwright secret sync
+bootwright secret generate
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright plan

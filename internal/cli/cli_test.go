@@ -584,13 +584,13 @@ func TestHumanOutputStructuredText(t *testing.T) {
 
 func TestJourneyCommandsRouteToStatus(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "secret", "sync")
-	if code != 1 {
-		t.Fatalf("secret sync exited %d (want 1 while openshift-pull-secret is unset), stderr=%q\nstdout:\n%s", code, stderr, stdout)
+	stdout, stderr, code := runCLI(t, "secret", "generate")
+	if code != 0 {
+		t.Fatalf("secret generate exited %d (want 0; missing context secrets do not fail generate), stderr=%q\nstdout:\n%s", code, stderr, stdout)
 	}
-	for _, want := range []string{"request(s) handled", "Still missing", "Next steps", "bootwright status"} {
+	for _, want := range []string{"request(s) handled", "Needs secret set", "Next steps", "bootwright status"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("secret sync stdout missing %q (journey commands must route back to the status hub):\n%s", want, stdout)
+			t.Fatalf("secret generate stdout missing %q (journey commands must route back to the status hub):\n%s", want, stdout)
 		}
 	}
 }
@@ -1854,12 +1854,12 @@ func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
 
 func TestSecretListJSONReportsDeclaredStatus(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	syncOut, stderr, code := runCLI(t, "secret", "sync")
-	if code != 1 {
-		t.Fatalf("secret sync exited %d (want 1 while openshift-pull-secret is unset), stderr=%q", code, stderr)
+	genOut, stderr, code := runCLI(t, "secret", "generate")
+	if code != 0 {
+		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(syncOut, "Still missing") || !strings.Contains(syncOut, "request(s) handled") {
-		t.Fatalf("secret sync stdout missing still-missing report:\n%s", syncOut)
+	if !strings.Contains(genOut, "Needs secret set") || !strings.Contains(genOut, "request(s) handled") {
+		t.Fatalf("secret generate stdout missing needs-secret-set report:\n%s", genOut)
 	}
 	stdout, stderr, code := runCLI(t, "secret", "list", "--output", "json")
 	if code != 0 {
@@ -3161,12 +3161,12 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}
-	syncOut, stderr, code := runCLI(t, "secret", "sync")
+	genOut, stderr, code := runCLI(t, "secret", "generate")
 	if code != 0 {
-		t.Fatalf("secret sync exited %d, stderr=%q\nstdout:\n%s", code, stderr, syncOut)
+		t.Fatalf("secret generate exited %d, stderr=%q\nstdout:\n%s", code, stderr, genOut)
 	}
-	if !strings.Contains(syncOut, "request(s) handled") || !strings.Contains(syncOut, "all declared secrets present") {
-		t.Fatalf("secret sync stdout missing success summary:\n%s", syncOut)
+	if !strings.Contains(genOut, "request(s) handled") || !strings.Contains(genOut, "all declared secrets present") {
+		t.Fatalf("secret generate stdout missing success summary:\n%s", genOut)
 	}
 	outputDir := filepath.Join(t.TempDir(), "rendered")
 	stdout, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt", "--sensitive")

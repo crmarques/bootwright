@@ -16,6 +16,9 @@ import (
 type MaterializeOptions struct {
 	Generated   bool
 	FileSources bool
+	// Renew regenerates every generated secret even when present material
+	// already matches the desired spec, replacing it with fresh material.
+	Renew bool
 }
 
 type MaterializeResult struct {
@@ -115,21 +118,21 @@ func MaterializeForContext(contextName, secretsDir string, state v1alpha1.State,
 			return nil, err
 		}
 		for _, request := range certRequests {
-			action, err := materializeSelfSignedCertificate(store, secretsDir, request)
+			action, err := materializeSelfSignedCertificate(store, secretsDir, request, opts.Renew)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, MaterializeResult{Name: request.Name, Action: action})
 		}
 		for _, request := range generatedCredentialsRequestsFor(state) {
-			action, err := materializeGeneratedCredentials(store, secretsDir, request)
+			action, err := materializeGeneratedCredentials(store, secretsDir, request, opts.Renew)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, MaterializeResult{Name: request.name, Action: action})
 		}
 		for _, request := range generatedSSHKeyPairRequestsFor(state) {
-			action, err := materializeGeneratedSSHKeyPair(store, secretsDir, request)
+			action, err := materializeGeneratedSSHKeyPair(store, secretsDir, request, opts.Renew)
 			if err != nil {
 				return nil, err
 			}
@@ -148,7 +151,7 @@ func MaterializeForContext(contextName, secretsDir string, state v1alpha1.State,
 	return out, nil
 }
 
-func materializeSelfSignedCertificate(store *ContextStore, secretsDir string, request GeneratedSelfSignedRequest) (string, error) {
+func materializeSelfSignedCertificate(store *ContextStore, secretsDir string, request GeneratedSelfSignedRequest, renew bool) (string, error) {
 	certPath := filepath.Join(secretsDir, request.Name)
 	keyPath := certPath + ".key"
 	certKey := MaterialKey{Name: request.Name, Role: MaterialPrimary}
@@ -161,18 +164,20 @@ func materializeSelfSignedCertificate(store *ContextStore, secretsDir string, re
 	if err != nil {
 		return "", err
 	}
-	if certExists != keyExists {
-		return "", fmt.Errorf("generated self-signed certificate %q is partially present; expected both %s and %s", request.Name, certPath, keyPath)
-	}
-	if certExists {
-		data, err := store.Read(certKey)
-		if err != nil {
-			return "", err
+	if !renew {
+		if certExists != keyExists {
+			return "", fmt.Errorf("generated self-signed certificate %q is partially present; expected both %s and %s", request.Name, certPath, keyPath)
 		}
-		if err := VerifySelfSignedCertificateBytesMatchRequest(data, request.Certificate); err != nil {
-			return "", fmt.Errorf("existing self-signed certificate %q at %s no longer matches the desired spec: %w; remove %s and %s to regenerate", request.Name, certPath, err, certPath, keyPath)
+		if certExists {
+			data, err := store.Read(certKey)
+			if err != nil {
+				return "", err
+			}
+			if err := VerifySelfSignedCertificateBytesMatchRequest(data, request.Certificate); err != nil {
+				return "", fmt.Errorf("existing self-signed certificate %q at %s no longer matches the desired spec: %w; run bootwright secret generate --renew to regenerate", request.Name, certPath, err)
+			}
+			return "reused existing certificate and key", nil
 		}
-		return "reused existing certificate and key", nil
 	}
 	certPEM, keyPEM, err := SelfSignedCertificatePEM(request.Certificate)
 	if err != nil {
@@ -185,10 +190,13 @@ func materializeSelfSignedCertificate(store *ContextStore, secretsDir string, re
 		_ = store.Delete(certKey)
 		return "", err
 	}
+	if renew && (certExists || keyExists) {
+		return fmt.Sprintf("regenerated %s and %s", certPath, keyPath), nil
+	}
 	return fmt.Sprintf("generated %s and %s", certPath, keyPath), nil
 }
 
-func materializeGeneratedCredentials(store *ContextStore, secretsDir string, request generatedCredentialsRequest) (string, error) {
+func materializeGeneratedCredentials(store *ContextStore, secretsDir string, request generatedCredentialsRequest, renew bool) (string, error) {
 	target := filepath.Join(secretsDir, request.name)
 	wantUser := request.credentials.Username
 	if wantUser == "" {
@@ -199,17 +207,17 @@ func materializeGeneratedCredentials(store *ContextStore, secretsDir string, req
 	if err != nil {
 		return "", err
 	}
-	if exists {
+	if exists && !renew {
 		data, err := store.Read(key)
 		if err != nil {
 			return "", fmt.Errorf("read existing credentials %s: %w", target, err)
 		}
 		gotUser, _, perr := ParseBMCCredentials(data)
 		if perr != nil {
-			return "", fmt.Errorf("existing credentials %s: %w; remove the file to regenerate", target, perr)
+			return "", fmt.Errorf("existing credentials %s: %w; run bootwright secret generate --renew to regenerate", target, perr)
 		}
 		if gotUser != wantUser {
-			return "", fmt.Errorf("existing credentials %q at %s use username %q but desired spec wants %q; remove %s to regenerate", request.name, target, gotUser, wantUser, target)
+			return "", fmt.Errorf("existing credentials %q at %s use username %q but desired spec wants %q; run bootwright secret generate --renew to regenerate", request.name, target, gotUser, wantUser)
 		}
 		return "reused existing credentials", nil
 	}
@@ -221,10 +229,13 @@ func materializeGeneratedCredentials(store *ContextStore, secretsDir string, req
 	if err := store.Write(key, payload); err != nil {
 		return "", err
 	}
+	if renew && exists {
+		return fmt.Sprintf("regenerated %s (user %q)", target, wantUser), nil
+	}
 	return fmt.Sprintf("generated %s (user %q)", target, wantUser), nil
 }
 
-func materializeGeneratedSSHKeyPair(store *ContextStore, secretsDir string, request generatedSSHKeyPairRequest) (string, error) {
+func materializeGeneratedSSHKeyPair(store *ContextStore, secretsDir string, request generatedSSHKeyPairRequest, renew bool) (string, error) {
 	privatePath := filepath.Join(secretsDir, request.name)
 	publicPath := privatePath + ".pub"
 	privateMaterial := MaterialKey{Name: request.name, Role: MaterialSSHPrivate}
@@ -237,18 +248,20 @@ func materializeGeneratedSSHKeyPair(store *ContextStore, secretsDir string, requ
 	if err != nil {
 		return "", err
 	}
-	if privateExists != publicExists {
-		return "", fmt.Errorf("generated SSH key pair %q is partially present; expected both %s and %s", request.name, privatePath, publicPath)
-	}
-	if privateExists {
-		data, err := store.Read(publicMaterial)
-		if err != nil {
-			return "", err
+	if !renew {
+		if privateExists != publicExists {
+			return "", fmt.Errorf("generated SSH key pair %q is partially present; expected both %s and %s", request.name, privatePath, publicPath)
 		}
-		if err := VerifySSHKeyPairPublicBytesMatchRequest(data, request.keyPair); err != nil {
-			return "", fmt.Errorf("existing SSH key pair %q at %s no longer matches the desired spec: %w; remove %s and %s to regenerate", request.name, publicPath, err, privatePath, publicPath)
+		if privateExists {
+			data, err := store.Read(publicMaterial)
+			if err != nil {
+				return "", err
+			}
+			if err := VerifySSHKeyPairPublicBytesMatchRequest(data, request.keyPair); err != nil {
+				return "", fmt.Errorf("existing SSH key pair %q at %s no longer matches the desired spec: %w; run bootwright secret generate --renew to regenerate", request.name, publicPath, err)
+			}
+			return "reused existing SSH key pair", nil
 		}
-		return "reused existing SSH key pair", nil
 	}
 	privateKeyPEM, publicKey, err := SSHKeyPairPEM(request.keyPair)
 	if err != nil {
@@ -260,6 +273,9 @@ func materializeGeneratedSSHKeyPair(store *ContextStore, secretsDir string, requ
 	if err := store.Write(publicMaterial, publicKey); err != nil {
 		_ = store.Delete(privateMaterial)
 		return "", err
+	}
+	if renew && (privateExists || publicExists) {
+		return fmt.Sprintf("regenerated %s and %s", privatePath, publicPath), nil
 	}
 	return fmt.Sprintf("generated %s and %s", privatePath, publicPath), nil
 }

@@ -117,12 +117,13 @@ OKD release image for reproducible installs.
 Bootwright desired state references secrets by name only; the bytes live in the
 context secret store or in operator files. Two common early-workflow blockers:
 
-- **Missing declared secrets.** `bootwright secret sync` converges
-  `Environment.spec.secrets`: it creates `generated:` material, copies `file:`
-  sources into the encrypted context store (in `context` storage mode), and
-  reports any declared secret that is still missing. It **exits non-zero while
-  any declared secret remains absent**, so resolve the reported gaps before
-  retrying a workflow that reads them.
+- **Missing declared secrets.** `bootwright secret generate` converges
+  `Environment.spec.secrets`: it creates `generated:` material and copies
+  `file:` sources into the encrypted context store (in `context` storage mode).
+  `bootwright secret check` is the read-only gate: it reports any declared
+  secret that is still missing and **exits non-zero while any declared secret
+  remains absent**, so resolve the reported gaps before retrying a workflow that
+  reads them.
 
 - **Read-only commands that would print credentials fail closed.** Commands
   that would surface secret material refuse to do so without `--sensitive`:
@@ -133,7 +134,7 @@ context secret store or in operator files. Two common early-workflow blockers:
 
 !!! warning
     `secret set --generate` is a test-fixture path only. Generated material in
-    real workflows comes from `secret sync`.
+    real workflows comes from `secret generate`.
 
 ## Active apply run
 
