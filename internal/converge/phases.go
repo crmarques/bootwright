@@ -17,28 +17,28 @@ type Phase struct {
 // authoritative. NeedsRoot is coarse: base and addons mix root work (container
 // install, addon ownership) with non-root work (ceph bootstrap), so it stays true.
 var phases = map[string]Phase{
-	"fabric": {
-		Name:        "fabric",
+	PhaseFabric: {
+		Name:        PhaseFabric,
 		NeedsRoot:   true,
 		Description: "converge provider hosts (BMC services) and machine-bound shared services: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
 	},
-	"machines": {
-		Name:        "machines",
+	PhaseMachines: {
+		Name:        PhaseMachines,
 		NeedsRoot:   true,
 		Description: "make machines exist with an OS: per-cluster substrate, instantiation, managed-OS install, networks, name resolution, and VIPs",
 	},
-	"deps": {
-		Name:        "deps",
+	PhaseDeps: {
+		Name:        PhaseDeps,
 		NeedsRoot:   true,
 		Description: "install per-cluster prerequisites before bringup: cephadm and dependencies on storage nodes; build the openshift-install agent ISO",
 	},
-	"base": {
-		Name:        "base",
+	PhaseBase: {
+		Name:        PhaseBase,
 		NeedsRoot:   true,
 		Description: "bring cluster control planes up: bootstrap Ceph and apply OSDs; boot nodes and wait for openshift-install",
 	},
-	"addons": {
-		Name:        "addons",
+	PhaseAddons: {
+		Name:        PhaseAddons,
 		NeedsRoot:   true,
 		Description: "post-install integration: apply declarative cluster addons with oc and attach storage to OpenShift",
 	},
@@ -74,7 +74,7 @@ func UseControllingTTYForWorkflow(selected []Phase, askBecomePass bool) bool {
 // drive that role must inline secrets before handing off to Ansible.
 func SelectedTargetsClusters(selected []Phase) bool {
 	for _, p := range selected {
-		if p.Name == "deps" || p.Name == "base" {
+		if p.Name == PhaseDeps || p.Name == PhaseBase {
 			return true
 		}
 	}

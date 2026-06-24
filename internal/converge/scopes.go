@@ -23,10 +23,22 @@ type Scope struct {
 	ClusterKind string
 }
 
+// Phase names of the five sub-phases, aliased from the workflow package's
+// canonical constants so the scope definitions, the phases map, and the
+// sub-phase/limit switches all reference one spelling. A typo becomes a
+// compile error rather than a silently mis-mapped phase.
+const (
+	PhaseFabric   = workflow.ApplyPhaseFabric
+	PhaseMachines = workflow.ApplyPhaseMachines
+	PhaseDeps     = workflow.ApplyPhaseDeps
+	PhaseBase     = workflow.ApplyPhaseBase
+	PhaseAddons   = workflow.ApplyPhaseAddons
+)
+
 var InfraScope = Scope{
 	Name:              "infra",
 	Short:             "Install and configure InfraProvider, InfraComponent, and ClusterInstall",
-	PhaseNames:        []string{"fabric", "machines"},
+	PhaseNames:        []string{PhaseFabric, PhaseMachines},
 	ApplyPlaybook:     roles.PlaybookWorkflowInfraApply,
 	DestroyPlaybook:   roles.PlaybookWorkflowInfraDestroy,
 	ArtifactsBaseName: "infra",
@@ -35,7 +47,7 @@ var InfraScope = Scope{
 var ClustersScope = Scope{
 	Name:              "clusters",
 	Short:             "Provision storage, OpenShift clusters, addons, and integrations",
-	PhaseNames:        []string{"deps", "base", "addons"},
+	PhaseNames:        []string{PhaseDeps, PhaseBase, PhaseAddons},
 	ApplyPlaybook:     roles.PlaybookWorkflowClustersApply,
 	DestroyPlaybook:   roles.PlaybookWorkflowClustersDestroy,
 	ArtifactsBaseName: "clusters",
@@ -44,8 +56,8 @@ var ClustersScope = Scope{
 var ContainerClusterScope = Scope{
 	Name:              "container-cluster",
 	Short:             "Install and configure managed OpenShift clusters via openshift-install agent",
-	PhaseNames:        []string{"deps", "base"},
-	ApplyPhaseNames:   []string{"deps", "base", "addons"},
+	PhaseNames:        []string{PhaseDeps, PhaseBase},
+	ApplyPhaseNames:   []string{PhaseDeps, PhaseBase, PhaseAddons},
 	ClusterKind:       workflow.ApplyClusterKindContainer,
 	ApplyPlaybook:     roles.PlaybookWorkflowContainerClusterApply,
 	DestroyPlaybook:   roles.PlaybookWorkflowClustersDestroy,
@@ -55,7 +67,7 @@ var ContainerClusterScope = Scope{
 var StorageClusterScope = Scope{
 	Name:              "storage-cluster",
 	Short:             "Provision external storage clusters",
-	PhaseNames:        []string{"deps", "base"},
+	PhaseNames:        []string{PhaseDeps, PhaseBase},
 	ArtifactsBaseName: "storage-cluster",
 	ClusterKind:       workflow.ApplyClusterKindStorage,
 }
@@ -63,14 +75,14 @@ var StorageClusterScope = Scope{
 var AddonsScope = Scope{
 	Name:              "addons",
 	Short:             "Apply post-install cluster addons",
-	PhaseNames:        []string{"addons"},
+	PhaseNames:        []string{PhaseAddons},
 	ArtifactsBaseName: "addons",
 }
 
 var AllScope = Scope{
 	Name:              "all",
 	Short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
-	PhaseNames:        []string{"fabric", "machines", "deps", "base", "addons"},
+	PhaseNames:        []string{PhaseFabric, PhaseMachines, PhaseDeps, PhaseBase, PhaseAddons},
 	ApplyPlaybook:     roles.PlaybookWorkflowAllApply,
 	ArtifactsBaseName: "all",
 }
@@ -120,9 +132,9 @@ const (
 
 func AnsibleLimitForScope(name string) string {
 	switch name {
-	case "infra", "fabric", "machines":
+	case "infra", PhaseFabric, PhaseMachines:
 		return infraAnsibleLimit
-	case "clusters", "deps", "base":
+	case "clusters", PhaseDeps, PhaseBase:
 		return clustersAnsibleLimit
 	case "container-cluster":
 		return clusterAnsibleLimit

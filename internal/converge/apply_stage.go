@@ -12,7 +12,9 @@ import (
 // accepts the families only — a sub-phase has no single destroy playbook.
 // Each accessor returns a fresh slice so callers may append freely.
 func FamilyStageNames() []string   { return []string{"infra", "clusters"} }
-func SubPhaseStageNames() []string { return []string{"fabric", "machines", "deps", "base", "addons"} }
+func SubPhaseStageNames() []string {
+	return []string{PhaseFabric, PhaseMachines, PhaseDeps, PhaseBase, PhaseAddons}
+}
 
 // ApplyStageNames is every value apply/plan/state-check accept (families first,
 // then sub-phases); DestroyStageNames is destroy's family-only set.
@@ -108,7 +110,7 @@ func ScopeTargetsContainerInstall(scope Scope) bool {
 func ScopeProvisionsClusterWorkload(scope Scope) bool {
 	for _, name := range scope.PhaseNames {
 		switch name {
-		case "machines", "deps", "base":
+		case PhaseMachines, PhaseDeps, PhaseBase:
 			return true
 		}
 	}
