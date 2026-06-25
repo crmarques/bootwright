@@ -46,6 +46,31 @@
           (lorax on Red Hat and Fedora hosts) or run this provider on an OS
           with mkksiso available.
 
+    # The source ISO is read from the controller (the copy below uses
+    # remote_src: false; a controller-local provider host with sourceOnTarget
+    # reads image.path directly). Fail fast with an actionable message instead
+    # of the opaque copy/mkksiso "Could not find or access" error deep into the
+    # machines phase when the operator has not staged the media yet.
+    - name: Stat managed ISO source on controller
+      ansible.builtin.stat:
+        path: "{{ bootwright_component.osInstall.image.path }}"
+        get_checksum: false
+      delegate_to: localhost
+      register: bootwright_os_source_controller_stat
+      when: bootwright_component.osInstall.image.kind in ['media', 'file']
+
+    - name: Assert managed ISO source is present on controller
+      ansible.builtin.assert:
+        that:
+          - bootwright_os_source_controller_stat.stat.exists | default(false) | bool
+        fail_msg: >-
+          managed install ISO {{ bootwright_component.osInstall.image.original }}
+          is not present on the bootwright controller at
+          {{ bootwright_component.osInstall.image.path }}. Stage it first, e.g.
+          `bootwright media add {{ bootwright_component.osInstall.image.key | default(bootwright_component.osInstall.image.original) }} --from-file <iso>`
+          (or --from-url <url>), then re-run apply.
+      when: bootwright_component.osInstall.image.kind in ['media', 'file']
+
     - name: Copy managed ISO source to provider host
       ansible.builtin.copy:
         src: "{{ bootwright_component.osInstall.image.path }}"

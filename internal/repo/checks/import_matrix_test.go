@@ -90,7 +90,7 @@ var allowedImports = map[string][]string{
 
 	// Operator-facing application services. They return plain data; cli
 	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).
-	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/safefs", "internal/infra/locality", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology", "internal/workspace"},
+	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology", "internal/workspace"},
 	"internal/status":        {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/clusteraccess", "internal/converge/workflow", "internal/ownership", "internal/render", "internal/state/graph", "internal/state/view"},
 	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/host/shellquote", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 }

@@ -137,6 +137,9 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 	if phaseInScope("machines", selected, hasState) && stateNeedsKubeVirt(state) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
+	if hasState {
+		checks = append(checks, installerMediaChecks(state, selected, deps, secretScope)...)
+	}
 	if anyPhaseInScope([]string{"machines", "base"}, selected) && hasState && stateNeedsVSphere(state) {
 		checks = append(checks, vspherePyvmomiCheck(deps))
 	}
