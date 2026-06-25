@@ -13,10 +13,18 @@
     - name: Load Anaconda package list
       ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
+    # Bare-metal-over-BMC, KubeVirt, and vSphere machines all drive their
+    # managed-OS install from the controller (localhost), so every machine in a
+    # cluster collapses onto the same host. This tooling install is host-global,
+    # not per-machine: running it concurrently across those machines races the
+    # dnf transaction test ("package ... is already installed"). throttle holds
+    # it to one host at a time so the first install wins and the rest depsolve
+    # to idempotent no-ops.
     - name: Install Anaconda ISO tooling packages
       ansible.builtin.package:
         name: "{{ bootwright_machine_os_install_anaconda_packages }}"
         state: present
+      throttle: 1
       when: bootwright_machine_os_install_anaconda_packages | length > 0
 
     - name: Verify mkksiso is available
