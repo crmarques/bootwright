@@ -17,6 +17,17 @@ import (
 // per-kind validators called below. Each rule emits a precise
 // diagnostic naming the field and the conflicting value.
 func Validate(state v1alpha1.State) error {
+	findings := validateFindings(state)
+	if len(findings) == 0 {
+		return nil
+	}
+	return newValidationError(findings)
+}
+
+// validateFindings runs every per-kind validator and returns the raw findings.
+// Validate wraps them in a ValidationError; ValidateScoped diffs two findings
+// sets. Keep the validator call order here as the single source of truth.
+func validateFindings(state v1alpha1.State) []Finding {
 	var errs []Finding
 	errs = append(errs, notes(validateEnvironments(state))...)
 	errs = append(errs, notes(validateMachines(state))...)
@@ -31,10 +42,54 @@ func Validate(state v1alpha1.State) error {
 	errs = append(errs, notes(validateCrossLayer(state))...)
 	errs = append(errs, notes(validateSecretReferences(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
-	if len(errs) == 0 {
+	return errs
+}
+
+// ValidateScoped validates a scoped subset of the effective desired state while
+// suppressing findings that are artifacts of scoping rather than genuine
+// desired-state errors. `--scoped-validation` narrows validation to the objects
+// a --clusters/--stage run acts on so an error in an out-of-scope object does
+// not block the run; but the scoped state is deliberately incomplete, so
+// dropping out-of-scope objects can orphan a reference an in-scope or
+// render-reference object still carries:
+//
+//   - an InfraComponent (artifact server, proxy, ...) survives a --clusters
+//     scope in full, but its host Machine is pulled in only when an in-scope
+//     cluster consumes the service; scoping a storage cluster that does not
+//     consume it leaves the component referencing a Machine no longer present.
+//   - a storage-cluster apply keeps the data-foundation ClusterAddonBindings as
+//     render references (they drive the per-consumer Ceph client auth) but drops
+//     the consuming ContainerClusters from the work set, so each binding's
+//     clusterRef names a ContainerCluster no longer present.
+//
+// Such a finding appears when validating `scoped` but not when validating the
+// self-consistent `full` state, so it is a false positive for the scoped run and
+// is dropped. A genuine error in an in-scope object appears in both and is
+// reported. An error in an object scoping removed entirely never appears in
+// `scoped`, so the existing out-of-scope-error tolerance is preserved. The
+// reported set is always a subset of the scoped findings: ValidateScoped only
+// ever suppresses, never adds.
+//
+// full must be the complete effective desired state `scoped` was derived from.
+func ValidateScoped(scoped, full v1alpha1.State) error {
+	scopedFindings := validateFindings(scoped)
+	if len(scopedFindings) == 0 {
 		return nil
 	}
-	return newValidationError(errs)
+	genuine := make(map[string]bool)
+	for _, finding := range validateFindings(full) {
+		genuine[finding.Message] = true
+	}
+	var kept []Finding
+	for _, finding := range scopedFindings {
+		if genuine[finding.Message] {
+			kept = append(kept, finding)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return newValidationError(kept)
 }
 
 // duplicateNameFindings reports every metadata.name that appears more than once

@@ -103,6 +103,13 @@ validates everything. Dependencies are still validated — if a selected cluster
 pulls another object in transitively (such as a Data Foundation storage
 attachment), that object stays in scope and is validated with it.
 
+A reference that dangles **only because** the object it points at was scoped out
+is treated as a scoping artifact, not an error: a shared `InfraComponent` (such
+as an artifact server) whose host machine the selection does not pull in, or a
+Data Foundation attachment whose consuming `ContainerCluster` a storage-cluster
+apply leaves out, no longer fails the run. A reference that is broken in the
+whole input — the object it names is declared nowhere — still blocks it.
+
 ## Destroy protection
 
 Set `Environment.spec.safety.destroyProtection: requiredOverride` to guard a

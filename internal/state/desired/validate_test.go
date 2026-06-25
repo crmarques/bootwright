@@ -4012,3 +4012,73 @@ spec:
       role: master
       machineRef: srv1
 `
+
+// TestValidateScopedSuppressesScopingArtifacts covers the --scoped-validation
+// case the storage-cluster apply hit: an InfraComponent (here a proxy) survives
+// a --clusters scope in full, but its host Machine is pulled into scope only
+// when an in-scope cluster consumes the service. Scoping to a cluster that does
+// not consume it drops the Machine, so the component's machineRef dangles purely
+// because of scoping. ValidateScoped must not report that artifact.
+func TestValidateScopedSuppressesScopingArtifacts(t *testing.T) {
+	proxy := func(machineRef string) v1alpha1.InfraComponent {
+		return v1alpha1.InfraComponent{
+			Metadata: v1alpha1.Metadata{Name: "lab-proxy"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotProxy,
+				Proxy: &v1alpha1.ProxyComponent{
+					Implementation: v1alpha1.InfraComponentTypeSquid,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: machineRef},
+				},
+			},
+		}
+	}
+	host := v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: "svc"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+		},
+	}
+	const dangling = `InfraComponent/lab-proxy spec.proxy.machineRef "svc" does not match any Machine`
+
+	full := v1alpha1.State{
+		InfraComponents: []v1alpha1.InfraComponent{proxy("svc")},
+		Machines:        []v1alpha1.Machine{host},
+	}
+	scoped := v1alpha1.State{
+		InfraComponents: []v1alpha1.InfraComponent{proxy("svc")},
+	}
+
+	if err := Validate(scoped); err == nil || !strings.Contains(err.Error(), dangling) {
+		t.Fatalf("Validate(scoped) must report the dangling machineRef, got: %v", err)
+	}
+	if err := Validate(full); err != nil && strings.Contains(err.Error(), dangling) {
+		t.Fatalf("Validate(full) must not report the dangling machineRef: %v", err)
+	}
+	if err := ValidateScoped(scoped, full); err != nil && strings.Contains(err.Error(), dangling) {
+		t.Fatalf("ValidateScoped must suppress the scoping-artifact finding, got: %v", err)
+	}
+}
+
+// TestValidateScopedKeepsGenuineErrors guards the other half of the contract: a
+// reference that dangles in the full state too (a real typo, not a scoping
+// artifact) must still block a scoped run.
+func TestValidateScopedKeepsGenuineErrors(t *testing.T) {
+	proxy := v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "lab-proxy"},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotProxy,
+			Proxy: &v1alpha1.ProxyComponent{
+				Implementation: v1alpha1.InfraComponentTypeSquid,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "ghost"},
+			},
+		},
+	}
+	const genuine = `InfraComponent/lab-proxy spec.proxy.machineRef "ghost" does not match any Machine`
+
+	full := v1alpha1.State{InfraComponents: []v1alpha1.InfraComponent{proxy}}
+	scoped := v1alpha1.State{InfraComponents: []v1alpha1.InfraComponent{proxy}}
+
+	if err := ValidateScoped(scoped, full); err == nil || !strings.Contains(err.Error(), genuine) {
+		t.Fatalf("ValidateScoped must keep a genuine in-scope error, got: %v", err)
+	}
+}
