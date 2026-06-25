@@ -225,6 +225,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 		return nil
 	}
 	seen := map[string]bool{}
+	usable := map[string]string{}
 	var checks []Check
 	for _, p := range state.InfraProviders {
 		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil || p.Spec.KubeVirt.HostClusterRef.Name == "" {
@@ -245,7 +246,21 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 		default:
 			checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
 			checks = append(checks, kubeVirtAPIReadyCheck(name, path, deps))
+			usable[name] = path
 		}
+	}
+	// Per provider (networkAttachments are provider-scoped, even when several
+	// providers share one host cluster), verify the referenced network resolves
+	// on the host cluster whose kubeconfig is usable.
+	for _, p := range state.InfraProviders {
+		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil {
+			continue
+		}
+		path, ok := usable[p.Spec.KubeVirt.HostClusterRef.Name]
+		if !ok {
+			continue
+		}
+		checks = append(checks, kubeVirtNetworkRefChecks(p, path, deps)...)
 	}
 	return checks
 }

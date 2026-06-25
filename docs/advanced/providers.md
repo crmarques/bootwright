@@ -354,7 +354,7 @@ kubevirt:
 
 Exactly one of `hostClusterRef` or `kubeconfigRef` is required. The namespace
 is required and the storage class is optional. KubeVirt machines must bind
-their selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.nadRef`,
+their selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.networkRef`,
 and the full apply graph waits for the host cluster add-on that advertises
 `provides: [kubevirt]` before creating child VMs. Focused applies must either
 name both parent and child in `--clusters`, or run after the parent install
@@ -381,26 +381,37 @@ spec:
 | --- | --- | --- | --- |
 | libvirt | `libvirt` | `bridge` | Required; host bridge name. |
 | vSphere | `vsphere` | `portgroup` | Required; vCenter portgroup. |
-| KubeVirt | `kubevirt` | `nadRef` | Object-form `{name, namespace}` reference (see below). |
+| KubeVirt | `kubevirt` | `networkRef` | GVK-typed object-form reference (see below). |
 | bare metal | `baremetal` | `vlan` | Optional integer `0..4094`. |
 
-For KubeVirt, the attachment names a NetworkAttachmentDefinition on the host
-cluster:
+For KubeVirt, the attachment references a network object on the host cluster by
+GVK + identity. It is UDN/CUDN-first: `kind`/`apiGroup` default to
+`ClusterUserDefinedNetwork` / `k8s.ovn.org`, the OCP 4.21-preferred secondary
+network for OpenShift Virtualization. `UserDefinedNetwork` and
+`NetworkAttachmentDefinition` (legacy/foreign) are also accepted.
 
 ```yaml
 spec:
   networkAttachments:
     - name: child-machine-net
       kubevirt:
-        nadRef:
+        networkRef:
+          apiGroup: k8s.ovn.org              # optional; defaults with kind
+          kind: ClusterUserDefinedNetwork    # default; may be omitted
           name: child-machine-net
-          namespace: bootwright-child-ocp
+          namespace: bootwright-child-ocp    # defaults to spec.kubevirt.namespace
 ```
 
-`nadRef` is the API's sole object-form reference: the
-NetworkAttachmentDefinition lives on the host cluster, outside the loaded
-state, so it is identified by the external two-part `{name, namespace}`
-identity. Every other reference in the API is a plain name string.
+`networkRef` is the API's sole object-form reference: the network object lives
+on the host cluster, outside the loaded state, so it is identified by an
+external GVK + `{name, namespace}` identity. Every other reference in the API is
+a plain name string. Bootwright *references* the object; it does not render or
+own it (author the CUDN/UDN/NAD and any OVS bridge-mapping
+`NodeNetworkConfigurationPolicy` out of band, e.g. as a `manifestSet` add-on —
+see the `baremetal-redfish-multidc-virtualized-odf-ceph` example). In every
+case the VM attaches via `multus.networkName: <namespace>/<name>`, because a
+(C)UDN's OVN-derived NAD shares the object's name. See
+[Networking](networking.md) for the localnet topology and the static-IP rule.
 
 ## Machine profiles
 

@@ -357,8 +357,8 @@ type Metadata struct {
 // reference rejects the {name: ...} object form with one shared error. Two
 // deliberate exceptions: Environment spec.containerClusters and
 // spec.storageClusters are fleet selection lists, not references, so they
-// stay plain strings without the Ref suffix; and kubevirt nadRef is the sole
-// object-form reference (KubeVirtNADReference, an external two-part
+// stay plain strings without the Ref suffix; and kubevirt networkRef is the
+// sole object-form reference (KubeVirtNetworkRef, an external GVK + two-part
 // identity).
 type LocalObjectReference struct {
 	Name string `yaml:"name" json:"name"`

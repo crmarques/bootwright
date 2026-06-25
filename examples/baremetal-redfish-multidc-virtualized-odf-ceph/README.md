@@ -7,7 +7,9 @@ This reference example shows the full canonical layout with:
 - one managed stretched Ceph cluster spanning two data sites plus a tiebreaker;
 - OpenShift Data Foundation bound to all four container clusters for block, file, and object storage;
 - OpenShift Virtualization bound only to the two parent clusters;
-- child cluster namespace and NAD manifests delivered as a cluster add-on.
+- child cluster namespace, a `ClusterUserDefinedNetwork` (localnet), and the
+  matching `NodeNetworkConfigurationPolicy` delivered as a cluster add-on; the
+  KubeVirt provider references the CUDN by `networkRef`.
 
 Like the smaller examples, the YAML is lean and relies on documented defaults; references such as `attachmentRef` are authored only where validation requires an explicit choice (the bare-metal provider declares one attachment per data center).
 

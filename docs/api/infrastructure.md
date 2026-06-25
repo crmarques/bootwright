@@ -188,12 +188,16 @@ must match the provider's `spec.type`.
 | `libvirt` | `bridge` | Yes | — | Host bridge name. |
 | `baremetal` | `vlan` | No | — | VLAN id; must be `0..4094`. |
 | `vsphere` | `portgroup` | Yes | — | Portgroup name. |
-| `kubevirt` | `nadRef.name` | Yes | — | NetworkAttachmentDefinition name on the host cluster. |
-| `kubevirt` | `nadRef.namespace` | Yes | — | NetworkAttachmentDefinition namespace; must be a DNS label. |
+| `kubevirt` | `networkRef.apiGroup` | No | `k8s.ovn.org` (with kind) | API group of the network object; pairs with `kind`. |
+| `kubevirt` | `networkRef.kind` | No | `ClusterUserDefinedNetwork` | `ClusterUserDefinedNetwork`, `UserDefinedNetwork`, `NetworkAttachmentDefinition`, or any kind. |
+| `kubevirt` | `networkRef.name` | Yes | — | Network object name on the host cluster. |
+| `kubevirt` | `networkRef.namespace` | No | `spec.kubevirt.namespace` | Selected VM namespace (CUDN) / object namespace (UDN, NAD); must be a DNS label. |
 
-KubeVirt `nadRef` is the API's sole object-form reference because the NAD lives
-on the host cluster, outside the loaded desired state. See
-[References](index.md#references).
+KubeVirt `networkRef` is the API's sole object-form reference because the
+network object lives on the host cluster, outside the loaded desired state. It
+is UDN/CUDN-first and GVK-typed (mirroring the Kubernetes `TypedObjectReference`
+idiom) so it references any network kind without Bootwright encoding that kind's
+schema. See [References](index.md#references).
 
 ## InfraComponent
 

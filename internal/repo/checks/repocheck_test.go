@@ -96,7 +96,6 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"providerRefs",
 		"HostPool",
 		"`Network`",
-		"networkRef",
 		"infrastructureRef",
 		"clusterInstallMode",
 		"bootInterface",

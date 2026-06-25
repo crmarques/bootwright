@@ -133,6 +133,17 @@ func normalizeProvider(p *v1alpha1.InfraProvider) {
 	if p.Spec.Type == v1alpha1.ProvisionerLibvirt && p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil {
 		normalizeBMCEmulationDefaults(p.Spec.Libvirt.BMCEmulationDefaults)
 	}
+	if p.Spec.Type == v1alpha1.ProvisionerKubeVirt && p.Spec.KubeVirt != nil {
+		// A kubevirt networkRef.namespace defaults to the provider's VM
+		// namespace: the OVN-derived NAD (for a CUDN) lands in the selected VM
+		// namespace, and a referenced NAD/UDN is co-located with the VMs.
+		for i := range p.Spec.NetworkAttachments {
+			ref := p.Spec.NetworkAttachments[i].KubeVirt
+			if ref != nil && ref.NetworkRef.Namespace == "" {
+				ref.NetworkRef.Namespace = p.Spec.KubeVirt.Namespace
+			}
+		}
+	}
 }
 
 func normalizeInfraComponent(c *v1alpha1.InfraComponent) {

@@ -47,7 +47,9 @@ spec:
   networkAttachments:
     - name: {{.NetworkID}}
       kubevirt:
-        nadRef:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
           name: ocp-install
           namespace: bootwright-vms
 `,

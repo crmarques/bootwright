@@ -2759,7 +2759,6 @@ func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/virtualmachine.yaml.j2",
 		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/datavolume-root.yaml.j2",
-		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/networkattachmentdefinition.yaml.j2",
 	} {
 		body := readRepoFile(t, path)
 		if !strings.Contains(body, "bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}") {

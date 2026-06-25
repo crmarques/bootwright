@@ -156,6 +156,33 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	}
 }
 
+func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
+	ref := v1alpha1.KubeVirtNetworkRef{
+		Kind:      v1alpha1.KubeVirtNetworkKindCUDN,
+		Name:      "child-net",
+		Namespace: "bootwright-child-ocp",
+	}
+	present := kubeVirtNetworkRefCheck("child-net", ref, "/kc", Deps{
+		CommandOutput: func(_ string, _ ...string) ([]byte, error) {
+			return []byte("networkattachmentdefinition.k8s.cni.cncf.io/child-net\n"), nil
+		},
+	})
+	if present.Status != StatusOK {
+		t.Fatalf("present NAD rejected: %+v", present)
+	}
+	missing := kubeVirtNetworkRefCheck("child-net", ref, "/kc", Deps{
+		CommandOutput: func(_ string, _ ...string) ([]byte, error) {
+			return []byte("Error from server (NotFound): networkattachmentdefinitions.k8s.cni.cncf.io \"child-net\" not found\n"), errors.New("not found")
+		},
+	})
+	if missing.Status != StatusFail {
+		t.Fatalf("missing NAD accepted: %+v", missing)
+	}
+	if !strings.Contains(missing.Remediation, "ClusterUserDefinedNetwork") {
+		t.Fatalf("remediation should name the referenced kind: %q", missing.Remediation)
+	}
+}
+
 func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	deps := Deps{

@@ -314,13 +314,20 @@ func validateProviderNetworkAttachment(provider v1alpha1.InfraProvider, attachme
 	}
 	if attachment.KubeVirt != nil {
 		set++
-		if attachment.KubeVirt.NADRef.Name == "" {
-			errs = append(errs, prefix+".kubevirt.nadRef is required")
+		ref := attachment.KubeVirt.NetworkRef
+		if ref.Name == "" {
+			errs = append(errs, prefix+".kubevirt.networkRef.name is required")
 		}
-		if attachment.KubeVirt.NADRef.Namespace == "" {
-			errs = append(errs, prefix+".kubevirt.nadRef.namespace is required")
-		} else if !IsDNSLabel(attachment.KubeVirt.NADRef.Namespace) {
-			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRef.namespace %q is not a DNS label", prefix, attachment.KubeVirt.NADRef.Namespace))
+		if ref.Namespace == "" {
+			errs = append(errs, prefix+".kubevirt.networkRef.namespace is required")
+		} else if !IsDNSLabel(ref.Namespace) {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.networkRef.namespace %q is not a DNS label", prefix, ref.Namespace))
+		}
+		// Bootwright references the network object by GVK; it does not own its
+		// schema. It only requires that the api group is resolvable: known kinds
+		// default their group, an unknown kind must spell it out.
+		if ref.EffectiveAPIGroup() == "" {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.networkRef.apiGroup is required for kind %q", prefix, ref.EffectiveKind()))
 		}
 	}
 	if attachment.BareMetal != nil {

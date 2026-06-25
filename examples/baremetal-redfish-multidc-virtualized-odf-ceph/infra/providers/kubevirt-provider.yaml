@@ -9,7 +9,9 @@ spec:
 
   - name: dc1-child-net
     kubevirt:
-      nadRef:
+      networkRef:
+        apiGroup: k8s.ovn.org
+        kind: ClusterUserDefinedNetwork
         name: dc1-child-net
         namespace: bootwright-dc1-child-ocp
 
@@ -38,7 +40,9 @@ spec:
 
   - name: dc2-child-net
     kubevirt:
-      nadRef:
+      networkRef:
+        apiGroup: k8s.ovn.org
+        kind: ClusterUserDefinedNetwork
         name: dc2-child-net
         namespace: bootwright-dc2-child-ocp
 

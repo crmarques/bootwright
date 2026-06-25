@@ -1,0 +1,32 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: dc2-child-localnet
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+  desiredState:
+    interfaces:
+      # VLAN 152 carries the dc2 child network on the single metal uplink; it is
+      # peeled off as a subinterface and bridged into OVS for the localnet. Adapt
+      # base-iface / VLAN id to the real DC fabric (a dedicated NIC or bond works too).
+      - name: primary.152
+        type: vlan
+        state: up
+        vlan:
+          base-iface: primary
+          id: 152
+      - name: br-dc2-child
+        type: ovs-bridge
+        state: up
+        bridge:
+          options:
+            stp: false
+          port:
+            - name: primary.152
+    ovn:
+      bridge-mappings:
+        # localnet MUST equal the CUDN spec.network.localnet.physicalNetworkName.
+        - localnet: dc2-child
+          bridge: br-dc2-child
+          state: present

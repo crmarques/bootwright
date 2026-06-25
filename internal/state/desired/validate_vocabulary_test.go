@@ -16,7 +16,7 @@ func TestDiagnosticsSpeakAuthoredFieldVocabulary(t *testing.T) {
 		"spec.nodes":        "ContainerCluster hosts live under spec.hosts",
 		"topology.nodes":    "StorageCluster hosts live under spec.ceph.topology.hosts",
 		"tiebreaker.node":   "the stretch tiebreaker field is tiebreaker.host",
-		"nadRefspace":       "the kubevirt NAD namespace is nadRef.namespace",
+		"networkRefspace":   "the kubevirt network namespace is networkRef.namespace",
 		".ip is required":   "bind and resolver entries spell the field address",
 		".ip %q":            "bind and resolver entries spell the field address",
 		".ip is only valid": "bind and resolver entries spell the field address",

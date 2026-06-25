@@ -57,7 +57,7 @@ func networkAttachmentVars(attachment v1alpha1.NetworkAttachmentCapability) map[
 		out["vsphere"] = map[string]any{"portgroup": attachment.VSphere.Portgroup}
 	case attachment.KubeVirt != nil:
 		out["kind"] = v1alpha1.ProvisionerKubeVirt
-		out["kubevirt"] = map[string]any{"nad": kubeVirtNADName(attachment.KubeVirt.NADRef)}
+		out["kubevirt"] = map[string]any{"nad": networkRefMultusName(attachment.KubeVirt.NetworkRef)}
 	case attachment.BareMetal != nil:
 		out["kind"] = v1alpha1.ProvisionerBareMetal
 		baremetal := map[string]any{}
@@ -69,9 +69,12 @@ func networkAttachmentVars(attachment v1alpha1.NetworkAttachmentCapability) map[
 	return out
 }
 
-func kubeVirtNADName(ref v1alpha1.KubeVirtNADReference) string {
-	if ref.Namespace == "" {
-		return ref.Name
-	}
+// networkRefMultusName resolves a kubevirt networkRef to the multus
+// networkName the VM consumes. For every kind it is <namespace>/<name>: a
+// referenced NAD by its own identity, and a (C)UDN by its OVN-derived NAD,
+// which shares the object's name in the selected namespace. Namespace is
+// defaulted to the provider VM namespace in normalize and required by
+// validation, so it is always set here.
+func networkRefMultusName(ref v1alpha1.KubeVirtNetworkRef) string {
 	return ref.Namespace + "/" + ref.Name
 }

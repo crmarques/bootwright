@@ -130,10 +130,10 @@ carve-outs:
 - `Environment.spec.containerClusters` and `Environment.spec.storageClusters`
   are fleet selection lists, not references, so they stay plain strings *without*
   a `Ref` suffix.
-- `kubevirt.nadRef` is the sole sanctioned object-form reference: a
-  NetworkAttachmentDefinition lives on the host cluster outside the loaded
-  state, so it is identified by an external two-part `{name, namespace}`
-  identity. See [Infrastructure](infrastructure.md#infraprovider).
+- `kubevirt.networkRef` is the sole sanctioned object-form reference: a network
+  object (UDN/CUDN/NAD) lives on the host cluster outside the loaded state, so it
+  is identified by an external GVK + `{name, namespace}` identity. See
+  [Infrastructure](infrastructure.md#infraprovider).
 
 ### Secrets
 

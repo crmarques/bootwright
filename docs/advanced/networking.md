@@ -167,6 +167,44 @@ spec:
 Bind that attachment from each installing machine via
 `spec.network.config.attachmentRef`, as shown in the machine above.
 
+### KubeVirt secondary networks (`networkRef`)
+
+A KubeVirt attachment references an existing network object on the host cluster
+by GVK + identity. It is UDN/CUDN-first — `kind`/`apiGroup` default to
+`ClusterUserDefinedNetwork` / `k8s.ovn.org`, the OCP 4.21-preferred secondary
+network for OpenShift Virtualization (a `localnet` `ClusterUserDefinedNetwork`
+bridges VMs onto a physical/VLAN underlay). `UserDefinedNetwork` and
+`NetworkAttachmentDefinition` are also accepted for legacy or foreign networks.
+
+```yaml
+spec:
+  type: kubevirt
+  networkAttachments:
+    - name: child-machine-net
+      kubevirt:
+        networkRef:
+          kind: ClusterUserDefinedNetwork   # default; apiGroup defaults to k8s.ovn.org
+          name: child-machine-net
+          namespace: bootwright-child-ocp
+```
+
+Bootwright **references** the object; it does not render or own it. Author the
+CUDN, the OVS bridge-mapping `NodeNetworkConfigurationPolicy` (it carries the
+child VLAN into OVS on the host's worker nodes — this requires the
+Kubernetes-NMState operator and OVN-Kubernetes on the host cluster), and the
+selected namespace's CUDN selector label out of band — for example as a
+`manifestSet` cluster add-on, as the
+`baremetal-redfish-multidc-virtualized-odf-ceph` example does. A `preflight`
+verifies the resulting NetworkAttachmentDefinition exists on the host cluster
+before child VMs boot.
+
+Keep the child node IPs **static** (NMState/`agent-config`, as for any cluster):
+the `localnet` CUDN must leave IPAM disabled (no `subnets`/`ipam`), or OVN would
+assign IPs that collide with the rendered static ones. Keep the CUDN `mtu`, the
+NNCP OVS bridge MTU, and the child `NetworkConfig` MTU coherent (localnet
+defaults to 1500). Switching a *running* child cluster between networks re-plugs
+the VM NIC and drops the node — treat `networkRef` as a new-cluster choice.
+
 ## Endpoints
 
 Cluster endpoints live in `ContainerCluster.spec.install.endpoints` under the

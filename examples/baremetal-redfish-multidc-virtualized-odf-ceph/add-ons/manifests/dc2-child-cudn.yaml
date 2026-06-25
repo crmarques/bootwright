@@ -1,0 +1,17 @@
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: dc2-child-net
+spec:
+  namespaceSelector:
+    matchLabels:
+      bootwright.io/cudn: dc2-child-net
+  network:
+    topology: Localnet
+    localnet:
+      role: Secondary
+      physicalNetworkName: dc2-child
+      mtu: 1500
+      # No subnets / no ipam: child node IPs are static, assigned by bootwright
+      # through NMState/agent-config (see infra/networkconfigs/dc2-child-net.yaml).
+      # OVN carries L2 only; enabling IPAM here would override those static IPs.

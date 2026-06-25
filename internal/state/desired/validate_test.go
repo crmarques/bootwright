@@ -2847,16 +2847,27 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 		{
 			name: "network-attachment-kind-mismatch",
 			mutate: func(files map[string]string) {
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n", "      libvirt:\n        bridge: vbr-child\n", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "      kubevirt:\n        networkRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n", "      libvirt:\n        bridge: vbr-child\n", 1)
 			},
 			wantSubstring: `spec.network.config.attachmentRef "child-machine-net" binds to InfraProvider/child-kubevirt-provider networkAttachment of kind "libvirt", but provider type is "kubevirt"`,
 		},
 		{
-			name: "network-attachment-nad-namespace-required",
+			name: "network-attachment-unknown-kind-requires-apigroup",
 			mutate: func(files map[string]string) {
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "          namespace: bootwright-child-ocp\n", "", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"],
+					"      kubevirt:\n        networkRef:\n          name: child-ocp-net\n",
+					"      kubevirt:\n        networkRef:\n          kind: FancyNet\n          name: child-ocp-net\n", 1)
 			},
-			wantSubstring: `networkAttachments[child-machine-net].kubevirt.nadRef.namespace is required`,
+			wantSubstring: `networkAttachments[child-machine-net].kubevirt.networkRef.apiGroup is required for kind "FancyNet"`,
+		},
+		{
+			name: "network-attachment-foreign-nad-kind-ok",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"],
+					"      kubevirt:\n        networkRef:\n          name: child-ocp-net\n",
+					"      kubevirt:\n        networkRef:\n          kind: NetworkAttachmentDefinition\n          name: child-ocp-net\n", 1)
+			},
+			wantSubstring: "",
 		},
 		{
 			name: "missing-kubevirt-capability",
@@ -3228,7 +3239,7 @@ spec:
   networkAttachments:
     - name: child-machine-net
       kubevirt:
-        nadRef:
+        networkRef:
           name: child-ocp-net
           namespace: bootwright-child-ocp
 ---
@@ -3280,8 +3291,8 @@ func addKubeVirtKubeconfigSecret(environmentYAML string) string {
 
 func addSecondKubeVirtNetworkAttachment(childYAML string) string {
 	return strings.Replace(childYAML,
-		"    - name: child-machine-net\n      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n",
-		"    - name: child-machine-net\n      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n    - name: child-storage-net\n      kubevirt:\n        nadRef:\n          name: child-storage-net\n          namespace: bootwright-child-ocp\n",
+		"    - name: child-machine-net\n      kubevirt:\n        networkRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n",
+		"    - name: child-machine-net\n      kubevirt:\n        networkRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n    - name: child-storage-net\n      kubevirt:\n        networkRef:\n          name: child-storage-net\n          namespace: bootwright-child-ocp\n",
 		1)
 }
 
@@ -3315,7 +3326,7 @@ spec:
   networkAttachments:
     - name: net-a
       kubevirt:
-        nadRef:
+        networkRef:
           name: net-a
           namespace: ns-a
 `,
@@ -3335,7 +3346,7 @@ spec:
   networkAttachments:
     - name: net-b
       kubevirt:
-        nadRef:
+        networkRef:
           name: net-b
           namespace: ns-b
 `,

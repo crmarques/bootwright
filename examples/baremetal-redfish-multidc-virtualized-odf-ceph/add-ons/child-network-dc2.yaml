@@ -8,11 +8,17 @@ spec:
   manifestSet:
     manifests:
       - path: manifests/dc2-child-namespace.yaml
-      - path: manifests/dc2-child-nad.yaml
+      - path: manifests/dc2-child-nncp.yaml
+      - path: manifests/dc2-child-cudn.yaml
 
   readiness:
     timeout: 5m
     checks:
+      - type: resourceExists
+        apiVersion: k8s.ovn.org/v1
+        kind: ClusterUserDefinedNetwork
+        name: dc2-child-net
+      # The OVN-derived NetworkAttachmentDefinition is what the child VMs consume.
       - type: resourceExists
         apiVersion: k8s.cni.cncf.io/v1
         kind: NetworkAttachmentDefinition

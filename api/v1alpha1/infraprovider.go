@@ -96,18 +96,8 @@ type NetworkAttachmentVSphere struct {
 	Portgroup string `yaml:"portgroup" json:"portgroup"`
 }
 
-type NetworkAttachmentKubeVirt struct {
-	NADRef KubeVirtNADReference `yaml:"nadRef" json:"nadRef"`
-}
-
-// KubeVirtNADReference is the sole sanctioned object-form reference in the
-// API: a NetworkAttachmentDefinition lives on the host cluster, outside the
-// loaded state, so it is identified by the external two-part {name,
-// namespace} identity instead of the plain-name-string reference grammar.
-type KubeVirtNADReference struct {
-	Name      string `yaml:"name" json:"name"`
-	Namespace string `yaml:"namespace" json:"namespace"`
-}
+// NetworkAttachmentKubeVirt and its KubeVirtNetworkRef live in
+// networkattachment_kubevirt.go.
 
 type NetworkAttachmentBareMetal struct {
 	VLAN int `yaml:"vlan,omitempty" json:"vlan,omitempty"`
