@@ -208,6 +208,14 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		return true
+	case "cluster":
+		// Bare `cluster` is a pure dispatcher that only prints help, so it must
+		// not escalate. Its subcommands (list/access/kubeconfig) read the
+		// root-owned context cluster artifacts and stay rootful.
+		if len(args) == 1 {
+			return false
+		}
+		return true
 	default:
 		return true
 	}

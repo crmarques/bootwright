@@ -2254,6 +2254,12 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"media"}, want: false},
 		{args: []string{"media", "list"}, want: true},
 		{args: []string{"media", "add", "rhel.iso", "--from-file", "/home/user/rhel.iso"}, want: true},
+		// Bare `cluster` only prints help, so it must not escalate; its
+		// subcommands read root-owned cluster artifacts and stay rootful.
+		{args: []string{"cluster"}, want: false},
+		{args: []string{"cluster", "list"}, want: true},
+		{args: []string{"cluster", "access"}, want: true},
+		{args: []string{"cluster", "kubeconfig", "--cluster", "managed-01"}, want: true},
 		{args: []string{"example", "init", "lab", "--output", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
