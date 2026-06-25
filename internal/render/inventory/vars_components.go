@@ -363,3 +363,18 @@ func machineHostRef(state v1alpha1.State, m v1alpha1.InstallMachine) string {
 	}
 	return ""
 }
+
+// managedOSTaskHost resolves the host that drives a storage cluster machine's
+// managed-OS install. Libvirt machines instantiate on their provider host;
+// every other shape — KubeVirt and vSphere through an API, and bare-metal over
+// the BMC (Redfish virtual media) — is driven from the controller, so it
+// resolves to localhost. machineHostRef already returns the provider host for
+// libvirt and localhost for the API-native substrates; only bare-metal (no
+// substrate profile) returns "", which would otherwise drop the node from its
+// managed-OS inventory group and silently skip the machines-phase install task.
+func managedOSTaskHost(state v1alpha1.State, m v1alpha1.InstallMachine) string {
+	if host := machineHostRef(state, m); host != "" {
+		return host
+	}
+	return "localhost"
+}

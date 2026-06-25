@@ -31,6 +31,12 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) 
 				continue
 			}
 			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, paths.SecretsDir)
+			// The managed-OS play selects this component by matching its
+			// machineRef against the inventory host's provider_host_name. Pin
+			// both to the same driver host so bare-metal nodes (which carry no
+			// substrate provider host) resolve to the controller (localhost)
+			// instead of leaving machineRef undefined and failing the match.
+			component["machineRef"] = managedOSTaskHost(state, m)
 			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, paths); len(osInstall) > 0 {
 				component["osInstall"] = osInstall
 				boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name))

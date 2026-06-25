@@ -271,7 +271,7 @@ func machineTaskHostSets(state v1alpha1.State) (map[string]bool, map[string]map[
 		}
 		for _, machine := range ci.Machines {
 			rawMachine, ok := stateview.Machine(state, machine.Name)
-			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) || machineHostRef(state, machine) == "" {
+			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) {
 				continue
 			}
 			add(ManagedOSGroupName(cluster.Metadata.Name), ManagedOSHostName(cluster.Metadata.Name, machine.Name))
@@ -282,8 +282,7 @@ func machineTaskHostSets(state v1alpha1.State) (map[string]bool, map[string]map[
 
 func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	out := map[string]any{}
-	add := func(hostName, clusterName, machineName string, machine v1alpha1.InstallMachine) {
-		providerHost := machineHostRef(state, machine)
+	add := func(hostName, clusterName, machineName, providerHost string) {
 		if providerHost == "" {
 			return
 		}
@@ -294,8 +293,9 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 			}
 			entry = machineInventoryEntry(providerMachine, env, paths, localPolicy)
 		} else if providerHost == "localhost" {
-			// API-native substrates (kubevirt, vsphere) run machine tasks
-			// on the controller; no Machine object backs the localhost ref.
+			// Controller-driven substrates run machine tasks on the controller
+			// with no Machine object backing the ref: the API-native KubeVirt
+			// and vSphere providers, and bare-metal over the BMC (Redfish).
 			entry = localmachineInventoryEntry()
 		} else {
 			return
@@ -311,7 +311,7 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 			continue
 		}
 		for _, machine := range ci.Machines {
-			add(MachineInfraHostName(cluster.Metadata.Name, machine.Name), cluster.Metadata.Name, machine.Name, machine)
+			add(MachineInfraHostName(cluster.Metadata.Name, machine.Name), cluster.Metadata.Name, machine.Name, machineHostRef(state, machine))
 		}
 	}
 	for _, cluster := range ManagedStorageClusters(state) {
@@ -324,7 +324,7 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) {
 				continue
 			}
-			add(ManagedOSHostName(cluster.Metadata.Name, machine.Name), cluster.Metadata.Name, machine.Name, machine)
+			add(ManagedOSHostName(cluster.Metadata.Name, machine.Name), cluster.Metadata.Name, machine.Name, managedOSTaskHost(state, machine))
 		}
 	}
 	return out
