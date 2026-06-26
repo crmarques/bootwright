@@ -46,6 +46,9 @@
     bootwright_ceph_registry_trust_path: "{{ bootwright_selected_storage_cluster.provider.registry.trustBundlePath | default('') }}"
     bootwright_ceph_rhsm_organization_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.organizationPath | default('') }}"
     bootwright_ceph_rhsm_activation_key_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.activationKeyPath | default('') }}"
+    bootwright_ceph_rhsm_satellite_hostname: "{{ bootwright_selected_storage_cluster.provider.rhsm.satellite.hostname | default('') }}"
+    bootwright_ceph_rhsm_satellite_content_base_url: "{{ bootwright_selected_storage_cluster.provider.rhsm.satellite.contentBaseURL | default('') }}"
+    bootwright_ceph_rhsm_satellite_ca_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.satellite.caPath | default('') }}"
 
 - name: Load cephadm registry credentials
   ansible.builtin.include_role:

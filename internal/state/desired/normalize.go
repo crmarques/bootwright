@@ -74,6 +74,24 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 		}
 		env.Spec.Secrets[name] = secret
 	}
+	for i := range env.Spec.Entitlements {
+		normalizeEntitlementSatellite(env.Spec.Entitlements[i].RHSM)
+	}
+}
+
+// normalizeEntitlementSatellite trims the Satellite hostname and, when the
+// operator left contentBaseURL unset, derives the canonical Satellite 6 content
+// path (https://<hostname>/pulp/content) so normalized state shows the effective
+// value the renderer will use.
+func normalizeEntitlementSatellite(rhsm *v1alpha1.EnvironmentEntitlementRHSM) {
+	if rhsm == nil || rhsm.Satellite == nil {
+		return
+	}
+	sat := rhsm.Satellite
+	sat.Hostname = strings.TrimSpace(sat.Hostname)
+	if sat.ContentBaseURL == "" && sat.Hostname != "" {
+		sat.ContentBaseURL = "https://" + sat.Hostname + "/pulp/content"
+	}
 }
 
 func normalizeMachine(m *v1alpha1.Machine) {

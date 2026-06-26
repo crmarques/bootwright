@@ -7,6 +7,39 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+func TestNormalizeDerivesSatelliteContentBaseURL(t *testing.T) {
+	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
+		Name:     "rhel",
+		Provider: v1alpha1.EntitlementProviderRedHat,
+		Product:  v1alpha1.EntitlementProductRHEL,
+		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+			OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
+			ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+			Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
+				Hostname: "  satellite.corp.example.com  ",
+			},
+		},
+	}}}}
+	normalizeEnvironment(env)
+	sat := env.Spec.Entitlements[0].RHSM.Satellite
+	if sat.Hostname != "satellite.corp.example.com" {
+		t.Fatalf("hostname not trimmed: %q", sat.Hostname)
+	}
+	if sat.ContentBaseURL != "https://satellite.corp.example.com/pulp/content" {
+		t.Fatalf("contentBaseURL = %q, want derived default", sat.ContentBaseURL)
+	}
+
+	// An explicit contentBaseURL is preserved.
+	env.Spec.Entitlements[0].RHSM.Satellite = &v1alpha1.EnvironmentEntitlementRHSMSatellite{
+		Hostname:       "capsule.corp.example.com",
+		ContentBaseURL: "https://capsule.corp.example.com/custom/content",
+	}
+	normalizeEnvironment(env)
+	if got := env.Spec.Entitlements[0].RHSM.Satellite.ContentBaseURL; got != "https://capsule.corp.example.com/custom/content" {
+		t.Fatalf("explicit contentBaseURL overwritten: %q", got)
+	}
+}
+
 func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{

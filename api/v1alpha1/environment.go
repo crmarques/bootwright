@@ -113,9 +113,36 @@ type EnvironmentEntitlement struct {
 }
 
 type EnvironmentEntitlementRHSM struct {
-	OrganizationRef   SecretRef `yaml:"organizationRef,omitempty" json:"organizationRef,omitempty"`
-	ActivationKeyRef  SecretRef `yaml:"activationKeyRef,omitempty" json:"activationKeyRef,omitempty"`
-	ConnectToInsights bool      `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
+	OrganizationRef   SecretRef                            `yaml:"organizationRef,omitempty" json:"organizationRef,omitempty"`
+	ActivationKeyRef  SecretRef                            `yaml:"activationKeyRef,omitempty" json:"activationKeyRef,omitempty"`
+	ConnectToInsights bool                                 `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
+	Satellite         *EnvironmentEntitlementRHSMSatellite `yaml:"satellite,omitempty" json:"satellite,omitempty"`
+}
+
+// EnvironmentEntitlementRHSMSatellite redirects this entitlement's RHSM
+// registration from the public Red Hat CDN (subscription.redhat.io) to a
+// corporate Red Hat Satellite or Capsule. When set, both the install-time
+// Anaconda kickstart (rhsm --server-hostname / --rhsm-baseurl) and the day-2
+// cephadm subscription-manager register target this server; the org and
+// activation key on the enclosing rhsm arm are interpreted against it. The CA
+// bundle named by trustBundleRef is trusted (anchors + update-ca-trust) before
+// registration so the Satellite's certificate validates. Applies to
+// RHEL/Anaconda installs; the rhsm kickstart command is RHEL-only.
+type EnvironmentEntitlementRHSMSatellite struct {
+	// Hostname is the Satellite or Capsule FQDN, e.g.
+	// satellite.corp.example.com. It is a bare host (no scheme or path); the
+	// renderer derives the rhsm server-hostname and, when ContentBaseURL is
+	// unset, the default content baseurl from it.
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	// TrustBundleRef names a spec.secrets PEM CA bundle for the Satellite's
+	// certificate chain, mirroring registry.trustBundleRef. Required in
+	// practice for the common private/self-signed Satellite CA; omit only when
+	// the Satellite certificate already chains to an already-trusted root.
+	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
+	// ContentBaseURL overrides the subscription content host (rhsm baseurl).
+	// Defaults during normalization to https://<hostname>/pulp/content. Set it
+	// for non-standard content paths or a Capsule.
+	ContentBaseURL string `yaml:"contentBaseURL,omitempty" json:"contentBaseURL,omitempty"`
 }
 
 type EnvironmentEntitlementRegistry struct {

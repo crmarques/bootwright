@@ -357,11 +357,22 @@ func Vars(provider Provider) map[string]any {
 		out["runtimeOS"] = os
 	}
 	if provider.Entitlement.RHSM.OrganizationPath != "" || provider.Entitlement.RHSM.ActivationKeyPath != "" {
-		out["rhsm"] = map[string]any{
+		rhsm := map[string]any{
 			"organizationPath":  provider.Entitlement.RHSM.OrganizationPath,
 			"activationKeyPath": provider.Entitlement.RHSM.ActivationKeyPath,
 			"connectToInsights": provider.Entitlement.RHSM.ConnectToInsights,
 		}
+		if satellite := provider.Entitlement.RHSM.Satellite; satellite.Hostname != "" {
+			sat := map[string]any{"hostname": satellite.Hostname}
+			if satellite.ContentBaseURL != "" {
+				sat["contentBaseURL"] = satellite.ContentBaseURL
+			}
+			if satellite.TrustBundlePath != "" {
+				sat["caPath"] = satellite.TrustBundlePath
+			}
+			rhsm["satellite"] = sat
+		}
+		out["rhsm"] = rhsm
 	}
 	if provider.Entitlement.Registry.URL != "" || provider.Entitlement.Registry.CredentialsPath != "" || provider.Entitlement.Registry.TrustBundlePath != "" {
 		registry := map[string]any{}

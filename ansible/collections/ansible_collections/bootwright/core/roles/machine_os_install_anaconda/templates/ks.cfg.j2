@@ -18,8 +18,11 @@ reboot
 {% set _proxy_scheme, _proxy_hostport = proxy.url.split('://', 1) %}
 {% set proxy_url = _proxy_scheme ~ '://' ~ (_proxy_creds[0] | urlencode) ~ ':' ~ (_proxy_creds[1] | urlencode) ~ '@' ~ _proxy_hostport %}
 {% endif %}
+{% set satellite = rhsm.satellite | default({}) %}
+{% set sat_enabled = (rhsm.enabled | default(false)) and (satellite.hostname | default('') | length > 0) %}
+{% set sat_ca = (satellite.caPath | default('') | length > 0) %}
 {% if rhsm.enabled | default(false) %}
-rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}{% if rhsm.connectToInsights | default(false) %} --connect-to-insights{% endif %}
+rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{% if sat_enabled %} --server-hostname={{ satellite.hostname }}{% if satellite.contentBaseURL | default('') | length > 0 %} --rhsm-baseurl={{ satellite.contentBaseURL }}{% endif %}{% endif %}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}{% if rhsm.connectToInsights | default(false) %} --connect-to-insights{% endif %}
 {% elif installer.sourceURL | default('') | length > 0 %}
 url --url={{ installer.sourceURL }}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}
 {% else %}
@@ -84,6 +87,19 @@ user --name={{ ks.sshUser }} --groups=wheel --lock
 sshkey --username={{ ks.sshUser | default('root') }} "{{ ssh_key | trim }}"
 {% endif %}
 
+{% if sat_enabled and sat_ca %}
+# Trust the corporate Satellite CA inside the installer runtime before the rhsm
+# registration and HTTPS content fetch run. Anaconda runs every %pre script before
+# the install transaction, so this is in place when the rhsm command registers.
+%pre --erroronfail
+mkdir -p /etc/pki/ca-trust/source/anchors
+cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT_SATELLITE_CA'
+{{ lookup('ansible.builtin.file', satellite.caPath) | trim }}
+BOOTWRIGHT_SATELLITE_CA
+update-ca-trust extract
+%end
+
+{% endif %}
 {% set packages = ks.packages | default({}) %}
 %packages{% if packages.excludeDocs | default(false) %} --excludedocs{% endif %}{% if not (packages.installWeakDeps | default(true)) %} --exclude-weakdeps{% endif %}{% if packages.languages | default([]) | length > 0 %} --inst-langs={{ packages.languages | join(',') }}{% endif %}
 @^{{ packages.environment | default('minimal') }}-environment
@@ -93,6 +109,15 @@ sshkey --username={{ ks.sshUser | default('root') }} "{{ ssh_key | trim }}"
 %end
 
 %post --log=/root/bootwright-ks-post.log
+{% if sat_enabled and sat_ca %}
+# Trust the corporate Satellite CA on the installed system so first-boot and
+# day-2 subscription-manager / dnf calls validate the Satellite certificate.
+mkdir -p /etc/pki/ca-trust/source/anchors
+cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT_SATELLITE_CA'
+{{ lookup('ansible.builtin.file', satellite.caPath) | trim }}
+BOOTWRIGHT_SATELLITE_CA
+update-ca-trust extract
+{% endif %}
 {% if (ks.sshUser | default('root')) != 'root' %}
 echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/99-bootwright-wheel
 chmod 0440 /etc/sudoers.d/99-bootwright-wheel

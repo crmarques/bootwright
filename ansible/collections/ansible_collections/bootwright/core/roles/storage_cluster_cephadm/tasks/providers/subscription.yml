@@ -27,6 +27,38 @@
       set the Environment entitlement license.accept=true.
   when: bootwright_ceph_provider.requiresLicense | default(false) | bool
 
+# Corporate Satellite redirect: when the entitlement names a Satellite, bind this
+# node's subscription-manager to it before registering so `register` targets the
+# Satellite instead of the public Red Hat CDN. The katello-ca-consumer RPM (served
+# over plain HTTP from the Satellite's /pub bootstrap path) writes the Satellite CA
+# into /etc/rhsm/ca and points rhsm.conf at the server; the system trust anchor is
+# updated too for general dnf/HTTPS content access. Skipped entirely (and behavior
+# is unchanged) when no satellite is set.
+- name: Trust corporate Satellite CA on storage node
+  ansible.builtin.copy:
+    src: "{{ bootwright_ceph_rhsm_satellite_ca_path }}"
+    dest: "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_ceph_satellite_ca
+  when:
+    - bootwright_ceph_rhsm_satellite_hostname | length > 0
+    - bootwright_ceph_rhsm_satellite_ca_path | length > 0
+
+- name: Update storage node trust store for corporate Satellite
+  ansible.builtin.command:
+    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
+  changed_when: bootwright_ceph_satellite_ca.changed | default(false)
+  when: bootwright_ceph_satellite_ca.changed | default(false)
+
+- name: Bind storage node subscription-manager to corporate Satellite
+  ansible.builtin.dnf:
+    name: "http://{{ bootwright_ceph_rhsm_satellite_hostname }}/pub/katello-ca-consumer-latest.noarch.rpm"
+    state: present
+    disable_gpg_check: true
+  when: bootwright_ceph_rhsm_satellite_hostname | length > 0
+
 - name: Register storage node with RHSM
   ansible.builtin.command:
     argv:

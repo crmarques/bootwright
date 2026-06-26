@@ -227,6 +227,33 @@ func validateEnvironmentEntitlementRHSMRequired(owner string, rhsm *v1alpha1.Env
 	if rhsm.ActivationKeyRef.Name == "" {
 		errs = append(errs, owner+".activationKeyRef is required")
 	}
+	errs = append(errs, validateEnvironmentEntitlementSatellite(owner+".satellite", rhsm.Satellite)...)
+	return errs
+}
+
+// validateEnvironmentEntitlementSatellite checks an optional corporate Satellite
+// redirect on an rhsm arm: a bare hostname is required when the block is present,
+// and contentBaseURL (when set) must be an http(s) URL. The CA secret named by
+// trustBundleRef is enforced as a preflight secret requirement, mirroring
+// registry.trustBundleRef, not here.
+func validateEnvironmentEntitlementSatellite(owner string, sat *v1alpha1.EnvironmentEntitlementRHSMSatellite) []string {
+	if sat == nil {
+		return nil
+	}
+	var errs []string
+	switch {
+	case strings.TrimSpace(sat.Hostname) == "":
+		errs = append(errs, owner+".hostname is required when satellite is set")
+	case sat.Hostname != strings.TrimSpace(sat.Hostname):
+		errs = append(errs, owner+".hostname must not contain leading or trailing whitespace")
+	case strings.Contains(sat.Hostname, "://") || strings.ContainsAny(sat.Hostname, "/ \t\r\n"):
+		errs = append(errs, owner+".hostname must be a bare host (no scheme or path), not a URL")
+	}
+	if sat.ContentBaseURL != "" {
+		if err := validateHTTPURL(sat.ContentBaseURL); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.contentBaseURL %q is invalid: %v", owner, sat.ContentBaseURL, err))
+		}
+	}
 	return errs
 }
 

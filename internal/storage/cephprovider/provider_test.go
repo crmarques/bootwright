@@ -234,6 +234,41 @@ func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
 	if _, ok := vars["community"]; ok {
 		t.Fatalf("redhat provider must not project community vars: %#v", vars["community"])
 	}
+	if _, ok := rhsm["satellite"]; ok {
+		t.Fatalf("public-CDN rhsm must carry no satellite key: %#v", rhsm["satellite"])
+	}
+}
+
+func TestSelectRedHatProviderProjectsSatellite(t *testing.T) {
+	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
+		Name:     "rhcs",
+		Provider: v1alpha1.EntitlementProviderRedHat,
+		Product:  v1alpha1.EntitlementProductCeph,
+		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+			OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+			ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-key"},
+			Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
+				Hostname:       "satellite.corp.example.com",
+				ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
+				TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+			},
+		},
+		Registry: &v1alpha1.EnvironmentEntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"}},
+	}}}}
+	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution:   v1alpha1.StorageCephDistributionRedHat,
+		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+	}}}
+	rhsm := Vars(Select(cluster, env, "/context/secrets"))["rhsm"].(map[string]any)
+	satellite, ok := rhsm["satellite"].(map[string]any)
+	if !ok {
+		t.Fatalf("day-2 rhsm.satellite missing: %#v", rhsm)
+	}
+	if satellite["hostname"] != "satellite.corp.example.com" ||
+		satellite["contentBaseURL"] != "https://satellite.corp.example.com/pulp/content" ||
+		satellite["caPath"] != "/context/secrets/corp-satellite-ca" {
+		t.Fatalf("day-2 rhsm.satellite = %#v", satellite)
+	}
 }
 
 func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {

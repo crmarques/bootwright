@@ -228,6 +228,9 @@ func machineImageInstallSourceVars(source v1alpha1.MachineImageInstallSource, en
 		rhsm["organizationPath"] = resolved.RHSM.OrganizationPath
 		rhsm["activationKeyPath"] = resolved.RHSM.ActivationKeyPath
 		rhsm["connectToInsights"] = resolved.RHSM.ConnectToInsights
+		if satellite := rhsmSatelliteVars(resolved.RHSM.Satellite); satellite != nil {
+			rhsm["satellite"] = satellite
+		}
 	}
 	return source.URL, machineInstallRepositoryVars(source.Repositories), rhsm
 }
@@ -261,6 +264,24 @@ func managedOSInstallProxyVars(state v1alpha1.State, env *v1alpha1.Environment, 
 		if path := secret.ResolveMaterialPath(eff.Auth.Name, env, secretsDir, secret.MaterialPrimary); path != "" {
 			out["credentialsPath"] = path
 		}
+	}
+	return out
+}
+
+// rhsmSatelliteVars projects a resolved corporate Satellite redirect into the
+// nested install/day-2 vars map (hostname, contentBaseURL, caPath). It returns
+// nil when registration targets the public Red Hat CDN, so callers omit the
+// satellite key entirely and existing CDN renders stay byte-identical.
+func rhsmSatelliteVars(satellite entitlements.RHSMSatellite) map[string]any {
+	if satellite.Hostname == "" {
+		return nil
+	}
+	out := map[string]any{"hostname": satellite.Hostname}
+	if satellite.ContentBaseURL != "" {
+		out["contentBaseURL"] = satellite.ContentBaseURL
+	}
+	if satellite.TrustBundlePath != "" {
+		out["caPath"] = satellite.TrustBundlePath
 	}
 	return out
 }

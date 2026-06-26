@@ -48,6 +48,13 @@ func stableMarkerInput(osInstall map[string]any) map[string]any {
 		if rhsm, ok := installer["rhsm"].(map[string]any); ok {
 			markerBasename(rhsm, "organizationPath")
 			markerBasename(rhsm, "activationKeyPath")
+			// The Satellite CA path resolves into the per-run secrets dir like
+			// the org/key paths, so basename it too. hostname/contentBaseURL are
+			// stable identifiers and stay verbatim, so the marker still changes
+			// when the host registers against a different Satellite.
+			if satellite, ok := rhsm["satellite"].(map[string]any); ok {
+				markerBasename(satellite, "caPath")
+			}
 		}
 	}
 	return out

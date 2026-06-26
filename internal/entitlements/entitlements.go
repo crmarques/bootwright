@@ -9,6 +9,17 @@ type RHSM struct {
 	OrganizationPath  string
 	ActivationKeyPath string
 	ConnectToInsights bool
+	Satellite         RHSMSatellite
+}
+
+// RHSMSatellite is the resolved form of a corporate Red Hat Satellite the RHSM
+// registration is redirected to. Hostname is empty when registration uses the
+// public Red Hat CDN. TrustBundlePath is the materialized Satellite CA on the
+// controller (basenamed by the install marker so it stays stable across runs).
+type RHSMSatellite struct {
+	Hostname        string
+	ContentBaseURL  string
+	TrustBundlePath string
 }
 
 type Registry struct {
@@ -67,6 +78,13 @@ func Resolve(env *v1alpha1.Environment, name, defaultRegistryURL, secretsDir str
 			OrganizationPath:  secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, env, secretsDir, secret.MaterialPrimary),
 			ActivationKeyPath: secret.ResolveMaterialPath(rhsm.ActivationKeyRef.Name, env, secretsDir, secret.MaterialPrimary),
 			ConnectToInsights: rhsm.ConnectToInsights,
+		}
+		if rhsm.Satellite != nil {
+			out.RHSM.Satellite = RHSMSatellite{
+				Hostname:        rhsm.Satellite.Hostname,
+				ContentBaseURL:  rhsm.Satellite.ContentBaseURL,
+				TrustBundlePath: secret.ResolveMaterialPath(rhsm.Satellite.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary),
+			}
 		}
 	}
 	if entitlement.Registry != nil {

@@ -38,3 +38,17 @@
       - (bootwright_component.osInstall.installer.rhsm.activationKeyPath | default('') | length) > 0
     fail_msg: "managed Anaconda RHSM install source needs organizationRef and activationKeyRef secret paths"
   when: bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool
+
+- name: Validate managed Anaconda Satellite registration
+  ansible.builtin.assert:
+    that:
+      - (bootwright_component.osInstall.installer.rhsm.satellite.hostname | default('') | length) > 0
+    fail_msg: >-
+      managed Anaconda Satellite registration needs rhsm.satellite.hostname so the
+      installer can register against the corporate Satellite. Provide it, or omit
+      rhsm.satellite to register against the public Red Hat CDN. A private Satellite
+      CA (rhsm.satellite.trustBundleRef) is also required unless the Satellite
+      certificate already chains to a trusted root.
+  when:
+    - bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool
+    - (bootwright_component.osInstall.installer.rhsm.satellite | default({})) | length > 0

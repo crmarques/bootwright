@@ -285,6 +285,74 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 	if rhsm["connectToInsights"] != true {
 		t.Fatalf("rhsm.connectToInsights = %v", rhsm["connectToInsights"])
 	}
+	if _, ok := rhsm["satellite"]; ok {
+		t.Fatalf("public-CDN rhsm must carry no satellite key, got %v", rhsm["satellite"])
+	}
+}
+
+func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
+	loadState := func() v1alpha1.State {
+		state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+		if err != nil {
+			t.Fatalf("LoadNormalizeValidate: %v", err)
+		}
+		state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
+		state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
+		state.Environments[0].Spec.Secrets["corp-satellite-ca"] = v1alpha1.EnvironmentSecretSpec{}
+		state.Environments[0].Spec.Entitlements = append(state.Environments[0].Spec.Entitlements, v1alpha1.EnvironmentEntitlement{
+			Name:     "rhel",
+			Provider: v1alpha1.EntitlementProviderRedHat,
+			Product:  v1alpha1.EntitlementProductRHEL,
+			RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+				OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
+				ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
+				ConnectToInsights: true,
+				Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
+					Hostname:       "satellite.corp.example.com",
+					ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
+					TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+				},
+			},
+		})
+		state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
+		state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
+			Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
+			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+		}
+		return state
+	}
+
+	render := func(secretsDir string) map[string]any {
+		vars := VarsWithSecretsDir(loadState(), secretsDir)
+		groups := vars["bootwright_managed_os_install_groups"].([]any)
+		first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+		return first["osInstall"].(map[string]any)
+	}
+
+	osInstall := render("/context/secrets")
+	rhsm := osInstall["installer"].(map[string]any)["rhsm"].(map[string]any)
+	satellite, ok := rhsm["satellite"].(map[string]any)
+	if !ok {
+		t.Fatalf("installer.rhsm.satellite missing, rhsm=%v", rhsm)
+	}
+	if satellite["hostname"] != "satellite.corp.example.com" {
+		t.Fatalf("satellite.hostname = %v", satellite["hostname"])
+	}
+	if satellite["contentBaseURL"] != "https://satellite.corp.example.com/pulp/content" {
+		t.Fatalf("satellite.contentBaseURL = %v", satellite["contentBaseURL"])
+	}
+	if satellite["caPath"] != "/context/secrets/corp-satellite-ca" {
+		t.Fatalf("satellite.caPath = %v", satellite["caPath"])
+	}
+
+	// The Satellite CA path resolves into the per-run secrets dir, so the install
+	// marker must basename it: two renders with different secrets dirs must
+	// produce the same desiredHash or a re-apply would falsely reinstall.
+	hashA := render("/context/secrets/run-a")["marker"].(map[string]any)["desiredHash"]
+	hashB := render("/context/secrets/run-b")["marker"].(map[string]any)["desiredHash"]
+	if hashA == "" || hashA != hashB {
+		t.Fatalf("install marker not stable across secrets dirs: %v vs %v", hashA, hashB)
+	}
 }
 
 func TestManagedOSInstallRoutesThroughMachineOSInstallProxy(t *testing.T) {

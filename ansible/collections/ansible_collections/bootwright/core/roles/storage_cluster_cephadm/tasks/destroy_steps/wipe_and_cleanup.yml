@@ -87,6 +87,7 @@
     - /var/lib/ceph
     - /var/log/ceph
     - "{{ bootwright_ceph_ca_trust_anchor_path }}"
+    - "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
     - "{{ bootwright_ceph_osd_marker_path }}"
 
 - name: Remove storage cluster ownership record

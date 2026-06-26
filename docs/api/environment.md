@@ -175,6 +175,9 @@ per pair (see [Required arms](#required-arms)).
 | `entitlements[].rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever `rhsm` is required. |
 | `entitlements[].rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever `rhsm` is required. |
 | `entitlements[].rhsm.connectToInsights` | No | `false` | Whether managed RHEL installs connect to Insights. |
+| `entitlements[].rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. See [Corporate Satellite](#corporate-satellite). |
+| `entitlements[].rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
+| `entitlements[].rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
 | `entitlements[].registry.url` | No | — | Vendor registry URL; must not embed credentials (use `credentialsRef`). |
 | `entitlements[].registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat/ceph` and `ibm/ibm-storage-ceph`. |
 | `entitlements[].registry.trustBundleRef` | No | — | Registry trust bundle. |
@@ -211,6 +214,49 @@ separate `redhat/rhel` entitlement named via `rhelEntitlementRef` — an inline
 `rhsm` arm on an `ibm/ibm-storage-ceph` entitlement is rejected. (`redhat/ceph`
 stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
 tools repo, so its own `rhsm` arm covers both.)
+
+### Corporate Satellite
+
+By default an `rhsm` arm registers against the public Red Hat CDN
+(`subscription.redhat.io`). Add an optional `rhsm.satellite` block to redirect
+registration to a corporate Red Hat Satellite (or Capsule): the same
+`organizationRef` and `activationKeyRef` are interpreted against the Satellite,
+and the CA named by `trustBundleRef` is trusted before registration. One block
+covers both the install-time Anaconda kickstart (`rhsm --server-hostname …
+--rhsm-baseurl …`) and the day-2 cephadm `subscription-manager register`, so
+nodes never fall back to the CDN. Because the redirect lives on the entitlement,
+a `MachineImage` boot ISO or a Ceph cluster that already references the
+entitlement inherits Satellite with no other changes.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: corp
+spec:
+  baseDomain: corp.example.com
+  secrets:
+    - corp-satellite-ca       # bootwright secret set corp-satellite-ca --from-file satellite-ca.pem
+    - rhel-org
+    - rhel-activation-key
+  entitlements:
+    - name: rhel
+      provider: redhat
+      product: rhel
+      rhsm:
+        organizationRef: rhel-org
+        activationKeyRef: rhel-activation-key
+        connectToInsights: true
+        satellite:
+          hostname: satellite.corp.example.com
+          trustBundleRef: corp-satellite-ca
+          # contentBaseURL defaults to https://satellite.corp.example.com/pulp/content
+```
+
+The `rhsm` kickstart command Bootwright emits is supported on Red Hat Enterprise
+Linux only (Anaconda disables it on RHEL rebuilds such as AlmaLinux, Rocky, and
+CentOS Stream); Satellite registration therefore applies to `family: rhel`
+installs. OpenShift/RHCOS agent-install nodes do not use Satellite.
 
 ## Component images
 

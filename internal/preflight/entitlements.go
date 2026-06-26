@@ -39,6 +39,14 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 					owner:   owner,
 				})
 			}
+			if rhsm.Satellite != nil && rhsm.Satellite.TrustBundleRef.Name != "" {
+				out = append(out, secretRefRequirement{
+					refName: rhsm.Satellite.TrustBundleRef.Name,
+					label:   label + " rhsm satellite trustBundleRef",
+					phases:  phases,
+					owner:   owner,
+				})
+			}
 		}
 		if entitlement.Registry != nil {
 			if entitlement.Registry.CredentialsRef.Name != "" {

@@ -19,6 +19,11 @@ func TestEnvironmentEntitlementValidation(t *testing.T) {
 			},
 		}
 	}
+	rhelWithSatellite := func(sat *v1alpha1.EnvironmentEntitlementRHSMSatellite) []v1alpha1.EnvironmentEntitlement {
+		e := rhel()
+		e.RHSM.Satellite = sat
+		return []v1alpha1.EnvironmentEntitlement{e}
+	}
 	cases := []struct {
 		name         string
 		entitlements []v1alpha1.EnvironmentEntitlement
@@ -204,6 +209,35 @@ func TestEnvironmentEntitlementValidation(t *testing.T) {
 				},
 			}},
 			want: "registry.url must not embed credentials; use credentialsRef",
+		},
+		{
+			name: "satellite-valid",
+			entitlements: rhelWithSatellite(&v1alpha1.EnvironmentEntitlementRHSMSatellite{
+				Hostname:       "satellite.corp.example.com",
+				TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+			}),
+		},
+		{
+			name: "satellite-missing-hostname",
+			entitlements: rhelWithSatellite(&v1alpha1.EnvironmentEntitlementRHSMSatellite{
+				TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+			}),
+			want: "satellite.hostname is required when satellite is set",
+		},
+		{
+			name: "satellite-hostname-is-url",
+			entitlements: rhelWithSatellite(&v1alpha1.EnvironmentEntitlementRHSMSatellite{
+				Hostname: "https://satellite.corp.example.com",
+			}),
+			want: "satellite.hostname must be a bare host",
+		},
+		{
+			name: "satellite-bad-content-url",
+			entitlements: rhelWithSatellite(&v1alpha1.EnvironmentEntitlementRHSMSatellite{
+				Hostname:       "satellite.corp.example.com",
+				ContentBaseURL: "ftp://satellite.corp.example.com/pulp",
+			}),
+			want: "satellite.contentBaseURL",
 		},
 	}
 	for _, tc := range cases {

@@ -175,6 +175,13 @@ present when omitted (`entitlementRef` means `redhatCDN`; `url` or
 | `installSource.repositories[].baseURL` | Yes (per entry) | None | Repository base URL; must be `http(s)`. |
 | `installSource.entitlementRef` | Required for `type: redhatCDN` | None | `Environment.spec.entitlements[]` `rhel` entitlement. Must be empty for `type: url`. |
 
+!!! note "Registering against a corporate Satellite"
+    A `redhatCDN` install registers against the public Red Hat CDN unless the
+    referenced entitlement's `rhsm` arm carries a `satellite` block, in which case
+    the install registers and pulls content from that Red Hat Satellite instead.
+    No `MachineImage` change is needed — see
+    [Environment › Corporate Satellite](environment.md#corporate-satellite).
+
 !!! note "Type-specific exclusivity"
     For `type: url`, `entitlementRef` must be empty and at least one of `url` or
     `repositories` is required. When `url` is omitted, normalize promotes

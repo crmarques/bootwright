@@ -17,6 +17,9 @@ bootwright_ceph_managed_packages:
   # ownership record is removed and the package uninstalled at teardown.
   - gdisk
 bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
+# Distinct anchor for the corporate Satellite CA so it never collides with the
+# cephadm-registry CA above. Matches the managed-OS Kickstart anchor filename.
+bootwright_ceph_rhsm_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem
 bootwright_ceph_ca_trust_update_argv:
   - update-ca-trust
 bootwright_ceph_community_default_mirror: https://download.ceph.com
