@@ -1,0 +1,32 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ceph-bridge
+spec:
+  machineNetwork:
+    - cidr: 192.168.134.0/24
+
+  nameResolutionRefs:
+    - lab-dns
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.134.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.134.1
+            next-hop-interface: primary
+            table-id: 254

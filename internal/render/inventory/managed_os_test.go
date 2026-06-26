@@ -134,6 +134,51 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	}
 }
 
+// TestManagedOSInstallVarsFromBootISOFixture pins the boot-ISO variant: the
+// 010 fixture declares mediaType: boot with a url install source, so rendering
+// must emit image.mediaType=boot, the BaseOS install tree as installer.sourceURL
+// (driving a Kickstart `url --url=` instead of `cdrom`), and the AppStream
+// repository as an additional `repo` entry.
+func TestManagedOSInstallVarsFromBootISOFixture(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "010-ceph-3nodes-libvirt-boot-iso")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	if len(groups) != 1 {
+		t.Fatalf("managed OS groups = %v", groups)
+	}
+	group := groups[0].(map[string]any)
+	if got := group["name"]; got != "ceph-libvirt" {
+		t.Fatalf("group name = %v", got)
+	}
+	components := group["components"].([]any)
+	if len(components) != 3 {
+		t.Fatalf("components = %v", components)
+	}
+	osInstall := components[0].(map[string]any)["osInstall"].(map[string]any)
+	image := osInstall["image"].(map[string]any)
+	if image["kind"] != "media" || image["key"] != "rhel-9.7-x86_64-boot.iso" {
+		t.Fatalf("image vars = %v", image)
+	}
+	if image["mediaType"] != "boot" {
+		t.Fatalf("image mediaType = %v, want boot", image["mediaType"])
+	}
+	installer := osInstall["installer"].(map[string]any)
+	if got := installer["sourceURL"]; got != "https://mirror.example.test/rhel/9/BaseOS/x86_64/os/" {
+		t.Fatalf("installer.sourceURL = %v, want the BaseOS install tree", got)
+	}
+	repositories := installer["repositories"].([]any)
+	if len(repositories) != 1 {
+		t.Fatalf("installer.repositories = %v, want one AppStream entry", repositories)
+	}
+	repo := repositories[0].(map[string]any)
+	if repo["id"] != "appstream" || repo["baseURL"] != "https://mirror.example.test/rhel/9/AppStream/x86_64/os/" {
+		t.Fatalf("installer.repositories[0] = %v", repo)
+	}
+}
+
 func TestManagedOSInstallRendersFIPSKernelArgs(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {

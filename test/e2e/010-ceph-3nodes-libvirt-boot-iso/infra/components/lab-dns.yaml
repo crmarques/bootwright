@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: lab-dns
+spec:
+  type: nameResolution
+
+  nameResolution:
+    implementation: dnsmasq
+    machineRef: bastion
+    bindAddress: 192.168.134.1
+    port: 53
+    forwarders:
+      - 1.1.1.1
+      - 9.9.9.9

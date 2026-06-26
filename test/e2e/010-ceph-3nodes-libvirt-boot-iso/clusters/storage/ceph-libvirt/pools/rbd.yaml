@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: rbd
+spec:
+  storageClusterRef: ceph-libvirt
+
+  placementPolicyRef: lab-replicated
+
+  ceph:
+    type: replicated
+    role: rbd
+    application: rbd

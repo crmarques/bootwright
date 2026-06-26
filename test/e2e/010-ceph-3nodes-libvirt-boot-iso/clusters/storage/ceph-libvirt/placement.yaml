@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: lab-replicated
+spec:
+  storageClusterRef: ceph-libvirt
+
+  ceph:
+    failureDomain: host
+    ruleName: lab-replicated
+    replicated:
+      size: 3
+      minSize: 2

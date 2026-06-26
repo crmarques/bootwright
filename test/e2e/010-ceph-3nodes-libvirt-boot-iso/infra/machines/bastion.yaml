@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: bastion
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+
+  os:
+    provided: true
+
+  addresses:
+    - name: ssh
+      address: localhost
+    - name: cluster-lan
+      address: 192.168.134.1
+
+  access:
+    ssh:
+      keyRef: bastion-host-ssh
+      addressRef: ssh

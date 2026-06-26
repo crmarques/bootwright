@@ -181,6 +181,74 @@ present when omitted (`entitlementRef` means `redhatCDN`; `url` or
     `repositories[0].baseURL` to the primary install tree. For `type: redhatCDN`,
     `url` and `repositories` must be empty and `entitlementRef` is required.
 
+### Installing from a boot ISO
+
+A DVD ISO (~10 GB) bundles the installer and the BaseOS/AppStream package
+repositories, so Anaconda installs offline with a Kickstart `cdrom` source and
+needs no `installSource`. A boot ISO (~1 GB) carries only the installer, so it
+**requires** an `installSource`: Bootwright renders a `url --url=` (or RHSM)
+install source plus `repo` entries instead of `cdrom`, and Anaconda fetches
+packages over the network during install. Stage either ISO the same way:
+
+```bash
+bootwright media add rhel-9.7-x86_64-boot.iso --from-file ./rhel-9.7-x86_64-boot.iso
+```
+
+A `*boot.iso` filename auto-derives `mediaType: boot`; a netinstall ISO named
+otherwise needs an explicit `mediaType: boot`.
+
+#### From a package mirror (`type: url`)
+
+Point `installSource.url` at a BaseOS install tree and add the AppStream
+repository — a RHEL install needs both:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-boot
+spec:
+  type: iso
+  mediaType: boot
+  url: local-media:rhel-9.7-x86_64-boot.iso
+  installSource:
+    type: url
+    url: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
+    repositories:
+      - id: appstream
+        baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
+```
+
+#### From the Red Hat CDN (`type: redhatCDN`)
+
+Reference a `rhel` entitlement (an RHSM organization plus activation key)
+declared in [`Environment.spec.entitlements`](environment.md); Anaconda
+registers the node and installs from the subscription CDN:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-boot-cdn
+spec:
+  type: iso
+  mediaType: boot
+  url: local-media:rhel-9.7-x86_64-boot.iso
+  installSource:
+    type: redhatCDN
+    entitlementRef: rhel
+```
+
+`bootwright apply` preflight probes each `type: url` install tree's
+`repodata/repomd.xml` before the machines phase: a server that answers without
+yum metadata fails fast, while one the controller cannot reach only warns — the
+install nodes, not the controller, are the authoritative fetcher. Each node
+brings up its network from its [machine network config](#machine) (the rendered
+Kickstart `network` directive) before Anaconda fetches packages, so a boot ISO
+needs no extra early-networking setup. For a fully disconnected install, point
+`installSource` at an internal mirror; Bootwright serves the ISO over its
+artifact server but never the package tree.
+
 ## MachineInstallProfile
 
 `MachineInstallProfile` declares how Bootwright installs and customizes an OS
