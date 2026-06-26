@@ -157,18 +157,24 @@ func printBundleStatus(p *output.Printer, result bundle.AnsibleBundleResult, ski
 func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var name string
 	var files []string
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "update --name <ctx-name> -f <dir>",
 		Short: "Replace a context's input from a source directory",
 		Long: `Replace the input of the named context by copying a source directory into
 it. The copied input fully replaces the previous input; the rest of the
 context — secrets, runs, rendered output, clusters, ownership, and provider
-state — is preserved.`,
-		Args:    cobra.NoArgs,
-		Example: `  bootwright context update --name lab -f ./examples/sno-libvirt-redfish`,
+state — is preserved.
+
+Replacing the input discards the context's current input, so update asks for
+confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
+		Args: cobra.NoArgs,
+		Example: `  bootwright context update --name lab -f ./examples/sno-libvirt-redfish
+  bootwright context update --name lab -f ~/lab-input --yes`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the context input (required)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "replace the input without the interactive confirmation prompt")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
@@ -183,8 +189,13 @@ state — is preserved.`,
 			return failErr(2, err)
 		}
 		if shouldRunContextRootChild() {
+			// Confirm here, as the calling user, before re-exec under root so the
+			// prompt reaches a real terminal; the child runs with --yes.
+			if !yes && !confirm(stdin, stdout, contextUpdateConfirmPrompt(name, source)) {
+				return failErr(1, errors.New("context update aborted"))
+			}
 			// update keeps the current pointer, so the registry is not synced back.
-			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "update", "--name", name, "-f", source}, stdin, stdout, stderr, false)
+			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "update", "--name", name, "-f", source, "--yes"}, stdin, stdout, stderr, false)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -204,6 +215,11 @@ state — is preserved.`,
 		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
+		// Validate the source before prompting so a bad -f fails fast instead of
+		// asking the user to confirm a replacement that cannot happen.
+		if !yes && !confirm(stdin, stdout, contextUpdateConfirmPrompt(ctx.Name, source)) {
+			return failErr(1, errors.New("context update aborted"))
+		}
 		if err := workspace.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
@@ -222,6 +238,12 @@ state — is preserved.`,
 		return nil
 	}
 	return cmd
+}
+
+// contextUpdateConfirmPrompt is the interactive confirmation shown before
+// update discards a context's current input and replaces it from source.
+func contextUpdateConfirmPrompt(name, source string) string {
+	return fmt.Sprintf("Replace the input of context %q from %s? The current input is discarded (secrets, runs, rendered output, and clusters are preserved). [y/N] (default: no): ", name, source)
 }
 
 func newContextUseCmd(stdout io.Writer) *cobra.Command {

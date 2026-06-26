@@ -1695,7 +1695,7 @@ func TestSourceEditsRequireContextUpdate(t *testing.T) {
 		t.Fatalf("source edit leaked into the context input before update (err=%v)", err)
 	}
 	// context update copies the edited source in; the next read sees it.
-	if _, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", source); code != 0 {
+	if _, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", source, "--yes"); code != 0 {
 		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
 	}
 	after, err := os.ReadFile(inputEnv)
@@ -1724,7 +1724,7 @@ func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(replacement, "extra-note.txt"), []byte("note\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code = runCLI(t, "context", "update", "--name", "test", "-f", replacement)
+	stdout, stderr, code = runCLI(t, "context", "update", "--name", "test", "-f", replacement, "--yes")
 	if code != 0 {
 		t.Fatalf("context update exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1749,6 +1749,70 @@ func TestContextUpdateRequiresSingleSourceDirectory(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "exactly one source directory") {
 		t.Fatalf("stderr missing single-source error: %q", stderr)
+	}
+}
+
+func TestContextUpdateAbortsWithoutConfirmation(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	if _, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source); code != 0 {
+		t.Fatalf("context init exited %d, stderr=%q", code, stderr)
+	}
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Edit the source so a replacement would be observable, then decline the
+	// prompt by leaving stdin empty (no --yes).
+	const marker = "# context-update marker\n"
+	srcEnv := filepath.Join(source, "environment.yaml")
+	data, err := os.ReadFile(srcEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(srcEnv, append(data, []byte(marker)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", source)
+	if code == 0 {
+		t.Fatal("context update without --yes proceeded; want abort")
+	}
+	if !strings.Contains(stderr, "aborted") {
+		t.Fatalf("stderr missing abort notice: %q", stderr)
+	}
+	// The declined update must leave the existing input untouched.
+	inputEnv := filepath.Join(ctx.InputDir, "environment.yaml")
+	if after, err := os.ReadFile(inputEnv); err != nil || strings.Contains(string(after), marker) {
+		t.Fatalf("aborted update still replaced the context input (err=%v)", err)
+	}
+}
+
+func TestContextUpdateProceedsWithInteractiveYes(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	if _, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source); code != 0 {
+		t.Fatalf("context init exited %d, stderr=%q", code, stderr)
+	}
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const marker = "# context-update marker\n"
+	srcEnv := filepath.Join(source, "environment.yaml")
+	data, err := os.ReadFile(srcEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(srcEnv, append(data, []byte(marker)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Answering the prompt with "y" replaces the input, same as --yes.
+	if _, stderr, code := runCLIWithInput(t, "y\n", "context", "update", "--name", "test", "-f", source); code != 0 {
+		t.Fatalf("context update with interactive yes exited %d, stderr=%q", code, stderr)
+	}
+	inputEnv := filepath.Join(ctx.InputDir, "environment.yaml")
+	if after, err := os.ReadFile(inputEnv); err != nil || !strings.Contains(string(after), marker) {
+		t.Fatalf("confirmed update did not refresh the context input (err=%v)", err)
 	}
 }
 

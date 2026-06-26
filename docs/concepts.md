@@ -125,9 +125,11 @@ drops the existing context and recreates it from the source.
 !!! note "Refresh input with `context update`"
     `context update --name <name> -f <dir>` replaces the named context's `input/`
     with a fresh copy of the source and preserves everything else (secrets, runs,
-    rendered output, clusters, ownership). An `input/` directory that becomes
-    missing or unreadable is a named failure at context-resolution time, with a
-    `context update --name <name> -f` remediation.
+    rendered output, clusters, ownership). Because it discards the current input,
+    update asks for confirmation first; pass `--yes` to skip the prompt in
+    scripts. An `input/` directory that becomes missing or unreadable is a named
+    failure at context-resolution time, with a `context update --name <name> -f`
+    remediation.
 
 Run Bootwright as your user. The CLI re-executes through `sudo` when it needs
 protected state.
