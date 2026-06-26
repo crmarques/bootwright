@@ -544,6 +544,7 @@ func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
 	}{
 		{"bootwright", env.Spec.ProxyFor.Bootwright},
 		{"containerClusterInstall", env.Spec.ProxyFor.ContainerClusterInstall},
+		{"machineOSInstall", env.Spec.ProxyFor.MachineOSInstall},
 	} {
 		if field.value == "" || field.value == v1alpha1.EnvironmentComponentNone {
 			continue

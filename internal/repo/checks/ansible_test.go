@@ -974,7 +974,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a file task", tasks[stagePermsIdx]["name"])
 	}
-	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if (bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) else '0644' }}" {
+	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if ((bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) or (bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length > 0)) else '0644' }}" {
 		t.Fatalf("%s must set permissions on the published install ISO, got %v", tasks[stagePermsIdx]["name"], stagePerms)
 	}
 	restoreLabels, ok := tasks[restoreLabelsIdx]["ansible.builtin.command"].(map[string]any)

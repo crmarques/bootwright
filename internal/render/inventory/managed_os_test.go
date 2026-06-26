@@ -287,6 +287,55 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 	}
 }
 
+func TestManagedOSInstallRoutesThroughMachineOSInstallProxy(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.Secrets["proxy-credentials"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.InfraComponents.Proxies = append(state.Environments[0].Spec.InfraComponents.Proxies, v1alpha1.EnvironmentProxyComponent{
+		Name:       "corp",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Connection: &v1alpha1.EnvironmentProxyConnection{
+			HTTPProxy:  "http://proxy.example.test:8080",
+			HTTPSProxy: "http://proxy.example.test:8080",
+			Auth:       &v1alpha1.EnvironmentProxyAuthSpec{ProxyAuthRef: v1alpha1.SecretRef{Name: "proxy-credentials"}},
+		},
+	})
+	state.Environments[0].Spec.ProxyFor.MachineOSInstall = "corp"
+
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	installer := first["osInstall"].(map[string]any)["installer"].(map[string]any)
+	proxyVars, ok := installer["proxy"].(map[string]any)
+	if !ok {
+		t.Fatalf("installer.proxy = %v, want a map", installer["proxy"])
+	}
+	if got := proxyVars["url"]; got != "http://proxy.example.test:8080" {
+		t.Fatalf("installer.proxy.url = %v", got)
+	}
+	// The credential lives behind a path the kickstart reads at apply time, so
+	// the proxy password never lands in vars.yaml (mirrors rhsm secret paths).
+	if got := proxyVars["credentialsPath"]; got != "/context/secrets/proxy-credentials" {
+		t.Fatalf("installer.proxy.credentialsPath = %v", got)
+	}
+}
+
+func TestManagedOSInstallOmitsProxyWhenSlotUnset(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	installer := first["osInstall"].(map[string]any)["installer"].(map[string]any)
+	if _, ok := installer["proxy"]; ok {
+		t.Fatalf("installer.proxy = %v, want omitted with no machineOSInstall proxy", installer["proxy"])
+	}
+}
+
 func TestManagedStorageOSMachinesEnterInfraInventory(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {

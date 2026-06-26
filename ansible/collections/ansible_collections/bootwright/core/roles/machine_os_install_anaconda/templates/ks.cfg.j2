@@ -6,10 +6,22 @@ skipx
 reboot
 {% set installer = bootwright_component.osInstall.installer | default({}) %}
 {% set rhsm = installer.rhsm | default({}) %}
+{# A boot ISO fetches packages (or registers against the Red Hat CDN) over the
+   network during install; on a proxied estate that traffic uses the proxy
+   named by spec.proxyFor.machineOSInstall. The credentialed proxy URL is built
+   here from the unauthenticated url plus the credentials file so the password
+   never lands in vars.yaml. #}
+{% set proxy = installer.proxy | default({}) %}
+{% set proxy_url = proxy.url | default('') %}
+{% if (proxy.url | default('') | length > 0) and (proxy.credentialsPath | default('') | length > 0) %}
+{% set _proxy_creds = (lookup('ansible.builtin.file', proxy.credentialsPath) | trim).split(':', 1) %}
+{% set _proxy_scheme, _proxy_hostport = proxy.url.split('://', 1) %}
+{% set proxy_url = _proxy_scheme ~ '://' ~ (_proxy_creds[0] | urlencode) ~ ':' ~ (_proxy_creds[1] | urlencode) ~ '@' ~ _proxy_hostport %}
+{% endif %}
 {% if rhsm.enabled | default(false) %}
-rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{% if rhsm.connectToInsights | default(false) %} --connect-to-insights{% endif %}
+rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}{% if rhsm.connectToInsights | default(false) %} --connect-to-insights{% endif %}
 {% elif installer.sourceURL | default('') | length > 0 %}
-url --url={{ installer.sourceURL }}
+url --url={{ installer.sourceURL }}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}
 {% else %}
 cdrom
 {% endif %}
@@ -36,7 +48,7 @@ network --device={{ net.device | default('link') }} --bootproto=dhcp{% if net.dn
 {% endif %}
 
 {% for repo in installer.repositories | default([]) %}
-repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}
+repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}
 {% endfor %}
 
 {% set storage = ks.storage | default({}) %}

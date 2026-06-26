@@ -120,6 +120,7 @@ func environmentUsesManagedProxy(state v1alpha1.State) bool {
 	selected := map[string]bool{
 		env.Spec.ProxyFor.Bootwright:              true,
 		env.Spec.ProxyFor.ContainerClusterInstall: true,
+		env.Spec.ProxyFor.MachineOSInstall:        true,
 	}
 	for _, entry := range env.Spec.InfraComponents.Proxies {
 		if selected[entry.Name] && entry.Management == v1alpha1.EnvironmentComponentManaged {

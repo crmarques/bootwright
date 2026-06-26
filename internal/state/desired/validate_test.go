@@ -1513,6 +1513,24 @@ func TestEnvironmentProxyForNoneIsReservedDisableValue(t *testing.T) {
 	}
 }
 
+func TestEnvironmentProxyForMachineOSInstallMustResolve(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  proxyFor:
+    machineOSInstall: ghost
+
+  infraComponents:
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatalf("LoadNormalizeValidate: want error for undeclared machineOSInstall proxy")
+	}
+	if !strings.Contains(err.Error(), `spec.proxyFor.machineOSInstall "ghost" does not match any spec.infraComponents.proxies[].name`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestReleaseImageRequiresPinnedReference(t *testing.T) {
 	cases := []struct {
 		name          string

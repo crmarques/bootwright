@@ -44,6 +44,7 @@ cell means there is no default — an omitted optional field stays unset.
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
 | `spec.proxyFor.bootwright` | No | — | Proxy catalog entry used by Bootwright runtime actions; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
 | `spec.proxyFor.containerClusterInstall` | No | — | Proxy catalog entry rendered into cluster install input; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
+| `spec.proxyFor.machineOSInstall` | No | — | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. Only an **external** proxy applies (the node installs before any managed proxy exists); empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
 | `spec.infraComponents` | No | — | Catalog of external or managed service access entries. See [Infra-component catalog](#infra-component-catalog). |
 | `spec.registries` | No | — | Disconnected mirror and image digest source settings. See [Registries](#registries). |
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
@@ -240,9 +241,9 @@ Beyond the per-field rules above, the validator enforces:
 - **Exactly one `Environment`** is required in the loaded state.
 - `spec.baseDomain` is required.
 - `spec.defaults.clientsMirror` must be an `http(s)` URL when set.
-- `spec.proxyFor.bootwright` and `spec.proxyFor.containerClusterInstall` must
-  each name a declared `spec.infraComponents.proxies[]` entry, or be empty or
-  the literal `none`.
+- `spec.proxyFor.bootwright`, `spec.proxyFor.containerClusterInstall`, and
+  `spec.proxyFor.machineOSInstall` must each name a declared
+  `spec.infraComponents.proxies[]` entry, or be empty or the literal `none`.
 - `spec.containerClusters[]` / `spec.storageClusters[]` entries must be unique
   and match a loaded `ContainerCluster` / `StorageCluster`.
 - `spec.resources[]`, when set, must list at least one non-empty path that is

@@ -249,6 +249,14 @@ needs no extra early-networking setup. For a fully disconnected install, point
 `installSource` at an internal mirror; Bootwright serves the ISO over its
 artifact server but never the package tree.
 
+When the install nodes reach the package source (a public mirror or the Red Hat
+CDN) only through a forward proxy, set
+[`Environment.spec.proxyFor.machineOSInstall`](environment.md) to a declared
+external proxy. Bootwright renders `--proxy=` onto the `rhsm`, `url`, and `repo`
+Kickstart directives so Anaconda registers and fetches packages through it —
+useful for a `type: redhatCDN` boot-ISO install on an estate that has no
+internal mirror but does have a corporate proxy.
+
 !!! tip "Disk footprint scales with media size × node count"
     Bootwright bakes each machine's Kickstart into its **own** install ISO
     (Redfish virtual-media boot cannot pass kernel arguments), so every node in a

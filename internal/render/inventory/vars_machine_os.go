@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/infra/media"
+	"github.com/crmarques/bootwright/internal/infra/proxy"
 	"github.com/crmarques/bootwright/internal/nmstate"
 	"github.com/crmarques/bootwright/internal/render/installer"
 	secret "github.com/crmarques/bootwright/internal/secrets"
@@ -134,6 +135,9 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if len(rhsm) > 0 {
 		installer["rhsm"] = rhsm
 	}
+	if proxyVars := managedOSInstallProxyVars(state, env, paths.SecretsDir); len(proxyVars) > 0 {
+		installer["proxy"] = proxyVars
+	}
 	out := map[string]any{
 		"profileName": profile.Metadata.Name,
 		"os": map[string]any{
@@ -226,6 +230,39 @@ func machineImageInstallSourceVars(source v1alpha1.MachineImageInstallSource, en
 		rhsm["connectToInsights"] = resolved.RHSM.ConnectToInsights
 	}
 	return source.URL, machineInstallRepositoryVars(source.Repositories), rhsm
+}
+
+// managedOSInstallProxyVars resolves the environment proxy named by
+// spec.proxyFor.machineOSInstall into the kickstart proxy inputs. A boot ISO
+// fetches packages (or registers against the Red Hat CDN) over the network
+// during install, so on a proxied estate that traffic must traverse this
+// proxy. Only an external proxy applies — the node installs before any managed
+// proxy could exist — so a managed or unset selection emits nothing. The
+// credentialed proxy URL is assembled in the kickstart from this
+// (unauthenticated) url plus the proxy credentials file, keeping the proxy
+// password out of vars.yaml the same way rhsm secrets stay out of it.
+func managedOSInstallProxyVars(state v1alpha1.State, env *v1alpha1.Environment, secretsDir string) map[string]any {
+	if env == nil {
+		return nil
+	}
+	eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.MachineOSInstall)
+	if eff == nil {
+		return nil
+	}
+	url := eff.HTTPS
+	if url == "" {
+		url = eff.HTTP
+	}
+	if url == "" {
+		return nil
+	}
+	out := map[string]any{"url": url}
+	if eff.Auth.Name != "" {
+		if path := secret.ResolveMaterialPath(eff.Auth.Name, env, secretsDir, secret.MaterialPrimary); path != "" {
+			out["credentialsPath"] = path
+		}
+	}
+	return out
 }
 
 func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository) []any {

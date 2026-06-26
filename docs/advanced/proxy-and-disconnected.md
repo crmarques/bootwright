@@ -46,12 +46,26 @@ spec:
   proxyFor:
     bootwright: default
     containerClusterInstall: default
+    machineOSInstall: default
 ```
 
 `proxyFor.bootwright` names the proxy applied to Bootwright's own runtime
 actions. `proxyFor.containerClusterInstall` names the proxy rendered into
-installer input. Both take the `name` of a `proxies[]` entry. Omitting a value
-— or setting the reserved value `none` — disables proxy use for that target.
+installer input. `proxyFor.machineOSInstall` names the proxy the managed-OS
+(Anaconda) install fetch uses: a boot ISO carries no packages, so the node
+reaches its install tree or the Red Hat CDN over the network during install,
+and on a proxied estate that traffic — the `rhsm`/`url`/`repo` Kickstart
+directives — goes through this proxy. Each takes the `name` of a `proxies[]`
+entry. Omitting a value — or setting the reserved value `none` — disables proxy
+use for that target.
+
+!!! note "machineOSInstall must be an external proxy"
+    The managed OS is installed before any Bootwright-managed proxy could
+    exist, so `machineOSInstall` only takes effect for an `external` proxy
+    entry (one carrying `connection`). A managed selection renders no install
+    proxy. When the proxy entry carries `auth.proxyAuthRef`, the credentials
+    are baked into the `--proxy=` Kickstart directives at install time and the
+    per-machine install ISO is tightened to `0600`.
 
 When a proxy entry carries `auth.proxyAuthRef`, the referenced credentials are
 secret bytes. `bootwright print-env` emits shell exports for the current

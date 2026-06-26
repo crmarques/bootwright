@@ -63,6 +63,13 @@ type EnvironmentInstallDefaultsSpec struct {
 type EnvironmentProxyForSpec struct {
 	Bootwright              string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
 	ContainerClusterInstall string `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
+	// MachineOSInstall names the proxy the managed-OS (Anaconda) install
+	// fetch routes through: a boot ISO carries no packages, so Anaconda
+	// reaches the install tree or the Red Hat CDN over the network during
+	// install, which on a proxied estate must go through this proxy. Only an
+	// external proxy applies — the node installs before any managed proxy
+	// could exist. Empty or "none" installs with no proxy.
+	MachineOSInstall string `yaml:"machineOSInstall,omitempty" json:"machineOSInstall,omitempty"`
 }
 
 type EnvironmentSecretStorageSpec struct {

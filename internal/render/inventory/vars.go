@@ -134,6 +134,9 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	if env.Spec.ProxyFor.ContainerClusterInstall != "" {
 		proxyFor["containerClusterInstall"] = env.Spec.ProxyFor.ContainerClusterInstall
 	}
+	if env.Spec.ProxyFor.MachineOSInstall != "" {
+		proxyFor["machineOSInstall"] = env.Spec.ProxyFor.MachineOSInstall
+	}
 	if len(proxyFor) > 0 {
 		out["proxyFor"] = proxyFor
 	}
