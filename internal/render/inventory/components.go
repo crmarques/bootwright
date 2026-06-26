@@ -214,12 +214,11 @@ func usesManagedArtifacts(state v1alpha1.State) bool {
 	// the artifact server for Redfish virtual media, so the server must run even
 	// when no container cluster consumes it.
 	for _, cluster := range ManagedStorageClusters(state) {
-		ci, ok := storageClusterInstall(state, cluster)
+		ci, ok := stateview.StorageClusterArtifactInstall(state, cluster)
 		if !ok {
 			continue
 		}
-		server, ok := artifacts.Select(state, ci)
-		if ok && server.Config != nil && storageClusterUsesBareMetalManagedOS(state, ci.Machines) {
+		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
 			return true
 		}
 	}

@@ -325,6 +325,7 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 			continue
 		}
 		out = append(out, nameResolutionConsumers(state, cluster.Metadata.Name, cluster.Metadata.Name, storageNetworkNameResolutionRefs(state, cluster))...)
+		out = append(out, storageArtifactServerConsumers(state, cluster)...)
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 			machineObj, ok := stateview.Machine(state, node.MachineRef.Name)
 			if !ok || !v1alpha1.MachineInstallsOS(machineObj) {
@@ -344,6 +345,43 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 		}
 	}
 	return out
+}
+
+// storageArtifactServerConsumers registers the artifact server a storage
+// cluster's bare-metal managed-OS install publishes through (for Redfish virtual
+// media) as a machine service the cluster consumes. Without it a scoped apply
+// (`--clusters <storage>`) would drop the artifact server's host machine, so the
+// install ISO stage path resolves empty and the managed-OS role fails with an
+// opaque empty-path error. This mirrors the container-cluster artifact consumer
+// in clusterMachineServiceConsumers.
+func storageArtifactServerConsumers(state v1alpha1.State, cluster v1alpha1.StorageCluster) []MachineServiceConsumer {
+	ci, ok := stateview.StorageClusterArtifactInstall(state, cluster)
+	if !ok {
+		return nil
+	}
+	if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
+		return nil
+	}
+	server, ok := artifacts.Select(state, ci)
+	if !ok || server.Config == nil {
+		return nil
+	}
+	return []MachineServiceConsumer{newServiceConsumer(
+		cluster.Metadata.Name,
+		cluster.Metadata.Name,
+		fmt.Sprintf("Environment artifactServer InfraComponent/%s", server.Component.Metadata.Name),
+		v1alpha1.ComponentSlotArtifactServer,
+		v1alpha1.KindInfraComponent,
+		server.Component.Metadata.Name,
+		v1alpha1.ArtifactServerProtocolHTTP,
+		map[string]string{
+			"machineRef":  server.Config.MachineRef.Name,
+			"bindAddress": server.Config.BindAddress,
+			"listeners":   artifactListenersKey(server.Config.Listeners),
+			"endpoints":   artifactEndpointsKey(server.Config.Endpoints),
+		},
+		nil,
+	)}
 }
 
 func bmcConsumerForMachine(state v1alpha1.State, clusterName, clusterInstallName, owner string, machine v1alpha1.InstallMachine) (MachineServiceConsumer, bool) {

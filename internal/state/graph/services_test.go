@@ -160,6 +160,105 @@ func TestSharedServicesReportsContainerClusterConsumers(t *testing.T) {
 	}
 }
 
+// TestScopedStorageApplyKeepsArtifactServerHost guards the fix for the opaque
+// "No such file or directory" managed-OS apply failure under a scoped run. A
+// bare-metal storage node publishes its install ISO through the artifact server
+// for Redfish virtual media, so `apply --clusters <storage>` must keep the
+// artifact server's host machine; without it the install ISO stage path renders
+// empty. Container clusters already pull the host in via their artifact consumer.
+func TestScopedStorageApplyKeepsArtifactServerHost(t *testing.T) {
+	state := bareMetalStorageManagedOSState()
+
+	// The artifact server must register as a service the storage cluster consumes.
+	var found bool
+	for _, service := range ResolveMachineServices(state).Services {
+		if service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {
+			continue
+		}
+		for _, consumer := range service.Consumers {
+			if consumer.Cluster == "ceph" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("storage cluster 'ceph' does not consume the artifact server service; a scoped apply would drop its host")
+	}
+
+	scoped := FilterStateToApplyClusterRoots(state, nil, []string{"ceph"})
+	if !contains(namesOfMachines(scoped.Machines), "service-host") {
+		t.Fatalf("scoped apply for storage cluster dropped artifact server host 'service-host'; install ISO stage path renders empty. machines=%v", namesOfMachines(scoped.Machines))
+	}
+}
+
+func contains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+func bareMetalStorageManagedOSState() v1alpha1.State {
+	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					ArtifactServers: []v1alpha1.EnvironmentArtifactServerComponent{{
+						Name:         "default",
+						Management:   v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+					}},
+				},
+				Defaults: v1alpha1.EnvironmentDefaultsSpec{
+					ArtifactAccess: v1alpha1.ClusterArtifactAccess{
+						ServerRef:           v1alpha1.LocalObjectReference{Name: "default"},
+						RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"}},
+					},
+				},
+			},
+		}},
+		Machines: []v1alpha1.Machine{
+			serviceMachine(),
+			bareMetalCephNode("ceph-0", "baremetal"),
+		},
+		InfraProviders:  []v1alpha1.InfraProvider{bareMetalProvider("baremetal")},
+		InfraComponents: []v1alpha1.InfraComponent{artifactServerComponent()},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{
+						Hosts: []v1alpha1.StorageCephHost{{
+							Hostname:   "ceph-0",
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Roles:      []string{"mon"},
+						}},
+					},
+				},
+			},
+		}},
+	}
+}
+
+func bareMetalCephNode(name, provider string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+			Substrate:    v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: provider}},
+			OS: v1alpha1.MachineOSSpec{
+				Provided:          v1alpha1.BoolPtr(false),
+				InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9-ceph"},
+			},
+		},
+	}
+}
+
 func TestFilterStateToClustersKeepsReferencedProviders(t *testing.T) {
 	state := sharedManagedServiceState()
 

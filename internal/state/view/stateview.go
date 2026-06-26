@@ -151,6 +151,59 @@ func InstallMachineFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine
 	return clusterNodeFromMachine(machine)
 }
 
+// StorageClusterArtifactInstall builds the ClusterInstall view a storage
+// cluster's managed-OS install resolves against: its install machines plus the
+// artifact access taken from the Environment defaults. A StorageCluster cannot
+// author spec.install.artifactAccess (unlike a ContainerCluster), so a bare-metal
+// node whose managed OS installs over the BMC publishes its install ISO through
+// the artifact server named by those defaults. It returns ok=true only when at
+// least one node installs its OS over a bare-metal BMC — the one shape that needs
+// the artifact server for Redfish virtual media. This is the single source of
+// truth shared by the renderer (boot vars), validation, and the apply-scope
+// service graph, so all three agree on which artifact server (and host machine)
+// the install pulls in; a divergence drops the host from a scoped apply and the
+// install ISO stage path renders empty.
+func StorageClusterArtifactInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster) (v1alpha1.ClusterInstall, bool) {
+	if cluster.Spec.Ceph == nil {
+		return v1alpha1.ClusterInstall{}, false
+	}
+	seen := map[string]bool{}
+	var machines []v1alpha1.InstallMachine
+	bareMetalManagedOS := false
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
+			continue
+		}
+		machine, ok := Machine(state, node.MachineRef.Name)
+		if !ok {
+			continue
+		}
+		seen[node.MachineRef.Name] = true
+		machines = append(machines, clusterNodeFromMachine(machine))
+		if !v1alpha1.MachineInstallsOS(machine) {
+			continue
+		}
+		if provider, ok := Provider(state, machine.Spec.Substrate.ProviderRef.Name); ok && provider.Spec.Type == v1alpha1.ProvisionerBareMetal {
+			bareMetalManagedOS = true
+		}
+	}
+	if !bareMetalManagedOS {
+		return v1alpha1.ClusterInstall{}, false
+	}
+	ci := v1alpha1.ClusterInstall{
+		Metadata: v1alpha1.Metadata{Name: cluster.Metadata.Name},
+		Machines: machines,
+	}
+	if env := Environment(state); env != nil {
+		defaults := env.Spec.Defaults.ArtifactAccess
+		ci.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+			ServerRef:           defaults.ServerRef,
+			RedfishVirtualMedia: defaults.RedfishVirtualMedia,
+		}
+	}
+	return ci, true
+}
+
 func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
 	node := v1alpha1.InstallMachine{
 		Name: machine.Metadata.Name,
