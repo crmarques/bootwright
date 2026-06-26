@@ -8,6 +8,88 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+// TestValidateArtifactServerRequirementsStorageBareMetalManagedOS guards the
+// fix for the opaque empty-path apply failure (No such file or directory): a storage
+// cluster cannot author artifactAccess, so a bare-metal node whose managed OS
+// installs over the BMC draws its Redfish virtual-media publication target from
+// the Environment defaults. When those are absent the renderer produces an empty
+// stage path; validation must reject it first with an actionable message.
+func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.T) {
+	baseState := func() v1alpha1.State {
+		return v1alpha1.State{
+			InfraProviders: []v1alpha1.InfraProvider{{
+				Metadata: v1alpha1.Metadata{Name: "baremetal"},
+				Spec: v1alpha1.InfraProviderSpec{
+					Type:      v1alpha1.ProvisionerBareMetal,
+					BareMetal: &v1alpha1.InfraProviderBareMetal{},
+				},
+			}},
+			Machines: []v1alpha1.Machine{{
+				Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+				Spec: v1alpha1.MachineSpec{
+					Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+					Substrate:    v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "baremetal"}},
+					OS: v1alpha1.MachineOSSpec{
+						Provided:          v1alpha1.BoolPtr(false),
+						InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9-ceph"},
+					},
+				},
+			}},
+			StorageClusters: []v1alpha1.StorageCluster{{
+				Metadata: v1alpha1.Metadata{Name: "ceph"},
+				Spec: v1alpha1.StorageClusterSpec{
+					Type: v1alpha1.StorageClusterTypeCeph,
+					Ceph: &v1alpha1.StorageClusterCephSpec{
+						Topology: v1alpha1.StorageCephTopology{
+							Hosts: []v1alpha1.StorageCephHost{
+								storageValidationCephNode("ceph-0", "", []string{"mon"}),
+							},
+						},
+					},
+				},
+			}},
+		}
+	}
+
+	t.Run("missing artifact server and defaults", func(t *testing.T) {
+		state := baseState()
+		state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
+		errs := strings.Join(validateArtifactServerRequirements(state), "; ")
+		if !strings.Contains(errs, "StorageCluster/ceph") || !strings.Contains(errs, "spec.infraComponents.artifactServers") {
+			t.Fatalf("want a bare-metal managed-OS artifact-publication error, got %q", errs)
+		}
+	})
+
+	t.Run("artifact server present but defaults unset", func(t *testing.T) {
+		state := baseState()
+		state.Environments = []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					ArtifactServers: []v1alpha1.EnvironmentArtifactServerComponent{{
+						Name:         "default",
+						Management:   v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+					}},
+				},
+			},
+		}}
+		errs := strings.Join(validateArtifactServerRequirements(state), "; ")
+		if !strings.Contains(errs, "spec.defaults.artifactAccess") {
+			t.Fatalf("want a missing-defaults artifact-access error, got %q", errs)
+		}
+	})
+
+	t.Run("provided-OS bare-metal node needs no artifact access", func(t *testing.T) {
+		state := baseState()
+		state.Machines[0].Spec.OS = v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)}
+		state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
+		if errs := validateArtifactServerRequirements(state); len(errs) != 0 {
+			t.Fatalf("provided-OS node must not require artifact access, got %v", errs)
+		}
+	})
+}
+
 func TestStorageStretchValidationAcceptsCanonicalShape(t *testing.T) {
 	if errs := validateStorage(storageValidationState()); len(errs) != 0 {
 		t.Fatalf("validateStorage returned errors: %v", errs)

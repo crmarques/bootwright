@@ -454,7 +454,78 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 			}
 		}
 	}
+	// A StorageCluster cannot author spec.install.artifactAccess, so a bare-metal
+	// node whose managed OS installs over the BMC draws its Redfish virtual-media
+	// publication target from the Environment artifact-access defaults. Require
+	// them to resolve here; otherwise the install ISO stage path renders empty and
+	// the managed-OS role fails deep in apply with an opaque empty-path error.
+	for _, cluster := range state.StorageClusters {
+		ci, ok := storageClusterBareMetalManagedOSInstall(state, env, cluster)
+		if !ok {
+			continue
+		}
+		prefix := fmt.Sprintf("StorageCluster/%s", cluster.Metadata.Name)
+		if env == nil || len(env.Spec.InfraComponents.ArtifactServers) == 0 {
+			errs = append(errs, fmt.Sprintf("%s installs a bare-metal node's OS over the BMC, which needs generated artifact publication; set Environment.spec.infraComponents.artifactServers and spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef", prefix))
+			continue
+		}
+		if ci.ArtifactAccess.ServerRef.Name == "" || ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s installs a bare-metal node's OS over the BMC; set Environment.spec.defaults.artifactAccess.serverRef and .redfishVirtualMedia.endpointRef so the install ISO can publish for Redfish virtual media", prefix))
+			continue
+		}
+		if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
+			errs = append(errs, fmt.Sprintf("%s bare-metal managed-OS install requires Environment.spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef to resolve on artifact server %q", prefix, ci.ArtifactAccess.ServerRef.Name))
+		}
+	}
 	return errs
+}
+
+// storageClusterBareMetalManagedOSInstall builds the ClusterInstall view used to
+// validate a storage cluster's artifact access, returning ok only when at least
+// one node installs its OS over a bare-metal BMC (the single managed-OS shape
+// that publishes through the artifact server for Redfish virtual media). The
+// artifact access is taken from the Environment defaults, mirroring the renderer
+// (storageClusterArtifactAccess); env may be nil, leaving the access empty so the
+// caller flags the missing configuration.
+func storageClusterBareMetalManagedOSInstall(state v1alpha1.State, env *v1alpha1.Environment, cluster v1alpha1.StorageCluster) (v1alpha1.ClusterInstall, bool) {
+	if cluster.Spec.Ceph == nil {
+		return v1alpha1.ClusterInstall{}, false
+	}
+	seen := map[string]bool{}
+	var machines []v1alpha1.InstallMachine
+	bareMetalManagedOS := false
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
+			continue
+		}
+		machine, ok := stateview.Machine(state, node.MachineRef.Name)
+		if !ok {
+			continue
+		}
+		seen[node.MachineRef.Name] = true
+		machines = append(machines, stateview.InstallMachineFromMachine(machine))
+		if !v1alpha1.MachineInstallsOS(machine) {
+			continue
+		}
+		if provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name); ok && provider.Spec.Type == v1alpha1.ProvisionerBareMetal {
+			bareMetalManagedOS = true
+		}
+	}
+	if !bareMetalManagedOS {
+		return v1alpha1.ClusterInstall{}, false
+	}
+	ci := v1alpha1.ClusterInstall{
+		Metadata: v1alpha1.Metadata{Name: cluster.Metadata.Name},
+		Machines: machines,
+	}
+	if env != nil {
+		defaults := env.Spec.Defaults.ArtifactAccess
+		ci.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+			ServerRef:           defaults.ServerRef,
+			RedfishVirtualMedia: defaults.RedfishVirtualMedia,
+		}
+	}
+	return ci, true
 }
 
 // validateSecretReferences walks every SecretRef in the loaded state
