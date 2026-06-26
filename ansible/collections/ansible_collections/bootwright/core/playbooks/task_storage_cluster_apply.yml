@@ -3,6 +3,11 @@
   hosts: bootwright_storage_hosts
   gather_facts: false
   become: true
+  # Ceph package work (dnf/get_url/podman) reaches the egress proxy through
+  # http(s)_proxy/no_proxy in the task environment; bootwright no longer writes a
+  # proxy= line into dnf.conf/yum.conf, so resolve the proxy facts here and apply
+  # them play-wide. noProxy hosts are honoured by libcurl's no_proxy.
+  environment: "{{ bootwright_proxy_env | default({}) }}"
   vars:
     bootwright_selected_storage_cluster: >-
       {{
@@ -13,6 +18,11 @@
         | first
         | default({})
       }}
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
   tasks:
     - name: End hosts outside selected storage cluster
       ansible.builtin.meta: end_host

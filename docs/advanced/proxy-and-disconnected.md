@@ -80,6 +80,27 @@ Without `--sensitive`, `print-env` refuses to emit the export. This matches the
 broader rule that read-only commands which would print credential bytes fail
 closed by default; see [Secrets](secrets.md).
 
+### Package managers and `noProxy`
+
+Bootwright applies the egress proxy to package managers (`dnf`/`yum`) through the
+environment — `http_proxy`, `https_proxy`, and `no_proxy` — exported on every
+task that runs them, and persisted to `/etc/environment`, `/etc/profile.d`, and
+the systemd `DefaultEnvironment`. It does **not** write a `proxy=` line into
+`/etc/yum.conf` or `/etc/dnf/dnf.conf`. Those files have no `noproxy` directive,
+so a config `proxy=` would force every repository — including the `noProxy` hosts
+— through the proxy. Driving the proxy from the environment instead lets the
+package manager honour the `noProxy` exceptions for package operations.
+
+!!! note "Manual `dnf` under a credentialed proxy"
+    When a proxy carries `auth.proxyAuthRef`, Bootwright does not write the
+    credential-bearing exports to the world-readable `/etc/environment`. An
+    operator running `dnf` by hand in a login shell must first load the proxy
+    exports for the current context:
+
+    ```bash
+    eval "$(bootwright print-env --sensitive)"
+    ```
+
 ### Managed proxies
 
 A managed proxy entry uses `management: managed` and selects a

@@ -313,6 +313,8 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_install.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_wait_agent_install.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml",
 	} {
 		for _, play := range readAnsiblePlays(t, path) {
 			env, _ := play["environment"].(string)
@@ -487,7 +489,7 @@ func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
 	}
 }
 
-func TestHostProxyPersistenceKeepsNoProxyOnlyConfiguration(t *testing.T) {
+func TestHostProxyPersistenceDrivesPackageManagersFromEnvironment(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_proxy/tasks/persist.yml")
 	persist := tasks[findAnsibleTask(t, tasks, "Persist proxy settings on host")]
 	if got := persist["when"]; got != "bootwright_proxy_enabled" {
@@ -504,21 +506,39 @@ func TestHostProxyPersistenceKeepsNoProxyOnlyConfiguration(t *testing.T) {
 		t.Fatalf("%s must persist NO_PROXY, got %s", envTask["name"], envBody)
 	}
 
-	for _, name := range []string{"Configure dnf proxy", "Configure yum proxy"} {
-		task := block[findAnsibleTask(t, block, name)]
-		if !stringListContains(task["when"], "bootwright_proxy_has_url") {
-			t.Fatalf("%s must require a proxy URL, got when=%v", name, task["when"])
+	// dnf/yum read the proxy (and its noProxy exceptions) from the environment,
+	// never from a config proxy= line: dnf.conf/yum.conf have no no_proxy
+	// directive, so a config proxy would force noProxy hosts through the proxy
+	// too. Any lineinfile touching these files must only strip a proxy= line.
+	for _, task := range block {
+		line, ok := task["ansible.builtin.lineinfile"].(map[string]any)
+		if !ok {
+			continue
+		}
+		path := fmt.Sprint(line["path"])
+		if path != "/etc/dnf/dnf.conf" && path != "/etc/yum.conf" {
+			continue
+		}
+		if _, ok := line["line"]; ok {
+			t.Fatalf("%s must not write a proxy= line into %s; the proxy comes from the environment", task["name"], path)
+		}
+		if got := fmt.Sprint(line["state"]); got != "absent" {
+			t.Fatalf("%s must strip the proxy= line (state: absent), got state=%v", task["name"], line["state"])
 		}
 	}
-	for _, name := range []string{
-		"Strip stale dnf proxy line when URL proxy is disabled",
-		"Strip stale yum proxy line when URL proxy is disabled",
-		"Remove stale pip proxy config when URL proxy is disabled",
-	} {
+
+	// The strip runs whenever the file exists so a proxy= line written by an
+	// older bootwright is removed on the next apply.
+	for _, name := range []string{"Strip dnf proxy line", "Strip yum proxy line (RHEL 7 / legacy)"} {
 		task := block[findAnsibleTask(t, block, name)]
-		if !stringListContains(task["when"], "not bootwright_proxy_has_url") {
-			t.Fatalf("%s must run when URL proxy is disabled, got when=%v", name, task["when"])
+		if got := fmt.Sprint(task["when"]); !strings.Contains(got, ".stat.exists") {
+			t.Fatalf("%s must run when the config file exists, got when=%v", name, task["when"])
 		}
+	}
+
+	// pip config and the reachability probe stay gated on an actual proxy URL.
+	if task := block[findAnsibleTask(t, block, "Remove stale pip proxy config when URL proxy is disabled")]; !stringListContains(task["when"], "not bootwright_proxy_has_url") {
+		t.Fatalf("pip strip must run when URL proxy is disabled, got when=%v", task["when"])
 	}
 	for _, name := range []string{"Ensure pip config directory", "Render pip proxy config", "Verify proxy TCP reachability"} {
 		task := block[findAnsibleTask(t, block, name)]

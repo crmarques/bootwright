@@ -16,6 +16,10 @@
   # assert, or the seed-reachability gate below) still aborts every host, while an
   # unreachable host is merely skipped.
   any_errors_fatal: true
+  # Teardown package/podman work reaches the egress proxy through the task
+  # environment; bootwright no longer writes a proxy= line into dnf.conf/yum.conf,
+  # so resolve the proxy facts here and apply them play-wide.
+  environment: "{{ bootwright_proxy_env | default({}) }}"
   vars:
     bootwright_selected_storage_cluster: >-
       {{
@@ -26,6 +30,11 @@
         | first
         | default({})
       }}
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
   tasks:
     - name: End hosts outside managed storage clusters
       ansible.builtin.meta: end_host

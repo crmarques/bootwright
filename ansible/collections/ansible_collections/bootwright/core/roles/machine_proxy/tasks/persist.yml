@@ -57,56 +57,30 @@
         path: /etc/dnf/dnf.conf
       register: bootwright_proxy_dnf_stat
 
-    - name: Configure dnf proxy
-      ansible.builtin.lineinfile:
-        path: /etc/dnf/dnf.conf
-        regexp: '^proxy='
-        line: "proxy={{ bootwright_proxy_primary }}"
-        insertafter: '^\[main\]'
-        owner: root
-        group: root
-        mode: "{{ '0600' if bootwright_proxy_credentialed_url else '0644' }}"
-      no_log: "{{ bootwright_proxy_credentialed_url }}"
-      when:
-        - bootwright_proxy_has_url
-        - bootwright_proxy_dnf_stat.stat.exists
-
-    - name: Strip stale dnf proxy line when URL proxy is disabled
+    # dnf gets the proxy from http(s)_proxy/no_proxy in the task environment
+    # (bootwright_proxy_env), not a proxy= line: dnf.conf has no no_proxy
+    # directive, so a config proxy would force noProxy hosts through the proxy
+    # too. Strip any proxy= a prior bootwright run wrote.
+    - name: Strip dnf proxy line
       ansible.builtin.lineinfile:
         path: /etc/dnf/dnf.conf
         regexp: '^proxy='
         state: absent
-      when:
-        - not bootwright_proxy_has_url
-        - bootwright_proxy_dnf_stat.stat.exists
+      when: bootwright_proxy_dnf_stat.stat.exists
 
     - name: Stat yum.conf (RHEL 7 / legacy)
       ansible.builtin.stat:
         path: /etc/yum.conf
       register: bootwright_proxy_yum_stat
 
-    - name: Configure yum proxy
-      ansible.builtin.lineinfile:
-        path: /etc/yum.conf
-        regexp: '^proxy='
-        line: "proxy={{ bootwright_proxy_primary }}"
-        insertafter: '^\[main\]'
-        owner: root
-        group: root
-        mode: "{{ '0600' if bootwright_proxy_credentialed_url else '0644' }}"
-      no_log: "{{ bootwright_proxy_credentialed_url }}"
-      when:
-        - bootwright_proxy_has_url
-        - bootwright_proxy_yum_stat.stat.exists
-
-    - name: Strip stale yum proxy line when URL proxy is disabled
+    # Same as dnf above: yum reads the proxy from the environment, never from a
+    # yum.conf proxy= line. Strip any proxy= a prior bootwright run wrote.
+    - name: Strip yum proxy line (RHEL 7 / legacy)
       ansible.builtin.lineinfile:
         path: /etc/yum.conf
         regexp: '^proxy='
         state: absent
-      when:
-        - not bootwright_proxy_has_url
-        - bootwright_proxy_yum_stat.stat.exists
+      when: bootwright_proxy_yum_stat.stat.exists
 
     - name: Ensure pip config directory
       ansible.builtin.file:
