@@ -195,15 +195,16 @@ func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum stri
 }
 
 func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.InstallMachine) bool {
-	machineRef := machineHostRef(state, m)
-	if machineRef == "" {
-		return false
-	}
-	machine, ok := stateview.Machine(state, machineRef)
+	// Resolve the host that actually drives the managed-OS install, mirroring
+	// managedOSTaskHost: libvirt machines install on their provider host, while
+	// API-native substrates (KubeVirt, vSphere) and bare-metal over the BMC all
+	// run from the controller (localhost). When that host is the controller, a
+	// file/media-library source already lives on it, so the copy-to-provider
+	// step is pure waste — skip it and point mkksiso at the source in place.
+	host := managedOSTaskHost(state, m)
+	machine, ok := stateview.Machine(state, host)
 	if !ok {
-		// API-native substrates run machine tasks on the controller, so a
-		// file-sourced install image is already on the task host.
-		return machineRef == "localhost"
+		return host == "localhost"
 	}
 	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
 }

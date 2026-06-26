@@ -10,6 +10,18 @@
         group: root
         mode: "0700"
 
+    # Shared per-(cluster, image) source staging directory. Only created when a
+    # copy or download will actually land here; a controller-local source reads
+    # in place (sourceOnTarget) and never materialises the shared file.
+    - name: Create managed OS shared source directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_source_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: bootwright_os_source_iso_effective == bootwright_os_source_iso
+
     - name: Load Anaconda package list
       ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
@@ -71,6 +83,11 @@
           (or --from-url <url>), then re-run apply.
       when: bootwright_component.osInstall.image.kind in ['media', 'file']
 
+    # The destination is shared across every machine in the OS group, so the
+    # first machine on a provider host stages it and the rest find it already
+    # present (copy/get_url skip on a checksum match). throttle holds the task
+    # to one machine at a time so parallel nodes never write the same file
+    # concurrently; it mirrors the vSphere virtual-media upload dedup.
     - name: Copy managed ISO source to provider host
       ansible.builtin.copy:
         src: "{{ bootwright_component.osInstall.image.path }}"
@@ -80,6 +97,7 @@
         group: root
         mode: "0644"
       register: bootwright_os_source_copy
+      throttle: 1
       when:
         - bootwright_component.osInstall.image.kind in ['media', 'file']
         - not (bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool)
@@ -93,6 +111,7 @@
         group: root
         mode: "0644"
       register: bootwright_os_source_download
+      throttle: 1
       when: bootwright_component.osInstall.image.kind == 'url'
 
     - name: Stat managed ISO source
@@ -201,6 +220,12 @@
         mode: "0700"
       when: bootwright_os_install_iso_rebuild_needed | bool
 
+    # mkksiso repacks the whole source ISO, so each build needs roughly the
+    # source size in scratch space under its TMPDIR on top of the retained
+    # output ISO. Bare-metal/API-native machines collapse onto the controller,
+    # so an un-throttled group runs N repacks at once and peaks at N x source
+    # size of transient scratch. throttle holds it to one build at a time: the
+    # output ISOs are unavoidably per-machine, but the scratch peak stays at one.
     - name: Build managed OS install ISO
       ansible.builtin.command:
         argv:
@@ -214,6 +239,7 @@
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
       changed_when: true
+      throttle: 1
       when:
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
@@ -233,6 +259,7 @@
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
       changed_when: true
+      throttle: 1
       when:
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0

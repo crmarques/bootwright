@@ -59,5 +59,14 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		if component["machineRef"] != providerHost {
 			t.Fatalf("component %v machineRef = %v, want %v to match the inventory host so the play selects it", component["name"], component["machineRef"], providerHost)
 		}
+		// The bare-metal install runs on the controller (localhost), where the
+		// media library already holds the source ISO, so the role must skip the
+		// copy-to-provider step and read the media in place. Without this the
+		// role copies the full DVD once per node into per-machine paths and can
+		// exhaust the controller's disk.
+		image := component["osInstall"].(map[string]any)["image"].(map[string]any)
+		if image["sourceOnTarget"] != true {
+			t.Fatalf("component %v sourceOnTarget = %v, want true for a controller-driven bare-metal install", component["name"], image["sourceOnTarget"])
+		}
 	}
 }

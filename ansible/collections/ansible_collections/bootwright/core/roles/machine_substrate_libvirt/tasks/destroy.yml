@@ -112,6 +112,9 @@
       name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
       paths:
         - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+        # Shared per-cluster source-ISO cache (staged once for the whole group).
+        # Cleared with the cluster so the source DVD is never left orphaned.
+        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
       attributes: {}
   when: bootwright_component.osManaged | default(false) | bool
 

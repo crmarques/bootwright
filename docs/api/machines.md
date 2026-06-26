@@ -249,6 +249,16 @@ needs no extra early-networking setup. For a fully disconnected install, point
 `installSource` at an internal mirror; Bootwright serves the ISO over its
 artifact server but never the package tree.
 
+!!! tip "Disk footprint scales with media size × node count"
+    Bootwright bakes each machine's Kickstart into its **own** install ISO
+    (Redfish virtual-media boot cannot pass kernel arguments), so every node in a
+    group keeps a customized ISO as large as the source media. The source ISO is
+    staged once per `(cluster, image)` — read in place on controller-local
+    installs, copied at most once on a remote provider host — but the per-machine
+    output ISOs are unavoidable. An N-node group therefore costs about
+    `N ×` media size of customized media, which is the main reason to prefer a
+    `mediaType: boot` source (~1&nbsp;GB) over a full `dvd` (~10&nbsp;GB).
+
 ## MachineInstallProfile
 
 `MachineInstallProfile` declares how Bootwright installs and customizes an OS
