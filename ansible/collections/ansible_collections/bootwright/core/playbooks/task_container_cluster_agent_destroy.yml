@@ -5,6 +5,11 @@
     - "!all"
     - min
   become: true
+  # --skip-unreachable tolerates powered-off OCP nodes: skip them and continue
+  # tearing down the reachable ones. There is no irreversible device wipe here, so
+  # no ownership/seed gate is needed. Default (var unset) keeps the historical
+  # behaviour where an unreachable node fails the teardown.
+  ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
   pre_tasks:
@@ -14,6 +19,17 @@
         tasks_from: facts
 
   tasks:
+    - name: Probe OCP host reachability before teardown
+      ansible.builtin.ping:
+      register: bootwright_ocp_reachable_probe
+      when: bootwright_destroy_skip_unreachable | default(false) | bool
+
+    - name: Stop tearing down unreachable OCP hosts
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_destroy_skip_unreachable | default(false) | bool
+        - bootwright_ocp_reachable_probe.unreachable | default(false) | bool
+
     - name: Destroy per cluster
       ansible.builtin.include_role:
         name: bootwright.core.container_cluster_agent_destroy
@@ -21,3 +37,25 @@
       loop_control:
         loop_var: bootwright_current_cluster
         label: "{{ bootwright_current_cluster.name }}"
+
+    - name: Warn about OCP hosts skipped as unreachable
+      vars:
+        bootwright_ocp_skipped_hosts: >-
+          {{
+            ansible_play_hosts_all
+            | map('extract', hostvars)
+            | selectattr('bootwright_ocp_reachable_probe', 'defined')
+            | selectattr('bootwright_ocp_reachable_probe.unreachable', 'defined')
+            | selectattr('bootwright_ocp_reachable_probe.unreachable')
+            | map(attribute='inventory_hostname')
+            | list
+          }}
+      ansible.builtin.debug:
+        msg: >-
+          Skipped unreachable OpenShift node(s): {{ bootwright_ocp_skipped_hosts | join(', ') }}.
+          Their agent install state was not cleaned; re-run destroy once they are
+          back up, or clean them manually, before reusing the hardware.
+      run_once: true
+      when:
+        - bootwright_destroy_skip_unreachable | default(false) | bool
+        - bootwright_ocp_skipped_hosts | length > 0

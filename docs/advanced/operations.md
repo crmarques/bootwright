@@ -155,6 +155,38 @@ bootwright destroy --clusters ceph-storage --force-unowned --yes
     Because it removes a VM Bootwright cannot positively confirm it owns,
     confirm the target VM is yours before using it.
 
+## Tearing down with a node powered off
+
+The node-targeting teardown plays (managed Ceph storage and OpenShift agent
+clusters) connect to every node over SSH. When a node is powered off the
+teardown stops with `UNREACHABLE!`, and because the storage step gates the
+container step, one down node blocks the whole teardown.
+
+`--skip-unreachable` lets the teardown proceed on the nodes it can reach: an
+unreachable node is skipped rather than aborting the play. It **requires
+`--override`**, because a skipped node leaves the cluster only *partially*
+destroyed.
+
+```text
+bootwright destroy --clusters ceph-nprd --override --skip-unreachable --yes
+```
+
+What "partial" means: a skipped storage node keeps its OSD device signatures and
+local Ceph state (`/etc/ceph`, `/var/lib/ceph`) — they are **not** wiped. The
+cluster's ownership record is kept and marked partially destroyed, so it is not
+treated as fully gone; `bootwright status` flags it, and the teardown prints a
+warning naming the skipped nodes. Re-run `destroy` once the nodes are back up, or
+wipe them manually, before reusing the hardware.
+
+!!! danger "Storage teardown fails closed when the Ceph **seed** host is down"
+    Cluster ownership is proven on the seed host before any node wipes its OSD
+    devices. If the seed host itself is unreachable, `--skip-unreachable` does
+    **not** proceed — the storage teardown fails closed with a clear message, so
+    no node wipes a cluster whose ownership could not be verified. Power the seed
+    on (or remove the cluster manually after verifying it is safe) and retry.
+    `--skip-unreachable` does not relax any device data-safety check, and like
+    `--force-unowned` it does not imply `--yes`.
+
 ## The fail-closed `apply --override` pattern
 
 `apply --override` authorizes Bootwright-owned destructive *rebuilds* — drifted

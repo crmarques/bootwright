@@ -35,6 +35,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		yes              bool
 		override         bool
 		forceUnowned     bool
+		skipUnreachable  bool
 		stage            string
 		streamAnsible    bool
 		scopedValidation bool
@@ -65,6 +66,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the destroy confirmation prompt")
 	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	cmd.Flags().BoolVar(&forceUnowned, "force-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
+	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --override. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
 	cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible teardown output to the terminal as well as the destroy log (default: log only)")
 	if options.stageSelector {
 		flags.output = outputText
@@ -80,6 +82,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
+		}
+		// Skipping a down node yields a partial teardown (its OSD devices are not
+		// wiped, local Ceph state remains), so gate it behind the same --override
+		// that authorizes other unsafe Bootwright-owned destroy operations.
+		if skipUnreachable && !override {
+			return failErr(2, errors.New("--skip-unreachable requires --override"))
 		}
 		runScope := scope
 		runCommandLabel := commandLabel
@@ -185,7 +193,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if infraScope && sel.Active {
 			resolvedClusterRoots = sel.AllRoots
 		}
-		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned)
+		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
 		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
 		// below). No Ansible destroy role consumes a destroy-override extra-var, so
@@ -285,7 +293,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			renderResult = result
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, streamAnsible)
-			result, ledger, _, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
+			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
 			if gerr != nil {
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
@@ -293,6 +301,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, gerr)
 			}
 			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames)
+			// A --skip-unreachable teardown that skipped powered-off nodes leaves
+			// those clusters only partially destroyed: stamp their ownership record
+			// (so status flags them and they are not treated as gone) and warn.
+			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
+			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
 			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
@@ -313,6 +326,20 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		return nil
 	}
 	return cmd
+}
+
+// printPartialStorageDestroyWarning surfaces storage clusters left partially
+// destroyed because --skip-unreachable skipped powered-off nodes, so the operator
+// knows the teardown is incomplete and must be finished before reusing hardware.
+func printPartialStorageDestroyWarning(stdout io.Writer, partial []string, err error) {
+	if len(partial) > 0 {
+		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
+			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped and local Ceph state remains. Re-run destroy once the nodes are back up, or wipe them manually, before reusing the hardware; bootwright status flags them.",
+			strings.Join(partial, ", ")))
+	}
+	if err != nil {
+		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error())
+	}
 }
 
 func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecision, override bool, dryRun bool) {

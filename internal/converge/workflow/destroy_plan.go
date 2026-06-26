@@ -79,9 +79,14 @@ func infraDestroySteps() []destroyStep {
 	}
 }
 
+// DestroyStorageClustersTaskID is the storage teardown task's id in the destroy
+// graph. Exported so converge can locate the task's per-run artifacts (the
+// partial-teardown summary the storage play writes) under the run history dir.
+const DestroyStorageClustersTaskID = "destroy.storage-clusters"
+
 func clusterDestroySteps() []destroyStep {
 	return []destroyStep{
-		{id: "destroy.storage-clusters", kind: DestroyTaskKindStorageCluster, label: "Storage clusters", playbook: roles.PlaybookTaskStorageClusterDestroy},
+		{id: DestroyStorageClustersTaskID, kind: DestroyTaskKindStorageCluster, label: "Storage clusters", playbook: roles.PlaybookTaskStorageClusterDestroy},
 		{id: "destroy.container-clusters", kind: DestroyTaskKindContainerCluster, label: "Container clusters", playbook: roles.PlaybookTaskContainerClusterAgentDestroy},
 	}
 }

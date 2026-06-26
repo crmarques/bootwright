@@ -926,6 +926,78 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 	}
 }
 
+// TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar pins that
+// --skip-unreachable is gated behind --override and, when authorized, feeds the
+// bootwright_destroy_skip_unreachable extra-var the node-targeting destroy plays
+// read to tolerate powered-off hosts.
+func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	help, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(help, "--skip-unreachable") {
+		t.Fatalf("destroy help must document --skip-unreachable:\n%s", help)
+	}
+
+	// Without --override the flag is refused (a skipped node is a partial teardown).
+	_, stderr, code = runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--skip-unreachable",
+		"--dry-run",
+		"--ask-become-pass=false",
+	)
+	if code != 2 {
+		t.Fatalf("destroy --skip-unreachable without --override must exit 2, got %d stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "--skip-unreachable requires --override") {
+		t.Fatalf("destroy --skip-unreachable without --override must explain the requirement, got stderr=%q", stderr)
+	}
+
+	// Without the flag, no skip extra-var even with --override.
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--override",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --stage infra --override dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if slices.Contains(report.ExtraVars, "bootwright_destroy_skip_unreachable=true") {
+		t.Fatalf("destroy without --skip-unreachable must not emit the skip extra-var: %#v", report.ExtraVars)
+	}
+
+	// With --skip-unreachable --override the gate var is set.
+	stdout, stderr, code = runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--skip-unreachable",
+		"--override",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --skip-unreachable --override dry-run exited %d, stderr=%q", code, stderr)
+	}
+	report = scopeDryRunReport{}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_destroy_skip_unreachable=true") {
+		t.Fatalf("destroy --skip-unreachable --override must emit the skip extra-var: %#v", report.ExtraVars)
+	}
+}
+
 // TestDestroyFullDryRunJSONPlansClustersThenInfra locks in that `destroy`
 // without --stage tears down the whole context: the JSON dry-run reports the
 // ordered task chain (clusters then infra) and enables the orphan-reclaim

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/state/graph"
@@ -123,7 +124,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	if stateLoaded {
 		printSecretStatus(p, ctx.Name, ctx.SecretsDir, state)
 		p.Checks(append(contextHostTrustChecks(ctx.BaseDir, state), bastionLocalityCheck(state)))
-		printClusterStatus(p, state, ctx.RenderedDir, ctx.ClustersDir)
+		printClusterStatus(p, state, ctx.RenderedDir, ctx.ClustersDir, ctx.OwnershipDir, ctx.Name)
 		printSharedStatus(p, state)
 	}
 
@@ -181,12 +182,16 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 	}
 }
 
-func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, clustersDir string) {
+func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, clustersDir, ownershipDir, contextName string) {
 	if len(state.ContainerClusters) == 0 && len(state.StorageClusters) == 0 {
 		return
 	}
 	p.Section("Clusters")
 	displays := buildClusterDisplays(state)
+	// Storage clusters left partially destroyed by a --skip-unreachable teardown
+	// (powered-off nodes skipped) carry a marker on their kept ownership record;
+	// surface it so the cluster is not read as cleanly torn down.
+	partialStorage, _ := converge.PartiallyDestroyedStorageClusters(ownershipDir, contextName)
 	freshness := status.LoadEffectiveStateFreshness(state, renderedDir)
 	addons := status.BuildAddons(state, clustersDir)
 	containers := map[string]v1alpha1.ContainerCluster{}
@@ -206,6 +211,13 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 			// not invisible next to the container clusters. The name badge is
 			// neutral INFO, not a green OK that would read as "installed".
 			p.Status(cliout.StatusInfo, name, storageStatusDetail(sc))
+			if skipped, partial := partialStorage[name]; partial {
+				detail := "partially destroyed: unreachable nodes skipped, devices not wiped; re-run destroy or wipe manually"
+				if strings.TrimSpace(skipped) != "" {
+					detail = "partially destroyed: nodes " + skipped + " skipped (unreachable), devices not wiped; re-run destroy or wipe manually"
+				}
+				p.Status(cliout.StatusWarn, "teardown", detail)
+			}
 			continue
 		}
 		ocp := containers[name]

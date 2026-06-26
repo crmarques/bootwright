@@ -24,6 +24,12 @@ const (
 	// the machine substrate destroy roles so a domain/VM matching the Bootwright
 	// naming but carrying a missing/mismatched marker is still torn down.
 	DestroyForceUnownedExtraVar = "bootwright_destroy_force_unowned"
+	// DestroySkipUnreachableExtraVar tells the node-targeting destroy plays
+	// (storage Ceph, container OCP) to tolerate powered-off/unreachable hosts:
+	// skip them and continue instead of aborting the play. The storage play still
+	// fails closed when a cluster's Ceph seed host is unreachable, so cluster
+	// ownership stays proven before any node wipes its OSD devices.
+	DestroySkipUnreachableExtraVar = "bootwright_destroy_skip_unreachable"
 )
 
 // ApplyDestroyScopeExtraVars composes the teardown-scoping executor gate
@@ -32,7 +38,8 @@ const (
 // cleanup is gated to resolvedClusterRoots. force-unowned is independent and
 // applies to any destroy. Cluster-name resolution stays a CLI concern; the
 // already-resolved roots are passed in (mirroring how PlanScopedApply takes the
-// already-scoped state).
+// already-scoped state). skipUnreachable is likewise independent and applies to
+// any destroy: it tolerates powered-off nodes in the node-targeting plays.
 //
 // The storage-teardown gate is composed here too, from the work set the caller
 // already resolved onto plan.StorageWorkNames (clusteraccess.Selection): this is
@@ -40,7 +47,7 @@ const (
 // task-graph executor and the single-playbook (dry-run / no-remote-work) path
 // carry an identical gate and a dry-run faithfully previews what the graph run
 // tears down.
-func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, forceUnowned bool) {
+func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, forceUnowned bool, skipUnreachable bool) {
 	if infraScope {
 		if strings.TrimSpace(clusterScope) == "" {
 			plan.ExtraVarPairs = append(plan.ExtraVarPairs, InfraDestroyContextSweepExtraVar+"=true")
@@ -61,5 +68,8 @@ func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScop
 	}
 	if forceUnowned {
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyForceUnownedExtraVar+"=true")
+	}
+	if skipUnreachable {
+		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroySkipUnreachableExtraVar+"=true")
 	}
 }

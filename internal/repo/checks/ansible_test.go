@@ -2958,6 +2958,57 @@ func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 	}
 }
 
+// TestStorageCephadmDestroySkipUnreachableGuards pins the safety contract for
+// --skip-unreachable: the play tolerates unreachable hosts only via the gate var
+// (default keeps the fatal behaviour), and a seed-reachability assert runs before
+// the include_role wipe so a cluster whose seed host is down never reaches the
+// device wipe with ownership unproven.
+func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	if len(plays) != 1 {
+		t.Fatalf("storage destroy plays = %d, want 1", len(plays))
+	}
+	// any_errors_fatal stays literally true even with ignore_unreachable, so a
+	// genuine task failure (the seed assert / ownership refusal) still aborts.
+	if got := plays[0]["any_errors_fatal"]; got != true {
+		t.Fatalf("storage destroy play must keep any_errors_fatal literally true, got %v", got)
+	}
+	ignoreUnreachable, ok := plays[0]["ignore_unreachable"].(string)
+	if !ok || !strings.Contains(ignoreUnreachable, "bootwright_destroy_skip_unreachable") {
+		t.Fatalf("storage destroy play must template ignore_unreachable from bootwright_destroy_skip_unreachable so it is off by default, got %v", plays[0]["ignore_unreachable"])
+	}
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	seedIdx := findAnsibleTask(t, tasks, "Require the Ceph seed host to be reachable before any device wipe")
+	wipeIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
+	if seedIdx >= wipeIdx {
+		t.Fatalf("seed-reachability assert (idx %d) must run before the destroy include_role wipe (idx %d)", seedIdx, wipeIdx)
+	}
+	if _, ok := tasks[seedIdx]["ansible.builtin.assert"]; !ok {
+		t.Fatalf("seed-reachability guard must be a hard assert so any_errors_fatal aborts all hosts, got %v", tasks[seedIdx])
+	}
+
+	// A partially-destroyed cluster (a node skipped) must keep its ownership
+	// record so it is not treated as fully gone.
+	destroyTasks := storageCephDestroyTasks(t)
+	removeIdx := findAnsibleTask(t, destroyTasks, "Remove storage cluster ownership record")
+	if got := fmt.Sprint(destroyTasks[removeIdx]["when"]); !strings.Contains(got, "bootwright_storage_cluster_partial") {
+		t.Fatalf("storage cluster ownership-record removal must be gated on not-partial so a partial teardown keeps the record, got when=%v", destroyTasks[removeIdx]["when"])
+	}
+}
+
+// TestContainerClusterDestroySkipUnreachable pins that the OCP teardown also
+// tolerates unreachable nodes only via the gate var (default unchanged).
+func TestContainerClusterDestroySkipUnreachable(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_destroy.yml")
+	if len(plays) != 1 {
+		t.Fatalf("container destroy plays = %d, want 1", len(plays))
+	}
+	ignoreUnreachable, ok := plays[0]["ignore_unreachable"].(string)
+	if !ok || !strings.Contains(ignoreUnreachable, "bootwright_destroy_skip_unreachable") {
+		t.Fatalf("container destroy play must template ignore_unreachable from bootwright_destroy_skip_unreachable, got %v", plays[0]["ignore_unreachable"])
+	}
+}
+
 func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")

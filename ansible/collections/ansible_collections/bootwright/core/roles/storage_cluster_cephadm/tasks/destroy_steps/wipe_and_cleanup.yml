@@ -90,6 +90,11 @@
     - "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
     - "{{ bootwright_ceph_osd_marker_path }}"
 
+# Keep the cluster's controller-side ownership record when a node was skipped as
+# unreachable (--skip-unreachable): the cluster is only partially torn down, so it
+# must not be treated as fully gone. bootwright re-stamps the kept record as
+# partially destroyed from the destroy-result file. A normal teardown (no skipped
+# nodes) removes the record as before.
 - name: Remove storage cluster ownership record
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -97,6 +102,7 @@
   vars:
     bootwright_ownership_kind: storage-cluster
     bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+  when: not (bootwright_storage_cluster_partial | default(false) | bool)
 
 - name: Remove Ceph package ownership records
   ansible.builtin.include_role:
