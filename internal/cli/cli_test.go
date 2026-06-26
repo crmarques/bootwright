@@ -118,6 +118,44 @@ func TestClusterTargets(t *testing.T) {
 	}
 }
 
+func TestBastionGroupExposesSetupAndCheck(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "bastion", "--help")
+	if code != 0 {
+		t.Fatalf("bastion --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"setup", "check"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("bastion --help missing subcommand %q:\n%s", want, stdout)
+		}
+	}
+	if _, stderr, code = runCLI(t, "bastion", "check", "--help"); code != 0 {
+		t.Fatalf("bastion check --help exited %d, stderr=%q", code, stderr)
+	}
+}
+
+// TestBastionCheckMirrorsPreflightBastion pins bastion check as the
+// bastion-grouped alias of preflight bastion: same read-only dependency
+// checks, byte-identical output, and the same exit code.
+func TestBastionCheckMirrorsPreflightBastion(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	checkOut, checkErr, checkCode := runCLI(t, "bastion", "check")
+	preOut, preErr, preCode := runCLI(t, "preflight", "bastion")
+
+	if checkCode != preCode {
+		t.Fatalf("bastion check exit %d != preflight bastion exit %d (checkErr=%q preErr=%q)", checkCode, preCode, checkErr, preErr)
+	}
+	if checkOut != preOut {
+		t.Fatalf("bastion check stdout differs from preflight bastion:\n--- bastion check ---\n%s\n--- preflight bastion ---\n%s", checkOut, preOut)
+	}
+	if checkErr != preErr {
+		t.Fatalf("bastion check stderr differs from preflight bastion:\n--- bastion check ---\n%s\n--- preflight bastion ---\n%s", checkErr, preErr)
+	}
+	if !strings.Contains(checkOut, "Bastion tools") {
+		t.Fatalf("bastion check output missing Bastion tools group:\n%s", checkOut)
+	}
+}
+
 func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	stdout, stderr, code := runCLI(t, "apply", "--help")
 	if code != 0 {
@@ -454,7 +492,7 @@ func TestValidateReportsDeclaredSecretStatus(t *testing.T) {
 // its description.
 func TestDispatcherCompletionListsSubcommandsOnce(t *testing.T) {
 	setTestHomeAndRoot(t)
-	for _, parent := range []string{"context", "render"} {
+	for _, parent := range []string{"context", "render", "bastion"} {
 		stdout, stderr, code := runCLI(t, cobra.ShellCompRequestCmd, parent, "")
 		if code != 0 {
 			t.Fatalf("__complete %s exited %d, stderr=%q\nstdout:\n%s", parent, code, stderr, stdout)
@@ -2385,6 +2423,11 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"cluster", "list"}, want: true},
 		{args: []string{"cluster", "access"}, want: true},
 		{args: []string{"cluster", "kubeconfig", "--cluster", "managed-01"}, want: true},
+		// Bare `bastion` only prints help; its subcommands read the root-owned
+		// context and stay rootful (setup mutates the host, check is read-only).
+		{args: []string{"bastion"}, want: false},
+		{args: []string{"bastion", "setup"}, want: true},
+		{args: []string{"bastion", "check"}, want: true},
 		{args: []string{"example", "init", "--name", "lab", "--output", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
@@ -2478,6 +2521,9 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		want bool
 	}{
 		{args: []string{"bastion", "setup"}, want: true},
+		// bastion check is read-only: it escalates to read the context but must
+		// never prompt for a sudo become password the way setup does.
+		{args: []string{"bastion", "check"}, want: false},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--stage", "clusters"}, want: true},
 		{args: []string{"apply"}, want: true},

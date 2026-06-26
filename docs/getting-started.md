@@ -285,6 +285,7 @@ bootwright plan
 | Command | Purpose |
 | --- | --- |
 | `bastion setup` | Installs the managed Ansible runtime and the release-matched OpenShift CLIs on the bastion. |
+| `bastion check` | Re-runs the read-only bastion dependency checks (Python, Ansible runtime, `tar`, `sudo`); equivalent to `preflight bastion`. |
 | `preflight all` | Checks the bastion, infrastructure hosts, and cluster prerequisites before any mutation. |
 | `render effective` | Writes the desired state with all defaults applied, so you can see exactly what will be acted on. |
 | `plan` | Shows the apply task graph without touching hosts or clusters. |

@@ -19,7 +19,10 @@ func newBastionCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		Use:   "bastion <command>",
 		Short: "Manage bastion prerequisites",
 	}
-	cmd.AddCommand(newBastionSetupCmd(stdin, stdout, stderr))
+	cmd.AddCommand(
+		newBastionSetupCmd(stdin, stdout, stderr),
+		newBastionCheckCmd(stdout),
+	)
 	requireSubcommand(cmd)
 	return cmd
 }
@@ -30,6 +33,9 @@ func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 		Short: "Check bastion dependencies",
 		Args:  cobra.NoArgs,
 		Example: `  # Check the bastion has the runtime + CLIs the current context needs
+  bootwright bastion check
+
+  # The same check is also exposed in the preflight family
   bootwright preflight bastion`,
 	}
 	cf := addCommonFlags()
