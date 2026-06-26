@@ -1,0 +1,56 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-1
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef: rack1-baremetal-provider
+
+  os:
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+    provided: false
+    installProfileRef: rhel-9-ceph-node
+
+  network:
+    config:
+      networkConfigRef: ceph-net
+      attachmentRef: ceph-net
+      interfaceAddresses:
+        - interface: bond0.140
+          addressRef: ssh
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+      - nicRef: eno2
+        interfaceName: eno2
+
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 00:25:90:5a:11:01
+      - name: eno2
+        macAddress: 00:25:90:5a:11:02
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-ceph-1.bootwright.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: bmc-credentials
+        disableCertificateVerification: true
+    boot:
+      nicRef: eno1
+
+  addresses:
+    - name: ssh
+      address: 192.168.140.21
+
+  access:
+    ssh:
+      user: root
+      keyRef: ceph-node-ssh
+      addressRef: ssh

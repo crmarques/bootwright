@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: rack1-baremetal-provider
+spec:
+  type: baremetal
+
+  baremetal:
+    boot:
+      method: external
+
+  networkAttachments:
+    - name: ceph-net
+      baremetal:
+        vlan: 140

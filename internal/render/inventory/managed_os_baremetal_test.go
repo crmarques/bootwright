@@ -1,88 +1,63 @@
 package inventory
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
+)
 
-// bareMetalManagedOSState is a managed Ceph cluster whose nodes install their OS
-// (os.provided=false + installProfileRef) on a bare-metal substrate. Bare-metal
-// machines carry no substrate profile, so they have no provider host: the
-// managed-OS install is driven from the controller over the BMC (Redfish), the
-// same controller-local model KubeVirt/vSphere use. The node must still land in
-// the cluster's managed-OS inventory group, or the machines-phase install task
-// is created (managedOSMachineNames sees installsOS=true) but skipped because
-// its --limit group resolves to zero hosts.
-func bareMetalManagedOSState() v1alpha1.State {
-	node := func(name, address string) v1alpha1.Machine {
-		return v1alpha1.Machine{
-			Metadata: v1alpha1.Metadata{Name: name},
-			Spec: v1alpha1.MachineSpec{
-				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
-				Substrate:    v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "bare-metal"}},
-				OS: v1alpha1.MachineOSSpec{
-					Provided:          v1alpha1.BoolPtr(false),
-					InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9-ceph-node"},
-				},
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: address}},
-				Access: v1alpha1.MachineAccess{
-					SSH: &v1alpha1.MachineSSHSpec{
-						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						KeyRef:     v1alpha1.SecretRef{Name: "ceph-node-ssh"},
-					},
-				},
-			},
-		}
+// Bare-metal Ceph nodes carry no substrate provider host: their managed-OS
+// install is driven from the controller over the BMC (Redfish), like the
+// API-native KubeVirt/vSphere substrates. They must still land in the cluster's
+// managed-OS inventory group with a controller-local connection, or the
+// machines-phase install task is created but skipped at runtime because its
+// --limit group resolves to zero hosts. This is the bare-metal counterpart to
+// TestManagedOSInstallVarsFromCephLibvirtFixture (fixture 006).
+func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "009-ceph-3nodes-baremetal-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	return v1alpha1.State{
-		Environments: []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "lab"}}},
-		InfraProviders: []v1alpha1.InfraProvider{{
-			Metadata: v1alpha1.Metadata{Name: "bare-metal"},
-			Spec:     v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerBareMetal},
-		}},
-		Machines: []v1alpha1.Machine{node("ceph-0", "10.10.10.10"), node("ceph-1", "10.10.10.11"), node("ceph-2", "10.10.10.12")},
-		StorageClusters: []v1alpha1.StorageCluster{{
-			Metadata: v1alpha1.Metadata{Name: "ceph-bm"},
-			Spec: v1alpha1.StorageClusterSpec{
-				Type:       v1alpha1.StorageClusterTypeCeph,
-				Management: v1alpha1.StorageClusterManagementManaged,
-				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Cephadm: v1alpha1.StorageCephadmSpec{
-						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						Bootstrap:  v1alpha1.StorageCephadmBootstrap{Host: "ceph-0"},
-					},
-					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{
-							{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Site: "dc1", Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleOSD}},
-							{Hostname: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Site: "dc1", Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleOSD}},
-							{Hostname: "ceph-2", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-2"}, Site: "dc1", Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleOSD}},
-						},
-					},
-				},
-			},
-		}},
-	}
-}
 
-func TestManagedOSGroupIncludesBareMetalNodes(t *testing.T) {
-	state := bareMetalManagedOSState()
-	group := ManagedOSGroupName("ceph-bm")
-
+	group := ManagedOSGroupName("ceph-baremetal")
 	members := HostGroupMembers(state)[group]
 	if len(members) != 3 {
 		t.Fatalf("managed-OS group %q members = %v, want 3 bare-metal nodes", group, members)
 	}
-
-	counts := HostGroupCounts(state)
-	if counts[group] != 3 {
-		t.Fatalf("managed-OS group %q count = %d, want 3", group, counts[group])
+	if got := HostGroupCounts(state)[group]; got != 3 {
+		t.Fatalf("managed-OS group %q count = %d, want 3 (an empty group skips the install task)", group, got)
 	}
 
-	// The machines-phase install task is limited to this group; an empty group
-	// makes ansible abort with "no hosts to target" and the task is skipped.
-	for _, host := range members {
-		entry, ok := HostGroupMembersWithOwnershipRecords(state, nil)[group]
-		if !ok || len(entry) == 0 {
-			t.Fatalf("host %q missing from managed-OS group", host)
+	// The install runs on the controller (ansible_connection: local) and the
+	// host's provider_host_name must equal the component's machineRef so the
+	// managed-OS play selects it.
+	host := ManagedOSHostName("ceph-baremetal", "ceph-0")
+	hosts := Inventory(state, "/context/secrets")["all"].(map[string]any)["hosts"].(map[string]any)
+	entry, ok := hosts[host].(map[string]any)
+	if !ok {
+		t.Fatalf("inventory all.hosts missing managed-OS host %q", host)
+	}
+	if entry["ansible_connection"] != "local" {
+		t.Fatalf("host %q ansible_connection = %v, want local", host, entry["ansible_connection"])
+	}
+	providerHost := entry["bootwright_machine_task_provider_host_name"]
+	if providerHost != "localhost" {
+		t.Fatalf("host %q provider_host_name = %v, want localhost", host, providerHost)
+	}
+
+	groups := VarsWithSecretsDir(state, "/context/secrets")["bootwright_managed_os_install_groups"].([]any)
+	if len(groups) != 1 {
+		t.Fatalf("managed OS groups = %v, want 1", groups)
+	}
+	components := groups[0].(map[string]any)["components"].([]any)
+	if len(components) != 3 {
+		t.Fatalf("components = %v, want 3", components)
+	}
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["machineRef"] != providerHost {
+			t.Fatalf("component %v machineRef = %v, want %v to match the inventory host so the play selects it", component["name"], component["machineRef"], providerHost)
 		}
 	}
 }
