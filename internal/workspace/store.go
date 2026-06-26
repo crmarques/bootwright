@@ -248,6 +248,25 @@ func ContextExists(name string) (bool, error) {
 	return isUsableContext(ctx)
 }
 
+// ContextBaseDirPresent reports whether the context's shared base directory
+// exists on this host, irrespective of whether it is a usable
+// Bootwright-managed context. Deletion uses it to tell "no shared files to
+// remove, just clean the caller's registry pointer" apart from a
+// present-but-unmanaged directory, which RequireExistingContext still rejects.
+func ContextBaseDirPresent(name string) (bool, error) {
+	ctx, err := NewContext(name)
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Lstat(ctx.BaseDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat context %q at %s: %w", name, ctx.BaseDir, err)
+	}
+	return true, nil
+}
+
 func RequireExistingContext(name string) (Context, error) {
 	ctx, err := NewContext(name)
 	if err != nil {

@@ -393,25 +393,40 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		if err != nil {
 			return failErr(1, err)
 		}
-		ctx, err := workspace.RequireExistingContext(name)
+		present, err := workspace.ContextBaseDirPresent(name)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
-			return failErr(1, errors.New("context delete aborted"))
+		if present {
+			ctx, err := workspace.RequireExistingContext(name)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
+				return failErr(1, errors.New("context delete aborted"))
+			}
+			if err := workspace.SafePurgeBaseDir(ctx); err != nil {
+				return failErr(1, err)
+			}
 		}
-		if err := workspace.SafePurgeBaseDir(ctx); err != nil {
-			return failErr(1, err)
-		}
+		clearedRegistry := false
 		if strings.TrimSpace(store.Current) == name {
 			store.Current = ""
 			if err := workspace.Save(registry, store); err != nil {
 				return failErr(1, err)
 			}
+			clearedRegistry = true
 		}
 		p := output.New(stdout)
 		p.Command("context delete")
-		p.Summary(output.StatusOK, "context "+name, "base directory removed")
+		switch {
+		case present:
+			p.Summary(output.StatusOK, "context "+name, "base directory removed")
+		case clearedRegistry:
+			p.Summary(output.StatusOK, "context "+name, "not in shared storage; cleared local registry selection")
+		default:
+			p.Summary(output.StatusOK, "context "+name, "not in shared storage; nothing to remove")
+		}
 		return nil
 	}
 	return cmd

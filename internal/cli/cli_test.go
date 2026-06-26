@@ -1923,6 +1923,56 @@ func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 	}
 }
 
+func TestContextDeletePurgeClearsDanglingSelectionWhenSharedDirMissing(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	homeA := t.TempDir()
+	homeB := t.TempDir()
+
+	t.Setenv("HOME", homeA)
+	stdout, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", fixturePath("001-sno-libvirt"))
+	if code != 0 {
+		t.Fatalf("user A context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	t.Setenv("HOME", homeB)
+	if _, stderr, code = runCLI(t, "context", "use", "--name", "lab"); code != 0 {
+		t.Fatalf("user B context use exited %d, stderr=%q", code, stderr)
+	}
+	t.Setenv("HOME", homeA)
+	if _, stderr, code = runCLI(t, "context", "delete", "--name", "lab", "--purge", "--yes"); code != 0 {
+		t.Fatalf("user A context delete --purge exited %d, stderr=%q", code, stderr)
+	}
+
+	// User B is now left with a dangling current pointer to a context whose
+	// shared directory no longer exists. Deleting it must clean the local
+	// registry instead of failing on the missing shared directory.
+	t.Setenv("HOME", homeB)
+	stdout, stderr, code = runCLI(t, "context", "delete", "--name", "lab", "--purge", "--yes")
+	if code != 0 {
+		t.Fatalf("user B context delete of dangling selection exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	registryB, err := workspace.DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeB, err := workspace.Load(registryB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storeB.Current != "" {
+		t.Fatalf("user B current = %q, want cleared", storeB.Current)
+	}
+}
+
+func TestContextDeletePurgeSucceedsWhenContextNeverExisted(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	_, stderr, code := runCLI(t, "context", "delete", "--name", "never-existed", "--purge", "--yes")
+	if code != 0 {
+		t.Fatalf("context delete of unknown context exited %d, stderr=%q", code, stderr)
+	}
+}
+
 func TestContextSelectionIsPerHomeWithSharedStorage(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(workspace.SetRootDirForTest(root))
