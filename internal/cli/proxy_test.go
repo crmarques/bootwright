@@ -10,7 +10,7 @@ import (
 func TestBastionSetupDryRunShowsContextProxy(t *testing.T) {
 	clearProxyEnv(t)
 	initTestContext(t, "002-sno-emul-baremetal")
-	_, stderr, code := runCLI(t, "secret", "set", "proxy-credentials", "--username", "proxy", "--password", "secret")
+	_, stderr, code := runCLI(t, "secret", "set", "--name", "proxy-credentials", "--username", "proxy", "--password", "secret")
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}

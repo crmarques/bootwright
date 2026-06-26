@@ -17,6 +17,7 @@ import (
 
 func newSecretSetCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var (
+		name          string
 		pullSecret    string
 		rawFile       string
 		fromFile      string
@@ -29,7 +30,7 @@ func newSecretSetCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		yes           bool
 	)
 	cmd := &cobra.Command{
-		Use:   "set <name>",
+		Use:   "set --name <name>",
 		Short: "Store a pull secret or username:password credentials for a SecretRef",
 		Long: `Write the named SecretRef material to the current context secrets-dir, mode 0600.
 Exactly one input mode is required:
@@ -43,22 +44,23 @@ Exactly one input mode is required:
 
 Prefer --password-stdin or --from-file for credentials the operator
 provides. Use --generate for test fixtures.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		Example: `  # Store an OpenShift pull secret
-  bootwright secret set openshift-pull-secret --pull-secret ~/pull-secret.json
+  bootwright secret set --name openshift-pull-secret --pull-secret ~/pull-secret.json
 
   # Store BMC / proxy credentials interactively
-  bootwright secret set proxy-credentials --username proxy --password-stdin
+  bootwright secret set --name proxy-credentials --username proxy --password-stdin
 
   # Use a pre-existing username:password file
-  bootwright secret set bmc-credentials --from-file ./bmc.txt
+  bootwright secret set --name bmc-credentials --from-file ./bmc.txt
 
   # Store imported Data Foundation external cluster details JSON
-  bootwright secret set shared-ceph-external-details --raw-file ./external-details.json
+  bootwright secret set --name shared-ceph-external-details --raw-file ./external-details.json
 
   # Generate a random password for a test fixture
-  bootwright secret set proxy-credentials --generate --username proxy`,
+  bootwright secret set --name proxy-credentials --generate --username proxy`,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "SecretRef name (required)")
 	cmd.Flags().StringVar(&pullSecret, "pull-secret", "", "path to an OpenShift pull-secret JSON file")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to a PEM TLS certificate chain file")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to a PEM TLS private key file")
@@ -70,10 +72,9 @@ provides. Use --generate for test fixtures.`,
 	cmd.Flags().BoolVar(&generate, "generate", false, "generate a strong random password (intended for test fixtures)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the overwrite confirmation prompt")
 	cf := addCommonFlags()
-	cmd.RunE = func(c *cobra.Command, args []string) error {
-		name := args[0]
+	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if !desiredstate.IsDNSLabel(name) {
-			return failf(2, "<name> must be a lowercase DNS label")
+			return failf(2, "--name must be a lowercase DNS label")
 		}
 		modes := 0
 		if pullSecret != "" {

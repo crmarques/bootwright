@@ -124,7 +124,7 @@ None of this goes in YAML — it lives encrypted in the Bootwright context.
 ## 2. Stage the RHEL ISO
 
 ```bash
-bootwright media add rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
+bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
 bootwright media list
 ```
 
@@ -155,18 +155,18 @@ bootwright secret list          # shows which secrets still need bytes
 # Red Hat subscription (plain strings).
 printf '%s' 'YOUR_ORG_ID'             > /tmp/rhel-org.txt
 printf '%s' 'YOUR_ACTIVATION_KEY'     > /tmp/rhel-activation-key.txt
-bootwright secret set rhel-org            --raw-file /tmp/rhel-org.txt
-bootwright secret set rhel-activation-key --raw-file /tmp/rhel-activation-key.txt
+bootwright secret set --name rhel-org            --raw-file /tmp/rhel-org.txt
+bootwright secret set --name rhel-activation-key --raw-file /tmp/rhel-activation-key.txt
 shred -u /tmp/rhel-org.txt /tmp/rhel-activation-key.txt
 
 # IBM entitlement key for cp.icr.io (username "cp", key as the password).
 printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
-  bootwright secret set ibm-ceph-registry --username cp --password-stdin
+  bootwright secret set --name ibm-ceph-registry --username cp --password-stdin
 
 # Real Redfish BMC account, and the proxy account (drop this one if the proxy
 # is unauthenticated).
-printf '%s\n' 'YOUR_BMC_PASSWORD'   | bootwright secret set bmc-credentials  --username <bmc-user>   --password-stdin
-printf '%s\n' 'YOUR_PROXY_PASSWORD' | bootwright secret set proxy-credentials --username <proxy-user> --password-stdin
+printf '%s\n' 'YOUR_BMC_PASSWORD'   | bootwright secret set --name bmc-credentials  --username <bmc-user>   --password-stdin
+printf '%s\n' 'YOUR_PROXY_PASSWORD' | bootwright secret set --name proxy-credentials --username <proxy-user> --password-stdin
 
 # Converge the auto-managed secrets: generates the ceph-node-ssh keypair and
 # copies the bastion-host-ssh file into the context.

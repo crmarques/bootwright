@@ -32,10 +32,10 @@ component, and get the same result every time.
 The CLI covers the normal convergence path:
 
 ```text
-bootwright example init lab --output ./lab-input
+bootwright example init --name lab --output ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init --name lab -f ./lab-input
-bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret check
 bootwright host trust
@@ -182,7 +182,7 @@ add-on inputs. IPMI is not apply-supported today.
 ## CLI
 
 ```text
-bootwright example init lab --output ./lab-input
+bootwright example init --name lab --output ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init --name lab -f ./lab-input
 bootwright context current
@@ -190,7 +190,7 @@ bootwright cluster list
 bootwright cluster access
 bootwright cluster access --cluster demo-ocp
 bootwright secret list
-bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret check
 bootwright host trust

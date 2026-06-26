@@ -52,7 +52,7 @@ Create the bastion SSH key and register the ISO:
 mkdir -p ~/.ssh
 test -f ~/.ssh/bootwright-ssh-key || \
   ssh-keygen -t ed25519 -N '' -C bootwright-lab -f ~/.ssh/bootwright-ssh-key
-bootwright media add rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel.iso
+bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel.iso
 ```
 
 ## Run

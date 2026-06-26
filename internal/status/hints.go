@@ -84,9 +84,9 @@ func ContextSecretSetHints(missing []string) []string {
 	var pull, rest []string
 	for _, name := range missing {
 		if name == v1alpha1.DefaultPullSecretName {
-			pull = append(pull, "bootwright secret set "+name+" --pull-secret <path>")
+			pull = append(pull, "bootwright secret set --name "+name+" --pull-secret <path>")
 		} else {
-			rest = append(rest, "bootwright secret set "+name+" --from-file <path>")
+			rest = append(rest, "bootwright secret set --name "+name+" --from-file <path>")
 		}
 	}
 	return append(pull, rest...)

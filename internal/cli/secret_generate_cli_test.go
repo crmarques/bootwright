@@ -29,7 +29,7 @@ func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
 	if !strings.HasPrefix(public, "ssh-ed25519 ") || !strings.Contains(public, " bootwright-sno-libvirt-cluster-admin\n") {
 		t.Fatalf("public part = %q", public)
 	}
-	_, stderr, code = runCLI(t, "secret", "delete", "sno-libvirt-cluster-admin-ssh-key", "--yes")
+	_, stderr, code = runCLI(t, "secret", "delete", "--name", "sno-libvirt-cluster-admin-ssh-key", "--yes")
 	if code != 0 {
 		t.Fatalf("secret delete exited %d, stderr=%q", code, stderr)
 	}
@@ -99,7 +99,7 @@ func TestSecretCheckGatesOnMissingSecrets(t *testing.T) {
 	if err := os.WriteFile(pullSecret, []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, stderr, code = runCLI(t, "secret", "set", "openshift-pull-secret", "--pull-secret", pullSecret); code != 0 {
+	if _, stderr, code = runCLI(t, "secret", "set", "--name", "openshift-pull-secret", "--pull-secret", pullSecret); code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}
 	stdout, stderr, code = runCLI(t, "secret", "check")

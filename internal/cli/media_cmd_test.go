@@ -17,7 +17,7 @@ func TestMediaCLIAddListRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runCLI(t, "media", "add", "rhel.iso", "--from-file", source)
+	stdout, stderr, code := runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", source)
 	if code != 0 {
 		t.Fatalf("media add exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -37,7 +37,7 @@ func TestMediaCLIAddListRemove(t *testing.T) {
 		t.Fatalf("report = %#v", report)
 	}
 
-	stdout, stderr, code = runCLI(t, "media", "remove", "rhel.iso", "--yes")
+	stdout, stderr, code = runCLI(t, "media", "remove", "--name", "rhel.iso", "--yes")
 	if code != 0 {
 		t.Fatalf("media remove exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -52,14 +52,14 @@ func TestMediaCLIRejectsInvalidAndDuplicate(t *testing.T) {
 	if err := os.WriteFile(source, []byte("iso bytes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "media", "add", "../rhel.iso", "--from-file", source)
+	_, stderr, code := runCLI(t, "media", "add", "--name", "../rhel.iso", "--from-file", source)
 	if code == 0 || !strings.Contains(stderr, "must be a filename") {
 		t.Fatalf("invalid key code=%d stderr=%q", code, stderr)
 	}
-	if _, stderr, code = runCLI(t, "media", "add", "rhel.iso", "--from-file", source); code != 0 {
+	if _, stderr, code = runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", source); code != 0 {
 		t.Fatalf("initial add failed: %q", stderr)
 	}
-	_, stderr, code = runCLI(t, "media", "add", "rhel.iso", "--from-file", source)
+	_, stderr, code = runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", source)
 	if code == 0 || !strings.Contains(stderr, "already exists") {
 		t.Fatalf("duplicate code=%d stderr=%q", code, stderr)
 	}
@@ -67,7 +67,7 @@ func TestMediaCLIRejectsInvalidAndDuplicate(t *testing.T) {
 	if err := os.WriteFile(replacement, []byte("replacement bytes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code := runCLI(t, "media", "add", "rhel.iso", "--from-file", replacement, "--force")
+	stdout, stderr, code := runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", replacement, "--force")
 	if code == 0 {
 		t.Fatal("media add --force without --yes unexpectedly succeeded")
 	}
@@ -84,7 +84,7 @@ func TestMediaCLIRejectsInvalidAndDuplicate(t *testing.T) {
 	if string(stored) != "iso bytes" {
 		t.Fatalf("aborted media replacement changed stored bytes: %q", stored)
 	}
-	stdout, stderr, code = runCLIWithInput(t, "y\n", "media", "add", "rhel.iso", "--from-file", replacement, "--force")
+	stdout, stderr, code = runCLIWithInput(t, "y\n", "media", "add", "--name", "rhel.iso", "--from-file", replacement, "--force")
 	if code != 0 {
 		t.Fatalf("confirmed media replacement exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}

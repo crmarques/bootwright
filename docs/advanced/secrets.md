@@ -137,16 +137,16 @@ are host-local, unversioned, non-symlink regular files with mode `0600`.
 
 | Form | Command |
 | --- | --- |
-| Pull secret or context-local secret | `bootwright secret set openshift-pull-secret --pull-secret ~/pull-secret.json` |
-| TLS certificate and key | `bootwright secret set ingress-serving-tls --tls-cert ./tls.crt --tls-key ./tls.key` |
-| Credentials | `bootwright secret set proxy-credentials --username proxy --password-stdin` |
-| Credentials from protected env vars | `printf '%s\n' "$PROXY_PASS" \| bootwright secret set proxy-credentials --username "$PROXY_USER" --password-stdin` |
+| Pull secret or context-local secret | `bootwright secret set --name openshift-pull-secret --pull-secret ~/pull-secret.json` |
+| TLS certificate and key | `bootwright secret set --name ingress-serving-tls --tls-cert ./tls.crt --tls-key ./tls.key` |
+| Credentials | `bootwright secret set --name proxy-credentials --username proxy --password-stdin` |
+| Credentials from protected env vars | `printf '%s\n' "$PROXY_PASS" \| bootwright secret set --name proxy-credentials --username "$PROXY_USER" --password-stdin` |
 | Converge `generated:` and context-storage entries | `bootwright secret generate` |
 | Verify every declared secret has local material, report gaps | `bootwright secret check` |
 | Inspect required material | `bootwright secret list` |
 | Print one local secret as raw bytes | `bootwright secret show --name <name>` |
 | Print generated SSH public key | `bootwright secret show --name <name> --part public` |
-| Delete local material | `bootwright secret delete <name> --yes` |
+| Delete local material | `bootwright secret delete --name <name> --yes` |
 | Initialize encryption explicitly | `bootwright secret encryption init` |
 | Inspect encryption status | `bootwright secret encryption status` |
 | Migrate old plaintext context files | `bootwright secret encryption migrate --yes` |

@@ -110,7 +110,7 @@ func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, resolver secret.Resolver, d
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
 		return okCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP %d", url, resp.StatusCode))
 	case resp.StatusCode == http.StatusUnauthorized:
-		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP 401", url), "vCenter rejected the declared credentials", "update the "+vc.CredentialsRef.Name+" secret (user:password) with bootwright secret set")
+		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP 401", url), "vCenter rejected the declared credentials", "update the "+vc.CredentialsRef.Name+" secret (user:password) with bootwright secret set --name "+vc.CredentialsRef.Name)
 	default:
 		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP %d", url, resp.StatusCode), "vSphere machine creation needs a working vCenter session API", "check the vCenter endpoint health for "+vc.Server)
 	}

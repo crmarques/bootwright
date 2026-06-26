@@ -14,16 +14,16 @@ declarations only; the bytes are supplied out of band.
 
 | Entitlement field | Secret | What it holds | How to set it |
 | --- | --- | --- | --- |
-| `rhsm.organizationRef` | `redhat-org` | RHSM organization ID | `bootwright secret set redhat-org --raw-file ./org.txt` |
-| `rhsm.activationKeyRef` | `redhat-activation-key` | RHSM activation key | `bootwright secret set redhat-activation-key --raw-file ./key.txt` |
-| `registry.credentialsRef` | `redhat-registry-credentials` | `registry.redhat.io` login | `bootwright secret set redhat-registry-credentials --username '<sa-user>' --password-stdin` |
+| `rhsm.organizationRef` | `redhat-org` | RHSM organization ID | `bootwright secret set --name redhat-org --raw-file ./org.txt` |
+| `rhsm.activationKeyRef` | `redhat-activation-key` | RHSM activation key | `bootwright secret set --name redhat-activation-key --raw-file ./key.txt` |
+| `registry.credentialsRef` | `redhat-registry-credentials` | `registry.redhat.io` login | `bootwright secret set --name redhat-registry-credentials --username '<sa-user>' --password-stdin` |
 
 Use a **registry service account** for the registry credential rather than a
 personal login: create one at <https://access.redhat.com/terms-based-registry/>,
 then supply its username (`<numeric>|<name>`) and token:
 
 ```sh
-printf '%s' "$RH_REGISTRY_TOKEN" | bootwright secret set redhat-registry-credentials --username '12345678|ceph-node' --password-stdin
+printf '%s' "$RH_REGISTRY_TOKEN" | bootwright secret set --name redhat-registry-credentials --username '12345678|ceph-node' --password-stdin
 ```
 
 Generate the RHSM activation key and find your organization ID under

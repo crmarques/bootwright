@@ -198,7 +198,7 @@ install source plus `repo` entries instead of `cdrom`, and Anaconda fetches
 packages over the network during install. Stage either ISO the same way:
 
 ```bash
-bootwright media add rhel-9.7-x86_64-boot.iso --from-file ./rhel-9.7-x86_64-boot.iso
+bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file ./rhel-9.7-x86_64-boot.iso
 ```
 
 A `*boot.iso` filename auto-derives `mediaType: boot`; a netinstall ISO named

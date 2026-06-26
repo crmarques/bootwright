@@ -34,6 +34,7 @@ func newMediaCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 
 func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var (
+		name     string
 		fromFile string
 		fromURL  string
 		sum      string
@@ -41,35 +42,39 @@ func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		yes      bool
 	)
 	cmd := &cobra.Command{
-		Use:   "add <filename.iso>",
+		Use:   "add --name <filename.iso>",
 		Short: "Add an ISO to the managed media store",
-		Args:  cobra.ExactArgs(1),
-		Example: `  bootwright media add rhel-9-x86_64-dvd.iso --from-file /path/to/rhel.iso
-  bootwright media add rhel-9-x86_64-dvd.iso --from-url http://mirror.example.test/rhel.iso --sha256 <hex>`,
+		Args:  cobra.NoArgs,
+		Example: `  bootwright media add --name rhel-9-x86_64-dvd.iso --from-file /path/to/rhel.iso
+  bootwright media add --name rhel-9-x86_64-dvd.iso --from-url http://mirror.example.test/rhel.iso --sha256 <hex>`,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "media store filename, e.g. rhel-9-x86_64-dvd.iso (required)")
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "copy ISO bytes from a local file")
 	cmd.Flags().StringVar(&fromURL, "from-url", "", "download ISO bytes from an HTTP(S) URL")
 	cmd.Flags().StringVar(&sum, "sha256", "", "expected ISO SHA-256 checksum")
 	cmd.Flags().BoolVar(&force, "force", false, "replace an existing media entry")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the replace confirmation prompt")
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		if name == "" {
+			return failf(2, "--name is required")
+		}
 		if (fromFile == "") == (fromURL == "") {
 			return failf(2, "exactly one of --from-file or --from-url is required")
 		}
-		exists, err := mediaEntryExists(args[0])
+		exists, err := mediaEntryExists(name)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if exists && force && !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace media %s in %s? [y/N] (default: no): ", args[0], media.StoreDir())) {
+		if exists && force && !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace media %s in %s? [y/N] (default: no): ", name, media.StoreDir())) {
 			return failErr(1, errors.New("media add aborted"))
 		}
 		var (
 			entry media.Entry
 		)
 		if fromFile != "" {
-			entry, err = media.AddFile(args[0], fromFile, sum, force)
+			entry, err = media.AddFile(name, fromFile, sum, force)
 		} else {
-			entry, err = media.AddURL(args[0], fromURL, sum, force)
+			entry, err = media.AddURL(name, fromURL, sum, force)
 		}
 		if err != nil {
 			return failErr(1, err)
@@ -138,17 +143,22 @@ func newMediaListCmd(stdout io.Writer) *cobra.Command {
 }
 
 func newMediaRemoveCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
+	var name string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:     "remove <filename.iso>",
+		Use:     "remove --name <filename.iso>",
 		Aliases: []string{"rm"},
 		Short:   "Remove an ISO from the managed media store",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.NoArgs,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "media store filename, e.g. rhel-9-x86_64-dvd.iso (required)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the remove confirmation prompt")
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		if name == "" {
+			return failf(2, "--name is required")
+		}
 		output.New(stdout).Command("media remove")
-		key := args[0]
+		key := name
 		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Remove media %s from %s? [y/N] (default: no): ", key, media.StoreDir())) {
 			return failErr(1, errors.New("media remove aborted"))
 		}

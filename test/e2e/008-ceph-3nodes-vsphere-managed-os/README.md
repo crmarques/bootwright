@@ -92,7 +92,7 @@ chmod 600 ~/.ssh/bootwright-ssh-key
 Register the RHEL ISO in the root-managed media store before applying:
 
 ```bash
-bootwright media add rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel.iso
+bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel.iso
 ```
 
 The fixture references that ISO with:

@@ -327,11 +327,11 @@ func secretFileCheck(refName, path, label string, publicKey, contextBacked, exte
 		remediation := "create " + path + " or update Environment.spec.secrets[" + refName + "].file"
 		switch {
 		case strings.Contains(label, "pullSecretRef"):
-			remediation = "bootwright secret set " + refName + " --pull-secret <path>"
+			remediation = "bootwright secret set --name " + refName + " --pull-secret <path>"
 		case strings.Contains(label, "tls.crt") || strings.Contains(label, "tls.key"):
-			remediation = "bootwright secret set " + refName + " --tls-cert <cert-chain.pem> --tls-key <key.pem>"
+			remediation = "bootwright secret set --name " + refName + " --tls-cert <cert-chain.pem> --tls-key <key.pem>"
 		case strings.Contains(label, "credentialsRef") || strings.Contains(label, "proxyAuthRef"):
-			remediation = "bootwright secret set " + refName + " --from-file <path>"
+			remediation = "bootwright secret set --name " + refName + " --from-file <path>"
 		case (strings.Contains(label, " keyRef") || strings.Contains(label, "nodeSSH")) && !contextBacked:
 			remediation = "create the file declared by Environment.spec.secrets[" + refName + "].file"
 		case contextBacked:
@@ -356,7 +356,7 @@ func generatedSecretCheck(refName, path, label, generatedKind string, deps Deps)
 	if err != nil {
 		remediation := "bootwright secret generate"
 		if generatedKind == "credentials" {
-			remediation = "bootwright secret generate or bootwright secret set " + refName + " --from-file <path>"
+			remediation = "bootwright secret generate or bootwright secret set --name " + refName + " --from-file <path>"
 		}
 		return failCheck(checkGroupSecretMaterial, name, path+" missing", "Generated secret material is required before apply", remediation)
 	}

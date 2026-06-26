@@ -199,13 +199,26 @@ func argsNeedLocalRoot(args []string) bool {
 		if len(args) == 1 {
 			return false
 		}
-		if len(args) >= 2 && args[1] == "set" {
+		switch args[1] {
+		case "set":
+			// secret set writes via the local user and self-escalates only after
+			// cobra parses, so the gate never escalates it.
 			return false
+		case "delete", "show":
+			// --name-targeted commands: stay rootless unless a --name value is
+			// present so a malformed invocation (the old positional form or a
+			// missing --name) fails cobra as the caller, not after a doomed sudo
+			// prompt. Mirrors validateArgsNeedLocalRoot.
+			return argsHaveNameValue(args[2:])
 		}
 		return true
 	case "media":
 		if len(args) == 1 {
 			return false
+		}
+		switch args[1] {
+		case "add", "remove", "rm":
+			return argsHaveNameValue(args[2:])
 		}
 		return true
 	case "cluster":
@@ -231,6 +244,24 @@ func renderArgsHaveExecutionTarget(args []string) bool {
 			return i+1 < len(args)
 		case strings.HasPrefix(arg, "--output-dir="):
 			return strings.TrimPrefix(arg, "--output-dir=") != ""
+		}
+	}
+	return false
+}
+
+// argsHaveNameValue reports whether args carry a --name flag with a non-empty
+// value, the shape every --name-targeted command requires. The gate uses it to
+// keep a malformed invocation (the retired positional form or a missing --name)
+// rootless so cobra rejects it as the caller instead of after a doomed sudo
+// prompt, the same way validateArgsNeedLocalRoot handles a malformed validate.
+func argsHaveNameValue(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--name":
+			return i+1 < len(args) && args[i+1] != ""
+		case strings.HasPrefix(arg, "--name="):
+			return strings.TrimPrefix(arg, "--name=") != ""
 		}
 	}
 	return false

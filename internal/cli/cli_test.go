@@ -428,7 +428,7 @@ func TestValidateReportsDeclaredSecretStatus(t *testing.T) {
 	for _, want := range []string{
 		"Declared secrets",
 		"[WARN] openshift-pull-secret",
-		"bootwright secret set openshift-pull-secret",
+		"bootwright secret set --name openshift-pull-secret",
 		"[OK] validate",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -2157,7 +2157,7 @@ func TestSecretDeleteDoesNotRequireValidDesiredState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(ctx.InputDir, "environment.yaml"), []byte("not: [valid\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "secret", "delete", "manual-secret", "--yes")
+	_, stderr, code := runCLI(t, "secret", "delete", "--name", "manual-secret", "--yes")
 	if code != 0 {
 		t.Fatalf("secret delete exited %d, stderr=%q", code, stderr)
 	}
@@ -2362,19 +2362,30 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"completion", "bash"}, want: false},
 		{args: []string{cobra.ShellCompRequestCmd, ""}, want: false},
 		{args: []string{cobra.ShellCompNoDescRequestCmd, ""}, want: false},
-		{args: []string{"secret", "set", "openshift-pull-secret", "--pull-secret", "/home/user/pull-secret.json"}, want: false},
+		{args: []string{"secret", "set", "--name", "openshift-pull-secret", "--pull-secret", "/home/user/pull-secret.json"}, want: false},
 		{args: []string{"secret"}, want: false},
 		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
+		// A --name command without --name (the retired positional form or a
+		// missing flag) stays rootless so cobra rejects it as the caller.
+		{args: []string{"secret", "show", "pull-secret"}, want: false},
+		{args: []string{"secret", "delete", "--name", "manual-secret"}, want: true},
+		{args: []string{"secret", "delete", "manual-secret"}, want: false},
+		{args: []string{"secret", "delete"}, want: false},
 		{args: []string{"media"}, want: false},
 		{args: []string{"media", "list"}, want: true},
-		{args: []string{"media", "add", "rhel.iso", "--from-file", "/home/user/rhel.iso"}, want: true},
+		{args: []string{"media", "add", "--name", "rhel.iso", "--from-file", "/home/user/rhel.iso"}, want: true},
+		{args: []string{"media", "add", "rhel.iso", "--from-file", "/home/user/rhel.iso"}, want: false},
+		{args: []string{"media", "add"}, want: false},
+		{args: []string{"media", "remove", "--name", "rhel.iso"}, want: true},
+		{args: []string{"media", "remove", "rhel.iso"}, want: false},
+		{args: []string{"media", "rm", "--name", "rhel.iso"}, want: true},
 		// Bare `cluster` only prints help, so it must not escalate; its
 		// subcommands read root-owned cluster artifacts and stay rootful.
 		{args: []string{"cluster"}, want: false},
 		{args: []string{"cluster", "list"}, want: true},
 		{args: []string{"cluster", "access"}, want: true},
 		{args: []string{"cluster", "kubeconfig", "--cluster", "managed-01"}, want: true},
-		{args: []string{"example", "init", "lab", "--output", "./lab-input"}, want: false},
+		{args: []string{"example", "init", "--name", "lab", "--output", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"validate"}, want: true},
@@ -2476,7 +2487,7 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		{args: []string{"destroy", "--stage=clusters"}, want: true},
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
 		{args: []string{"preflight", "infra"}, want: false},
-		{args: []string{"secret", "set", "pull-secret"}, want: false},
+		{args: []string{"secret", "set", "--name", "pull-secret"}, want: false},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -2772,7 +2783,7 @@ func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
 		},
 	}
 
-	stdout, stderr, code := runCLI(t, "secret", "set", "openshift-pull-secret", "--pull-secret", source)
+	stdout, stderr, code := runCLI(t, "secret", "set", "--name", "openshift-pull-secret", "--pull-secret", source)
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -2851,7 +2862,7 @@ func TestSecretSetRawFileWritesContextSecret(t *testing.T) {
 	if err := os.WriteFile(source, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code := runCLI(t, "secret", "set", "shared-ceph-external-details", "--raw-file", source)
+	stdout, stderr, code := runCLI(t, "secret", "set", "--name", "shared-ceph-external-details", "--raw-file", source)
 	if code != 0 {
 		t.Fatalf("secret set --raw-file exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -2881,7 +2892,7 @@ func TestSecretSetRawFileWritesContextSecret(t *testing.T) {
 	if err := os.WriteFile(replacement, replacementBody, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code = runCLI(t, "secret", "set", "shared-ceph-external-details", "--raw-file", replacement)
+	stdout, stderr, code = runCLI(t, "secret", "set", "--name", "shared-ceph-external-details", "--raw-file", replacement)
 	if code == 0 {
 		t.Fatal("secret set overwrite without --yes unexpectedly succeeded")
 	}
@@ -2899,7 +2910,7 @@ func TestSecretSetRawFileWritesContextSecret(t *testing.T) {
 		t.Fatalf("aborted overwrite changed raw secret = %q, want %q", got, body)
 	}
 
-	stdout, stderr, code = runCLIWithInput(t, "y\n", "secret", "set", "shared-ceph-external-details", "--raw-file", replacement)
+	stdout, stderr, code = runCLIWithInput(t, "y\n", "secret", "set", "--name", "shared-ceph-external-details", "--raw-file", replacement)
 	if code != 0 {
 		t.Fatalf("secret set overwrite confirmation exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -2918,7 +2929,7 @@ func TestSecretSetRawFileRejectsConflictingInputModes(t *testing.T) {
 	if err := os.WriteFile(source, []byte(`[]`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "secret", "set", "shared-ceph-external-details", "--raw-file", source, "--from-file", source)
+	_, stderr, code := runCLI(t, "secret", "set", "--name", "shared-ceph-external-details", "--raw-file", source, "--from-file", source)
 	if code == 0 {
 		t.Fatal("secret set --raw-file unexpectedly accepted conflicting input modes")
 	}
@@ -2947,13 +2958,13 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	rootArgs = rootArgs[8:]
-	if len(rootArgs) != 5 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "openshift-pull-secret" || rootArgs[3] != "--pull-secret" {
+	if len(rootArgs) != 6 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "--name" || rootArgs[3] != "openshift-pull-secret" || rootArgs[4] != "--pull-secret" {
 		os.Exit(2)
 	}
-	if rootArgs[4] == os.Getenv("BOOTWRIGHT_SECRET_SET_SOURCE") {
+	if rootArgs[5] == os.Getenv("BOOTWRIGHT_SECRET_SET_SOURCE") {
 		os.Exit(2)
 	}
-	data, err := os.ReadFile(rootArgs[4])
+	data, err := os.ReadFile(rootArgs[5])
 	if err != nil || string(data) != `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}` {
 		os.Exit(2)
 	}
@@ -3206,7 +3217,7 @@ func TestContextPrintEnvRequiresSensitiveForProxyCredentials(t *testing.T) {
 	if !strings.Contains(stderr, "--sensitive") {
 		t.Fatalf("stderr = %q, want --sensitive hint", stderr)
 	}
-	_, stderr, code = runCLI(t, "secret", "set", "proxy-credentials", "--username", "proxy", "--password", "secret")
+	_, stderr, code = runCLI(t, "secret", "set", "--name", "proxy-credentials", "--username", "proxy", "--password", "secret")
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}
@@ -3373,7 +3384,7 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 	if err := os.WriteFile(pullSecret, []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "secret", "set", "openshift-pull-secret", "--pull-secret", pullSecret)
+	_, stderr, code := runCLI(t, "secret", "set", "--name", "openshift-pull-secret", "--pull-secret", pullSecret)
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}

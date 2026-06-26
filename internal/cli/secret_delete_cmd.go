@@ -15,24 +15,25 @@ import (
 )
 
 func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
+	var name string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <name>",
+		Use:   "delete --name <name>",
 		Short: "Delete local secret material from the current context",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "SecretRef name (required)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the delete confirmation prompt")
 	cf := addCommonFlags()
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		if !desiredstate.IsDNSLabel(name) {
+			return failf(2, "--name must be a lowercase DNS label")
+		}
 		ctx, err := cf.resolveLocalOnly()
 		if err != nil {
 			return failErr(1, err)
 		}
 		output.New(stdout).Command("secret delete")
-		name := args[0]
-		if !desiredstate.IsDNSLabel(name) {
-			return failf(2, "<name> must be a lowercase DNS label")
-		}
 		materials, err := existingSecretMaterials(ctx.Name, ctx.SecretsDir, name)
 		if err != nil {
 			return failErr(1, err)

@@ -236,7 +236,7 @@ metadata:
 spec:
   baseDomain: corp.example.com
   secrets:
-    - corp-satellite-ca       # bootwright secret set corp-satellite-ca --from-file satellite-ca.pem
+    - corp-satellite-ca       # bootwright secret set --name corp-satellite-ca --from-file satellite-ca.pem
     - rhel-org
     - rhel-activation-key
   entitlements:

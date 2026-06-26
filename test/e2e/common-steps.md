@@ -30,7 +30,7 @@ Confirm the provider-host SSH key pair, then set the pull secret:
 test -r ~/.ssh/bootwright-ssh-key
 test -r ~/.ssh/bootwright-ssh-key.pub
 
-bootwright secret set openshift-pull-secret \
+bootwright secret set --name openshift-pull-secret \
   --pull-secret "$HOME/pull-secret.json"
 ```
 
@@ -43,7 +43,7 @@ If you want to provide `proxy-credentials` instead of generating them, write
 them now:
 
 ```bash
-bootwright secret set proxy-credentials \
+bootwright secret set --name proxy-credentials \
   --username <proxy-user> \
   --password-stdin
 ```

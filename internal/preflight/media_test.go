@@ -25,7 +25,7 @@ func TestInstallerMediaCheckFailsWhenSourceMissing(t *testing.T) {
 	if c.Name != "local-media:rhel-9.7-x86_64-dvd.iso" {
 		t.Fatalf("name = %q, want the operator-facing reference", c.Name)
 	}
-	if !strings.Contains(c.Remediation, "bootwright media add rhel-9.7-x86_64-dvd.iso") {
+	if !strings.Contains(c.Remediation, "bootwright media add --name rhel-9.7-x86_64-dvd.iso") {
 		t.Fatalf("remediation = %q, want a bootwright media add hint", c.Remediation)
 	}
 }

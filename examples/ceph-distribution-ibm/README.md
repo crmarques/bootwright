@@ -18,9 +18,9 @@ bytes are supplied out of band.
 
 | Entitlement field | Secret | What it holds | How to set it |
 | --- | --- | --- | --- |
-| `rhel` → `rhsm.organizationRef` | `ibm-rhsm-org` | RHSM organization ID | `bootwright secret set ibm-rhsm-org --raw-file ./org.txt` |
-| `rhel` → `rhsm.activationKeyRef` | `ibm-rhsm-activation-key` | RHSM activation key | `bootwright secret set ibm-rhsm-activation-key --raw-file ./key.txt` |
-| `ibm-storage-ceph` → `registry.credentialsRef` | `ibm-registry-credentials` | IBM container registry login | `bootwright secret set ibm-registry-credentials --username cp --password-stdin` |
+| `rhel` → `rhsm.organizationRef` | `ibm-rhsm-org` | RHSM organization ID | `bootwright secret set --name ibm-rhsm-org --raw-file ./org.txt` |
+| `rhel` → `rhsm.activationKeyRef` | `ibm-rhsm-activation-key` | RHSM activation key | `bootwright secret set --name ibm-rhsm-activation-key --raw-file ./key.txt` |
+| `ibm-storage-ceph` → `registry.credentialsRef` | `ibm-registry-credentials` | IBM container registry login | `bootwright secret set --name ibm-registry-credentials --username cp --password-stdin` |
 
 The registry credential is the non-obvious one: IBM Storage Ceph images are
 pulled from `cp.icr.io/cp` using the fixed username **`cp`** and your **IBM
@@ -28,7 +28,7 @@ entitlement key** as the password. Obtain the key from the *Access your containe
 software* page in My IBM and pipe it to the command above:
 
 ```sh
-printf '%s' "$IBM_ENTITLEMENT_KEY" | bootwright secret set ibm-registry-credentials --username cp --password-stdin
+printf '%s' "$IBM_ENTITLEMENT_KEY" | bootwright secret set --name ibm-registry-credentials --username cp --password-stdin
 ```
 
 `license.accept: true` in the `ibm-storage-ceph` entitlement records that you

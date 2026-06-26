@@ -25,23 +25,25 @@ func newExampleCmd(stdout io.Writer) *cobra.Command {
 }
 
 func newExampleInitCmd(stdout io.Writer) *cobra.Command {
+	name := ""
 	provider := string(scaffold.ProviderEmulatedBareMetal)
 	outputDir := ""
 	yes := false
 	cmd := &cobra.Command{
-		Use:   "init <cluster-name>",
+		Use:   "init --name <cluster-name>",
 		Short: "Write a safe desired-state example directory",
-		Args:  cobra.ExactArgs(1),
-		Example: `  bootwright example init my-sno-lab --output ./my-sno-lab
-  bootwright example init my-baremetal-lab --provider bare-metal --output ./my-baremetal-lab`,
+		Args:  cobra.NoArgs,
+		Example: `  bootwright example init --name my-sno-lab --output ./my-sno-lab
+  bootwright example init --name my-baremetal-lab --provider bare-metal --output ./my-baremetal-lab`,
 	}
+	cmd.Flags().StringVar(&name, "name", "", "cluster name to scaffold (required)")
 	cmd.Flags().StringVar(&provider, "provider", provider, "example provider: "+strings.Join(scaffold.KnownProviders(), "|"))
-	cmd.Flags().StringVar(&outputDir, "output", outputDir, "directory to write (defaults to <cluster-name>)")
+	cmd.Flags().StringVar(&outputDir, "output", outputDir, "directory to write (defaults to the --name value)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite scaffolded files in a non-empty output directory")
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
-		clusterName := args[0]
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		clusterName := name
 		if !desiredstate.IsDNSLabel(clusterName) {
-			return failf(2, "<cluster-name> must be a lowercase DNS label")
+			return failf(2, "--name must be a lowercase DNS label")
 		}
 		if outputDir == "" {
 			outputDir = clusterName

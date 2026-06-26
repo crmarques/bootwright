@@ -208,13 +208,13 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	if !strings.Contains(pullSecret.Evidence, "/context/secrets/openshift-pull-secret missing") {
 		t.Fatalf("pull secret check evidence = %q", pullSecret.Evidence)
 	}
-	if !strings.Contains(pullSecret.Remediation, "bootwright secret set openshift-pull-secret --pull-secret") {
+	if !strings.Contains(pullSecret.Remediation, "bootwright secret set --name openshift-pull-secret --pull-secret") {
 		t.Fatalf("pull secret remediation = %q", pullSecret.Remediation)
 	}
 	if generatedBMC == nil {
 		t.Fatalf("missing generated BMC check: %+v", checks)
 	}
-	if !strings.Contains(generatedBMC.Remediation, "bootwright secret generate or bootwright secret set bmc-credentials") {
+	if !strings.Contains(generatedBMC.Remediation, "bootwright secret generate or bootwright secret set --name bmc-credentials") {
 		t.Fatalf("generated BMC remediation = %q", generatedBMC.Remediation)
 	}
 }

@@ -72,7 +72,7 @@ func installerMediaCheck(resolved media.Resolved, deps Deps) Check {
 
 func installerMediaRemediation(resolved media.Resolved) string {
 	if resolved.Key != "" {
-		return "bootwright media add " + resolved.Key + " --from-file <iso> (or --from-url <url>)"
+		return "bootwright media add --name " + resolved.Key + " --from-file <iso> (or --from-url <url>)"
 	}
 	return "place the install ISO at " + resolved.Path
 }

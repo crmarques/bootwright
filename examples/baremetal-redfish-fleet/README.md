@@ -29,8 +29,8 @@ host-trust workflow.
 ```text
 bootwright validate -f <input-dir>
 bootwright context init --name lab -f <input-dir>
-bootwright secret set openshift-pull-secret --pull-secret <path>
-printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
+bootwright secret set --name openshift-pull-secret --pull-secret <path>
+printf '%s\n' "${BMC_PASS}" | bootwright secret set --name bmc-credentials --username "${BMC_USER}" --password-stdin
 bootwright secret generate
 bootwright bastion setup --yes
 bootwright preflight all

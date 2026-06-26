@@ -24,7 +24,7 @@ func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, std
 }
 
 func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool, yes bool) ([]string, io.Reader, func(), error) {
-	rootArgs := []string{"secret", "set", name}
+	rootArgs := []string{"secret", "set", "--name", name}
 	if yes {
 		rootArgs = append(rootArgs, "--yes")
 	}

@@ -157,7 +157,7 @@ want a frozen, reproducible version (a `:latest` tag is rejected by validation).
 ## 2. Stage the RHEL ISO into Bootwright
 
 ```bash
-bootwright media add rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
+bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
 bootwright media list
 ```
 
@@ -191,13 +191,13 @@ bootwright secret list          # shows which secrets still need bytes
 # Red Hat subscription: organization ID and activation key (plain strings).
 printf '%s' 'YOUR_ORG_ID'            > /tmp/rhel-org.txt
 printf '%s' 'ceph-lab'               > /tmp/rhel-activation-key.txt
-bootwright secret set rhel-org            --raw-file /tmp/rhel-org.txt
-bootwright secret set rhel-activation-key --raw-file /tmp/rhel-activation-key.txt
+bootwright secret set --name rhel-org            --raw-file /tmp/rhel-org.txt
+bootwright secret set --name rhel-activation-key --raw-file /tmp/rhel-activation-key.txt
 shred -u /tmp/rhel-org.txt /tmp/rhel-activation-key.txt
 
 # IBM entitlement key for cp.icr.io (username "cp", key as the password).
 printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
-  bootwright secret set ibm-ceph-registry --username cp --password-stdin
+  bootwright secret set --name ibm-ceph-registry --username cp --password-stdin
 
 # Converge the auto-managed secrets: generates the ceph-node-ssh keypair and
 # bmc-credentials, and copies the bastion-host-ssh file: source into the context.

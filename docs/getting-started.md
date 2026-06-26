@@ -78,7 +78,7 @@ Generate a single-node lab workspace. The default provider,
 uses:
 
 ```bash
-bootwright example init my-sno-lab --output ./my-sno-lab
+bootwright example init --name my-sno-lab --output ./my-sno-lab
 ```
 
 The scaffold writes six `apiVersion: bootwright.io/v1alpha1` files:
@@ -242,8 +242,8 @@ generated and `file:`-sourced entries are converged by `secret generate`; the
 two operator-supplied entries you set yourself:
 
 ```bash
-bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
-printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
+bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+printf '%s\n' "${BMC_PASS}" | bootwright secret set --name bmc-credentials --username "${BMC_USER}" --password-stdin
 bootwright secret generate
 bootwright secret check
 bootwright secret list
