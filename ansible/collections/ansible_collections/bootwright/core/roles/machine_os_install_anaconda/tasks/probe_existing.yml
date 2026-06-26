@@ -23,11 +23,17 @@
 - name: Probe managed OS SSH authentication before install
   ansible.builtin.command:
     argv:
+      - timeout
+      - "15"
       - ssh
       - -i
       - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
       - -o
       - BatchMode=yes
+      - -o
+      - ConnectTimeout=5
+      - -o
+      - GSSAPIAuthentication=no
       - -o
       - StrictHostKeyChecking=yes
       - -o
@@ -50,11 +56,17 @@
 - name: Read managed OS install marker before install
   ansible.builtin.command:
     argv:
+      - timeout
+      - "15"
       - ssh
       - -i
       - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
       - -o
       - BatchMode=yes
+      - -o
+      - ConnectTimeout=5
+      - -o
+      - GSSAPIAuthentication=no
       - -o
       - StrictHostKeyChecking=yes
       - -o
