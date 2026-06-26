@@ -98,9 +98,55 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	})
 	return v1alpha1.ClusterInstall{
 		Metadata:        v1alpha1.Metadata{Name: cluster.Metadata.Name},
+		ArtifactAccess:  storageClusterArtifactAccess(state, machines),
 		NetworkBindings: bindings,
 		Machines:        machines,
 	}, len(machines) > 0
+}
+
+// storageClusterArtifactAccess derives a storage cluster's effective artifact
+// access from the environment defaults. A StorageCluster has no
+// spec.install.artifactAccess block to author (unlike a ContainerCluster), so a
+// bare-metal node whose managed-OS install drives over the BMC would otherwise
+// resolve an empty Redfish virtual-media stage path and fail the install with
+// an opaque empty-path error (No such file or directory). This mirrors
+// the OCP defaulting in applyEnvironmentArtifactAccessDefaults, scoped to the
+// only consumer a storage cluster has: the managed-OS install ISO published for
+// Redfish virtual media. Clusters with no bare-metal managed-OS node carry no
+// artifact access, so libvirt/KubeVirt/vSphere storage renders stay unchanged.
+func storageClusterArtifactAccess(state v1alpha1.State, machines []v1alpha1.InstallMachine) v1alpha1.ClusterArtifactAccess {
+	if !storageClusterUsesBareMetalManagedOS(state, machines) {
+		return v1alpha1.ClusterArtifactAccess{}
+	}
+	env := stateview.Environment(state)
+	if env == nil {
+		return v1alpha1.ClusterArtifactAccess{}
+	}
+	defaults := env.Spec.Defaults.ArtifactAccess
+	return v1alpha1.ClusterArtifactAccess{
+		ServerRef:           defaults.ServerRef,
+		RedfishVirtualMedia: defaults.RedfishVirtualMedia,
+	}
+}
+
+// storageClusterUsesBareMetalManagedOS reports whether any of the cluster's
+// nodes installs its OS over a bare-metal BMC. Those nodes reach their install
+// ISO through the artifact server over Redfish virtual media; every other shape
+// (libvirt emulated BMC, KubeVirt/vSphere API) stages the ISO without the
+// artifact server, so it needs no cluster artifact access.
+func storageClusterUsesBareMetalManagedOS(state v1alpha1.State, machines []v1alpha1.InstallMachine) bool {
+	for _, m := range machines {
+		machine, ok := stateview.Machine(state, m.Name)
+		if !ok || !v1alpha1.MachineInstallsOS(machine) {
+			continue
+		}
+		provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
+		if !ok || provider.Spec.Type != v1alpha1.ProvisionerBareMetal {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName string, paths PathOptions) map[string]any {

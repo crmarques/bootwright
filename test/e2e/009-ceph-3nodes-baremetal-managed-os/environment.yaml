@@ -10,6 +10,16 @@ spec:
       - name: lab-dns
         management: managed
         componentRef: lab-dns
+    artifactServers:
+      - name: default
+        management: managed
+        componentRef: artifact-server
+
+  defaults:
+    artifactAccess:
+      serverRef: default
+      redfishVirtualMedia:
+        endpointRef: bmc
 
   secrets:
     - bastion-host-ssh:

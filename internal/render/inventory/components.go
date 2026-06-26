@@ -210,5 +210,18 @@ func usesManagedArtifacts(state v1alpha1.State) bool {
 			return true
 		}
 	}
+	// A bare-metal storage cluster publishes its managed-OS install ISO through
+	// the artifact server for Redfish virtual media, so the server must run even
+	// when no container cluster consumes it.
+	for _, cluster := range ManagedStorageClusters(state) {
+		ci, ok := storageClusterInstall(state, cluster)
+		if !ok {
+			continue
+		}
+		server, ok := artifacts.Select(state, ci)
+		if ok && server.Config != nil && storageClusterUsesBareMetalManagedOS(state, ci.Machines) {
+			return true
+		}
+	}
 	return false
 }

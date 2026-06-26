@@ -68,5 +68,25 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		if image["sourceOnTarget"] != true {
 			t.Fatalf("component %v sourceOnTarget = %v, want true for a controller-driven bare-metal install", component["name"], image["sourceOnTarget"])
 		}
+
+		// A bare-metal node mounts its managed-OS install ISO over the BMC, so
+		// the install ISO is published through the artifact server for Redfish
+		// virtual media. A StorageCluster cannot author spec.install.artifactAccess,
+		// so this access is derived from the Environment defaults; without it the
+		// boot.agentIso stage path resolves empty and the install role fails on
+		// `dirname("")` with "No such file or directory: b''".
+		boot, ok := component["boot"].(map[string]any)
+		if !ok {
+			t.Fatalf("component %v missing boot block", component["name"])
+		}
+		iso, ok := boot["agentIso"].(map[string]any)
+		if !ok {
+			t.Fatalf("component %v missing boot.agentIso", component["name"])
+		}
+		for _, field := range []string{"stageHost", "stagePath", "fetchUrl"} {
+			if value, _ := iso[field].(string); value == "" {
+				t.Fatalf("component %v boot.agentIso.%s is empty; bare-metal managed-OS install needs the artifact-server Redfish virtual-media path", component["name"], field)
+			}
+		}
 	}
 }
