@@ -2264,6 +2264,13 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"validate"}, want: true},
+		{args: []string{"validate", "--output", "json"}, want: true},
+		// An unknown flag (e.g. --source-dir for -f) or stray positional is a
+		// malformed validate cobra rejects; the gate stays rootless so the user
+		// sees "unknown flag" instead of a doomed sudo password prompt.
+		{args: []string{"validate", "--source-dir", "./lab-input"}, want: false},
+		{args: []string{"validate", "./lab-input"}, want: false},
+		{args: []string{"validate", "--output"}, want: false},
 		{args: []string{"preflight"}, want: false},
 		{args: []string{"preflight", "infra"}, want: true},
 		{args: []string{"preflight", "--help"}, want: false},

@@ -153,7 +153,7 @@ func argsNeedLocalRoot(args []string) bool {
 	case "version", "help", "completion", "example", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
 		return false
 	case "validate":
-		return !argsHaveInputFileFlag(args[1:])
+		return validateArgsNeedLocalRoot(args[1:])
 	case "apply":
 		return true
 	case "destroy":
@@ -245,18 +245,37 @@ func argsContainHelp(args []string) bool {
 	return false
 }
 
-func argsHaveInputFileFlag(args []string) bool {
-	for i, arg := range args {
+// validateArgsNeedLocalRoot reports whether a `validate` invocation must read the
+// root-owned current context and so has to escalate. Bare `validate` and
+// `validate --output <fmt>` validate the active context: rootful. Explicit
+// `-f`/`--file` input validates a user-owned directory: rootless. Any other token
+// — an unknown flag like --source-dir, or a stray positional — is a malformed
+// invocation cobra will reject (validate takes only -f/--file, --output, --help
+// and no positional args), so the gate declines to escalate and lets the user see
+// the "unknown flag" error as themselves instead of a doomed sudo password
+// prompt. This mirrors how `destroy --stage bogus` stays rootless to fail
+// validation fast.
+func validateArgsNeedLocalRoot(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		switch {
 		case arg == "-f" || arg == "--file":
-			return i+1 < len(args)
-		case strings.HasPrefix(arg, "--file="):
-			return true
-		case strings.HasPrefix(arg, "-f") && len(arg) > 2:
-			return true
+			return false // explicit input directory: rootless
+		case strings.HasPrefix(arg, "--file=") || (strings.HasPrefix(arg, "-f") && len(arg) > 2):
+			return false // explicit input directory (--file=DIR / -fDIR): rootless
+		case arg == "--output":
+			if i+1 >= len(args) {
+				return false // missing value: cobra rejects it rootlessly
+			}
+			i++ // skip the format value; still a context validation
+		case strings.HasPrefix(arg, "--output="):
+			// value attached; still a context validation
+		default:
+			// Unknown flag or stray positional: let cobra reject it rootlessly.
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func argsMayMutateRegistry(args []string) bool {
