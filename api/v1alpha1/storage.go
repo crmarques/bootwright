@@ -70,6 +70,14 @@ type StorageClusterCephSpec struct {
 	EntitlementRef LocalObjectReference      `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
 	Cephadm        StorageCephadmSpec        `yaml:"cephadm" json:"cephadm"`
 	Networks       StorageCephNetworks       `yaml:"networks,omitempty" json:"networks,omitempty"`
+	// Security declares the managed Ceph cluster's security posture. FIPS, when
+	// enabled, requires every Ceph node's MachineInstallProfile to install in
+	// FIPS mode and a redhat or ibm distribution (FIPS-validated Ceph crypto is
+	// a Red Hat / IBM Storage Ceph feature). The fips=1 install itself is
+	// delivered by each node's MachineInstallProfile
+	// (customizations.security.fips); this field is the cluster-level intent and
+	// consistency gate, not a separate cephadm setting.
+	Security StorageCephSecurity `yaml:"security,omitempty" json:"security,omitempty"`
 	// Config declares Ceph configuration database options as
 	// section -> key -> value, rendered as idempotent `ceph config set`
 	// operations after bootstrap. Keys removed from the spec are not unset
@@ -105,6 +113,17 @@ type StorageClusterCephSpec struct {
 	// (additive-only).
 	Services []StorageCephService `yaml:"services,omitempty" json:"services,omitempty"`
 	Topology StorageCephTopology  `yaml:"topology" json:"topology"`
+}
+
+type StorageCephSecurity struct {
+	FIPS StorageCephFIPS `yaml:"fips,omitempty" json:"fips,omitempty"`
+}
+
+// StorageCephFIPS.Enabled is a plain bool because false and unset mean the same
+// thing — matching MachineInstallFIPS. Only enabled: true gates the cluster to
+// FIPS-enabled node profiles and a redhat/ibm distribution.
+type StorageCephFIPS struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 // StorageCephCommunitySpec tunes the upstream community package source for the

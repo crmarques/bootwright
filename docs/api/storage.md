@@ -53,6 +53,7 @@ below cover each `spec` only.
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the host machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
+| `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that **every** Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. |
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |
@@ -69,6 +70,11 @@ below cover each `spec` only.
       (`mgr/<module>/<key>`), not on `mgrModules[]`.
     - Removed `config` keys, `mgrModules[]`, and `services[]` are **not** undone
       (additive-only).
+    - `ceph.security.fips.enabled: true` requires distribution `redhat` or `ibm`
+      (the community `oss` images are not FIPS-validated) and that every Ceph
+      node Bootwright installs uses a `MachineInstallProfile` with
+      `customizations.security.fips.enabled: true`. Provided-OS nodes (no
+      install profile) are not checked and must be FIPS-installed out of band.
 
 Distribution requirements:
 

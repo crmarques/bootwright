@@ -55,3 +55,9 @@ spec:
         mode: enforcing
       firewall:
         enabled: true
+      fips:
+        # Install RHEL in FIPS mode: Bootwright adds fips=1 to the installer
+        # kernel command line so Anaconda lays the system down FIPS-enabled.
+        # Required because the ceph-ibm cluster declares
+        # spec.ceph.security.fips.enabled (clusters/storage/ceph-ibm/cluster.yaml).
+        enabled: true

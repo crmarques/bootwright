@@ -3644,6 +3644,91 @@ spec:
 	}
 }
 
+func TestValidateStorageCephFIPSGate(t *testing.T) {
+	const profileName = "rhel-ceph"
+	cluster := func(distribution string, fips bool) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: "ceph",
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Distribution: distribution,
+					Security:     v1alpha1.StorageCephSecurity{FIPS: v1alpha1.StorageCephFIPS{Enabled: fips}},
+					Topology: v1alpha1.StorageCephTopology{
+						Hosts: []v1alpha1.StorageCephHost{{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}}},
+					},
+				},
+			},
+		}
+	}
+	machines := func(profileRef string) map[string]v1alpha1.Machine {
+		m := v1alpha1.Machine{Metadata: v1alpha1.Metadata{Name: "ceph-0"}}
+		m.Spec.OS.InstallProfileRef = v1alpha1.LocalObjectReference{Name: profileRef}
+		return map[string]v1alpha1.Machine{"ceph-0": m}
+	}
+	profiles := func(fips bool) map[string]v1alpha1.MachineInstallProfile {
+		p := v1alpha1.MachineInstallProfile{Metadata: v1alpha1.Metadata{Name: profileName}}
+		p.Spec.OS.Family = "rhel"
+		p.Spec.Customizations.Security.FIPS.Enabled = fips
+		return map[string]v1alpha1.MachineInstallProfile{profileName: p}
+	}
+
+	cases := []struct {
+		name          string
+		cluster       v1alpha1.StorageCluster
+		machines      map[string]v1alpha1.Machine
+		profiles      map[string]v1alpha1.MachineInstallProfile
+		wantSubstring string // empty means expect no errors
+	}{
+		{
+			name:     "ibm-fips-with-fips-profile-ok",
+			cluster:  cluster(v1alpha1.StorageCephDistributionIBM, true),
+			machines: machines(profileName),
+			profiles: profiles(true),
+		},
+		{
+			name:     "fips-off-gate-disabled",
+			cluster:  cluster(v1alpha1.StorageCephDistributionOSS, false),
+			machines: machines(profileName),
+			profiles: profiles(false),
+		},
+		{
+			name:          "oss-fips-rejected",
+			cluster:       cluster(v1alpha1.StorageCephDistributionOSS, true),
+			machines:      machines(profileName),
+			profiles:      profiles(true),
+			wantSubstring: "spec.ceph.security.fips.enabled requires distribution redhat or ibm",
+		},
+		{
+			name:          "redhat-fips-with-non-fips-profile-rejected",
+			cluster:       cluster(v1alpha1.StorageCephDistributionRedHat, true),
+			machines:      machines(profileName),
+			profiles:      profiles(false),
+			wantSubstring: "requires MachineInstallProfile/rhel-ceph (Ceph host ceph-0) spec.customizations.security.fips.enabled: true",
+		},
+		{
+			name:     "provided-os-node-skipped",
+			cluster:  cluster(v1alpha1.StorageCephDistributionRedHat, true),
+			machines: machines(""), // no install profile ref => provided OS, not enforced
+			profiles: profiles(false),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateStorageCephFIPS(tc.cluster, tc.machines, tc.profiles)
+			if tc.wantSubstring == "" {
+				if len(errs) != 0 {
+					t.Fatalf("expected no errors, got %v", errs)
+				}
+				return
+			}
+			if !strings.Contains(strings.Join(errs, "\n"), tc.wantSubstring) {
+				t.Fatalf("errors %v do not contain %q", errs, tc.wantSubstring)
+			}
+		})
+	}
+}
+
 func writeFiles(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	for name, content := range files {

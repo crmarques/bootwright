@@ -92,6 +92,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephImage(prefix, ceph.Image)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
+	errs = append(errs, validateStorageCephFIPS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, env)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.publicCIDRs[%d]", prefix, i), cidr)...)
@@ -228,6 +229,38 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 		}
 		if !storageCephDistributionSupportsRHELVersion(distribution, profile.Spec.OS.Version) {
 			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q; supported RHEL versions are %s", owner, profile.Spec.OS.Version, distribution, strings.Join(v1alpha1.StorageCephRHELVersions(), ", ")))
+		}
+	}
+	return errs
+}
+
+// validateStorageCephFIPS gates a FIPS-declared managed Ceph cluster. FIPS is
+// delivered by each node's OS install (MachineInstallProfile
+// customizations.security.fips), so this enforces the cluster-level intent is
+// consistent: the distribution must be FIPS-validated (redhat or ibm, not the
+// community oss images), and every Ceph node whose OS Bootwright installs must
+// install in FIPS mode. Provided-OS nodes (no install profile) are skipped —
+// like validateStorageCephManagedOS — and must be FIPS-installed out of band.
+func validateStorageCephFIPS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
+	if !cluster.Spec.Ceph.Security.FIPS.Enabled {
+		return nil
+	}
+	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph.security.fips.enabled", cluster.Metadata.Name)
+	if storageCephDistribution(cluster) == v1alpha1.StorageCephDistributionOSS {
+		return []string{prefix + " requires distribution redhat or ibm"}
+	}
+	var errs []string
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
+			continue
+		}
+		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
+		if !ok {
+			continue
+		}
+		if !profile.Spec.Customizations.Security.FIPS.Enabled {
+			errs = append(errs, fmt.Sprintf("%s requires MachineInstallProfile/%s (Ceph host %s) spec.customizations.security.fips.enabled: true", prefix, profile.Metadata.Name, node.MachineRef.Name))
 		}
 	}
 	return errs

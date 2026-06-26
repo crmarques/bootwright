@@ -25,6 +25,16 @@ spec:
 
     entitlementRef: ibm-storage-ceph
 
+    # Install and run this cluster in FIPS mode. This is a cluster-level intent
+    # gate, not a separate cephadm switch: Ceph runs FIPS by running on
+    # FIPS-installed RHEL nodes. Bootwright validates that the distribution is
+    # FIPS-validated (redhat/ibm — community oss images are not) and that every
+    # node's install profile (os/install-profile.yaml) also sets
+    # customizations.security.fips.enabled, where the fips=1 install lives.
+    security:
+      fips:
+        enabled: true
+
     cephadm:
       # Reach every node over its "ssh" address with the ceph-node-ssh key.
       addressRef: ssh

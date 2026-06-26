@@ -13,6 +13,14 @@ machine**, installs **RHEL 9.7** on them as Bootwright-managed OS, and builds a
 All three storage types are configured: **block (RBD)**, **file (CephFS)**, and
 **object (RGW with an ingress VIP)**.
 
+The lab also installs in **FIPS mode**: `clusters/storage/ceph-ibm/cluster.yaml`
+sets `spec.ceph.security.fips.enabled` and `os/install-profile.yaml` sets
+`customizations.security.fips.enabled`, so each RHEL node is laid down with
+`fips=1` on the installer kernel command line. FIPS is an OS-level property —
+there is no separate cephadm switch — so Bootwright gates it to the
+`redhat`/`ibm` distributions and requires every Ceph node's install profile to
+agree. Drop both `security.fips` blocks to build the cluster without FIPS.
+
 ## A note on "tie-breaker" vs Ceph "stretch mode"
 
 You asked for 2 full nodes + 1 monitor-only tie-breaker. That is exactly what
