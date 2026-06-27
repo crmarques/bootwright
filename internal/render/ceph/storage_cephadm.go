@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -14,11 +15,37 @@ import (
 // in the config before bootstrap; the set-public-network operation keeps the
 // value converged on later applies. Empty when nothing needs seeding.
 func CephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
-	publics := cluster.Spec.Ceph.Networks.PublicCIDRs
-	if len(publics) == 0 {
-		return ""
+	ceph := cluster.Spec.Ceph
+	publics := ceph.Networks.PublicCIDRs
+	// Only the global/mon/osd sections (no masks) seed at bootstrap: their
+	// daemons exist at bootstrap, so seeding them via --config means cephadm's
+	// own auto-created pools (e.g. .mgr) honor the declared defaults instead of
+	// the cephadm defaults the post-bootstrap `ceph config set` ops would only
+	// correct afterward. mgr/mds/client/<type>.<id> have no daemon yet and are
+	// left to the post-bootstrap ops (which run for every section regardless).
+	var out strings.Builder
+	for _, section := range []string{"global", "mon", "osd"} {
+		options := ceph.Config[section]
+		keys := make([]string, 0, len(options))
+		for key := range options {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		if section == "global" && len(publics) == 0 && len(keys) == 0 {
+			continue
+		}
+		if section != "global" && len(keys) == 0 {
+			continue
+		}
+		out.WriteString("[" + section + "]\n")
+		if section == "global" && len(publics) > 0 {
+			out.WriteString("public_network = " + strings.Join(publics, ",") + "\n")
+		}
+		for _, key := range keys {
+			out.WriteString(key + " = " + options[key] + "\n")
+		}
 	}
-	return "[global]\npublic_network = " + strings.Join(publics, ",") + "\n"
+	return out.String()
 }
 
 func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {

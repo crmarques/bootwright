@@ -3648,6 +3648,16 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !strings.Contains(bootstrapArgv, "--allow-fqdn-hostname") {
 		t.Fatalf("bootstrap argv must pass --allow-fqdn-hostname (IBM recommended), got %v", resolveBootstrap)
 	}
+	// --dashboard-password-noupdate is unconditional: bootwright captures the
+	// generated dashboard password install-only, so the forced first-login
+	// rotation would immediately stale the captured secret.
+	if !strings.Contains(bootstrapArgv, "--dashboard-password-noupdate") {
+		t.Fatalf("bootstrap argv must pass --dashboard-password-noupdate, got %v", resolveBootstrap)
+	}
+	// --single-host-defaults is conditional on the rendered bootstrap flag.
+	if !strings.Contains(bootstrapArgv, "--single-host-defaults") || !strings.Contains(bootstrapArgv, "singleHostDefaults") {
+		t.Fatalf("bootstrap argv must conditionally pass --single-host-defaults, got %v", resolveBootstrap)
+	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")
 	lateIdx := findAnsibleTask(t, block, "Apply Ceph late service spec")

@@ -103,8 +103,9 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
 			"hosts":               storageHostsVars(state, cluster),
 			"bootstrap": map[string]any{
-				"host":  ceph.Cephadm.Bootstrap.Host,
-				"monIP": topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
+				"host":               ceph.Cephadm.Bootstrap.Host,
+				"monIP":              topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
+				"singleHostDefaults": ceph.Cephadm.Bootstrap.SingleHostDefaults,
 			},
 			"ceph": map[string]any{
 				"bootstrapConfPath":    asset.BootstrapConfPath,

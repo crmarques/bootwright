@@ -621,6 +621,28 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
+// The bootstrap ceph.conf seeds public_network plus the global/mon/osd config
+// sections (no masks, no mgr/mds/client) so cephadm's auto-created pools honor
+// the declared defaults; the post-bootstrap ceph config set ops still run.
+func TestBootstrapConfAssimilatesGlobalMonOSDConfig(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Networks: v1alpha1.StorageCephNetworks{PublicCIDRs: []string{"10.0.0.0/24"}},
+			Config: map[string]map[string]string{
+				"global":        {"osd_pool_default_size": "3"},
+				"osd":           {"osd_memory_target": "4294967296"},
+				"mgr":           {"mgr/balancer/active": "true"},
+				"osd/class:ssd": {"osd_memory_target": "8589934592"},
+			},
+		}},
+	}
+	want := "[global]\npublic_network = 10.0.0.0/24\nosd_pool_default_size = 3\n[osd]\nosd_memory_target = 4294967296\n"
+	if got := CephadmBootstrapConf(cluster); got != want {
+		t.Fatalf("bootstrap conf =\n%q\nwant\n%q", got, want)
+	}
+}
+
 // Declared spec.ceph.config options render as deterministic `ceph config set`
 // operations (sorted by section then key), additive-only by design.
 func TestCephConfigOptionsRenderAsConfigSetOperations(t *testing.T) {

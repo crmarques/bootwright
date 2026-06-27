@@ -905,6 +905,34 @@ func TestStorageECProfileValidation(t *testing.T) {
 	}
 }
 
+// TestValidateSingleHostDefaults covers the --single-host-defaults gate: only a
+// one-host non-stretch topology, and it owns the three osd/crush bootstrap
+// defaults so spec.ceph.config[global] must not also set them.
+func TestValidateSingleHostDefaults(t *testing.T) {
+	base := func() v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+				Cephadm:  v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{SingleHostDefaults: true}},
+				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{Hostname: "ceph-0"}}},
+			}},
+		}
+	}
+	if errs := validateStorageCephSingleHostDefaults("p", base()); len(errs) != 0 {
+		t.Fatalf("single-host cluster should pass, got %v", errs)
+	}
+	multi := base()
+	multi.Spec.Ceph.Topology.Hosts = append(multi.Spec.Ceph.Topology.Hosts, v1alpha1.StorageCephHost{Hostname: "ceph-1"})
+	if got := strings.Join(validateStorageCephSingleHostDefaults("p", multi), "; "); !strings.Contains(got, "single-host topology") {
+		t.Fatalf("multi-host should be rejected, got %q", got)
+	}
+	conflict := base()
+	conflict.Spec.Ceph.Config = map[string]map[string]string{"global": {"osd_pool_default_size": "1"}}
+	if got := strings.Join(validateStorageCephSingleHostDefaults("p", conflict), "; "); !strings.Contains(got, "osd_pool_default_size") {
+		t.Fatalf("config conflict should be rejected, got %q", got)
+	}
+}
+
 // TestValidCephConfigSectionMasks covers the CRUSH config-DB masks: a who-target
 // may carry a single /class:<v> or /<bucket>:<v> mask.
 func TestValidCephConfigSectionMasks(t *testing.T) {

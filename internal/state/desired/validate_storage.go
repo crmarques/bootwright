@@ -109,6 +109,32 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	if ceph.Topology.Stretch != nil {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
+	errs = append(errs, validateStorageCephSingleHostDefaults(prefix+".cephadm.bootstrap.singleHostDefaults", cluster)...)
+	return errs
+}
+
+// validateStorageCephSingleHostDefaults gates the --single-host-defaults
+// bootstrap flag: it is only coherent for a one-host, non-stretch topology, and
+// it owns the three osd_pool/crush defaults at bootstrap — so declaring those in
+// spec.ceph.config[global] would conflict.
+func validateStorageCephSingleHostDefaults(prefix string, cluster v1alpha1.StorageCluster) []string {
+	if !cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults {
+		return nil
+	}
+	var errs []string
+	if len(cluster.Spec.Ceph.Topology.Hosts) != 1 {
+		errs = append(errs, prefix+" is only valid for a single-host topology")
+	}
+	if cluster.Spec.Ceph.Topology.Stretch != nil {
+		errs = append(errs, prefix+" must not be set with stretch mode")
+	}
+	if global := cluster.Spec.Ceph.Config["global"]; global != nil {
+		for _, key := range []string{"osd_pool_default_size", "osd_pool_default_min_size", "osd_crush_chooseleaf_type"} {
+			if _, ok := global[key]; ok {
+				errs = append(errs, fmt.Sprintf("%s owns %s at bootstrap; remove it from spec.ceph.config[global]", prefix, key))
+			}
+		}
+	}
 	return errs
 }
 

@@ -163,6 +163,13 @@ type StorageCephadmBootstrap struct {
 	// machine's SSH address.
 	Host       string               `yaml:"host" json:"host"`
 	AddressRef LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+	// SingleHostDefaults renders `cephadm bootstrap --single-host-defaults`,
+	// which sets the CRUSH/replication defaults a single-node cluster needs to
+	// reach active+clean. Only valid for a one-host, non-stretch topology, and
+	// rejected if spec.ceph.config[global] also sets the three defaults the flag
+	// owns (osd_pool_default_size, osd_pool_default_min_size,
+	// osd_crush_chooseleaf_type).
+	SingleHostDefaults bool `yaml:"singleHostDefaults,omitempty" json:"singleHostDefaults,omitempty"`
 }
 
 type StorageCephMonitoring struct {
