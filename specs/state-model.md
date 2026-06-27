@@ -1014,9 +1014,13 @@ Rules:
   an undefined VM, a deleted namespace) is not detected until the next apply
   refreshes the record. A root whose resources are all `missing` is reported as
   one absence; a present root reports only the resources that are not in sync.
-  Drift is reported at apply-task granularity: each selected apply task is one
-  reported resource, so a managed `StorageCluster` together with its pools,
-  filesystems, gateways, and exports classifies as one storage resource, and the
+  Drift is reported per object: each selected apply task is one reported
+  resource, and a managed `StorageCluster`'s pools, filesystems, object
+  gateways, and exports are each classified independently against their own
+  recorded apply, so the report names the individual pool or export that
+  drifted or is not yet applied — the same object granularity `apply` acts on.
+  A present `StorageCluster` lists its out-of-sync sub-objects under the cluster
+  root, while a never-applied cluster still collapses to one absence. The
   `infrastructure` root aggregates the provider and infra-component host tasks.
   The report names which resource drifted, not which field; run `render
   effective` and diff, or `plan`, to see the exact change. It
