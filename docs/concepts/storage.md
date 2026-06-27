@@ -362,12 +362,35 @@ desired state leaves the live filesystem running (additive-only).
 | `spec.cephfs.dataPoolRefs[]` | Yes | — | One or more data pools, each authored as a plain pool name (the `{name, default}` object form is only for electing the default). |
 | `spec.cephfs.dataPoolRefs[].name` | Yes (object form) | — | Data pool name. |
 | `spec.cephfs.dataPoolRefs[].default` | No | `true` for a single entry; otherwise `false` | Marks the default data pool. |
-| `spec.cephfs.mds.activeCount` | No | Ceph default | Active MDS count. |
+| `spec.cephfs.mds.activeCount` | No | Ceph default | Active MDS count (`max_mds`). |
+| `spec.cephfs.mds.standbyReplay` | No | `false` | Enable hot standby-replay MDS (`allow_standby_replay`), the standard production HA posture. |
+| `spec.cephfs.mds.standbyCountWanted` | No | Ceph default | Standby daemons the cluster wants (`standby_count_wanted`, non-negative). |
 | `spec.cephfs.mds.placement` | No | every host carrying the `mds` role | MDS service placement; see [Shared placement](#shared-placement). |
+| `spec.cephfs.mds.serviceSpec.unmanaged` | No | `false` | Freeze the MDS daemon set (`unmanaged`). |
+| `spec.cephfs.mds.serviceSpec.extraContainerArgs[]` | No | — | `extra_container_args` for the daemon container. |
+| `spec.cephfs.mds.serviceSpec.extraEntrypointArgs[]` | No | — | `extra_entrypoint_args` for the daemon. |
+| `spec.cephfs.mds.serviceSpec.networks[]` | No | — | Bind the daemon to CIDRs (`networks`). |
+| `spec.cephfs.subvolumeGroups[]` | No | — | Static subvolume groups; see [Subvolume groups](#subvolume-groups). |
 
 !!! note "Cross-field rule"
     A single data pool becomes the default automatically. With multiple data
     pools you must mark **exactly one** as `default: true`.
+
+### Subvolume groups
+
+`spec.cephfs.subvolumeGroups[]` declares the static `ceph fs subvolumegroup
+create` boundaries that CSI and other tools provision subvolumes into.
+Individual subvolumes are out of scope (apps/CSI own those). Additive-only: a
+removed group keeps running.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `name` | Yes | — | Subvolume group name; unique within the filesystem. |
+| `poolLayoutRef` | No | — | `StoragePool` (same cluster) for the group's data layout (`--pool_layout`). |
+| `mode` | No | — | Directory mode in octal (`--mode`, e.g. `0755`). |
+| `uid` | No | — | Owner UID (`--uid`, non-negative). |
+| `gid` | No | — | Owner GID (`--gid`, non-negative). |
+| `sizeBytes` | No | — | Group quota in bytes (`--size`, non-negative). |
 
 ## StorageObjectGateway
 

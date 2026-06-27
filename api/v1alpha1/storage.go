@@ -484,6 +484,27 @@ type StorageCephFSSpec struct {
 	MetadataPoolRef LocalObjectReference          `yaml:"metadataPoolRef" json:"metadataPoolRef"`
 	DataPoolRefs    []StorageCephFSDataPoolRef    `yaml:"dataPoolRefs" json:"dataPoolRefs"`
 	MDS             StorageCephFSMetadataServices `yaml:"mds,omitempty" json:"mds,omitempty"`
+	// SubvolumeGroups declares static subvolume groups (`ceph fs subvolumegroup
+	// create`) — the multi-tenant boundary tools like CSI provision subvolumes
+	// into. Individual subvolumes are deliberately out of scope (apps/CSI own
+	// those). Additive-only: a removed group keeps running.
+	SubvolumeGroups []StorageCephFSSubvolumeGroup `yaml:"subvolumeGroups,omitempty" json:"subvolumeGroups,omitempty"`
+}
+
+// StorageCephFSSubvolumeGroup mirrors `ceph fs subvolumegroup create` flags.
+type StorageCephFSSubvolumeGroup struct {
+	Name string `yaml:"name" json:"name"`
+	// PoolLayoutRef names the StoragePool the group's data lands in
+	// (--pool_layout); same cluster as the filesystem.
+	PoolLayoutRef LocalObjectReference `yaml:"poolLayoutRef,omitempty" json:"poolLayoutRef,omitempty"`
+	// Mode is the group directory mode in octal (--mode, e.g. "0755").
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	// UID / GID own the group directory (--uid / --gid); pointers so 0 (root) is
+	// distinguishable from unset.
+	UID *int `yaml:"uid,omitempty" json:"uid,omitempty"`
+	GID *int `yaml:"gid,omitempty" json:"gid,omitempty"`
+	// SizeBytes is the group quota in bytes (--size).
+	SizeBytes int64 `yaml:"sizeBytes,omitempty" json:"sizeBytes,omitempty"`
 }
 
 // StorageCephFSDataPoolRef names one data pool backing the filesystem. It is
@@ -533,8 +554,29 @@ func (r *StorageCephFSDataPoolRef) UnmarshalJSON(data []byte) error {
 }
 
 type StorageCephFSMetadataServices struct {
-	ActiveCount int              `yaml:"activeCount,omitempty" json:"activeCount,omitempty"`
-	Placement   StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
+	ActiveCount int `yaml:"activeCount,omitempty" json:"activeCount,omitempty"`
+	// StandbyReplay enables hot standby-replay MDS daemons
+	// (`ceph fs set <fs> allow_standby_replay true`), the standard production
+	// HA posture. StandbyCountWanted is the number of standby daemons the
+	// cluster wants (`standby_count_wanted`); both spell the native fields.
+	StandbyReplay      bool                       `yaml:"standbyReplay,omitempty" json:"standbyReplay,omitempty"`
+	StandbyCountWanted int                        `yaml:"standbyCountWanted,omitempty" json:"standbyCountWanted,omitempty"`
+	Placement          StoragePlacement           `yaml:"placement,omitempty" json:"placement,omitempty"`
+	ServiceSpec        *StorageCephMDSServiceSpec `yaml:"serviceSpec,omitempty" json:"serviceSpec,omitempty"`
+}
+
+// StorageCephMDSServiceSpec exposes the cephadm common service-spec fields for
+// the MDS service (all top-level service-spec keys, not daemon config). Scoped
+// to MDS on purpose; per-MDS config belongs in spec.ceph.config[mds.<fs>].
+type StorageCephMDSServiceSpec struct {
+	// Unmanaged freezes the MDS daemon set (cephadm stops reconciling it).
+	Unmanaged bool `yaml:"unmanaged,omitempty" json:"unmanaged,omitempty"`
+	// ExtraContainerArgs / ExtraEntrypointArgs pass through to the daemon
+	// container (extra_container_args / extra_entrypoint_args).
+	ExtraContainerArgs  []string `yaml:"extraContainerArgs,omitempty" json:"extraContainerArgs,omitempty"`
+	ExtraEntrypointArgs []string `yaml:"extraEntrypointArgs,omitempty" json:"extraEntrypointArgs,omitempty"`
+	// Networks pins the daemon to one or more CIDRs (networks).
+	Networks []string `yaml:"networks,omitempty" json:"networks,omitempty"`
 }
 
 // StoragePlacement selects where a Ceph service runs. Omitted hosts default

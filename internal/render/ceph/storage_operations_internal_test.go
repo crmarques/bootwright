@@ -11,6 +11,74 @@ import (
 // TestCephFilesystemAttachesNonDefaultDataPools covers F26: `ceph fs new` wires
 // only the default data pool, so every additional declared data pool must be
 // attached with `ceph fs add_data_pool`, and the default pool must not be added
+// CephFS standby HA and subvolume groups render as native `ceph fs set` /
+// `ceph fs subvolumegroup create` ops, and the MDS serviceSpec common fields
+// land as top-level keys on the cephadm mds service doc.
+func TestCephFSStandbySubvolumeAndMDSServiceSpecRender(t *testing.T) {
+	uid := 1000
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mds"},
+			}}},
+		}},
+	}
+	fs := v1alpha1.StorageFilesystem{
+		Metadata: v1alpha1.Metadata{Name: "fs1"},
+		Spec: v1alpha1.StorageFilesystemSpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+			CephFS: v1alpha1.StorageCephFSSpec{
+				MetadataPoolRef: v1alpha1.LocalObjectReference{Name: "fs1-meta"},
+				DataPoolRefs:    []v1alpha1.StorageCephFSDataPoolRef{{Name: "fs1-data", Default: true}},
+				MDS: v1alpha1.StorageCephFSMetadataServices{
+					ActiveCount: 2, StandbyReplay: true, StandbyCountWanted: 1,
+					ServiceSpec: &v1alpha1.StorageCephMDSServiceSpec{Unmanaged: true, Networks: []string{"10.0.0.0/24"}, ExtraContainerArgs: []string{"--cpus=2"}},
+				},
+				SubvolumeGroups: []v1alpha1.StorageCephFSSubvolumeGroup{{Name: "csi", PoolLayoutRef: v1alpha1.LocalObjectReference{Name: "fs1-data"}, Mode: "0755", UID: &uid, SizeBytes: 1073741824}},
+			},
+		},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}, StorageFilesystems: []v1alpha1.StorageFilesystem{fs}}
+
+	byName := map[string][]string{}
+	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
+		name, _ := op["name"].(string)
+		cmd, _ := op["command"].([]string)
+		byName[name] = cmd
+	}
+	if got := byName["set-cephfs-standby-replay-fs1"]; !reflect.DeepEqual(got, []string{"ceph", "fs", "set", "fs1", "allow_standby_replay", "true"}) {
+		t.Fatalf("standby-replay = %v", got)
+	}
+	if got := byName["set-cephfs-standby-count-fs1"]; !reflect.DeepEqual(got, []string{"ceph", "fs", "set", "fs1", "standby_count_wanted", "1"}) {
+		t.Fatalf("standby-count = %v", got)
+	}
+	want := []string{"ceph", "fs", "subvolumegroup", "create", "fs1", "csi", "--size", "1073741824", "--pool_layout", "fs1-data", "--uid", "1000", "--mode", "0755"}
+	if got := byName["create-cephfs-subvolumegroup-fs1-csi"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("subvolumegroup create = %v\nwant %v", byName["create-cephfs-subvolumegroup-fs1-csi"], want)
+	}
+
+	var mds map[string]any
+	for _, doc := range CephadmLateServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		if m["service_type"] == "mds" {
+			mds = m
+		}
+	}
+	if mds == nil {
+		t.Fatalf("no mds service rendered")
+	}
+	if mds["unmanaged"] != true {
+		t.Fatalf("mds serviceSpec.unmanaged must be a top-level key: %v", mds)
+	}
+	if nets, _ := mds["networks"].([]string); !reflect.DeepEqual(nets, []string{"10.0.0.0/24"}) {
+		t.Fatalf("mds networks = %v", mds["networks"])
+	}
+	if args, _ := mds["extra_container_args"].([]string); !reflect.DeepEqual(args, []string{"--cpus=2"}) {
+		t.Fatalf("mds extra_container_args = %v", mds["extra_container_args"])
+	}
+}
+
 // a second time.
 func TestCephFilesystemAttachesNonDefaultDataPools(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{

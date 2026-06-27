@@ -75,7 +75,11 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 		hosts := topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS)
 		if len(hosts) > 0 {
-			docs = append(docs, cephadmPlacementService("mds", fs.Metadata.Name, hosts, 0, nil))
+			doc := cephadmPlacementService("mds", fs.Metadata.Name, hosts, 0, nil)
+			if ss := fs.Spec.CephFS.MDS.ServiceSpec; ss != nil {
+				applyCephServiceCommonFields(doc, ss.Unmanaged, ss.ExtraContainerArgs, ss.ExtraEntrypointArgs, ss.Networks)
+			}
+			docs = append(docs, doc)
 		}
 	}
 	docs = append(docs, cephadmMonitoringSpecs(cluster)...)
@@ -113,6 +117,25 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 	}
 	return docs
+}
+
+// applyCephServiceCommonFields sets the cephadm common service-spec keys that
+// are top-level (siblings of placement/spec), not daemon config: unmanaged,
+// extra_container_args, extra_entrypoint_args, and networks. Each renders only
+// when set so a service without overrides is byte-identical to before.
+func applyCephServiceCommonFields(doc map[string]any, unmanaged bool, extraContainerArgs, extraEntrypointArgs, networks []string) {
+	if unmanaged {
+		doc["unmanaged"] = true
+	}
+	if len(extraContainerArgs) > 0 {
+		doc["extra_container_args"] = append([]string(nil), extraContainerArgs...)
+	}
+	if len(extraEntrypointArgs) > 0 {
+		doc["extra_entrypoint_args"] = append([]string(nil), extraEntrypointArgs...)
+	}
+	if len(networks) > 0 {
+		doc["networks"] = append([]string(nil), networks...)
+	}
 }
 
 func cephadmPlacementService(serviceType, serviceID string, hosts []string, countPerHost int, spec map[string]any) map[string]any {

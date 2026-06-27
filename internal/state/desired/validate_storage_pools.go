@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/topology"
@@ -239,6 +240,55 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 		errs = append(errs, validateStoragePlacementHosts(prefix+".cephfs.mds.placement", fs.Spec.CephFS.MDS.Placement, cluster, ok, v1alpha1.StorageCephRoleMDS)...)
 		if ok && storageClusterStretchEnabled(cluster) {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".cephfs.mds.placement", topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS), cluster, v1alpha1.StorageCephRoleMDS)...)
+		}
+		if fs.Spec.CephFS.MDS.StandbyCountWanted < 0 {
+			errs = append(errs, prefix+".cephfs.mds.standbyCountWanted must be non-negative")
+		}
+		if ss := fs.Spec.CephFS.MDS.ServiceSpec; ss != nil {
+			for i, cidr := range ss.Networks {
+				errs = append(errs, validateCIDR(fmt.Sprintf("%s.cephfs.mds.serviceSpec.networks[%d]", prefix, i), cidr)...)
+			}
+		}
+		errs = append(errs, validateStorageSubvolumeGroups(prefix+".cephfs.subvolumeGroups", fs, pools)...)
+	}
+	return errs
+}
+
+var cephOctalModePattern = regexp.MustCompile(`^0?[0-7]{3,4}$`)
+
+// validateStorageSubvolumeGroups checks the declared subvolume groups: unique
+// non-empty names, an octal mode, a pool layout that resolves to a pool in the
+// same cluster, and non-negative quota/ids.
+func validateStorageSubvolumeGroups(prefix string, fs v1alpha1.StorageFilesystem, pools map[string]v1alpha1.StoragePool) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, group := range fs.Spec.CephFS.SubvolumeGroups {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if group.Name == "" {
+			errs = append(errs, owner+".name is required")
+		} else if seen[group.Name] {
+			errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, group.Name))
+		}
+		seen[group.Name] = true
+		if group.Mode != "" && !cephOctalModePattern.MatchString(group.Mode) {
+			errs = append(errs, fmt.Sprintf("%s.mode %q must be an octal mode such as 0755", owner, group.Mode))
+		}
+		if group.SizeBytes < 0 {
+			errs = append(errs, owner+".sizeBytes must be non-negative")
+		}
+		if group.UID != nil && *group.UID < 0 {
+			errs = append(errs, owner+".uid must be non-negative")
+		}
+		if group.GID != nil && *group.GID < 0 {
+			errs = append(errs, owner+".gid must be non-negative")
+		}
+		if ref := group.PoolLayoutRef.Name; ref != "" {
+			pool, poolOK := pools[ref]
+			if !poolOK {
+				errs = append(errs, fmt.Sprintf("%s.poolLayoutRef %q does not match any StoragePool", owner, ref))
+			} else if pool.Spec.StorageClusterRef.Name != fs.Spec.StorageClusterRef.Name {
+				errs = append(errs, fmt.Sprintf("%s.poolLayoutRef %q belongs to StorageCluster/%s, want StorageCluster/%s", owner, ref, pool.Spec.StorageClusterRef.Name, fs.Spec.StorageClusterRef.Name))
+			}
 		}
 	}
 	return errs
