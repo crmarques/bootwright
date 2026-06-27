@@ -1,18 +1,20 @@
 ---
-title: Environment API
+title: Environment & fleet defaults
 description: Environment fields, defaults, secrets, services, mirrors, and entitlements.
 ---
 
-# Environment
+# Environment & fleet defaults
 
-`Environment` owns fleet-wide defaults, selected input resources, selected
-clusters, secret declarations, proxy and mirror defaults, install trust,
-entitlements, and the infra-component service access catalog (external or
-managed entries).
+`Environment` owns fleet-wide concerns: default install material, the active
+resource and cluster selection lists, secret declarations, proxy and mirror
+defaults, install trust, vendor entitlements, the infra-component service access
+catalog (external or managed entries), and managed-service image pins. It is the
+top of the ownership tree — every other kind inherits its fleet defaults and
+references its secret and service catalogs.
 
-Exactly one `Environment` is loaded per context. The standard object envelope
-(`apiVersion`, `kind`, `metadata.name`) applies — see
-[Object Envelope](index.md#object-envelope). A minimal skeleton:
+Exactly one `Environment` is loaded per context. It uses the shared object
+envelope and the **Required** / **Default** column convention documented on
+[The desired-state model](index.md#object-envelope). A minimal skeleton:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -24,9 +26,9 @@ spec:
 ```
 
 In the tables below, **Required** marks fields the author must set.
-**Required: No** with a stated default means the field is normalize-defaulted
-or simply optional: omit it and Bootwright uses the default. A blank Default
-cell means there is no default — an omitted optional field stays unset.
+**Required: No** with a stated default means the field is normalize-defaulted or
+simply optional: omit it and Bootwright uses the default. A blank Default cell
+means there is no default — an omitted optional field stays unset.
 
 ## Fields
 
@@ -38,7 +40,7 @@ cell means there is no default — an omitted optional field stays unset.
 | `spec.containerClusters[]` | No | All loaded | Active `ContainerCluster` selection list. When set, loaded container clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.storageClusters[]` | No | All loaded | Active `StorageCluster` selection list. When set, loaded storage clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.defaults.install.pullSecretRef` | No | — | Default pull secret for clusters that omit `install.pullSecretRef`. |
-| `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [ContainerCluster](container-cluster.md)). |
+| `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [Container clusters](container-clusters.md)). |
 | `spec.defaults.artifactAccess` | No | — | Default artifact endpoint binding for active artifact consumers. See [Artifact access](#artifact-access). |
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
@@ -54,8 +56,8 @@ cell means there is no default — an omitted optional field stays unset.
 
 ## Artifact access
 
-`defaults.artifactAccess` and cluster/provider artifact access share this shape.
-All fields are optional name references; the names are validated at the
+`defaults.artifactAccess` and the cluster artifact access block share this
+shape. All fields are optional name references; the names are validated at the
 declaration site even when no cluster currently consumes them.
 
 | Field | Required | Default | Description |
@@ -69,11 +71,14 @@ declaration site even when no cluster currently consumes them.
 
 ## Infra-component catalog
 
-Each catalog entry sets `management: external` or `management: managed`.
-Managed entries point at an `InfraComponent` through `componentRef`; external
-entries carry connection facts directly. `name` and `management` are required
-on every entry. The remaining fields are conditional on `management` — fields
-marked managed-only are rejected on external entries and vice versa.
+`spec.infraComponents` is the fleet's catalog of shared-service access entries,
+grouped by service kind (`proxies`, `nameResolution`, `artifactServers`,
+`registries`, `ntp`). Each entry sets `management: external` or
+`management: managed`. Managed entries point at an
+[`InfraComponent`](infrastructure.md) through `componentRef`; external entries
+carry connection facts directly. `name` and `management` are required on every
+entry. The remaining fields are conditional on `management` — fields marked
+managed-only are rejected on external entries and vice versa.
 
 | Field | Required | Description |
 | --- | --- | --- |
@@ -112,7 +117,9 @@ marked managed-only are rejected on external entries and vice versa.
 
 `spec.registries` configures disconnected mirroring. It is optional, but a
 disconnected `ContainerCluster` install requires mirror trust plus either an
-external mirror URL or a managed registry catalog entry.
+external mirror URL or a managed registry catalog entry. See
+[Disconnected & proxied installs](../advanced/disconnected-proxy.md) for the
+end-to-end mirror workflow.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -125,11 +132,12 @@ external mirror URL or a managed registry catalog entry.
 
 ## Secrets
 
-`spec.secrets[]` is authored as a list. Each item is one of the shapes below.
-Entry names must be DNS labels. Scalar and null-valued items declare
-context-local material — generated or operator-supplied material written through
-the encrypted context secret store. `file` and `generated` are mutually
-exclusive; `keyFile` requires `file`.
+`spec.secrets[]` declares secret *names*, never bytes. It is the API's one
+bespoke collection codec: authored as a list of scalar names or single-key
+objects, it decodes into a name-keyed map. Entry names must be DNS labels.
+Scalar and null-valued items declare context-local material — generated or
+operator-supplied material written through the encrypted context secret store.
+`file` and `generated` are mutually exclusive; `keyFile` requires `file`.
 
 | Shape | Required parts | Meaning |
 | --- | --- | --- |
@@ -142,8 +150,8 @@ exclusive; `keyFile` requires `file`.
 | `- name: {generated: {sshKeyPair: ...}}` | `generated.sshKeyPair` | Generated SSH key pair. |
 
 The object form requires `file`, `keyFile`, or `generated`; use a scalar item
-(or an omitted/null value) for context-local material. A `generated:` block
-must set exactly one of `credentials`, `selfSignedCertificate`, or `sshKeyPair`.
+(or an omitted/null value) for context-local material. A `generated:` block must
+set exactly one of `credentials`, `selfSignedCertificate`, or `sshKeyPair`.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -155,10 +163,11 @@ must set exactly one of `credentials`, `selfSignedCertificate`, or `sshKeyPair`.
 | `generated.sshKeyPair.type` | No | `ed25519` | Key type; currently only `ed25519`. |
 | `generated.sshKeyPair.comment` | No | — | Public key comment (no leading/trailing whitespace or newlines). |
 
-!!! note
-    Desired state references secrets by name only — never bytes. Generated
-    material is created during apply; operator-owned `file:` material stays
-    outside versioned state. See [Secrets](../advanced/secrets.md).
+!!! note "Names only — never bytes"
+    Desired state references secrets by name only. Generated material is created
+    during apply; operator-owned `file:` material stays outside versioned state.
+    The full source/context storage model and the secret-declaration grammar
+    live on [Secrets & entitlements](secrets.md).
 
 ## Entitlements
 
@@ -225,8 +234,8 @@ and the CA named by `trustBundleRef` is trusted before registration. One block
 covers both the install-time Anaconda kickstart (`rhsm --server-hostname …
 --rhsm-baseurl …`) and the day-2 cephadm `subscription-manager register`, so
 nodes never fall back to the CDN. Because the redirect lives on the entitlement,
-a `MachineImage` boot ISO or a Ceph cluster that already references the
-entitlement inherits Satellite with no other changes.
+a [`MachineImage`](machines.md) boot ISO or a Ceph cluster that already
+references the entitlement inherits Satellite with no other changes.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -299,3 +308,8 @@ Beyond the per-field rules above, the validator enforces:
   least one `mirrors[]` value.
 - Proxy URLs and `entitlements[].registry.url` must not embed inline
   credentials.
+
+See [The desired-state model](index.md) for the conventions every field table
+shares, [Secrets & entitlements](secrets.md) for the secret-declaration grammar,
+and [Disconnected & proxied installs](../advanced/disconnected-proxy.md) for the
+proxy and mirror how-to.

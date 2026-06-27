@@ -1,28 +1,32 @@
 ---
-title: Extending Bootwright
-description: Contributor guide to Bootwright's extension points — adding a substrate adapter, adding a CLI verb, and where the renderer, role registry, and Ansible collection live.
+title: API
+description: Contributor guide to the Bootwright desired-state API and its extension points — where the kinds live, the strict-decode rule, and how to add a substrate adapter, a managed service, or a CLI verb.
 ---
 
-# Extending Bootwright
+# API
 
 This page is for contributors changing Bootwright's code, not operators
-authoring desired state. It maps the two most common extension tasks — adding a
-substrate adapter and adding a CLI verb — onto the packages that own them, and
-points at the normative contracts each change must honour.
+authoring desired state. It maps the desired-state API onto the packages that
+own it and walks the most common extension tasks — adding a substrate adapter,
+adding a managed service, and adding a CLI verb — pointing at the normative
+contracts each change must honour.
 
-If you are looking for how to *use* the substrates and commands that already
-exist, see [Providers](../advanced/providers.md) and the
-[API Reference](../api/index.md) instead.
+For the operator-facing view of the kinds and the substrates that already exist,
+read the [desired-state model](../concepts/index.md). For the execution internals
+behind these extension points, read [Architecture](architecture.md).
 
 !!! note "Read the contracts first"
-    Everything below is a summary of binding contracts that live under
-    `specs/`. The normative source of truth is `specs/architecture.md`,
-    `specs/state-model.md` (the CLI contract and API schema), and
-    `specs/adr/0002-ansible-provider-dispatch.md`. The Go registry in
-    `internal/roles` is the single source of truth for role names. When this
-    page and a spec disagree, the spec wins — please fix this page.
+    Everything below summarizes binding contracts that live under `specs/`. The
+    normative sources are
+    [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md),
+    [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md)
+    (the CLI contract and API schema), and
+    [`specs/adr/0002-ansible-provider-dispatch.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0002-ansible-provider-dispatch.md).
+    The Go registry in `internal/roles` is the single source of truth for role
+    names. When this page and a spec disagree, the spec wins — please fix this
+    page.
 
-## Where the moving parts live
+## Where the API lives
 
 Bootwright is a desired-state loader, validator, renderer, and idempotent apply
 pipeline. The flow is `load and strict decode -> normalize defaults -> validate
@@ -39,24 +43,27 @@ new extension almost always touches one or more of these layers:
 | Execution | `ansible/` (`bootwright.core` collection) | The roles that do per-host work, recording ownership as they mutate. |
 | CLI | `internal/cli` | Thin command adapters that translate flags into workflow options. |
 
-Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
-for machine-level work. Go owns the graph and enforces resource locks before
-launching concurrent playbooks; the collection roles do the host work and never
-branch on dispatch discriminators. For the full pipeline, locking, and the
-four-outcome classifier, see [Architecture](../concepts/architecture.md).
+The typed kinds and their fields all live in `api/v1alpha1`. That package owns
+the decode-time shape of every authored `bootwright.io/v1alpha1` object and the
+capability arms that discriminate substrate and service behaviour.
 
-### The Ansible bundle
+### Strict decode and no backward compatibility
 
-Roles are authored under `/ansible`. `make sync-bundle` packs that source plus
-pinned external collections into the generated archive at
-`internal/converge/bundle/ansible_bundle.zip`, and `make build` runs the sync
-before compiling the CLI. The archive is not versioned.
+Desired state is decoded strictly: unknown fields are rejected before
+normalization. There are **no aliases and no migrations** — `v1alpha1` may change
+cleanly, and retired field names are *rejected, not translated*. A schema change
+that renames or removes a field is a flag-day: stale desired state is expected to
+fail strict validation rather than be silently rewritten. Keep it that way when
+you change the API; do not add compatibility shims.
 
-!!! warning "Run `make build` after touching roles"
-    A source checkout without the generated archive still compiles, but
-    commands that need Ansible report an *empty* embedded bundle until you run
-    `make build`. If a role change appears to have no effect, you probably
-    forgot to re-sync the bundle.
+### Where validation and normalization live
+
+Cross-field rules, ownership checks, and reference resolution live in the
+desired-state validators. Defaults consumed by more than one stage are
+materialized by the normalize phase — validators and renderers read the
+normalized value rather than recomputing it. The desired-state ownership boundary
+is enforced here: physical machine facts must not move into cluster intent, and
+cluster release intent must not move into environment defaults.
 
 ## Adding a substrate adapter
 
@@ -87,7 +94,8 @@ and it must never move physical facts into cluster intent.
 4.  **Map the installer platform render mode** where it applies. This is the
     installer *platform render mode*, not the substrate type — substrate
     ownership stays on the `Machine` and `InfraProvider`. See
-    [platform rendering](../advanced/providers.md) for how the mode is derived.
+    [platform render mode and substrate type](../concepts/index.md#platform-render-mode-and-substrate-type)
+    for how the mode is derived.
 
 !!! note "`scaffold` vs `supported`"
     The schema can accept provider facts for a substrate before an apply adapter
@@ -97,17 +105,17 @@ and it must never move physical facts into cluster intent.
     distinct in code, tests, and docs.
 
 The normative contracts are in `specs/architecture.md` (Providers and Platform
-Rendering) and `specs/adr/0002-ansible-provider-dispatch.md`. Prefer the
-official CLI capabilities of the tools Bootwright already drives (for example,
+Rendering) and `specs/adr/0002-ansible-provider-dispatch.md`. Prefer the official
+CLI capabilities of the tools Bootwright already drives (for example,
 `openshift-install agent wait-for install-complete`) over custom orchestration,
 and prefer capability discovery and advertised metadata over supplier-specific
 branching — isolate, minimize, test, and document any workaround that discovery
 genuinely cannot express.
 
-### Adding a managed service instead
+## Adding a managed service
 
-If you are adding a machine-bound shared service rather than a substrate, it
-*is* a typed kind. Keep the service path orthogonal: add a typed
+If you are adding a machine-bound shared service rather than a substrate, it *is*
+a typed kind. Keep the service path orthogonal to substrate dispatch: add a typed
 `InfraComponent`/`Environment` arm, register its role, image, and defaults in
 `internal/roles`, add its consumer discovery to the service graph, project the
 resolved graph into Ansible vars, and place the converging role under
@@ -116,10 +124,9 @@ resolved graph into Ansible vars, and place the converging role under
 ## Adding a CLI verb
 
 CLI commands live in `internal/cli` and are wired in `cli.go`. Each command
-should be a thin adapter: translate flags into options, then call into
-`internal/converge/workflow`. Orchestration logic stays in the workflow
-package, not in the command. Human-readable output goes through
-`internal/cli/output`.
+should be a **thin adapter**: translate flags into options, then call into
+`internal/converge/workflow`. Orchestration logic stays in the workflow package,
+not in the command. Human-readable output goes through `internal/cli/output`.
 
 ### Decide whether the verb is read-only
 
@@ -156,8 +163,7 @@ keep that contract green in the CLI-contract tests.
 If your extension produces tool inputs, the renderer is a *second enforcement
 line*, not a best-effort formatter. Every render entry point must fail before
 writing anything when an endpoint load-balancer bind or a managed Ceph topology
-host address does not resolve, rather than degrading to output with empty
-values.
+host address does not resolve, rather than degrading to output with empty values.
 
 Two more rules apply to any new render path:
 
@@ -167,33 +173,36 @@ Two more rules apply to any new render path:
   normalize-injected reference the author never wrote, stating that it was
   defaulted and how to override it.
 - **Reuse the shared resolvers.** ISO references are resolved by the Bootwright
-  managed media resolver; providers, OS installers, and future user-supplied
-  ISO fields must not duplicate `local-media:`, `file://`, or HTTP(S) parsing.
-  Shared parsing and resolution live behind one reusable package or adapter
-  before any provider-specific role consumes it.
+  managed media resolver; providers, OS installers, and future user-supplied ISO
+  fields must not duplicate `local-media:`, `file://`, or HTTP(S) parsing. Shared
+  parsing and resolution live behind one reusable package or adapter before any
+  provider-specific role consumes it.
 
 ## The ownership-record contract
 
 Anything your roles create or configure on a host must be recorded so that
 `destroy`, host package-removal gating, orphan reporting, and `state-check` can
-reason about it. Ownership evidence is a named cross-boundary contract:
-executing collection roles record per-host resource and package ownership
-through `bootwright.core.ownership_record` at mutation time, and Go reads those
-records. Run, install, and convergence-safety ledgers stay Go-written — do not
-write those from a role.
+reason about it. Ownership evidence is a named cross-boundary contract: executing
+collection roles record per-host resource and package ownership through
+`bootwright.core.ownership_record` at mutation time, and Go reads those records.
+Run, install, and convergence-safety ledgers stay Go-written — do not write those
+from a role.
 
 !!! warning "No secret bytes, ever"
     Bootwright desired state and rendered output are safe to commit because they
     reference secrets by name, never by value. A new arm, renderer, or role must
     not inline secret bytes into desired state, rendered installer files,
     inventories, effective-state snapshots, or ownership records. See
-    [Secrets](../advanced/secrets.md) for the full model.
+    [Secrets](../concepts/secrets.md) for the full model.
 
 ## Further reading
 
-- [Architecture](../concepts/architecture.md) — the execution pipeline,
-  locking, and the four-outcome classifier in depth.
-- [Providers](../advanced/providers.md) — the operator-facing view of the
-  substrate arms you are extending.
-- `specs/architecture.md`, `specs/state-model.md`, and
-  `specs/adr/0002-ansible-provider-dispatch.md` — the binding contracts.
+- [Architecture](architecture.md) — the execution pipeline, locking, and the
+  four-outcome classifier in depth.
+- [The desired-state model](../concepts/index.md) — the operator-facing view of
+  the substrate arms and kinds you are extending.
+- [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md),
+  [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md),
+  and
+  [`specs/adr/0002-ansible-provider-dispatch.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0002-ansible-provider-dispatch.md)
+  — the binding contracts.

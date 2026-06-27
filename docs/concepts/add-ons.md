@@ -1,24 +1,70 @@
 ---
-title: Add-Ons API
-description: ClusterAddon, ClusterAddonProfile, and ClusterAddonBinding fields.
+title: Add-ons
+description: Post-install bootstrap components — ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, advertised capabilities, and binding-scoped inputs.
 ---
 
-# Add-Ons
+# Add-ons
 
-Add-on resources model the initial post-install bootstrap applied *inside* an
-installed OpenShift or OKD cluster. They are rendered into apply plans, not
-installer input, and they are not a replacement for long-term day-2 GitOps
-reconciliation. Three kinds compose the model: `ClusterAddon` declares one
-reusable component, `ClusterAddonProfile` groups add-ons into an ordered
-reusable set, and `ClusterAddonBinding` attaches add-ons and profiles to one
-installed `ContainerCluster` with binding-scoped input values.
+Post-install bootstrap components are **separate kinds**, not fields under
+[`ContainerCluster.spec.install`](container-clusters.md). Cluster provisioning
+stays the responsibility of `ContainerCluster`, [`Machine`](machines.md), and
+provider-owned resources; add-ons are desired-state objects the
+[`Environment`](environment.md) selects, binds to clusters, and applies *after*
+the target cluster is installed and reachable.
 
-All three use the standard object envelope (`apiVersion: bootwright.io/v1alpha1`,
-`kind`, `metadata.name`) documented on the [API Reference](index.md#object-envelope)
-page, and every field table below follows the shared
-[Required + Default convention](index.md#field-table-convention): a field that
-the normalize phase defaults is `Required: No` with its default stated, never
-plain `Required: Yes`.
+Add-ons model the initial post-install bootstrap applied *inside* an installed
+OpenShift or OKD cluster. They render into apply plans, not installer input, and
+they are not a replacement for long-term day-2 GitOps reconciliation. You can
+install a GitOps operator (for example OpenShift GitOps) as an ordinary `olm`
+add-on and deliver bootstrap manifests through a `manifestSet`, but repository
+publication and ongoing reconciliation stay outside Bootwright scope. There is
+no Argo CD specific behavior — a GitOps operator is a plain add-on like any
+other.
+
+!!! note "Scope boundary"
+    Day-2 GitOps publication of fleet content (package catalogs, repository
+    bootstrap) is a separate project. Add-ons exist only to bring a freshly
+    installed cluster up to a usable baseline. The MVP intentionally does not
+    support pruning, label selectors, Helm, or Kustomize.
+
+Three kinds compose the model:
+
+- **`ClusterAddon`** — declares one reusable component (`olm` or `manifestSet`).
+- **`ClusterAddonProfile`** — groups add-ons into an ordered, reusable set.
+- **`ClusterAddonBinding`** — attaches add-ons and profiles to one installed
+  `ContainerCluster`, optionally supplying binding-scoped input values.
+
+See [conventions](index.md) for the object envelope and the Required/Default
+field-table convention every table below follows.
+
+## Capabilities and inputs
+
+Two cross-resource mechanisms make add-ons composable: advertised capabilities
+and binding-scoped inputs.
+
+**Advertised capabilities.** `ClusterAddon.spec.provides[]` advertises
+capabilities that other desired state may depend on. Accepted values are
+`kubevirt` and `dataFoundation`. Use `kubevirt` on the OpenShift Virtualization
+add-on so KubeVirt child infrastructure waits for the host cluster to be ready
+(see [KubeVirt child clusters](../advanced/kubevirt.md)). Use `dataFoundation`
+on the Data Foundation operator add-on (Red Hat ODF or IBM Fusion) so
+storage-export input effects wait for external-mode components to be ready.
+
+!!! warning "`provides[]` requires a readiness check"
+    An add-on that advertises any `provides[]` capability must declare at least
+    one [`readiness.checks[]`](#readiness) entry, so dependents wait on a real
+    readiness signal rather than mere apply completion.
+
+**Binding-scoped inputs.** `ClusterAddon.spec.accepts.inputs[]` declares input
+APIs that bindings supply by name, validated against a per-input schema. A
+schema property names exactly one resolution — `refKind` (binding values name a
+loaded object of that kind) or `secret` (binding values name a declared
+[`Environment` secret](secrets.md)). The only built-in effect is
+`storageExportAttachment`, the canonical pairing for Data Foundation external
+storage: an input whose single required property is `exportRef` with
+`refKind: StorageExport`, plus an effect with `provider: dataFoundation`. The
+binding then supplies the [`StorageExport`](storage.md#storageexport) name for
+one cluster.
 
 ## ClusterAddon
 
@@ -45,6 +91,53 @@ discriminated union arm whose key is byte-identical to the `type` value.
     check is rejected, because dependents (such as a KubeVirt-backed child
     cluster) wait on the advertised capability becoming ready.
 
+A complete OpenShift Virtualization add-on:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-virtualization
+spec:
+  type: olm
+  provides:
+    - kubevirt
+  olm:
+    namespace:
+      name: openshift-cnv
+      create: true
+      labels:
+        openshift.io/cluster-monitoring: "true"
+    operatorGroup:
+      name: kubevirt-hyperconverged-group
+      targetNamespaces:
+        - openshift-cnv
+    subscription:
+      name: hco-operatorhub
+      package: kubevirt-hyperconverged
+      channel: stable
+      source: redhat-operators
+    customResources:
+      - apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        metadata:
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+  readiness:
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-cnv
+        subscription: hco-operatorhub
+      - type: condition
+        apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        name: kubevirt-hyperconverged
+        namespace: openshift-cnv
+        condition:
+          type: Available
+          status: "True"
+```
+
 ### OLM
 
 `spec.olm` is required when `spec.type: olm`. It installs an operator through
@@ -62,10 +155,16 @@ optional raw custom resources applied after the subscription resources.
 | `olm.subscription.package` | Yes | — | Operator package. |
 | `olm.subscription.channel` | Yes | — | Catalog channel. |
 | `olm.subscription.startingCSV` | No | — | Optional starting CSV. |
-| `olm.subscription.source` | Yes | — | CatalogSource name. |
+| `olm.subscription.source` | Yes | — | CatalogSource name (e.g. `redhat-operators`). |
 | `olm.subscription.sourceNamespace` | No | `openshift-marketplace` | CatalogSource namespace. |
 | `olm.subscription.installPlanApproval` | No | `Automatic` | `Automatic` or `Manual`. |
 | `olm.customResources[]` | No | — | Raw custom resources applied after the subscription resources. |
+
+!!! note "Required vs defaulted Subscription fields"
+    `subscription.sourceNamespace` and `subscription.installPlanApproval` are
+    validated as required but filled in by the normalize phase, so omitting them
+    is valid and leaves `openshift-marketplace` and `Automatic`. Run
+    `bootwright render effective` to see the injected values.
 
 !!! note "Custom resources need full identity"
     Each `olm.customResources[]` entry must set `apiVersion`, `kind`,
@@ -91,7 +190,7 @@ files applied in declared order.
 ### Accepted inputs
 
 `spec.accepts.inputs[]` declares the binding-scoped values an add-on accepts.
-Each input has a name, an object schema, and optional built-in effects.
+Each input has a name, an object schema, and optional built-in effects. The
 `ClusterAddonBinding` supplies the values; the schema validates them.
 
 | Field | Required | Default | Description |
@@ -117,6 +216,51 @@ Each input has a name, an object schema, and optional built-in effects.
     `refKind: StorageExport`, list `exportRef` in `schema.required[]`, and
     declare *no other properties*. Any extra property on such an input is
     rejected.
+
+A Data Foundation add-on advertising the capability and accepting an export
+attachment:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-data-foundation
+spec:
+  type: olm
+  provides:
+    - dataFoundation
+  accepts:
+    inputs:
+      - name: external-storage
+        schema:
+          type: object
+          required:
+            - exportRef
+          properties:
+            exportRef:
+              refKind: StorageExport
+        effects:
+          - type: storageExportAttachment
+            provider: dataFoundation
+  olm:
+    namespace:
+      name: openshift-storage
+      create: true
+    operatorGroup:
+      name: openshift-storage
+      targetNamespaces:
+        - openshift-storage
+    subscription:
+      name: odf-operator
+      package: odf-operator
+      channel: stable-4.21
+      source: redhat-operators
+  readiness:
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-storage
+        subscription: odf-operator
+```
 
 ### Readiness
 
@@ -144,10 +288,6 @@ The required fields depend on the check `type`:
 | `condition` | `apiVersion`, `kind`, `name`, `condition.type`, `condition.status` | `subscription` |
 | `resourceExists` | `apiVersion`, `kind`, `name` | `subscription`, `condition` |
 
-!!! note "`subscription` is csvSucceeded-only"
-    `readiness.checks[].subscription` is valid only on a `csvSucceeded` check,
-    and `readiness.checks[].condition` only on a `condition` check.
-
 ## ClusterAddonProfile
 
 `ClusterAddonProfile` declares an ordered, reusable group of add-ons and nested
@@ -166,7 +306,10 @@ occurrence and the later one dropped.
 ## ClusterAddonBinding
 
 `ClusterAddonBinding` attaches profiles and direct add-ons to one installed
-container cluster, optionally supplying binding-scoped input values.
+container cluster, optionally supplying binding-scoped input values. Bootwright
+applies add-ons after the target cluster is installed and uses a fixed apply
+policy — server-side apply on, field manager `bootwright`, pruning off — that
+authored YAML cannot override.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -193,3 +336,42 @@ separate bindings for separate clusters.
     `ContainerCluster` by only one binding. The same add-on reaching one cluster
     through two bindings — or through both a direct `addons[]` entry and an
     expanded profile — is rejected.
+
+A binding that expands a profile (no inputs):
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: metal-ocp-platform
+spec:
+  clusterRef: metal-ocp
+  addonProfileRefs:
+    - platform-bootstrap
+```
+
+A binding that supplies a storage-export attachment to a Data Foundation add-on:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: metal-ocp-odf
+spec:
+  clusterRef: metal-ocp
+  addons:
+    - addonRef: openshift-data-foundation
+      inputs:
+        - name: external-storage
+          values:
+            exportRef: imported-ceph-odf
+```
+
+## Where to go next
+
+- [KubeVirt child clusters](../advanced/kubevirt.md) — depending on the
+  `kubevirt` capability for nested infrastructure.
+- [Storage](storage.md) — `StorageExport` and the Data Foundation attachment it
+  feeds.
+- [Operations and recovery](../advanced/operations.md) — applying, re-running,
+  and the records add-ons leave behind.

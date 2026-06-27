@@ -1,37 +1,51 @@
 ---
-title: Infrastructure API
-description: InfraProvider, InfraComponent, and NetworkConfig fields.
+title: "Infrastructure: providers, components & networking"
+description: InfraProvider substrate arms, InfraComponent shared services, and NetworkConfig templates.
 ---
 
-# Infrastructure
+# Infrastructure: providers, components & networking
 
-Infrastructure objects describe substrate capabilities, shared machine-bound
-services, and reusable installer network templates. They share the common
-object envelope and the **Required** / **Default** column convention documented
-in [API Reference](index.md#object-envelope); this page documents only each
-kind's `spec`.
+Infrastructure objects describe what the substrate can do, the shared services
+machines run, and the reusable network templates installers consume. Three kinds
+cover this domain:
+
+- **`InfraProvider`** declares a substrate capability — libvirt, bare metal,
+  vSphere, or KubeVirt — including machine profiles, provider facts, and named
+  network attachments. A provider is selected by machines, not by clusters
+  directly: references flow upward from cluster to machine to provider to host.
+- **`InfraComponent`** declares one machine-bound shared service: a load
+  balancer, artifact server, DNS, NTP, proxy, or mirror registry.
+- **`NetworkConfig`** owns reusable machine-network CIDRs, name-resolution
+  selections, and the NMState host template merged into each selected machine.
+
+Current apply support covers libvirt machines with emulated Redfish BMCs,
+bare-metal machines with Redfish virtual media, vCenter-managed vSphere VMs, and
+KubeVirt VMs hosted on an OpenShift Virtualization cluster. (IPMI is not
+apply-supported today.) Those substrates can back a complete cloud-platform graph
+or a single selected `ContainerCluster` / `StorageCluster` convergence.
+
+These kinds share the common object envelope and the **Required** / **Default**
+column convention documented on
+[The desired-state model](index.md#object-envelope); this page documents only
+each kind's `spec`.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: example
-spec: {}
+spec:
+  type: baremetal
+  baremetal:
+    boot:
+      method: external
 ```
-
-Every table below — including the sub-tables — reads its two leading columns
-together: **Required: Yes** must be authored, while **Required: No** with a
-stated default is optional and the normalize phase injects that default before
-validators and renderers run. Cross-field rules that the schema enforces appear
-as notes, because those are the silent authoring failures this reference exists
-to catch.
 
 ## InfraProvider
 
-`InfraProvider` declares what a substrate can provide. A provider is selected by
-machines, not by clusters directly. `spec.type` is a discriminated union: the
-populated arm key is byte-identical to the `type` value, and any other arm must
-be empty.
+`InfraProvider` declares what a substrate can provide. `spec.type` is a
+discriminated union: the populated arm key is byte-identical to the `type` value,
+and any other arm must be empty.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -48,8 +62,8 @@ be empty.
     `spec.artifactAccess is not valid on InfraProvider; use
     Environment.spec.defaults.artifactAccess or
     ContainerCluster.spec.install.artifactAccess`. Author artifact access on
-    [`Environment`](environment.md) or [`ContainerCluster`](container-cluster.md)
-    instead.
+    [`Environment`](environment.md#artifact-access) or
+    [`ContainerCluster`](container-clusters.md) instead.
 
 !!! note "Arm matches `spec.type`"
     Exactly one provider arm is populated and it must match `spec.type`. Setting
@@ -58,13 +72,93 @@ be empty.
 
 ### Bare Metal
 
+For bare metal the provider carries the substrate-level boot method and default
+BMC settings; the per-server hardware facts (NICs, BMC address, boot device) live
+on each [`Machine`](machines.md), which selects the provider and its network
+attachment.
+
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `baremetal.boot.method` | No | — | Boot method. Free-form string today; `external` is the supported value. |
+| `baremetal.boot.method` | No | — | Boot method. Free-form string today; `external` is the supported value for Redfish virtual media. |
 | `baremetal.defaults.bmc.credentialsRef` | No | — | Default BMC credentials secret, inherited by machines that omit their own. |
 | `baremetal.defaults.bmc.disableCertificateVerification` | No | `false` | Lab-only BMC TLS verification opt-out for the control-node-to-BMC leg. |
 
+`defaults.bmc` supplies provider-wide BMC defaults; an individual server can
+override them through its own `Machine.spec.hardware.management.bmc`.
+`disableCertificateVerification: true` is a lab posture for BMCs without trusted
+TLS — do not treat it as the production default.
+
+A provider plus its physical-server `Machine` companion:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: rack1-baremetal-provider
+spec:
+  type: baremetal
+  baremetal:
+    boot:
+      method: external
+    defaults:
+      bmc:
+        credentialsRef: bmc-credentials
+        disableCertificateVerification: true
+  networkAttachments:
+    - name: rack1-vlan140-machine
+      baremetal:
+        vlan: 0
+```
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv1
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: rack1-baremetal-provider
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    config:
+      networkConfigRef: rack1-vlan140-machine
+      interfaceAddresses:
+        - interface: eno1
+          addressRef: ip
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 00:25:90:5a:10:01
+      - name: eno2
+        macAddress: 00:25:90:5a:10:02
+    boot:
+      nicRef: eno1
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
+        credentialsRef: bmc-credentials
+        disableCertificateVerification: true
+  addresses:
+    - name: ip
+      address: 192.168.140.20
+```
+
 ### Libvirt
+
+Libvirt is the primary apply-supported substrate and the one used by the
+[Getting Started](../getting-started/openshift.md) walkthrough. The provider runs
+VMs on a libvirt host machine and serves an emulated Redfish BMC so the agent ISO
+can be attached as virtual media exactly as on real hardware.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -99,7 +193,36 @@ be empty.
     effective values (after the `8000` / `port + 1` defaults) are also checked
     for collisions across all libvirt providers in the same context.
 
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt-provider
+spec:
+  type: libvirt
+  libvirt:
+    machineRef: bastion
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      auth:
+        credentialsRef: bmc-credentials
+    machineProfiles:
+      - name: sno
+        cpu: 8
+        memoryMiB: 16384
+        diskGiB: 120
+  networkAttachments:
+    - name: sno-bridge
+      libvirt:
+        bridge: vbr-cb-sno
+```
+
 ### vSphere
+
+vSphere keeps vCenter, datacenter, failure-domain, and topology facts inside the
+provider. The vSphere adapter creates VMs through the vCenter API from the
+controller — no provider host machine is involved.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -129,14 +252,61 @@ be empty.
 !!! note "Multi-network failure domains require nodeNetworking"
     When a failure domain declares **more than one** `topology.networks[]` entry,
     `spec.vsphere.nodeNetworking` is required so the installer can disambiguate
-    node addressing. A single-network failure domain may omit it.
+    node addressing. A single-network failure domain may omit it. The
+    `networkSubnetCidr` key is the upstream openshift-install spelling (note the
+    lowercase `Cidr`) and renders into `install-config.yaml` unchanged.
 
 !!! note "`isoStaging` needs at least one field"
     If `vsphere.isoStaging` is present, it must set at least one of
     `{datastore, folder}`; an empty block is rejected. Absent, ISOs stage on the
-    machine's failure-domain `topology.datastore` under the stock folder.
+    machine's failure-domain `topology.datastore` under the stock folder. Cleanup
+    removes the uploaded ISO files but cannot remove folders, so empty per-upload
+    directories can accumulate — delete the staging folder itself to reclaim them.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: vsphere-provider
+spec:
+  type: vsphere
+  vsphere:
+    vcenters:
+      - server: vcenter.example.test
+        port: 443
+        datacenters:
+          - dc1
+        credentialsRef: vcenter-credentials
+    failureDomains:
+      - name: dc1-zone-a
+        region: dc1
+        zone: zone-a
+        server: vcenter.example.test
+        topology:
+          datacenter: dc1
+          computeCluster: /dc1/host/cluster1
+          datastore: /dc1/datastore/datastore1
+          folder: /dc1/vm/bootwright
+          resourcePool: /dc1/host/cluster1/Resources/bootwright
+          networks:
+            - VM_Network_1
+    isoStaging:
+      folder: bootwright-vmedia
+    machineProfiles:
+      - name: vsphere-control-plane
+        cpu: 8
+        memoryMiB: 22528
+        diskGiB: 120
+        failureDomainRef: dc1-zone-a
+```
 
 ### KubeVirt
+
+KubeVirt provider profiles create child-cluster VMs on a host OpenShift
+Virtualization cluster. Use `hostClusterRef` when the virtualization host is
+another Bootwright `ContainerCluster` (Bootwright reads that host's cluster
+secrets kubeconfig — do not put kubeconfig bytes in desired state); use
+`kubeconfigRef` when the host cluster is external.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -150,14 +320,35 @@ be empty.
     Setting both, or neither, is rejected. `hostClusterRef` must resolve to a
     declared `ContainerCluster`. A KubeVirt-backed child cluster targeting a
     Bootwright-managed host applies only when that host is installed and bound to
-    a `ClusterAddon` advertising `provides: [kubevirt]`; see
-    [Providers](../advanced/providers.md).
+    a `ClusterAddon` advertising `provides: [kubevirt]`; a focused apply must name
+    both parent and child in `--clusters`, or run after the parent install and
+    KubeVirt add-on are ready. See
+    [KubeVirt nested clusters](../advanced/kubevirt.md).
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: child-kubevirt-provider
+spec:
+  type: kubevirt
+  kubevirt:
+    hostClusterRef: metal-ocp
+    namespace: bootwright-child-ocp
+    storageClassRef: lvms-vg1
+    machineProfiles:
+      - name: child-sno
+        cpu: 8
+        memoryMiB: 16384
+        diskGiB: 120
+```
 
 ### Machine Profiles
 
 `machineProfiles[]` is the shared VM shape across libvirt, vSphere, and KubeVirt
-providers. Fields a provider's adapter does not consume are rejected, so the
-required/applies-to columns differ per arm.
+providers — virtual machines select one by name through
+`Machine.spec.substrate.profileRef`. Fields a provider's adapter does not consume
+are rejected, so the required/applies-to columns differ per arm.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -179,9 +370,12 @@ required/applies-to columns differ per arm.
 
 ### Network Attachments
 
-`networkAttachments[]` is a presence union over the provider arms: each
-attachment has a `name` (unique within the provider) and exactly one arm, which
-must match the provider's `spec.type`.
+`networkAttachments[]` declares the named substrate networks a machine's
+`NetworkConfig` binds to (a `Machine` selects one with
+`network.config.attachmentRef`). It is a presence union over the provider arms:
+each attachment has a `name` (unique within the provider) and exactly one arm,
+which must match the provider's `spec.type` — the parent type already fixes the
+kind, so there is no separate discriminator.
 
 | Arm | Field | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -193,17 +387,44 @@ must match the provider's `spec.type`.
 | `kubevirt` | `networkRef.name` | Yes | — | Network object name on the host cluster. |
 | `kubevirt` | `networkRef.namespace` | No | `spec.kubevirt.namespace` | Selected VM namespace (CUDN) / object namespace (UDN, NAD); must be a DNS label. |
 
-KubeVirt `networkRef` is the API's sole object-form reference because the
-network object lives on the host cluster, outside the loaded desired state. It
-is UDN/CUDN-first and GVK-typed (mirroring the Kubernetes `TypedObjectReference`
+KubeVirt `networkRef` is the API's sole object-form reference because the network
+object lives on the host cluster, outside the loaded desired state. It is
+UDN/CUDN-first and GVK-typed (mirroring the Kubernetes `TypedObjectReference`
 idiom) so it references any network kind without Bootwright encoding that kind's
-schema. See [References](index.md#references).
+schema. Bootwright *references* the object; it does not render or own it — author
+the CUDN/UDN/NAD and any OVS bridge-mapping policy out of band. See
+[References](index.md#references), the
+[`baremetal-redfish-multidc-virtualized-odf-ceph`](../advanced/examples.md)
+example, [KubeVirt nested clusters](../advanced/kubevirt.md), and
+[Networking & load balancing](../advanced/networking.md) for the localnet
+topology and the static-IP rule.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: child-kubevirt-network-provider
+spec:
+  type: kubevirt
+  kubevirt:
+    hostClusterRef: metal-ocp
+    namespace: bootwright-child-ocp
+  networkAttachments:
+    - name: child-machine-net
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org              # optional; defaults with kind
+          kind: ClusterUserDefinedNetwork    # default; may be omitted
+          name: child-machine-net
+          namespace: bootwright-child-ocp    # defaults to spec.kubevirt.namespace
+```
 
 ## InfraComponent
 
 `InfraComponent` declares one machine-bound shared service. `spec.type` is a
 discriminated union: exactly one arm is populated, the arm key equals the `type`
-value, and `spec.type` must equal that arm key.
+value, and `spec.type` must equal that arm key. Each placed `machineRef` must
+resolve to a `Machine` and is checked for the service's required capability.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -228,11 +449,20 @@ value, and `spec.type` must equal that arm key.
     | `ntp` | `chrony` |
     | `registry` | `mirror-registry` |
 
-    The artifact server has no `implementation` field. `machineRef` on every arm
-    must resolve to a `Machine` and is checked for the service's required
-    capability.
+    The artifact server has no `implementation` field.
+
+A managed `InfraComponent` is published to consumers through the
+[`Environment.spec.infraComponents`](environment.md#infra-component-catalog)
+catalog (a `componentRef` on a `management: managed` entry). Endpoint and
+load-balancer wiring is covered in
+[Networking & load balancing](../advanced/networking.md).
 
 ### Artifact Server
+
+Generated ISO and boot-artifact publication is derived from install requirements
+and uses an artifact-server `InfraComponent`. Bootwright serves HTTPS listeners
+with a self-signed certificate generated on the host; omit `listeners` to use the
+default HTTPS listener on port `8443`.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -246,6 +476,14 @@ value, and `spec.type` must equal that arm key.
 | `artifactServer.endpoints[].name` | Yes | — | Endpoint selector name; unique within the service. |
 | `artifactServer.endpoints[].listenerRef` | Yes | — | Must name a declared `listeners[].name`. |
 | `artifactServer.endpoints[].addressRef` | Yes | — | Must resolve to a `Machine.spec.addresses[].name` on the placement machine. |
+
+!!! warning "BMC reachability for virtual media"
+    The artifact server endpoint selected by an
+    `artifactAccess.redfishVirtualMedia.endpointRef` should usually resolve to an
+    IP address the BMC network can reach. Many BMCs do not reliably resolve DNS
+    aliases, and Bootwright uses the matched address value directly in the ISO URL
+    sent to Redfish — controller reachability alone is not enough for virtual-media
+    ISO fetches.
 
 ### Load Balancer
 
@@ -281,10 +519,26 @@ shape. Each requires its own `implementation` value (see the table above).
     DNS `53`, NTP `123`, mirror-registry `5000`, and artifact HTTPS `8443`
     ports) when a `port` is omitted. These defaults are not authored fields here.
 
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: proxy
+spec:
+  type: proxy
+  proxy:
+    implementation: squid
+    machineRef: services-host
+    port: 3128
+```
+
 ## NetworkConfig
 
 `NetworkConfig` owns reusable installer network data: the installer
-`machineNetwork[]` plus an NMState host template merged into each selected host.
+`machineNetwork[]` plus an NMState host template merged into each selected host. A
+machine selects a template with `Machine.spec.network.config.networkConfigRef`,
+and `Machine.spec.network.config.interfaceAddresses[]` injects per-machine static
+addresses into it.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -299,5 +553,47 @@ shape. Each requires its own `implementation` value (see the table above).
     `spec.nameResolutionRefs[]` field; its resolved addresses feed the NMState
     `dns-resolver` server list and installer DNS.
 
-`Machine.spec.network.config.interfaceAddresses[]` injects per-machine static
-addresses into the selected template.
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: sno-bridge
+spec:
+  machineNetwork:
+    - cidr: 192.168.132.0/24
+  nameResolutionRefs:
+    - default
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.132.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.132.1
+            next-hop-interface: primary
+            table-id: 254
+```
+
+## Where to go next
+
+- [Networking & load balancing](../advanced/networking.md) for the deep
+  networking, endpoint, and load-balancer how-to (including the KubeVirt localnet
+  topology and static-IP rule).
+- [KubeVirt nested clusters](../advanced/kubevirt.md) for hosting child clusters
+  on OpenShift Virtualization.
+- [Disconnected & proxied installs](../advanced/disconnected-proxy.md) for mirror
+  registries and proxies.
+- [The desired-state model](index.md) for the conventions every field table
+  shares.

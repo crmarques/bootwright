@@ -1,33 +1,48 @@
 ---
-title: Machines And OS API
-description: Machine, MachineImage, and MachineInstallProfile fields.
+title: Machines & operating systems
+description: Machine vs node, OS modes, substrate binding, and the Machine, MachineImage, and MachineInstallProfile fields.
 ---
 
-# Machines And OS
+# Machines & operating systems
 
-`Machine` owns durable machine facts: substrate binding, hardware and BMC
-inventory, the OS mode, the install network, named addresses, and SSH access.
-The managed-OS kinds describe the install media (`MachineImage`) and the install
-behavior (`MachineInstallProfile`) Bootwright uses when it installs an operating
-system before storage or other machine-level work.
+A `Machine` is a *desired-state* description of a host — raw hardware, a virtual
+machine, an OS-ready box, or a machine whose OS Bootwright should install. It is
+not a running node: it carries the durable facts (substrate binding, hardware and
+BMC inventory, the OS mode, the install network, named addresses, and SSH
+access) that let Bootwright provision the substrate, install an OS where asked,
+and bind the host into a cluster. A cluster references machines by name and the
+machine references its substrate by name; nodes are what those machines become
+after install.
+
+`spec.os.provided` selects the machine's **OS mode** and drives most cross-field
+rules on this kind:
+
+- **provided** (`os.provided: true`) — the machine already runs a usable OS.
+  Bootwright neither provisions a substrate nor installs an OS; it only needs SSH
+  access.
+- **managed** (`os.provided: false` plus `os.installProfileRef`) — Bootwright
+  installs the OS through Anaconda before any cluster or storage work, using a
+  [`MachineImage`](#machineimage) and a [`MachineInstallProfile`](#machineinstallprofile).
+- **ready** (`os.provided: false`, no `os.installProfileRef`) — the cluster
+  agent installer lays the OS down (RHCOS for OpenShift); Bootwright provisions
+  the substrate and boots the agent ISO.
+
+The two managed-OS kinds describe the install media (`MachineImage`) and the
+install behavior (`MachineInstallProfile`). For the end-to-end managed-OS install
+workflow see [Managed OS installs](../advanced/managed-os.md).
 
 Every kind on this page uses the shared
 [object envelope](index.md#object-envelope) (`apiVersion: bootwright.io/v1alpha1`,
-`kind`, `metadata.name`). The tables below describe only `spec`. Each table
-follows the uniform convention: **Required** distinguishes author-required fields
-from normalize-defaulted ones, and **Default** states the value normalize injects
-when the field is omitted.
+`kind`, `metadata.name`) and the **Required** / **Default** column convention.
+The tables below describe only `spec`.
 
 !!! note "Reusable network templates live on the Infrastructure page"
     A `Machine` references a `NetworkConfig` by name through
-    `spec.network.config.networkConfigRef`. The `NetworkConfig` kind itself is
-    documented on the [Infrastructure](infrastructure.md#networkconfig) page.
+    `spec.network.config.networkConfigRef`, and a provider attachment through
+    `attachmentRef`. The `NetworkConfig`, `InfraProvider`, and `InfraComponent`
+    kinds are documented on [Infrastructure](infrastructure.md).
 
 ## Machine
-
-`Machine` represents raw hardware, a virtual machine, an OS-ready machine, or a
-machine whose OS Bootwright should install. `spec.os.provided` selects the mode
-and drives most cross-field rules on this kind.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -69,8 +84,8 @@ and gates several other fields.
 
 When `os.provided: false`, the machine needs a substrate
 (`substrate.providerRef`). It is OS-installed by Bootwright when
-`os.installProfileRef` is also set, and otherwise installed by the cluster
-agent installer.
+`os.installProfileRef` is also set (managed mode), and otherwise installed by the
+cluster agent installer (ready mode).
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -102,6 +117,10 @@ provider with `os.provided: false`, `nics[]` (each with a `macAddress`) and
 | `hardware.management.bmc.credentialsRef` | Required when any BMC field is set | None | Secret containing BMC credentials. |
 | `hardware.management.bmc.disableCertificateVerification` | No | `false` | Lab-only TLS verification opt-out for the control-node-to-BMC leg. |
 
+A per-`Machine` `hardware.management.bmc` block overrides the provider's
+`baremetal.defaults.bmc` for that server. A complete bare-metal `Machine`
+inventory example sits on [Infrastructure](infrastructure.md#bare-metal).
+
 ### Network
 
 `spec.network.config` selects the install network. Reference a reusable
@@ -132,8 +151,8 @@ with `spec`; the two are mutually exclusive. `overrides` and
 ### Addresses and SSH
 
 `access.ssh` carries durable SSH connection details. Both `ssh.addressRef` (a
-name from `spec.addresses[]`) and `ssh.keyRef` are required whenever the block
-is present.
+name from `spec.addresses[]`) and `ssh.keyRef` are required whenever the block is
+present.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -143,6 +162,37 @@ is present.
 | `access.ssh.user` | No | Workflow-dependent | SSH user. |
 | `access.ssh.keyRef` | Yes (when `access.ssh` is set) | None | Secret containing the private SSH key material. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
+
+A complete `Machine` (libvirt, ready mode) referencing a provider profile, a
+network config, and a static address:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: sno-libvirt-master-0
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt-provider
+    profileRef: sno
+  os:
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+    provided: false
+  network:
+    config:
+      networkConfigRef: sno-bridge
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+  addresses:
+    - name: ip
+      address: 192.168.132.20
+```
 
 ## MachineImage
 
@@ -164,8 +214,8 @@ what rendering consumes.
 ### Install source
 
 `installSource` is a presence union: its `type` is derived from the fields
-present when omitted (`entitlementRef` means `redhatCDN`; `url` or
-`repositories` mean `url`).
+present when omitted (`entitlementRef` means `redhatCDN`; `url` or `repositories`
+mean `url`).
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -177,9 +227,9 @@ present when omitted (`entitlementRef` means `redhatCDN`; `url` or
 
 !!! note "Registering against a corporate Satellite"
     A `redhatCDN` install registers against the public Red Hat CDN unless the
-    referenced entitlement's `rhsm` arm carries a `satellite` block, in which case
-    the install registers and pulls content from that Red Hat Satellite instead.
-    No `MachineImage` change is needed — see
+    referenced entitlement's `rhsm` arm carries a `satellite` block, in which
+    case the install registers and pulls content from that Red Hat Satellite
+    instead. No `MachineImage` change is needed — see
     [Environment › Corporate Satellite](environment.md#corporate-satellite).
 
 !!! note "Type-specific exclusivity"
@@ -188,26 +238,20 @@ present when omitted (`entitlementRef` means `redhatCDN`; `url` or
     `repositories[0].baseURL` to the primary install tree. For `type: redhatCDN`,
     `url` and `repositories` must be empty and `entitlementRef` is required.
 
-### Installing from a boot ISO
+### Boot ISO vs DVD
 
 A DVD ISO (~10 GB) bundles the installer and the BaseOS/AppStream package
 repositories, so Anaconda installs offline with a Kickstart `cdrom` source and
 needs no `installSource`. A boot ISO (~1 GB) carries only the installer, so it
 **requires** an `installSource`: Bootwright renders a `url --url=` (or RHSM)
 install source plus `repo` entries instead of `cdrom`, and Anaconda fetches
-packages over the network during install. Stage either ISO the same way:
+packages over the network during install. A `*boot.iso` filename auto-derives
+`mediaType: boot`; a netinstall ISO named otherwise needs an explicit
+`mediaType: boot`.
 
-```bash
-bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file ./rhel-9.7-x86_64-boot.iso
-```
-
-A `*boot.iso` filename auto-derives `mediaType: boot`; a netinstall ISO named
-otherwise needs an explicit `mediaType: boot`.
-
-#### From a package mirror (`type: url`)
-
-Point `installSource.url` at a BaseOS install tree and add the AppStream
-repository — a RHEL install needs both:
+A boot ISO sourced from a package mirror (`type: url`) points `installSource.url`
+at a BaseOS install tree and adds the AppStream repository — a RHEL install needs
+both:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -226,10 +270,9 @@ spec:
         baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
-#### From the Red Hat CDN (`type: redhatCDN`)
-
-Reference a `rhel` entitlement (an RHSM organization plus activation key)
-declared in [`Environment.spec.entitlements`](environment.md); Anaconda
+A boot ISO from the Red Hat CDN (`type: redhatCDN`) references a `rhel`
+entitlement (an RHSM organization plus activation key) declared in
+[`Environment.spec.entitlements`](environment.md#entitlements); Anaconda
 registers the node and installs from the subscription CDN:
 
 ```yaml
@@ -246,24 +289,6 @@ spec:
     entitlementRef: rhel
 ```
 
-`bootwright apply` preflight probes each `type: url` install tree's
-`repodata/repomd.xml` before the machines phase: a server that answers without
-yum metadata fails fast, while one the controller cannot reach only warns — the
-install nodes, not the controller, are the authoritative fetcher. Each node
-brings up its network from its [machine network config](#machine) (the rendered
-Kickstart `network` directive) before Anaconda fetches packages, so a boot ISO
-needs no extra early-networking setup. For a fully disconnected install, point
-`installSource` at an internal mirror; Bootwright serves the ISO over its
-artifact server but never the package tree.
-
-When the install nodes reach the package source (a public mirror or the Red Hat
-CDN) only through a forward proxy, set
-[`Environment.spec.proxyFor.machineOSInstall`](environment.md) to a declared
-external proxy. Bootwright renders `--proxy=` onto the `rhsm`, `url`, and `repo`
-Kickstart directives so Anaconda registers and fetches packages through it —
-useful for a `type: redhatCDN` boot-ISO install on an estate that has no
-internal mirror but does have a corporate proxy.
-
 !!! tip "Disk footprint scales with media size × node count"
     Bootwright bakes each machine's Kickstart into its **own** install ISO
     (Redfish virtual-media boot cannot pass kernel arguments), so every node in a
@@ -273,6 +298,12 @@ internal mirror but does have a corporate proxy.
     output ISOs are unavoidable. An N-node group therefore costs about
     `N ×` media size of customized media, which is the main reason to prefer a
     `mediaType: boot` source (~1&nbsp;GB) over a full `dvd` (~10&nbsp;GB).
+
+The boot-ISO reachability preflight, early networking, and proxy details are
+covered in [Managed OS installs](../advanced/managed-os.md). When the install
+nodes reach the package source only through a forward proxy, set
+[`Environment.spec.proxyFor.machineOSInstall`](environment.md) to a declared
+external proxy.
 
 ## MachineInstallProfile
 
@@ -313,3 +344,8 @@ through Anaconda.
       `customizations.services.enabled`.
     - `customizations.security.fips.enabled: true` is supported only when
       `os.family` is `rhel` (compared case-insensitively).
+
+See [The desired-state model](index.md) for the field-table and union
+conventions, [Infrastructure](infrastructure.md) for providers and networks, and
+[Managed OS installs](../advanced/managed-os.md) for the managed-OS install
+how-to.

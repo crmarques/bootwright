@@ -18,8 +18,8 @@ platform from scratch**, or converge a **single isolated component** for
 build-out, recovery, or maintenance. Either way the YAML is the source of truth,
 the convergence is repeatable, and re-running it is safe.
 
-[Get Started](getting-started.md){ .md-button .md-button--primary }
-[API Reference](api/index.md){ .md-button }
+[Get Started](getting-started/index.md){ .md-button .md-button--primary }
+[Concepts & APIs](concepts/index.md){ .md-button }
 
 ## What Bootwright is for
 
@@ -84,11 +84,11 @@ managed Ceph supports stretch mode (two data sites plus one tiebreaker, fixed at
 
 | Section | Use it for |
 | --- | --- |
-| [Getting Started](getting-started.md) | A complete, guided single-node example from scaffold to cluster access. |
-| [Concepts](concepts.md) | The object model, references, contexts, stages, secrets, storage, and add-ons. |
-| [Advanced](advanced/index.md) | Provider-specific setup, networking, disconnected installs, storage, recovery, and larger examples. |
-| [API Reference](api/index.md) | Field-level options for every authored `bootwright.io/v1alpha1` kind. |
+| [Getting Started](getting-started/index.md) | A complete, guided single-node example from scaffold to cluster access, plus installation. |
+| [Concepts and APIs](concepts/index.md) | The object model, references, contexts, stages, secrets, storage, add-ons, and the field-level options for every authored `bootwright.io/v1alpha1` kind. |
+| [Advanced Scenarios](advanced/index.md) | Provider-specific setup, networking, disconnected installs, managed OS, Ceph topologies, recovery, and larger examples. |
 | [Troubleshooting](troubleshooting.md) | Common validation, apply, SSH, artifact, and orphan-state failures. |
+| [Contributing](contributing/index.md) | For contributors changing Bootwright's code: the API extension points and the execution architecture. |
 
 The source-of-truth contracts live in
 [`/specs`](https://github.com/crmarques/bootwright/tree/main/specs). These docs

@@ -96,30 +96,36 @@ extra:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
-  - Concepts:
-      - concepts.md
-      - Architecture: concepts/architecture.md
-  - Advanced:
+  - Getting Started:
+      - getting-started/index.md
+      - Installation and Setup: getting-started/installation.md
+      - Provisioning an OpenShift cluster: getting-started/openshift.md
+      - Provisioning a Ceph cluster: getting-started/ceph.md
+  - Concepts and APIs:
+      - concepts/index.md
+      - Environment & fleet defaults: concepts/environment.md
+      - Machines & operating systems: concepts/machines.md
+      - "Infrastructure: providers, components & networking": concepts/infrastructure.md
+      - Container clusters (OpenShift / OKD): concepts/container-clusters.md
+      - Storage (Ceph): concepts/storage.md
+      - Post-install add-ons: concepts/add-ons.md
+      - Secrets & entitlements: concepts/secrets.md
+  - Advanced Scenarios:
       - advanced/index.md
-      - Providers: advanced/providers.md
-      - Networking and Load Balancing: advanced/networking.md
-      - Proxy and Disconnected Installs: advanced/proxy-and-disconnected.md
-      - Post-Install Add-ons: advanced/post-install-addons.md
-      - Ceph Storage Clusters: advanced/storage-ceph.md
-      - Secrets: advanced/secrets.md
-      - Operations and Recovery: advanced/operations.md
-      - Reference Examples: advanced/examples.md
-  - API Reference:
-      - api/index.md
-      - Environment: api/environment.md
-      - Machines and OS: api/machines.md
-      - Infrastructure: api/infrastructure.md
-      - ContainerCluster: api/container-cluster.md
-      - Storage: api/storage.md
-      - Add-ons: api/addons.md
+      - Multi-cluster fleets & shared services: advanced/fleets.md
+      - Disconnected & proxied installs: advanced/disconnected-proxy.md
+      - Managed OS installs: advanced/managed-os.md
+      - Ceph topologies: advanced/ceph-topologies.md
+      - KubeVirt nested clusters: advanced/kubevirt.md
+      - Networking & load balancing: advanced/networking.md
+      - Ownership, idempotency & safety: advanced/ownership-and-safety.md
+      - Operations, recovery & teardown: advanced/operations.md
+      - Reference examples: advanced/examples.md
   - Troubleshooting: troubleshooting.md
-  - Contributing: contributing/extending.md
+  - Contributing:
+      - contributing/index.md
+      - API: contributing/api.md
+      - Architecture: contributing/architecture.md
 
 copyright: >-
   Bootwright is an open-source desired-state cloud-platform orchestrator.

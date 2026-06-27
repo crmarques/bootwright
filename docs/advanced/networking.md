@@ -1,9 +1,17 @@
 ---
 title: Networking
-description: NetworkConfig templates, machine static-IP binding, endpoints, and load balancers.
+description: NetworkConfig templates for agent installs, binding machine networks with NMState, authoring static IPs once and referencing them, route/bond/VLAN overrides, endpoint sources and the single-node rule, and load-balancer VIP placement.
 ---
 
 # Networking and load balancing
+
+This page is the task-oriented guide to wiring machine networks and cluster
+endpoints. The object model — `NetworkConfig`, `InfraProvider` attachments, and
+`InfraComponent` services — lives in
+[Infrastructure: providers, components & networking](../concepts/infrastructure.md);
+cluster endpoint fields live in
+[Container clusters](../concepts/container-clusters.md#endpoints). Link there for
+the field tables; this page shows how to assemble them.
 
 `NetworkConfig` is the reusable network template for agent installs. It owns:
 
@@ -17,11 +25,6 @@ the selected provider attachment. When a provider-backed machine omits
 `attachmentRef`, it defaults to the `networkConfigRef` name; the default is
 accepted only while the provider declares a single attachment — with several,
 validation requires an authored `attachmentRef` naming the one to bind.
-
-This page owns the machine network-binding example and the endpoint, load
-balancer, and RGW endpoint surfaces. See
-[Providers](providers.md) for substrate arms and
-[Ceph storage clusters](storage-ceph.md) for the rest of the gateway.
 
 ## Network template
 
@@ -79,7 +82,7 @@ but leaves the static address to each machine.
 
 ## Binding a node's static IP
 
-A node's static install address is authored once as a named
+A node's static install address is authored **once** as a named
 `Machine.spec.addresses[]` entry, then bound to an NMState interface with
 `spec.network.config.interfaceAddresses[]`. This is the idiomatic mechanism:
 the address lives in exactly one place, and rendering injects it into the
@@ -134,11 +137,11 @@ declared on the same machine.
 
 !!! note "Raw NMState overrides are for non-address tweaks only"
     `spec.network.config.overrides` patches the referenced template's raw
-    NMState for settings the template does not cover (extra routes, MTU, a
-    secondary interface). Do **not** set a static install IP through
-    `overrides` — validation rejects an interface whose install IP is already
-    owned by `interfaceAddresses[]`. `overrides` is valid only alongside
-    `networkConfigRef`.
+    NMState for settings the template does not cover — extra routes, MTU, a
+    secondary interface, a VLAN, an additional bond. Do **not** set a static
+    install IP through `overrides`: validation rejects an interface whose install
+    IP is already owned by `interfaceAddresses[]`. `overrides` is valid only
+    alongside `networkConfigRef`.
 
 !!! note "Inline NetworkConfig spec"
     A machine may inline a full `NetworkConfig` spec under
@@ -146,6 +149,15 @@ declared on the same machine.
     `networkConfigRef`. The two are **mutually exclusive** — setting both is
     rejected (`config must set only one of networkConfigRef or spec`).
     `interfaceAddresses[]` works with either form.
+
+## Routes, bonds, and VLANs
+
+Bonds and routes can be authored directly in the shared template (as in the
+example above). For per-machine deviations — a host that needs an extra route, a
+larger MTU, a VLAN, or a secondary interface the template does not declare —
+patch the template through `spec.network.config.overrides` rather than forking
+the `NetworkConfig`. Keep the static install address in `interfaceAddresses[]`
+even when overriding other attributes on the same interface.
 
 ## Provider attachments
 
@@ -165,45 +177,10 @@ spec:
 ```
 
 Bind that attachment from each installing machine via
-`spec.network.config.attachmentRef`, as shown in the machine above.
-
-### KubeVirt secondary networks (`networkRef`)
-
-A KubeVirt attachment references an existing network object on the host cluster
-by GVK + identity. It is UDN/CUDN-first — `kind`/`apiGroup` default to
-`ClusterUserDefinedNetwork` / `k8s.ovn.org`, the OCP 4.21-preferred secondary
-network for OpenShift Virtualization (a `localnet` `ClusterUserDefinedNetwork`
-bridges VMs onto a physical/VLAN underlay). `UserDefinedNetwork` and
-`NetworkAttachmentDefinition` are also accepted for legacy or foreign networks.
-
-```yaml
-spec:
-  type: kubevirt
-  networkAttachments:
-    - name: child-machine-net
-      kubevirt:
-        networkRef:
-          kind: ClusterUserDefinedNetwork   # default; apiGroup defaults to k8s.ovn.org
-          name: child-machine-net
-          namespace: bootwright-child-ocp
-```
-
-Bootwright **references** the object; it does not render or own it. Author the
-CUDN, the OVS bridge-mapping `NodeNetworkConfigurationPolicy` (it carries the
-child VLAN into OVS on the host's worker nodes — this requires the
-Kubernetes-NMState operator and OVN-Kubernetes on the host cluster), and the
-selected namespace's CUDN selector label out of band — for example as a
-`manifestSet` cluster add-on, as the
-`baremetal-redfish-multidc-virtualized-odf-ceph` example does. A `preflight`
-verifies the resulting NetworkAttachmentDefinition exists on the host cluster
-before child VMs boot.
-
-Keep the child node IPs **static** (NMState/`agent-config`, as for any cluster):
-the `localnet` CUDN must leave IPAM disabled (no `subnets`/`ipam`), or OVN would
-assign IPs that collide with the rendered static ones. Keep the CUDN `mtu`, the
-NNCP OVS bridge MTU, and the child `NetworkConfig` MTU coherent (localnet
-defaults to 1500). Switching a *running* child cluster between networks re-plugs
-the VM NIC and drops the node — treat `networkRef` as a new-cluster choice.
+`spec.network.config.attachmentRef`, as shown in the machine above. The full
+attachment model, including KubeVirt secondary networks
+(`networkAttachments[].kubevirt.networkRef`), is in
+[Infrastructure](../concepts/infrastructure.md#network-attachments).
 
 ## Endpoints
 
@@ -227,18 +204,6 @@ endpoints:
       bindAddressRef: apps-ip
 ```
 
-Each endpoint slot is an `Endpoint`:
-
-| Field | Type | Required | Default | Notes |
-| --- | --- | --- | --- | --- |
-| `address` | string | No | — | The VIP for this endpoint. |
-| `dnsName` | string | No | — | DNS name for this endpoint. |
-| `port` | int | No | — | Listen port; the consumer role usually derives the OpenShift port. |
-| `scheme` | string | No | — | URL scheme (e.g. `https`). |
-| `prefixLength` | int | No | — | CIDR suffix for the VIP, used when Bootwright attaches the address. |
-| `interfaceNetworks` | list | No | — | Subnets that may host the VIP, mirroring the RGW ingress fields below. |
-| `source` | object | No | `openshift` | Where the endpoint comes from — see `source.type` below. |
-
 `source.type` is one of:
 
 - `openshift` (default) — the cluster's own VIP, managed by the installer.
@@ -247,9 +212,19 @@ Each endpoint slot is an `Endpoint`:
   `source.componentRef` (the `InfraComponent` name) and, when the load balancer
   declares more than one bind address, `source.bindAddressRef`.
 
-For Bootwright-provisioned load balancers, declare the target component and its
-bind addresses. `source.bindAddressRef` is the bind-address **name**, not the
-IP itself; the effective IP comes from the matching `bindAddresses[].address`.
+The full `Endpoint` field table is in
+[Container clusters](../concepts/container-clusters.md#endpoints).
+
+!!! note "Single-node clusters reject `openshift` sources"
+    A single-node cluster cannot use `source.type: openshift` on the `api`,
+    `api-int`, or `ingress` slot — the agent installer rejects bare-metal and
+    vSphere platform blocks for one-control-plane clusters, so these clusters
+    render `platform.none`. Use `external` or `infraComponent` instead.
+
+## Load balancers and VIP placement
+
+For a Bootwright-provisioned load balancer, declare the target `InfraComponent`
+and its bind addresses, then point an endpoint slot at it:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -266,13 +241,14 @@ spec:
         address: 192.168.133.11
 ```
 
-If a load balancer has exactly one bind address, the endpoint may omit
-`source.bindAddressRef`. A non-empty `source.bindAddressRef` must always match
-a declared `bindAddresses[].name`, even on a single-bind load balancer; the
-shortcut never applies to an authored name. Listener ports for OpenShift roles
-are derived from the consumer role, not from arbitrary endpoint names.
-Effective VIPs are validated against the machine networks selected by cluster
-machines.
+`source.bindAddressRef` is the bind-address **name**, not the IP itself; the
+effective IP comes from the matching `bindAddresses[].address`. If a load
+balancer has exactly one bind address, the endpoint may omit
+`source.bindAddressRef`; a non-empty `source.bindAddressRef` must always match a
+declared `bindAddresses[].name`, even on a single-bind load balancer. Listener
+ports for OpenShift roles are derived from the consumer role, not from arbitrary
+endpoint names. Effective VIPs are validated against the machine networks
+selected by cluster machines.
 
 Bootwright renders and converges the HAProxy provider service for
 `source.type=infraComponent` endpoints. Today, automatic VIP attachment is
@@ -285,7 +261,7 @@ the VIP to the load-balancer host.
 
 Storage RGW endpoints are owned by the `StorageObjectGateway`, not by a cluster.
 `spec.public` is the public S3 endpoint, and each `spec.ceph.ingresses[]` entry
-is a concrete ingress VIP. `prefixLength` provides the `/24` style suffix
+is a concrete ingress VIP. `prefixLength` provides the `/24`-style suffix
 cephadm expects for the keepalived virtual IP, and `virtualInterfaceNetworks[]`
 tells cephadm which site-local subnet can host that VIP. `spec.ceph.frontendPort`
 sets the RGW daemon's frontend listen port behind the ingress (distinct from the
@@ -313,6 +289,9 @@ spec:
         placement:
           hosts: [ceph-dc1-0, ceph-dc1-1, ceph-dc1-2]
 ```
+
+See [Ceph storage topologies](ceph-topologies.md#rgw-and-ingress) for how RGW
+fits the broader storage spine.
 
 ## Name resolution
 
@@ -371,3 +350,12 @@ infraComponents:
       componentRef: ntp-server
       endpointRef: cluster
 ```
+
+## See also
+
+- [Infrastructure](../concepts/infrastructure.md) — the `NetworkConfig`,
+  attachment, and `InfraComponent` object model.
+- [Container clusters](../concepts/container-clusters.md#endpoints) — the
+  `Endpoint` slot vocabulary and field table.
+- [Operations and recovery](operations.md) — VIP and recovery interactions
+  during apply and destroy.

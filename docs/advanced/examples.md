@@ -1,9 +1,9 @@
 ---
 title: Reference Examples
-description: Choose a complete in-repo Bootwright example tree to learn from or adapt.
+description: A catalog of the complete, safe-to-commit desired-state trees under examples/ — each one's complexity, the situation it fits, and the kinds it exercises.
 ---
 
-# Reference Examples
+# Reference examples
 
 The repository ships complete, safe-to-commit desired-state trees under
 `examples/`. Each one is a full topology you can read end to end, diff against
@@ -18,7 +18,7 @@ bootwright example init --name <cluster-name> --output <input-dir>
 ```
 
 The scaffold produces a nested `shared/` + `clusters/<name>/` workspace and is
-what [Getting Started](../getting-started.md) walks through. The committed
+what [Getting Started](../getting-started/index.md) walks through. The committed
 examples below are reference trees for comparison and adaptation — some use a
 different (often flatter, more minimal) shape than the scaffold, so read the
 example's own `README.md` for its authoritative file list.
@@ -61,7 +61,7 @@ the authored kinds it exercises.
     Contrast them with `baremetal-redfish-imported-ceph-odf`, where the
     `StorageCluster` is in **import** posture — it consumes an externally
     managed Ceph cluster rather than provisioning one. See
-    [Ceph Storage Clusters](storage-ceph.md) for the managed-vs-imported axis.
+    [Ceph storage topologies](ceph-topologies.md) for the managed-vs-imported axis.
 
 ## How to review an example
 
@@ -95,7 +95,7 @@ example intentionally leaves placeholders that you must edit for your lab.
 
 Bootwright's vocabulary invariant is that every fact has exactly one owner. When
 you adapt an example, keep each change in the kind that owns it (see
-[Concepts](../concepts.md) for the ownership rule):
+[The desired-state model](../concepts/index.md) for the ownership rule):
 
 - Change `Environment` for fleet defaults, resource selection, secret names,
   service-catalog entries, proxies, registries, and entitlements.
@@ -109,4 +109,9 @@ you adapt an example, keep each change in the kind that owns it (see
 - Change the storage kinds only for Ceph and exported-storage intent.
 - Change the add-on kinds only for post-install bootstrap behavior.
 
-For the per-kind field reference, see the [API Reference](../api/index.md).
+For the per-kind field reference, follow the kind into Concepts and APIs:
+[Infrastructure](../concepts/infrastructure.md) for providers, components, and
+`NetworkConfig`; [Networking](networking.md) for assembling endpoints and
+load balancers; [Ceph storage topologies](ceph-topologies.md) and the
+[storage reference](../concepts/storage.md) for the storage kinds; and
+[Add-ons](../concepts/add-ons.md) for the post-install kinds.

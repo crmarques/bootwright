@@ -1,34 +1,57 @@
 ---
-title: ContainerCluster API
-description: ContainerCluster install intent, distribution, platform, endpoints, artifact access, networking, machine pools, and hosts.
+title: Container clusters
+description: ContainerCluster install intent — distribution, platform render mode, endpoints, networking, machine pools, and host bindings.
 ---
 
-# ContainerCluster
+# Container clusters
 
-`ContainerCluster` owns OpenShift or OKD install intent: the distribution and
-release, the install method and mode, the installer platform render mode,
-cluster endpoints, artifact access, cluster networking, machine-pool replica
-counts, and the node-to-machine bindings the agent install consumes. It selects
-machines through `spec.hosts[].machineRef`; substrate ownership stays on
-`Machine` and `InfraProvider`.
+A `ContainerCluster` owns OpenShift or OKD **install intent** and nothing else.
+It declares the distribution and release, the install method and mode, the
+installer platform render mode, cluster endpoints, artifact access, cluster
+networking, machine-pool replica counts, and the node-to-machine bindings the
+agent install consumes. It selects machines through `spec.hosts[].machineRef`;
+substrate ownership stays on [`Machine`](machines.md) and
+[`InfraProvider`](infrastructure.md).
+
+What a `ContainerCluster` deliberately does **not** own:
+
+- **Node facts.** Hardware, OS mode, install network, and SSH access live on the
+  bound [`Machine`](machines.md), not here.
+- **Post-install add-ons.** Bootstrap components are not authored under
+  `spec.install` — they are separate [add-on](add-ons.md) kinds the
+  [`Environment`](environment.md) selects and binds after install.
+- **External storage.** Ceph is a peer [`StorageCluster`](storage.md), never a
+  `ContainerCluster` field.
 
 The install scope is direct `openshift-install agent` runs against single-node
-and multi-node machines. Post-install components are not authored here — they
-are separate add-on resources selected by `Environment` and bound after install.
-External storage is a separate `StorageCluster` peer phase.
-
-This page documents `spec` only. The
-[object envelope](index.md#object-envelope) (`apiVersion`, `kind`,
-`metadata.name`) and the [field-table convention](index.md#field-table-convention)
-(how the **Required** and **Default** columns read together) live on the API
-reference index.
+and multi-node machines. See [conventions](index.md) for the object envelope and
+the Required/Default field-table convention every table below follows.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
 metadata:
-  name: example
-spec: {}
+  name: sno-libvirt
+spec:
+  distribution:
+    release:
+      version: 4.21.15
+  install:
+    nodeSSH:
+      keyPairRef: sno-libvirt-cluster-admin-ssh-key
+    endpoints:
+      api:
+        address: 192.168.132.20
+        source:
+          type: external
+      ingress:
+        address: 192.168.132.20
+        source:
+          type: external
+  hosts:
+    - hostname: master-0
+      role: master
+      machineRef: sno-libvirt-master-0
 ```
 
 ## Fields
@@ -59,9 +82,8 @@ a channel feed.
     An `openshift` distribution requires a pull secret. The normalize phase
     fills `install.pullSecretRef` from the `Environment` default, falling back
     to the `openshift-pull-secret` convention name, so you rarely author it. An
-    `okd` distribution may omit a Red&nbsp;Hat pull secret unless a private
-    release or mirror requires credentials. See
-    [Secrets](../advanced/secrets.md).
+    `okd` distribution may omit a Red Hat pull secret unless a private release
+    or mirror requires credentials. See [Secrets](secrets.md).
 
 ## Install
 
@@ -83,7 +105,7 @@ a channel feed.
     registry `InfraComponent`. It also requires
     `install.artifactAccess.containerClusterInstall.endpointRef` to resolve on
     the selected artifact server. See
-    [Proxy and disconnected installs](../advanced/proxy-and-disconnected.md).
+    [Disconnected and proxied installs](../advanced/disconnected-proxy.md).
 
 ### Node SSH
 
@@ -100,7 +122,8 @@ Author either a combined key pair or split public/private references — not bot
     Setting `keyPairRef` together with `publicKeyRef` or `privateKeyRef` is
     rejected. When `keyPairRef` is empty, `publicKeyRef` is required. When the
     whole block is omitted, normalize injects the generated
-    `<cluster-name>-cluster-admin-ssh-key` convention name.
+    `<cluster-name>-cluster-admin-ssh-key` convention name. See
+    [Secrets](secrets.md#node-ssh-keys) for how the secret name is keyed.
 
 ### Serving certificates
 
@@ -126,8 +149,7 @@ present.
 
 `install.platform.type` is the installer **platform render mode**, not the
 substrate type — substrate ownership stays with the selected machines and their
-providers. See [Architecture](../concepts/architecture.md) for how the platform
-mode feeds `install-config.yaml`.
+providers. The platform mode feeds the generated `install-config.yaml`.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -135,6 +157,16 @@ mode feeds `install-config.yaml`.
 | `install.platform.baremetal.provisioningNetwork` | No | — | `disabled`, `managed`, or `unmanaged`. |
 | `install.platform.vsphere.nodeNetworking` | No | — | vSphere node networking subnets; see below. |
 | `install.platform.external` | No | — | Free-form passthrough map for the `external` platform. |
+
+Mapping the common topologies to a platform mode:
+
+| Topology | Platform mode |
+| --- | --- |
+| Redfish virtual media on real bare metal | `baremetal` |
+| Libvirt VM with emulated Redfish | `baremetal` |
+| vSphere agent install | `vsphere` |
+| KubeVirt-hosted child machines | `none` |
+| Operator-owned external platform | `external` |
 
 ### vSphere node networking
 
@@ -161,7 +193,13 @@ spelling is the verbatim upstream key.
 
 `install.endpoints` is a closed map; only the `api`, `api-int`, and `ingress`
 keys are accepted. Omitting an endpoint's `source.type` normalizes it to
-`openshift`.
+`openshift`. Each slot draws its address from one of three sources:
+
+| Source | Meaning |
+| --- | --- |
+| `openshift` | The installer or cluster owns the endpoint; an explicit `address` is required. |
+| `external` | Operator-owned load balancer or DNS; an explicit `address` is required. |
+| `infraComponent` | Bootwright-managed load balancer selected by `componentRef`; the address resolves from the component's `bindAddressRef`. |
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -175,17 +213,18 @@ keys are accepted. Omitting an endpoint's `source.type` normalizes it to
 | `endpoints.<slot>.source.componentRef` | Required for `infraComponent` | — | Load-balancer `InfraComponent` name. |
 | `endpoints.<slot>.source.bindAddressRef` | No | — | Names a `bindAddresses[]` entry on the referenced load balancer. |
 
-!!! note "Where the endpoint address comes from"
-    `openshift` and `external` sources require an explicit `address`.
-    `infraComponent` sources resolve their address from the selected load
-    balancer component's `bindAddressRef`, so they do not author an `address`.
-    See [Networking and load balancing](../advanced/networking.md).
+!!! note "Single-node clusters reject `openshift` sources"
+    A single-node cluster cannot use `source.type: openshift` on the `api`,
+    `api-int`, or `ingress` slot — pair it with the `platform.none` default
+    above. Use `external` or `infraComponent` instead. For how VIPs and managed
+    load balancers wire together, see
+    [Networking](../advanced/networking.md).
 
 ## Artifact access
 
 `install.artifactAccess` selects the artifact server and the per-flow endpoints
-that boot and install media use. It carries six authorable sub-fields: two
-top-level references and four endpoint selectors that each hold an `endpointRef`.
+that boot and install media use. It carries two top-level references and four
+endpoint selectors that each hold an `endpointRef`.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -203,8 +242,7 @@ top-level references and four endpoint selectors that each hold an `endpointRef`
     `install.mode: disconnected`, and `serverRef` whenever any of those endpoint
     selectors resolves to a name. `providerRef`, `machineBoot.endpointRef`, and
     `osInstall.endpointRef` are not Environment-defaulted — author them when a
-    flow needs them (`osInstall.endpointRef` is the often-omitted managed-OS
-    media selector). When validation reports a dangling defaulted reference, it
+    flow needs them. When validation reports a dangling defaulted reference, it
     states that the value was injected from `Environment` defaults rather than
     authored, so you know where to fix it.
 
@@ -246,9 +284,8 @@ offending line.
     `master` hosts in `spec.hosts[]`; omitting it or setting `0` skips the
     check. The sum of `compute[].replicas` must equal the number of `worker`
     plus `infra` hosts when any compute pool is declared (infra hosts install in
-    the worker pool). The master count is the control-plane node count and the
-    worker count is the worker node count, so these fields restate the host
-    roster rather than scaling it independently.
+    the worker pool). These fields restate the host roster rather than scaling
+    it independently.
 
 ## Hosts
 
@@ -280,4 +317,14 @@ offending line.
     `StorageCluster` — and at most one host entry. Those rules are enforced
     here. A node `Machine` is installed by Bootwright, so it is declared with
     `os.provided: false` on the `Machine` itself; that constraint is enforced by
-    [Machine](machines.md#machine) validation, not by `ContainerCluster`.
+    [Machine](machines.md) validation, not by `ContainerCluster`.
+
+## Where to go next
+
+- [Networking](../advanced/networking.md) — endpoints, VIPs, and managed load
+  balancers in depth.
+- [KubeVirt child clusters](../advanced/kubevirt.md) — nesting a
+  `ContainerCluster` on a KubeVirt-backed parent.
+- [Add-ons](add-ons.md) — post-install bootstrap components bound after install.
+- [Conventions](index.md) — the object envelope, unions, references, and
+  defaults that govern every kind.

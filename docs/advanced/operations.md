@@ -1,21 +1,80 @@
 ---
 title: Operations and Recovery
-description: Destroy stages and full-context teardown, the destroyProtection requiredOverride safety, the fail-closed apply --override pattern, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, and where run logs, the ledger, and leases live.
+description: The three apply modes including break-glass --override and greenfield --expect-new, destroy stages and the no-selector full-teardown default, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, state-check drift, and --force-unowned / --skip-unreachable.
 ---
 
 # Operations and recovery
 
 Day-2 work on an applied context is teardown and recovery, not re-authoring.
-This page covers tearing a platform down by stage or in full, the
-`destroyProtection` safety gate, the fail-closed `apply --override` pattern,
-recovering a single component, and where Bootwright keeps the run logs, ledger,
-and leases that make all of this resumable.
+This page covers the three apply modes, tearing a platform down by stage or in
+full, the `destroyProtection` safety gate and the destroy-authorization
+boundary, recovering a single component, and the destructive rebuilds Bootwright
+performs on resources it owns.
 
 For the user-facing apply, stage, and convergence model — bare `apply`,
-`--expect-new`, and `--override` as modes — see [Concepts](../concepts.md). For
-the execution pipeline, locking, and the four-outcome classifier in depth, see
-[Architecture](../concepts/architecture.md). This page is the how-to and does
-not restate that model.
+`--expect-new`, and `--override` as modes, and the stage families and
+sub-phases — see [The desired-state model](../concepts/index.md). For the
+execution pipeline, locking, and the four-outcome classifier in depth, see
+[Architecture](../contributing/architecture.md). This page is the how-to and
+does not restate those models.
+
+## The three apply modes
+
+`apply` reconciles by default. Two modifier flags change that, and they are
+mutually exclusive:
+
+- **bare `apply`** — reconcile: create what is missing, skip objects whose
+  recorded desired state matches current, and fail closed on drift or foreign
+  ownership before any mutation.
+- **`apply --expect-new`** — greenfield assertion: additionally refuse to
+  proceed if any selected object already exists. Use it when you intend a
+  from-scratch build and want a stale leftover to stop the run rather than be
+  reconciled into.
+- **`apply --override`** — break-glass recovery for Bootwright-owned drift it
+  knows how to rebuild (managed-OS reinstall, owned-Ceph wipe-and-rebuild,
+  drifted owned-object rebuild). It is command-scoped and bypasses only
+  safe-mismatch gates that have an explicit override path.
+
+!!! note "`--expect-new` and `--override` cannot be combined"
+    `--expect-new` asserts greenfield (fail if any selected object exists);
+    `--override` authorizes rebuilding objects that already exist. They express
+    opposite intents.
+
+### The fail-closed `--override` contract
+
+`apply --override` authorizes Bootwright-owned destructive *rebuilds* — drifted
+owned objects, a managed-OS machine reinstall, an owned-Ceph wipe-and-rebuild.
+It never bypasses active-run leases, validation, secret checks, or
+foreign-resource ownership failures, and it never touches a resource a
+non-Bootwright owner holds.
+
+The fail-closed interaction with destroy protection is the part operators most
+often miss:
+
+!!! warning "`apply --override` is rejected on a protected context"
+    When the selected state sets `destroyProtection: requiredOverride`,
+    `apply --override` **fails closed before any mutation** instead of rebuilding
+    the protected resources. Destruction of protected state must cross the
+    destroy authorization boundary. (`--dry-run` still previews the override
+    plan.)
+
+So there are two distinct rebuild paths, and which one you use depends on
+whether the context is protected:
+
+- **Protected context** — rebuild crosses the destroy boundary. Run
+  `destroy --override` for the affected scope, then re-apply:
+
+  ```text
+  bootwright destroy --stage clusters --clusters ocp-3node --override
+  bootwright apply --stage clusters --clusters ocp-3node --yes
+  ```
+
+- **Unprotected context** — a single `apply --override` performs the
+  Bootwright-owned destructive rebuild in place:
+
+  ```text
+  bootwright apply --clusters ocp-3node --override
+  ```
 
 ## Tearing down with `destroy`
 
@@ -25,7 +84,9 @@ the current desired state plus the root-managed ownership records under
 resources Bootwright created or configured, including ones no longer present in
 the input YAML.
 
-`destroy` accepts only two stage values:
+`destroy` accepts only two stage values — the two stage families. The
+single-phase sub-phases (`fabric`, `machines`, `deps`, `base`, `addons`) are
+apply/plan reruns only; `destroy` does not accept them.
 
 | Invocation | Tears down |
 | --- | --- |
@@ -84,6 +145,29 @@ and leaves the rest of the infrastructure standing:
 bootwright destroy --stage infra --clusters artifact-server
 ```
 
+## Destroy protection and the authorization boundary
+
+Set `Environment.spec.safety.destroyProtection: requiredOverride` to guard a
+context against accidental teardown. The field accepts `allow` or
+`requiredOverride`; empty means `allow`, and protection is **never** inferred
+from environment, context, label, or cluster names.
+
+When the selected state sets `requiredOverride`, `destroy --stage infra` and
+`destroy --stage clusters` both require `--override` to proceed:
+
+```text
+bootwright destroy --stage clusters --override
+```
+
+This is the **destroy authorization boundary**: destruction of protected state
+can be authorized only through `destroy --override`, never through
+`apply --override` (which fails closed on a protected context, as above).
+
+!!! warning "`--yes` does not imply `--override`"
+    `--yes` skips only the confirmation prompt; it never implies `--override`.
+    On a protected context a `destroy` without `--override` fails closed,
+    regardless of `--yes`.
+
 ## Validating only the selected scope
 
 By default `apply` and `destroy` validate the **whole** input before doing any
@@ -110,24 +194,77 @@ Data Foundation attachment whose consuming `ContainerCluster` a storage-cluster
 apply leaves out, no longer fails the run. A reference that is broken in the
 whole input — the object it names is declared nowhere — still blocks it.
 
-## Destroy protection
+## Focused recovery of one component
 
-Set `Environment.spec.safety.destroyProtection: requiredOverride` to guard a
-context against accidental teardown. The field accepts `allow` or
-`requiredOverride`; empty means `allow`, and protection is **never** inferred
-from environment, context, label, or cluster names.
+Recovery does not require touching the whole graph. Combine `--stage` and
+`--clusters` to converge a single component for build-out, recovery, or
+maintenance.
 
-When the selected state sets `requiredOverride`, `destroy --stage infra` and
-`destroy --stage clusters` both require `--override` to proceed:
+- **One cluster root.** `--clusters` takes a comma-separated list of
+  `ContainerCluster` and `StorageCluster` names. The two kinds share one
+  selection namespace, so a bare name must be unique across both and selects
+  exactly one cluster root.
 
-```text
-bootwright destroy --stage clusters --override
-```
+  ```text
+  bootwright apply --clusters ceph-stretch --yes
+  ```
 
-!!! warning "`--yes` does not imply `--override`"
-    `--yes` skips only the confirmation prompt; it never implies `--override`.
-    On a protected context a `destroy` without `--override` fails closed,
-    regardless of `--yes`.
+- **One stage.** Narrow to a stage family when only that layer needs work:
+
+  ```text
+  bootwright apply --stage infra --yes
+  ```
+
+- **A surgical sub-phase rerun.** `apply` and `plan` additionally accept the
+  single-phase selectors `fabric`, `machines`, `deps`, `base`, and `addons` for
+  surgical reruns within a family. These are reruns, not peers of the `infra`
+  and `clusters` families; `destroy` does not accept them.
+
+!!! note "Check before you rebuild"
+    `bootwright state-check` reports which roots are `missing`, `match`,
+    `drift`, or `foreign` against the last recorded apply, without contacting
+    hosts. `bootwright plan` (or `apply --dry-run`) shows the task graph a
+    selection would run. Use them to confirm the scope before applying. Note
+    that `state-check` compares against *recorded* evidence only — an out-of-band
+    change (a wiped disk, an undefined VM, a deleted namespace) is not detected
+    until the next apply refreshes the record. `state-check --override` is
+    rejected.
+
+### KubeVirt child clusters do not auto-include their parent
+
+A scoped apply of a KubeVirt-backed child `ContainerCluster` that references a
+Bootwright-managed virtualization cluster does **not** expand the selection to
+install the parent. It fails before mutation unless the parent is selected too,
+or local runtime records already prove the parent install and its `kubevirt`
+add-on are ready. Select both roots together when the parent is not yet
+installed.
+
+## Managed-OS reinstall and owned-Ceph rebuild
+
+Two destructive rebuilds run through `apply --override` and are gated by
+Bootwright ownership markers, so they apply only to resources Bootwright owns.
+
+- **Managed-OS machine reinstall.** `apply --override` bypasses the
+  skip-if-already-installed check, undefines the substrate VM, wipes its disks,
+  and rebuilds the machine from its `Machine`, `MachineImage`, and
+  `MachineInstallProfile` desired state. (FIPS and other install-time
+  customizations are reinstall-only by nature, so this is the path to change
+  them on an installed machine.) See [Managed OS installs](managed-os.md) for the
+  install model.
+
+- **Owned-Ceph cluster rebuild.** `apply --override` cleanly rebuilds a managed
+  Ceph cluster with `cephadm rm-cluster --zap-osds`, but **only** when a
+  Bootwright ownership marker proves the live cluster is the one Bootwright
+  created. A foreign or co-resident cluster fails closed.
+
+!!! note "Override rebuilds still-declared structure; it does not prune"
+    Ceph convergence is additive-only across the whole storage domain. `apply`
+    never removes a live Ceph object whose declaration was deleted, and
+    `--override` does not prune undeclared objects either — it rebuilds only
+    still-declared pools whose structural identity (pool `type` or erasure
+    profile) changed. Remove undeclared Ceph objects on the cluster out of band.
+    See [Ceph storage topologies](ceph-topologies.md#convergence-is-additive-only)
+    for the full convergence contract.
 
 ## Force-destroying renamed or unmarked machines
 
@@ -187,119 +324,6 @@ wipe them manually, before reusing the hardware.
     `--skip-unreachable` does not relax any device data-safety check, and like
     `--force-unowned` it does not imply `--yes`.
 
-## The fail-closed `apply --override` pattern
-
-`apply --override` authorizes Bootwright-owned destructive *rebuilds* — drifted
-owned objects, a managed-OS machine reinstall, an owned-Ceph wipe-and-rebuild.
-It is command-scoped and bypasses only safe-mismatch gates that have an explicit
-override path. It never bypasses active-run leases, validation, secret checks,
-or foreign-resource ownership failures, and it never touches a resource a
-non-Bootwright owner holds.
-
-The fail-closed interaction with destroy protection is the part operators most
-often miss:
-
-!!! warning "`apply --override` is rejected on a protected context"
-    When the selected state sets `destroyProtection: requiredOverride`,
-    `apply --override` **fails closed before any mutation** instead of rebuilding
-    the protected resources. Destruction of protected state must cross the
-    destroy authorization boundary. (`--dry-run` still previews the override
-    plan.)
-
-So there are two distinct rebuild paths, and which one you use depends on
-whether the context is protected:
-
-- **Protected context** — rebuild crosses the destroy boundary. Run
-  `destroy --override` for the affected scope, then re-apply:
-
-  ```text
-  bootwright destroy --stage clusters --clusters ocp-3node --override
-  bootwright apply --stage clusters --clusters ocp-3node --yes
-  ```
-
-- **Unprotected context** — a single `apply --override` performs the
-  Bootwright-owned destructive rebuild in place:
-
-  ```text
-  bootwright apply --clusters ocp-3node --override
-  ```
-
-!!! note "`--expect-new` and `--override` are mutually exclusive"
-    `--expect-new` asserts greenfield (fail if any selected object exists);
-    `--override` authorizes rebuilding objects that already exist. They express
-    opposite intents and cannot be combined.
-
-## Focused recovery of one component
-
-Recovery does not require touching the whole graph. Combine `--stage` and
-`--clusters` to converge a single component for build-out, recovery, or
-maintenance.
-
-- **One cluster root.** `--clusters` takes a comma-separated list of
-  `ContainerCluster` and `StorageCluster` names. The two kinds share one
-  selection namespace, so a bare name must be unique across both and selects
-  exactly one cluster root.
-
-  ```text
-  bootwright apply --clusters ceph-stretch --yes
-  ```
-
-- **One stage.** Narrow to a stage family when only that layer needs work:
-
-  ```text
-  bootwright apply --stage infra --yes
-  ```
-
-- **A surgical sub-phase rerun.** `apply` and `plan` additionally accept the
-  single-phase selectors `fabric`, `machines`, `deps`, `base`, and `addons` for
-  surgical reruns within a family. These are reruns, not peers of the `infra`
-  and `clusters` families; `destroy` does not accept them.
-
-!!! note "Check before you rebuild"
-    `bootwright state-check` reports which roots are `missing`, `match`,
-    `drift`, or `foreign` against the last recorded apply, without contacting
-    hosts. `bootwright plan` (or `apply --dry-run`) shows the task graph a
-    selection would run. Use them to confirm the scope before applying. Note
-    that `state-check` compares against *recorded* evidence only — an out-of-band
-    change (a wiped disk, an undefined VM, a deleted namespace) is not detected
-    until the next apply refreshes the record. `state-check --override` is
-    rejected.
-
-### KubeVirt child clusters do not auto-include their parent
-
-A scoped apply of a KubeVirt-backed child `ContainerCluster` that references a
-Bootwright-managed virtualization cluster does **not** expand the selection to
-install the parent. It fails before mutation unless the parent is selected too,
-or local runtime records already prove the parent install and its `kubevirt`
-add-on are ready. Select both roots together when the parent is not yet
-installed.
-
-## Managed-OS reinstall and owned-Ceph rebuild
-
-Two destructive rebuilds run through `apply --override` and are gated by
-Bootwright ownership markers, so they apply only to resources Bootwright owns.
-
-- **Managed-OS machine reinstall.** `apply --override` bypasses the
-  skip-if-already-installed check, undefines the substrate VM, wipes its disks,
-  and rebuilds the machine from its `Machine`, `MachineImage`, and
-  `MachineInstallProfile` desired state. (FIPS and other install-time
-  customizations are reinstall-only by nature, so this is the path to change
-  them on an installed machine.)
-
-- **Owned-Ceph cluster rebuild.** `apply --override` cleanly rebuilds a managed
-  Ceph cluster with `cephadm rm-cluster --zap-osds`, but **only** when a
-  Bootwright ownership marker proves the live cluster is the one Bootwright
-  created. A foreign or co-resident cluster fails closed.
-
-!!! note "Override rebuilds still-declared structure; it does not prune"
-    Ceph convergence is additive-only across the whole storage domain. `apply`
-    never removes a live Ceph object whose declaration was deleted, and
-    `--override` does not prune undeclared objects either — it rebuilds only
-    still-declared pools whose structural identity (pool `type` or erasure
-    profile) changed. Remove undeclared Ceph objects on the cluster out of band.
-    See [Ceph Storage Clusters](storage-ceph.md) for the full convergence
-    contract.
-
 ## Where run logs, the ledger, and leases live
 
 Mutating runs write their state under the root-managed context tree at
@@ -329,10 +353,13 @@ them back, and `plan` / `--dry-run` never write them.
 
 ## See also
 
-- [Concepts](../concepts.md) — apply stages and the apply-mode model
-  (reconcile, `--expect-new`, `--override`).
-- [Architecture](../concepts/architecture.md) — the execution pipeline,
+- [The desired-state model](../concepts/index.md) — apply stages and the
+  apply-mode model (reconcile, `--expect-new`, `--override`), plus the destroy
+  stages.
+- [Architecture](../contributing/architecture.md) — the execution pipeline,
   resource locking, and the four-outcome classifier in depth.
-- [Ceph Storage Clusters](storage-ceph.md) — additive-only convergence and the
-  owned-Ceph rebuild details.
+- [Ceph storage topologies](ceph-topologies.md) — additive-only convergence and
+  the owned-Ceph rebuild details.
+- [Managed OS installs](managed-os.md) — the managed-OS install and reinstall
+  model.
 - [Troubleshooting](../troubleshooting.md) — what to do when a run fails closed.

@@ -76,10 +76,11 @@ The user-facing docs are published from [`docs/`](docs/) as this [link](https://
 
 | Audience | Start |
 | --- | --- |
-| Newcomers | [Home](docs/index.md) and [Getting Started](docs/getting-started.md) |
-| Understanding the model | [Concepts](docs/concepts.md) |
-| Authoring real environments | [Advanced](docs/advanced/) — examples, providers, networking, proxy/disconnected, storage, add-ons, secrets |
-| Field-level schema lookup | [API Reference](docs/api/index.md) |
+| Newcomers | [Home](docs/index.md) and [Getting Started](docs/getting-started/index.md) |
+| Understanding the model and the schema | [Concepts and APIs](docs/concepts/index.md) — the desired-state model plus field-level reference per domain |
+| Authoring real environments | [Advanced Scenarios](docs/advanced/index.md) — fleets, disconnected/proxied, managed OS, Ceph, KubeVirt, networking, ownership & safety, operations |
+| When something fails | [Troubleshooting](docs/troubleshooting.md) |
+| Contributing to Bootwright | [Contributing](docs/contributing/index.md) — the API contract and architecture internals |
 | Contributors and coding agents | [Specs](specs/index.md) |
 | Architecture decisions | [ADRs](specs/adr/README.md) |
 

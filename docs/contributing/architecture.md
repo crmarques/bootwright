@@ -6,23 +6,23 @@ description: The Bootwright execution pipeline, convergence classifier, and rend
 # Architecture
 
 This page is the execution and pipeline deep dive behind the user-facing model
-in [Concepts](../concepts.md). It covers the render pipeline, execution
-identities, resource locks, the convergence classifier, the apply modes, and the
-contributor-facing contracts that hold the system together. It does **not**
-restate the user-facing stage, platform, or selection model — see the cross-links
-below for those.
+in [The desired-state model](../concepts/index.md). It covers the render
+pipeline, execution identities, resource locks, the convergence classifier, the
+apply modes, and the contributor-facing contracts that hold the system together.
+It does **not** restate the user-facing stage, platform, or selection model — see
+the cross-links below for those.
 
 For the user-facing mental model first, read these once and do not expect them
 repeated here:
 
 - The kinds, ownership rule, and references —
-  [Concepts → Object Ownership](../concepts.md#object-ownership).
+  [The desired-state model → Object ownership](../concepts/index.md#object-ownership).
 - The two stage families, sub-phases, and the `--clusters` single-namespace rule
-  — [Concepts → Apply Stages](../concepts.md#apply-stages).
+  — [The desired-state model → Apply stages and families](../concepts/index.md#apply-stages-and-families).
 - Platform render mode versus substrate type —
-  [Concepts → Providers, Machines, And Platform Mode](../concepts.md#providers-machines-and-platform-mode).
+  [The desired-state model → Platform render mode and substrate type](../concepts/index.md#platform-render-mode-and-substrate-type).
 - The four classification outcomes at a glance —
-  [Concepts → Convergence And Drift](../concepts.md#convergence-and-drift).
+  [The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift).
 
 ## The pipeline
 
@@ -74,8 +74,8 @@ distinct execution identities so that ownership and privilege stay explicit:
 The desired-state ownership boundary holds throughout: physical machine facts do
 not move into cluster intent, and cluster release intent does not move into
 environment defaults. That keeps provider swaps and release changes explicit. See
-[Concepts → Object Ownership](../concepts.md#object-ownership) for the full
-ownership table.
+[The desired-state model → Object ownership](../concepts/index.md#object-ownership)
+for the full ownership table.
 
 ## Orchestration, executor, and resource locks
 
@@ -119,7 +119,7 @@ records. Imported storage clusters skip this storage task entirely.
     install-wait, add-on apply) are not the same vocabulary as the CLI
     `--stage infra|clusters` families and their `fabric`/`machines`/`deps`/`base`/
     `addons` sub-phases. The CLI model is owned by
-    [Concepts → Apply Stages](../concepts.md#apply-stages).
+    [The desired-state model → Apply stages and families](../concepts/index.md#apply-stages-and-families).
 
 ### KubeVirt parent/child edge behavior
 
@@ -152,7 +152,8 @@ outcomes:
 | `foreign` | The record carries a non-Bootwright owner. |
 
 This is exactly what `state-check` reports against recorded evidence — never live
-hosts. See [Concepts → Convergence And Drift](../concepts.md#convergence-and-drift)
+hosts. See
+[The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift)
 for the user-facing summary.
 
 !!! warning "Classification is NOT an apply-time skip gate"
@@ -183,7 +184,8 @@ the run reaches a terminal state.
 ## The three apply modes
 
 `apply` selects how strictly Bootwright treats pre-existing state. The user-facing
-overview is in [Concepts → Convergence And Drift](../concepts.md#convergence-and-drift);
+overview is in
+[The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift);
 the behavioral contract is:
 
 - **bare `apply` = reconcile (default):** creates missing objects, skips objects
@@ -272,7 +274,7 @@ at the top level of `<dir>`.
 !!! warning "Rendered runtime inputs can carry secret bytes"
     Because runtime installer files inline secret material, `render --output-dir`
     requires `--sensitive` and fails without it. Rendered **effective state**
-    never includes secret bytes. See [Secrets](../advanced/secrets.md).
+    never includes secret bytes. See [Secrets](../concepts/secrets.md).
 
 ## The ownership-record cross-boundary contract
 
@@ -296,7 +298,7 @@ for how destroy consumes these records.
 
 ## The Ansible bundle
 
-The Ansible source tree is authored under `<dir>/ansible/` in the repository.
+The Ansible source tree is authored under `ansible/` in the repository.
 `make sync-bundle` packs that source plus pinned external collections into the
 generated embedded archive at `internal/converge/bundle/ansible_bundle.zip`, and
 `make build` runs that sync before compiling the CLI. The generated archive is
@@ -325,9 +327,9 @@ the tools Bootwright drives before adding custom orchestration around the same
 operation — for example, install completion stays delegated to
 `openshift-install agent wait-for install-complete`.
 
-For the contributor extension walkthrough, see
-[Extending Bootwright](../contributing/extending.md). The full per-field schema
-is in the [API Reference](../api/index.md), and the normative contract lives in
+For the contributor extension walkthrough, see [API](api.md). The full per-field
+schema is in [The desired-state model](../concepts/index.md), and the normative
+contract lives in
 [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md)
 and
 [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md).

@@ -1,18 +1,30 @@
 ---
-title: Storage API
-description: StorageCluster, Ceph sub-objects, and StorageExport fields.
+title: Storage
+description: StorageCluster and the Ceph sub-objects — managed cephadm or imported clusters, pools, filesystems, gateways, and exports.
 ---
 
 # Storage
 
-The storage kinds model imported (external) Ceph or Bootwright-managed Ceph via
-cephadm: `StorageCluster` (the cluster and its cephadm topology),
-`StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
-`StorageObjectGateway`, and `StorageExport`. Each takes the standard
-`apiVersion: bootwright.io/v1alpha1` / `kind` / `metadata.name` envelope and the
-[Required + Default field-table convention](index.md#field-table-convention)
-documented in the [API Reference](index.md#object-envelope) overview; the tables
-below cover each `spec` only.
+Storage is a separate domain from [`ContainerCluster`](container-clusters.md):
+Ceph is never a cluster field, it is its own set of kinds the
+[`Environment`](environment.md) selects and binds. Two operating modes share the
+same `StorageCluster` kind:
+
+- **Managed Ceph** (`management: managed`) — Bootwright bootstraps and converges
+  Ceph on selected machines via **cephadm**, then applies pools, filesystems,
+  RGW, and prepares downstream export data.
+- **Imported / external Ceph** (`management: external`) — Bootwright consumes an
+  operator-supplied cluster through a [`StorageExport`](#storageexport) and skips
+  the cephadm storage task entirely.
+
+A `StorageCluster` references machines **by node**: each topology host names a
+[`Machine`](machines.md) with the `ceph-node` capability. A storage export can
+then feed an [add-on](add-ons.md) input — for example an OpenShift Data
+Foundation external-mode attachment that names a `StorageExport` for one
+installed cluster.
+
+See [conventions](index.md) for the object envelope and the Required/Default
+field-table convention every table below follows.
 
 !!! warning "Storage convergence is additive-only"
     Across the whole storage domain, `apply` creates and converges what desired
@@ -21,7 +33,41 @@ below cover each `spec` only.
     and config keys keep running until removed on the cluster out of band.
     `apply --override` does not prune undeclared objects either; it rebuilds only
     still-declared pools whose structural identity changed. See
-    [Operations and Recovery](../advanced/operations.md) for removal patterns.
+    [Operations and recovery](../advanced/operations.md) for removal patterns.
+
+A minimal managed cluster and its OSS distribution:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-oss
+spec:
+  type: ceph
+  ceph:
+    distribution: oss
+    release: squid
+    cephadm:
+      bootstrap:
+        host: ceph-0
+    topology:
+      hosts:
+        - machineRef: ceph-0
+          roles:
+            - mon
+```
+
+An imported cluster carries no `ceph` block:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: imported-ceph
+spec:
+  type: ceph
+  management: external
+```
 
 ## StorageCluster
 
@@ -45,9 +91,9 @@ below cover each `spec` only.
 | `ceph.release` | No | `squid` (`oss`); `9` (`redhat`, `ibm`) | Ceph release for the chosen distribution. For `oss`, an upstream release name (`squid`, `reef`, `quincy`) or a full `x.y.z` version (for example `19.2.1`); a version pins the package repository and, when `ceph.image` is unset, derives the matching `quay.io/ceph/ceph:vX.Y.Z` image. For `redhat`/`ibm`, the product stream (for example `9`), selecting the `rhceph-<N>-tools` / `ibm-storage-ceph-<N>` repositories. |
 | `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). `redhat`/`ibm` tags are not `x.y.z`, so they pin here explicitly. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | Upstream package base URL for mirrored or disconnected environments. `oss` only. |
-| `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Environment.spec.entitlements[]` entry. Must resolve to a Red Hat Ceph (for `redhat`) or IBM Storage Ceph (for `ibm`) entitlement. Must be empty for `oss`. |
+| `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Environment.spec.entitlements[]` entry. Must resolve to a Red Hat Ceph (for `redhat`) or IBM Storage Ceph (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
-| `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node, so nodes may use their own `access.ssh.keyRef` (e.g. a provided-OS arbiter reached over an operator-authorized key). |
+| `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
 | `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
 | `ceph.cephadm.bootstrap.host` | Yes | — | Topology host that cephadm bootstraps on. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the host machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
@@ -193,7 +239,9 @@ operator alone knows; normalize derives the rest from the topology.
     Stretch is supported only as two data sites plus one mon-only tiebreaker
     site. Policy-less replicated pools get `size: 4` / `minSize: 2` as a
     render-time constant — non-4/2 stretch is unsupported and the replication is
-    not authorable. Erasure pools are not allowed on stretch-mode clusters.
+    not authorable. Erasure pools are not allowed on stretch-mode clusters. See
+    [Ceph topologies](../advanced/ceph-topologies.md) for the full stretch
+    walkthrough.
 
 ## StoragePlacementPolicy
 
@@ -239,6 +287,19 @@ running (additive-only).
       (data-destroying, `apply --override` only); replicas, CRUSH rule, and
       application reconcile in place.
 
+A role-typed RBD pool selecting its cluster:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-rbd
+spec:
+  storageClusterRef: ceph-storage
+  ceph:
+    role: rbd
+```
+
 ## StorageFilesystem
 
 Owns one CephFS filesystem and its MDS placement. Deleting the object from
@@ -282,7 +343,7 @@ state leaves the live service running (additive-only).
 !!! note "Storage owns the endpoint"
     RGW public endpoints and ingress VIPs are owned by the storage gateway, not
     by `ContainerCluster`. Downstream consumers reference the gateway. See
-    [Networking](../advanced/networking.md#endpoints).
+    [Networking](../advanced/networking.md).
 
 ## Shared placement
 
@@ -302,7 +363,8 @@ must set `hosts` or `sites`.
 ## StorageExport
 
 `StorageExport` owns storage surfaces prepared for downstream consumers, such as
-OpenShift Data Foundation external mode.
+OpenShift Data Foundation external mode. The export name is what an
+[add-on](add-ons.md) binding supplies to a `storageExportAttachment` input.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -315,6 +377,36 @@ OpenShift Data Foundation external mode.
     - For a **managed** `storageClusterRef`, `dataFoundation` is required.
     - For an **external** `storageClusterRef`, `externalDetails` is required and
       `dataFoundation` must be empty.
+
+A managed export wiring the RBD pool, CephFS filesystem, and RGW gateway:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: odf-external-ceph
+spec:
+  type: dataFoundation
+  storageClusterRef: ceph-storage
+  dataFoundation:
+    rbdPoolRef: odf-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw
+```
+
+An external export taking operator-supplied details from a secret:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: imported-ceph-odf
+spec:
+  type: dataFoundation
+  storageClusterRef: imported-ceph
+  externalDetails:
+    fromSecretRef: imported-ceph-odf-details
+```
 
 ### Data Foundation
 
@@ -358,3 +450,12 @@ OpenShift Data Foundation external mode.
 | `sshExecution.config.clusterName` | When `restrictedAuthPermission` is true | — | Storage cluster name for the exported details. |
 | `sshExecution.config.k8sClusterName` | No | — | Kubernetes cluster name for the exported details. |
 | `sshExecution.config.restrictedAuthPermission` | No | `false` | Restrict the exported auth permission. |
+
+## Where to go next
+
+- [Ceph topologies](../advanced/ceph-topologies.md) — stretch clusters, FIPS,
+  the HA dashboard, and importing an existing cluster.
+- [The Ceph lab](../getting-started/ceph.md) — a guided first managed-Ceph
+  apply.
+- [Add-ons](add-ons.md) — how a `StorageExport` feeds a Data Foundation
+  external-mode attachment.

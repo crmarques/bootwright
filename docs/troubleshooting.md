@@ -200,13 +200,13 @@ reclamation workflow.
     from a still-declared `StorageCluster` is not listed — the live pool or
     service simply keeps running. Remove it on the cluster with the
     `ceph`/`cephadm` CLI (see
-    [Ceph Storage Clusters](advanced/storage-ceph.md)).
+    [Ceph topologies](advanced/ceph-topologies.md)).
 
 ## Recovering the Ceph dashboard password
 
 `cephadm bootstrap` generates a one-time random `admin` password for the Ceph
 dashboard, which Bootwright captures only during the install (see
-[Ceph Storage Clusters](advanced/storage-ceph.md#dashboard-credentials)). If the
+[Ceph topologies](advanced/ceph-topologies.md#accessing-a-managed-cluster)). If the
 stored `dashboard-password` file is lost, or the in-cluster password was changed
 and no longer matches the stored copy, reset it directly on the cluster. The
 `ceph` CLI is on the seed node's PATH after bootstrap, so no `cephadm shell` is
