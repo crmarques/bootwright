@@ -182,6 +182,72 @@ func TestErasureCodedPoolRendersProfileAndErasureCreate(t *testing.T) {
 	}
 }
 
+// The per-pool steady-state intents render with their native ceph spellings:
+// autoscaler via `pool set`, quota via the distinct `set-quota` verb (an
+// authored 0 is the native no-limit), compression via `pool set compression_*`,
+// and a placement policy's device class as the trailing create-replicated arg.
+func TestPoolTuningAndCrushDeviceClassRender(t *testing.T) {
+	maxBytes := int64(0)
+	bulk := true
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec:     v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}},
+	}
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{cluster},
+		StoragePlacementPolicies: []v1alpha1.StoragePlacementPolicy{{
+			Metadata: v1alpha1.Metadata{Name: "ssd-rule"},
+			Spec: v1alpha1.StoragePlacementPolicySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Ceph:              v1alpha1.StoragePlacementCephSpec{RuleName: "ssd-rule", CrushDeviceClass: "ssd"},
+			},
+		}},
+		StoragePools: []v1alpha1.StoragePool{{
+			Metadata: v1alpha1.Metadata{Name: "rbd"},
+			Spec: v1alpha1.StoragePoolSpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Ceph: v1alpha1.StoragePoolCephSpec{
+					Role:        v1alpha1.StoragePoolRoleRBD,
+					Autoscale:   &v1alpha1.StoragePoolAutoscale{Mode: "on", TargetSizeRatio: 0.4, Bulk: &bulk},
+					Quota:       &v1alpha1.StoragePoolQuota{MaxBytes: &maxBytes},
+					Compression: &v1alpha1.StoragePoolCompression{Mode: "aggressive", Algorithm: "zstd"},
+				},
+			},
+		}},
+	}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	byName := map[string][]string{}
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		cmd, _ := op["command"].([]string)
+		byName[name] = cmd
+	}
+	if got := byName["create-crush-rule-ssd-rule"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "crush", "rule", "create-replicated", "ssd-rule", "default", "host", "ssd"}) {
+		t.Fatalf("crush rule with device class = %v", got)
+	}
+	if got := byName["set-pool-autoscale-mode-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set", "rbd", "pg_autoscale_mode", "on"}) {
+		t.Fatalf("autoscale-mode = %v", got)
+	}
+	if got := byName["set-pool-target-size-ratio-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set", "rbd", "target_size_ratio", "0.4"}) {
+		t.Fatalf("target-size-ratio = %v", got)
+	}
+	if got := byName["set-pool-bulk-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set", "rbd", "bulk", "true"}) {
+		t.Fatalf("bulk = %v", got)
+	}
+	if got := byName["set-pool-quota-max-bytes-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set-quota", "rbd", "max_bytes", "0"}) {
+		t.Fatalf("quota max_bytes (0 = no limit) = %v", got)
+	}
+	if _, ok := byName["set-pool-quota-max-objects-rbd"]; ok {
+		t.Fatal("an unset quota.maxObjects must not render a set-quota op (additive-only)")
+	}
+	if got := byName["set-pool-compression-mode-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set", "rbd", "compression_mode", "aggressive"}) {
+		t.Fatalf("compression-mode = %v", got)
+	}
+	if got := byName["set-pool-compression-algorithm-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set", "rbd", "compression_algorithm", "zstd"}) {
+		t.Fatalf("compression-algorithm = %v", got)
+	}
+}
+
 // Stretch mode requires the connectivity election strategy before
 // enable_stretch_mode, and a CRUSH rule that places two replicas per data
 // site — a two-step rule create-replicated cannot express, rendered as a

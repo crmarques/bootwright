@@ -10,3 +10,10 @@ spec:
   ceph:
     # Block storage (RBD).
     role: rbd
+
+    # Steady-state intents render as idempotent `ceph osd pool set` ops and
+    # reconcile in place (they never rebuild the pool). Let the PG autoscaler
+    # manage pg_num, hinting this pool will hold ~40% of the cluster.
+    autoscale:
+      mode: "on"
+      targetSizeRatio: 0.4

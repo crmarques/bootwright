@@ -269,6 +269,7 @@ Reusable placement and replicated-pool defaults for pools that select it via
 | `spec.storageClusterRef` | Yes | — | Managed `StorageCluster`. |
 | `spec.ceph.ruleName` | Yes | — | CRUSH rule name. |
 | `spec.ceph.failureDomain` | No | — | CRUSH failure domain. |
+| `spec.ceph.crushDeviceClass` | No | — | Pin the replicated rule to one device class (`ssd`/`hdd`/`nvme`), the trailing argument of `crush rule create-replicated`. Fixed at rule creation; route to a different class with a new `ruleName`. |
 | `spec.ceph.replicated.size` | No | Ceph default | Replica count. |
 | `spec.ceph.replicated.minSize` | No | Ceph default | Minimum replicas to serve I/O. |
 
@@ -292,6 +293,9 @@ running (additive-only).
 | `spec.ceph.replicated.minSize` | No | Ceph default | Minimum replicas (`replicated` only). |
 | `spec.ceph.erasure.dataChunks` | Yes (when `type: erasure`) | — | Erasure `k`; must be positive. |
 | `spec.ceph.erasure.codingChunks` | Yes (when `type: erasure`) | — | Erasure `m`; must be positive. |
+| `spec.ceph.autoscale` | No | cephadm default | PG autoscaler intent; see [Pool tuning](#pool-tuning). |
+| `spec.ceph.quota` | No | no limit | Pool quota; see [Pool tuning](#pool-tuning). |
+| `spec.ceph.compression` | No | — | Inline compression; see [Pool tuning](#pool-tuning). |
 
 !!! note "Cross-field rules"
     - `type: replicated` must not set `erasure`; `type: erasure` must not set
@@ -315,6 +319,30 @@ spec:
   ceph:
     role: rbd
 ```
+
+### Pool tuning
+
+The autoscaler, quota, and compression blocks render their fields as idempotent
+`ceph osd pool set` / `set-quota` operations. Each reconciles in place
+(last-write-wins) and none is part of the pool's structural identity, so they
+never trigger a rebuild. `pg_num`/`pgp_num` are deliberately not modeled — the
+autoscaler owns them.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `autoscale.mode` | No | cephadm default | `pg_autoscale_mode`: `on`, `off`, or `warn`. |
+| `autoscale.targetSizeRatio` | No | — | `target_size_ratio` capacity hint. Mutually exclusive with `targetSizeBytes`. |
+| `autoscale.targetSizeBytes` | No | — | `target_size_bytes` capacity hint (e.g. `10G`). |
+| `autoscale.pgNumMin` | No | — | `pg_num_min` lower bound. |
+| `autoscale.pgNumMax` | No | — | `pg_num_max` upper bound. |
+| `autoscale.bulk` | No | — | `bulk`: start the pool large. |
+| `quota.maxBytes` | No | no limit | `set-quota max_bytes`. An authored `0` is the native "no limit"; omit to leave a live quota untouched. |
+| `quota.maxObjects` | No | no limit | `set-quota max_objects`. Same `0`/omit semantics. |
+| `compression.mode` | No | — | `compression_mode`: `none`, `passive`, `aggressive`, or `force`. Required to set any other compression field. |
+| `compression.algorithm` | No | — | `compression_algorithm`: `lz4`, `snappy`, `zlib`, or `zstd`. |
+| `compression.requiredRatio` | No | — | `compression_required_ratio` `(0,1]`. |
+| `compression.minBlobSize` | No | — | `compression_min_blob_size` (e.g. `8K`). |
+| `compression.maxBlobSize` | No | — | `compression_max_blob_size`. |
 
 ## StorageFilesystem
 

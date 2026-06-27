@@ -64,7 +64,13 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if failureDomain == "" {
 			failureDomain = topology.FailureDomain(cluster)
 		}
-		ops = append(ops, operationWithIdempotency("topology", "create-crush-rule-"+policy.Spec.Ceph.RuleName, "crush-rule", policy.Spec.Ceph.RuleName, "ceph", "osd", "crush", "rule", "create-replicated", policy.Spec.Ceph.RuleName, "default", failureDomain))
+		ruleCmd := []string{"ceph", "osd", "crush", "rule", "create-replicated", policy.Spec.Ceph.RuleName, "default", failureDomain}
+		// The optional trailing class pins the rule to one device class; it is
+		// fixed at create time, so a class change means a new ruleName.
+		if class := policy.Spec.Ceph.CrushDeviceClass; class != "" {
+			ruleCmd = append(ruleCmd, class)
+		}
+		ops = append(ops, operationWithIdempotency("topology", "create-crush-rule-"+policy.Spec.Ceph.RuleName, "crush-rule", policy.Spec.Ceph.RuleName, ruleCmd...))
 	}
 	for _, pool := range state.StoragePools {
 		if pool.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
@@ -108,6 +114,9 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if app := topology.StoragePoolApplication(pool); app != "" {
 			ops = append(ops, operationInPhase("storage", "enable-pool-application-"+pool.Metadata.Name, "ceph", "osd", "pool", "application", "enable", pool.Metadata.Name, app))
 		}
+		// Steady-state per-pool intents apply to both the replicated and EC arms;
+		// each reconciles in place (last-write-wins) and none is structural.
+		ops = append(ops, storagePoolTuningOperations(pool)...)
 	}
 	for _, fs := range state.StorageFilesystems {
 		if fs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
@@ -202,6 +211,64 @@ func storagePoolStructural(pool v1alpha1.StoragePool) map[string]any {
 		structural["codingChunks"] = pool.Spec.Ceph.ErasureCoded.CodingChunks
 	}
 	return structural
+}
+
+// storagePoolTuningOperations renders the per-pool steady-state intents
+// (autoscaler, quota, compression) as idempotent ceph operations. Quota uses
+// the distinct set-quota verb; an authored 0 is the native "no limit". Every op
+// reconciles in place — none is part of the pool's structural identity.
+func storagePoolTuningOperations(pool v1alpha1.StoragePool) []map[string]any {
+	var ops []map[string]any
+	name := pool.Metadata.Name
+	setOp := func(suffix, key, value string) {
+		ops = append(ops, operationInPhase("storage", "set-pool-"+suffix+"-"+name, "ceph", "osd", "pool", "set", name, key, value))
+	}
+	if a := pool.Spec.Ceph.Autoscale; a != nil {
+		if a.Mode != "" {
+			setOp("autoscale-mode", "pg_autoscale_mode", a.Mode)
+		}
+		if a.TargetSizeRatio > 0 {
+			setOp("target-size-ratio", "target_size_ratio", fmt.Sprint(a.TargetSizeRatio))
+		}
+		if a.TargetSizeBytes != "" {
+			setOp("target-size-bytes", "target_size_bytes", a.TargetSizeBytes)
+		}
+		if a.PGNumMin > 0 {
+			setOp("pg-num-min", "pg_num_min", fmt.Sprint(a.PGNumMin))
+		}
+		if a.PGNumMax > 0 {
+			setOp("pg-num-max", "pg_num_max", fmt.Sprint(a.PGNumMax))
+		}
+		if a.Bulk != nil {
+			setOp("bulk", "bulk", fmt.Sprint(*a.Bulk))
+		}
+	}
+	if q := pool.Spec.Ceph.Quota; q != nil {
+		if q.MaxBytes != nil {
+			ops = append(ops, operationInPhase("storage", "set-pool-quota-max-bytes-"+name, "ceph", "osd", "pool", "set-quota", name, "max_bytes", fmt.Sprint(*q.MaxBytes)))
+		}
+		if q.MaxObjects != nil {
+			ops = append(ops, operationInPhase("storage", "set-pool-quota-max-objects-"+name, "ceph", "osd", "pool", "set-quota", name, "max_objects", fmt.Sprint(*q.MaxObjects)))
+		}
+	}
+	if c := pool.Spec.Ceph.Compression; c != nil {
+		if c.Mode != "" {
+			setOp("compression-mode", "compression_mode", c.Mode)
+		}
+		if c.Algorithm != "" {
+			setOp("compression-algorithm", "compression_algorithm", c.Algorithm)
+		}
+		if c.RequiredRatio > 0 {
+			setOp("compression-required-ratio", "compression_required_ratio", fmt.Sprint(c.RequiredRatio))
+		}
+		if c.MinBlobSize != "" {
+			setOp("compression-min-blob-size", "compression_min_blob_size", c.MinBlobSize)
+		}
+		if c.MaxBlobSize != "" {
+			setOp("compression-max-blob-size", "compression_max_blob_size", c.MaxBlobSize)
+		}
+	}
+	return ops
 }
 
 func storageRuleCreatedByStretch(cluster v1alpha1.StorageCluster, rule string) bool {

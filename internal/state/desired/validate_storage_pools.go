@@ -95,6 +95,61 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.minSize must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolMinSize, cluster.Metadata.Name))
 			}
 		}
+		errs = append(errs, validateStoragePoolTuning(prefix+".ceph", pool.Spec.Ceph)...)
+	}
+	return errs
+}
+
+// validateStoragePoolTuning checks the per-pool steady-state intents: the
+// autoscaler mode and bounds, the quota values, and the compression mode and
+// algorithm — each against the native `ceph osd pool set` vocabulary.
+func validateStoragePoolTuning(prefix string, spec v1alpha1.StoragePoolCephSpec) []string {
+	var errs []string
+	if a := spec.Autoscale; a != nil {
+		switch a.Mode {
+		case "", v1alpha1.StoragePoolAutoscaleModeOn, v1alpha1.StoragePoolAutoscaleModeOff, v1alpha1.StoragePoolAutoscaleModeWarn:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.autoscale.mode %q must be one of {%s, %s, %s}", prefix, a.Mode,
+				v1alpha1.StoragePoolAutoscaleModeOn, v1alpha1.StoragePoolAutoscaleModeOff, v1alpha1.StoragePoolAutoscaleModeWarn))
+		}
+		if a.TargetSizeRatio < 0 {
+			errs = append(errs, prefix+".autoscale.targetSizeRatio must be non-negative")
+		}
+		if a.TargetSizeRatio > 0 && a.TargetSizeBytes != "" {
+			errs = append(errs, prefix+".autoscale must set at most one of targetSizeRatio or targetSizeBytes")
+		}
+		if a.PGNumMin < 0 || a.PGNumMax < 0 {
+			errs = append(errs, prefix+".autoscale pgNumMin/pgNumMax must be non-negative")
+		}
+		if a.PGNumMin > 0 && a.PGNumMax > 0 && a.PGNumMin > a.PGNumMax {
+			errs = append(errs, prefix+".autoscale.pgNumMin must not exceed pgNumMax")
+		}
+	}
+	if q := spec.Quota; q != nil {
+		if q.MaxBytes != nil && *q.MaxBytes < 0 {
+			errs = append(errs, prefix+".quota.maxBytes must be non-negative (0 means no limit)")
+		}
+		if q.MaxObjects != nil && *q.MaxObjects < 0 {
+			errs = append(errs, prefix+".quota.maxObjects must be non-negative (0 means no limit)")
+		}
+	}
+	if c := spec.Compression; c != nil {
+		switch c.Mode {
+		case "", v1alpha1.StoragePoolCompressionModeNone, v1alpha1.StoragePoolCompressionModePassive, v1alpha1.StoragePoolCompressionModeAggressive, v1alpha1.StoragePoolCompressionModeForce:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.compression.mode %q must be one of {none, passive, aggressive, force}", prefix, c.Mode))
+		}
+		switch c.Algorithm {
+		case "", "lz4", "snappy", "zlib", "zstd":
+		default:
+			errs = append(errs, fmt.Sprintf("%s.compression.algorithm %q must be one of {lz4, snappy, zlib, zstd}", prefix, c.Algorithm))
+		}
+		if c.RequiredRatio < 0 || c.RequiredRatio > 1 {
+			errs = append(errs, fmt.Sprintf("%s.compression.requiredRatio %v must be in (0, 1]", prefix, c.RequiredRatio))
+		}
+		if c.Mode == "" && (c.Algorithm != "" || c.RequiredRatio != 0 || c.MinBlobSize != "" || c.MaxBlobSize != "") {
+			errs = append(errs, prefix+".compression sets tuning without compression.mode")
+		}
 	}
 	return errs
 }

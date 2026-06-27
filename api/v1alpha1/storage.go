@@ -346,9 +346,15 @@ type StoragePlacementPolicySpec struct {
 }
 
 type StoragePlacementCephSpec struct {
-	FailureDomain string                  `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
-	RuleName      string                  `yaml:"ruleName,omitempty" json:"ruleName,omitempty"`
-	Replicated    StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
+	FailureDomain string `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
+	RuleName      string `yaml:"ruleName,omitempty" json:"ruleName,omitempty"`
+	// CrushDeviceClass pins the replicated CRUSH rule to one device class
+	// (ssd/hdd/nvme), the optional trailing argument of
+	// `crush rule create-replicated <name> default <failureDomain> [<class>]`.
+	// The class is fixed at rule creation; route a pool to a different class by
+	// authoring a new ruleName.
+	CrushDeviceClass string                  `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
+	Replicated       StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
 }
 
 // StoragePool owns one Ceph pool. Deleting the object from desired state
@@ -384,6 +390,53 @@ type StoragePoolCephSpec struct {
 	Application  string                  `yaml:"application,omitempty" json:"application,omitempty"`
 	Replicated   StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
 	ErasureCoded *StoragePoolErasureCode `yaml:"erasure,omitempty" json:"erasure,omitempty"`
+	// Autoscale declares the PG autoscaler intent. Each set field reconciles in
+	// place via `ceph osd pool set` (last-write-wins); none is structural.
+	// pg_num/pgp_num are deliberately not modeled — the autoscaler owns them.
+	Autoscale *StoragePoolAutoscale `yaml:"autoscale,omitempty" json:"autoscale,omitempty"`
+	// Quota caps the pool via `ceph osd pool set-quota`. An authored 0 is the
+	// native "no limit"; an omitted field is left untouched (additive-only).
+	Quota *StoragePoolQuota `yaml:"quota,omitempty" json:"quota,omitempty"`
+	// Compression tunes inline BlueStore compression via
+	// `ceph osd pool set compression_*` (last-write-wins; not structural).
+	Compression *StoragePoolCompression `yaml:"compression,omitempty" json:"compression,omitempty"`
+}
+
+// StoragePoolAutoscale mirrors the PG-autoscaler `ceph osd pool set` options.
+type StoragePoolAutoscale struct {
+	// Mode is pg_autoscale_mode: on, off, or warn.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	// TargetSizeRatio (target_size_ratio) and TargetSizeBytes (target_size_bytes)
+	// hint the pool's eventual share of the cluster; set at most one.
+	TargetSizeRatio float64 `yaml:"targetSizeRatio,omitempty" json:"targetSizeRatio,omitempty"`
+	TargetSizeBytes string  `yaml:"targetSizeBytes,omitempty" json:"targetSizeBytes,omitempty"`
+	// PGNumMin / PGNumMax bound the autoscaler (pg_num_min / pg_num_max).
+	PGNumMin int `yaml:"pgNumMin,omitempty" json:"pgNumMin,omitempty"`
+	PGNumMax int `yaml:"pgNumMax,omitempty" json:"pgNumMax,omitempty"`
+	// Bulk marks the pool as starting large (bulk); a pointer so false renders.
+	Bulk *bool `yaml:"bulk,omitempty" json:"bulk,omitempty"`
+}
+
+// StoragePoolQuota caps a pool. The pointers distinguish unset (leave alone)
+// from an authored 0 (the native "no limit"): an omitted field must never
+// render set-quota 0 and silently clear a live quota.
+type StoragePoolQuota struct {
+	MaxBytes   *int64 `yaml:"maxBytes,omitempty" json:"maxBytes,omitempty"`
+	MaxObjects *int64 `yaml:"maxObjects,omitempty" json:"maxObjects,omitempty"`
+}
+
+// StoragePoolCompression mirrors the `ceph osd pool set compression_*` options.
+type StoragePoolCompression struct {
+	// Mode is compression_mode: none, passive, aggressive, or force.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	// Algorithm is compression_algorithm: lz4, snappy, zlib, or zstd.
+	Algorithm string `yaml:"algorithm,omitempty" json:"algorithm,omitempty"`
+	// RequiredRatio is compression_required_ratio (0,1].
+	RequiredRatio float64 `yaml:"requiredRatio,omitempty" json:"requiredRatio,omitempty"`
+	// MinBlobSize / MaxBlobSize bound which writes compress
+	// (compression_min_blob_size / compression_max_blob_size; sizes such as 8K).
+	MinBlobSize string `yaml:"minBlobSize,omitempty" json:"minBlobSize,omitempty"`
+	MaxBlobSize string `yaml:"maxBlobSize,omitempty" json:"maxBlobSize,omitempty"`
 }
 
 type StoragePoolErasureCode struct {

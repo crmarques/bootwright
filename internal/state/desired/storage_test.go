@@ -826,6 +826,55 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 	}
 }
 
+// TestStoragePoolTuningValidation covers the per-pool autoscaler / quota /
+// compression intents: enum and bounds checks against the native ceph vocabulary.
+func TestStoragePoolTuningValidation(t *testing.T) {
+	neg := int64(-1)
+	cases := []struct {
+		name string
+		spec v1alpha1.StoragePoolCephSpec
+		want string
+	}{
+		{name: "valid", spec: v1alpha1.StoragePoolCephSpec{
+			Autoscale:   &v1alpha1.StoragePoolAutoscale{Mode: "warn", TargetSizeRatio: 0.5},
+			Compression: &v1alpha1.StoragePoolCompression{Mode: "passive", Algorithm: "lz4"},
+		}},
+		{name: "bad-autoscale-mode", spec: v1alpha1.StoragePoolCephSpec{
+			Autoscale: &v1alpha1.StoragePoolAutoscale{Mode: "auto"},
+		}, want: `.autoscale.mode "auto" must be one of`},
+		{name: "target-ratio-and-bytes", spec: v1alpha1.StoragePoolCephSpec{
+			Autoscale: &v1alpha1.StoragePoolAutoscale{TargetSizeRatio: 0.5, TargetSizeBytes: "10G"},
+		}, want: `at most one of targetSizeRatio or targetSizeBytes`},
+		{name: "pgnum-min-exceeds-max", spec: v1alpha1.StoragePoolCephSpec{
+			Autoscale: &v1alpha1.StoragePoolAutoscale{PGNumMin: 64, PGNumMax: 32},
+		}, want: `pgNumMin must not exceed pgNumMax`},
+		{name: "negative-quota", spec: v1alpha1.StoragePoolCephSpec{
+			Quota: &v1alpha1.StoragePoolQuota{MaxBytes: &neg},
+		}, want: `.quota.maxBytes must be non-negative`},
+		{name: "bad-compression-algorithm", spec: v1alpha1.StoragePoolCephSpec{
+			Compression: &v1alpha1.StoragePoolCompression{Mode: "force", Algorithm: "gzip"},
+		}, want: `.compression.algorithm "gzip" must be one of`},
+		{name: "compression-without-mode", spec: v1alpha1.StoragePoolCephSpec{
+			Compression: &v1alpha1.StoragePoolCompression{Algorithm: "zstd"},
+		}, want: `compression sets tuning without compression.mode`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateStoragePoolTuning("StoragePool/p spec.ceph", tc.spec)
+			got := strings.Join(errs, "; ")
+			if tc.want == "" {
+				if len(errs) != 0 {
+					t.Fatalf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 	cases := []struct {
 		name string

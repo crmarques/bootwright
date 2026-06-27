@@ -268,6 +268,17 @@ const (
 	StoragePoolRoleCephFSData     = "cephfs-data"
 	StoragePoolRoleRGW            = "rgw"
 
+	// pg_autoscale_mode values.
+	StoragePoolAutoscaleModeOn   = "on"
+	StoragePoolAutoscaleModeOff  = "off"
+	StoragePoolAutoscaleModeWarn = "warn"
+
+	// compression_mode values.
+	StoragePoolCompressionModeNone       = "none"
+	StoragePoolCompressionModePassive    = "passive"
+	StoragePoolCompressionModeAggressive = "aggressive"
+	StoragePoolCompressionModeForce      = "force"
+
 	// StorageExport union: type value == populated arm key.
 	StorageExportTypeDataFoundation                              = "dataFoundation"
 	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
