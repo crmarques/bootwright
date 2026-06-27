@@ -3,6 +3,8 @@ package workflow
 import (
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func stateCheckTask(id, kind, cluster, clusterKind string) ApplyTask {
@@ -14,6 +16,21 @@ func saveStateCheckRecord(t *testing.T, runsDir string, task ApplyTask, hash, ow
 	record := ConvergeSafetyRecord{
 		APIVersion:  ConvergeSafetyAPIVersion,
 		ResourceID:  applyTaskSafetyResourceID(task),
+		DesiredHash: hash,
+		Owner:       ConvergeSafetyOwnerIdentity{Manager: owner},
+		Status:      ConvergeSafetyStatusReconciled,
+		UpdatedAt:   time.Unix(0, 0).UTC(),
+	}
+	if err := SaveConvergeSafetyRecord(runsDir, record); err != nil {
+		t.Fatalf("save converge safety record: %v", err)
+	}
+}
+
+func saveSubObjectRecord(t *testing.T, runsDir, resourceID, hash, owner string) {
+	t.Helper()
+	record := ConvergeSafetyRecord{
+		APIVersion:  ConvergeSafetyAPIVersion,
+		ResourceID:  resourceID,
 		DesiredHash: hash,
 		Owner:       ConvergeSafetyOwnerIdentity{Manager: owner},
 		Status:      ConvergeSafetyStatusReconciled,
@@ -38,7 +55,7 @@ func TestStateCheckClassifiesDriftAbsenceAndMatch(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner) // desired state changed since apply
 	// absent: no record at all -> never applied
 
-	report, err := StateCheck([]ApplyTask{match, drift, absent}, runsDir)
+	report, err := StateCheck([]ApplyTask{match, drift, absent}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -82,7 +99,7 @@ func TestStateCheckGranularDriftMixedResources(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
 	// missing: no record -> never applied, but the root is otherwise present.
 
-	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, runsDir)
+	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -120,7 +137,7 @@ func TestStateCheckForeignOwner(t *testing.T) {
 	}
 	saveStateCheckRecord(t, runsDir, task, hash, "someone-else")
 
-	report, err := StateCheck([]ApplyTask{task}, runsDir)
+	report, err := StateCheck([]ApplyTask{task}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -156,11 +173,115 @@ func TestStateCheckSharedResourceKeyTasksMatch(t *testing.T) {
 		saveStateCheckRecord(t, runsDir, task, hash, ConvergeSafetyOwner)
 	}
 
-	report, err := StateCheck([]ApplyTask{provider, finalize}, runsDir)
+	report, err := StateCheck([]ApplyTask{provider, finalize}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
 	if !report.InSync {
 		t.Fatalf("shared-ResourceKey tasks recorded after a clean apply must be in sync, got %+v", report.Roots)
+	}
+}
+
+// storageSubObjectTestState builds a managed StorageCluster with two pools and
+// one export, all referencing it, for the sub-object granularity tests.
+func storageSubObjectTestState(cluster string) v1alpha1.State {
+	ref := v1alpha1.LocalObjectReference{Name: cluster}
+	return v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{Metadata: v1alpha1.Metadata{Name: cluster}}},
+		StoragePools: []v1alpha1.StoragePool{
+			{Metadata: v1alpha1.Metadata{Name: "rbd"}, Spec: v1alpha1.StoragePoolSpec{StorageClusterRef: ref}},
+			{Metadata: v1alpha1.Metadata{Name: "cephfs-data"}, Spec: v1alpha1.StoragePoolSpec{StorageClusterRef: ref}},
+		},
+		StorageExports: []v1alpha1.StorageExport{
+			{Metadata: v1alpha1.Metadata{Name: "odf"}, Spec: v1alpha1.StorageExportSpec{StorageClusterRef: ref}},
+		},
+	}
+}
+
+// TestStateCheckGranularStorageSubObjectDrift covers the storage-granularity gap:
+// on a present (applied) StorageCluster, state-check must name the specific pool
+// or export that drifted or is missing, not collapse the whole cluster to one
+// line. Sub-objects carry their own converge-safety records, so the report reads
+// them independently of the cluster task.
+func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
+	runsDir := t.TempDir()
+	const cluster = "ceph"
+	state := storageSubObjectTestState(cluster)
+
+	clusterTask := stateCheckTask("storage."+cluster, "storageCluster", cluster, "storage")
+	clusterHash, err := ApplyTaskDesiredHash(clusterTask)
+	if err != nil {
+		t.Fatalf("desired hash: %v", err)
+	}
+	saveStateCheckRecord(t, runsDir, clusterTask, clusterHash, ConvergeSafetyOwner) // cluster applied, matches
+
+	rbd := storageSubObject{storageSubObjectKindPool, cluster, "rbd"}
+	rbdHash, err := storageSubObjectDesiredHash(state, rbd)
+	if err != nil {
+		t.Fatalf("sub-object desired hash: %v", err)
+	}
+	saveSubObjectRecord(t, runsDir, rbd.resourceID(), rbdHash, ConvergeSafetyOwner)                                                                       // pool rbd: match
+	saveSubObjectRecord(t, runsDir, storageSubObject{storageSubObjectKindPool, cluster, "cephfs-data"}.resourceID(), "sha256:stale", ConvergeSafetyOwner) // pool cephfs-data: drift
+	// export odf: no record -> missing
+
+	report, err := StateCheck([]ApplyTask{clusterTask}, state, runsDir)
+	if err != nil {
+		t.Fatalf("StateCheck: %v", err)
+	}
+	if report.InSync {
+		t.Fatal("a storage cluster with a drifted pool and a missing export must not be in sync")
+	}
+	if len(report.Roots) != 1 {
+		t.Fatalf("expected one storage root, got %d: %+v", len(report.Roots), report.Roots)
+	}
+	root := report.Roots[0]
+	if root.Name != cluster || root.Absent {
+		t.Fatalf("present storage cluster must report granularly, not as one absence, got %+v", root)
+	}
+	// 1 cluster task + 2 pools + 1 export = 4 resources; cluster and rbd matched.
+	if root.Total != 4 || root.Matched != 2 {
+		t.Fatalf("expected total 4 matched 2, got total=%d matched=%d", root.Total, root.Matched)
+	}
+	got := map[string]ConvergeSafetyClassification{}
+	for _, res := range root.Resources {
+		got[res.Label] = res.Classification
+	}
+	if len(root.Resources) != 2 {
+		t.Fatalf("expected exactly 2 out-of-sync sub-objects, got %d: %+v", len(root.Resources), root.Resources)
+	}
+	if got["StoragePool/ceph.cephfs-data"] != ConvergeSafetyDrift {
+		t.Fatalf("expected cephfs-data pool drift, got %+v", root.Resources)
+	}
+	if got["StorageExport/ceph.odf"] != ConvergeSafetyMissing {
+		t.Fatalf("expected odf export missing, got %+v", root.Resources)
+	}
+	if _, reported := got["StoragePool/ceph.rbd"]; reported {
+		t.Fatalf("matched rbd pool must not be reported, got %+v", root.Resources)
+	}
+}
+
+// TestStateCheckStorageSubObjectsCollapseWhenClusterAbsent keeps the succinct-root-
+// absence behavior: a never-applied StorageCluster (cluster task and every declared
+// sub-object missing) reports one absence, not a per-pool/per-export flood.
+func TestStateCheckStorageSubObjectsCollapseWhenClusterAbsent(t *testing.T) {
+	runsDir := t.TempDir()
+	const cluster = "ceph"
+	state := storageSubObjectTestState(cluster)
+	clusterTask := stateCheckTask("storage."+cluster, "storageCluster", cluster, "storage")
+	// No records at all -> cluster task and every sub-object missing.
+
+	report, err := StateCheck([]ApplyTask{clusterTask}, state, runsDir)
+	if err != nil {
+		t.Fatalf("StateCheck: %v", err)
+	}
+	if report.InSync {
+		t.Fatal("a never-applied storage cluster is not in sync")
+	}
+	if len(report.Roots) != 1 {
+		t.Fatalf("expected one storage root, got %+v", report.Roots)
+	}
+	root := report.Roots[0]
+	if !root.Absent || len(root.Resources) != 0 {
+		t.Fatalf("a never-applied storage cluster must collapse to one absence even with declared sub-objects, got %+v", root)
 	}
 }

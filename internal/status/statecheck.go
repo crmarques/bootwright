@@ -37,7 +37,7 @@ func StateCheck(state v1alpha1.State, clusterScope string, applyTarget workflow.
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}
-	report, err := workflow.StateCheck(tasks, runsDir)
+	report, err := workflow.StateCheck(tasks, state, runsDir)
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}

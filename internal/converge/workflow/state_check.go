@@ -1,6 +1,10 @@
 package workflow
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
 
 // StateCheckResource is one resource in the selected apply graph whose recorded
 // convergence state differs from the current desired state.
@@ -33,15 +37,16 @@ type StateCheckReport struct {
 	Undeclared []UndeclaredResource `json:"undeclared,omitempty"`
 }
 
-// StateCheck classifies every task in the selected apply graph against the
-// durable convergence-safety evidence recorded by the last apply, without
-// running playbooks, probing, or writing records. Each resource resolves to
-// match (applied with the current desired state), drift (desired state changed
-// since it was applied), foreign (a non-Bootwright owner recorded it), or
-// missing (never applied). A root whose resources are all missing is reported
-// as one absence instead of a flood of per-resource missing lines; a present
-// root reports only the resources that are not in sync.
-func StateCheck(tasks []ApplyTask, runsDir string) (StateCheckReport, error) {
+// StateCheck classifies every task in the selected apply graph, plus each
+// StorageCluster's declared sub-objects (pools, filesystems, object gateways,
+// exports), against the durable convergence-safety evidence recorded by the last
+// apply, without running playbooks, probing, or writing records. Each resource
+// resolves to match (applied with the current desired state), drift (desired
+// state changed since it was applied), foreign (a non-Bootwright owner recorded
+// it), or missing (never applied). A root whose resources are all missing is
+// reported as one absence instead of a flood of per-resource missing lines; a
+// present root reports only the resources that are not in sync.
+func StateCheck(tasks []ApplyTask, state v1alpha1.State, runsDir string) (StateCheckReport, error) {
 	type rootAcc struct {
 		kind, name string
 		total      int
@@ -51,12 +56,7 @@ func StateCheck(tasks []ApplyTask, runsDir string) (StateCheckReport, error) {
 	}
 	order := make([]string, 0)
 	roots := map[string]*rootAcc{}
-	for _, task := range tasks {
-		kind := task.Entry.ClusterKind
-		name := task.Entry.Cluster
-		if name == "" {
-			kind, name = "infrastructure", "infrastructure"
-		}
+	rootFor := func(kind, name string) *rootAcc {
 		key := kind + "/" + name
 		acc := roots[key]
 		if acc == nil {
@@ -64,19 +64,49 @@ func StateCheck(tasks []ApplyTask, runsDir string) (StateCheckReport, error) {
 			roots[key] = acc
 			order = append(order, key)
 		}
-		class, err := classifyApplyTaskState(task, runsDir)
-		if err != nil {
-			return StateCheckReport{}, err
-		}
+		return acc
+	}
+	accumulate := func(acc *rootAcc, class ConvergeSafetyClassification, resource StateCheckResource) {
 		acc.total++
 		switch class {
 		case ConvergeSafetyMatch:
 			acc.matched++
 		case ConvergeSafetyMissing:
 			acc.missing++
-			acc.resources = append(acc.resources, stateCheckResource(task, class))
+			acc.resources = append(acc.resources, resource)
 		default:
-			acc.resources = append(acc.resources, stateCheckResource(task, class))
+			acc.resources = append(acc.resources, resource)
+		}
+	}
+
+	for _, task := range tasks {
+		kind := task.Entry.ClusterKind
+		name := task.Entry.Cluster
+		if name == "" {
+			kind, name = "infrastructure", "infrastructure"
+		}
+		class, err := classifyApplyTaskState(task, runsDir)
+		if err != nil {
+			return StateCheckReport{}, err
+		}
+		accumulate(rootFor(kind, name), class, stateCheckResource(task, class))
+	}
+
+	// Expand each StorageCluster's sub-objects against their own durable records
+	// (MarkStorageSubObjectsConvergeSafety writes one per sub-object, keyed
+	// "<Kind>/<cluster>.<name>"), so a present storage cluster reports which
+	// specific pool or export drifted or is missing instead of collapsing to one
+	// StorageCluster line. Sub-objects share their owning cluster's
+	// "storage/<cluster>" root, so a never-applied cluster — cluster task and
+	// every sub-object missing — still collapses to a single absence.
+	for _, cluster := range state.StorageClusters {
+		acc := rootFor(ApplyClusterKindStorage, cluster.Metadata.Name)
+		for _, sub := range storageSubObjects(state, cluster.Metadata.Name) {
+			class, err := classifyStorageSubObject(state, sub, runsDir)
+			if err != nil {
+				return StateCheckReport{}, err
+			}
+			accumulate(acc, class, storageSubObjectResource(sub, class))
 		}
 	}
 
@@ -123,6 +153,15 @@ func stateCheckResource(task ApplyTask, class ConvergeSafetyClassification) Stat
 		ResourceID:     applyTaskSafetyResourceID(task),
 		Kind:           task.Entry.Kind,
 		Label:          task.Entry.Label,
+		Classification: class,
+	}
+}
+
+func storageSubObjectResource(sub storageSubObject, class ConvergeSafetyClassification) StateCheckResource {
+	return StateCheckResource{
+		ResourceID:     sub.resourceID(),
+		Kind:           sub.Kind,
+		Label:          sub.resourceID(),
 		Classification: class,
 	}
 }
