@@ -96,6 +96,42 @@ func TestStorageStretchValidationAcceptsCanonicalShape(t *testing.T) {
 	}
 }
 
+// TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization guards the
+// regression where the tiebreaker mon-only / no-OSD / site safety checks
+// silently no-op after normalize FQDN-qualifies node hostnames. The shipped
+// multi-DC example authors tiebreaker.host as a machine name; once normalize
+// rewrites node.Hostname to <machine>.<cluster>.<baseDomain> a raw
+// node.Hostname == tiebreaker.host compare never matches, so a misconfigured
+// arbiter would reach cephadm. The validator must resolve the tiebreaker host
+// by machine name or hostname (storageCephNodeByName) the way every other
+// storage reference does. Unlike TestStorageStretchValidationRejectsInvalidRules
+// this runs the full Normalize -> validate pipeline, which is what exposes the
+// bug (validateStorage alone leaves Hostname == machine name and false-greens).
+func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing.T) {
+	state := storageValidationState()
+	// A baseDomain plus an unset arbiter hostname makes normalize qualify the
+	// arbiter to its FQDN, reproducing the machine-name authoring form.
+	state.Environments = []v1alpha1.Environment{{
+		Metadata: v1alpha1.Metadata{Name: "env"},
+		Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+	}}
+	arbiter := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6]
+	arbiter.Hostname = ""
+	// Give the arbiter a second role so it is no longer mon-only; the safety
+	// check must reject it even though its hostname is now FQDN-qualified.
+	arbiter.Roles = []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR}
+
+	Normalize(&state)
+
+	if got := state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Hostname; got != "ceph-arbiter.ceph.example.test" {
+		t.Fatalf("precondition: normalize did not FQDN-qualify the arbiter hostname, got %q", got)
+	}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, `tiebreaker.host "ceph-arbiter" must be mon-only`) {
+		t.Fatalf("stretch tiebreaker mon-only check did not fire after FQDN normalization; errors = %q", got)
+	}
+}
+
 func TestStorageValidationAcceptsManagedManagementValue(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementManaged
