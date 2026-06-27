@@ -406,6 +406,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.StorageObjectGateways = append(state.StorageObjectGateways, item)
+		case v1alpha1.KindStorageNFSExport:
+			var item v1alpha1.StorageNFSExport
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StorageNFSExports = append(state.StorageNFSExports, item)
 		case v1alpha1.KindStorageExport:
 			var item v1alpha1.StorageExport
 			if err := decodeKnown(node, &item); err != nil {

@@ -39,6 +39,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
 	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters)...)
+	errs = append(errs, validateStorageNFSExports(state.StorageNFSExports, clusters, filesystems)...)
 	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, machines)...)
 	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
@@ -645,7 +646,7 @@ func validateStorageCephServices(prefix string, cluster v1alpha1.StorageCluster)
 	reserved := map[string]bool{
 		"host": true, "mon": true, "mgr": true, "osd": true, "mds": true,
 		"rgw": true, "ingress": true, "prometheus": true, "grafana": true,
-		"alertmanager": true, "node-exporter": true,
+		"alertmanager": true, "node-exporter": true, "nfs": true,
 	}
 	var errs []string
 	seen := map[string]bool{}

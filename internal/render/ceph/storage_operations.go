@@ -211,6 +211,7 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		uid := "bootwright-" + gw.Metadata.Name + "-admin"
 		ops = append(ops, operationWithIdempotency("object-gateway", "create-rgw-admin-user-"+gw.Metadata.Name, "rgw-user", uid, "radosgw-admin", "user", "create", "--uid", uid, "--display-name", "Bootwright "+gw.Metadata.Name+" admin", "--format", "json"))
 	}
+	ops = append(ops, nfsExportOperations(state, cluster)...)
 	ops = append(ops, dataFoundationCredentialOperations(state, cluster)...)
 	return map[string]any{
 		"apiVersion": "bootwright.io/v1alpha1",
@@ -220,6 +221,49 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		},
 		"operations": ops,
 	}
+}
+
+// nfsExportOperations renders each declared NFS export as an idempotent
+// `ceph nfs export create cephfs|rgw` in the object-gateway phase (after the nfs
+// service is registered). The role probes `ceph nfs export ls <serviceID>` keyed
+// by <serviceID>|<pseudo>; additive-only, so a removed export keeps running.
+func nfsExportOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) []map[string]any {
+	var ops []map[string]any
+	for _, nfs := range state.StorageNFSExports {
+		if nfs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		id := nfs.Spec.Ceph.ServiceID
+		for _, export := range nfs.Spec.Exports {
+			var cmd []string
+			if export.Bucket != "" {
+				cmd = []string{"ceph", "nfs", "export", "create", "rgw", "--cluster-id", id, "--pseudo-path", export.Pseudo, "--bucket", export.Bucket}
+			} else {
+				path := export.Path
+				if path == "" {
+					path = "/"
+				}
+				cmd = []string{"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", id, "--pseudo-path", export.Pseudo, "--fsname", export.FilesystemRef.Name, "--path", path}
+			}
+			if export.AccessType == v1alpha1.StorageNFSAccessReadOnly {
+				cmd = append(cmd, "--readonly")
+			}
+			if export.Squash != "" {
+				cmd = append(cmd, "--squash", export.Squash)
+			}
+			for _, client := range export.Clients {
+				cmd = append(cmd, "--client-addr", client)
+			}
+			name := "create-nfs-export-" + nfs.Metadata.Name + "-" + sanitizeOpName(export.Pseudo)
+			ops = append(ops, operationWithIdempotency("object-gateway", name, "nfs-export", id+"|"+export.Pseudo, cmd...))
+		}
+	}
+	return ops
+}
+
+// sanitizeOpName turns a pseudo path into a stable operation-name suffix.
+func sanitizeOpName(s string) string {
+	return strings.Trim(strings.ReplaceAll(s, "/", "-"), "-")
 }
 
 func sortedKeys[V any](m map[string]V) []string {

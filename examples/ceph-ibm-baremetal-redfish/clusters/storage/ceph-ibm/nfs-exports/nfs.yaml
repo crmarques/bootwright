@@ -1,0 +1,37 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageNFSExport
+metadata:
+  name: nfs
+spec:
+  storageClusterRef: ceph-ibm
+
+  ceph:
+    serviceID: ceph-ibm
+    # No nfs topology role, so placement is explicit. NFS-Ganesha on both full
+    # nodes; cephadm auto-provisions the backing .nfs pool.
+    placement:
+      hosts:
+        - ceph-1
+        - ceph-2
+    # Floating VIP fronting nfs.ceph-ibm, distinct from the RGW (.80) and
+    # management (.81) VIPs.
+    ingresses:
+      - name: nfs
+        address: 10.20.30.82
+        prefixLength: 24
+        virtualInterfaceNetworks:
+          - 10.20.30.0/24
+        placement:
+          hosts:
+            - ceph-1
+            - ceph-2
+
+  exports:
+    # CephFS export (FSAL CEPH) of the shared filesystem at a pseudo path.
+    - pseudo: /shared
+      filesystemRef: cephfs
+      path: /
+      accessType: RW
+      squash: no_root_squash
+      clients:
+        - 10.20.30.0/24

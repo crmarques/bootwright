@@ -111,6 +111,7 @@ func duplicateNameFindings(state v1alpha1.State) []Finding {
 	out = append(out, duplicateFindings(v1alpha1.KindStoragePool, objectNames(state.StoragePools, func(p v1alpha1.StoragePool) string { return p.Metadata.Name }))...)
 	out = append(out, duplicateFindings(v1alpha1.KindStorageFilesystem, objectNames(state.StorageFilesystems, func(f v1alpha1.StorageFilesystem) string { return f.Metadata.Name }))...)
 	out = append(out, duplicateFindings(v1alpha1.KindStorageObjectGateway, objectNames(state.StorageObjectGateways, func(g v1alpha1.StorageObjectGateway) string { return g.Metadata.Name }))...)
+	out = append(out, duplicateFindings(v1alpha1.KindStorageNFSExport, objectNames(state.StorageNFSExports, func(n v1alpha1.StorageNFSExport) string { return n.Metadata.Name }))...)
 	out = append(out, duplicateFindings(v1alpha1.KindStorageExport, objectNames(state.StorageExports, func(e v1alpha1.StorageExport) string { return e.Metadata.Name }))...)
 	out = append(out, duplicateFindings(v1alpha1.KindClusterAddon, objectNames(state.ClusterAddons, func(a v1alpha1.ClusterAddon) string { return a.Metadata.Name }))...)
 	out = append(out, duplicateFindings(v1alpha1.KindClusterAddonProfile, objectNames(state.ClusterAddonProfiles, func(p v1alpha1.ClusterAddonProfile) string { return p.Metadata.Name }))...)

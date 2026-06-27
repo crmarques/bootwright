@@ -152,6 +152,31 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			docs = append(docs, cephadmPlacementService("ingress", "rgw."+gw.Spec.Ceph.ServiceID+"."+ingress.Name, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), 0, ingressSpec))
 		}
 	}
+	for _, nfs := range state.StorageNFSExports {
+		if nfs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		// cephadm auto-provisions the backing .nfs pool (Squid), so the service
+		// needs only placement; no pool/namespace. There is no nfs topology role,
+		// so placement is authored explicitly (role "" — same as passthrough).
+		docs = append(docs, cephadmPlacementService("nfs", nfs.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, nfs.Spec.Ceph.Placement, ""), nfs.Spec.Ceph.Placement.CountPerHost, nil))
+		for _, ingress := range nfs.Spec.Ceph.Ingresses {
+			endpoint, ok := topology.GatewayIngressEndpoint(ingress)
+			if !ok {
+				continue
+			}
+			ingressSpec := map[string]any{
+				"backend_service": "nfs." + nfs.Spec.Ceph.ServiceID,
+				"virtual_ip":      topology.CephadmVirtualIP(endpoint),
+				"frontend_port":   2049,
+				"monitor_port":    9049,
+			}
+			if len(endpoint.InterfaceNetworks) > 0 {
+				ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
+			}
+			docs = append(docs, cephadmPlacementService("ingress", "nfs."+nfs.Spec.Ceph.ServiceID+"."+ingress.Name, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), 0, ingressSpec))
+		}
+	}
 	return docs
 }
 

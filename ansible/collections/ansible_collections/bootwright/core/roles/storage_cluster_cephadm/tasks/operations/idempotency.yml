@@ -279,6 +279,28 @@
     - bootwright_ceph_op_idempotency_kind == 'rgw-zone'
     - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_zones.stdout | default('{}')) | from_json).zones | default([])
 
+- name: Check existing NFS export
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - nfs
+      - export
+      - ls
+      - "{{ bootwright_ceph_op_idempotency_name.split('|') | first }}"
+      - --format
+      - json
+  register: bootwright_ceph_nfs_exports
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_op_idempotency_kind == 'nfs-export'
+
+- name: Skip existing NFS export operation
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_skip: true
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'nfs-export'
+    - (bootwright_ceph_op_idempotency_name.split('|') | last) in ((bootwright_ceph_nfs_exports.stdout | default('[]')) | from_json)
+
 - name: Check existing RGW user
   ansible.builtin.command:
     argv:

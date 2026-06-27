@@ -621,6 +621,65 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
+// A first-class NFS export renders the nfs service + ingress (backend
+// nfs.<id>) into the late service specs and each export as an idempotent
+// `ceph nfs export create cephfs|rgw` operation keyed by <serviceID>|<pseudo>.
+func TestNFSExportServiceAndExportsRender(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
+			}}},
+		}},
+	}
+	nfs := v1alpha1.StorageNFSExport{
+		Metadata: v1alpha1.Metadata{Name: "nfs"},
+		Spec: v1alpha1.StorageNFSExportSpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+			Ceph: v1alpha1.StorageNFSExportCephSpec{
+				ServiceID: "nfs1",
+				Placement: v1alpha1.StoragePlacement{Hosts: []string{"ceph-0"}},
+				Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip", Address: "10.0.0.9", PrefixLength: 24}},
+			},
+			Exports: []v1alpha1.StorageNFSExportEntry{
+				{Pseudo: "/share", FilesystemRef: v1alpha1.LocalObjectReference{Name: "fs1"}, Path: "/data", AccessType: "RO", Squash: "root_squash", Clients: []string{"10.0.0.0/8"}},
+				{Pseudo: "/bucket", Bucket: "tenant-a"},
+			},
+		},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}, StorageNFSExports: []v1alpha1.StorageNFSExport{nfs}}
+
+	byType := map[string]map[string]any{}
+	for _, doc := range CephadmLateServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		byType[m["service_type"].(string)] = m
+	}
+	if byType["nfs"] == nil || byType["nfs"]["service_id"] != "nfs1" {
+		t.Fatalf("nfs service = %v", byType["nfs"])
+	}
+	ingressSpec := byType["ingress"]["spec"].(map[string]any)
+	if ingressSpec["backend_service"] != "nfs.nfs1" {
+		t.Fatalf("nfs ingress backend = %v", ingressSpec)
+	}
+
+	byName := map[string][]string{}
+	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
+		name, _ := op["name"].(string)
+		cmd, _ := op["command"].([]string)
+		byName[name] = cmd
+	}
+	cephfs := byName["create-nfs-export-nfs-share"]
+	want := []string{"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", "nfs1", "--pseudo-path", "/share", "--fsname", "fs1", "--path", "/data", "--readonly", "--squash", "root_squash", "--client-addr", "10.0.0.0/8"}
+	if !reflect.DeepEqual(cephfs, want) {
+		t.Fatalf("cephfs export =\n  %v\nwant\n  %v", cephfs, want)
+	}
+	rgw := byName["create-nfs-export-nfs-bucket"]
+	if !reflect.DeepEqual(rgw, []string{"ceph", "nfs", "export", "create", "rgw", "--cluster-id", "nfs1", "--pseudo-path", "/bucket", "--bucket", "tenant-a"}) {
+		t.Fatalf("rgw export = %v", rgw)
+	}
+}
+
 // An RGW realm/zone binding emits idempotent radosgw-admin creates plus a
 // period commit in the storage phase (before the rgw service applies), renders
 // rgw_realm/rgw_zonegroup/rgw_zone into the service spec, and seeds per-RGW
@@ -751,10 +810,10 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 				Prometheus: &v1alpha1.StorageCephMonitoringService{RetentionTime: "15d", Networks: []string{"10.10.0.0/24"}},
 			},
 			Services: []v1alpha1.StorageCephService{{
-				ServiceType: "nfs",
+				ServiceType: "snmp-gateway",
 				ServiceID:   "shared",
 				Placement:   v1alpha1.StoragePlacement{Sites: []string{"lab"}},
-				Spec:        map[string]any{"port": 2049},
+				Spec:        map[string]any{"port": 9464},
 			}},
 			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
 				{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Site: "lab", Roles: []string{"mon", "prometheus", "grafana"}},
@@ -789,15 +848,15 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 	if byType["alertmanager"] != nil || byType["node-exporter"] != nil {
 		t.Fatal("services with neither role nor block must keep the cephadm default (no spec)")
 	}
-	nfs := byType["nfs"]
-	if nfs == nil || nfs["service_id"] != "shared" {
-		t.Fatalf("nfs passthrough spec = %v", nfs)
+	passthrough := byType["snmp-gateway"]
+	if passthrough == nil || passthrough["service_id"] != "shared" {
+		t.Fatalf("snmp-gateway passthrough spec = %v", passthrough)
 	}
-	if got := nfs["placement"].(map[string]any)["hosts"].([]string); !reflect.DeepEqual(got, []string{"ceph-0"}) {
-		t.Fatalf("nfs hosts = %v, want [ceph-0] (sites narrowing)", got)
+	if got := passthrough["placement"].(map[string]any)["hosts"].([]string); !reflect.DeepEqual(got, []string{"ceph-0"}) {
+		t.Fatalf("passthrough hosts = %v, want [ceph-0] (sites narrowing)", got)
 	}
-	if got := nfs["spec"].(map[string]any)["port"]; got != 2049 {
-		t.Fatalf("nfs port = %v", got)
+	if got := passthrough["spec"].(map[string]any)["port"]; got != 9464 {
+		t.Fatalf("passthrough port = %v", got)
 	}
 
 	ops := CephOperations(state, cluster)["operations"].([]map[string]any)

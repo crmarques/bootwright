@@ -124,6 +124,12 @@ func filterStorageObjects(state v1alpha1.State, selected map[string]bool) v1alph
 			gateways = append(gateways, gateway)
 		}
 	}
+	var nfsExports []v1alpha1.StorageNFSExport
+	for _, nfs := range state.StorageNFSExports {
+		if selected[nfs.Spec.StorageClusterRef.Name] {
+			nfsExports = append(nfsExports, nfs)
+		}
+	}
 	var exports []v1alpha1.StorageExport
 	for _, export := range state.StorageExports {
 		if selected[export.Spec.StorageClusterRef.Name] {
@@ -135,6 +141,7 @@ func filterStorageObjects(state v1alpha1.State, selected map[string]bool) v1alph
 	state.StoragePools = pools
 	state.StorageFilesystems = filesystems
 	state.StorageObjectGateways = gateways
+	state.StorageNFSExports = nfsExports
 	state.StorageExports = exports
 	return state
 }
@@ -220,11 +227,18 @@ func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]b
 		filteredClusters = append(filteredClusters, cluster)
 		addStorageClusterMachines(selectedMachines, cluster)
 	}
+	var filteredNFSExports []v1alpha1.StorageNFSExport
+	for _, nfs := range state.StorageNFSExports {
+		if selectedStorageClusters[nfs.Spec.StorageClusterRef.Name] {
+			filteredNFSExports = append(filteredNFSExports, nfs)
+		}
+	}
 	state.StorageClusters = filteredClusters
 	state.StoragePlacementPolicies = filteredPolicies
 	state.StoragePools = filteredPools
 	state.StorageFilesystems = filteredFilesystems
 	state.StorageObjectGateways = filteredGateways
+	state.StorageNFSExports = filteredNFSExports
 	state.StorageExports = filteredExports
 	return state
 }
@@ -448,6 +462,7 @@ func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.S
 	storagePools := map[string]bool{}
 	storageFilesystems := map[string]bool{}
 	storageObjectGateways := map[string]bool{}
+	storageNFSExports := map[string]bool{}
 	storageExports := map[string]bool{}
 	clusterAddons := map[string]bool{}
 	clusterAddonProfiles := map[string]bool{}
@@ -461,6 +476,7 @@ func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.S
 		addNames(storagePools, part.StoragePools, func(item v1alpha1.StoragePool) string { return item.Metadata.Name })
 		addNames(storageFilesystems, part.StorageFilesystems, func(item v1alpha1.StorageFilesystem) string { return item.Metadata.Name })
 		addNames(storageObjectGateways, part.StorageObjectGateways, func(item v1alpha1.StorageObjectGateway) string { return item.Metadata.Name })
+		addNames(storageNFSExports, part.StorageNFSExports, func(item v1alpha1.StorageNFSExport) string { return item.Metadata.Name })
 		addNames(storageExports, part.StorageExports, func(item v1alpha1.StorageExport) string { return item.Metadata.Name })
 		addNames(clusterAddons, part.ClusterAddons, func(item v1alpha1.ClusterAddon) string { return item.Metadata.Name })
 		addNames(clusterAddonProfiles, part.ClusterAddonProfiles, func(item v1alpha1.ClusterAddonProfile) string { return item.Metadata.Name })
@@ -474,6 +490,7 @@ func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.S
 	out.StoragePools = filterByName(base.StoragePools, storagePools, func(item v1alpha1.StoragePool) string { return item.Metadata.Name })
 	out.StorageFilesystems = filterByName(base.StorageFilesystems, storageFilesystems, func(item v1alpha1.StorageFilesystem) string { return item.Metadata.Name })
 	out.StorageObjectGateways = filterByName(base.StorageObjectGateways, storageObjectGateways, func(item v1alpha1.StorageObjectGateway) string { return item.Metadata.Name })
+	out.StorageNFSExports = filterByName(base.StorageNFSExports, storageNFSExports, func(item v1alpha1.StorageNFSExport) string { return item.Metadata.Name })
 	out.StorageExports = filterByName(base.StorageExports, storageExports, func(item v1alpha1.StorageExport) string { return item.Metadata.Name })
 	out.ClusterAddons = filterByName(base.ClusterAddons, clusterAddons, func(item v1alpha1.ClusterAddon) string { return item.Metadata.Name })
 	out.ClusterAddonProfiles = filterByName(base.ClusterAddonProfiles, clusterAddonProfiles, func(item v1alpha1.ClusterAddonProfile) string { return item.Metadata.Name })

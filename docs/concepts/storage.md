@@ -175,7 +175,8 @@ apply` document.
 
 !!! warning "Do not duplicate first-class surfaces"
     Do not declare service types already owned by Bootwright surfaces —
-    monitors, managers, OSDs, MDS, RGW, ingress, or the monitoring services.
+    monitors, managers, OSDs, MDS, RGW, NFS, ingress, or the monitoring
+    services.
 
 ### Topology
 
@@ -426,10 +427,35 @@ state leaves the live service running (additive-only).
     by `ContainerCluster`. Downstream consumers reference the gateway. See
     [Networking](../advanced/networking.md).
 
+## StorageNFSExport
+
+Owns one cephadm NFS-Ganesha service and its exports. Deleting the object from
+desired state leaves the live service and exports running (additive-only). cephadm
+auto-provisions the backing `.nfs` pool, so no pool/namespace is modeled.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `spec.storageClusterRef` | Yes | — | Managed `StorageCluster`. |
+| `spec.ceph.serviceID` | Yes | — | NFS service ID (`--cluster-id`). |
+| `spec.ceph.placement` | Yes | — | Must set `hosts` or `sites` (there is no `nfs` topology role); see [Shared placement](#shared-placement). |
+| `spec.ceph.ingresses[]` | No | — | Ingress VIPs fronting `nfs.<serviceID>` (same shape as the RGW gateway ingress). |
+| `spec.exports[]` | No | — | NFS exports; each renders an idempotent `ceph nfs export create`. |
+| `spec.exports[].pseudo` | Yes (per entry) | — | NFSv4 pseudo path (`--pseudo-path`); unique within the service. |
+| `spec.exports[].filesystemRef` | One of two FSALs | — | CephFS export (`--fsname`); a `StorageFilesystem` in the same cluster. |
+| `spec.exports[].path` | No | `/` | Directory within the filesystem (`--path`). |
+| `spec.exports[].bucket` | One of two FSALs | — | RGW export (`--bucket`). |
+| `spec.exports[].accessType` | No | — | `RW`, `RO` (renders `--readonly`), or `NONE`. |
+| `spec.exports[].squash` | No | — | NFS squash mode (`--squash`, e.g. `no_root_squash`). |
+| `spec.exports[].clients[]` | No | — | Restrict access by address/CIDR (`--client-addr`). |
+
+!!! note "Cross-field rule"
+    Each export sets **exactly one** of `filesystemRef` (CephFS, FSAL CEPH) or
+    `bucket` (RGW, FSAL RGW).
+
 ## Shared placement
 
 `StoragePlacement` selects where a Ceph service runs. It appears on monitoring
-services, passthrough services, MDS, RGW, and ingress.
+services, passthrough services, MDS, RGW, NFS, and ingress.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |

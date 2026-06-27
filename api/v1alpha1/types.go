@@ -30,6 +30,7 @@ const (
 	KindStoragePool            = "StoragePool"
 	KindStorageFilesystem      = "StorageFilesystem"
 	KindStorageObjectGateway   = "StorageObjectGateway"
+	KindStorageNFSExport       = "StorageNFSExport"
 	KindStorageExport          = "StorageExport"
 	KindClusterAddon           = "ClusterAddon"
 	KindClusterAddonProfile    = "ClusterAddonProfile"
@@ -273,6 +274,11 @@ const (
 	StoragePoolAutoscaleModeOff  = "off"
 	StoragePoolAutoscaleModeWarn = "warn"
 
+	// NFS export access types.
+	StorageNFSAccessReadWrite = "RW"
+	StorageNFSAccessReadOnly  = "RO"
+	StorageNFSAccessNone      = "NONE"
+
 	// compression_mode values.
 	StoragePoolCompressionModeNone       = "none"
 	StoragePoolCompressionModePassive    = "passive"
@@ -344,6 +350,7 @@ type State struct {
 	StoragePools             []StoragePool            `yaml:"storagePools,omitempty" json:"storagePools,omitempty"`
 	StorageFilesystems       []StorageFilesystem      `yaml:"storageFilesystems,omitempty" json:"storageFilesystems,omitempty"`
 	StorageObjectGateways    []StorageObjectGateway   `yaml:"storageObjectGateways,omitempty" json:"storageObjectGateways,omitempty"`
+	StorageNFSExports        []StorageNFSExport       `yaml:"storageNFSExports,omitempty" json:"storageNFSExports,omitempty"`
 	StorageExports           []StorageExport          `yaml:"storageExports,omitempty" json:"storageExports,omitempty"`
 	ClusterAddons            []ClusterAddon           `yaml:"clusterAddons,omitempty" json:"clusterAddons,omitempty"`
 	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`

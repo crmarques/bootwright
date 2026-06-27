@@ -759,6 +759,30 @@ Rules:
   rendered verbatim to the cephadm ingress `virtual_interface_networks`), and
   a `placement` that defaults to every `ingress`-role host, narrowed by
   `sites`/`hosts` (per-site VIPs author `placement.sites`).
+- Optional `spec.ceph.realm`/`zoneGroup`/`zone` bind the RGW to a named
+  multisite realm (rendered as `rgw_realm`/`rgw_zonegroup`/`rgw_zone`); all three
+  are set together, and Bootwright creates them and commits the period before the
+  service applies. Optional `spec.ceph.config` is a per-RGW
+  `ceph config set client.rgw.<serviceID>` map (one owner: a key must not also
+  appear in the cluster config map, and `rgw_frontend_port` is reserved).
+
+## StorageNFSExport
+
+`StorageNFSExport` owns one cephadm NFS-Ganesha service and its exports.
+
+Rules:
+
+- `spec.storageClusterRef` is required and must reference a managed
+  `StorageCluster`. `spec.ceph.serviceID` is required.
+- `spec.ceph.placement` must set `hosts` or `sites` (there is no `nfs` topology
+  role). `spec.ceph.ingresses[]` mirror the RGW ingress shape and front
+  `nfs.<serviceID>`.
+- Each `spec.exports[]` sets a unique `pseudo` path and exactly one FSAL —
+  `filesystemRef` (CephFS, same cluster) or `bucket` (RGW). Optional `path`,
+  `accessType` (`RW`/`RO`/`NONE`), `squash`, and `clients[]` spell the
+  `ceph nfs export create` flags. cephadm auto-provisions the backing `.nfs`
+  pool, so no pool/namespace is modeled. Additive-only: a removed export keeps
+  running.
 
 ## StorageExport
 
