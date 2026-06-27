@@ -857,6 +857,12 @@ func TestStoragePoolTuningValidation(t *testing.T) {
 		{name: "compression-without-mode", spec: v1alpha1.StoragePoolCephSpec{
 			Compression: &v1alpha1.StoragePoolCompression{Algorithm: "zstd"},
 		}, want: `compression sets tuning without compression.mode`},
+		{name: "valid-mirroring", spec: v1alpha1.StoragePoolCephSpec{
+			Mirroring: &v1alpha1.StoragePoolMirroring{Mode: "image"},
+		}},
+		{name: "bad-mirroring-mode", spec: v1alpha1.StoragePoolCephSpec{
+			Mirroring: &v1alpha1.StoragePoolMirroring{Mode: "snapshot"},
+		}, want: `.mirroring.mode "snapshot" must be one of`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

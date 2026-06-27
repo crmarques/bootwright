@@ -412,6 +412,18 @@ type StoragePoolCephSpec struct {
 	// Compression tunes inline BlueStore compression via
 	// `ceph osd pool set compression_*` (last-write-wins; not structural).
 	Compression *StoragePoolCompression `yaml:"compression,omitempty" json:"compression,omitempty"`
+	// Mirroring enables RBD mirroring on the pool (`rbd mirror pool enable`).
+	// Additive-only: Bootwright never disables mirroring. Deploy the rbd-mirror
+	// daemon via spec.ceph.services[] (service_type: rbd-mirror). Peer setup is
+	// out of scope today (it needs secret-backed bootstrap tokens).
+	Mirroring *StoragePoolMirroring `yaml:"mirroring,omitempty" json:"mirroring,omitempty"`
+}
+
+// StoragePoolMirroring enables RBD mirroring on a pool.
+type StoragePoolMirroring struct {
+	// Mode is the rbd mirroring mode: image (per-image opt-in) or pool (all
+	// images in the pool).
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
 // StoragePoolAutoscale mirrors the PG-autoscaler `ceph osd pool set` options.

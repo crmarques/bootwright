@@ -274,6 +274,10 @@ const (
 	StoragePoolAutoscaleModeOff  = "off"
 	StoragePoolAutoscaleModeWarn = "warn"
 
+	// rbd mirroring modes.
+	StoragePoolMirroringModeImage = "image"
+	StoragePoolMirroringModePool  = "pool"
+
 	// NFS export access types.
 	StorageNFSAccessReadWrite = "RW"
 	StorageNFSAccessReadOnly  = "RO"

@@ -423,6 +423,11 @@ func storagePoolTuningOperations(pool v1alpha1.StoragePool) []map[string]any {
 			setOp("compression-max-blob-size", "compression_max_blob_size", c.MaxBlobSize)
 		}
 	}
+	if m := pool.Spec.Ceph.Mirroring; m != nil && m.Mode != "" {
+		// rbd mirror pool enable is idempotent on Ceph; additive-only, so a
+		// removed mirroring block never disables the live pool.
+		ops = append(ops, operationInPhase("storage", "enable-rbd-mirror-"+name, "rbd", "mirror", "pool", "enable", name, m.Mode))
+	}
 	return ops
 }
 

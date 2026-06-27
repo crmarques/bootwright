@@ -354,6 +354,7 @@ autoscaler owns them.
 | `compression.requiredRatio` | No | — | `compression_required_ratio` `(0,1]`. |
 | `compression.minBlobSize` | No | — | `compression_min_blob_size` (e.g. `8K`). |
 | `compression.maxBlobSize` | No | — | `compression_max_blob_size`. |
+| `mirroring.mode` | No | — | Enable RBD mirroring (`rbd mirror pool enable`): `image` or `pool`. Additive-only (never disabled). Deploy the `rbd-mirror` daemon via `spec.ceph.services[]`; peer setup is out of scope today. |
 
 ## StorageFilesystem
 

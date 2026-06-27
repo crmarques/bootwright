@@ -329,6 +329,7 @@ func TestPoolTuningAndCrushDeviceClassRender(t *testing.T) {
 					Autoscale:   &v1alpha1.StoragePoolAutoscale{Mode: "on", TargetSizeRatio: 0.4, Bulk: &bulk},
 					Quota:       &v1alpha1.StoragePoolQuota{MaxBytes: &maxBytes},
 					Compression: &v1alpha1.StoragePoolCompression{Mode: "aggressive", Algorithm: "zstd"},
+					Mirroring:   &v1alpha1.StoragePoolMirroring{Mode: "pool"},
 				},
 			},
 		}},
@@ -363,6 +364,9 @@ func TestPoolTuningAndCrushDeviceClassRender(t *testing.T) {
 	}
 	if got := byName["set-pool-compression-algorithm-rbd"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "pool", "set", "rbd", "compression_algorithm", "zstd"}) {
 		t.Fatalf("compression-algorithm = %v", got)
+	}
+	if got := byName["enable-rbd-mirror-rbd"]; !reflect.DeepEqual(got, []string{"rbd", "mirror", "pool", "enable", "rbd", "pool"}) {
+		t.Fatalf("rbd mirror enable = %v", got)
 	}
 }
 

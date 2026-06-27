@@ -186,6 +186,13 @@ func validateStoragePoolTuning(prefix string, spec v1alpha1.StoragePoolCephSpec)
 			errs = append(errs, prefix+".compression sets tuning without compression.mode")
 		}
 	}
+	if m := spec.Mirroring; m != nil {
+		switch m.Mode {
+		case "", v1alpha1.StoragePoolMirroringModeImage, v1alpha1.StoragePoolMirroringModePool:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.mirroring.mode %q must be one of {image, pool}", prefix, m.Mode))
+		}
+	}
 	return errs
 }
 
