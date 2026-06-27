@@ -16,6 +16,9 @@
     - name: Pin cephadm container image base
       ansible.builtin.include_tasks: bootstrap_steps/container_image_base.yml
 
+    - name: Reconcile cephadm registry login
+      ansible.builtin.include_tasks: bootstrap_steps/registry_login.yml
+
     - name: Capture dashboard bootstrap secret
       ansible.builtin.include_tasks: bootstrap_steps/dashboard_secret.yml
 

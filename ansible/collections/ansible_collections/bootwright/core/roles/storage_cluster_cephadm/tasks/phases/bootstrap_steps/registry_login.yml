@@ -1,0 +1,24 @@
+---
+# cephadm bootstrap seeds the registry login once (--registry-json), but day-2
+# daemon pulls authenticate from the mgr cephadm registry store, NOT from a
+# node-level podman login. When subscription/registry credentials rotate, the
+# bootstrap-time login goes stale and every new daemon pull 401s — masked on the
+# nodes that still hold a podman login. Re-push the resolved credentials to the
+# mgr store on every apply so a rotated credentialsRef takes effect cluster-wide.
+# Idempotent: re-pushing the same credentials is a no-op on the store, so this
+# reconciles drift without reporting a change. Runs only when registry
+# credentials were resolved (subscription-backed redhat/ibm, or an oss mirror
+# behind auth); the registry-login.json staged for bootstrap is still present
+# (cleanup runs later, in the block's always section).
+- name: Reconcile cephadm registry login for credential rotation
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - cephadm
+      - registry-login
+      - -i
+      - "{{ bootwright_ceph_remote_registry_json }}"
+  register: bootwright_ceph_registry_login
+  changed_when: false
+  no_log: true
+  when: bootwright_ceph_registry_credentials is defined

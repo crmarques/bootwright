@@ -2820,6 +2820,29 @@ func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 	}
 }
 
+// The day-2 registry-login reconcile re-pushes resolved registry credentials to
+// the mgr cephadm store on every apply (so a rotated credentialsRef takes
+// effect cluster-wide), gated on credentials being resolved, no_log, and run
+// after the cluster exists (after the image-base pin) but before cleanup.
+func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
+	tasks := storageCephBootstrapTasks(t)
+	idx := findAnsibleTask(t, tasks, "Reconcile cephadm registry login for credential rotation")
+	step := tasks[idx]
+	if got := fmt.Sprint(step["ansible.builtin.command"]); !strings.Contains(got, "registry-login") || !strings.Contains(got, "bootwright_ceph_remote_registry_json") {
+		t.Fatalf("registry login must run ceph cephadm registry-login -i <json>, got %v", step["ansible.builtin.command"])
+	}
+	if got := fmt.Sprint(step["when"]); !strings.Contains(got, "bootwright_ceph_registry_credentials is defined") {
+		t.Fatalf("registry login must be gated on resolved credentials, got when=%v", step["when"])
+	}
+	if step["no_log"] != true {
+		t.Fatalf("registry login must set no_log: true, got %v", step["no_log"])
+	}
+	pinIdx := findAnsibleTask(t, tasks, "Pin cephadm container image base to the distribution registry")
+	if !(pinIdx < idx) {
+		t.Fatalf("registry login reconcile must run after the cluster exists (pin=%d login=%d)", pinIdx, idx)
+	}
+}
+
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
@@ -4428,6 +4451,7 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 		base+"bootstrap_cluster.yml",
 		base+"ownership_marker.yml",
 		base+"container_image_base.yml",
+		base+"registry_login.yml",
 		base+"dashboard_secret.yml",
 		base+"service_specs.yml",
 		base+"data_foundation_base.yml",

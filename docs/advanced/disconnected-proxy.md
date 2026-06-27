@@ -235,6 +235,13 @@ estate keeps RHEL package fetches inside the perimeter. See
 [Managed OS installs](managed-os.md) and the entitlement model on
 [Environment](../concepts/environment.md).
 
+!!! note "Managed-Ceph registry credential rotation"
+    For managed Ceph, each `apply` re-pushes the resolved registry credentials to
+    the cephadm manager store (`ceph cephadm registry-login`). Rotating the
+    entitlement's registry credentials therefore takes effect cluster-wide on the
+    next `apply` — day-2 daemon pulls authenticate from the manager store, not
+    from a node-level `podman login`, so no manual re-login is needed.
+
 ## Host trust for disconnected labs
 
 Disconnected hosts are reached over SSH like any other machine. A non-interactive
