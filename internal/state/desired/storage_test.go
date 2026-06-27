@@ -933,6 +933,32 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 	}
 }
 
+// TestStorageGatewayRealmAndConfigValidation covers the all-or-nothing realm
+// binding and the per-RGW config one-owner / reserved-key guards.
+func TestStorageGatewayRealmAndConfigValidation(t *testing.T) {
+	gwWith := func(c v1alpha1.StorageObjectGatewayCephSpec) v1alpha1.StorageObjectGateway {
+		return v1alpha1.StorageObjectGateway{Metadata: v1alpha1.Metadata{Name: "s3"}, Spec: v1alpha1.StorageObjectGatewaySpec{Ceph: c}}
+	}
+	if errs := validateStorageGatewayRealm("p", gwWith(v1alpha1.StorageObjectGatewayCephSpec{Realm: "r", ZoneGroup: "zg", Zone: "z"})); len(errs) != 0 {
+		t.Fatalf("complete realm binding should pass, got %v", errs)
+	}
+	if got := strings.Join(validateStorageGatewayRealm("p", gwWith(v1alpha1.StorageObjectGatewayCephSpec{Realm: "r"})), "; "); !strings.Contains(got, "all-or-nothing") {
+		t.Fatalf("partial realm binding should be rejected, got %q", got)
+	}
+
+	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Config: map[string]map[string]string{"client.rgw.s3": {"rgw_thread_pool_size": "512"}},
+	}}}
+	dup := gwWith(v1alpha1.StorageObjectGatewayCephSpec{ServiceID: "s3", Config: map[string]string{"rgw_thread_pool_size": "256"}})
+	if got := strings.Join(validateStorageGatewayConfig("p", dup, cluster, true), "; "); !strings.Contains(got, "declare it in one place") {
+		t.Fatalf("config key set in both places should be rejected, got %q", got)
+	}
+	reserved := gwWith(v1alpha1.StorageObjectGatewayCephSpec{ServiceID: "s3", Config: map[string]string{"rgw_frontend_port": "8080"}})
+	if got := strings.Join(validateStorageGatewayConfig("p", reserved, v1alpha1.StorageCluster{}, false), "; "); !strings.Contains(got, "owned by spec.ceph.frontendPort") {
+		t.Fatalf("rgw_frontend_port in config should be rejected, got %q", got)
+	}
+}
+
 // TestValidCephConfigSectionMasks covers the CRUSH config-DB masks: a who-target
 // may carry a single /class:<v> or /<bucket>:<v> mask.
 func TestValidCephConfigSectionMasks(t *testing.T) {

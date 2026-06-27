@@ -15,6 +15,12 @@ spec:
 
   ceph:
     serviceID: ceph-ibm
+    # Name the realm/zonegroup/zone (all-or-nothing). Bootwright creates them and
+    # commits the period before the RGW deploys; a named single-site zone is
+    # stable and ready to grow into multisite without a rebuild.
+    realm: ceph-ibm
+    zoneGroup: ceph-ibm
+    zone: ceph-ibm-1
     # RGW daemons on both full nodes.
     placement:
       hosts:

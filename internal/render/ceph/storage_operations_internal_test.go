@@ -621,6 +621,72 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
+// An RGW realm/zone binding emits idempotent radosgw-admin creates plus a
+// period commit in the storage phase (before the rgw service applies), renders
+// rgw_realm/rgw_zonegroup/rgw_zone into the service spec, and seeds per-RGW
+// config under client.rgw.<id>.
+func TestRGWRealmZoneAndConfigRender(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"rgw"},
+			}}},
+		}},
+	}
+	gw := v1alpha1.StorageObjectGateway{
+		Metadata: v1alpha1.Metadata{Name: "s3"},
+		Spec: v1alpha1.StorageObjectGatewaySpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+			Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "s3.example.com"},
+			Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+				ServiceID: "s3", Realm: "prod", ZoneGroup: "us", Zone: "us-east",
+				Config: map[string]string{"rgw_max_objs_per_shard": "100000"},
+			},
+		},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}, StorageObjectGateways: []v1alpha1.StorageObjectGateway{gw}}
+
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	byName := map[string]map[string]any{}
+	var order []string
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		byName[name] = op
+		order = append(order, name)
+	}
+	realmCmd, _ := byName["create-rgw-realm-prod"]["command"].([]string)
+	if !reflect.DeepEqual(realmCmd, []string{"radosgw-admin", "realm", "create", "--rgw-realm=prod", "--default"}) {
+		t.Fatalf("realm create = %v", realmCmd)
+	}
+	if byName["create-rgw-realm-prod"]["phase"] != "storage" {
+		t.Fatalf("realm create must be in the storage phase (before late services), got %v", byName["create-rgw-realm-prod"]["phase"])
+	}
+	zoneCmd, _ := byName["create-rgw-zone-us-east"]["command"].([]string)
+	if !reflect.DeepEqual(zoneCmd, []string{"radosgw-admin", "zone", "create", "--rgw-zone=us-east", "--rgw-zonegroup=us", "--rgw-realm=prod", "--master", "--default"}) {
+		t.Fatalf("zone create = %v", zoneCmd)
+	}
+	if _, ok := byName["commit-rgw-period-prod"]; !ok {
+		t.Fatal("a realm binding must commit the period so a single-site zone serves")
+	}
+	cfgCmd, _ := byName["set-rgw-config-s3-rgw_max_objs_per_shard"]["command"].([]string)
+	if !reflect.DeepEqual(cfgCmd, []string{"ceph", "config", "set", "client.rgw.s3", "rgw_max_objs_per_shard", "100000"}) {
+		t.Fatalf("per-rgw config = %v", cfgCmd)
+	}
+
+	var rgw map[string]any
+	for _, doc := range CephadmLateServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		if m["service_type"] == "rgw" {
+			rgw = m
+		}
+	}
+	spec := rgw["spec"].(map[string]any)
+	if spec["rgw_realm"] != "prod" || spec["rgw_zonegroup"] != "us" || spec["rgw_zone"] != "us-east" {
+		t.Fatalf("rgw spec realm/zone = %v", spec)
+	}
+}
+
 // The bootstrap ceph.conf seeds public_network plus the global/mon/osd config
 // sections (no masks, no mgr/mds/client) so cephadm's auto-created pools honor
 // the declared defaults; the post-bootstrap ceph config set ops still run.

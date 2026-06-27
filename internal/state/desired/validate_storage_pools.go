@@ -316,6 +316,8 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 		if gw.Spec.Ceph.FrontendPort < 0 || gw.Spec.Ceph.FrontendPort > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.ceph.frontendPort %d out of range", prefix, gw.Spec.Ceph.FrontendPort))
 		}
+		errs = append(errs, validateStorageGatewayRealm(prefix+".ceph", gw)...)
+		errs = append(errs, validateStorageGatewayConfig(prefix+".ceph.config", gw, cluster, ok)...)
 		errs = append(errs, validateStorageGatewayPublicEndpoint(prefix+".public", gw)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
@@ -337,6 +339,47 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 		}
 		if ok && storageClusterStretchEnabled(cluster) && len(gw.Spec.Ceph.Ingresses) > 0 {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.ingresses", ingressHosts, cluster, v1alpha1.StorageCephRoleIngress)...)
+		}
+	}
+	return errs
+}
+
+// validateStorageGatewayRealm enforces the all-or-nothing realm/zonegroup/zone
+// binding: a named multisite deployment needs all three, so setting any one
+// requires the others.
+func validateStorageGatewayRealm(prefix string, gw v1alpha1.StorageObjectGateway) []string {
+	realm, zg, zone := gw.Spec.Ceph.Realm, gw.Spec.Ceph.ZoneGroup, gw.Spec.Ceph.Zone
+	if realm == "" && zg == "" && zone == "" {
+		return nil
+	}
+	if realm == "" || zg == "" || zone == "" {
+		return []string{prefix + " realm, zoneGroup, and zone must be set together (all-or-nothing)"}
+	}
+	return nil
+}
+
+// validateStorageGatewayConfig checks the per-RGW config map: non-empty values,
+// no rgw_frontend_port (owned by frontendPort), and one-owner against the
+// cluster's config[client.rgw.<serviceID>] section (so a key is declared once).
+func validateStorageGatewayConfig(prefix string, gw v1alpha1.StorageObjectGateway, cluster v1alpha1.StorageCluster, clusterOK bool) []string {
+	if len(gw.Spec.Ceph.Config) == 0 {
+		return nil
+	}
+	var errs []string
+	var clusterSection map[string]string
+	if clusterOK && cluster.Spec.Ceph != nil {
+		clusterSection = cluster.Spec.Ceph.Config["client.rgw."+gw.Spec.Ceph.ServiceID]
+	}
+	for _, key := range sortedStringKeys2(gw.Spec.Ceph.Config) {
+		owner := fmt.Sprintf("%s.%s", prefix, key)
+		if key == "rgw_frontend_port" {
+			errs = append(errs, owner+" is owned by spec.ceph.frontendPort; declare it there")
+		}
+		if gw.Spec.Ceph.Config[key] == "" {
+			errs = append(errs, owner+" must not be empty")
+		}
+		if _, dup := clusterSection[key]; dup {
+			errs = append(errs, fmt.Sprintf("%s is also set in StorageCluster spec.ceph.config[client.rgw.%s]; declare it in one place", owner, gw.Spec.Ceph.ServiceID))
 		}
 	}
 	return errs

@@ -124,6 +124,15 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			continue
 		}
 		spec := map[string]any{"rgw_frontend_port": gw.Spec.Ceph.FrontendPort}
+		if gw.Spec.Ceph.Realm != "" {
+			spec["rgw_realm"] = gw.Spec.Ceph.Realm
+		}
+		if gw.Spec.Ceph.ZoneGroup != "" {
+			spec["rgw_zonegroup"] = gw.Spec.Ceph.ZoneGroup
+		}
+		if gw.Spec.Ceph.Zone != "" {
+			spec["rgw_zone"] = gw.Spec.Ceph.Zone
+		}
 		docs = append(docs, cephadmPlacementService("rgw", gw.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, gw.Spec.Ceph.Placement, v1alpha1.StorageCephRoleRGW), gw.Spec.Ceph.Placement.CountPerHost, spec))
 		publicEndpoint, _ := topology.GatewayPublicEndpoint(gw)
 		for _, ingress := range gw.Spec.Ceph.Ingresses {

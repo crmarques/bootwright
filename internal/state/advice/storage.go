@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -34,7 +33,7 @@ type StorageAdvisory struct {
 // golden tests render a stable warning list. It reads only the Ceph spec, so it
 // is safe to call on any validated state.
 func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
-	disconnected := environmentIsDisconnected(stateview.Environment(state))
+	disconnected := environmentIsDisconnected(state)
 	var out []StorageAdvisory
 	for _, cluster := range state.StorageClusters {
 		if cluster.Spec.Ceph == nil || v1alpha1.StorageClusterExternal(cluster) {
@@ -51,12 +50,17 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 
 // environmentIsDisconnected reports whether the Environment routes images
 // through a mirror or digest-source remap — the disconnected posture in which
-// cephadm's upstream sidecar image defaults are unreachable.
-func environmentIsDisconnected(env *v1alpha1.Environment) bool {
-	if env == nil || env.Spec.Registries == nil {
+// cephadm's upstream sidecar image defaults are unreachable. It reads the
+// Environment off the state directly to keep advice free of cross-package deps.
+func environmentIsDisconnected(state v1alpha1.State) bool {
+	if len(state.Environments) == 0 {
 		return false
 	}
-	return env.Spec.Registries.Mirror != nil || len(env.Spec.Registries.ImageDigestSources) > 0
+	registries := state.Environments[0].Spec.Registries
+	if registries == nil {
+		return false
+	}
+	return registries.Mirror != nil || len(registries.ImageDigestSources) > 0
 }
 
 // storageSidecarImageAdvisories flags the airgap foot-gun: cephadm pulls the

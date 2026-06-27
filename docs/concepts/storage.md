@@ -410,6 +410,10 @@ state leaves the live service running (additive-only).
 | `spec.ceph.serviceID` | Yes | — | RGW service ID. |
 | `spec.ceph.placement` | No | every host carrying the `rgw` role | RGW placement; see [Shared placement](#shared-placement). |
 | `spec.ceph.frontendPort` | No | cephadm default | RGW frontend port (0–65535). |
+| `spec.ceph.realm` | No | implicit default | Multisite realm (`rgw_realm`). Set with `zoneGroup` and `zone` (all-or-nothing). Bootwright creates the realm/zonegroup/zone and commits the period; even a single site benefits from a stable named zone. |
+| `spec.ceph.zoneGroup` | No | — | Multisite zonegroup (`rgw_zonegroup`). |
+| `spec.ceph.zone` | No | — | Multisite zone (`rgw_zone`). |
+| `spec.ceph.config` | No | — | Per-RGW options applied as `ceph config set client.rgw.<serviceID>`. Values must not be empty; `rgw_frontend_port` is owned by `frontendPort`; a key must not also appear in the cluster `config[client.rgw.<serviceID>]` section. |
 | `spec.ceph.ingresses[]` | No | — | cephadm ingress VIPs. |
 | `spec.ceph.ingresses[].name` | Yes (per entry) | — | Ingress name; unique within the gateway. |
 | `spec.ceph.ingresses[].address` | Yes (per entry) | — | VIP address. |

@@ -629,10 +629,24 @@ type StorageObjectGatewayPublic struct {
 }
 
 type StorageObjectGatewayCephSpec struct {
-	ServiceID    string                        `yaml:"serviceID" json:"serviceID"`
-	Placement    StoragePlacement              `yaml:"placement" json:"placement"`
-	FrontendPort int                           `yaml:"frontendPort,omitempty" json:"frontendPort,omitempty"`
-	Ingresses    []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
+	ServiceID    string           `yaml:"serviceID" json:"serviceID"`
+	Placement    StoragePlacement `yaml:"placement" json:"placement"`
+	FrontendPort int              `yaml:"frontendPort,omitempty" json:"frontendPort,omitempty"`
+	// Realm / ZoneGroup / Zone bind the RGW to a named multisite realm
+	// (rgw_realm / rgw_zonegroup / rgw_zone in the service spec). cephadm does
+	// not create them, so Bootwright emits idempotent radosgw-admin
+	// realm/zonegroup/zone creates plus a period commit before the service
+	// applies. All three are set together (all-or-nothing); even a single site
+	// benefits from a named zone (stable naming, future multisite). Omitting
+	// them keeps the implicit default zone.
+	Realm     string `yaml:"realm,omitempty" json:"realm,omitempty"`
+	ZoneGroup string `yaml:"zoneGroup,omitempty" json:"zoneGroup,omitempty"`
+	Zone      string `yaml:"zone,omitempty" json:"zone,omitempty"`
+	// Config declares RGW options applied as `ceph config set client.rgw.<id>`,
+	// co-located with the gateway so the serviceID owns the section (no manual
+	// matching against the cluster config map, which would orphan on rename).
+	Config    map[string]string             `yaml:"config,omitempty" json:"config,omitempty"`
+	Ingresses []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
 }
 
 // StorageObjectGatewayIngress is one storage-owned RGW ingress VIP. Address and

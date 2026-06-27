@@ -172,6 +172,38 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	for _, module := range cluster.Spec.Ceph.MgrModules {
 		ops = append(ops, operationWithIdempotency("topology", "enable-mgr-module-"+module, "mgr-module", module, "ceph", "mgr", "module", "enable", module))
 	}
+	// RGW realm/zonegroup/zone must exist before the rgw daemons start, so these
+	// creates run in the storage phase (before late service specs). cephadm does
+	// not create them. Owner-stamp by name so two gateways sharing a realm emit
+	// the creates once; a period commit follows each realm so a single-site zone
+	// actually serves. Per-RGW config also seeds in the storage phase, scoped to
+	// client.rgw.<serviceID>.
+	createdRealm := map[string]bool{}
+	createdZoneGroup := map[string]bool{}
+	createdZone := map[string]bool{}
+	for _, gw := range state.StorageObjectGateways {
+		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		if realm := gw.Spec.Ceph.Realm; realm != "" && !createdRealm[realm] {
+			createdRealm[realm] = true
+			ops = append(ops, operationWithIdempotency("storage", "create-rgw-realm-"+realm, "rgw-realm", realm, "radosgw-admin", "realm", "create", "--rgw-realm="+realm, "--default"))
+			if zg := gw.Spec.Ceph.ZoneGroup; zg != "" && !createdZoneGroup[zg] {
+				createdZoneGroup[zg] = true
+				ops = append(ops, operationWithIdempotency("storage", "create-rgw-zonegroup-"+zg, "rgw-zonegroup", zg, "radosgw-admin", "zonegroup", "create", "--rgw-zonegroup="+zg, "--rgw-realm="+realm, "--master", "--default"))
+			}
+			if zone := gw.Spec.Ceph.Zone; zone != "" && !createdZone[zone] {
+				createdZone[zone] = true
+				ops = append(ops, operationWithIdempotency("storage", "create-rgw-zone-"+zone, "rgw-zone", zone, "radosgw-admin", "zone", "create", "--rgw-zone="+zone, "--rgw-zonegroup="+gw.Spec.Ceph.ZoneGroup, "--rgw-realm="+realm, "--master", "--default"))
+			}
+			// A single-site realm only serves after its period is committed.
+			ops = append(ops, operationInPhase("storage", "commit-rgw-period-"+realm, "radosgw-admin", "period", "update", "--commit", "--rgw-realm="+realm))
+		}
+		section := "client.rgw." + gw.Spec.Ceph.ServiceID
+		for _, key := range sortedKeys(gw.Spec.Ceph.Config) {
+			ops = append(ops, operationInPhase("storage", "set-rgw-config-"+gw.Metadata.Name+"-"+key, "ceph", "config", "set", section, key, gw.Spec.Ceph.Config[key]))
+		}
+	}
 	for _, gw := range state.StorageObjectGateways {
 		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
