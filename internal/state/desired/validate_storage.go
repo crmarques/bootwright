@@ -445,7 +445,7 @@ func validateStorageCephConfig(prefix string, config map[string]map[string]strin
 	for _, section := range sortedStringKeys(config) {
 		owner := fmt.Sprintf("%s[%s]", prefix, section)
 		if !validCephConfigSection(section) {
-			errs = append(errs, fmt.Sprintf("%s is not a valid ceph config section (accepted: global, mon, mgr, osd, mds, client, or <type>.<id>)", owner))
+			errs = append(errs, fmt.Sprintf("%s is not a valid ceph config section (accepted: global, mon, mgr, osd, mds, client, <type>.<id>, optionally with a /<mask> such as /class:ssd or /rack:r1)", owner))
 		}
 		options := config[section]
 		for _, key := range sortedStringKeys2(options) {
@@ -465,13 +465,35 @@ func validateStorageCephConfig(prefix string, config map[string]map[string]strin
 	return errs
 }
 
+// validCephConfigSection accepts a `ceph config set` who-target, optionally
+// suffixed with a single CRUSH mask: <who>/class:<value> or
+// <who>/<crush-bucket-type>:<value> (host, rack, datacenter, ...). The bucket
+// type is not enumerated — like the stretch failureDomain, any CRUSH type is
+// valid — so the mask only has to be a non-empty key:value with no second slash.
 func validCephConfigSection(section string) bool {
-	switch section {
+	base := section
+	if idx := strings.Index(section, "/"); idx >= 0 {
+		base = section[:idx]
+		mask := section[idx+1:]
+		if strings.Contains(mask, "/") {
+			return false
+		}
+		colon := strings.Index(mask, ":")
+		// key:value with both sides non-empty.
+		if colon <= 0 || colon == len(mask)-1 {
+			return false
+		}
+	}
+	return validCephConfigWho(base)
+}
+
+func validCephConfigWho(who string) bool {
+	switch who {
 	case "global", "mon", "mgr", "osd", "mds", "client":
 		return true
 	}
 	for _, daemon := range []string{"mon.", "mgr.", "osd.", "mds.", "client."} {
-		if strings.HasPrefix(section, daemon) && len(section) > len(daemon) {
+		if strings.HasPrefix(who, daemon) && len(who) > len(daemon) {
 			return true
 		}
 	}

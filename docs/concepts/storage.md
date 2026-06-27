@@ -110,8 +110,11 @@ spec:
     - `ceph.config` **rejects** `public_network` and `cluster_network` keys in
       any section — they are owned by `ceph.networks` (`publicCIDRs` /
       `clusterCIDRs`). Config sections are `global`, `mon`, `mgr`, `osd`, `mds`,
-      `client`, or a `<type>.<id>` daemon section; option values must not be
-      empty.
+      `client`, or a `<type>.<id>` daemon section, optionally suffixed with a
+      single CRUSH mask — `<section>/class:<class>` or
+      `<section>/<crush-bucket-type>:<value>` (e.g. `osd/class:ssd`,
+      `osd/rack:r1`) for per-class or per-location tuning. Option values must
+      not be empty.
     - mgr module settings are declared in `ceph.config` under the `mgr` section
       (`mgr/<module>/<key>`), not on `mgrModules[]`.
     - Removed `config` keys, `mgrModules[]`, and `services[]` are **not** undone

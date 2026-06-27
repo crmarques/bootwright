@@ -905,6 +905,23 @@ func TestStorageECProfileValidation(t *testing.T) {
 	}
 }
 
+// TestValidCephConfigSectionMasks covers the CRUSH config-DB masks: a who-target
+// may carry a single /class:<v> or /<bucket>:<v> mask.
+func TestValidCephConfigSectionMasks(t *testing.T) {
+	valid := []string{"global", "osd", "mds.fs1", "osd/class:ssd", "osd/rack:r1", "client.rgw.s3/datacenter:dc1"}
+	for _, s := range valid {
+		if !validCephConfigSection(s) {
+			t.Errorf("section %q should be valid", s)
+		}
+	}
+	invalid := []string{"", "bogus", "osd/class:", "osd/:ssd", "osd/class:ssd/extra", "osd/nocolon", "mon."}
+	for _, s := range invalid {
+		if validCephConfigSection(s) {
+			t.Errorf("section %q should be invalid", s)
+		}
+	}
+}
+
 func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 	cases := []struct {
 		name string
