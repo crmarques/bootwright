@@ -89,6 +89,7 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 				fmt.Sprintf("m=%d", ec.CodingChunks),
 				"crush-failure-domain=" + topology.StoragePoolFailureDomain(state, cluster, pool),
 			}
+			profileCmd = append(profileCmd, storageECProfileArgs(ec)...)
 			ops = append(ops, operationWithIdempotency("storage", "create-ec-profile-"+pool.Metadata.Name, "ec-profile", profile, profileCmd...))
 			createPool := operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name, "erasure", profile)
 			createPool["structural"] = storagePoolStructural(pool)
@@ -206,11 +207,62 @@ func storagePoolStructural(pool v1alpha1.StoragePool) map[string]any {
 		poolType = v1alpha1.StoragePoolTypeReplicated
 	}
 	structural := map[string]any{"type": poolType}
-	if pool.Spec.Ceph.ErasureCoded != nil {
-		structural["dataChunks"] = pool.Spec.Ceph.ErasureCoded.DataChunks
-		structural["codingChunks"] = pool.Spec.Ceph.ErasureCoded.CodingChunks
+	if ec := pool.Spec.Ceph.ErasureCoded; ec != nil {
+		// The EC profile is immutable on Ceph, so every authored profile field —
+		// including every opaque parameters key — is part of the structural
+		// identity: a change must trigger the --override rebuild, never a no-op.
+		structural["dataChunks"] = ec.DataChunks
+		structural["codingChunks"] = ec.CodingChunks
+		if ec.Plugin != "" {
+			structural["plugin"] = ec.Plugin
+		}
+		if ec.Technique != "" {
+			structural["technique"] = ec.Technique
+		}
+		if ec.CrushDeviceClass != "" {
+			structural["crushDeviceClass"] = ec.CrushDeviceClass
+		}
+		if ec.CrushRoot != "" {
+			structural["crushRoot"] = ec.CrushRoot
+		}
+		if ec.StripeUnit != "" {
+			structural["stripeUnit"] = ec.StripeUnit
+		}
+		if len(ec.Parameters) > 0 {
+			params := map[string]any{}
+			for k, v := range ec.Parameters {
+				params[k] = v
+			}
+			structural["parameters"] = params
+		}
 	}
 	return structural
+}
+
+// storageECProfileArgs renders the optional erasure-code-profile knobs beyond
+// k/m/crush-failure-domain (which the caller already emits) using their native
+// `erasure-code-profile set` spellings. parameters render last, sorted, verbatim.
+func storageECProfileArgs(ec *v1alpha1.StoragePoolErasureCode) []string {
+	var args []string
+	if ec.Plugin != "" {
+		args = append(args, "plugin="+ec.Plugin)
+	}
+	if ec.Technique != "" {
+		args = append(args, "technique="+ec.Technique)
+	}
+	if ec.CrushDeviceClass != "" {
+		args = append(args, "crush-device-class="+ec.CrushDeviceClass)
+	}
+	if ec.CrushRoot != "" {
+		args = append(args, "crush-root="+ec.CrushRoot)
+	}
+	if ec.StripeUnit != "" {
+		args = append(args, "stripe_unit="+ec.StripeUnit)
+	}
+	for _, key := range sortedKeys(ec.Parameters) {
+		args = append(args, key+"="+ec.Parameters[key])
+	}
+	return args
 }
 
 // storagePoolTuningOperations renders the per-pool steady-state intents

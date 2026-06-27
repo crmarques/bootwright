@@ -439,9 +439,29 @@ type StoragePoolCompression struct {
 	MaxBlobSize string `yaml:"maxBlobSize,omitempty" json:"maxBlobSize,omitempty"`
 }
 
+// StoragePoolErasureCode mirrors `ceph osd erasure-code-profile set`: dataChunks
+// (k) and codingChunks (m) plus the profile knobs that materially change
+// durability, recovery, and placement. The whole profile is immutable on Ceph,
+// so every field here is part of the pool's structural identity — a change
+// triggers the data-destroying --override rebuild, never a silent no-op.
 type StoragePoolErasureCode struct {
 	DataChunks   int `yaml:"dataChunks,omitempty" json:"dataChunks,omitempty"`
 	CodingChunks int `yaml:"codingChunks,omitempty" json:"codingChunks,omitempty"`
+	// Plugin selects the EC plugin (jerasure, isa, clay, lrc, shec); each has
+	// distinct recovery/CPU tradeoffs. Defaults to Ceph's own (jerasure).
+	Plugin string `yaml:"plugin,omitempty" json:"plugin,omitempty"`
+	// Technique is the plugin-specific coding technique (e.g. reed_sol_van).
+	Technique string `yaml:"technique,omitempty" json:"technique,omitempty"`
+	// CrushDeviceClass / CrushRoot tier the EC pool onto a device class or a
+	// CRUSH subtree (crush-device-class / crush-root).
+	CrushDeviceClass string `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
+	CrushRoot        string `yaml:"crushRoot,omitempty" json:"crushRoot,omitempty"`
+	// StripeUnit is the per-chunk stripe size (stripe_unit, e.g. 4K).
+	StripeUnit string `yaml:"stripeUnit,omitempty" json:"stripeUnit,omitempty"`
+	// Parameters passes any remaining profile key=value pairs verbatim (l, c, d,
+	// w, packetsize, scalar_mds, ...). Keys owned by first-class fields above and
+	// the derived crush-failure-domain are rejected (one owner per fact).
+	Parameters map[string]string `yaml:"parameters,omitempty" json:"parameters,omitempty"`
 }
 
 // StorageFilesystem owns one CephFS filesystem and its MDS placement.

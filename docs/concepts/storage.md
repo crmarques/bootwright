@@ -293,6 +293,12 @@ running (additive-only).
 | `spec.ceph.replicated.minSize` | No | Ceph default | Minimum replicas (`replicated` only). |
 | `spec.ceph.erasure.dataChunks` | Yes (when `type: erasure`) | — | Erasure `k`; must be positive. |
 | `spec.ceph.erasure.codingChunks` | Yes (when `type: erasure`) | — | Erasure `m`; must be positive. |
+| `spec.ceph.erasure.plugin` | No | Ceph default (`jerasure`) | EC plugin: `jerasure`, `isa`, `clay`, `lrc`, or `shec`. |
+| `spec.ceph.erasure.technique` | No | — | Plugin-specific coding technique (`technique`, e.g. `reed_sol_van`). |
+| `spec.ceph.erasure.crushDeviceClass` | No | — | Tier the EC pool onto a device class (`crush-device-class`). |
+| `spec.ceph.erasure.crushRoot` | No | — | CRUSH subtree root for the profile (`crush-root`). |
+| `spec.ceph.erasure.stripeUnit` | No | — | Per-chunk stripe size (`stripe_unit`, e.g. `4K`). |
+| `spec.ceph.erasure.parameters` | No | — | Remaining `erasure-code-profile set` key=value pairs (`l`, `c`, `d`, `w`, `packetsize`, …), rendered verbatim. Keys owned by the fields above or the derived `crush-failure-domain` are rejected. |
 | `spec.ceph.autoscale` | No | cephadm default | PG autoscaler intent; see [Pool tuning](#pool-tuning). |
 | `spec.ceph.quota` | No | no limit | Pool quota; see [Pool tuning](#pool-tuning). |
 | `spec.ceph.compression` | No | — | Inline compression; see [Pool tuning](#pool-tuning). |

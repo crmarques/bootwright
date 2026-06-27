@@ -875,6 +875,36 @@ func TestStoragePoolTuningValidation(t *testing.T) {
 	}
 }
 
+// TestStorageECProfileValidation covers the erasure-code profile knobs: the
+// plugin enum and the opaque parameters one-owner guard.
+func TestStorageECProfileValidation(t *testing.T) {
+	cases := []struct {
+		name string
+		ec   *v1alpha1.StoragePoolErasureCode
+		want string
+	}{
+		{name: "valid", ec: &v1alpha1.StoragePoolErasureCode{DataChunks: 4, CodingChunks: 2, Plugin: "isa", Parameters: map[string]string{"d": "5"}}},
+		{name: "bad-plugin", ec: &v1alpha1.StoragePoolErasureCode{Plugin: "raid5"}, want: `.plugin "raid5" must be one of`},
+		{name: "parameters-duplicate-first-class", ec: &v1alpha1.StoragePoolErasureCode{Parameters: map[string]string{"crush-device-class": "ssd"}}, want: `is owned by a first-class erasure field`},
+		{name: "parameters-empty-value", ec: &v1alpha1.StoragePoolErasureCode{Parameters: map[string]string{"d": ""}}, want: `.parameters[d] must not be empty`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateStorageECProfile("StoragePool/p spec.ceph.erasure", tc.ec)
+			got := strings.Join(errs, "; ")
+			if tc.want == "" {
+				if len(errs) != 0 {
+					t.Fatalf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 	cases := []struct {
 		name string

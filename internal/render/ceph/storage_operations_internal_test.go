@@ -182,6 +182,56 @@ func TestErasureCodedPoolRendersProfileAndErasureCreate(t *testing.T) {
 	}
 }
 
+// The erasure-code profile knobs render with native erasure-code-profile set
+// spellings (plugin/technique/crush-device-class/crush-root/stripe_unit and
+// sorted opaque parameters), and EVERY profile field — including parameters —
+// joins the structural identity so an immutable-profile change rebuilds.
+func TestErasureProfileFidelityRendersAndIsStructural(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec:     v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}},
+	}
+	pool := v1alpha1.StoragePool{
+		Metadata: v1alpha1.Metadata{Name: "ec"},
+		Spec: v1alpha1.StoragePoolSpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+			Ceph: v1alpha1.StoragePoolCephSpec{
+				Type:         v1alpha1.StoragePoolTypeErasureCode,
+				Role:         v1alpha1.StoragePoolRoleCephFSData,
+				ErasureCoded: &v1alpha1.StoragePoolErasureCode{DataChunks: 4, CodingChunks: 2, Plugin: "clay", Technique: "reed_sol_van", CrushDeviceClass: "ssd", CrushRoot: "default", StripeUnit: "4K", Parameters: map[string]string{"d": "5", "scalar_mds": "isa"}},
+			},
+		},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}, StoragePools: []v1alpha1.StoragePool{pool}}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	var profileCmd []string
+	var structural map[string]any
+	for _, op := range ops {
+		switch op["name"] {
+		case "create-ec-profile-ec":
+			profileCmd, _ = op["command"].([]string)
+		case "create-pool-ec":
+			structural, _ = op["structural"].(map[string]any)
+		}
+	}
+	want := []string{
+		"ceph", "osd", "erasure-code-profile", "set", "ec-profile",
+		"k=4", "m=2", "crush-failure-domain=host",
+		"plugin=clay", "technique=reed_sol_van", "crush-device-class=ssd",
+		"crush-root=default", "stripe_unit=4K", "d=5", "scalar_mds=isa",
+	}
+	if !reflect.DeepEqual(profileCmd, want) {
+		t.Fatalf("ec profile command =\n  %v\nwant\n  %v", profileCmd, want)
+	}
+	if structural["plugin"] != "clay" || structural["crushDeviceClass"] != "ssd" || structural["stripeUnit"] != "4K" {
+		t.Fatalf("structural missing EC profile fields: %v", structural)
+	}
+	params, _ := structural["parameters"].(map[string]any)
+	if params["d"] != "5" || params["scalar_mds"] != "isa" {
+		t.Fatalf("structural.parameters = %v, want opaque params included", params)
+	}
+}
+
 // The per-pool steady-state intents render with their native ceph spellings:
 // autoscaler via `pool set`, quota via the distinct `set-quota` verb (an
 // authored 0 is the native no-limit), compression via `pool set compression_*`,

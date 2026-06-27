@@ -68,8 +68,11 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 		case v1alpha1.StoragePoolTypeErasureCode:
 			if pool.Spec.Ceph.ErasureCoded == nil {
 				errs = append(errs, prefix+".ceph.erasure is required when ceph.type=erasure")
-			} else if pool.Spec.Ceph.ErasureCoded.DataChunks < 1 || pool.Spec.Ceph.ErasureCoded.CodingChunks < 1 {
-				errs = append(errs, prefix+".ceph.erasure.dataChunks and codingChunks must be positive")
+			} else {
+				if pool.Spec.Ceph.ErasureCoded.DataChunks < 1 || pool.Spec.Ceph.ErasureCoded.CodingChunks < 1 {
+					errs = append(errs, prefix+".ceph.erasure.dataChunks and codingChunks must be positive")
+				}
+				errs = append(errs, validateStorageECProfile(prefix+".ceph.erasure", pool.Spec.Ceph.ErasureCoded)...)
 			}
 			if pool.Spec.Ceph.Replicated.Size != 0 || pool.Spec.Ceph.Replicated.MinSize != 0 {
 				errs = append(errs, prefix+".ceph.type=erasure must not set replicated")
@@ -96,6 +99,37 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 			}
 		}
 		errs = append(errs, validateStoragePoolTuning(prefix+".ceph", pool.Spec.Ceph)...)
+	}
+	return errs
+}
+
+// validateStorageECProfile checks the erasure-code profile knobs: the plugin
+// enum and the opaque parameters map, which must not duplicate a first-class
+// field or the derived crush-failure-domain (one owner per fact).
+func validateStorageECProfile(prefix string, ec *v1alpha1.StoragePoolErasureCode) []string {
+	var errs []string
+	switch ec.Plugin {
+	case "", "jerasure", "isa", "clay", "lrc", "shec":
+	default:
+		errs = append(errs, fmt.Sprintf("%s.plugin %q must be one of {jerasure, isa, clay, lrc, shec}", prefix, ec.Plugin))
+	}
+	owned := map[string]bool{
+		"k": true, "m": true, "plugin": true, "technique": true,
+		"crush-device-class": true, "crush-root": true, "stripe_unit": true,
+		"crush-failure-domain": true,
+	}
+	for key, value := range ec.Parameters {
+		owner := fmt.Sprintf("%s.parameters[%s]", prefix, key)
+		if key == "" {
+			errs = append(errs, prefix+".parameters has an empty key")
+			continue
+		}
+		if owned[key] {
+			errs = append(errs, fmt.Sprintf("%s is owned by a first-class erasure field; declare it there, not in parameters", owner))
+		}
+		if value == "" {
+			errs = append(errs, owner+" must not be empty")
+		}
 	}
 	return errs
 }

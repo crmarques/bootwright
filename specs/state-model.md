@@ -697,7 +697,13 @@ Rules:
   `replicated` must not set `ceph.erasure`. `erasure` requires
   `ceph.erasure.{dataChunks,codingChunks}` (rendered as the erasure-code
   profile `k=`/`m=`), must not set `ceph.replicated`, and is not allowed on
-  stretch-mode clusters.
+  stretch-mode clusters. The profile also accepts `plugin`, `technique`,
+  `crushDeviceClass`, `crushRoot`, `stripeUnit`, and an opaque `parameters`
+  map (rendered with their `erasure-code-profile set` spellings); the whole
+  profile is immutable, so every field is part of the pool's structural
+  identity. Per-pool steady-state intents — `ceph.autoscale`, `ceph.quota`,
+  `ceph.compression` — render as idempotent `ceph osd pool set`/`set-quota`
+  ops and are explicitly NOT structural (they reconcile in place).
 - `spec.ceph.role`, when set, accepts `rbd`, `cephfs-metadata`, `cephfs-data`,
   or `rgw`. It drives `StorageExport` wiring and infers the pool application
   (`rbd` → `rbd`, `cephfs-*` → `cephfs`, `rgw` → `rgw`);
