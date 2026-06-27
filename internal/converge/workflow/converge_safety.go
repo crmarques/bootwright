@@ -107,6 +107,27 @@ func ConvergeSafetyRecordPath(runsDir, resourceID string) string {
 	return filepath.Join(runsDir, "safety", convergeSafetyRecordFileName(resourceID))
 }
 
+// HasConvergeSafetyRecords reports whether the context has any convergence-safety
+// record on disk — i.e. Bootwright has applied at least one object. It is the cheap
+// gate the status next-step spine uses to start suggesting `state-check` (the
+// read-only drift verb) only once there is a recorded apply to compare against; it
+// never reads or classifies the records.
+func HasConvergeSafetyRecords(runsDir string) bool {
+	if strings.TrimSpace(runsDir) == "" {
+		return false
+	}
+	entries, err := os.ReadDir(filepath.Join(runsDir, "safety"))
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
 // RemoveConvergeSafetyRecord deletes the convergence-safety record for a resource
 // if present (a no-op when absent). Destroy calls it so a torn-down object
 // reclassifies as missing: a later apply creates it instead of skipping a gone

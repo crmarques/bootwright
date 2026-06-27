@@ -137,7 +137,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	p.Section("Next steps")
 	var items []cliout.Item
-	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir)
+	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir, ctx.RunsDir)
 	if ledgerFound && ledgerErr == nil {
 		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
 		hints = status.LedgerNextSteps(ledger, activity, hints)
@@ -308,14 +308,15 @@ func printSecretStatus(p *cliout.Printer, contextName, secretsDir string, state 
 	}
 }
 
-func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, contextName string, secretsDir string) []string {
+func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, contextName string, secretsDir string, runsDir string) []string {
 	var secretHints []string
 	needsHostTrust := false
 	if stateLoaded {
 		secretHints = secretNextStepHints(state, contextName, secretsDir)
 		needsHostTrust = preflight.NeedsHostTrust(state, secretsDir)
 	}
-	return status.NextStepHints(stateLoaded, state, renderedDir, clustersDir, secretHints, needsHostTrust)
+	applied := workflow.HasConvergeSafetyRecords(runsDir)
+	return status.NextStepHints(stateLoaded, state, renderedDir, clustersDir, secretHints, needsHostTrust, applied)
 }
 
 func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) []string {

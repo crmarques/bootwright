@@ -1023,5 +1023,12 @@ Rules:
   is distinct from `status` (context setup checks, local readiness,
   and next-step spine), `preflight` (Ansible preflight), and `plan`/`apply
   --dry-run` (the intended task graph). `--override` is rejected because
-  state-check neither mutates nor suppresses its report.
+  state-check neither mutates nor suppresses its report. The text report
+  summarizes a present root's out-of-sync resources by class (drifted,
+  foreign-owned, not-yet-applied) so opposite remediations are never conflated.
+  Exit codes let automation gate on drift without parsing the report: `0` when
+  the selected state is in sync, `3` when any selected resource is out of sync
+  (drift, foreign, or never-applied), `1` on load error, and `2` on usage error.
+  Once the context has a recorded apply, the `status` next-step spine surfaces
+  `state-check` ahead of `plan`/`apply`.
 - Rendered effective state must not include secret bytes.

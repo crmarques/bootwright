@@ -74,7 +74,7 @@ func buildStatusReport(cf *commonFlags) (status.Report, bool, error) {
 		Clusters:        []status.Cluster{},
 		StorageClusters: []status.StorageCluster{},
 		Shared:          []status.Shared{},
-		NextSteps:       nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir),
+		NextSteps:       nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir, ctx.RunsDir),
 	}
 	setupChecks := contextReadinessChecks(ctx)
 	if loadErr != nil {

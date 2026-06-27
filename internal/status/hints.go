@@ -12,8 +12,9 @@ import (
 
 // NextStepHints recommends the next commands for the loaded context state.
 // The caller supplies the secret hints and host-trust readiness derived from
-// its own secret-material and preflight surfaces.
-func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, secretHints []string, needsHostTrust bool) []string {
+// its own secret-material and preflight surfaces, plus applied — whether the
+// context has any recorded apply — which gates the read-only drift verb.
+func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, secretHints []string, needsHostTrust bool, applied bool) []string {
 	if stateLoaded {
 		hints := []string{"bootwright secret list"}
 		hints = append(hints, secretHints...)
@@ -21,6 +22,14 @@ func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 			hints = append(hints, "bootwright host trust")
 		}
 		hints = append(hints, "bootwright bastion setup --yes", "bootwright preflight all", "bootwright render effective")
+		// Once Bootwright has applied at least once, state-check is the read-only
+		// "did anything drift since my last apply?" verb for the steady-state loop;
+		// surface it before plan/apply so it is not discovered only after a
+		// surprising apply. Before the first apply there is nothing recorded to
+		// compare against, so it stays off the spine.
+		if applied {
+			hints = append(hints, "bootwright state-check")
+		}
 		needsInstaller := ClustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
 			hints = append(hints, "bootwright plan")

@@ -75,9 +75,19 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		if output == outputJSON {
-			return cliout.JSON(stdout, report)
+			if err := cliout.JSON(stdout, report); err != nil {
+				return failErr(1, err)
+			}
+		} else {
+			printStateCheckReport(stdout, report)
 		}
-		printStateCheckReport(stdout, report)
+		if !report.InSync {
+			// Exit non-zero so automation can gate on "no drift" without parsing the
+			// report. 1 and 2 are already this command's load and usage codes, so
+			// out-of-sync (drift, foreign, or never-applied) gets its own code (3);
+			// the printed report stays the output.
+			return silentExit(3)
+		}
 		return nil
 	}
 	return cmd
@@ -101,7 +111,7 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 			case len(root.Resources) == 0:
 				p.Status(cliout.StatusOK, label, "in sync")
 			default:
-				p.Status(cliout.StatusWarn, label, fmt.Sprintf("%d of %d resources drifted from desired state", len(root.Resources), root.Total))
+				p.Status(cliout.StatusWarn, label, stateCheckRootSummary(root))
 				for _, resource := range root.Resources {
 					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, string(resource.Classification))
 				}
@@ -109,6 +119,40 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 		}
 	}
 	printStateCheckOrphans(p, report.Undeclared)
+}
+
+// stateCheckRootSummary describes a present root's out-of-sync resources by
+// classification, so a foreign-owned resource (resolve the foreign owner) is never
+// lumped under "drifted" (re-apply) — the two have opposite remediations, and a
+// never-applied resource is a third, distinct case.
+func stateCheckRootSummary(root workflow.StateCheckRoot) string {
+	var drift, foreign, missing, other int
+	for _, resource := range root.Resources {
+		switch resource.Classification {
+		case workflow.ConvergeSafetyDrift:
+			drift++
+		case workflow.ConvergeSafetyForeign:
+			foreign++
+		case workflow.ConvergeSafetyMissing:
+			missing++
+		default:
+			other++
+		}
+	}
+	var parts []string
+	if drift > 0 {
+		parts = append(parts, fmt.Sprintf("%d drifted", drift))
+	}
+	if foreign > 0 {
+		parts = append(parts, fmt.Sprintf("%d foreign-owned", foreign))
+	}
+	if missing > 0 {
+		parts = append(parts, fmt.Sprintf("%d not yet applied", missing))
+	}
+	if other > 0 {
+		parts = append(parts, fmt.Sprintf("%d unknown", other))
+	}
+	return fmt.Sprintf("%d of %d resources out of sync: %s", len(root.Resources), root.Total, strings.Join(parts, ", "))
 }
 
 // printStateCheckOrphans lists Bootwright-owned resources that are no longer declared
