@@ -625,8 +625,11 @@ Rules:
   `devices[]` is the lean OSD shorthand (literal paths ==
   `osd.dataDevices.paths`); the optional `osd` object is the drivegroup-shaped
   selection mirroring the cephadm OSD spec (`dataDevices`/`dbDevices`/
-  `walDevices` with `paths|all|rotational|size|limit`, `encrypted`,
-  `osdsPerDevice`, `crushDeviceClass`), mutually exclusive with `devices`.
+  `walDevices` with `paths|pathSpecs|all|model|vendor|rotational|size|limit`,
+  plus spec-level `filterLogic`, `encrypted`, `tpm2`, `osdsPerDevice`,
+  `crushDeviceClass`, `blockDBSize`/`blockWALSize`/`dbSlots`/`walSlots`,
+  `dataAllocateFraction`, and the top-level `unmanaged`), mutually exclusive
+  with `devices`.
   Both require the `osd` role, and every osd-role host must author one of
   them: OSD device consumption is explicit opt-in, so consuming all available
   devices is the authored `osd: {dataDevices: {all: true}}`, never an

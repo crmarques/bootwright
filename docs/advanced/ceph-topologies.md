@@ -149,6 +149,37 @@ The drivegroup form mirrors the cephadm OSD service spec field for field; the
 [storage reference](../concepts/storage.md#osd-device-selection) carries the
 exact field table.
 
+A production drivegroup typically selects data disks by stable `model`/`vendor`
+(not `/dev` paths, which reorder across boots) and carves the BlueStore DB onto a
+shared NVMe, one slot per OSD:
+
+```yaml
+hosts:
+- machineRef: ceph-0
+  roles: [osd]
+  osd:
+    dataDevices:
+      model: MZ7LH3T8         # all SAS data disks of this model
+      rotational: false
+    dbDevices:
+      paths: [/dev/nvme0n1]   # one fast device shared by every data OSD
+    dbSlots: 8                # carve it into 8 equal DB slices
+    encrypted: true
+    tpm2: true                # seal the LUKS key in the host TPM
+    unmanaged: false          # set true to freeze the drivegroup (no new claims)
+```
+
+On a mixed-disk host that needs distinct CRUSH classes per device, use the
+expanded `pathSpecs` form so pool placement can tier onto a class:
+
+```yaml
+osd:
+  dataDevices:
+    pathSpecs:
+    - {path: /dev/sdb, crushDeviceClass: ssd}
+    - {path: /dev/sdc, crushDeviceClass: hdd}
+```
+
 ## Production layout
 
 Bootwright accepts small and single-node Ceph clusters for labs, but

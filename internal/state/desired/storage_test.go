@@ -734,6 +734,78 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "model-vendor-selection-passes",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{Model: "MZ7", Vendor: "ATA"},
+					FilterLogic: "OR",
+				}
+			},
+		},
+		{
+			name: "filter-logic-rejects-non-and-or",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+					FilterLogic: "and",
+				}
+			},
+			want: `.osd.filterLogic "and" must be AND or OR`,
+		},
+		{
+			name: "tpm2-requires-encrypted",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+					TPM2:        true,
+				}
+			},
+			want: `.osd.tpm2 requires encrypted: true`,
+		},
+		{
+			name: "data-allocate-fraction-out-of-range",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices:          &v1alpha1.StorageCephDeviceSelection{All: true},
+					DataAllocateFraction: 1.5,
+				}
+			},
+			want: `must be in (0, 1]`,
+		},
+		{
+			name: "pathspecs-and-paths-mutually-exclusive",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{
+						Paths:     []string{"/dev/sdb"},
+						PathSpecs: []v1alpha1.StorageCephDevicePath{{Path: "/dev/sdc"}},
+					},
+				}
+			},
+			want: `must set only one of paths or pathSpecs`,
+		},
+		{
+			name: "size-range-rejects-dash-separator",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{Size: "10G-40G"},
+				}
+			},
+			want: `uses '-' as a range separator`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

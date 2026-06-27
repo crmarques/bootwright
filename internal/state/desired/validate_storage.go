@@ -817,21 +817,83 @@ func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost) []s
 		if selection.value == nil {
 			continue
 		}
-		selectionOwner := owner + ".osd." + selection.field
-		if len(selection.value.Paths) > 0 && selection.value.All {
-			errs = append(errs, selectionOwner+" must not set both paths and all")
-		}
-		if len(selection.value.Paths) == 0 && !selection.value.All && selection.value.Rotational == nil && selection.value.Size == "" && selection.value.Limit == 0 {
-			errs = append(errs, selectionOwner+" must select devices (paths, all, rotational, size, or limit)")
-		}
-		if selection.value.Limit < 0 {
-			errs = append(errs, selectionOwner+".limit must be non-negative")
-		}
+		errs = append(errs, validateStorageCephDeviceSelection(owner+".osd."+selection.field, selection.value)...)
+	}
+	switch node.OSD.FilterLogic {
+	case "", "AND", "OR":
+	default:
+		errs = append(errs, fmt.Sprintf("%s.osd.filterLogic %q must be AND or OR", owner, node.OSD.FilterLogic))
+	}
+	if node.OSD.TPM2 && !node.OSD.Encrypted {
+		errs = append(errs, owner+".osd.tpm2 requires encrypted: true")
 	}
 	if node.OSD.OSDsPerDevice < 0 {
 		errs = append(errs, owner+".osd.osdsPerDevice must be non-negative")
 	}
+	if node.OSD.DBSlots < 0 {
+		errs = append(errs, owner+".osd.dbSlots must be non-negative")
+	}
+	if node.OSD.WALSlots < 0 {
+		errs = append(errs, owner+".osd.walSlots must be non-negative")
+	}
+	if frac := node.OSD.DataAllocateFraction; frac < 0 || frac > 1 {
+		errs = append(errs, fmt.Sprintf("%s.osd.dataAllocateFraction %v must be in (0, 1]", owner, frac))
+	}
 	return errs
+}
+
+// validateStorageCephDeviceSelection checks one drivegroup device filter: the
+// path forms (scalar paths, expanded pathSpecs) and all are mutually exclusive,
+// pathSpecs entries need a path, the size filter must be a coherent drivegroup
+// size range, and the selection must narrow on at least one predicate.
+func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.StorageCephDeviceSelection) []string {
+	var errs []string
+	pathForms := 0
+	if len(selection.Paths) > 0 {
+		pathForms++
+	}
+	if len(selection.PathSpecs) > 0 {
+		pathForms++
+	}
+	if pathForms > 0 && selection.All {
+		errs = append(errs, owner+" must not set both an explicit path list and all")
+	}
+	if pathForms > 1 {
+		errs = append(errs, owner+" must set only one of paths or pathSpecs")
+	}
+	for i, p := range selection.PathSpecs {
+		if p.Path == "" {
+			errs = append(errs, fmt.Sprintf("%s.pathSpecs[%d].path is required", owner, i))
+		}
+	}
+	selectsSomething := pathForms > 0 || selection.All || selection.Model != "" ||
+		selection.Vendor != "" || selection.Rotational != nil || selection.Size != "" || selection.Limit != 0
+	if !selectsSomething {
+		errs = append(errs, owner+" must select devices (paths, pathSpecs, all, model, vendor, rotational, size, or limit)")
+	}
+	errs = append(errs, validateStorageCephDeviceSize(owner+".size", selection.Size)...)
+	if selection.Limit < 0 {
+		errs = append(errs, owner+".limit must be non-negative")
+	}
+	return errs
+}
+
+// validateStorageCephDeviceSize guards the cephadm drivegroup size grammar
+// without re-implementing it: a single size (10G) or a low:high range
+// (10G:40G, :40G, 10G:) using ':' as the separator. It rejects only
+// unambiguously malformed values (a '-' separator, or more than one ':') so a
+// typo fails at the validate gate, not at live `ceph orch apply`.
+func validateStorageCephDeviceSize(owner, size string) []string {
+	if size == "" {
+		return nil
+	}
+	if strings.Count(size, ":") > 1 {
+		return []string{fmt.Sprintf("%s %q is not a valid size range (use low:high, :high, or low:, e.g. 10G:40G)", owner, size)}
+	}
+	if strings.Contains(size, "-") {
+		return []string{fmt.Sprintf("%s %q uses '-' as a range separator; cephadm sizes use ':' (e.g. 10G:40G)", owner, size)}
+	}
+	return nil
 }
 
 func storageCephNodeRolesOnly(node v1alpha1.StorageCephHost, role string) bool {

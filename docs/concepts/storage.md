@@ -195,14 +195,24 @@ apply` document.
 
 #### OSD device selection
 
+All field names render 1:1 into the cephadm OSD drivegroup spec.
+
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `osd.dataDevices` | Yes (when `osd` is set) | — | Data device selector. |
 | `osd.dbDevices` | No | — | DB device selector. |
 | `osd.walDevices` | No | — | WAL device selector. |
-| `osd.encrypted` | No | `false` | Enable encrypted OSDs. |
+| `osd.filterLogic` | No | `AND` | How cephadm combines the device filters across selectors: `AND` (intersect) or `OR` (union). Spec-level (`filter_logic`). |
+| `osd.encrypted` | No | `false` | Enable encrypted (LUKS) OSDs. |
+| `osd.tpm2` | No | `false` | Seal the OSD LUKS key in the host TPM (`tpm2`). Requires `encrypted: true`. |
 | `osd.osdsPerDevice` | No | cephadm default | OSDs per selected device (non-negative). |
-| `osd.crushDeviceClass` | No | — | CRUSH device class. |
+| `osd.crushDeviceClass` | No | — | CRUSH device class for the whole drivegroup. |
+| `osd.blockDBSize` | No | — | Per-OSD DB slice size carved from `dbDevices` (`block_db_size`, e.g. `60G`). |
+| `osd.blockWALSize` | No | — | Per-OSD WAL slice size carved from `walDevices` (`block_wal_size`). |
+| `osd.dbSlots` | No | — | Number of equal DB slices per shared `dbDevices` device (`db_slots`, non-negative). |
+| `osd.walSlots` | No | — | Number of equal WAL slices per shared `walDevices` device (`wal_slots`, non-negative). |
+| `osd.dataAllocateFraction` | No | `1` | Fraction `(0,1]` of each data device to allocate (`data_allocate_fraction`), reserving headroom. |
+| `osd.unmanaged` | No | `false` | Freeze this OSD service so cephadm stops claiming new devices (`unmanaged`, a top-level service-spec key). |
 
 Each device selector (`dataDevices`, `dbDevices`, `walDevices`) mirrors the
 cephadm drivegroup device filter:
@@ -210,16 +220,22 @@ cephadm drivegroup device filter:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `*.paths[]` | No | — | Literal device paths. |
+| `*.pathSpecs[]` | No | — | Expanded path form `{path, crushDeviceClass}` pinning a per-device CRUSH class; renders to the cephadm `paths: [{path, crush_device_class}]` mapping. |
 | `*.all` | No | `false` | Select all matching devices. |
+| `*.model` | No | — | Device model filter (`model`). |
+| `*.vendor` | No | — | Device vendor filter (`vendor`). |
 | `*.rotational` | No | — | Rotational filter. |
-| `*.size` | No | — | Size filter. |
+| `*.size` | No | — | Size filter: a single size (`10G`) or a range (`10G:40G`, `:40G`, `10G:`). |
 | `*.limit` | No | — | Cap on matching devices (non-negative). |
 
 !!! note "Cross-field rules"
-    - `paths` and `all` are **mutually exclusive** within one selector.
-    - A selector must select something: set at least one of `paths`, `all`,
-      `rotational`, `size`, or `limit`. `rotational`, `size`, and `limit` only
-      narrow the match.
+    - `paths`, `pathSpecs`, and `all` are **mutually exclusive** within one
+      selector; set at most one. `pathSpecs[].path` is required.
+    - A selector must select something: set at least one of `paths`, `pathSpecs`,
+      `all`, `model`, `vendor`, `rotational`, `size`, or `limit`. `model`,
+      `vendor`, `rotational`, `size`, and `limit` only narrow the match.
+    - Address fleet disks by `model`/`vendor` rather than `/dev` paths, which can
+      reorder across boots.
 
 #### Stretch mode
 

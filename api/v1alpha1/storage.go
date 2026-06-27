@@ -270,7 +270,10 @@ type StorageCephHost struct {
 
 // StorageCephHostOSD mirrors the cephadm drivegroup spec for one host's OSD
 // service; field names render 1:1 into the cephadm spec (data_devices,
-// db_devices, wal_devices, encrypted, osds_per_device, crush_device_class).
+// db_devices, wal_devices, encrypted, osds_per_device, crush_device_class,
+// filter_logic, block_db_size, block_wal_size, db_slots, wal_slots,
+// data_allocate_fraction, tpm2). Unmanaged is the top-level service-spec key
+// (rendered outside the spec block).
 type StorageCephHostOSD struct {
 	DataDevices      *StorageCephDeviceSelection `yaml:"dataDevices,omitempty" json:"dataDevices,omitempty"`
 	DBDevices        *StorageCephDeviceSelection `yaml:"dbDevices,omitempty" json:"dbDevices,omitempty"`
@@ -278,17 +281,55 @@ type StorageCephHostOSD struct {
 	Encrypted        bool                        `yaml:"encrypted,omitempty" json:"encrypted,omitempty"`
 	OSDsPerDevice    int                         `yaml:"osdsPerDevice,omitempty" json:"osdsPerDevice,omitempty"`
 	CrushDeviceClass string                      `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
+	// FilterLogic is the spec-level combiner cephadm applies across the device
+	// filters: AND (default) or OR. It is a service-spec field, not a per-block
+	// one. With multiple predicates, AND intersects them; OR unions them.
+	FilterLogic string `yaml:"filterLogic,omitempty" json:"filterLogic,omitempty"`
+	// BlockDBSize / BlockWALSize size each OSD's DB / WAL slice carved from the
+	// shared db/wal devices (cephadm block_db_size / block_wal_size; a size such
+	// as 60G or 2147483648). DBSlots / WALSlots instead carve a fixed number of
+	// equal slices per shared device (cephadm db_slots / wal_slots).
+	BlockDBSize  string `yaml:"blockDBSize,omitempty" json:"blockDBSize,omitempty"`
+	BlockWALSize string `yaml:"blockWALSize,omitempty" json:"blockWALSize,omitempty"`
+	DBSlots      int    `yaml:"dbSlots,omitempty" json:"dbSlots,omitempty"`
+	WALSlots     int    `yaml:"walSlots,omitempty" json:"walSlots,omitempty"`
+	// DataAllocateFraction reserves headroom by allocating only this fraction
+	// (0,1] of each selected data device to the OSD (cephadm data_allocate_fraction).
+	DataAllocateFraction float64 `yaml:"dataAllocateFraction,omitempty" json:"dataAllocateFraction,omitempty"`
+	// TPM2 seals the OSD LUKS key in the host TPM (cephadm tpm2). Requires
+	// encrypted: true.
+	TPM2 bool `yaml:"tpm2,omitempty" json:"tpm2,omitempty"`
+	// Unmanaged freezes this OSD service: cephadm stops claiming newly appearing
+	// devices for it. Rendered as the top-level service-spec unmanaged key, the
+	// cephadm-native expression of Bootwright's additive-only philosophy.
+	Unmanaged bool `yaml:"unmanaged,omitempty" json:"unmanaged,omitempty"`
 }
 
 // StorageCephDeviceSelection mirrors the cephadm drivegroup device filter:
-// exactly one of paths or all, optionally narrowed by rotational, size, and
-// limit (upstream data_devices fields, same spellings).
+// at most one of paths, pathSpecs, or all, optionally narrowed by model,
+// vendor, rotational, size, and limit (upstream data_devices fields, same
+// spellings; combined per the parent osd.filterLogic).
 type StorageCephDeviceSelection struct {
-	Paths      []string `yaml:"paths,omitempty" json:"paths,omitempty"`
-	All        bool     `yaml:"all,omitempty" json:"all,omitempty"`
-	Rotational *bool    `yaml:"rotational,omitempty" json:"rotational,omitempty"`
-	Size       string   `yaml:"size,omitempty" json:"size,omitempty"`
-	Limit      int      `yaml:"limit,omitempty" json:"limit,omitempty"`
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty"`
+	// PathSpecs is the expanded path form that pins a per-device CRUSH class:
+	// each entry renders as the cephadm paths mapping {path, crush_device_class}.
+	// It is mutually exclusive with paths and all. Use it on mixed-disk hosts
+	// where individual devices need distinct CRUSH device classes.
+	PathSpecs  []StorageCephDevicePath `yaml:"pathSpecs,omitempty" json:"pathSpecs,omitempty"`
+	All        bool                    `yaml:"all,omitempty" json:"all,omitempty"`
+	Model      string                  `yaml:"model,omitempty" json:"model,omitempty"`
+	Vendor     string                  `yaml:"vendor,omitempty" json:"vendor,omitempty"`
+	Rotational *bool                   `yaml:"rotational,omitempty" json:"rotational,omitempty"`
+	Size       string                  `yaml:"size,omitempty" json:"size,omitempty"`
+	Limit      int                     `yaml:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// StorageCephDevicePath is one expanded drivegroup path entry: a device path
+// with an optional per-device CRUSH class (cephadm paths: [{path,
+// crush_device_class}]). An entry with no class renders as a bare path.
+type StorageCephDevicePath struct {
+	Path             string `yaml:"path" json:"path"`
+	CrushDeviceClass string `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
 }
 
 type StoragePlacementPolicy struct {

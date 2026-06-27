@@ -310,6 +310,81 @@ func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	}
 }
 
+// The extended drivegroup fidelity fields render into the cephadm OSD spec with
+// their native spellings: spec-level filter_logic / tpm2 / data_allocate_fraction
+// / block_db_size / db_slots, device-selection model / vendor, the expanded
+// pathSpecs paths form with per-device crush_device_class, and the top-level
+// unmanaged key (a sibling of spec/placement, not inside spec).
+func TestDrivegroupOSDExtendedFieldsRender(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname:   "ceph-0",
+				MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+				Site:       "lab",
+				Roles:      []string{"osd"},
+				OSD: &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{
+						Model: "MZ7LH3T8", Vendor: "ATA", Size: "1T:4T",
+					},
+					DBDevices: &v1alpha1.StorageCephDeviceSelection{
+						PathSpecs: []v1alpha1.StorageCephDevicePath{
+							{Path: "/dev/nvme0n1", CrushDeviceClass: "nvme"},
+							{Path: "/dev/nvme1n1"},
+						},
+					},
+					FilterLogic:          "OR",
+					Encrypted:            true,
+					TPM2:                 true,
+					BlockDBSize:          "60G",
+					DBSlots:              6,
+					DataAllocateFraction: 0.9,
+					Unmanaged:            true,
+				},
+			}}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+
+	var osd map[string]any
+	for _, doc := range CephadmCoreServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		if m["service_type"] == "osd" {
+			osd = m
+		}
+	}
+	if osd == nil {
+		t.Fatalf("no osd service rendered")
+	}
+	if osd["unmanaged"] != true {
+		t.Fatalf("unmanaged must be a top-level service-spec key, got doc = %v", osd)
+	}
+	spec := osd["spec"].(map[string]any)
+	if _, ok := spec["unmanaged"]; ok {
+		t.Fatalf("unmanaged must not appear inside spec, got %v", spec)
+	}
+	if spec["filter_logic"] != "OR" || spec["tpm2"] != true || spec["encrypted"] != true {
+		t.Fatalf("spec filter_logic/tpm2/encrypted = %v", spec)
+	}
+	if spec["block_db_size"] != "60G" || spec["db_slots"] != 6 || spec["data_allocate_fraction"] != 0.9 {
+		t.Fatalf("spec db/alloc fields = %v", spec)
+	}
+	data := spec["data_devices"].(map[string]any)
+	if data["model"] != "MZ7LH3T8" || data["vendor"] != "ATA" || data["size"] != "1T:4T" {
+		t.Fatalf("data_devices = %v", data)
+	}
+	db := spec["db_devices"].(map[string]any)
+	paths := db["paths"].([]any)
+	first := paths[0].(map[string]any)
+	if first["path"] != "/dev/nvme0n1" || first["crush_device_class"] != "nvme" {
+		t.Fatalf("expanded pathSpecs[0] = %v", first)
+	}
+	if paths[1] != "/dev/nvme1n1" {
+		t.Fatalf("classless pathSpecs[1] should render as a bare path, got %v", paths[1])
+	}
+}
+
 // OSD device consumption is explicit opt-in: the authored
 // osd: {dataDevices: {all: true}} renders a per-host OSD service, and an
 // osd-role host without a device selection (unreachable for validated state)
