@@ -10,36 +10,9 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Kinds
 
-- `Environment` owns fleet-wide defaults, context resource selection, selected
-  clusters, secret sources, proxy defaults, registry mirrors, component image
-  pins, and service access catalog entries.
-- `Machine` owns machine desired state: capability tags, substrate binding,
-  provided-vs-installed OS state, install profile reference, install network,
-  named addresses, SSH, and hardware inventory.
-- `MachineImage` owns bootable OS install media such as a base ISO URL,
-  checksum, and trust references.
-- `MachineInstallProfile` owns Bootwright-managed OS install behavior:
-  installer type, image reference, repositories, host naming, SSH
-  authorization, storage, packages, services, SELinux, firewall, and FIPS
-  install-time customizations.
-- `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
-  selections, and NMState templates rendered into installer inputs.
-- `InfraProvider` owns substrate capabilities, machine profiles, provider
-  connection facts, and network attachments.
-- `InfraComponent` owns machine-bound shared services and their routable
-  endpoints.
-- `ContainerCluster` owns OpenShift or OKD install intent: distribution,
-  release, install mode, platform render mode, endpoints, artifact access,
-  trust, cluster networking, machine pools, and node-to-machine bindings.
-- `StorageCluster` owns imported or managed Ceph intent. Managed clusters
-  provision Ceph from selected machines.
-- `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, and
-  `StorageObjectGateway` own Ceph placement, pools, CephFS, RGW, and ingress
-  endpoint intent.
-- `StorageExport` owns the exported storage surface.
-- `ClusterAddon`, `ClusterAddonProfile`, and `ClusterAddonBinding` own
-  post-install component definitions, reusable add-on sets, and binding-scoped
-  input values.
+The seventeen kinds and the fact each owns are listed in `domain.md` (Operating
+Model). This document specifies each kind's fields, validation, and the CLI
+contract.
 
 ## Environment
 
@@ -171,14 +144,10 @@ spec:
   network:
     config:
       networkConfigRef: ocp-machine-net
-      attachmentRef: ocp-install
       interfaceAddresses:
         - interface: primary
           addressRef: ip
           prefixLength: 24
-    interfaceBinding:
-      - nicRef: primary
-        interfaceName: primary
   addresses:
     - name: ip
       address: 192.0.2.20
@@ -304,45 +273,22 @@ spec:
     type: anaconda
     anaconda:
       imageRef: rhel-94-dvd-iso
-      repositories:
-        - id: extras
-          baseURL: https://repos.example.test/rhel/9.4/extras/x86_64/os/
   customizations:
     hostname:
       source: machineName
     ssh:
       authorizeMachineSSHKey: true
-      passwordAuthentication: false
     storage:
       rootDevice:
         source: machineRootDeviceHints
-      wipe: true
     packages:
-      environment: minimal
-      installWeakDeps: false
-      excludeDocs: true
-      languages:
-        - en_US.UTF-8
       install:
         - cephadm
-        - podman
-        - lvm2
-        - chrony
         - firewalld
     services:
       enabled:
         - sshd
-        - chronyd
-        - firewalld
-      disabled:
-        - avahi-daemon
-        - cockpit.socket
-        - cups
-        - kdump
-        - postfix
     security:
-      selinux:
-        mode: enforcing
       firewall:
         enabled: true
       fips:
@@ -488,10 +434,6 @@ spec:
         address: 192.0.2.10
         source:
           type: external
-      api-int:
-        address: 192.0.2.10
-        source:
-          type: external
       ingress:
         address: 192.0.2.11
         source:
@@ -502,12 +444,6 @@ spec:
         endpointRef: bmc
     nodeSSH:
       keyPairRef: ocp-3node-cluster-admin-ssh-key
-  networking:
-    clusterNetwork:
-      - cidr: 10.128.0.0/14
-        hostPrefix: 23
-    serviceNetwork:
-      - 172.30.0.0/16
   hosts:
     - hostname: master-0
       role: master
@@ -599,15 +535,13 @@ Rules:
 - Managed storage nodes reference `Machine` objects with `ceph-node`
   capability.
 - Managed storage seed/admin operations use `Machine.spec.access.ssh`.
-- Storage convergence is additive-only across the whole domain —
-  `spec.ceph.config` keys, `mgrModules[]`, `monitoring`, the `services[]`
-  passthrough, and the `StoragePool`/`StorageFilesystem`/
-  `StorageObjectGateway` kinds: `apply` creates and converges what desired
-  state declares and never removes a live Ceph object whose declaration was
-  deleted; it keeps running until removed on the cluster out of band.
-  `--override` does not prune undeclared objects either — it rebuilds only
-  still-declared pools whose structural identity changed. Removal semantics
-  belong to the open override/reconcile design.
+- Storage convergence is additive-only across `spec.ceph.config`, `mgrModules[]`,
+  `monitoring`, the `services[]` passthrough, and the `StoragePool`/
+  `StorageFilesystem`/`StorageObjectGateway` kinds: `apply` creates and converges
+  declared objects and never removes a live Ceph object whose declaration was
+  deleted; `--override` rebuilds only still-declared pools whose structural
+  identity changed, never prunes. Removal is out of band, pending the open
+  override/reconcile design.
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `spec.ceph.release` selects which Ceph release to install for the chosen
@@ -711,26 +645,24 @@ Rules:
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
-- Authoring `spec.ceph.topology.stretch` enables stretch mode (presence is the
-  signal; there is no `enabled` flag). `failureDomain` (the CRUSH failure
-  domain for the stretch rule) and `tiebreaker.host` are required; normalize
-  derives the rest: `dataSites` from the topology's non-tiebreaker sites,
-  `tiebreaker.site` from the tiebreaker host's `site`, and `ruleName` to
-  `stretch-rule`. Authoring `dataSites` only matters when the topology carries
-  additional OSD-only sites the derivation would wrongly include. Stretch
-  replication is not authorable: policy-less replicated pools always render
-  with `size: 4` / `minSize: 2` (the Ceph requirement for two-site stretch);
-  non-4/2 stretch is unsupported today. Authoring `stretch` on an existing
-  cluster therefore re-rules and resizes every policy-less pool on the next
-  apply with no change to any `StoragePool` file; `bootwright validate`
-  prints a one-line notice naming the inheriting pools. Validation runs
-  post-normalize:
-  `dataSites` must contain exactly two sites; `tiebreaker.site` must be
-  distinct from the data sites; each data site must hold exactly two `mon`
-  hosts and the tiebreaker site exactly one; the tiebreaker host must be
-  mon-only with no OSD `devices`; erasure-coded pools are rejected; and MDS,
-  RGW, and ingress placement must include at least two role-capable hosts per
-  data site.
+- `spec.ceph.topology.stretch` enables stretch mode by presence (no `enabled`
+  flag):
+  - **Required:** `failureDomain` (CRUSH failure domain for the stretch rule)
+    and `tiebreaker.host`.
+  - **Normalized:** `dataSites` from the topology's non-tiebreaker sites,
+    `tiebreaker.site` from the tiebreaker host's `site`, `ruleName` to
+    `stretch-rule`. Author `dataSites` only to exclude OSD-only sites the
+    derivation would wrongly include.
+  - **Replication:** not authorable; policy-less replicated pools always render
+    `size: 4` / `minSize: 2` (the two-site stretch requirement); non-4/2 is
+    unsupported. Authoring `stretch` on an existing cluster re-rules and resizes
+    every policy-less pool on the next apply with no `StoragePool` change;
+    `bootwright validate` prints a one-line notice naming the inheriting pools.
+  - **Validation (post-normalize):** `dataSites` holds exactly two sites;
+    `tiebreaker.site` is distinct from them; each data site holds exactly two
+    `mon` hosts and the tiebreaker exactly one; the tiebreaker host is mon-only
+    with no OSD `devices`; erasure-coded pools are rejected; MDS, RGW, and
+    ingress placement include at least two role-capable hosts per data site.
 
 ## StoragePlacementPolicy
 

@@ -69,23 +69,16 @@ rg -n "Activity|Task|Apply|Plan|Scheduler|lock|capabil|kubevirt|hostClusterRef|m
 go test ./internal/state/graph ./internal/converge/workflow ./internal/converge/render
 ```
 
-Do not install tools or require network access for a review. If a useful check
-cannot run because tools, credentials, root, or infrastructure are missing, report
-that limitation.
+Report any useful check that could not run.
 
-## Durable Guardrails
+## Guardrails
 
-Verify these in the current specs before relying on them:
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Prompt-specific additions:
 
-- **Scope.** Stay inside direct provisioning to installed clusters plus
-  cluster-bound bootstrap add-ons. Day-2 fleet publication belongs elsewhere.
-- **Product API.** Desired-state YAML is the user API. Ansible inventories, vars,
-  rendered installer files, ledgers, and runtime records are outputs.
 - **One owner per fact.** Improve orchestration by routing facts through their
   owning kind or runtime record, not by duplicating facts across layers.
-- **Provider neutrality.** Keep the model open for libvirt, bare metal, vSphere,
-  OpenShift Virtualization, and future substrates. Unsupported handlers should
-  fail clearly at apply time without distorting the graph.
 - **Readiness is not a tag.** Authored machine capabilities select eligibility;
   runtime activities provide readiness facts such as provider-ready,
   machine-instantiated, OS-ready, SSH-ready, cluster-installed, add-on-ready,
@@ -98,12 +91,6 @@ Verify these in the current specs before relying on them:
   equivalent non-secret identity, a useful probe when possible, safe drift
   classification, clear skip behavior, and a retry path that does not corrupt
   partial state.
-- **Secrets and logs.** Secret bytes, kubeconfigs, pull secrets, tokens, and
-  private keys never appear in versioned content, non-sensitive output, logs, or
-  proposed snippets.
-- **Official tools.** Delegate completion and domain behavior to the tools
-  Bootwright drives when those tools already own it, such as
-  `openshift-install agent wait-for install-complete` and cephadm operations.
 
 ## Reconstruct the Current Provisioning Model
 
@@ -128,12 +115,14 @@ actual artifacts and functions you found.
 5. **Cluster lifecycle.** For each cluster family, identify asset rendering,
    artifact publication, node boot, install wait, add-on apply, add-on readiness,
    and post-install consumers.
-6. **Storage lifecycle.** For managed and imported storage, identify storage
-   detail gathering, node preparation, bootstrap seed choice, topology work, pool
-   and service work, export details, and cluster attachment.
+6. **Storage lifecycle.** For each storage cluster, classify managed versus
+   imported, node preparation, cephadm bootstrap on the seed, topology placement,
+   pool, filesystem, gateway, and service work, export details, and Data
+   Foundation attachment.
 7. **Lowering to Ansible.** Identify where activities become playbooks, roles,
-   inventories, host groups, vars, and logs. Call out broad playbooks that hide
-   concurrency or roles that do several unrelated activity classes.
+   inventories and host groups, rendered vars, and per-activity logs. Call out
+   broad playbooks that hide concurrency or roles that do several unrelated
+   activity classes.
 
 ## Scenario Matrix
 

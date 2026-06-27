@@ -155,36 +155,20 @@ shellcheck scripts/* test/**/*.sh              # when available
 
 Do not run actual `apply`, `destroy`, `reset`, cleanup, provider mutation, BMC,
 cluster, storage, or disk commands during a review-only audit unless the user
-explicitly authorizes a disposable environment. Do not install tools or fetch
-dependencies unless the user allows it. Report useful checks that could not run.
+explicitly authorizes a disposable environment.
 
-## Durable Guardrails
+## Guardrails
 
-Verify each in the current specs before relying on it:
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Prompt-specific additions:
 
-- **Scope.** Bootwright provisions clusters and cluster-bound bootstrap add-ons.
-  Day-2 fleet publication belongs elsewhere unless specs say otherwise.
-- **Product API.** Desired-state YAML is declarative, idempotent, typed,
-  deterministic, and user-authored. Generated installer files, inventories,
-  runtime records, and logs are outputs.
 - **One owner per fact.** Do not fix safety by duplicating facts across layers.
   Route checks through the owning kind, generated contract, or durable runtime
   record.
-- **Provider neutrality.** Keep substrate variation behind capabilities,
-  advertised metadata, normalized adapters, and isolated supplier workarounds.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, tokens, BMC
-  credentials, proxy credentials, and private paths never appear in versioned
-  content, audit snippets, logs, or proposed examples.
-- **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
-  stay raw: JSON, shell exports, Cobra help, prompts, and external process
-  passthrough.
 - **Go-Ansible split.** Go owns CLI, input loading/validation, normalization,
   rendering, storage intent, task planning, locks, ledgers, status, and
   orchestration. Ansible executes mutations from rendered contracts.
-- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases, shims,
-  or legacy examples.
-- **Official tools.** Prefer native idempotency and completion behavior from the
-  tools Bootwright drives before wrapping or replacing it.
 
 ## Safety Guidance Review
 

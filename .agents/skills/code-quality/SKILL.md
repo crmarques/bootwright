@@ -7,7 +7,8 @@ methods, types, variables, imports, or fields are left behind.
 
 ## Load First
 
-- `/specs/architecture.md` (testing and repository layout sections)
+- `/specs/architecture.md` (Testing section)
+- The Repository Layout section in `/README.md`
 
 ## Required Checks
 

@@ -55,31 +55,18 @@ go list -m all ; go list ./... ; go test ./... ; go vet ./... ; gofmt -l .
 shellcheck scripts/* test/**/*.sh ; ansible-lint ; ansible-playbook --syntax-check <playbook>   # when available
 ```
 
-Do not install tools, fetch dependencies, or require network for a review-only
-audit unless the user allows it. Report useful checks that could not be run.
+Report useful checks that could not be run. For a review-only audit, do not
+install tools or require network unless the user allows it.
 
-## Durable Guardrails
+## Guardrails
 
-Verify each in the current repo before relying on it; do not recommend anything
-that violates them:
+Apply the Core Invariants in `/AGENTS.md` (scope, product API, secrets, provider
+adapters, official tools, output routing, clean-break `v1alpha1`); verify their
+current form in `specs/`. Security-specific addition:
 
-- **Scope.** Stay inside Bootwright's stated scope; Day-2 fleet publication lives
-  elsewhere unless the specs say otherwise.
-- **Product API.** Desired-state YAML is the user API; generated artifacts are
-  outputs, not authored source of truth.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, tokens,
-  plaintext credentials, private absolute paths, and environment-specific values
-  never appear in versioned content, examples, logs, generated docs, or snippets.
 - **Rendered output.** Installer files, inventories, lock files, and
   effective-state snapshots do not inline secret bytes unless a documented
   sensitive-output path requires explicit opt-in and restrictive file modes.
-- **Adapters.** Normalize provider and BMC variation through capabilities and
-  adapters; keep unavoidable supplier workarounds isolated, tested, documented.
-  Prefer official tool capabilities before custom orchestration.
-- **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
-  stay raw (JSON, shell exports, Cobra help, prompts, external process passthrough).
-- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases, shims, or
-  legacy examples.
 
 ## Review Areas
 
@@ -201,7 +188,7 @@ the blocker and the next useful step.
 ## Constraints
 
 - Cite real repo evidence; invent no vulnerabilities; use current vocabulary.
-- Respect the durable guardrails; verify their current form in `specs/` first.
+- Respect the `/AGENTS.md` Core Invariants; verify their current form in `specs/` first.
 - Keep secrets out of every finding, snippet, and recommendation.
 - Every recommendation must pass the Aggregation test — prefer fewer, stronger,
   evidence-backed fixes, and say plainly when the current state is already safe.

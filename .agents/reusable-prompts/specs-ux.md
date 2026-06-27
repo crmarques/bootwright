@@ -44,9 +44,8 @@ Listing what you deliberately leave alone proves the survivors earned their plac
 
 ## Ground Yourself
 
-The repository is the source of truth; load current definitions instead of
-relying on memory, and do not anchor findings to older vocabulary. Read until you
-have enough evidence, then stop:
+The repository is the source of truth. Read until you have enough evidence, then
+stop:
 
 1. `AGENTS.md` and `.agents/README.md` for load order and operating rules.
 2. `specs/README.md` and `specs/index.md`, then the task-relevant specs and ADRs —
@@ -65,37 +64,23 @@ rg --files specs docs test examples .agents
 rg -n 'apiVersion:\s*bootwright|^kind:' specs examples test
 ```
 
-Run validation or tests only if the toolchain is already present. Do not install
-dependencies.
+Run validation or tests only if the toolchain is already present.
 
-## Durable Guardrails
+## Guardrails
 
-Verify in the current specs before relying on these; do not propose anything that
-violates them:
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Prompt-specific additions:
 
-- **Scope.** Direct provisioning to installed clusters plus cluster-bound
-  bootstrap add-ons. Day-2 fleet content publication lives elsewhere.
-- **Product API.** Desired-state YAML stays declarative, idempotent, typed,
-  deterministic, and reproducible. Generated artifacts are readable debugging
-  outputs, not user edit points.
 - **One owner per fact.** Lower-layer objects (`Machine`, `InfraProvider`,
   `InfraComponent`, provider inventories) own reachability, capabilities,
   services, and substrate facts and must not refer upward to consumers
   (`ContainerCluster`, `StorageCluster`, future cluster types). Consumer intent
   references downward.
-- **Provider neutrality.** Keep abstractions open for libvirt, bare metal,
-  vSphere, OpenShift Virtualization, and future substrates; hide supplier and BMC
-  variation behind capabilities and adapters.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
-  never appear in versioned content, examples, snippets, or recommendations.
 - **State checking.** The public contract must give operators a well-named,
   non-mutating command to compare selected desired state with the recorded last apply. The
   spec/UX must distinguish this from `status`, `render`, `apply`, `destroy`, and
   dry-run, and define how `--override` behaves or is rejected without mutation.
-- **Clean break.** While the API is `v1alpha1`, propose clean breaking
-  improvements freely — but never migrations, aliases, compatibility shims, or
-  legacy examples. State why each break is worth it and what tests or fixtures
-  must change.
 
 ## Posture
 

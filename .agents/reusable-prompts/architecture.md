@@ -45,8 +45,7 @@ than thrash a working layout.
 
 The repo is the source of truth; load current state instead of relying on memory
 or on this prompt's examples — layout, kind names, role taxonomy, ADRs, and
-substrates evolve as the project matures, so trust what is in the repo now. Read
-until you have enough, then stop:
+substrates evolve. Read until you have enough, then stop:
 
 1. `AGENTS.md` and `.agents/README.md` — operating rules.
 2. `specs/README.md`, `specs/index.md`, then the specs the task touches — start
@@ -71,23 +70,14 @@ go list ./...
 go list -f '{{.ImportPath}} {{.Dir}}' ./...
 ```
 
-Run validation or tests only if the toolchain is already present. Do not install
-tools.
+Run validation or tests only if the toolchain is already present.
 
-## Durable Guardrails
+## Guardrails
 
-Verify each in the current `specs/` before relying on it; do not propose an
-architecture that violates them:
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Architecture-specific addition:
 
-- **Scope.** Stay inside the stated in/out-of-scope list (`specs/domain.md`). Day-2
-  fleet publication belongs to a separate project unless the spec says otherwise.
-- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases, or shims.
-- **Provider neutrality.** Do not lock to one substrate, topology, or install mode;
-  keep provider abstraction open to the substrates the spec claims to support.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
-  never appear in versioned content, examples, or recommended snippets.
-- **Product API.** Desired-state YAML is the user API; generated artifacts
-  (including Ansible inventory and vars) are outputs, not user edit points.
 - **Go↔Ansible split.** Go owns the control plane — CLI, input loading,
   validation, normalization, rendering, storage intent, task planning,
   orchestration, status, ledgers. Ansible executes configuration and installation
@@ -230,7 +220,7 @@ tests, and dependency order. End with the smallest coherent first follow-up chan
 ## Constraints
 
 - Cite real files; use current project vocabulary; introduce no placeholder names.
-- Respect the durable guardrails; verify their current form in `specs/` first.
+- Respect the `/AGENTS.md` Core Invariants; verify their current form in `specs/` first.
 - Assume a small team must keep this understandable — reject generality bought at
   the cost of comprehension, and reject churn that buys no ownership or navigation
   gain.

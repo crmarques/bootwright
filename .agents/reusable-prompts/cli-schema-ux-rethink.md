@@ -31,8 +31,7 @@ valuable as the proposals — it proves the survivors earned their place.
 
 ## Ground Yourself
 
-Load current repository facts before judging; do not anchor to older vocabulary
-or to memory of this prompt. Read until you have enough, then stop:
+Load current repository facts before judging. Read until you have enough, then stop:
 
 1. `AGENTS.md`, then `.agents/README.md`.
 2. `specs/README.md` and `specs/index.md`, then the specs that define objectives,
@@ -51,44 +50,23 @@ rg --files specs docs test examples .agents
 rg -n 'apiVersion:\s*bootwright|^kind:' specs examples test
 ```
 
-Do not install dependencies or require network access.
+## Guardrails
 
-## Durable Guardrails
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Schema/UX-specific additions:
 
-Verify in the current specs before relying on these; do not propose anything that
-violates them:
-
-- **Scope.** Direct provisioning to installed clusters plus cluster-bound
-  bootstrap add-ons. Day-2 fleet content publication lives elsewhere.
-- **Product API.** Desired-state YAML stays declarative, idempotent, typed,
-  deterministic, and safe to commit. Generated installer files, inventories,
-  rendered outputs, and runtime state are outputs, not authored source of truth.
 - **One owner per fact.** Never improve UX by duplicating a fact across layers.
   Pressure-test *attribute* ownership, not just kind ownership: lower-layer
   objects (`Machine`, `InfraProvider`, `InfraComponent`, provider inventories)
   expose their own reachability, capabilities, services, and substrate facts and
   must not know, select, or refer to upper-layer consumers (`ContainerCluster`,
   `StorageCluster`, future cluster types). Consumer intent references downward.
-- **Provider neutrality.** Keep abstractions open for libvirt, bare metal,
-  vSphere, OpenShift Virtualization, and future substrates; hide supplier and BMC
-  variation behind capabilities and adapters.
-- **Drive official tools.** Prefer native capabilities of the tools Bootwright
-  drives (e.g. `openshift-install`, cephadm) before inventing orchestration
-  around the same operation.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
-  never appear in versioned content, examples, proposed snippets, or rendered
-  reviewable output.
-- **Output.** CLI human output uses the centralized output component in any
-  follow-up. Raw exceptions stay raw: JSON, shell exports, Cobra help, prompts,
-  external process passthrough.
 - **State checking.** The CLI must include a well-named, non-mutating command for
   comparing selected desired state with the recorded last apply. Do not accept a UX where
   users must infer drift from `apply`, `destroy`, logs, or generated files.
   Evaluate behavior both with and without `--override` for commands that support
   it; override must never make the state-check command mutate or hide drift.
-- **Clean break.** While the API is `v1alpha1`, propose clean breaking
-  improvements freely — but never migrations, aliases, compatibility shims, or
-  legacy examples.
 
 ## Posture
 

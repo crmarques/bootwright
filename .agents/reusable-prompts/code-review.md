@@ -43,9 +43,9 @@ thin.
 
 ## Ground Yourself
 
-The repo is the source of truth; load current state instead of relying on memory,
-and trust the repo if names, taxonomy, substrates, or layout have changed. Read
-until the evidence supports concrete findings, then stop expanding scope:
+Load current state from the repo; trust it if names, taxonomy, substrates, or
+layout have changed. Read until the evidence supports concrete findings, then stop
+expanding scope:
 
 1. `AGENTS.md` and `.agents/README.md` — operating rules.
 2. `specs/README.md`, `specs/index.md`, then the task-relevant specs — usually
@@ -64,31 +64,19 @@ shellcheck scripts/* test/**/*.sh        # when available
 ansible-lint ; ansible-playbook --syntax-check <playbook>   # when available
 ```
 
-Do not install tools or fetch dependencies for a review-only audit unless the user
-allows it. When a check needs mutation, missing tools, network, or unavailable
-infrastructure, record the limitation instead of substituting speculation.
+When a check needs mutation, missing tools, network, or unavailable infrastructure,
+record the limitation instead of substituting speculation.
 
-## Durable Guardrails
+## Guardrails
 
-Verify each in the current repo before relying on it; do not recommend anything
-that violates them:
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Prompt-specific addition:
 
-- **Scope.** Stay inside Bootwright's stated scope; Day-2 fleet publication lives
-  elsewhere unless the specs say otherwise.
-- **Product API.** Desired-state YAML is the user API; generated artifacts are
-  outputs, not authored source of truth.
-- **Provider neutrality.** Keep abstractions open for supported substrates; do not
-  hard-code to the current lab, one vendor, one topology, or one install mode.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
-  never appear in versioned content, examples, logs, generated docs, or snippets.
-- **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
-  stay raw (JSON, shell exports, Cobra help, prompts, external process passthrough).
 - **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
   rendering, storage intent, task planning, locking, ledgers, status, and
   orchestration. Ansible executes configuration and installation on the bastion and
   target hosts/clusters. Confirm the spec's exact wording before relying on it.
-- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases, shims, or
-  legacy examples.
 
 ## Priority Order
 

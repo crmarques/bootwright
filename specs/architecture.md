@@ -78,34 +78,9 @@ HTTP(S) parsing.
 
 ## Ownership Boundaries
 
-- `Environment` owns fleet-wide defaults, context resource selection, cluster
-  selection, secret sources, entitlement entries, service access catalog
-  entries, registry mirrors, and component images.
-- `Machine` owns substrate binding, provided-vs-installed OS state, install
-  network, named addresses, SSH, hardware inventory, root-device hints, and
-  capabilities.
-- `MachineImage` owns trusted OS install media.
-- `MachineInstallProfile` owns OS installer profile and customizations.
-- `InfraProvider` owns substrate capabilities, machine profiles, provider
-  connection facts, and network attachments.
-- `InfraComponent` owns machine-bound shared infra services, service placement,
-  listeners, bind addresses, and routable endpoints.
-- `NetworkConfig` owns reusable machine-network data and NMState templates.
-- `ContainerCluster` owns OpenShift or OKD install intent, platform render
-  mode, endpoints, artifact access, and node-to-machine bindings.
-- `StorageCluster` owns external storage intent. Managed clusters provision
-  Ceph; imported clusters reference previously provisioned Ceph.
-- `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, and
-  `StorageObjectGateway` own Ceph placement, pool, CephFS, RGW, and endpoint
-  bindings for public and cephadm ingress traffic.
-- `StorageExport` owns the exported storage surface, while
-  `ClusterAddon.spec.accepts.inputs[]` declares the Data Foundation
-  external-mode effect consumed by one installed cluster through binding input
-  values.
-- `ClusterAddon`, `ClusterAddonProfile`, and `ClusterAddonBinding` own
-  reusable post-install component intent and binding-scoped input values.
-
-These boundaries are reflected in rendering:
+Per-kind ownership is summarized in `domain.md` (Operating Model) and specified
+field by field in `state-model.md`. Every fact has one owner, and those
+boundaries drive rendering:
 
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
   selected machines, machine `NetworkConfig` references, endpoints, and
@@ -139,11 +114,10 @@ These boundaries are reflected in rendering:
 Convergence is resumable by default. Each mutating workflow task runs under its
 existing resource lock, derives a non-secret desired hash and Bootwright owner
 identity, and writes a durable convergence-safety record. The records classifier
-compares that recorded evidence against current desired state and yields four
-outcomes — `missing` (no record), `foreign` (a non-Bootwright owner), `match`
-(recorded desired hash equals current), or `drift` (it differs). This
-classification is what `state-check` reports; it is not itself an apply-time skip
-gate. Most provider-service and infra-component config tasks have no reliable
+compares that recorded evidence against current desired state into the four
+outcomes `state-check` reports (`missing`/`foreign`/`match`/`drift`; defined in
+the `state-model.md` CLI Contract); the classification is not itself an
+apply-time skip gate. Most provider-service and infra-component config tasks have no reliable
 external probe: they re-run and rely on idempotent execution, and their record is
 marked `unknown` (recorded but not classified) as durable evidence rather than an
 apply-time skip. Apply-time fail-closed gating lives at the concrete-probe sites.

@@ -59,9 +59,9 @@ areas and any check that could not be run.
 
 ## Ground Yourself
 
-The repo is the source of truth; load current state instead of relying on memory,
-and trust the repo if names, taxonomy, substrates, or layout have changed. Read
-until the evidence supports concrete findings, then stop:
+The repo is the source of truth; load current state, and trust the repo if names,
+taxonomy, substrates, or layout have changed. Read until the evidence supports
+concrete findings, then stop:
 
 1. `AGENTS.md` and `.agents/README.md` — operating rules.
 2. `specs/README.md`, `specs/index.md`, then the task-relevant specs — usually
@@ -81,25 +81,15 @@ rg -n '<kind|field|object|command|ansible-var>' internal api ansible test docs s
 ansible-playbook --syntax-check <playbook> ; ansible-lint ; shellcheck scripts/* test/**/*.sh   # when available
 ```
 
-Do not install tools, fetch dependencies, or require network for the review unless
-the user allows it. Report useful checks that could not be run.
+Report useful checks that could not be run.
 
-## Durable Guardrails
+## Guardrails
 
-Verify each in the current repo before relying on it; do not recommend or implement
-anything that violates them:
+Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product API,
+drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
+verify their current form in `specs/`. Prompt-specific additions:
 
-- **Scope.** Stay inside Bootwright's stated scope; Day-2 fleet publication lives
-  elsewhere unless the specs say otherwise.
-- **Product API.** Desired-state YAML is the user API; generated artifacts are
-  outputs, not authored source of truth.
 - **One owner per fact.** Do not patch drift by duplicating a fact across layers.
-- **Provider neutrality.** Keep abstractions open for supported substrates; do not
-  hard-code to one lab, vendor, topology, or install mode.
-- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
-  never appear in versioned content, examples, logs, generated docs, or snippets.
-- **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
-  stay raw (JSON, shell exports, Cobra help, prompts, external process passthrough).
 - **State checking.** A well-named command must let the operator compare selected
   desired state with the recorded last apply without mutation. Trace both `--override` and
   no-override behavior where supported; override must not make this read-only
@@ -108,8 +98,6 @@ anything that violates them:
   rendering, storage intent, planning, locking, ledgers, status, orchestration;
   Ansible executes configuration and installation on the bastion and targets.
   Confirm the spec's wording before relying on it.
-- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases, shims, or
-  legacy examples. Prefer official tool behavior over custom reimplementation.
 
 ## Review Method: Trace Before Judging
 

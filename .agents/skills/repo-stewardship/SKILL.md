@@ -7,9 +7,9 @@ guidance.
 
 ## Load First
 
-- `/specs/architecture.md` (Ansible, testing, repository layout)
+- `/specs/architecture.md` (Layers and Testing sections)
 - `/specs/security.md`
-- The repository layout section in `/README.md`
+- The Repository Layout section in `/README.md`
 
 ## Guidance
 
