@@ -81,7 +81,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck python-test ansible-syntax-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -166,9 +166,10 @@ test:
 
 # Order checks from cheapest to slowest so local runs fail before starting
 # race tests or clean-copy tests when lightweight guardrails already caught it.
-check: check-fast
+check: check-fast sync-bundle
 	$(GO) vet $(GO_TEST_PACKAGES)
 	$(MAKE) staticcheck
+	$(MAKE) go-mod-tidy-check
 	$(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
@@ -216,6 +217,19 @@ go-test-clean-checkout:
 staticcheck:
 	@test -n "$(STATICCHECK)" || { printf '%s\n' 'staticcheck not found in PATH; install with go install honnef.co/go/tools/cmd/staticcheck@v0.7.0 or set STATICCHECK=/path/to/staticcheck'; exit 1; }
 	$(STATICCHECK) $(GO_TEST_PACKAGES)
+
+# Fail if `go mod tidy` would change go.mod/go.sum, so dependency metadata
+# stays minimal and complete. Runs tidy against copies and restores them,
+# leaving the working tree untouched whether or not the check passes.
+go-mod-tidy-check:
+	@tmp=$$(mktemp -d); cp go.mod go.sum "$$tmp/"; \
+	$(GO) mod tidy; \
+	rc=0; \
+	diff -u "$$tmp/go.mod" go.mod || rc=1; \
+	diff -u "$$tmp/go.sum" go.sum || rc=1; \
+	cp "$$tmp/go.mod" go.mod; cp "$$tmp/go.sum" go.sum; rm -rf "$$tmp"; \
+	if [ $$rc -ne 0 ]; then printf '%s\n' 'go.mod/go.sum are not tidy; run: go mod tidy'; fi; \
+	exit $$rc
 
 # Filter-plugin unit tests use only stdlib unittest so the check works
 # on any Python 3 install without a venv. If pytest is installed
@@ -336,7 +350,7 @@ help:
 		'  build            Build bin/bootwright (syncs the embedded ansible bundle first)' \
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
 		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip' \
-		'  check            Run fast guardrails first, then Go, Python, and Ansible checks' \
+		'  check            Run fast guardrails, then Go/Python/Ansible checks, bundle sync, and go.mod tidiness' \
 		'  check-fast       Run cheap local guardrails plus Go unit tests (no Python, Ansible, race, or clean-checkout)' \
 		'  test             Run Go tests' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \

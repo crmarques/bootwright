@@ -28,11 +28,17 @@ jobs:
           python3 -m pip install --disable-pip-version-check
           ansible-core==2.21.0
 
+      - name: Sync ansible bundle
+        run: make sync-bundle
+
       - name: Go format
         run: make check-gofmt
 
       - name: Go vet
         run: go vet ./...
+
+      - name: Go mod tidy
+        run: make go-mod-tidy-check
 
       - name: Go test
         run: go test ./...
