@@ -344,7 +344,11 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 				spec["retention_size"] = service.config.RetentionSize
 			}
 		}
-		docs = append(docs, cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec))
+		doc := cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec)
+		if service.config != nil {
+			applyCephServiceCommonFields(doc, false, nil, nil, service.config.Networks)
+		}
+		docs = append(docs, doc)
 	}
 	return docs
 }

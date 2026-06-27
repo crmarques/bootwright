@@ -576,6 +576,9 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 		if item.field != "prometheus" && (item.service.RetentionTime != "" || item.service.RetentionSize != "") {
 			errs = append(errs, owner+" retentionTime/retentionSize apply to prometheus only")
 		}
+		for i, cidr := range item.service.Networks {
+			errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks[%d]", owner, i), cidr)...)
+		}
 	}
 	return errs
 }

@@ -660,7 +660,7 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			MgrModules: []string{"balancer", "telemetry"},
 			Monitoring: &v1alpha1.StorageCephMonitoring{
-				Prometheus: &v1alpha1.StorageCephMonitoringService{RetentionTime: "15d"},
+				Prometheus: &v1alpha1.StorageCephMonitoringService{RetentionTime: "15d", Networks: []string{"10.10.0.0/24"}},
 			},
 			Services: []v1alpha1.StorageCephService{{
 				ServiceType: "nfs",
@@ -691,6 +691,9 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 	}
 	if got := prometheus["spec"].(map[string]any)["retention_time"]; got != "15d" {
 		t.Fatalf("prometheus retention_time = %v", got)
+	}
+	if nets, _ := prometheus["networks"].([]string); !reflect.DeepEqual(nets, []string{"10.10.0.0/24"}) {
+		t.Fatalf("prometheus networks must be a top-level key, got %v", prometheus["networks"])
 	}
 	if byType["grafana"] == nil {
 		t.Fatal("grafana role on a host must render a grafana spec")

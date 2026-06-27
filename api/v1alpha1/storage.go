@@ -176,12 +176,17 @@ type StorageCephMonitoring struct {
 }
 
 // StorageCephMonitoringService tunes one monitoring service; the knobs render
-// 1:1 into the cephadm service spec (port, retention_time, retention_size).
+// 1:1 into the cephadm service spec (port, retention_time, retention_size in
+// spec; networks as the top-level service-spec key).
 type StorageCephMonitoringService struct {
 	Placement     StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
 	Port          int              `yaml:"port,omitempty" json:"port,omitempty"`
 	RetentionTime string           `yaml:"retentionTime,omitempty" json:"retentionTime,omitempty"`
 	RetentionSize string           `yaml:"retentionSize,omitempty" json:"retentionSize,omitempty"`
+	// Networks binds the service to one or more CIDRs (the top-level cephadm
+	// service-spec networks key) — e.g. a dedicated management VLAN on
+	// multi-homed storage nodes.
+	Networks []string `yaml:"networks,omitempty" json:"networks,omitempty"`
 }
 
 // StorageCephService is a raw cephadm service spec: serviceType/serviceID/

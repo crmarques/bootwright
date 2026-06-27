@@ -158,6 +158,7 @@ Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
 | `port` | No | cephadm default | Service port. |
 | `retentionTime` | No | cephadm default | Retention time (applies to Prometheus). |
 | `retentionSize` | No | cephadm default | Retention size (applies to Prometheus). |
+| `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
 
 ### Passthrough services
 
