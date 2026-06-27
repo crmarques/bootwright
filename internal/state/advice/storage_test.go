@@ -114,6 +114,49 @@ func TestStorageAdvisoriesPinnedImageAndOSSAreSilentOnImage(t *testing.T) {
 	}
 }
 
+func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
+	healthy := func(name, distribution string) v1alpha1.StorageCluster {
+		return adviceCephCluster(name, distribution, "",
+			[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
+	}
+	disconnectedEnv := v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{
+		Registries: &v1alpha1.EnvironmentRegistriesSpec{Mirror: &v1alpha1.EnvironmentRegistryMirrorSpec{URL: "mirror.test:5000"}},
+	}}
+
+	// IBM is flagged even when connected (its cephadm defaults point at
+	// registry.redhat.io, which an IBM entitlement cannot pull).
+	ibm := adviceState(healthy("ibm", v1alpha1.StorageCephDistributionIBM))
+	if got := findingsWith(StorageAdvisories(ibm), "sidecar"); len(got) != 1 {
+		t.Fatalf("ibm cluster must flag unpinned sidecars, got %+v", StorageAdvisories(ibm))
+	}
+
+	// A connected oss cluster is silent; a disconnected one is flagged.
+	ossConnected := adviceState(healthy("oss", v1alpha1.StorageCephDistributionOSS))
+	if got := findingsWith(StorageAdvisories(ossConnected), "sidecar"); len(got) != 0 {
+		t.Fatalf("connected oss cluster must not flag sidecars, got %+v", got)
+	}
+	ossDisconnected := adviceState(healthy("oss", v1alpha1.StorageCephDistributionOSS))
+	ossDisconnected.Environments = []v1alpha1.Environment{disconnectedEnv}
+	if got := findingsWith(StorageAdvisories(ossDisconnected), "sidecar"); len(got) != 1 {
+		t.Fatalf("disconnected oss cluster must flag sidecars, got %+v", StorageAdvisories(ossDisconnected))
+	}
+
+	// Pinning any sidecar image suppresses the advisory.
+	pinned := healthy("ibm-pinned", v1alpha1.StorageCephDistributionIBM)
+	pinned.Spec.Ceph.Config = map[string]map[string]string{"mgr": {"mgr/cephadm/container_image_prometheus": "mirror.test:5000/prometheus:v2"}}
+	if got := findingsWith(StorageAdvisories(adviceState(pinned)), "sidecar"); len(got) != 0 {
+		t.Fatalf("a cluster pinning sidecar images must be silent, got %+v", got)
+	}
+
+	// Disabled monitoring suppresses the advisory.
+	noMon := healthy("ibm-nomon", v1alpha1.StorageCephDistributionIBM)
+	disabled := false
+	noMon.Spec.Ceph.Monitoring = &v1alpha1.StorageCephMonitoring{Enabled: &disabled}
+	if got := findingsWith(StorageAdvisories(adviceState(noMon)), "sidecar"); len(got) != 0 {
+		t.Fatalf("monitoring-disabled cluster must not flag sidecars, got %+v", got)
+	}
+}
+
 func TestStorageAdvisoriesExemptStretchFromMonCount(t *testing.T) {
 	cluster := adviceCephCluster("stretch", v1alpha1.StorageCephDistributionOSS, "",
 		[]string{"mon", "mgr"}, []string{"mon", "mgr"},

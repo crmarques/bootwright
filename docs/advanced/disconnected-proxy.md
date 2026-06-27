@@ -242,6 +242,33 @@ estate keeps RHEL package fetches inside the perimeter. See
     next `apply` — day-2 daemon pulls authenticate from the manager store, not
     from a node-level `podman login`, so no manual re-login is needed.
 
+### Pinning the Ceph monitoring and ingress sidecar images
+
+`spec.ceph.image` pins only the Ceph **daemon** image. cephadm pulls its
+monitoring and ingress sidecars (Prometheus, Grafana, Alertmanager,
+node-exporter, HAProxy, keepalived) from compiled-in **upstream** defaults that a
+disconnected estate cannot reach — and an IBM cluster's defaults point at
+`registry.redhat.io`, which an IBM (`cp.icr.io`) entitlement cannot pull. Pin
+each sidecar to your mirror or entitled registry under `spec.ceph.config[mgr]`:
+
+```yaml
+spec:
+  ceph:
+    config:
+      mgr:
+        mgr/cephadm/container_image_prometheus: mirror.example.test:5000/prometheus/prometheus:v2.53.0
+        mgr/cephadm/container_image_grafana: mirror.example.test:5000/ceph/grafana:10.4.0
+        mgr/cephadm/container_image_alertmanager: mirror.example.test:5000/prometheus/alertmanager:v0.27.0
+        mgr/cephadm/container_image_node_exporter: mirror.example.test:5000/prometheus/node-exporter:v1.7.0
+        mgr/cephadm/container_image_haproxy: mirror.example.test:5000/library/haproxy:2.8
+        mgr/cephadm/container_image_keepalived: mirror.example.test:5000/library/keepalived:2.2.8
+```
+
+`bootwright validate` raises a non-blocking advisory when monitoring is enabled
+on a disconnected (mirror/`imageDigestSources`) or IBM cluster that has not
+pinned these, so the gap is caught at author time rather than as a stalled
+deploy.
+
 ## Host trust for disconnected labs
 
 Disconnected hosts are reached over SSH like any other machine. A non-interactive

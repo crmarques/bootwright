@@ -7,8 +7,10 @@ package advice
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -32,6 +34,7 @@ type StorageAdvisory struct {
 // golden tests render a stable warning list. It reads only the Ceph spec, so it
 // is safe to call on any validated state.
 func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
+	disconnected := environmentIsDisconnected(stateview.Environment(state))
 	var out []StorageAdvisory
 	for _, cluster := range state.StorageClusters {
 		if cluster.Spec.Ceph == nil || v1alpha1.StorageClusterExternal(cluster) {
@@ -41,8 +44,54 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageMonitorAdvisories(object, cluster)...)
 		out = append(out, storageManagerAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
+		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
 	}
 	return out
+}
+
+// environmentIsDisconnected reports whether the Environment routes images
+// through a mirror or digest-source remap — the disconnected posture in which
+// cephadm's upstream sidecar image defaults are unreachable.
+func environmentIsDisconnected(env *v1alpha1.Environment) bool {
+	if env == nil || env.Spec.Registries == nil {
+		return false
+	}
+	return env.Spec.Registries.Mirror != nil || len(env.Spec.Registries.ImageDigestSources) > 0
+}
+
+// storageSidecarImageAdvisories flags the airgap foot-gun: cephadm pulls the
+// monitoring and ingress sidecars (prometheus, grafana, alertmanager,
+// node-exporter, haproxy, keepalived) from compiled-in upstream defaults that a
+// disconnected estate — or an IBM cluster entitled only to cp.icr.io — cannot
+// reach, even though spec.ceph.image only pins the Ceph daemon image. Pinning
+// these is the difference between a working and a non-working airgapped install.
+// Suppressed once the operator pins any sidecar image under config[mgr], and for
+// connected non-IBM clusters whose upstream defaults resolve.
+func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluster, disconnected bool) []StorageAdvisory {
+	ceph := cluster.Spec.Ceph
+	monitoring := ceph.Monitoring
+	monitoringEnabled := monitoring == nil || monitoring.Enabled == nil || *monitoring.Enabled
+	if !monitoringEnabled {
+		return nil
+	}
+	// IBM's compiled-in cephadm defaults point at registry.redhat.io, which an
+	// IBM entitlement (cp.icr.io only) cannot pull, so it needs the pins even
+	// when otherwise connected.
+	vendorMismatch := ceph.Distribution == v1alpha1.StorageCephDistributionIBM
+	if !disconnected && !vendorMismatch {
+		return nil
+	}
+	for key := range ceph.Config["mgr"] {
+		if strings.HasPrefix(key, "mgr/cephadm/container_image_") && key != "mgr/cephadm/container_image_base" {
+			return nil
+		}
+	}
+	return []StorageAdvisory{{
+		Object:      object,
+		Finding:     "monitoring/ingress sidecar images are not pinned to the entitled registry or mirror",
+		Impact:      "cephadm pulls prometheus/grafana/alertmanager/node-exporter/haproxy/keepalived from upstream defaults this cluster cannot reach; the monitoring stack and every HA VIP fail to deploy",
+		Remediation: "pin mgr/cephadm/container_image_{prometheus,grafana,alertmanager,node_exporter,haproxy,keepalived} under spec.ceph.config[mgr] to the mirror/entitled registry references",
+	}}
 }
 
 // storageMonitorAdvisories flags a monitor count that cannot form, or barely
