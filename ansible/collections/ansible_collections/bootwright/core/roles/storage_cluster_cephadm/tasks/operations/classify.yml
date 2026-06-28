@@ -19,4 +19,6 @@
     bootwright_ceph_op_pool_recreate: false
     bootwright_ceph_op_fs_live: {}
     bootwright_ceph_op_fs_recreate: false
+    bootwright_ceph_op_ec_live: {}
+    bootwright_ceph_op_ec_recreate: false
   no_log: "{{ bootwright_ceph_op.capture is defined }}"

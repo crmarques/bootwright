@@ -299,6 +299,63 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	}
 }
 
+// The erasure-code profile is immutable in Ceph and cannot be removed while a pool
+// uses it, so its --override rebuild runs at the profile op (which precedes the pool
+// create): it compares the live profile to the rendered authored fields and, on a
+// mismatch, tears down the one dependent pool (data-destroying) with the
+// double-confirmation flag, re-disables mon_allow_pool_delete even on failure, fails
+// closed, then deletes the stale profile so the op recreates it.
+func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml")
+
+	decide := tasks[findAnsibleTask(t, tasks, "Decide Ceph erasure-code profile structural override rebuild")]
+	decideFact, ok := decide["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("ec-profile rebuild decision must be a set_fact, got %v", decide)
+	}
+	expr := fmt.Sprint(decideFact["bootwright_ceph_op_ec_recreate"])
+	for _, want := range []string{"bootwright_ceph_op_ec_live", "bootwright_ceph_op.structural.fields"} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("ec-profile rebuild decision must compare live profile to desired structural %q, got %s", want, expr)
+		}
+	}
+	if got := fmt.Sprint(decide["when"]); !strings.Contains(got, "ec-profile") || !strings.Contains(got, "'override'") {
+		t.Fatalf("ec-profile rebuild decision must be gated on the ec-profile op under override, got %v", decide["when"])
+	}
+
+	rebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted erasure-coded pool for override")]
+	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
+		t.Fatalf("ec-profile rebuild must be gated on the structural-mismatch decision, got %v", rebuild["when"])
+	}
+	block := nestedAnsibleTasks(t, rebuild, "block")
+	allowIdx := findAnsibleTask(t, block, "Allow Ceph pool deletion for erasure-code profile override rebuild")
+	rmIdx := findAnsibleTask(t, block, "Destroy pool using structurally drifted erasure-code profile")
+	if !(allowIdx < rmIdx) {
+		t.Fatalf("must enable pool deletion before removing the dependent pool (allow=%d rm=%d)", allowIdx, rmIdx)
+	}
+	rm, ok := block[rmIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(rm["argv"]), "--yes-i-really-really-mean-it") {
+		t.Fatalf("ec-profile rebuild must rm the dependent pool with --yes-i-really-really-mean-it, got %v", block[rmIdx])
+	}
+	always := nestedAnsibleTasks(t, rebuild, "always")
+	disable := always[findAnsibleTask(t, always, "Re-disable Ceph pool deletion after erasure-code profile override rebuild")]
+	if got := fmt.Sprint(disable["ansible.builtin.command"]); !strings.Contains(got, "mon_allow_pool_delete") {
+		t.Fatalf("always block must re-disable mon_allow_pool_delete, got %v", disable)
+	}
+
+	assertTask := tasks[findAnsibleTask(t, tasks, "Fail closed when erasure-code profile override pool deletion failed")]
+	if _, ok := assertTask["ansible.builtin.assert"].(map[string]any); !ok {
+		t.Fatalf("ec-profile pool deletion failure must be an assert, got %v", assertTask)
+	}
+
+	// The stale profile is deleted only after its dependent pool, gated on the same
+	// override + structural-mismatch decision, so the op then recreates it.
+	profileRm := tasks[findAnsibleTask(t, tasks, "Delete structurally drifted erasure-code profile for override rebuild")]
+	if got := fmt.Sprint(profileRm["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
+		t.Fatalf("ec-profile delete must be gated on the structural-mismatch decision, got %v", profileRm["when"])
+	}
+}
+
 func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",

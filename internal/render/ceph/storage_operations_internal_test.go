@@ -274,10 +274,12 @@ func TestErasureProfileFidelityRendersAndIsStructural(t *testing.T) {
 	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
 	var profileCmd []string
 	var structural map[string]any
+	var ecStructural map[string]any
 	for _, op := range ops {
 		switch op["name"] {
 		case "create-ec-profile-ec":
 			profileCmd, _ = op["command"].([]string)
+			ecStructural, _ = op["structural"].(map[string]any)
 		case "create-pool-ec":
 			structural, _ = op["structural"].(map[string]any)
 		}
@@ -297,6 +299,28 @@ func TestErasureProfileFidelityRendersAndIsStructural(t *testing.T) {
 	params, _ := structural["parameters"].(map[string]any)
 	if params["d"] != "5" || params["scalar_mds"] != "isa" {
 		t.Fatalf("structural.parameters = %v, want opaque params included", params)
+	}
+
+	// The ec-profile op carries a live-comparable structural identity (authored
+	// fields keyed by their `erasure-code-profile get` spellings) so the role can
+	// rebuild the profile and its dependent pool when a field drifts.
+	if ecStructural["pool"] != "ec" || ecStructural["profile"] != "ec-profile" {
+		t.Fatalf("ec-profile structural must name its pool and profile, got %v", ecStructural)
+	}
+	ecFields, ok := ecStructural["fields"].(map[string]string)
+	if !ok {
+		t.Fatalf("ec-profile structural.fields must be a string map, got %v", ecStructural["fields"])
+	}
+	if ecFields["k"] != "4" || ecFields["m"] != "2" || ecFields["plugin"] != "clay" ||
+		ecFields["technique"] != "reed_sol_van" || ecFields["crush-device-class"] != "ssd" ||
+		ecFields["crush-root"] != "default" || ecFields["stripe_unit"] != "4K" {
+		t.Fatalf("ec-profile structural fields missing authored values: %v", ecFields)
+	}
+	if ecFields["crush-failure-domain"] == "" {
+		t.Fatalf("ec-profile structural fields must carry crush-failure-domain, got %v", ecFields)
+	}
+	if ecFields["d"] != "5" || ecFields["scalar_mds"] != "isa" {
+		t.Fatalf("ec-profile structural fields must include opaque parameters, got %v", ecFields)
 	}
 }
 
