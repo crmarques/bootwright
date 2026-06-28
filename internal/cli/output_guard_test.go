@@ -34,7 +34,7 @@ func TestHumanOutputUsesOutputPackage(t *testing.T) {
 			return err
 		}
 		text := string(body)
-		for _, needle := range []string{"fmt.Fprint(", "fmt.Fprintf(", "fmt.Fprintln("} {
+		for _, needle := range []string{"fmt.Fprint(", "fmt.Fprintf(", "fmt.Fprintln(", "fmt.Print(", "fmt.Printf(", "fmt.Println("} {
 			if strings.Contains(text, needle) {
 				t.Fatalf("%s uses %s for CLI output; use internal/cli/output or add a narrow allowlist reason", rel, needle)
 			}
