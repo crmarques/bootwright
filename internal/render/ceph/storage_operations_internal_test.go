@@ -882,11 +882,9 @@ func TestRGWRealmZoneAndConfigRender(t *testing.T) {
 
 	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
 	byName := map[string]map[string]any{}
-	var order []string
 	for _, op := range ops {
 		name, _ := op["name"].(string)
 		byName[name] = op
-		order = append(order, name)
 	}
 	realmCmd, _ := byName["create-rgw-realm-prod"]["command"].([]string)
 	if !reflect.DeepEqual(realmCmd, []string{"radosgw-admin", "realm", "create", "--rgw-realm=prod", "--default"}) {
