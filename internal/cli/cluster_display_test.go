@@ -116,12 +116,12 @@ func TestApplyBlockedReasonNamesHostParent(t *testing.T) {
 
 	// The directly-blocked child task points at the failed host parent.
 	boot, _ := ledger.Task("boot.dc1-child-ocp")
-	if got := applyBlockedReason(ledger, boot); got != "host cluster dc1-metal-ocp not ready (blocked by Wait install dc1-metal-ocp)" {
+	if got := applyBlockedReason(ledger, boot); got != "host cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
 		t.Fatalf("blocked reason = %q", got)
 	}
 	// A transitively-blocked child task still resolves to the parent, not the sibling.
 	wait, _ := ledger.Task("wait.dc1-child-ocp")
-	if got := applyBlockedReason(ledger, wait); got != "host cluster dc1-metal-ocp not ready (blocked by Wait install dc1-metal-ocp)" {
+	if got := applyBlockedReason(ledger, wait); got != "host cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
 		t.Fatalf("transitive blocked reason = %q", got)
 	}
 }

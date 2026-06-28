@@ -202,7 +202,7 @@ func applyTaskDisplayLabel(label string) string {
 	case strings.HasPrefix(label, "boot "):
 		return "Boot " + strings.TrimPrefix(label, "boot ")
 	case strings.HasPrefix(label, "wait install "):
-		return "Wait install " + strings.TrimPrefix(label, "wait install ")
+		return "Install " + strings.TrimPrefix(label, "wait install ")
 	case strings.HasPrefix(label, "addon "):
 		return "Addon " + strings.TrimPrefix(label, "addon ")
 	case strings.HasPrefix(label, "storage attachment "):

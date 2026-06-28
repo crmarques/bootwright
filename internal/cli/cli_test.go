@@ -4098,7 +4098,7 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"Current apply", "apply-test", "Progress", "[DONE] Provider services", "[RUNNING] Boot sno-libvirt nodes", "[PENDING] Wait install sno-libvirt", "bootwright status --watch"} {
+	for _, want := range []string{"Current apply", "apply-test", "Progress", "[DONE] Provider services", "[RUNNING] Boot sno-libvirt nodes", "[PENDING] Install sno-libvirt", "bootwright status --watch"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("status output missing %q:\n%s", want, stdout)
 		}
