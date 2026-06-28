@@ -23,19 +23,25 @@ uses:
 bootwright example init --name my-sno-lab --output ./my-sno-lab
 ```
 
-The scaffold writes six `apiVersion: bootwright.io/v1alpha1` files:
+The scaffold writes seven `apiVersion: bootwright.io/v1alpha1` files:
 
 ```text
 my-sno-lab/
   environment.yaml
-  shared/
-    machines.yaml
-    networks.yaml
-    provider.yaml
-    infra-component.yaml
+  infra/
+    providers/
+      provider.yaml
+    machines/
+      bastion.yaml
+    networkconfigs/
+      networks.yaml
+    components/
+      infra-component.yaml
   clusters/
-    my-sno-lab/
-      cluster.yaml
+    container/
+      my-sno-lab/
+        cluster.yaml
+        cluster-machines.yaml
 ```
 
 The files are safe to commit once you keep secret bytes out of them (the
@@ -68,30 +74,32 @@ The scaffold declares four secrets:
 | `bastion-host-ssh` | SSH private key to reach the bastion | `file:` reference to a key you own |
 | `bmc-credentials` | Credentials for the emulated Redfish BMC | You set it: `bootwright secret set` |
 
-### Machine (`shared/machines.yaml`)
+### Machine (`infra/machines/bastion.yaml`, `clusters/container/my-sno-lab/cluster-machines.yaml`)
 
-Two machines. Machines own substrate binding, OS mode, durable addresses, and
-SSH access — never install intent.
+Two machines, in two files — the shared bastion under `infra/`, the cluster node
+alongside its cluster. Machines own substrate binding, OS mode, durable
+addresses, and SSH access — never install intent.
 
-- `bastion`: the service host. It declares `capabilities` (`libvirt`,
-  `container-runtime`, `load-balancer`, `name-resolution`, `ntp`),
-  `os.provided: true` (bootwright does not install its OS), its `addresses`
-  (`ssh` and `cluster-lan`), and `access.ssh` (which secret key and which address
-  to connect over).
-- `my-sno-lab-master-0`: the OpenShift node. It declares
-  `capabilities: [openshift-node]`, its `substrate` binding (`providerRef` +
-  `profileRef: sno`), `os.provided: false` (bootwright installs OpenShift onto
-  it), its `network.config` (which `NetworkConfig` and per-interface address it
-  gets), and its static `addresses` (the node IP).
+- `bastion` (`infra/machines/bastion.yaml`): the service host. It declares
+  `capabilities` (`libvirt`, `container-runtime`, `load-balancer`,
+  `name-resolution`, `ntp`), `os.provided: true` (bootwright does not install its
+  OS), its `addresses` (`ssh` and `cluster-lan`), and `access.ssh` (which secret
+  key and which address to connect over).
+- `my-sno-lab-master-0` (`clusters/container/my-sno-lab/cluster-machines.yaml`):
+  the OpenShift node. It declares `capabilities: [openshift-node]`, its
+  `substrate` binding (`providerRef` + `profileRef: sno`), `os.provided: false`
+  (bootwright installs OpenShift onto it), its `network.config` (which
+  `NetworkConfig` and per-interface address it gets), and its static `addresses`
+  (the node IP).
 
-### NetworkConfig (`shared/networks.yaml`)
+### NetworkConfig (`infra/networkconfigs/networks.yaml`)
 
 The cluster machine network plus a reusable NMState host template for the agent
 install. It owns `spec.machineNetwork[].cidr`, the name-resolution selection
 (`nameResolutionRefs`), and the NMState `template` (interface `primary`, the DNS
 resolver, and the default route).
 
-### InfraProvider (`shared/provider.yaml`)
+### InfraProvider (`infra/providers/provider.yaml`)
 
 The substrate facts. **Two** providers are declared — this is easy to miss:
 
@@ -102,7 +110,7 @@ The substrate facts. **Two** providers are declared — this is easy to miss:
 - `my-sno-lab-hosts` (`type: baremetal`): the externally-booted arm the node uses
   to receive the agent ISO over the emulated Redfish virtual media.
 
-### InfraComponent (`shared/infra-component.yaml`)
+### InfraComponent (`infra/components/infra-component.yaml`)
 
 Machine-bound shared services. Three are declared, all pinned to `bastion`:
 
@@ -111,7 +119,7 @@ Machine-bound shared services. Three are declared, all pinned to `bastion`:
 - `name-resolution` (`dnsmasq`): serves cluster DNS.
 - `ntp-server` (`chrony`): serves time.
 
-### ContainerCluster (`clusters/my-sno-lab/cluster.yaml`)
+### ContainerCluster (`clusters/container/my-sno-lab/cluster.yaml`)
 
 The OpenShift install intent — and only install intent. It owns the release
 (`spec.distribution.release.version`), the install `platform` render mode, the
@@ -134,14 +142,14 @@ Open the scaffold and adjust these for your host. The defaults form a working
 | File | Field | Set it to |
 | --- | --- | --- |
 | `environment.yaml` | `spec.baseDomain` | A DNS base domain you control or route in the lab (default `example.test`). |
-| `shared/machines.yaml` | `Machine/bastion` `spec.addresses` (`ssh`) | The address bootwright uses to SSH to the bastion (default `192.168.10.11`). |
-| `shared/machines.yaml` | `Machine/my-sno-lab-master-0` `spec.addresses` (`ip`) | The node's static IP on the machine network (default `192.168.130.20`). |
-| `shared/networks.yaml` | `spec.machineNetwork[].cidr` | The cluster machine network CIDR (default `192.168.130.0/24`). |
-| `shared/provider.yaml` | `spec.libvirt.uri` | The libvirt URI, usually `qemu:///system`. |
-| `shared/provider.yaml` | `spec.libvirt.machineProfiles[]` | CPU, memory, and disk for the node VM (default `sno`: 8 vCPU / 22528 MiB / 120 GiB). |
-| `shared/provider.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network. |
-| `shared/infra-component.yaml` | `InfraComponent/load-balancer` `spec.loadBalancer.bindAddresses[]` | The `control-plane` VIP (`192.168.130.10`) and `apps` VIP (`192.168.130.11`). |
-| `clusters/my-sno-lab/cluster.yaml` | `spec.distribution.release.version` | The OpenShift release to install (default `4.21.15`). |
+| `infra/machines/bastion.yaml` | `Machine/bastion` `spec.addresses` (`ssh`) | The address bootwright uses to SSH to the bastion (default `192.168.10.11`). |
+| `clusters/container/my-sno-lab/cluster-machines.yaml` | `Machine/my-sno-lab-master-0` `spec.addresses` (`ip`) | The node's static IP on the machine network (default `192.168.130.20`). |
+| `infra/networkconfigs/networks.yaml` | `spec.machineNetwork[].cidr` | The cluster machine network CIDR (default `192.168.130.0/24`). |
+| `infra/providers/provider.yaml` | `spec.libvirt.uri` | The libvirt URI, usually `qemu:///system`. |
+| `infra/providers/provider.yaml` | `spec.libvirt.machineProfiles[]` | CPU, memory, and disk for the node VM (default `sno`: 8 vCPU / 22528 MiB / 120 GiB). |
+| `infra/providers/provider.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network. |
+| `infra/components/infra-component.yaml` | `InfraComponent/load-balancer` `spec.loadBalancer.bindAddresses[]` | The `control-plane` VIP (`192.168.130.10`) and `apps` VIP (`192.168.130.11`). |
+| `clusters/container/my-sno-lab/cluster.yaml` | `spec.distribution.release.version` | The OpenShift release to install (default `4.21.15`). |
 
 Leave `spec.secrets` as names only. Then validate the tree offline (no host
 contact, no context needed):

@@ -250,3 +250,30 @@ func TestStorageAdvisoriesSkipExternalClusters(t *testing.T) {
 		t.Fatalf("external clusters have no authored topology and must raise no advisories, got %+v", got)
 	}
 }
+
+// TestStorageAdvisoriesQuorumGuidanceIsDistributionNeutral guards against
+// re-branding general Ceph quorum/HA guidance as IBM-specific. Monitor quorum
+// and manager standby sizing are universal Ceph properties — the oss and redhat
+// distribution examples surface these same advisories — so the wording must not
+// claim "IBM Storage Ceph recommends" regardless of the selected distribution.
+func TestStorageAdvisoriesQuorumGuidanceIsDistributionNeutral(t *testing.T) {
+	for _, distribution := range []string{
+		v1alpha1.StorageCephDistributionOSS,
+		v1alpha1.StorageCephDistributionRedHat,
+		v1alpha1.StorageCephDistributionIBM,
+	} {
+		// A single host fires both the sub-quorum mon and the single-mgr advisory.
+		cluster := adviceCephCluster("q", distribution, "", []string{"mon", "mgr", "osd"})
+		got := StorageAdvisories(adviceState(cluster))
+		mon := findingsWith(got, "mon role")
+		mgr := findingsWith(got, "mgr role")
+		if len(mon) != 1 || len(mgr) != 1 {
+			t.Fatalf("%s single-host cluster must raise one mon and one mgr advisory, got %+v", distribution, got)
+		}
+		for _, a := range append(mon, mgr...) {
+			if strings.Contains(a.Impact, "IBM Storage Ceph") {
+				t.Errorf("%s: quorum advisory must not brand general Ceph guidance as IBM Storage Ceph: %q", distribution, a.Impact)
+			}
+		}
+	}
+}

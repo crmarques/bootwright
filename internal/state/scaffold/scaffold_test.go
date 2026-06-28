@@ -44,12 +44,13 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 // downstream init.go's `os.WriteFile` directory layout doesn't drift.
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	defaultNames := []string{
-		"environment.yaml", "shared/machines.yaml", "shared/networks.yaml", "shared/provider.yaml",
-		"clusters/cluster-a/cluster.yaml",
+		"environment.yaml", "infra/providers/provider.yaml", "infra/networkconfigs/networks.yaml",
+		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
 	}
 	namesWithArtifacts := []string{
-		"environment.yaml", "shared/machines.yaml", "shared/networks.yaml", "shared/provider.yaml",
-		"shared/infra-component.yaml", "clusters/cluster-a/cluster.yaml",
+		"environment.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
+		"infra/networkconfigs/networks.yaml", "infra/components/infra-component.yaml",
+		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
 	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
@@ -114,11 +115,11 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectations := map[string][]string{
-		"environment.yaml":                 {"name: my-cluster"},
-		"shared/machines.yaml":             {"name: my-cluster-master-0", "providerRef: my-cluster-libvirt"},
-		"shared/networks.yaml":             {"name: my-cluster-bridge"},
-		"shared/provider.yaml":             {"name: my-cluster-libvirt"},
-		"clusters/my-cluster/cluster.yaml": {"name: my-cluster", "machineRef: my-cluster-master-0"},
+		"environment.yaml": {"name: my-cluster"},
+		"clusters/container/my-cluster/cluster-machines.yaml": {"name: my-cluster-master-0", "providerRef: my-cluster-libvirt"},
+		"infra/networkconfigs/networks.yaml":                  {"name: my-cluster-bridge"},
+		"infra/providers/provider.yaml":                       {"name: my-cluster-libvirt"},
+		"clusters/container/my-cluster/cluster.yaml":          {"name: my-cluster", "machineRef: my-cluster-master-0"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]

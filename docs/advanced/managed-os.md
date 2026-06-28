@@ -9,8 +9,8 @@ Bootwright can install a machine's operating system before any cluster or storag
 work runs — the path most commonly used for Ceph storage nodes, which need a
 managed RHEL before cephadm. This page is the task how-to. The object model and
 every field live on [Machines](../concepts/machines.md); the worked end-to-end
-lab is `examples/ceph-ibm-libvirt-lab` (its `os/` subtree is the source for the
-snippets below) and `examples/ceph-ibm-baremetal-redfish` for bare metal.
+lab is `examples/ceph-ibm-libvirt-lab` (its `infra/os/` subtree is the source for
+the snippets below) and `examples/ceph-ibm-baremetal-redfish` for bare metal.
 
 ## When Bootwright installs the OS
 

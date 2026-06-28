@@ -136,7 +136,7 @@ func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []
 			Group:       cephBestPracticeGroup,
 			Object:      object,
 			Finding:     fmt.Sprintf("%d host(s) carry the mon role", mons),
-			Impact:      "IBM Storage Ceph recommends at least 3 monitors for quorum; fewer cannot survive a single monitor failure without losing the cluster",
+			Impact:      "Ceph recommends at least 3 monitors for quorum; fewer cannot survive a single monitor failure without losing the cluster",
 			Remediation: "give the mon role to at least 3 hosts (an odd count); single-monitor clusters are for lab or single-node use only",
 		}}
 	case mons%2 == 0:
@@ -161,7 +161,7 @@ func storageManagerAdvisories(object string, cluster v1alpha1.StorageCluster) []
 			Group:       cephBestPracticeGroup,
 			Object:      object,
 			Finding:     fmt.Sprintf("%d host(s) carry the mgr role", mgrs),
-			Impact:      "IBM Storage Ceph recommends at least 2 managers; a single manager is a single point of failure for orchestration, the dashboard, and metrics",
+			Impact:      "Ceph recommends at least 2 managers; a single manager is a single point of failure for orchestration, the dashboard, and metrics",
 			Remediation: "give the mgr role to at least 2 hosts for an active/standby pair",
 		}}
 	}

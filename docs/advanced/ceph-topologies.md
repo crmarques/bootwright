@@ -184,7 +184,7 @@ osd:
 
 Bootwright accepts small and single-node Ceph clusters for labs, but
 `bootwright validate` emits **warnings** (it never blocks apply) when a cluster
-departs from the layout IBM Storage Ceph recommends for production:
+departs from the layout Ceph recommends for production:
 
 - **Monitors** — give the `mon` role to at least **3 hosts**, and keep the count
   **odd** (3, 5, 7) so the cluster holds quorum through a monitor failure.

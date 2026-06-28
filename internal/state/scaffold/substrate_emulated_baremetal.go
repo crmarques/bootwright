@@ -19,7 +19,7 @@ var emulatedBareMetalSubstrate = Substrate{
         endpointRef: cluster
 
 `,
-	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
+	BastionMachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
   name: bastion
@@ -41,8 +41,8 @@ spec:
     ssh:
       addressRef: ssh
       keyRef: bastion-host-ssh
----
-apiVersion: bootwright.io/v1alpha1
+`,
+	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
   name: {{.Cluster}}-master-0

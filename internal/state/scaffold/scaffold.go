@@ -59,6 +59,7 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 	}
 	data.Substrate = resolved
 	data.MachinesYAML = resolved.MachinesYAML
+	data.BastionMachinesYAML = resolved.BastionMachinesYAML
 	data.EnvSecrets = resolved.EnvExtraSecrets
 
 	files := []File{}
@@ -181,6 +182,9 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	if s.MachinesYAML, err = render("MachinesYAML", s.MachinesYAML); err != nil {
 		return s, err
 	}
+	if s.BastionMachinesYAML, err = render("BastionMachinesYAML", s.BastionMachinesYAML); err != nil {
+		return s, err
+	}
 	if s.ProviderNetworkAttachments, err = render("ProviderNetworkAttachments", s.ProviderNetworkAttachments); err != nil {
 		return s, err
 	}
@@ -242,6 +246,7 @@ type Substrate struct {
 	NetworkNameSuffix          string
 	EnvExtraSecrets            string
 	EnvArtifactServer          string
+	BastionMachinesYAML        string
 	MachinesYAML               string
 	NetworkDNSServers          string
 	NetworkNameResolutionRefs  string
@@ -254,12 +259,13 @@ type Substrate struct {
 }
 
 type templateData struct {
-	Cluster      string
-	ProviderID   string
-	NetworkID    string
-	Substrate    Substrate
-	MachinesYAML string
-	EnvSecrets   string
+	Cluster             string
+	ProviderID          string
+	NetworkID           string
+	Substrate           Substrate
+	MachinesYAML        string
+	BastionMachinesYAML string
+	EnvSecrets          string
 }
 
 type namedTemplate struct {
@@ -270,11 +276,12 @@ type namedTemplate struct {
 
 var allTemplates = []namedTemplate{
 	{name: "environment.yaml", tmpl: mustTmpl("env", environmentTmpl)},
-	{name: "shared/machines.yaml", tmpl: mustTmpl("machines", machinesTmpl)},
-	{name: "shared/networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
-	{name: "shared/provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
-	{name: "shared/infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
-	{name: "clusters/{{.Cluster}}/cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
+	{name: "infra/providers/provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
+	{name: "infra/machines/bastion.yaml", tmpl: mustTmpl("bastion", bastionMachinesTmpl), optional: true},
+	{name: "infra/networkconfigs/networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
+	{name: "infra/components/infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
+	{name: "clusters/container/{{.Cluster}}/cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
+	{name: "clusters/container/{{.Cluster}}/cluster-machines.yaml", tmpl: mustTmpl("clustermachines", clusterMachinesTmpl)},
 }
 
 func mustTmpl(name, body string) *template.Template {
@@ -308,7 +315,9 @@ spec:
 {{.EnvSecrets}}
 `
 
-const machinesTmpl = `{{.MachinesYAML}}`
+const bastionMachinesTmpl = `{{.BastionMachinesYAML}}`
+
+const clusterMachinesTmpl = `{{.MachinesYAML}}`
 
 const networksTmpl = `apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig

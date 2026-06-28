@@ -14,7 +14,7 @@ All three storage types are configured: **block (RBD)**, **file (CephFS)**, and
 **object (RGW with an ingress VIP)**.
 
 The lab also installs in **FIPS mode**: `clusters/storage/ceph-ibm/cluster.yaml`
-sets `spec.ceph.security.fips.enabled` and `os/install-profile.yaml` sets
+sets `spec.ceph.security.fips.enabled` and `infra/os/rhel-9-ceph-node.yaml` sets
 `customizations.security.fips.enabled`, so each RHEL node is laid down with
 `fips=1` on the installer kernel command line. FIPS is an OS-level property —
 there is no separate cephadm switch — so Bootwright gates it to the
@@ -341,12 +341,12 @@ bootwright destroy --stage infra --override --yes      # remove VMs, network, se
 environment.yaml                              Environment: secrets, IBM entitlement, lab DNS
 infra/providers/libvirt.yaml                  InfraProvider: libvirt + VM profiles + bridge
 infra/machines/bastion.yaml                   Machine: the libvirt host (localhost)
-infra/machines/ceph-nodes.yaml                Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 192.168.140.0/24, static IPs
 infra/components/lab-dns.yaml                  InfraComponent: dnsmasq resolver + forwarders
-os/machine-image.yaml                         MachineImage: RHEL 9.7 DVD (local-media)
-os/install-profile.yaml                        MachineInstallProfile: anaconda RHEL install
+infra/os/rhel-9-x86-64-dvd.yaml               MachineImage: RHEL 9.7 DVD (local-media)
+infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
 clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9, mgmt-gateway HA dashboard
+clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml  Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
 clusters/storage/ceph-ibm/placement-policy.yaml  size 2 / minSize 2, failureDomain host
 clusters/storage/ceph-ibm/pools/*.yaml        StoragePools: rbd, cephfs-data/metadata, rgw
 clusters/storage/ceph-ibm/filesystems/cephfs.yaml  StorageFilesystem (CephFS)
@@ -354,6 +354,6 @@ clusters/storage/ceph-ibm/object-gateways/rgw.yaml StorageObjectGateway (RGW + i
 ```
 
 To change the network, edit the `192.168.140.*` addresses in
-`infra/networkconfigs/ceph-net.yaml`, `infra/machines/*.yaml`,
-`infra/components/lab-dns.yaml`, and
+`infra/networkconfigs/ceph-net.yaml`, `infra/machines/bastion.yaml`,
+`clusters/storage/ceph-ibm/nodes/*.yaml`, `infra/components/lab-dns.yaml`, and
 `clusters/storage/ceph-ibm/{cluster.yaml,object-gateways/rgw.yaml}`.

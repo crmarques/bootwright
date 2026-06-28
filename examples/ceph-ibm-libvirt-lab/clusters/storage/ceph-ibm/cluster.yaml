@@ -29,7 +29,7 @@ spec:
     # gate, not a separate cephadm switch: Ceph runs FIPS by running on
     # FIPS-installed RHEL nodes. Bootwright validates that the distribution is
     # FIPS-validated (redhat/ibm — community oss images are not) and that every
-    # node's install profile (os/install-profile.yaml) also sets
+    # node's install profile (infra/os/rhel-9-ceph-node.yaml) also sets
     # customizations.security.fips.enabled, where the fips=1 install lives.
     security:
       fips:

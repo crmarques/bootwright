@@ -17,11 +17,12 @@ func TestExampleInitWritesValidWorkspace(t *testing.T) {
 	}
 	for _, name := range []string{
 		"environment.yaml",
-		"shared/machines.yaml",
-		"shared/provider.yaml",
-		"shared/infra-component.yaml",
-		"shared/networks.yaml",
-		"clusters/my-sno-lab/cluster.yaml",
+		"infra/providers/provider.yaml",
+		"infra/machines/bastion.yaml",
+		"infra/networkconfigs/networks.yaml",
+		"infra/components/infra-component.yaml",
+		"clusters/container/my-sno-lab/cluster.yaml",
+		"clusters/container/my-sno-lab/cluster-machines.yaml",
 	} {
 		if _, err := os.Stat(filepath.Join(outputDir, name)); err != nil {
 			t.Fatalf("example init did not write %s: %v", name, err)

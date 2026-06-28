@@ -17,7 +17,7 @@ example by hand:
 bootwright example init --name <cluster-name> --output <input-dir>
 ```
 
-The scaffold produces a nested `shared/` + `clusters/<name>/` workspace and is
+The scaffold produces a nested `infra/` + `clusters/container/<name>/` workspace and is
 what [Getting Started](../getting-started/index.md) walks through. The committed
 examples below are reference trees for comparison and adaptation — some use a
 different (often flatter, more minimal) shape than the scaffold, so read the

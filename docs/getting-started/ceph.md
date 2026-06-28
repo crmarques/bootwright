@@ -54,14 +54,13 @@ my-ceph-lab/
   infra/
     providers/libvirt.yaml                           InfraProvider: libvirt + VM profiles + bridge
     machines/bastion.yaml                            Machine: the libvirt host (localhost)
-    machines/ceph-nodes.yaml                         Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
     networkconfigs/ceph-net.yaml                     NetworkConfig: 192.168.140.0/24, static IPs
     components/lab-dns.yaml                           InfraComponent: dnsmasq resolver + forwarders
-  os/
-    machine-image.yaml                               MachineImage: RHEL 9.7 DVD (local-media)
-    install-profile.yaml                             MachineInstallProfile: Anaconda RHEL install
+    os/rhel-9-x86-64-dvd.yaml                        MachineImage: RHEL 9.7 DVD (local-media)
+    os/rhel-9-ceph-node.yaml                         MachineInstallProfile: Anaconda RHEL install
   clusters/storage/ceph-ibm/
     cluster.yaml                                     StorageCluster: distribution ibm, release 9
+    nodes/{ceph-1,ceph-2,ceph-3}.yaml                Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
     placement-policy.yaml                            StoragePlacementPolicy: size 2 / minSize 2
     pools/{rbd,cephfs-data,cephfs-metadata,rgw}.yaml StoragePools
     filesystems/cephfs.yaml                          StorageFilesystem (CephFS)
@@ -108,10 +107,12 @@ bridge under `networkAttachments`:
   (`/dev/vdb`–`/dev/vdd`).
 - `ceph-mon`: 1 vCPU, 2048 MiB RAM, a 16 GiB root, no OSD disks.
 
-### Machine (`infra/machines/*.yaml`)
+### Machine (`infra/machines/bastion.yaml`, `clusters/storage/ceph-ibm/nodes/*.yaml`)
 
-Four machines in two files. Machines own substrate binding, OS mode, durable
-addresses, and SSH access — never install intent.
+Four machines: the shared bastion under `infra/machines/`, and the three Ceph
+nodes alongside their cluster under `clusters/storage/ceph-ibm/nodes/`. Machines
+own substrate binding, OS mode, durable addresses, and SSH access — never install
+intent.
 
 - `bastion`: the local workstation/libvirt host. `os.provided: true`,
   `capabilities` (`container-runtime`, `libvirt`, `name-resolution`), addresses
@@ -123,7 +124,7 @@ addresses, and SSH access — never install intent.
   static IP (`.21`, `.22`, `.23`), and connects over SSH as `root` with the shared
   `ceph-node-ssh` key — one SSH identity per `StorageCluster`.
 
-### MachineImage and MachineInstallProfile (`os/`)
+### MachineImage and MachineInstallProfile (`infra/os/`)
 
 These drive the managed RHEL install — the part that distinguishes this lab from
 the agent-installed OpenShift SNO lab.
@@ -190,23 +191,23 @@ environment differs.
 | `infra/providers/libvirt.yaml` | `spec.libvirt.uri` | The libvirt URI, usually `qemu:///system`. |
 | `infra/providers/libvirt.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network (default `vbr-ceph-ibm`). |
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |
-| `infra/machines/ceph-nodes.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
-| `os/machine-image.yaml` | `spec.url` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
-| `os/install-profile.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.7`). |
+| `clusters/storage/ceph-ibm/nodes/*.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
+| `infra/os/rhel-9-x86-64-dvd.yaml` | `spec.url` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
+| `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.7`). |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph product stream (default `"9"`). |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `management.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
 | `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsName` and `spec.ceph.ingresses[].address` | The RGW endpoint and ingress VIP, if you changed the network. |
 
 If you change the `192.168.140.*` network, update every place it appears:
-`infra/networkconfigs/ceph-net.yaml`, `infra/machines/*.yaml`,
-`infra/components/lab-dns.yaml`, and
+`infra/networkconfigs/ceph-net.yaml`, `infra/machines/bastion.yaml`,
+`clusters/storage/ceph-ibm/nodes/*.yaml`, `infra/components/lab-dns.yaml`, and
 `clusters/storage/ceph-ibm/{cluster.yaml,object-gateways/rgw.yaml}`.
 
 !!! note "Drop FIPS to simplify"
     Two blocks request FIPS: `spec.ceph.security.fips.enabled` in
     `cluster.yaml` and `customizations.security.fips.enabled` in
-    `os/install-profile.yaml`. Remove both to build the cluster without FIPS —
-    bootwright requires every Ceph node's install profile to agree.
+    `infra/os/rhel-9-ceph-node.yaml`. Remove both to build the cluster without
+    FIPS — bootwright requires every Ceph node's install profile to agree.
 
 ## Prerequisites Unique To This Lab
 

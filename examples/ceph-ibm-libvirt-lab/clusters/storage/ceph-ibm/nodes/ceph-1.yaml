@@ -1,0 +1,41 @@
+# Full Ceph node (profile ceph-full, 3 OSD disks): mon, mgr, osd, mds, rgw,
+# ingress. A libvirt VM installed with RHEL 9.7 as Bootwright-managed OS. Shares
+# the ceph-node-ssh key and root user with its peers — one SSH identity per
+# StorageCluster.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-1
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef: lab-libvirt-provider
+    profileRef: ceph-full
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-ceph-node
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+
+  network:
+    config:
+      networkConfigRef: ceph-bridge
+      attachmentRef: ceph-bridge
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ssh
+          prefixLength: 24
+
+  addresses:
+    - name: ssh
+      address: 192.168.140.21
+
+  access:
+    ssh:
+      user: root
+      keyRef: ceph-node-ssh
+      addressRef: ssh
