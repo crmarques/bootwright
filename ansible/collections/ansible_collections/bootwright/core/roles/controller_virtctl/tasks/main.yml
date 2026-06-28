@@ -28,6 +28,12 @@
     bootwright_virtctl_lookup_path: "{{ bootwright_virtctl_install_dir }}:{{ ansible_facts.env.PATH }}"
   changed_when: false
 
+# observedKubeVirtVersion on the KubeVirt CR is the operator image's version
+# tag, which is a digest (sha256:...) whenever the image is digest-pinned, as it
+# always is in OpenShift Virtualization. A digest cannot drive a version match
+# against virtctl's GitVersion nor a mirror URL. Query the subresource
+# apiserver's version endpoint instead: it returns the real KubeVirt semver, the
+# same GitVersion that `virtctl version` reports as the Server Version.
 - name: Read KubeVirt server version from the host cluster
   ansible.builtin.command:
     argv:
@@ -35,16 +41,14 @@
       - --kubeconfig
       - "{{ bootwright_virtctl_kubeconfig }}"
       - get
-      - kubevirt.kubevirt.io
-      - --all-namespaces
-      - -o
-      - "jsonpath={.items[0].status.observedKubeVirtVersion}"
+      - --raw
+      - /apis/subresources.kubevirt.io/v1/version
   register: bootwright_virtctl_server_probe
   changed_when: false
 
 - name: Resolve KubeVirt server version
   ansible.builtin.set_fact:
-    bootwright_virtctl_server_version: "{{ bootwright_virtctl_server_probe.stdout | trim }}"
+    bootwright_virtctl_server_version: "{{ (bootwright_virtctl_server_probe.stdout | from_json).gitVersion | default('') | trim }}"
   changed_when: false
 
 - name: Validate KubeVirt server version is known
