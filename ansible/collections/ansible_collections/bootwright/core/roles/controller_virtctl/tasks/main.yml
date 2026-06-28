@@ -1,0 +1,173 @@
+---
+- name: Validate virtctl provisioning inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_virtctl_kubeconfig is defined
+      - (bootwright_virtctl_kubeconfig | string | length) > 0
+    fail_msg: "bootwright_virtctl_kubeconfig is required (the KubeVirt host cluster kubeconfig)"
+
+- name: Validate controller virtctl install is running as root
+  ansible.builtin.assert:
+    that:
+      - ansible_user_uid | int == 0
+    fail_msg: "controller virtctl install must run as root"
+
+- name: Install virtctl archive packages
+  ansible.builtin.package:
+    name: "{{ bootwright_virtctl_packages }}"
+    state: present
+
+- name: Ensure virtctl install directory exists
+  ansible.builtin.file:
+    path: "{{ bootwright_virtctl_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Compute virtctl lookup PATH (install dir + system PATH)
+  ansible.builtin.set_fact:
+    bootwright_virtctl_lookup_path: "{{ bootwright_virtctl_install_dir }}:{{ ansible_facts.env.PATH }}"
+  changed_when: false
+
+- name: Read KubeVirt server version from the host cluster
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_virtctl_kubeconfig }}"
+      - get
+      - kubevirt.kubevirt.io
+      - --all-namespaces
+      - -o
+      - "jsonpath={.items[0].status.observedKubeVirtVersion}"
+  register: bootwright_virtctl_server_probe
+  changed_when: false
+
+- name: Resolve KubeVirt server version
+  ansible.builtin.set_fact:
+    bootwright_virtctl_server_version: "{{ bootwright_virtctl_server_probe.stdout | trim }}"
+  changed_when: false
+
+- name: Validate KubeVirt server version is known
+  ansible.builtin.assert:
+    that:
+      - bootwright_virtctl_server_version | length > 0
+    fail_msg: >-
+      Could not read the KubeVirt version from host cluster kubeconfig
+      {{ bootwright_virtctl_kubeconfig }}; is OpenShift Virtualization installed
+      and the kubeconfig reachable?
+
+- name: Probe installed virtctl version
+  ansible.builtin.command:
+    cmd: virtctl version --client
+  register: bootwright_virtctl_installed_probe
+  environment:
+    PATH: "{{ bootwright_virtctl_lookup_path }}"
+  changed_when: false
+  failed_when: false
+
+- name: Decide whether virtctl needs install (require server version match)
+  ansible.builtin.set_fact:
+    bootwright_virtctl_install: >-
+      {{ bootwright_virtctl_installed_probe.rc != 0
+         or bootwright_virtctl_server_version not in (bootwright_virtctl_installed_probe.stdout | default('')) }}
+  changed_when: false
+
+- name: Resolve virtctl ConsoleCLIDownload from the host cluster
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_virtctl_kubeconfig }}"
+      - get
+      - consoleclidownload.console.openshift.io
+      - "{{ bootwright_virtctl_console_clidownload }}"
+      - -o
+      - json
+  register: bootwright_virtctl_clidownload
+  changed_when: false
+  when:
+    - bootwright_virtctl_install | bool
+    - (bootwright_virtctl_mirror_base | length) == 0
+
+- name: Select the linux/amd64 virtctl ConsoleCLIDownload URL
+  ansible.builtin.set_fact:
+    bootwright_virtctl_download_url: >-
+      {{ (bootwright_virtctl_clidownload.stdout | from_json).spec.links
+         | selectattr('href', 'search', 'amd64/linux')
+         | map(attribute='href') | first }}
+  changed_when: false
+  when:
+    - bootwright_virtctl_install | bool
+    - (bootwright_virtctl_mirror_base | length) == 0
+
+- name: Compute the mirrored virtctl download URL
+  ansible.builtin.set_fact:
+    bootwright_virtctl_download_url: "{{ bootwright_virtctl_mirror_base }}/{{ bootwright_virtctl_server_version }}/virtctl-linux-amd64.tar.gz"
+  changed_when: false
+  when:
+    - bootwright_virtctl_install | bool
+    - (bootwright_virtctl_mirror_base | length) > 0
+
+- name: Create virtctl tmp directory
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ bootwright_virtctl_tmp_parent }}"
+    prefix: bootwright-controller-virtctl-
+  register: bootwright_virtctl_tmp
+  when: bootwright_virtctl_install | bool
+
+- name: Download virtctl archive
+  ansible.builtin.get_url:
+    url: "{{ bootwright_virtctl_download_url }}"
+    dest: "{{ bootwright_virtctl_tmp.path }}/virtctl.tar.gz"
+    mode: "0644"
+    validate_certs: "{{ not (bootwright_virtctl_insecure_tls | bool) }}"
+  when: bootwright_virtctl_install | bool
+
+- name: Remove stale virtctl from install dir
+  ansible.builtin.file:
+    path: "{{ bootwright_virtctl_install_dir }}/virtctl"
+    state: absent
+  when: bootwright_virtctl_install | bool
+
+- name: Extract virtctl into install dir
+  ansible.builtin.unarchive:
+    src: "{{ bootwright_virtctl_tmp.path }}/virtctl.tar.gz"
+    dest: "{{ bootwright_virtctl_install_dir }}"
+    remote_src: true
+    include:
+      - virtctl
+    mode: "0755"
+  when: bootwright_virtctl_install | bool
+
+- name: Probe final virtctl version
+  ansible.builtin.command:
+    cmd: virtctl version --client
+  register: bootwright_virtctl_final_probe
+  environment:
+    PATH: "{{ bootwright_virtctl_lookup_path }}"
+  changed_when: false
+  failed_when: false
+  when: bootwright_virtctl_install | bool
+
+- name: Verify installed virtctl matches the host cluster KubeVirt version
+  ansible.builtin.assert:
+    that:
+      - bootwright_virtctl_server_version in (bootwright_virtctl_final_probe.stdout | default(''))
+    fail_msg: >-
+      Installed virtctl does not match host cluster KubeVirt version
+      {{ bootwright_virtctl_server_version }}:
+      {{ bootwright_virtctl_final_probe.stdout | default('<unknown>') }}.
+  when: bootwright_virtctl_install | bool
+
+- name: Remove virtctl tmp directory
+  ansible.builtin.file:
+    path: "{{ bootwright_virtctl_tmp.path }}"
+    state: absent
+  when:
+    - bootwright_virtctl_tmp is defined
+    - bootwright_virtctl_tmp.path is defined
+
+- name: Show provisioned virtctl version
+  ansible.builtin.debug:
+    msg: "virtctl {{ bootwright_virtctl_server_version }} (matched to host cluster KubeVirt)"

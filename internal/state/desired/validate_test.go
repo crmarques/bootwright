@@ -104,6 +104,31 @@ func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	}
 }
 
+func TestEnvironmentVirtctlMirrorValidation(t *testing.T) {
+	mk := func(url string) v1alpha1.Environment {
+		return v1alpha1.Environment{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec:     v1alpha1.EnvironmentSpec{Defaults: v1alpha1.EnvironmentDefaultsSpec{VirtctlMirror: url}},
+		}
+	}
+	if errs := validateEnvironmentDefaults(mk("https://mirror.example/virtctl"), nil); len(errs) != 0 {
+		t.Fatalf("valid virtctlMirror rejected: %v", errs)
+	}
+	if errs := validateEnvironmentDefaults(mk(""), nil); len(errs) != 0 {
+		t.Fatalf("empty virtctlMirror rejected: %v", errs)
+	}
+	errs := validateEnvironmentDefaults(mk("not-a-url"), nil)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "virtctlMirror") && strings.Contains(e, "http(s) URL") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("invalid virtctlMirror not rejected: %v", errs)
+	}
+}
+
 func TestEnvironmentSafetyDestroyProtectionValidation(t *testing.T) {
 	for _, value := range []string{v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionRequiredOverride} {
 		t.Run(value, func(t *testing.T) {

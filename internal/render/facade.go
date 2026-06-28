@@ -72,6 +72,10 @@ func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 	return inventory.OpenShiftClientsReleaseURL(state, version)
 }
 
+func VirtctlMirrorOverride(state v1alpha1.State) string {
+	return inventory.VirtctlMirrorOverride(state)
+}
+
 func HostGroupCountsWithOwnershipRecords(state v1alpha1.State, records []ownership.ResourceRecord) map[string]int {
 	return inventory.HostGroupCountsWithOwnershipRecords(state, records)
 }

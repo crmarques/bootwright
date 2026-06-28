@@ -157,8 +157,13 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 		checks = append(checks, vspherePyvmomiCheck(deps))
 	}
 	if phaseInScope("base", selected, hasState) {
-		if stateNeedsKubeVirt(state) {
-			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH", deps))
+		// virtctl is provisioned, version-matched to each host cluster, by the
+		// deps stage (the controller_virtctl role). Require it up front only when
+		// base runs without deps (nothing will provision it); when deps is in
+		// scope — including a full apply with no --stage filter — the provision
+		// task installs it before boot, so a missing virtctl here is not a gate.
+		if stateNeedsKubeVirt(state) && !phaseInScope("deps", selected, hasState) {
+			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH, or include the deps stage so bootwright provisions it from the host cluster", deps))
 		}
 	}
 	if phaseInScope("add-ons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {

@@ -85,6 +85,63 @@ func kubeVirtHostClusterApplyCapabilitiesForMachines(state v1alpha1.State, machi
 	return out, nil
 }
 
+// kubeVirtHostClusterReadiness returns, per distinct KubeVirt host cluster
+// referenced by the loaded container clusters' machines, the capabilities that
+// must be satisfied before the controller can talk to that host (the host
+// cluster being installed plus its KubeVirt-providing addon). A host that is not
+// itself a selected ContainerCluster (a pre-existing, externally-managed host)
+// yields a nil slice: it is assumed ready, so the deps-stage virtctl provision
+// for it has no prerequisites. The second return maps each container cluster to
+// the distinct host clusters its machines run on, so each boot task can require
+// its hosts' virtctl provision. Mirrors kubeVirtHostClusterApplyCapabilities so
+// the readiness gate is identical to the one boot already waits on.
+func kubeVirtHostClusterReadiness(state v1alpha1.State) (map[string][]CapabilityRef, map[string][]string, error) {
+	selected := map[string]bool{}
+	for _, cluster := range state.ContainerClusters {
+		selected[cluster.Metadata.Name] = true
+	}
+	providers := providerIndex(state)
+	machines := machineIndex(state)
+	provides, err := kubeVirtProviderExtensionCapabilities(state)
+	if err != nil {
+		return nil, nil, err
+	}
+	perHost := map[string][]CapabilityRef{}
+	hostsByCluster := map[string][]string{}
+	for _, cluster := range state.ContainerClusters {
+		for _, node := range cluster.Spec.Hosts {
+			machine, ok := machines[node.MachineRef.Name]
+			if !ok {
+				continue
+			}
+			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
+			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil || provider.Spec.KubeVirt.HostClusterRef.Name == "" {
+				continue
+			}
+			parent := provider.Spec.KubeVirt.HostClusterRef.Name
+			hostsByCluster[cluster.Metadata.Name] = appendUniqueString(hostsByCluster[cluster.Metadata.Name], parent)
+			if _, done := perHost[parent]; done {
+				continue
+			}
+			if !selected[parent] {
+				perHost[parent] = nil
+				continue
+			}
+			caps := []CapabilityRef{clusterInstalledCapability(parent)}
+			addonCaps := provides[parent]
+			if len(addonCaps) == 0 {
+				return nil, nil, fmt.Errorf("ContainerCluster uses KubeVirt hostClusterRef %q but no selected ClusterAddon providing %q is bound to that host cluster",
+					parent, v1alpha1.ClusterAddonProvidesKubeVirt)
+			}
+			for _, cap := range addonCaps {
+				caps = appendUniqueCapability(caps, cap)
+			}
+			perHost[parent] = caps
+		}
+	}
+	return perHost, hostsByCluster, nil
+}
+
 func kubeVirtProviderExtensionCapabilities(state v1alpha1.State) (map[string][]CapabilityRef, error) {
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {

@@ -43,6 +43,7 @@ means there is no default — an omitted optional field stays unset.
 | `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [Container clusters](container-clusters.md)). |
 | `spec.defaults.artifactAccess` | No | — | Default artifact endpoint binding for active artifact consumers. See [Artifact access](#artifact-access). |
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
+| `spec.defaults.virtctlMirror` | No | — | HTTP(S) base URL for a mirrored, version-matched `virtctl`. Empty means fetch from each KubeVirt host cluster's OpenShift Virtualization ConsoleCLIDownload; set it for disconnected labs. Validated as an `http(s)` URL when set. |
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
 | `spec.proxyFor.bootwright` | No | — | Proxy catalog entry used by Bootwright runtime actions; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
 | `spec.proxyFor.containerClusterInstall` | No | — | Proxy catalog entry rendered into cluster install input; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
@@ -296,6 +297,7 @@ Beyond the per-field rules above, the validator enforces:
 - **Exactly one `Environment`** is required in the loaded state.
 - `spec.baseDomain` is required.
 - `spec.defaults.clientsMirror` must be an `http(s)` URL when set.
+- `spec.defaults.virtctlMirror` must be an `http(s)` URL when set.
 - `spec.proxyFor.bootwright`, `spec.proxyFor.containerClusterInstall`, and
   `spec.proxyFor.machineOSInstall` must each name a declared
   `spec.infraComponents.proxies[]` entry, or be empty or the literal `none`.

@@ -1,0 +1,21 @@
+---
+- name: Provision version-matched virtctl for a KubeVirt host cluster
+  hosts: bootwright_ocp_hosts
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
+
+  tasks:
+    - name: Install version-matched virtctl from the host cluster
+      ansible.builtin.import_role:
+        name: bootwright.core.controller_virtctl
+      vars:
+        bootwright_virtctl_kubeconfig: "{{ bootwright_clusters_dir }}/{{ bootwright_task_host_cluster_name }}/secrets/kubeconfig"

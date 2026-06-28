@@ -215,6 +215,23 @@ silently widen their scope.
     parent and child, or run the child apply after the parent is independently
     converged.
 
+## virtctl is provisioned during the deps stage
+
+Booting child VMs runs `virtctl image-upload` and `virtctl start` against the
+host cluster, so the controller needs a `virtctl` whose version matches the
+host's OpenShift Virtualization. Bootwright provisions it for you: the **deps**
+stage installs a version-matched `virtctl` on the controller, once per distinct
+host cluster, before any child boots. By default it is fetched from the host
+cluster's OpenShift Virtualization `ConsoleCLIDownload`; set
+`Environment.spec.defaults.virtctlMirror` to a mirror base for disconnected labs
+(the role appends the server-reported version). Each child's boot waits on its
+host's provision.
+
+Because the deps stage installs it, the preflight `virtctl` check is **skipped**
+whenever deps is in scope — including a full `apply` with no `--stage` filter. It
+is only enforced for a `--stage base` run without deps, where nothing provisions
+`virtctl` and it must already be on the controller's `PATH`.
+
 ## See also
 
 - [Container clusters](../concepts/container-clusters.md) — child cluster install

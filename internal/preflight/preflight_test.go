@@ -266,6 +266,58 @@ func TestVSpherePyvmomiCheckRunsAsLocalRoot(t *testing.T) {
 	}
 }
 
+// TestVirtctlPreflightGatedOnDepsProvisioning pins the deps-aware virtctl gate:
+// the deps stage provisions a version-matched virtctl from the host cluster, so
+// the hard binary check is required only for a base run without deps; a full
+// apply (no --stage) or any run that includes deps skips it.
+func TestVirtctlPreflightGatedOnDepsProvisioning(t *testing.T) {
+	state := v1alpha1.State{
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "kv"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type:     v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{HostClusterRef: &v1alpha1.LocalObjectReference{Name: "host"}, Namespace: "ns"},
+			},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "m0"},
+			Spec:     v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "kv"}}},
+		}},
+	}
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			if name == "virtctl" {
+				return "", errors.New("not found")
+			}
+			return "/bin/" + name, nil
+		},
+		StatPath:               func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+		CommandOutput:          func(string, ...string) ([]byte, error) { return []byte("Python 3.12.4"), nil },
+		CommandOutputLocalRoot: func(string, ...string) ([]byte, error) { return []byte("Python 3.12.4"), nil },
+		UID:                    func() int { return 1000 },
+	}
+	hasVirtctl := func(checks []Check) bool {
+		for _, c := range checks {
+			if c.Name == "virtctl" {
+				return true
+			}
+		}
+		return false
+	}
+	baseOnly := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
+	if !hasVirtctl(baseOnly) {
+		t.Fatalf("base-without-deps must require virtctl up front: %+v", baseOnly)
+	}
+	withDeps := CollectChecks(state, []Phase{{Name: "deps"}, {Name: "base"}}, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
+	if hasVirtctl(withDeps) {
+		t.Fatalf("deps in scope provisions virtctl, so the hard gate must be skipped")
+	}
+	fullApply := CollectChecks(state, nil, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
+	if hasVirtctl(fullApply) {
+		t.Fatalf("a full apply (no --stage) includes deps, so the hard gate must be skipped")
+	}
+}
+
 func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	deps := Deps{

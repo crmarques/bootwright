@@ -19,6 +19,7 @@ const (
 	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
+	ApplyTaskKindHostVirtctl            = "hostVirtctl"
 	ApplyTaskKindNodeBoot               = "nodeBoot"
 	ApplyTaskKindInstallWait            = "installWait"
 	ApplyTaskKindStorageCluster         = "storageCluster"
@@ -47,6 +48,7 @@ const (
 	applyMachineInfraFinalize     = roles.PlaybookTaskMachineInfraFinalize
 	applyManagedMachineOSPlaybook = roles.PlaybookTaskManagedMachineOSApply
 	applyCreateISOPlaybook        = roles.PlaybookTaskContainerClusterCreateAgentISO
+	applyHostVirtctlPlaybook      = roles.PlaybookTaskHostVirtctlProvision
 	applyBootMachinePlaybook      = roles.PlaybookTaskContainerClusterBootAgentMachine
 	applyWaitInstallPlaybook      = roles.PlaybookTaskContainerClusterWaitAgentInstall
 	applyStoragePlaybook          = roles.PlaybookTaskStorageClusterApply

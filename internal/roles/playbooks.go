@@ -23,6 +23,7 @@ const (
 	PlaybookTaskContainerClusterCreateAgentISO   = "bootwright.core.task_container_cluster_create_agent_iso"
 	PlaybookTaskContainerClusterBootAgentMachine = "bootwright.core.task_container_cluster_boot_agent_machine"
 	PlaybookTaskContainerClusterWaitAgentInstall = "bootwright.core.task_container_cluster_wait_agent_install"
+	PlaybookTaskHostVirtctlProvision             = "bootwright.core.task_host_virtctl_provision"
 	PlaybookTaskStorageClusterApply              = "bootwright.core.task_storage_cluster_apply"
 
 	// Per-task destroy entry points. The workflow_*_destroy playbooks are thin

@@ -1548,6 +1548,53 @@ func TestPlanApplyClustersSkipsUnselectedKubeVirtHostDependencies(t *testing.T) 
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	assertTaskDeps(t, tasks, "iso.child-ocp")
+	// A pre-existing (unselected) host cluster still gets a deps-stage virtctl
+	// provision, but with no prerequisites — the host is assumed ready.
+	assertTaskDeps(t, tasks, "virtctl.metal-ocp")
+}
+
+func TestPlanApplyProvisionsVirtctlPerHostBeforeBoot(t *testing.T) {
+	state := kubeVirtChildPlanningState(true)
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	// One virtctl provision per distinct host cluster, gated behind that host's
+	// readiness (install + the KubeVirt-providing addon) — same gate boot waits on.
+	assertTaskDeps(t, tasks, "virtctl.metal-ocp", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
+	// Every child boot waits for its host's virtctl provision.
+	boot := assertTaskPresent(t, tasks, "boot.child-ocp")
+	found := false
+	for _, dep := range boot.Entry.Dependencies {
+		if dep == "virtctl.metal-ocp" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("boot.child-ocp deps = %v, want to include virtctl.metal-ocp", boot.Entry.Dependencies)
+	}
+}
+
+func TestPlanApplyBaseOnlyDoesNotProvisionVirtctl(t *testing.T) {
+	// Pre-existing host (unselected): a base-only run has no addon/deps tasks, so
+	// boot requires no host capabilities and nothing provisions virtctl.
+	state := kubeVirtChildPlanningState(false)
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "base", PhaseNames: []string{ApplyPhaseBase}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	// Without deps in scope nothing provisions virtctl, so no provision task is
+	// planned and boot must not wait on a task that does not exist. The preflight
+	// keeps the hard virtctl binary check for this base-without-deps case instead.
+	assertTaskMissing(t, tasks, "virtctl.metal-ocp")
+	boot := assertTaskPresent(t, tasks, "boot.child-ocp")
+	for _, dep := range boot.Entry.Dependencies {
+		if dep == "virtctl.metal-ocp" {
+			t.Fatalf("boot.child-ocp deps = %v, must not require an unplanned virtctl task", boot.Entry.Dependencies)
+		}
+	}
 }
 
 func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {

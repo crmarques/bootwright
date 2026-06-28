@@ -81,6 +81,21 @@ func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 	return base + "/" + version
 }
 
+// VirtctlMirrorOverride returns the Environment defaults.virtctlMirror base URL
+// when set, and "" otherwise. Empty means the controller_virtctl role fetches
+// the version-matched virtctl from each KubeVirt host cluster's OpenShift
+// Virtualization ConsoleCLIDownload; a disconnected lab sets the override and
+// the role appends the server-reported version. Unlike OpenShiftClientsReleaseURL
+// there is no upstream default base — the default source is the host cluster.
+func VirtctlMirrorOverride(state v1alpha1.State) string {
+	if env := stateview.Environment(state); env != nil {
+		if m := strings.TrimSpace(env.Spec.Defaults.VirtctlMirror); m != "" {
+			return strings.TrimRight(m, "/")
+		}
+	}
+	return ""
+}
+
 // servicePinGates maps each pinnable managed service to the predicate that
 // decides whether the loaded state actually uses it. The set of keys here must
 // match roles.PinnableServiceKeys(); TestServicePinGatesCoverPinnableServices

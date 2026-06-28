@@ -19,6 +19,7 @@ const (
 	ActivityKindStorageClusterProvision    ActivityKind = "StorageClusterProvision"
 	ActivityKindStorageExternalDetails     ActivityKind = "StorageExternalDetailsGather"
 	ActivityKindContainerInstallAssets     ActivityKind = "ContainerInstallAssets"
+	ActivityKindHostVirtctlProvision       ActivityKind = "HostVirtctlProvision"
 	ActivityKindContainerNodeBoot          ActivityKind = "ContainerNodeBoot"
 	ActivityKindContainerInstallWait       ActivityKind = "ContainerInstallWait"
 	ActivityKindStorageAttachmentApply     ActivityKind = "StorageAttachmentApply"
@@ -198,4 +199,12 @@ func clusterInstalledCapability(cluster string) CapabilityRef {
 
 func addonProvidesCapability(cluster, capability string) CapabilityRef {
 	return CapabilityRef{Kind: "addon.provides:" + capability, Name: cluster}
+}
+
+// virtctlProvisionedCapability marks that a KubeVirt host cluster's
+// version-matched virtctl has been installed on the controller. The boot task of
+// every child cluster running on that host requires it, so booting waits for the
+// deps-stage provision activity.
+func virtctlProvisionedCapability(hostCluster string) CapabilityRef {
+	return CapabilityRef{Kind: "kubevirt.virtctl-provisioned", Name: hostCluster}
 }

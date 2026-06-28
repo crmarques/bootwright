@@ -108,6 +108,9 @@ func validateEnvironmentDefaults(env v1alpha1.Environment, components map[string
 	if mirror := strings.TrimSpace(env.Spec.Defaults.ClientsMirror); mirror != "" && !isHTTPURL(mirror) {
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.clientsMirror %q must be an http(s) URL", env.Metadata.Name, env.Spec.Defaults.ClientsMirror))
 	}
+	if mirror := strings.TrimSpace(env.Spec.Defaults.VirtctlMirror); mirror != "" && !isHTTPURL(mirror) {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.virtctlMirror %q must be an http(s) URL", env.Metadata.Name, env.Spec.Defaults.VirtctlMirror))
+	}
 	errs = append(errs, validateNodeSSHSpec(
 		fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name),
 		env.Spec.Defaults.Install.NodeSSH,

@@ -53,6 +53,11 @@ type EnvironmentDefaultsSpec struct {
 	// site, regardless of whether any cluster currently consumes them.
 	ArtifactAccess ClusterArtifactAccess `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
 	ClientsMirror  string                `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
+	// VirtctlMirror overrides where the controller fetches the version-matched
+	// virtctl for KubeVirt host clusters. Empty means fetch from each host
+	// cluster's OpenShift Virtualization ConsoleCLIDownload; a disconnected lab
+	// sets it to its own mirror base (the role appends the server version).
+	VirtctlMirror string `yaml:"virtctlMirror,omitempty" json:"virtctlMirror,omitempty"`
 }
 
 type EnvironmentInstallDefaultsSpec struct {

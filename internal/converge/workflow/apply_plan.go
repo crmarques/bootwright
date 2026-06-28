@@ -283,6 +283,52 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}
 		}
 	}
+	// deps (clusters): provision a version-matched virtctl on the controller for
+	// each distinct KubeVirt host cluster, before any child boots. virtctl runs on
+	// the controller (the agent-node layer connects locally), so one provision per
+	// host suffices; each child's boot task waits on its host's provision.
+	hostVirtctlReadiness, hostsByContainerCluster, err := kubeVirtHostClusterReadiness(state)
+	if err != nil {
+		return nil, err
+	}
+	if phaseSet[ApplyPhaseDeps] && includeContainer {
+		hostNames := make([]string, 0, len(hostVirtctlReadiness))
+		for host := range hostVirtctlReadiness {
+			hostNames = append(hostNames, host)
+		}
+		sort.Strings(hostNames)
+		virtctlMirror := render.VirtctlMirrorOverride(state)
+		for _, host := range hostNames {
+			virtctlID := "virtctl." + host
+			extraVars := []string{"bootwright_task_host_cluster_name=" + host}
+			if virtctlMirror != "" {
+				extraVars = append(extraVars, "bootwright_virtctl_mirror_base="+virtctlMirror)
+			}
+			if err := graph.Add(Activity{
+				ID:       virtctlID,
+				Kind:     ActivityKindHostVirtctlProvision,
+				Requires: hostVirtctlReadiness[host],
+				Provides: []CapabilityRef{virtctlProvisionedCapability(host)},
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:          virtctlID,
+						Kind:        ApplyTaskKindHostVirtctl,
+						Label:       "provision virtctl for host " + host,
+						Cluster:     host,
+						ClusterKind: ApplyClusterKindContainer,
+						Status:      TaskStatusPending,
+					},
+					Playbook:      applyHostVirtctlPlaybook,
+					Limit:         render.GroupOCPHosts,
+					Forks:         1,
+					ExtraVarPairs: extraVars,
+					State:         state,
+				},
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
 	for _, name := range clusterNames {
 		infraDeps := append([]string(nil), infraDepsByCluster[name]...)
 		isoTaskID := "iso." + name
@@ -330,10 +376,16 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			bootTaskID := ""
 			if len(machineNames) > 0 {
 				bootTaskID = "boot." + name
+				bootRequires := append([]CapabilityRef(nil), kubeVirtReqsByCluster[name]...)
+				if phaseSet[ApplyPhaseDeps] {
+					for _, host := range hostsByContainerCluster[name] {
+						bootRequires = appendUniqueCapability(bootRequires, virtctlProvisionedCapability(host))
+					}
+				}
 				if err := graph.Add(Activity{
 					ID:                   bootTaskID,
 					Kind:                 ActivityKindContainerNodeBoot,
-					Requires:             kubeVirtReqsByCluster[name],
+					Requires:             bootRequires,
 					ExplicitDependencies: isoDeps,
 					Task: ApplyTask{
 						Entry: TaskLedgerEntry{
