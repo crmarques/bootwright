@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/nmstate"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func TestValidateStoragePoolRoleEnum(t *testing.T) {
@@ -64,6 +65,46 @@ func TestStoragePoolRejectsInlineReplicatedWithPolicy(t *testing.T) {
 	errs := validateStoragePools([]v1alpha1.StoragePool{pool}, clusters, policies)
 	if !containsSubstring(errs, "ceph.replicated must not be set when placementPolicyRef is set") {
 		t.Fatalf("expected policy-owns-replication error, got %v", errs)
+	}
+}
+
+func TestStoragePlacementPolicyEnforcesStretchReplicas(t *testing.T) {
+	clusters := map[string]v1alpha1.StorageCluster{
+		"ceph": {
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{
+						Stretch: &v1alpha1.StorageCephStretch{DataSites: []string{"dc1", "dc2"}},
+					},
+				},
+			},
+		},
+	}
+	policy := func(replicas v1alpha1.StorageCephPoolReplicas) v1alpha1.StoragePlacementPolicy {
+		return v1alpha1.StoragePlacementPolicy{
+			Metadata: v1alpha1.Metadata{Name: "pol"},
+			Spec: v1alpha1.StoragePlacementPolicySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Ceph:              v1alpha1.StoragePlacementCephSpec{RuleName: "stretch-rule", Replicated: replicas},
+			},
+		}
+	}
+
+	errs := validateStoragePlacementPolicies([]v1alpha1.StoragePlacementPolicy{policy(v1alpha1.StorageCephPoolReplicas{Size: 3})}, clusters)
+	if !containsSubstring(errs, "ceph.replicated.size must be 4 for stretch-mode StorageCluster/ceph") {
+		t.Fatalf("expected stretch 4/2 size rejection for policy-derived replication, got %v", errs)
+	}
+
+	for _, ok := range []v1alpha1.StorageCephPoolReplicas{
+		{Size: topology.StretchReplicatedPoolSize, MinSize: topology.StretchReplicatedPoolMinSize},
+		{},
+	} {
+		if got := validateStoragePlacementPolicies([]v1alpha1.StoragePlacementPolicy{policy(ok)}, clusters); containsSubstring(got, "stretch-mode") {
+			t.Fatalf("replicas %+v should pass the stretch 4/2 rule, got %v", ok, got)
+		}
 	}
 }
 

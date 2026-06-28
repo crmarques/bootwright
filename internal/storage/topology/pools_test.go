@@ -1,0 +1,115 @@
+package topology
+
+import (
+	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+// poolReplicasFixture builds a state with one stretch and one non-stretch
+// cluster plus a placement policy, so the pool-resolution helpers can be
+// exercised against both topologies and policy-derived defaults.
+func poolReplicasFixture() v1alpha1.State {
+	return v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{
+			{
+				Metadata: v1alpha1.Metadata{Name: "stretch"},
+				Spec: v1alpha1.StorageClusterSpec{
+					Type: v1alpha1.StorageClusterTypeCeph,
+					Ceph: &v1alpha1.StorageClusterCephSpec{
+						Topology: v1alpha1.StorageCephTopology{
+							Stretch: &v1alpha1.StorageCephStretch{
+								FailureDomain: "datacenter",
+								DataSites:     []string{"dc1", "dc2"},
+								RuleName:      "stretch-rule",
+							},
+						},
+					},
+				},
+			},
+			{
+				Metadata: v1alpha1.Metadata{Name: "flat"},
+				Spec: v1alpha1.StorageClusterSpec{
+					Type: v1alpha1.StorageClusterTypeCeph,
+					Ceph: &v1alpha1.StorageClusterCephSpec{},
+				},
+			},
+		},
+		StoragePlacementPolicies: []v1alpha1.StoragePlacementPolicy{{
+			Metadata: v1alpha1.Metadata{Name: "policy"},
+			Spec: v1alpha1.StoragePlacementPolicySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "flat"},
+				Ceph: v1alpha1.StoragePlacementCephSpec{
+					FailureDomain: "rack",
+					RuleName:      "policy-rule",
+					Replicated:    v1alpha1.StorageCephPoolReplicas{Size: 5, MinSize: 3},
+				},
+			},
+		}},
+	}
+}
+
+func poolFixtureCluster(state v1alpha1.State, name string) v1alpha1.StorageCluster {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Metadata.Name == name {
+			return cluster
+		}
+	}
+	return v1alpha1.StorageCluster{}
+}
+
+func TestEffectivePoolReplicas(t *testing.T) {
+	state := poolReplicasFixture()
+	stretch := poolFixtureCluster(state, "stretch")
+	flat := poolFixtureCluster(state, "flat")
+
+	pool := func(replicas v1alpha1.StorageCephPoolReplicas, policyRef string) v1alpha1.StoragePool {
+		return v1alpha1.StoragePool{
+			Metadata: v1alpha1.Metadata{Name: "rbd"},
+			Spec: v1alpha1.StoragePoolSpec{
+				PlacementPolicyRef: v1alpha1.LocalObjectReference{Name: policyRef},
+				Ceph:               v1alpha1.StoragePoolCephSpec{Replicated: replicas},
+			},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		cluster v1alpha1.StorageCluster
+		pool    v1alpha1.StoragePool
+		want    v1alpha1.StorageCephPoolReplicas
+	}{
+		{
+			name:    "authored values win over the stretch default",
+			cluster: stretch,
+			pool:    pool(v1alpha1.StorageCephPoolReplicas{Size: StretchReplicatedPoolSize, MinSize: StretchReplicatedPoolMinSize}, ""),
+			want:    v1alpha1.StorageCephPoolReplicas{Size: StretchReplicatedPoolSize, MinSize: StretchReplicatedPoolMinSize},
+		},
+		{
+			name:    "stretch with empty replicas falls through to 4/2",
+			cluster: stretch,
+			pool:    pool(v1alpha1.StorageCephPoolReplicas{}, ""),
+			want:    v1alpha1.StorageCephPoolReplicas{Size: StretchReplicatedPoolSize, MinSize: StretchReplicatedPoolMinSize},
+		},
+		{
+			name:    "non-stretch with empty replicas falls through to 3/2",
+			cluster: flat,
+			pool:    pool(v1alpha1.StorageCephPoolReplicas{}, ""),
+			want:    v1alpha1.StorageCephPoolReplicas{Size: DefaultReplicatedPoolSize, MinSize: DefaultReplicatedPoolMinSize},
+		},
+		{
+			name:    "placement policy fills in when authored are zero, before stretch/default",
+			cluster: flat,
+			pool:    pool(v1alpha1.StorageCephPoolReplicas{}, "policy"),
+			want:    v1alpha1.StorageCephPoolReplicas{Size: 5, MinSize: 3},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := EffectivePoolReplicas(state, tc.cluster, tc.pool)
+			if got != tc.want {
+				t.Fatalf("EffectivePoolReplicas = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}

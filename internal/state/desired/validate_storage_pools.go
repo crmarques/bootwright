@@ -22,6 +22,18 @@ func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, c
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q does not match any StorageCluster", prefix, policy.Spec.StorageClusterRef.Name))
 		} else if storageClusterExternal(cluster) {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q references an external StorageCluster; Bootwright-managed placement policies are not declared for imported Ceph", prefix, policy.Spec.StorageClusterRef.Name))
+		} else if storageClusterStretchEnabled(cluster) {
+			// A pool inheriting replication from this policy bypasses the inline
+			// stretch 4/2 check in validateStoragePools, so the 4/2 rule must also
+			// cover policy-derived replication. Omitted values fall through to the
+			// stretch default at render time and are accepted here.
+			replicas := policy.Spec.Ceph.Replicated
+			if replicas.Size != 0 && replicas.Size != topology.StretchReplicatedPoolSize {
+				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.size must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolSize, cluster.Metadata.Name))
+			}
+			if replicas.MinSize != 0 && replicas.MinSize != topology.StretchReplicatedPoolMinSize {
+				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.minSize must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolMinSize, cluster.Metadata.Name))
+			}
 		}
 		if policy.Spec.Ceph.RuleName == "" {
 			errs = append(errs, prefix+".ceph.ruleName is required")
