@@ -219,6 +219,7 @@ type syntaxCheckReport struct {
 	StoragePools             int                      `json:"storagePools"`
 	StorageFilesystems       int                      `json:"storageFilesystems"`
 	StorageObjectGateways    int                      `json:"storageObjectGateways"`
+	StorageNFSExports        int                      `json:"storageNFSExports"`
 	StorageExports           int                      `json:"storageExports"`
 	ClusterAddons            int                      `json:"clusterAddons"`
 	Profiles                 int                      `json:"clusterAddonProfiles"`
@@ -243,6 +244,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		StoragePools:              len(state.StoragePools),
 		StorageFilesystems:        len(state.StorageFilesystems),
 		StorageObjectGateways:     len(state.StorageObjectGateways),
+		StorageNFSExports:         len(state.StorageNFSExports),
 		StorageExports:            len(state.StorageExports),
 		ClusterAddons:             len(state.ClusterAddons),
 		Profiles:                  len(state.ClusterAddonProfiles),
@@ -298,6 +300,7 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "StoragePools", Value: fmt.Sprint(len(state.StoragePools))},
 		{Key: "StorageFilesystems", Value: fmt.Sprint(len(state.StorageFilesystems))},
 		{Key: "StorageObjectGateways", Value: fmt.Sprint(len(state.StorageObjectGateways))},
+		{Key: "StorageNFSExports", Value: fmt.Sprint(len(state.StorageNFSExports))},
 		{Key: "StorageExports", Value: fmt.Sprint(len(state.StorageExports))},
 		{Key: "ClusterAddons", Value: fmt.Sprint(len(state.ClusterAddons))},
 		{Key: "ClusterAddonProfiles", Value: fmt.Sprint(len(state.ClusterAddonProfiles))},
