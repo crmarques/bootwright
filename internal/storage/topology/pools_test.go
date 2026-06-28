@@ -113,3 +113,49 @@ func TestEffectivePoolReplicas(t *testing.T) {
 		})
 	}
 }
+
+func TestStoragePoolFailureDomain(t *testing.T) {
+	state := poolReplicasFixture()
+	stretch := poolFixtureCluster(state, "stretch")
+	flat := poolFixtureCluster(state, "flat")
+
+	pool := func(policyRef string) v1alpha1.StoragePool {
+		return v1alpha1.StoragePool{
+			Metadata: v1alpha1.Metadata{Name: "rbd"},
+			Spec:     v1alpha1.StoragePoolSpec{PlacementPolicyRef: v1alpha1.LocalObjectReference{Name: policyRef}},
+		}
+	}
+
+	if got := StoragePoolFailureDomain(state, flat, pool("policy")); got != "rack" {
+		t.Fatalf("policy failureDomain not used: got %q, want %q", got, "rack")
+	}
+	if got := StoragePoolFailureDomain(state, stretch, pool("")); got != "datacenter" {
+		t.Fatalf("empty ref should fall back to stretch failure domain: got %q, want %q", got, "datacenter")
+	}
+	if got := StoragePoolFailureDomain(state, flat, pool("absent")); got != "host" {
+		t.Fatalf("unmatched ref on a non-stretch cluster should fall back to host: got %q", got)
+	}
+}
+
+func TestStoragePoolCRUSHRule(t *testing.T) {
+	state := poolReplicasFixture()
+	stretch := poolFixtureCluster(state, "stretch")
+	flat := poolFixtureCluster(state, "flat")
+
+	pool := func(policyRef string) v1alpha1.StoragePool {
+		return v1alpha1.StoragePool{
+			Metadata: v1alpha1.Metadata{Name: "rbd"},
+			Spec:     v1alpha1.StoragePoolSpec{PlacementPolicyRef: v1alpha1.LocalObjectReference{Name: policyRef}},
+		}
+	}
+
+	if got := StoragePoolCRUSHRule(state, flat, pool("policy")); got != "policy-rule" {
+		t.Fatalf("policy ruleName not used: got %q, want %q", got, "policy-rule")
+	}
+	if got := StoragePoolCRUSHRule(state, stretch, pool("")); got != "stretch-rule" {
+		t.Fatalf("empty ref should fall back to the stretch rule: got %q, want %q", got, "stretch-rule")
+	}
+	if got := StoragePoolCRUSHRule(state, flat, pool("")); got != "" {
+		t.Fatalf("empty ref on a non-stretch cluster should resolve to no rule: got %q", got)
+	}
+}
