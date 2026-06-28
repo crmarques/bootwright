@@ -734,7 +734,10 @@ Rules:
 - `spec.storageClusterRef` is required and must reference a managed
   `StorageCluster`.
 - `spec.cephfs.metadataPoolRef` is required and must reference a
-  `StoragePool` on the same `StorageCluster`.
+  `StoragePool` on the same `StorageCluster`. The metadata pool is part of the
+  filesystem's structural identity — Ceph cannot move a live CephFS to a
+  different metadata pool — so changing it is a data-destroying, `--override`-only
+  recreate (`ceph fs rm` then recreate), never an in-place reconcile.
 - `spec.cephfs.dataPoolRefs[]` is required; each entry is a plain pool name
   (a single entry becomes the default automatically) or `{name, default}` to
   elect the default data pool on multi-pool filesystems. Each must reference a

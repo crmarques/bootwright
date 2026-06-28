@@ -261,8 +261,9 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     Ceph convergence is additive-only across the whole storage domain. `apply`
     never removes a live Ceph object whose declaration was deleted, and
     `--override` does not prune undeclared objects either — it rebuilds only
-    still-declared pools whose structural identity (pool `type` or erasure
-    profile) changed. Remove undeclared Ceph objects on the cluster out of band.
+    still-declared objects whose structural identity changed: a pool's `type` or
+    erasure profile, or a CephFS metadata pool (a data-destroying `ceph fs rm`
+    recreate). Remove undeclared Ceph objects on the cluster out of band.
     See [Ceph storage topologies](ceph-topologies.md#convergence-is-additive-only)
     for the full convergence contract.
 

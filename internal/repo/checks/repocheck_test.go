@@ -131,6 +131,29 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 	}
 }
 
+// TestCephFSMetadataPoolDestructiveChangeDocumented guards the warning that
+// changing a StorageFilesystem's metadata pool is a data-destroying,
+// --override-only recreate (the role runs `ceph fs rm` on a metadata-pool
+// mismatch), not an in-place reconcile. The structural-identity surfaces must
+// say so, so the warning cannot silently regress into reading as a safe change.
+func TestCephFSMetadataPoolDestructiveChangeDocumented(t *testing.T) {
+	// "metadata pool" must co-occur, within the same sentence, with the
+	// destructive-recreate vocabulary.
+	note := regexp.MustCompile(`(?is)metadata pool[^.]{0,220}(data-destroying|ceph fs rm|recreate)`)
+	surfaces := []string{
+		"specs/state-model.md",
+		"docs/advanced/operations.md",
+		"docs/advanced/ceph-topologies.md",
+		"docs/concepts/storage.md",
+	}
+	for _, path := range surfaces {
+		data := readRepoFile(t, path)
+		if !note.MatchString(data) {
+			t.Fatalf("%s must document that changing a CephFS metadata pool is a data-destroying --override recreate (ceph fs rm)", path)
+		}
+	}
+}
+
 // TestRuntimeBundleUseNewSchemaTerms scans shipped Ansible role text for
 // stale schema fragments that otherwise surface only as runtime diagnostics.
 func TestRuntimeBundleUseNewSchemaTerms(t *testing.T) {

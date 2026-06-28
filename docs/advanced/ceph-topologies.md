@@ -336,8 +336,10 @@ service keeps running — remove it on the cluster with the `ceph`/`cephadm` CLI
 when you mean it.
 
 `--override` does not prune undeclared objects either: it rebuilds only
-still-declared pools whose structural identity (pool `type` and erasure profile)
-changed. See [Operations and recovery](operations.md#managed-os-reinstall-and-owned-ceph-rebuild)
+still-declared objects whose structural identity changed: a pool's `type` and
+erasure profile, or a CephFS metadata pool — changing the metadata pool is a
+data-destroying `ceph fs rm` recreate, not an in-place reconcile. See
+[Operations and recovery](operations.md#managed-os-reinstall-and-owned-ceph-rebuild)
 for the owned-Ceph wipe-and-rebuild path.
 
 !!! note "Storage sub-objects are not orphan-tracked"
