@@ -63,6 +63,39 @@
     bootwright_creds_label: "registry mirror credentialsRef {{ bootwright_mr_credentials_path }}"
   when: (bootwright_mr_credentials_path | length) > 0
 
+- name: Stat existing mirror htpasswd
+  ansible.builtin.stat:
+    path: "{{ bootwright_mr_auth_dir }}/htpasswd"
+  register: bootwright_mr_htpasswd_stat
+  when: (bootwright_mr_credentials_path | length) > 0
+
+- name: Verify existing mirror htpasswd matches current credentials
+  ansible.builtin.command:
+    argv:
+      - htpasswd
+      - -vi
+      - "{{ bootwright_mr_auth_dir }}/htpasswd"
+      - "{{ bootwright_mr_credentials.username }}"
+    stdin: "{{ bootwright_mr_credentials.password }}"
+  register: bootwright_mr_htpasswd_verify
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - (bootwright_mr_credentials_path | length) > 0
+    - bootwright_mr_htpasswd_stat.stat.exists | default(false)
+
+- name: Decide whether to rewrite mirror htpasswd
+  ansible.builtin.set_fact:
+    bootwright_mr_htpasswd_needs_write: >-
+      {{
+        not (bootwright_mr_htpasswd_stat.stat.exists | default(false))
+        or (bootwright_mr_htpasswd_verify.rc | default(1)) != 0
+      }}
+  no_log: true
+  changed_when: false
+  when: (bootwright_mr_credentials_path | length) > 0
+
 - name: Generate mirror htpasswd
   ansible.builtin.command:
     argv:
@@ -73,7 +106,9 @@
   register: bootwright_mr_htpasswd
   changed_when: false
   no_log: true
-  when: (bootwright_mr_credentials_path | length) > 0
+  when:
+    - (bootwright_mr_credentials_path | length) > 0
+    - bootwright_mr_htpasswd_needs_write | default(false) | bool
 
 - name: Write mirror htpasswd
   ansible.builtin.copy:
@@ -83,7 +118,9 @@
     mode: "0600"
     content: "{{ bootwright_mr_htpasswd.stdout }}\n"
   no_log: true
-  when: (bootwright_mr_credentials_path | length) > 0
+  when:
+    - (bootwright_mr_credentials_path | length) > 0
+    - bootwright_mr_htpasswd_needs_write | default(false) | bool
 
 - name: Install registry trust bundle on host
   ansible.builtin.copy:
