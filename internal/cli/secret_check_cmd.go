@@ -17,7 +17,7 @@ import (
 // set. Run `bootwright secret generate` first to materialize generated and
 // file:-sourced material.
 func newSecretCheckCmd(stdout io.Writer) *cobra.Command {
-	outputFormat := outputText
+	var outputFormat string
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Check that every declared secret has present local material",
@@ -28,7 +28,7 @@ func newSecretCheckCmd(stdout io.Writer) *cobra.Command {
   # Machine-readable secret status
   bootwright secret check --output json`,
 	}
-	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
+	addOutputFlag(cmd, &outputFormat)
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {

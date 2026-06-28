@@ -42,7 +42,7 @@ func TestClusterAccessReportsStorageClusters(t *testing.T) {
 
 func TestClusterAccessFiltersStorageClusterByName(t *testing.T) {
 	initTestContext(t, cephFixture)
-	stdout, stderr, code := runCLI(t, "cluster", "access", "--cluster", "ceph-libvirt")
+	stdout, stderr, code := runCLI(t, "cluster", "access", "--name", "ceph-libvirt")
 	if code != 0 {
 		t.Fatalf("cluster access --cluster exited %d, stderr=%q", code, stderr)
 	}
@@ -50,7 +50,7 @@ func TestClusterAccessFiltersStorageClusterByName(t *testing.T) {
 		t.Fatalf("filtered output missing storage cluster:\n%s", stdout)
 	}
 
-	_, stderr, code = runCLI(t, "cluster", "access", "--cluster", "missing")
+	_, stderr, code = runCLI(t, "cluster", "access", "--name", "missing")
 	if code == 0 {
 		t.Fatal("cluster access accepted unknown storage cluster")
 	}
@@ -91,7 +91,7 @@ func TestClusterAccessShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runCLI(t, "cluster", "access", "--cluster", "ceph-libvirt")
+	stdout, stderr, code := runCLI(t, "cluster", "access", "--name", "ceph-libvirt")
 	if code != 0 {
 		t.Fatalf("cluster access exited %d, stderr=%q", code, stderr)
 	}

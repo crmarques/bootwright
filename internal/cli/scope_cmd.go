@@ -7,7 +7,6 @@ import (
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
-	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 // scopeCommonFlags collects the four flags shared by every scope
@@ -29,17 +28,12 @@ func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClus
 }
 
 func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool, targetKind string) {
-	f.output = outputText
 	if includeAnsible {
-		cmd.Flags().StringVar(&f.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+		addAnsiblePlaybookFlag(cmd, &f.executable)
 	}
-	cmd.Flags().StringVar(&f.output, "output", f.output, "output format: text|json (json is supported for --dry-run)")
+	addOutputFlagDryRun(cmd, &f.output)
 	if allowClusterScope {
-		scopeUsage := "comma-separated " + targetKind + " names to " + scopeAction
-		if targetKind == "ContainerCluster" {
-			scopeUsage += " (restricts the matching ClusterInstall/Provider sets)"
-		}
-		cmd.Flags().StringVar(&f.clusterScope, "clusters", "", scopeUsage)
+		cmd.Flags().StringVar(&f.clusterScope, "clusters", "", "comma-separated "+targetKind+" names to "+scopeAction+" (default: all)")
 	}
 }
 

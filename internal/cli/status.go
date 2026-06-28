@@ -21,26 +21,14 @@ import (
 )
 
 const (
-	outputText = "text"
-	outputJSON = "json"
-)
-
-const (
 	installerFreshnessFresh   = status.InstallerFreshnessFresh
 	installerFreshnessStale   = status.InstallerFreshnessStale
 	installerFreshnessMissing = status.InstallerFreshnessMissing
 	installerFreshnessUnknown = status.InstallerFreshnessUnknown
 )
 
-func validateOutputFormat(value string) error {
-	if value != outputText && value != outputJSON {
-		return fmt.Errorf("--output must be %q or %q", outputText, outputJSON)
-	}
-	return nil
-}
-
 func newStatusCmd(stdout io.Writer) *cobra.Command {
-	output := outputText
+	var output string
 	watch := false
 	watchInterval := 5 * time.Second
 	cmd := &cobra.Command{
@@ -58,7 +46,7 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
   bootwright status --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
+	addOutputFlag(cmd, &output)
 	cmd.Flags().BoolVar(&watch, "watch", false, "refresh status until the current apply run reaches a terminal state")
 	cmd.Flags().DurationVar(&watchInterval, "watch-interval", watchInterval, "status refresh interval for --watch")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

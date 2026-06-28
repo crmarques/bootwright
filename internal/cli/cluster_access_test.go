@@ -101,7 +101,7 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 
 func TestClusterAccessCommandRejectsUnknownCluster(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	_, stderr, code := runCLI(t, "cluster", "access", "--cluster", "missing")
+	_, stderr, code := runCLI(t, "cluster", "access", "--name", "missing")
 	if code == 0 {
 		t.Fatal("cluster access accepted unknown cluster")
 	}

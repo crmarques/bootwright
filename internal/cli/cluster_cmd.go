@@ -59,23 +59,23 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 func newClusterKubeconfigCmd(stdout io.Writer) *cobra.Command {
 	clusterName := ""
 	cmd := &cobra.Command{
-		Use:   "kubeconfig --cluster <name>",
+		Use:   "kubeconfig --name <cluster>",
 		Short: "Print the admin kubeconfig for an installed cluster",
 		Long: `Print the generated admin kubeconfig for an installed container cluster to
 stdout, so you can save it to a file you own instead of copying the root-owned
 source by hand:
 
-    bootwright cluster kubeconfig --cluster managed-01 > ~/.kube/managed-01
+    bootwright cluster kubeconfig --name managed-01 > ~/.kube/managed-01
     oc --kubeconfig ~/.kube/managed-01 get nodes
 
 The kubeconfig is admin credential material; redirect it to a private path and
 do not commit it.`,
 		Args: cobra.NoArgs,
 		Example: `  # Save one cluster's admin kubeconfig to a private file
-  bootwright cluster kubeconfig --cluster managed-01 > ~/.kube/managed-01`,
+  bootwright cluster kubeconfig --name managed-01 > ~/.kube/managed-01`,
 	}
-	cmd.Flags().StringVar(&clusterName, "cluster", "", "ContainerCluster name")
-	_ = cmd.MarkFlagRequired("cluster")
+	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster name (required)")
+	_ = cmd.MarkFlagRequired("name")
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		state, err := loadDesiredState(cf)
@@ -99,13 +99,13 @@ do not commit it.`,
 }
 
 func newClusterListCmd(stdout io.Writer) *cobra.Command {
-	outputFormat := outputText
+	var outputFormat string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List clusters and local access artifact status",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
+	addOutputFlag(cmd, &outputFormat)
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {
@@ -136,8 +136,8 @@ func newClusterAccessCommand(stdout io.Writer) *cobra.Command {
   bootwright cluster access
 
   # Print access details for one container or storage cluster
-  bootwright cluster access --cluster managed-01
-  bootwright cluster access --cluster ceph-libvirt`,
+  bootwright cluster access --name managed-01
+  bootwright cluster access --name ceph-libvirt`,
 	})
 }
 
@@ -149,7 +149,7 @@ type clusterAccessCommandSpec struct {
 }
 
 func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra.Command {
-	outputFormat := outputText
+	var outputFormat string
 	clusterName := ""
 	cmd := &cobra.Command{
 		Use:     spec.use,
@@ -157,12 +157,12 @@ func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra
 		Args:    cobra.NoArgs,
 		Example: spec.example,
 	}
-	clusterFlagUsage := "ContainerCluster name to inspect"
+	clusterFlagUsage := "ContainerCluster name to inspect (default: all)"
 	if spec.includeStorage {
-		clusterFlagUsage = "ContainerCluster or StorageCluster name to inspect"
+		clusterFlagUsage = "ContainerCluster or StorageCluster name to inspect (default: all)"
 	}
-	cmd.Flags().StringVar(&clusterName, "cluster", "", clusterFlagUsage)
-	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
+	cmd.Flags().StringVar(&clusterName, "name", "", clusterFlagUsage)
+	addOutputFlag(cmd, &outputFormat)
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {

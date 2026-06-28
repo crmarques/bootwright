@@ -30,9 +30,9 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 	}
 	cf := addCommonFlags()
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "preflight", true, scopeTargetKind(scope))
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
-	cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only); automation must pre-record trust with bootwright host trust")
-	cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible preflight output to the terminal as well as the log (default: log only)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
+	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
+	addStreamAnsibleFlag(cmd, &streamAnsible)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)

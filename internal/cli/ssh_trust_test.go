@@ -85,7 +85,7 @@ func TestHostTrustFiltersSelectedHosts(t *testing.T) {
 	initHostTrustTestContext(t)
 	setHostTrustTestDeps(t, map[string]string{"provider-01.example.test": hostTrustKeyA})
 
-	stdout, stderr, code := runCLI(t, "host", "trust", "--hosts", "provider-01", "--dry-run", "--output", "json")
+	stdout, stderr, code := runCLI(t, "host", "trust", "--machines", "provider-01", "--dry-run", "--output", "json")
 	if code != 0 {
 		t.Fatalf("host trust selected dry-run exited %d, stderr=%q", code, stderr)
 	}

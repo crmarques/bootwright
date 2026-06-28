@@ -23,7 +23,7 @@ func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "SecretRef name (required)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the delete confirmation prompt")
+	addYesFlag(cmd, &yes, "delete")
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if !desiredstate.IsDNSLabel(name) {

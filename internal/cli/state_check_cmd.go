@@ -42,12 +42,12 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
   bootwright state-check --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("limit to a stage: %s families, or a sub-phase %s", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+	cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("limit to a stage: %s (or sub-phase %s)", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 	registerStageCompletion(cmd, converge.ApplyStageNames())
-	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to everything up to and including a stage: a %s family or a sub-phase %s (cumulative prefix; mutually exclusive with --stage)", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
-	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check")
-	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
+	addOutputFlag(cmd, &output)
 	cmd.Flags().BoolVar(&override, "override", false, "rejected: state-check never mutates state or suppresses drift")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {

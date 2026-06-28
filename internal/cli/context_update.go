@@ -32,7 +32,7 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the context input (required)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "replace the input without the interactive confirmation prompt")
+	addYesFlag(cmd, &yes, "replace")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)

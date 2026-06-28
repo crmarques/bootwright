@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/workspace"
 	"github.com/spf13/cobra"
@@ -17,13 +18,19 @@ const (
 	groupGeneral  = "general"
 )
 
+// contextOverride holds the value of the global --context flag. It is a
+// package var bound by newRootCmd's persistent flag (StringVar resets it to ""
+// on every newRootCmd call), and consulted by commonFlags.resolve so any
+// command can operate in a non-current context without "context use" first.
+var contextOverride string
+
 func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "bootwright",
 		Short: "Desired-state OpenShift fleet provisioning",
 		Long: "Bootwright renders, validates, and converges versioned desired-state YAML\n" +
 			"to drive OpenShift cluster lifecycle.",
-		Example: `  bootwright example init --name lab --output ./lab-input
+		Example: `  bootwright example init --name lab --output-dir ./lab-input
   bootwright validate -f ./lab-input
   bootwright context init --name lab -f ./lab-input
   bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
@@ -45,6 +52,8 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
+	root.PersistentFlags().StringVar(&contextOverride, "context", "", flagContextUsage)
+	registerContextNameCompletion(root, "context")
 
 	root.AddGroup(
 		&cobra.Group{ID: groupWorkflow, Title: "Workflow Commands:"},
@@ -102,7 +111,7 @@ func (cf *commonFlags) resolveWithLocality(checkLocality bool) (workspace.Contex
 	if cf.ctx.Name != "" {
 		return cf.ctx, nil
 	}
-	ctx, err := workspace.CurrentContext()
+	ctx, err := resolveTargetContext()
 	if err != nil {
 		return workspace.Context{}, err
 	}
@@ -116,6 +125,31 @@ func (cf *commonFlags) resolveWithLocality(checkLocality bool) (workspace.Contex
 	}
 	cf.ctx = ctx
 	return ctx, nil
+}
+
+// resolveTargetContext returns the context the command operates in: the
+// --context override when set, otherwise the current context.
+func resolveTargetContext() (workspace.Context, error) {
+	if name := strings.TrimSpace(contextOverride); name != "" {
+		return workspace.RequireExistingContext(name)
+	}
+	return workspace.CurrentContext()
+}
+
+// registerContextNameCompletion offers existing context names as completions
+// for a context-selecting flag.
+func registerContextNameCompletion(cmd *cobra.Command, flag string) {
+	_ = cmd.RegisterFlagCompletionFunc(flag, func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		contexts, err := workspace.ListContexts()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(contexts))
+		for _, c := range contexts {
+			names = append(names, c.Name)
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 // requireSubcommand configures cmd as a pure dispatcher whose only valid

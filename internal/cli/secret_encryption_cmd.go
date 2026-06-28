@@ -54,13 +54,13 @@ func newSecretEncryptionInitCmd(stdout io.Writer) *cobra.Command {
 }
 
 func newSecretEncryptionStatusCmd(stdout io.Writer) *cobra.Command {
-	outputFormat := outputText
+	var outputFormat string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show context-local secret encryption status",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
+	addOutputFlag(cmd, &outputFormat)
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {
@@ -109,7 +109,7 @@ func newSecretEncryptionMigrateCmd(stdin io.Reader, stdout io.Writer) *cobra.Com
 		Short: "Encrypt existing context-local plaintext secret files",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the migration confirmation prompt")
+	addYesFlag(cmd, &yes, "migration")
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()
@@ -146,7 +146,7 @@ func newSecretEncryptionRotateCmd(stdin io.Reader, stdout io.Writer) *cobra.Comm
 		Short: "Rotate the active context-local secret encryption key",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the rotation confirmation prompt")
+	addYesFlag(cmd, &yes, "rotation")
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()

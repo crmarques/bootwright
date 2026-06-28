@@ -32,28 +32,27 @@ func newHostCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 
 func newHostTrustCmd(stdin io.Reader, stdout io.Writer, _ io.Writer) *cobra.Command {
 	var (
-		hosts   string
-		replace string
-		dryRun  bool
-		yes     bool
-		format  string
+		machines string
+		replace  string
+		dryRun   bool
+		yes      bool
+		format   string
 	)
-	format = outputText
 	cmd := &cobra.Command{
 		Use:   "trust",
 		Short: "Record SSH host-key trust for declared Machines",
 		Args:  cobra.NoArgs,
 		Example: `  bootwright host trust
-  bootwright host trust --hosts provider-01,ceph-dc1-0
+  bootwright host trust --machines provider-01,ceph-dc1-0
   bootwright host trust --replace provider-01
   bootwright host trust --dry-run
   bootwright host trust --output json --dry-run`,
 	}
-	cmd.Flags().StringVar(&hosts, "hosts", "", "comma-separated Machine names to trust")
-	cmd.Flags().StringVar(&replace, "replace", "", "comma-separated Machine names whose changed trust may be replaced")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "scan and report trust changes without writing context trust files")
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip confirmation prompts")
-	cmd.Flags().StringVar(&format, "output", format, "output format: text|json")
+	cmd.Flags().StringVar(&machines, "machines", "", "comma-separated Machine names to trust (default: all declared)")
+	cmd.Flags().StringVar(&replace, "replace", "", "comma-separated Machine names whose changed host key may be re-trusted")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report trust changes without writing the trust store")
+	addYesFlag(cmd, &yes, "trust")
+	addOutputFlag(cmd, &format)
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(format); err != nil {
@@ -68,7 +67,7 @@ func newHostTrustCmd(stdin io.Reader, stdout io.Writer, _ io.Writer) *cobra.Comm
 			return failErr(1, err)
 		}
 		report, err := runHostTrust(c.Context(), stdin, stdout, ctx.Name, ctx.BaseDir, state, hostTrustOptions{
-			Hosts:   hosts,
+			Hosts:   machines,
 			Replace: replace,
 			DryRun:  dryRun,
 			Yes:     yes,

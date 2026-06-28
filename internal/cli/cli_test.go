@@ -2523,13 +2523,13 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"cluster"}, want: false},
 		{args: []string{"cluster", "list"}, want: true},
 		{args: []string{"cluster", "access"}, want: true},
-		{args: []string{"cluster", "kubeconfig", "--cluster", "managed-01"}, want: true},
+		{args: []string{"cluster", "kubeconfig", "--name", "managed-01"}, want: true},
 		// Bare `bastion` only prints help; its subcommands read the root-owned
 		// context and stay rootful (setup mutates the host, check is read-only).
 		{args: []string{"bastion"}, want: false},
 		{args: []string{"bastion", "setup"}, want: true},
 		{args: []string{"bastion", "check"}, want: true},
-		{args: []string{"example", "init", "--name", "lab", "--output", "./lab-input"}, want: false},
+		{args: []string{"example", "init", "--name", "lab", "--output-dir", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"validate"}, want: true},

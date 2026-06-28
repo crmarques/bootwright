@@ -32,7 +32,7 @@ component, and get the same result every time.
 The CLI covers the normal convergence path:
 
 ```text
-bootwright example init --name lab --output ./lab-input
+bootwright example init --name lab --output-dir ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init --name lab -f ./lab-input
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
@@ -183,13 +183,13 @@ add-on inputs. IPMI is not apply-supported today.
 ## CLI
 
 ```text
-bootwright example init --name lab --output ./lab-input
+bootwright example init --name lab --output-dir ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init --name lab -f ./lab-input
 bootwright context current
 bootwright cluster list
 bootwright cluster access
-bootwright cluster access --cluster demo-ocp
+bootwright cluster access --name demo-ocp
 bootwright secret list
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate

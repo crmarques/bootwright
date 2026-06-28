@@ -20,7 +20,7 @@ Generate a single-node lab workspace. The default provider,
 uses:
 
 ```bash
-bootwright example init --name my-sno-lab --output ./my-sno-lab
+bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
 ```
 
 The scaffold writes seven `apiVersion: bootwright.io/v1alpha1` files:
@@ -223,7 +223,7 @@ command streams it to stdout so you can redirect it without copying the
 root-owned source by hand:
 
 ```bash
-bootwright cluster kubeconfig --cluster my-sno-lab > ~/.kube/my-sno-lab
+bootwright cluster kubeconfig --name my-sno-lab > ~/.kube/my-sno-lab
 chmod 0600 ~/.kube/my-sno-lab
 oc --kubeconfig ~/.kube/my-sno-lab get nodes
 ```
@@ -239,7 +239,7 @@ mkdir -p "${HOME}/.kube"
 touch "${HOME}/.kube/config"
 chmod 0600 "${HOME}/.kube/config"
 
-bootwright cluster kubeconfig --cluster "${CLUSTER}" > "${SRC}"
+bootwright cluster kubeconfig --name "${CLUSTER}" > "${SRC}"
 chmod 0600 "${SRC}"
 CTX="$(oc --kubeconfig "${SRC}" config current-context)"
 oc --kubeconfig "${SRC}" config rename-context "${CTX}" "${CLUSTER}-admin"

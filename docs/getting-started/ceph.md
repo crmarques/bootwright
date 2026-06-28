@@ -313,7 +313,7 @@ List the cluster and its access details:
 
 ```bash
 bootwright cluster list
-bootwright cluster access --cluster ceph-ibm
+bootwright cluster access --name ceph-ibm
 ```
 
 `cluster access` reports the seed node, the SSH and health-check commands, the

@@ -20,7 +20,6 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 		sensitive    bool
 		output       string
 	)
-	output = outputText
 	cmd := &cobra.Command{
 		Use:   "installer",
 		Short: "Render OpenShift installer inputs",
@@ -38,9 +37,9 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
   bootwright render installer --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to render (the openshift-install agent inputs are container-cluster only)")
-	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under /var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/ with secret material inlined for direct openshift-install consumption (mode 0600)")
-	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to render, default: all (the openshift-install agent inputs are container-cluster only)")
+	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under the context runtime/installer dir with secret material inlined for direct openshift-install consumption (mode 0600)")
+	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)

@@ -11,7 +11,7 @@ import (
 
 func TestExampleInitWritesValidWorkspace(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "my-sno-lab")
-	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output", outputDir)
+	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output-dir", outputDir)
 	if code != 0 {
 		t.Fatalf("example init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -52,7 +52,7 @@ func TestExampleInitDoesNotRequireContextRegistry(t *testing.T) {
 	t.Cleanup(func() { localRootGate = previous })
 
 	outputDir := filepath.Join(t.TempDir(), "my-sno-lab")
-	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output", outputDir)
+	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output-dir", outputDir)
 	if code != 0 {
 		t.Fatalf("example init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -66,7 +66,7 @@ func TestExampleInitRejectsNonEmptyOutputWithoutYes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(outputDir, "note.txt"), []byte("keep me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output", outputDir)
+	_, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output-dir", outputDir)
 	if code == 0 {
 		t.Fatal("example init unexpectedly wrote into a non-empty directory")
 	}

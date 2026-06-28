@@ -31,11 +31,11 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
   bootwright preflight all --dry-run`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
-	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json (json requires --dry-run)")
-	cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only); automation must pre-record trust with bootwright host trust")
-	cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible preflight output to the terminal as well as the log (default: log only)")
+	addAnsiblePlaybookFlag(cmd, &executable)
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
+	addOutputFlagDryRun(cmd, &output)
+	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
+	addStreamAnsibleFlag(cmd, &streamAnsible)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)

@@ -14,7 +14,7 @@ When you are starting fresh, prefer the CLI scaffold instead of copying an
 example by hand:
 
 ```text
-bootwright example init --name <cluster-name> --output <input-dir>
+bootwright example init --name <cluster-name> --output-dir <input-dir>
 ```
 
 The scaffold produces a nested `infra/` + `clusters/container/<name>/` workspace and is

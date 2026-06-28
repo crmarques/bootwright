@@ -21,8 +21,8 @@ func newSecretShowCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		Short: "Print context-local secret material",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().StringVar(&name, "name", "", "context-local secret name to print")
-	cmd.Flags().StringVar(&part, "part", part, "secret material part: primary|private|public|tls-key")
+	cmd.Flags().StringVar(&name, "name", "", "context-local secret name to print (required)")
+	cmd.Flags().StringVar(&part, "part", part, "secret material part (primary|private|public|tls-key)")
 	_ = cmd.MarkFlagRequired("name")
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

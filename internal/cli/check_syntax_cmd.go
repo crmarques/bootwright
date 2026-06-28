@@ -41,7 +41,7 @@ type syntaxValidationCommand struct {
 }
 
 func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cobra.Command {
-	output := outputText
+	var output string
 	var files []string
 	cmd := &cobra.Command{
 		Use:     spec.use,
@@ -50,8 +50,8 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		Example: spec.example,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to validate before context import; may be repeated")
-	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to validate; may be repeated (default: current context input)")
+	addOutputFlag(cmd, &output)
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)

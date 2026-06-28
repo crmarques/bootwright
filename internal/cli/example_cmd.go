@@ -33,13 +33,13 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		Use:   "init --name <cluster-name>",
 		Short: "Write a safe desired-state example directory",
 		Args:  cobra.NoArgs,
-		Example: `  bootwright example init --name my-sno-lab --output ./my-sno-lab
-  bootwright example init --name my-baremetal-lab --provider bare-metal --output ./my-baremetal-lab`,
+		Example: `  bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
+  bootwright example init --name my-baremetal-lab --provider bare-metal --output-dir ./my-baremetal-lab`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "cluster name to scaffold (required)")
-	cmd.Flags().StringVar(&provider, "provider", provider, "example provider: "+strings.Join(scaffold.KnownProviders(), "|"))
-	cmd.Flags().StringVar(&outputDir, "output", outputDir, "directory to write (defaults to the --name value)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite scaffolded files in a non-empty output directory")
+	cmd.Flags().StringVar(&provider, "provider", provider, "example provider ("+strings.Join(scaffold.KnownProviders(), "|")+")")
+	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory to write the example into (default: the --name value)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite files in a non-empty output directory")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		clusterName := name
 		if !desiredstate.IsDNSLabel(clusterName) {
@@ -63,7 +63,7 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		p.Fields([]output.Field{
 			{Key: "cluster", Value: clusterName},
 			{Key: "provider", Value: provider},
-			{Key: "output", Value: filepath.Clean(outputDir)},
+			{Key: "output-dir", Value: filepath.Clean(outputDir)},
 			{Key: "apply support", Value: fmt.Sprintf("%s - %s", support.Status, support.Summary)},
 		})
 		p.Section("Written inputs")

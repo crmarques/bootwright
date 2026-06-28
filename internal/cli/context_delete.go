@@ -24,7 +24,7 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
 	cmd.Flags().BoolVar(&purge, "purge", false, "also delete the context base directory")
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip confirmation when purging context files")
+	addYesFlag(cmd, &yes, "delete")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)

@@ -17,7 +17,7 @@ import (
 func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 	var (
 		clusterScope string
-		output       = outputText
+		output       string
 	)
 	cmd := &cobra.Command{
 		Use:   "preflight",
@@ -30,8 +30,8 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
   bootwright preflight addons --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to check")
-	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to check (default: all)")
+	addOutputFlag(cmd, &output)
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)

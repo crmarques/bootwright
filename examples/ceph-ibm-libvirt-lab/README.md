@@ -265,7 +265,7 @@ mgmt-gateway VIP `192.168.140.81`, fronted by a `keepalive_only` ingress).
 file:
 
 ```bash
-bootwright cluster access --cluster ceph-ibm
+bootwright cluster access --name ceph-ibm
 # Dashboard: https://dashboard.ceph.bootwright.test:8443
 # Dashboard user: admin
 # Dashboard password file: .../secrets/dashboard-password

@@ -30,10 +30,16 @@ var localRootGate = localRootGateDeps{
 }
 
 func ensureLocalRootForArgs(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, bool, error) {
-	if !localRootGate.enabled || !argsNeedLocalRoot(args) || localRootGate.geteuid() == 0 {
+	if !localRootGate.enabled || localRootGate.geteuid() == 0 {
 		return 0, false, nil
 	}
-	code, err := runWithLocalRoot(ctx, args, stdin, stdout, stderr, argsMayMutateRegistry(args))
+	// Classify by the real command, ignoring a leading global flag (--context),
+	// but forward the original args verbatim to the sudo child.
+	decisionArgs := stripLeadingGlobalFlags(args)
+	if !argsNeedLocalRoot(decisionArgs) {
+		return 0, false, nil
+	}
+	code, err := runWithLocalRoot(ctx, args, stdin, stdout, stderr, argsMayMutateRegistry(decisionArgs))
 	if err != nil {
 		return code, false, err
 	}
@@ -63,7 +69,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	}
 	stopKeepAlive := sudoSession.KeepAlive(ctx)
 	defer stopKeepAlive()
-	childEnv, cleanupChildEnv, err := sudoSession.ChildEnv(argsMayUseBecome(args))
+	childEnv, cleanupChildEnv, err := sudoSession.ChildEnv(argsMayUseBecome(stripLeadingGlobalFlags(args)))
 	if err != nil {
 		return 1, err
 	}

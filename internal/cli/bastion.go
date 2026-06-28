@@ -76,10 +76,10 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
   bootwright bastion setup --ask-become-pass=false --yes`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned actions without executing them")
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the confirmation prompt")
-	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
-	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned actions without changing the host")
+	addYesFlag(cmd, &yes, "bootstrap")
+	addAskBecomePassFlag(cmd, &askBecomePass)
+	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, flagStrictSecretsUsage)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()
 		if err != nil {

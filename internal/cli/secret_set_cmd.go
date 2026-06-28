@@ -70,7 +70,7 @@ provides. Use --generate for test fixtures.`,
 	cmd.Flags().StringVar(&password, "password", "", "password (mutually exclusive with --password-stdin and --generate)")
 	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read password from stdin instead of --password")
 	cmd.Flags().BoolVar(&generate, "generate", false, "generate a strong random password (intended for test fixtures)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the overwrite confirmation prompt")
+	addYesFlag(cmd, &yes, "overwrite")
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if !desiredstate.IsDNSLabel(name) {

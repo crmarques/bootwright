@@ -77,20 +77,20 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		Example: example,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().BoolVar(&dryRun, "dry-run", options.defaultPlan, "render artifacts and print a plan only; does not run readiness checks or mutate remote systems")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", options.defaultPlan, flagDryRunUsage)
 	if options.hideDryRun {
 		_ = cmd.Flags().MarkHidden("dry-run")
 	}
 	if usesAnsible {
 		cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
-		cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
-		cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible-playbook output to the terminal as well as the run log (default: log only); the progress view falls back to plain transition lines")
+		addAskBecomePassFlag(cmd, &askBecomePass)
+		addStreamAnsibleFlag(cmd, &streamAnsible)
 	}
 	if !options.hideApproval {
-		cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
-		cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only; never under --yes or --output json); automation must pre-record trust with bootwright host trust")
+		addYesFlag(cmd, &yes, action)
+		addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	}
-	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
+	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, flagStrictSecretsUsage)
 	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
 	if converge.ScopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
@@ -101,23 +101,22 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
 	if options.stageSelector {
-		flags.output = outputText
 		if usesAnsible {
-			cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+			addAnsiblePlaybookFlag(cmd, &flags.executable)
 		}
-		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
-		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to %s: %s families, or a sub-phase %s (default full graph)", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		addOutputFlagDryRun(cmd, &flags.output)
+		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to %s: %s (or sub-phase %s); default: full graph", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerStageCompletion(cmd, converge.ApplyStageNames())
-		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("%s from the beginning up to and including a stage: %s families, or a sub-phase %s (cumulative prefix; mutually exclusive with --stage)", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit %s to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply")
-		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, "validate only the resources within the selected --clusters/--stage scope, ignoring desired-state errors in objects outside it (no effect without --clusters)")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply (default: all)")
+		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, flagScopedValidationUsage)
 	} else {
 		registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
 	}
 	if options.defaultPlan {
 		if flag := cmd.Flags().Lookup("output"); flag != nil {
-			flag.Usage = "output format: text|json"
+			flag.Usage = flagOutputUsage
 		}
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

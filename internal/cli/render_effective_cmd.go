@@ -11,7 +11,7 @@ import (
 )
 
 func newRenderEffectiveCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
-	output := outputText
+	var output string
 	cmd := &cobra.Command{
 		Use:   "effective",
 		Short: "Render normalized effective state",
@@ -23,7 +23,7 @@ func newRenderEffectiveCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
   bootwright render effective --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
+	addOutputFlag(cmd, &output)
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)

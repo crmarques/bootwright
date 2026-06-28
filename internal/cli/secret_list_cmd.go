@@ -25,13 +25,13 @@ type secretListReport struct {
 type secretListEntry = status.SecretEntry
 
 func newSecretListCmd(stdout io.Writer) *cobra.Command {
-	outputFormat := outputText
+	var outputFormat string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List declared secrets and local material status",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
+	addOutputFlag(cmd, &outputFormat)
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {
