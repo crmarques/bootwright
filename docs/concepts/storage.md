@@ -142,6 +142,8 @@ Distribution requirements:
 | `monitoring.grafana` | No | — | Per-service tuning; placement derives from the `grafana` role. |
 | `monitoring.alertmanager` | No | — | Per-service tuning; placement derives from the `alertmanager` role. |
 | `monitoring.nodeExporter` | No | every host (cephadm behavior) | node-exporter has no topology role; an authored block narrows by explicit placement only. |
+| `monitoring.loki` | No | — | Centralized-logging aggregator (`service_type: loki`); role-less, placement authored explicitly. Authoring it also wires the dashboard (`ceph dashboard set-loki-api-host`). `retentionTime` applies here. |
+| `monitoring.promtail` | No | — | Log shipper (`service_type: promtail`); role-less. Ships to loki, so it has no dashboard wiring. |
 
 !!! note "Absent versus present"
     Omitting the `monitoring` block deploys cephadm's **default** monitoring
@@ -150,13 +152,13 @@ Distribution requirements:
     `true`; `enabled: false` skips the stack.
 
 Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
-`nodeExporter`) carries:
+`nodeExporter`, `loki`, `promtail`) carries:
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `placement` | No | every host carrying the service's role | See [Shared placement](#shared-placement). |
 | `port` | No | cephadm default | Service port. |
-| `retentionTime` | No | cephadm default | Retention time (applies to Prometheus). |
+| `retentionTime` | No | cephadm default | Retention time (applies to Prometheus and Loki). |
 | `retentionSize` | No | cephadm default | Retention size (applies to Prometheus). |
 | `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
 

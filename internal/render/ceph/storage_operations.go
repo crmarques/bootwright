@@ -172,6 +172,19 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	for _, module := range cluster.Spec.Ceph.MgrModules {
 		ops = append(ops, operationWithIdempotency("topology", "enable-mgr-module-"+module, "mgr-module", module, "ceph", "mgr", "module", "enable", module))
 	}
+	// Authoring loki wires the dashboard to it (the easy-to-forget half of
+	// centralized logging). promtail ships logs to loki, so there is no
+	// set-promtail-api-host — only set-loki-api-host. Last-write-wins.
+	if monitoring := cluster.Spec.Ceph.Monitoring; monitoring != nil && monitoring.Loki != nil {
+		if hosts := topology.ResolvePlacement(cluster, monitoring.Loki.Placement, ""); len(hosts) > 0 {
+			port := monitoring.Loki.Port
+			if port == 0 {
+				port = 3100
+			}
+			url := fmt.Sprintf("http://%s:%d", hosts[0], port)
+			ops = append(ops, operationInPhase("topology", "set-dashboard-loki-api-host", "ceph", "dashboard", "set-loki-api-host", url))
+		}
+	}
 	// RGW realm/zonegroup/zone must exist before the rgw daemons start, so these
 	// creates run in the storage phase (before late service specs). cephadm does
 	// not create them. Owner-stamp by name so two gateways sharing a realm emit

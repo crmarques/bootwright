@@ -360,6 +360,8 @@ func storageSiteRequirement(state v1alpha1.State, cluster v1alpha1.StorageCluste
 			{"grafana", monitoring.Grafana},
 			{"alertmanager", monitoring.Alertmanager},
 			{"nodeExporter", monitoring.NodeExporter},
+			{"loki", monitoring.Loki},
+			{"promtail", monitoring.Promtail},
 		} {
 			if item.service != nil && len(item.service.Placement.Sites) > 0 {
 				return fmt.Sprintf("spec.ceph.monitoring.%s.placement narrows by sites", item.field)
@@ -592,6 +594,7 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 		for field, service := range map[string]*v1alpha1.StorageCephMonitoringService{
 			"prometheus": monitoring.Prometheus, "grafana": monitoring.Grafana,
 			"alertmanager": monitoring.Alertmanager, "nodeExporter": monitoring.NodeExporter,
+			"loki": monitoring.Loki, "promtail": monitoring.Promtail,
 		} {
 			if service != nil {
 				errs = append(errs, fmt.Sprintf("%s.%s must be empty when monitoring.enabled is false", prefix, field))
@@ -608,6 +611,8 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 		{"grafana", v1alpha1.StorageCephRoleGrafana, monitoring.Grafana},
 		{"alertmanager", v1alpha1.StorageCephRoleAlertmanager, monitoring.Alertmanager},
 		{"nodeExporter", "", monitoring.NodeExporter},
+		{"loki", "", monitoring.Loki},
+		{"promtail", "", monitoring.Promtail},
 	} {
 		if item.service == nil {
 			continue
@@ -617,8 +622,11 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 		if item.service.Port < 0 || item.service.Port > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.port %d out of range", owner, item.service.Port))
 		}
-		if item.field != "prometheus" && (item.service.RetentionTime != "" || item.service.RetentionSize != "") {
-			errs = append(errs, owner+" retentionTime/retentionSize apply to prometheus only")
+		if item.service.RetentionTime != "" && item.field != "prometheus" && item.field != "loki" {
+			errs = append(errs, owner+".retentionTime applies to prometheus and loki only")
+		}
+		if item.service.RetentionSize != "" && item.field != "prometheus" {
+			errs = append(errs, owner+".retentionSize applies to prometheus only")
 		}
 		for i, cidr := range item.service.Networks {
 			errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks[%d]", owner, i), cidr)...)
@@ -696,6 +704,7 @@ func validateStorageCephServices(prefix string, cluster v1alpha1.StorageCluster)
 		"host": true, "mon": true, "mgr": true, "osd": true, "mds": true,
 		"rgw": true, "ingress": true, "prometheus": true, "grafana": true,
 		"alertmanager": true, "node-exporter": true, "nfs": true,
+		"loki": true, "promtail": true,
 	}
 	var errs []string
 	seen := map[string]bool{}

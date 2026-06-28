@@ -667,6 +667,47 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
+// Authoring loki/promtail renders role-less services and wires the dashboard to
+// loki (set-loki-api-host only — there is no set-promtail-api-host).
+func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Monitoring: &v1alpha1.StorageCephMonitoring{
+				Loki:     &v1alpha1.StorageCephMonitoringService{Placement: v1alpha1.StoragePlacement{Hosts: []string{"ceph-0"}}, RetentionTime: "30d"},
+				Promtail: &v1alpha1.StorageCephMonitoringService{},
+			},
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
+				{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon"}},
+			}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	byType := map[string]map[string]any{}
+	for _, doc := range CephadmLateServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		byType[m["service_type"].(string)] = m
+	}
+	if byType["loki"] == nil || byType["promtail"] == nil {
+		t.Fatalf("loki/promtail must render when authored: %v", byType)
+	}
+	if byType["loki"]["spec"].(map[string]any)["retention_time"] != "30d" {
+		t.Fatalf("loki retention_time = %v", byType["loki"]["spec"])
+	}
+	var dashboardOp []string
+	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
+		if op["name"] == "set-dashboard-loki-api-host" {
+			dashboardOp, _ = op["command"].([]string)
+		}
+		if op["name"] == "set-dashboard-promtail-api-host" {
+			t.Fatal("there is no set-promtail-api-host op")
+		}
+	}
+	if !reflect.DeepEqual(dashboardOp, []string{"ceph", "dashboard", "set-loki-api-host", "http://ceph-0:3100"}) {
+		t.Fatalf("loki dashboard wiring = %v", dashboardOp)
+	}
+}
+
 // A management gateway carrying TLS or oauth2-proxy is deferred to the dedicated
 // secret-bearing apply step: the static late-services render emits only the
 // keepalive ingress, never a mgmt-gateway doc that would inline secrets.

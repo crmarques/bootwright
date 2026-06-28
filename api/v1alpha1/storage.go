@@ -180,6 +180,13 @@ type StorageCephMonitoring struct {
 	Grafana      *StorageCephMonitoringService `yaml:"grafana,omitempty" json:"grafana,omitempty"`
 	Alertmanager *StorageCephMonitoringService `yaml:"alertmanager,omitempty" json:"alertmanager,omitempty"`
 	NodeExporter *StorageCephMonitoringService `yaml:"nodeExporter,omitempty" json:"nodeExporter,omitempty"`
+	// Loki and Promtail are the centralized-logging half of the stack. Like
+	// node-exporter they carry no topology role, so an authored block renders the
+	// service with explicit placement (or cephadm's default). Authoring loki also
+	// wires the dashboard to it (ceph dashboard set-loki-api-host); promtail ships
+	// logs to loki, so there is no dashboard wiring for it.
+	Loki     *StorageCephMonitoringService `yaml:"loki,omitempty" json:"loki,omitempty"`
+	Promtail *StorageCephMonitoringService `yaml:"promtail,omitempty" json:"promtail,omitempty"`
 }
 
 // StorageCephMonitoringService tunes one monitoring service; the knobs render

@@ -386,12 +386,16 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 		{"grafana", v1alpha1.StorageCephRoleGrafana, nil},
 		{"alertmanager", v1alpha1.StorageCephRoleAlertmanager, nil},
 		{"node-exporter", "", nil},
+		{"loki", "", nil},
+		{"promtail", "", nil},
 	}
 	if monitoring != nil {
 		services[0].config = monitoring.Prometheus
 		services[1].config = monitoring.Grafana
 		services[2].config = monitoring.Alertmanager
 		services[3].config = monitoring.NodeExporter
+		services[4].config = monitoring.Loki
+		services[5].config = monitoring.Promtail
 	}
 	var docs []any
 	for _, service := range services {
