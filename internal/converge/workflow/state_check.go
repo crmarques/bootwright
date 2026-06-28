@@ -105,13 +105,22 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 	// "storage/<cluster>" root, so a never-applied cluster — cluster task and
 	// every sub-object missing — still collapses to a single absence.
 	//
-	// Restricted to the apply target's storage work set so the sub-object
-	// classification mirrors what scoped apply plans: a managed StorageCluster
-	// pulled into the scoped state only as a data-foundation render reference is
-	// neither provisioned by apply nor classified here (ADR-0004), so it does not
-	// report spurious pool/export drift for a cluster a scoped check never touches.
+	// Classified only for storage clusters the selected graph actually plans a
+	// StorageCluster task for, mirroring the apply preflight exactly
+	// (ClassifyApplyObjects expands sub-objects per StorageCluster task). A stage
+	// that plans no storage (e.g. --stage infra) and a managed StorageCluster
+	// pulled in only as a data-foundation render reference (no provisioning task,
+	// ADR-0004) both carry no task here, so neither reports spurious pool/export
+	// drift the identically-scoped apply would never touch (a state check exiting 3
+	// where apply is a clean no-op).
+	storagePlanned := map[string]bool{}
+	for _, task := range tasks {
+		if task.Entry.Kind == ApplyTaskKindStorageCluster {
+			storagePlanned[task.Entry.Cluster] = true
+		}
+	}
 	for _, cluster := range state.StorageClusters {
-		if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+		if !storagePlanned[cluster.Metadata.Name] || !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
 			continue
 		}
 		acc := rootFor(ApplyClusterKindStorage, cluster.Metadata.Name)
