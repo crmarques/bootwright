@@ -370,6 +370,27 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	}
 }
 
+// TestPackageRemovalGuardedByOwnershipAndRequirements pins the host-package safety
+// contract: Bootwright removes a package only when its ownership record proves
+// Bootwright introduced it (preexisting is false, defaulting to true so an
+// operator-preexisting package is kept) AND nothing else still requires it. A
+// regression that inverts the preexisting default or drops the requiredBy gate
+// would silently start removing operator-preexisting packages (chrony, podman, ...).
+func TestPackageRemovalGuardedByOwnershipAndRequirements(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_remove_one.yml")
+	remove := tasks[findAnsibleTask(t, tasks, "Remove package that Bootwright introduced")]
+	when := fmt.Sprint(remove["when"])
+	// Removal only when the package is NOT operator-preexisting; the default is true
+	// so a missing flag keeps the package.
+	if !strings.Contains(when, "not (bootwright_ownership_package_record.preexisting") || !strings.Contains(when, "preexisting | default(true)") {
+		t.Fatalf("package removal must be gated on preexisting defaulting to true (keep), got when=%v", remove["when"])
+	}
+	// Removal only when nothing else still requires the package.
+	if !strings.Contains(when, "bootwright_ownership_package_remaining_required_by") || !strings.Contains(when, "length == 0") {
+		t.Fatalf("package removal must be gated on an empty remaining requiredBy, got when=%v", remove["when"])
+	}
+}
+
 func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",
