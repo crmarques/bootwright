@@ -225,7 +225,7 @@ func validateNodePlacement(prefix string, node v1alpha1.OCPHostSpec) []string {
 }
 
 func validateSNOOpenShiftEndpoints(ocp v1alpha1.ContainerCluster, ci v1alpha1.ClusterInstall) []string {
-	if !isSingleNodeCluster(ocp) {
+	if !stateview.IsSingleNodeCluster(ocp) {
 		return nil
 	}
 	var errs []string
@@ -281,13 +281,6 @@ func containerEndpointRefName(role string) string {
 	default:
 		return ""
 	}
-}
-
-func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
-	if len(ocp.Spec.Hosts) != 1 {
-		return false
-	}
-	return ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
 }
 
 func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {

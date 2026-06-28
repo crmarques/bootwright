@@ -12,17 +12,13 @@ var StandardEndpointNames = []string{
 }
 
 func clusterPlatformKind(ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) string {
-	if isSingleNodeCluster(ocp) && ci.Platform.Type != v1alpha1.PlatformTypeExternal {
+	if stateview.IsSingleNodeCluster(ocp) && ci.Platform.Type != v1alpha1.PlatformTypeExternal {
 		return v1alpha1.PlatformTypeNone
 	}
 	if ci.Platform.Type == "" {
 		return v1alpha1.PlatformTypeNone
 	}
 	return ci.Platform.Type
-}
-
-func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
-	return len(ocp.Spec.Hosts) == 1 && ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
 }
 
 func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, secrets InstallerSecrets) map[string]any {

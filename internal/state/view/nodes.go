@@ -13,6 +13,12 @@ func ComposeFQDN(host, clusterName, baseDomain string) string {
 	return host + "." + clusterName + "." + baseDomain
 }
 
+// IsSingleNodeCluster reports whether a ContainerCluster is single-node (SNO):
+// exactly one host, carrying the master role.
+func IsSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
+	return len(ocp.Spec.Hosts) == 1 && ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
+}
+
 // NodeCluster reports the cluster that node-binds a machine, by kind
 // ("ContainerCluster" or "StorageCluster") and name. A machine is node-bound by
 // at most one cluster across all clusters (validation enforces this), so the
