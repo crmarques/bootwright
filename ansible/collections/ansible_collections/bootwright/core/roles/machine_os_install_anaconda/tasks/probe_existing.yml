@@ -79,28 +79,72 @@
   changed_when: false
   when: bootwright_managed_os_already_ready | bool
 
-- name: Resolve managed OS install marker match
+# A Bootwright-owned marker is one written by bootwright (owner == bootwright),
+# regardless of whether its hash still matches desired. Ownership is a stronger,
+# separate predicate than match: --override may rebuild an OWNED host whose hash
+# drifted, but must NEVER adopt or wipe a host Bootwright does not own.
+- name: Resolve managed OS Bootwright ownership before install
   ansible.builtin.set_fact:
-    bootwright_os_pre_marker_matches: >-
+    bootwright_os_pre_marker_owned: >-
       {{
         (bootwright_os_pre_marker.rc | default(1) | int) == 0
         and (
           ('"owner": "bootwright"' in (bootwright_os_pre_marker.stdout | default('')))
           or ('"owner":"bootwright"' in (bootwright_os_pre_marker.stdout | default('')))
         )
+      }}
+  changed_when: false
+  when: bootwright_managed_os_already_ready | bool
+
+- name: Resolve managed OS install marker match
+  ansible.builtin.set_fact:
+    bootwright_os_pre_marker_matches: >-
+      {{
+        (bootwright_os_pre_marker_owned | default(false) | bool)
         and (bootwright_os_marker_desired_hash in (bootwright_os_pre_marker.stdout | default('')))
       }}
   changed_when: false
   when: bootwright_managed_os_already_ready | bool
 
-- name: Refuse reachable managed OS without matching Bootwright marker
+# A reachable host that does NOT carry a Bootwright-owned marker is foreign (or was
+# manually prepared): never adopt, reinstall, or wipe it — fail closed even under
+# --override, which does not bypass foreign ownership.
+- name: Refuse foreign or unmarked reachable managed OS
   ansible.builtin.fail:
     msg: >-
-      managed OS at {{ bootwright_component.osInstall.ssh.address }} accepts SSH
-      but {{ bootwright_os_marker_path }} is absent or does not match desired hash
-      {{ bootwright_os_marker_desired_hash }}; refusing to reinstall, wipe, or
-      adopt without --override
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} accepts SSH but
+      {{ bootwright_os_marker_path }} is absent or not owned by bootwright; refusing to
+      reinstall, wipe, or adopt a host Bootwright does not own (--override does not
+      bypass foreign ownership).
   when:
     - bootwright_managed_os_already_ready | bool
+    - not (bootwright_os_pre_marker_owned | default(false) | bool)
+
+# A reachable Bootwright-owned host whose marker no longer matches the desired hash
+# has drifted. The default reconcile fails closed; --override authorizes the
+# data-destroying rebuild of an owned host.
+- name: Refuse drifted Bootwright-owned managed OS without override
+  ansible.builtin.fail:
+    msg: >-
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} is Bootwright-owned
+      but {{ bootwright_os_marker_path }} does not match desired hash
+      {{ bootwright_os_marker_desired_hash }}; rerun with --override to rebuild it.
+  when:
+    - bootwright_managed_os_already_ready | bool
+    - bootwright_os_pre_marker_owned | default(false) | bool
     - not (bootwright_os_pre_marker_matches | default(false) | bool)
     - (bootwright_apply_mode | default('continue')) != 'override'
+
+# Stamp the marker/ownership only for a host Bootwright legitimately owns: one it
+# freshly installs this run (was not already reachable) or one it already owns
+# (matching, or override-rebuilt). A foreign host fails closed above and never
+# reaches the stamp; gate it so a future reordering cannot launder a foreign host
+# into an owned one.
+- name: Resolve whether managed OS may be stamped as Bootwright-owned
+  ansible.builtin.set_fact:
+    bootwright_managed_os_stamp_owned: >-
+      {{
+        (not (bootwright_managed_os_already_ready | bool))
+        or (bootwright_os_pre_marker_owned | default(false) | bool)
+      }}
+  changed_when: false

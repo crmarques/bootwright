@@ -16,6 +16,8 @@
 
 - name: Write managed OS marker
   ansible.builtin.import_tasks: marker.yml
+  when: bootwright_managed_os_stamp_owned | default(true) | bool
 
 - name: Record managed OS ownership
   ansible.builtin.import_tasks: ownership.yml
+  when: bootwright_managed_os_stamp_owned | default(true) | bool

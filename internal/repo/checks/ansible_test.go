@@ -370,6 +370,43 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	}
 }
 
+// TestManagedOSRefusesForeignHostRegardlessOfMode pins that a reachable managed-OS
+// host without a Bootwright-owned marker fails closed even under --override (never
+// adopt/wipe a foreign host), while an owned host whose hash drifted is refused only
+// without --override; and that the marker/ownership stamps are gated so a host that
+// failed the ownership proof is never recorded as Bootwright-owned.
+func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
+	probe := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml")
+
+	foreign := probe[findAnsibleTask(t, probe, "Refuse foreign or unmarked reachable managed OS")]
+	foreignWhen := fmt.Sprint(foreign["when"])
+	if strings.Contains(foreignWhen, "override") {
+		t.Fatalf("foreign managed-OS refusal must fail closed regardless of apply_mode (no --override escape), got when=%v", foreign["when"])
+	}
+	if !strings.Contains(foreignWhen, "bootwright_os_pre_marker_owned") || !strings.Contains(foreignWhen, "bootwright_managed_os_already_ready") {
+		t.Fatalf("foreign refusal must fire for a reachable host that is not Bootwright-owned, got when=%v", foreign["when"])
+	}
+
+	drifted := probe[findAnsibleTask(t, probe, "Refuse drifted Bootwright-owned managed OS without override")]
+	driftedWhen := fmt.Sprint(drifted["when"])
+	if !strings.Contains(driftedWhen, "override") {
+		t.Fatalf("drifted owned managed-OS refusal must be relaxed by --override, got when=%v", drifted["when"])
+	}
+	if !strings.Contains(driftedWhen, "bootwright_os_pre_marker_owned") {
+		t.Fatalf("drifted refusal must apply only to a Bootwright-owned host, got when=%v", drifted["when"])
+	}
+
+	// The marker and ownership stamps are gated so a host that failed the ownership
+	// proof is never recorded as Bootwright-owned.
+	main := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
+	for _, name := range []string{"Write managed OS marker", "Record managed OS ownership"} {
+		task := main[findAnsibleTask(t, main, name)]
+		if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_managed_os_stamp_owned") {
+			t.Fatalf("%s must be gated on the ownership-proof fact, got when=%v", name, task["when"])
+		}
+	}
+}
+
 // TestPackageRemovalGuardedByOwnershipAndRequirements pins the host-package safety
 // contract: Bootwright removes a package only when its ownership record proves
 // Bootwright introduced it (preexisting is false, defaulting to true so an
@@ -793,7 +830,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	resolveFilesIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install files")
 	resolveSourcePathIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install source path")
 	readMarkerIdx := findAnsibleTask(t, topTasks, "Read managed OS install marker before install")
-	refuseMarkerIdx := findAnsibleTask(t, topTasks, "Refuse reachable managed OS without matching Bootwright marker")
+	refuseMarkerIdx := findAnsibleTask(t, topTasks, "Refuse foreign or unmarked reachable managed OS")
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
