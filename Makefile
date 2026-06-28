@@ -22,7 +22,7 @@ E2E_CONTEXT_EXPECTED = $(E2E_CONTEXT_ROOT)/$(CASE)
 E2E_HOME ?= $(abspath $(STATE_DIR)/e2e-home/$(CASE))
 ANSIBLE_PLAYBOOK ?= $(shell command -v ansible-playbook 2>/dev/null)
 E2E_ANSIBLE_FLAGS = $(if $(ANSIBLE_PLAYBOOK),--ansible-playbook $(ANSIBLE_PLAYBOOK),)
-E2E_APPLY_ALL ?= $(BIN_DIR)/$(BINARY) apply all --yes
+E2E_APPLY_ALL ?= $(BIN_DIR)/$(BINARY) apply --yes
 E2E_APPLY_FLAGS ?=
 E2E_CLEAN ?= sudo rm -rf
 # ADRs intentionally describe the abandoned shape in their Context
@@ -298,11 +298,10 @@ containerfile-pin-check:
 	awk 'BEGIN { status = 0 } /^FROM[[:space:]]/ && $$2 != "scratch" && $$2 !~ /@sha256:[0-9a-f]{64}$$/ { printf "%s:%d: Containerfile base image must be digest-pinned: %s\n", FILENAME, FNR, $$0; status = 1 } /^#[[:space:]]*syntax[[:space:]]*=/ && $$0 !~ /@sha256:[0-9a-f]{64}$$/ { printf "%s:%d: Containerfile syntax directive must be digest-pinned: %s\n", FILENAME, FNR, $$0; status = 1 } END { exit status }' $$files
 
 validate: build
-	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init validate -f test/e2e/001-sno-libvirt --yes
-	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) check syntax
+	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) validate -f test/e2e/001-sno-libvirt
 
 plan: build
-	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init plan -f test/e2e/001-sno-libvirt --yes
+	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init --name plan -f test/e2e/001-sno-libvirt --yes
 	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) render installer
 
 check-e2e-deps:
@@ -324,11 +323,11 @@ list-e2e-cases:
 	@printf '%s\n' 'Available e2e cases:' $(addprefix '  ',$(E2E_CASES))
 
 e2e-dry-run: check-e2e-case check-e2e-deps build
-	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init $(CASE) -f $(E2E_FIXTURE) --yes
-	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) apply all --dry-run $(E2E_ANSIBLE_FLAGS) $(E2E_APPLY_FLAGS)
+	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init --name $(CASE) -f $(E2E_FIXTURE) --yes
+	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) apply --dry-run $(E2E_ANSIBLE_FLAGS) $(E2E_APPLY_FLAGS)
 
 e2e: check-e2e-case check-e2e-deps build
-	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init $(CASE) -f $(E2E_FIXTURE) --yes
+	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init --name $(CASE) -f $(E2E_FIXTURE) --yes
 	HOME=$(E2E_HOME) $(E2E_APPLY_ALL) $(E2E_ANSIBLE_FLAGS) $(E2E_APPLY_FLAGS)
 
 clean:
