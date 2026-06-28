@@ -46,7 +46,10 @@ ANSIBLE_GALAXY_ENV = \
 GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
 GO_TEST_PACKAGES ?= ./...
 GO_TEST_CHECK_FLAGS ?= -vet=off
-GO_TEST_RACE_FLAGS ?= -vet=off -race
+# internal/cli is a large integration-style package; under -race it runs ~12min
+# on slower machines, past Go's 600s/package default. Give the race run headroom
+# so it fails on real races, not the clock.
+GO_TEST_RACE_FLAGS ?= -vet=off -race -timeout 1800s
 BOOTWRIGHT_COLLECTIONS_DIR = $(abspath $(ANSIBLE_SRC_DIR)/collections)
 BOOTWRIGHT_COLLECTION_ROOT = $(ANSIBLE_SRC_DIR)/collections/ansible_collections/bootwright/core
 ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
