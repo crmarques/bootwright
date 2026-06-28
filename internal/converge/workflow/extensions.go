@@ -11,7 +11,7 @@ import (
 
 func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
 	if task.Extension == nil {
-		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("addon task %s has no addon plan", task.Entry.ID)}
+		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("add-on task %s has no add-on plan", task.Entry.ID)}
 	}
 	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
 	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
@@ -37,7 +37,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	var err error
 	switch task.Entry.Kind {
 	case ApplyTaskKindClusterAddon:
-		// Install the addon, then wait for it to report ready. The task is only
+		// Install the add-on, then wait for it to report ready. The task is only
 		// "skipped" (nothing converged) when both phases are no-ops.
 		var applied, waited extensionoc.TaskResult
 		applied, err = extensionoc.Apply(ctx, runner, cfg, *task.Extension)
@@ -48,7 +48,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 			result = extensionoc.TaskResult{Skipped: true, Reason: applied.Reason}
 		}
 	default:
-		err = fmt.Errorf("unsupported addon task kind %s", task.Entry.Kind)
+		err = fmt.Errorf("unsupported add-on task kind %s", task.Entry.Kind)
 	}
 	if err == nil {
 		status := ConvergeSafetyStatusReconciled

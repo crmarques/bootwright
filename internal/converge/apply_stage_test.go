@@ -17,7 +17,7 @@ func TestScopeProvisionsClusterWorkload(t *testing.T) {
 			t.Errorf("stage %q should gate KubeVirt host readiness", stage)
 		}
 	}
-	for _, stage := range []string{"fabric", "addons"} {
+	for _, stage := range []string{"fabric", "add-ons"} {
 		scope, err := ApplyStageScope(stage)
 		if err != nil {
 			t.Fatalf("ApplyStageScope(%q): %v", stage, err)
@@ -34,14 +34,14 @@ func TestApplyStageScopeResolvesFamiliesAndSubPhases(t *testing.T) {
 		wantName   string
 		wantPhases []string
 	}{
-		{"", "all", []string{"fabric", "machines", "deps", "base", "addons"}},
+		{"", "all", []string{"fabric", "machines", "deps", "base", "add-ons"}},
 		{"infra", "infra", []string{"fabric", "machines"}},
-		{"clusters", "clusters", []string{"deps", "base", "addons"}},
+		{"clusters", "clusters", []string{"deps", "base", "add-ons"}},
 		{"fabric", "fabric", []string{"fabric"}},
 		{"machines", "machines", []string{"machines"}},
 		{"deps", "deps", []string{"deps"}},
 		{"base", "base", []string{"base"}},
-		{"addons", "addons", []string{"addons"}},
+		{"add-ons", "add-ons", []string{"add-ons"}},
 	}
 	for _, tc := range cases {
 		scope, err := ApplyStageScope(tc.stage)
@@ -64,11 +64,11 @@ func TestStageScopeOmissions(t *testing.T) {
 		wantAssumedPrior []string
 	}{
 		{"", nil, nil},
-		{"infra", []string{"deps", "base", "addons"}, nil},
+		{"infra", []string{"deps", "base", "add-ons"}, nil},
 		{"clusters", []string{"fabric", "machines"}, []string{"fabric", "machines"}},
-		{"fabric", []string{"machines", "deps", "base", "addons"}, nil},
-		{"base", []string{"fabric", "machines", "deps", "addons"}, []string{"fabric", "machines", "deps"}},
-		{"addons", []string{"fabric", "machines", "deps", "base"}, []string{"fabric", "machines", "deps", "base"}},
+		{"fabric", []string{"machines", "deps", "base", "add-ons"}, nil},
+		{"base", []string{"fabric", "machines", "deps", "add-ons"}, []string{"fabric", "machines", "deps"}},
+		{"add-ons", []string{"fabric", "machines", "deps", "base"}, []string{"fabric", "machines", "deps", "base"}},
 	}
 	for _, tc := range cases {
 		scope, err := ApplyStageScope(tc.stage)
@@ -104,14 +104,14 @@ func TestApplyThroughScopeBuildsPrefix(t *testing.T) {
 		wantLimit        string
 		wantTargetsCInst bool
 	}{
-		{"", "all", "all", []string{"fabric", "machines", "deps", "base", "addons"}, "", true},
+		{"", "all", "all", []string{"fabric", "machines", "deps", "base", "add-ons"}, "", true},
 		{"fabric", "through-fabric", "through-fabric", []string{"fabric"}, infraAnsibleLimit, false},
 		{"machines", "infra", "infra", []string{"fabric", "machines"}, infraAnsibleLimit, false},
 		{"infra", "infra", "infra", []string{"fabric", "machines"}, infraAnsibleLimit, false},
 		{"deps", "through-deps", "through-deps", []string{"fabric", "machines", "deps"}, "", true},
 		{"base", "through-base", "through-base", []string{"fabric", "machines", "deps", "base"}, "", true},
-		{"addons", "all", "all", []string{"fabric", "machines", "deps", "base", "addons"}, "", true},
-		{"clusters", "all", "all", []string{"fabric", "machines", "deps", "base", "addons"}, "", true},
+		{"add-ons", "all", "all", []string{"fabric", "machines", "deps", "base", "add-ons"}, "", true},
+		{"clusters", "all", "all", []string{"fabric", "machines", "deps", "base", "add-ons"}, "", true},
 	}
 	for _, tc := range cases {
 		scope, err := ApplyThroughScope(tc.through)

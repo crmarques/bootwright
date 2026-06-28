@@ -56,7 +56,7 @@ func selectedHasExtensionWork(selected []Phase, state v1alpha1.State) bool {
 		return false
 	}
 	for _, phase := range selected {
-		if phase.Name == "addons" {
+		if phase.Name == "add-ons" {
 			return true
 		}
 	}

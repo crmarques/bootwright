@@ -100,7 +100,7 @@ func TestClusterTargets(t *testing.T) {
 			t.Fatalf("%s stderr %q does not reject unsupported target", strings.Join(args, " "), stderr)
 		}
 	}
-	for _, target := range []string{"bastion", "infra", "clusters", "container-cluster", "storage-cluster", "addons", "all"} {
+	for _, target := range []string{"bastion", "infra", "clusters", "container-cluster", "storage-cluster", "add-ons", "all"} {
 		_, stderr, code := runCLI(t, "apply", target)
 		if code == 0 {
 			t.Fatalf("bootwright apply %s unexpectedly succeeded", target)
@@ -235,7 +235,7 @@ func TestApplyRejectsRemovedStagesAndFlags(t *testing.T) {
 }
 
 func TestDestroyRejectsRemovedStagesAndFlags(t *testing.T) {
-	for _, stage := range []string{"container", "storage", "install", "addons"} {
+	for _, stage := range []string{"container", "storage", "install", "add-ons"} {
 		_, stderr, code := runCLI(t, "destroy", "--stage", stage, "--dry-run")
 		if code == 0 {
 			t.Fatalf("destroy --stage %s unexpectedly succeeded", stage)
@@ -260,16 +260,16 @@ func TestStageRejectionMessagesListCanonicalVocabulary(t *testing.T) {
 	// internal/converge stay the single source the CLI error messages, flag help,
 	// and completion all derive from. A drift here means one surface fell behind.
 	_, applyErr, applyCode := runCLI(t, "apply", "--stage", "bogus", "--dry-run")
-	if applyCode != 2 || !strings.Contains(applyErr, "--stage must be one of infra, clusters, fabric, machines, deps, base, addons") {
+	if applyCode != 2 || !strings.Contains(applyErr, "--stage must be one of infra, clusters, fabric, machines, deps, base, add-ons") {
 		t.Fatalf("apply --stage bogus code=%d stderr=%q, want full apply vocabulary", applyCode, applyErr)
 	}
 	_, destroyErr, destroyCode := runCLI(t, "destroy", "--stage", "bogus", "--dry-run")
-	if destroyCode != 2 || !strings.Contains(destroyErr, "--stage must be one of infra, clusters (sub-phases fabric, machines, deps, base, addons are apply-only)") {
+	if destroyCode != 2 || !strings.Contains(destroyErr, "--stage must be one of infra, clusters (sub-phases fabric, machines, deps, base, add-ons are apply-only)") {
 		t.Fatalf("destroy --stage bogus code=%d stderr=%q, want family list + apply-only note", destroyCode, destroyErr)
 	}
 	// --through derives the same canonical vocabulary as --stage.
 	_, throughErr, throughCode := runCLI(t, "apply", "--through", "bogus", "--dry-run")
-	if throughCode != 2 || !strings.Contains(throughErr, "--through must be one of infra, clusters, fabric, machines, deps, base, addons") {
+	if throughCode != 2 || !strings.Contains(throughErr, "--through must be one of infra, clusters, fabric, machines, deps, base, add-ons") {
 		t.Fatalf("apply --through bogus code=%d stderr=%q, want full through vocabulary", throughCode, throughErr)
 	}
 }
@@ -290,8 +290,8 @@ func TestApplyThroughBaseDryRunReportsTrailingOmissionsWithoutPriorWarning(t *te
 	if code != 0 {
 		t.Fatalf("apply --through base --dry-run exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "phases not in this plan: addons") {
-		t.Fatalf("apply --through base dry-run should report only addons omitted:\n%s", stdout)
+	if !strings.Contains(stdout, "phases not in this plan: add-ons") {
+		t.Fatalf("apply --through base dry-run should report only add-ons omitted:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "assumes a prior apply completed") {
 		t.Fatalf("apply --through base dry-run must not warn about assumed prior phases:\n%s", stdout)
@@ -793,7 +793,7 @@ func TestApplyThroughWithClusterScopeDryRunJSON(t *testing.T) {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
 	// The cumulative prefix stops at deps: base and addons must be omitted.
-	for _, omitted := range []string{"base", "addons"} {
+	for _, omitted := range []string{"base", "add-ons"} {
 		if slices.Contains(report.Phases, omitted) {
 			t.Fatalf("through-deps plan unexpectedly includes %q: %#v", omitted, report.Phases)
 		}
@@ -1112,7 +1112,7 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
-	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "addons"}) {
+	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "add-ons"}) {
 		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
 	}
 	if report.Playbook != clustersScope.destroyPlaybook {
@@ -4550,7 +4550,7 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	if report.Target != "clusters" || report.Playbook != clustersScope.destroyPlaybook {
 		t.Fatalf("destroy target/playbook = %q/%q, want clusters/%q", report.Target, report.Playbook, clustersScope.destroyPlaybook)
 	}
-	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "addons"}) {
+	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "add-ons"}) {
 		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
 	}
 	varsData, err := os.ReadFile(report.Render.VarsPath)

@@ -6,7 +6,7 @@ import (
 )
 
 func TestPreflightAddonsRejectsUnknownOutput(t *testing.T) {
-	stdout, stderr, code := runCLI(t, "preflight", "addons", "--output", "yaml")
+	stdout, stderr, code := runCLI(t, "preflight", "add-ons", "--output", "yaml")
 	if code != 2 {
 		t.Fatalf("preflight addons --output yaml exit = %d, want 2 (stderr=%q)", code, stderr)
 	}

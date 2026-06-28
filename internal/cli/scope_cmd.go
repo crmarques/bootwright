@@ -59,7 +59,7 @@ func printBundlePath(stdout io.Writer, bundleDir string) {
 // commands exclude it via destroyOnly=true; check/apply include it.
 func scopeAllowsClusterScope(scope converge.Scope, destroyOnly bool) bool {
 	switch scope.Name {
-	case "clusters", "container-cluster", "storage-cluster", "infra", "addons":
+	case "clusters", "container-cluster", "storage-cluster", "infra", "add-ons":
 		return true
 	case "all":
 		return !destroyOnly

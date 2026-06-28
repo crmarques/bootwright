@@ -140,7 +140,7 @@ bootwright apply --stage clusters --clusters dc1-ocp --yes
 ```
 
 `apply` and `plan` additionally accept the single-phase sub-phases
-(`fabric`, `machines`, `deps`, `base`, `addons`) for even tighter reruns;
+(`fabric`, `machines`, `deps`, `base`, `add-ons`) for even tighter reruns;
 `destroy` accepts only the two families. The full stage model — families versus
 sub-phases — is on [Concepts → Apply stages](../concepts/index.md).
 

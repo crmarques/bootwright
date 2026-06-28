@@ -9,10 +9,10 @@ import (
 // TestPrepareScopedWorkflowPlanAddonsNoBindingsIsNoRemoteWork pins the addons
 // short-circuit: the addons scope runs no ansible, so with no addon bindings
 // there is nothing to do and the run must report NoRemoteWork. Before the
-// AnsibleLimitForScope("addons")=="" empty-limit handling, this stayed false
+// AnsibleLimitForScope("add-ons")=="" empty-limit handling, this stayed false
 // and an empty addons run still prompted and started.
 func TestPrepareScopedWorkflowPlanAddonsNoBindingsIsNoRemoteWork(t *testing.T) {
-	scope := subPhaseStageScope("addons")
+	scope := subPhaseStageScope("add-ons")
 	plan, err := PrepareScopedWorkflowPlan(v1alpha1.State{}, scope, scope.ApplyPhases(), false, false, nil)
 	if err != nil {
 		t.Fatalf("PrepareScopedWorkflowPlan: %v", err)

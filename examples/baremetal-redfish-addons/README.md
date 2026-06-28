@@ -1,4 +1,4 @@
-# Bare-Metal Redfish Addons
+# Bare-Metal Redfish Add-ons
 
 Bare-metal OpenShift with ordered add-on profiles, OLM operators, readiness
 checks, and a manifestSet add-on.

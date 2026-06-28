@@ -37,7 +37,7 @@ result JSON, use 'validate'.`,
 		retargetCommand(newScopeCheckCmd(converge.ClustersScope, stdin, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
 		retargetCommand(newScopeCheckCmd(converge.ContainerClusterScope, stdin, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
 		retargetCommand(newScopeCheckCmd(converge.StorageClusterScope, stdin, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
-		retargetCommand(newAddonsCheckCmd(stdout), "addons", "Check post-install cluster addon prerequisites"),
+		retargetCommand(newAddonsCheckCmd(stdout), "add-ons", "Check post-install cluster add-on prerequisites"),
 		newCheckAllCmd(stdin, stdout, stderr),
 	)
 	requireSubcommand(cmd)
@@ -59,7 +59,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
   # Prepare infrastructure for selected clusters only
   bootwright apply --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
 
-  # Install selected container and storage clusters, addons, and integrations
+  # Install selected container and storage clusters, add-ons, and integrations
   bootwright apply --stage clusters --clusters dc1-ocp,ceph-storage --yes
 
   # Run everything from the beginning up to and including a stage

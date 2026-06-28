@@ -127,7 +127,7 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 // to the run's genuine work targets, ignoring render-reference pull-ins.
 func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps, hostTrustScope map[string]bool, secretScope *SecretScope) []Check {
 	var checks []Check
-	addonsNeedAnsible := phaseInScope("addons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
+	addonsNeedAnsible := phaseInScope("add-ons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(workspace.AnsibleVenvDir(), "bin")}, "bootwright bastion setup", deps),
@@ -149,7 +149,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH", deps))
 		}
 	}
-	if phaseInScope("addons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
+	if phaseInScope("add-ons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
 	if (phaseInScope("deps", selected, hasState) || phaseInScope("base", selected, hasState)) && stateHasManagedStorageClustersInScope(state, secretScope) {
@@ -173,7 +173,7 @@ func selectedNeedsAnsible(selected []Phase) bool {
 		return true
 	}
 	for _, phase := range selected {
-		if phase.Name != "addons" {
+		if phase.Name != "add-ons" {
 			return true
 		}
 	}

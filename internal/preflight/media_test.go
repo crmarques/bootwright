@@ -54,7 +54,7 @@ func TestInstallerMediaCheckSkippedOutsideMachinesPhase(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }}
 
-	if checks := installerMediaChecks(state, []Phase{{Name: "addons"}}, deps, nil); len(checks) != 0 {
+	if checks := installerMediaChecks(state, []Phase{{Name: "add-ons"}}, deps, nil); len(checks) != 0 {
 		t.Fatalf("media checks = %+v, want none outside the machines phase", checks)
 	}
 }

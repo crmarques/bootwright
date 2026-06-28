@@ -126,7 +126,7 @@ func TestInstallSourceReachabilitySkippedOutsideMachinesPhase(t *testing.T) {
 		return nil, nil
 	}}
 
-	if checks := installSourceReachabilityChecks(state, []Phase{{Name: "addons"}}, deps, nil); len(checks) != 0 {
+	if checks := installSourceReachabilityChecks(state, []Phase{{Name: "add-ons"}}, deps, nil); len(checks) != 0 {
 		t.Fatalf("checks = %+v, want none outside the machines phase", checks)
 	}
 }

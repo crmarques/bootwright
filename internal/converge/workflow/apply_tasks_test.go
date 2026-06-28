@@ -883,7 +883,7 @@ func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T
 func TestPlanApplyAddonsOrdersAddonTasks(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "addons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}

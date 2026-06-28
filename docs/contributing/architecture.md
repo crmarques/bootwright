@@ -118,7 +118,7 @@ records. Imported storage clusters skip this storage task entirely.
     The internal dependency stages above (for example `machine-infra`,
     install-wait, add-on apply) are not the same vocabulary as the CLI
     `--stage infra|clusters` families and their `fabric`/`machines`/`deps`/`base`/
-    `addons` sub-phases. The CLI model is owned by
+    `add-ons` sub-phases. The CLI model is owned by
     [The desired-state model → Apply stages and families](../concepts/index.md#apply-stages-and-families).
 
 ### KubeVirt parent/child edge behavior

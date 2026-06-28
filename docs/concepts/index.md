@@ -211,7 +211,7 @@ reruns. They are not stage families and `destroy` does not accept them.
 | `machines` | `infra` | Machine infrastructure and managed OS work. |
 | `deps` | `clusters` | Cluster-stage prerequisites. |
 | `base` | `clusters` | Container and storage cluster base install. |
-| `addons` | `clusters` | Post-install add-ons. |
+| `add-ons` | `clusters` | Post-install add-ons. |
 
 ### Selecting clusters
 

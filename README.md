@@ -214,7 +214,7 @@ bootwright render --output-dir ./rendered --clusters demo-ocp --sensitive
 bootwright apply --stage clusters --clusters ceph-stretch --yes
 bootwright apply --stage clusters --yes
 bootwright apply --through base --yes
-bootwright preflight addons
+bootwright preflight add-ons
 bootwright status
 bootwright destroy --yes
 bootwright destroy --stage clusters --yes

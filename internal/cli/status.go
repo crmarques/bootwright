@@ -229,7 +229,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 		}
 		for _, extension := range addons[name] {
 			status := cliout.StatusSkip
-			detail := "no addon record"
+			detail := "no add-on record"
 			if extension.Status != "" {
 				status = cliout.StatusOK
 				if extension.Status != string(extensionrecords.RecordStatusReady) {
@@ -240,7 +240,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 					detail += " phase=" + extension.Phase
 				}
 			}
-			p.Status(status, "addon "+extension.Name, detail)
+			p.Status(status, "add-on "+extension.Name, detail)
 		}
 	}
 }

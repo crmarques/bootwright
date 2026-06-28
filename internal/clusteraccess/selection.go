@@ -110,7 +110,7 @@ func Resolve(state v1alpha1.State, target, scope string) (Selection, error) {
 // resolver, and an unsupported target rejects --clusters.
 func resolveSelectionRoots(state v1alpha1.State, target, scope string) (container, storage []string, err error) {
 	switch target {
-	case "container-cluster", "addons":
+	case "container-cluster", "add-ons":
 		names, err := ClusterNamesForTarget(state, scope)
 		if err != nil {
 			return nil, nil, err

@@ -30,7 +30,7 @@ const (
 	ApplyClusterKindStorage   = "storage"
 
 	// Phase gates. Two families — infra (fabric, machines) and clusters
-	// (deps, base, addons) — each an ordered set of CLI-selectable sub-phases.
+	// (deps, base, add-ons) — each an ordered set of CLI-selectable sub-phases.
 	// These are coarse gates over the task graph; true ordering is the
 	// capability/explicit-dependency DAG. deps and base are shared by storage
 	// and container clusters; the planner filters tasks by cluster kind.
@@ -38,7 +38,7 @@ const (
 	ApplyPhaseMachines = "machines" // substrate prepare/instantiate/OS/finalize
 	ApplyPhaseDeps     = "deps"     // per-cluster install prereqs: cephadm / agent ISO
 	ApplyPhaseBase     = "base"     // bring control planes up: ceph bootstrap / boot+wait
-	ApplyPhaseAddons   = "addons"   // post-install: addons + storage attachment
+	ApplyPhaseAddons   = "add-ons"  // post-install: add-ons + storage attachment
 
 	applyProviderPlaybook         = roles.PlaybookTaskProviderServicesApply
 	applyInfraComponentsPlaybook  = roles.PlaybookTaskInfraComponentServicesApply

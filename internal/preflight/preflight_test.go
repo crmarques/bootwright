@@ -288,7 +288,7 @@ func TestSecretRefChecksStatFileSourcesAsCallerOwned(t *testing.T) {
 
 func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "addons"}}, Deps{
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "add-ons"}}, Deps{
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -526,7 +526,7 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
 		},
 	}
-	checks := CollectChecks(state, []Phase{{Name: "addons"}}, true, "test", "/context/secrets", "/host-state", Deps{
+	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
 		},

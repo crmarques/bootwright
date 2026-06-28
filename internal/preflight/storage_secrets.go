@@ -32,7 +32,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			out = append(out, secretRefRequirement{
 				refName: fromSecret,
 				label:   fmt.Sprintf("StorageExport/%s externalDetails.fromSecretRef", export.Metadata.Name),
-				phases:  []string{"addons"},
+				phases:  []string{"add-ons"},
 				role:    secret.MaterialPrimary,
 			})
 		}
@@ -45,7 +45,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			if !ok {
 				continue
 			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false, secretRefOwner{})...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"add-ons"}, machine, false, secretRefOwner{})...)
 		}
 		if len(ssh.MachineRefs) == 0 {
 			cluster, ok := clusterByName[export.Spec.StorageClusterRef.Name]
@@ -58,7 +58,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 					if !ok {
 						continue
 					}
-					out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false, secretRefOwner{})...)
+					out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"add-ons"}, machine, false, secretRefOwner{})...)
 				}
 			}
 		}

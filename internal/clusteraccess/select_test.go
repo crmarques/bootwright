@@ -99,7 +99,7 @@ func TestValidateScopedApplySharedServicesFailsForThroughPrefixScopes(t *testing
 // narrowing them with --clusters stays exempt from the shared-service guard.
 func TestValidateScopedApplySharedServicesAllowsClusterWorkloadScopes(t *testing.T) {
 	state := cliStateWithSharedDNS()
-	for _, target := range []string{"clusters", "deps", "base", "addons"} {
+	for _, target := range []string{"clusters", "deps", "base", "add-ons"} {
 		if err := ValidateScopedApplySharedServices(state, target, "cluster-a"); err != nil {
 			t.Fatalf("%s should not validate shared machine services: %v", target, err)
 		}

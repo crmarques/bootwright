@@ -85,7 +85,7 @@ resources Bootwright created or configured, including ones no longer present in
 the input YAML.
 
 `destroy` accepts only two stage values — the two stage families. The
-single-phase sub-phases (`fabric`, `machines`, `deps`, `base`, `addons`) are
+single-phase sub-phases (`fabric`, `machines`, `deps`, `base`, `add-ons`) are
 apply/plan reruns only; `destroy` does not accept them.
 
 | Invocation | Tears down |
@@ -216,7 +216,7 @@ maintenance.
   ```
 
 - **A surgical sub-phase rerun.** `apply` and `plan` additionally accept the
-  single-phase selectors `fabric`, `machines`, `deps`, `base`, and `addons` for
+  single-phase selectors `fabric`, `machines`, `deps`, `base`, and `add-ons` for
   surgical reruns within a family. These are reruns, not peers of the `infra`
   and `clusters` families; `destroy` does not accept them.
 

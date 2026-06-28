@@ -55,7 +55,7 @@ var InfraScope = Scope{
 
 var ClustersScope = Scope{
 	Name:                    "clusters",
-	Short:                   "Provision storage, OpenShift clusters, addons, and integrations",
+	Short:                   "Provision storage, OpenShift clusters, add-ons, and integrations",
 	PhaseNames:              []string{PhaseDeps, PhaseBase, PhaseAddons},
 	ApplyPlaybook:           roles.PlaybookWorkflowClustersApply,
 	DestroyPlaybook:         roles.PlaybookWorkflowClustersDestroy,
@@ -88,7 +88,7 @@ var StorageClusterScope = Scope{
 
 var AllScope = Scope{
 	Name:                    "all",
-	Short:                   "Apply infrastructure, storage, OpenShift clusters, and addons",
+	Short:                   "Apply infrastructure, storage, OpenShift clusters, and add-ons",
 	PhaseNames:              []string{PhaseFabric, PhaseMachines, PhaseDeps, PhaseBase, PhaseAddons},
 	ApplyPlaybook:           roles.PlaybookWorkflowAllApply,
 	ArtifactsBaseName:       "all",

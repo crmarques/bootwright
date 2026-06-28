@@ -27,7 +27,7 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 		return
 	}
 	p := cliout.NewContinuation(stdout)
-	p.Section("Addons")
+	p.Section("Add-ons")
 	p.Tasks(lines)
 }
 

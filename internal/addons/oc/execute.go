@@ -55,7 +55,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 			return TaskResult{}, err
 		}
 		if found && record.DesiredHash == hash {
-			return TaskResult{Skipped: true, Reason: "addon already ready for desired inputs"}, nil
+			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 		}
 	}
 	now := time.Now().UTC()
@@ -119,7 +119,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if found && record.DesiredHash == hash && record.Status == extensionrecords.RecordStatusReady {
 		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {
-			return TaskResult{Skipped: true, Reason: "addon already ready for desired inputs"}, nil
+			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 		}
 	}
 	if !found {

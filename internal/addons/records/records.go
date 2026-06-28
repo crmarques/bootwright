@@ -56,11 +56,11 @@ func LoadRecord(clustersDir, cluster, extension string) (Record, bool, error) {
 		return Record{}, false, nil
 	}
 	if err != nil {
-		return Record{}, false, fmt.Errorf("read addon record: %w", err)
+		return Record{}, false, fmt.Errorf("read add-on record: %w", err)
 	}
 	var record Record
 	if err := json.Unmarshal(data, &record); err != nil {
-		return Record{}, true, fmt.Errorf("decode addon record %s: %w", path, err)
+		return Record{}, true, fmt.Errorf("decode add-on record %s: %w", path, err)
 	}
 	return record, true, nil
 }
@@ -68,18 +68,18 @@ func LoadRecord(clustersDir, cluster, extension string) (Record, bool, error) {
 func SaveRecord(clustersDir string, record Record) error {
 	path := RecordPath(clustersDir, record.Cluster, record.Extension)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create addon record directory: %w", err)
+		return fmt.Errorf("create add-on record directory: %w", err)
 	}
 	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod addon record directory: %w", err)
+		return fmt.Errorf("chmod add-on record directory: %w", err)
 	}
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode addon record: %w", err)
+		return fmt.Errorf("encode add-on record: %w", err)
 	}
 	data = append(data, '\n')
 	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write addon record: %w", err)
+		return fmt.Errorf("write add-on record: %w", err)
 	}
 	return nil
 }

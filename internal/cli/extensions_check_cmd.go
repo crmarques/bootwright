@@ -21,13 +21,13 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "preflight",
-		Short: "Check addons prerequisites",
+		Short: "Check add-ons prerequisites",
 		Args:  cobra.NoArgs,
-		Example: `  # Check oc and local kubeconfig material for selected addons
-  bootwright preflight addons
+		Example: `  # Check oc and local kubeconfig material for selected add-ons
+  bootwright preflight add-ons
 
   # Machine-readable output for CI
-  bootwright preflight addons --output json`,
+  bootwright preflight add-ons --output json`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to check (default: all)")
@@ -39,7 +39,7 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		var p *cliout.Printer
 		if output != outputJSON {
 			p = cliout.New(stdout)
-			p.Command("addons preflight")
+			p.Command("add-ons preflight")
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
@@ -69,9 +69,9 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		}
 		p.Checks(results)
 		if failed > 0 {
-			return failf(1, "addons preflight failed")
+			return failf(1, "add-ons preflight failed")
 		}
-		p.Summary(cliout.StatusOK, "addons preflight", fmt.Sprintf("all %d check(s) passed", len(results)))
+		p.Summary(cliout.StatusOK, "add-ons preflight", fmt.Sprintf("all %d check(s) passed", len(results)))
 		return nil
 	}
 	return cmd
