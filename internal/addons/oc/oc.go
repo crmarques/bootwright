@@ -52,9 +52,13 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 		return out, fmt.Errorf("run %s %s: %w: %s", name, shellJoin(command), err, strings.TrimSpace(string(out)))
 	}
 	if logErr != nil {
-		return out, fmt.Errorf("append oc log %s: %w", r.LogPath, logErr)
+		return stdout.Bytes(), fmt.Errorf("append oc log %s: %w", r.LogPath, logErr)
 	}
-	return out, nil
+	// oc routinely writes deprecation/TLS/auth warnings to stderr on a successful
+	// `get -o json`; returning the combined buffer would corrupt JSON that callers
+	// unmarshal, so the success path yields stdout only. stderr stays in the log
+	// and in the failure-path error above.
+	return stdout.Bytes(), nil
 }
 
 func appendLog(path, name string, args []string, input []byte, output []byte) error {
