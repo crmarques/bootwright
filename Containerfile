@@ -17,7 +17,8 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     https_proxy=${https_proxy} \
     no_proxy=${no_proxy} \
     PATH=/opt/bootwright-ansible/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    GOMODCACHE=/go/pkg/mod
+    GOMODCACHE=/go/pkg/mod \
+    GOTOOLCHAIN=go1.25.11
 
 WORKDIR /src
 
@@ -28,6 +29,8 @@ RUN --mount=type=cache,id=bootwright-dnf-cache,target=/var/cache/dnf,sharing=loc
         python3.12 \
         make \
         git
+
+RUN go version
 
 RUN --mount=type=cache,id=bootwright-pip,target=/root/.cache/pip,sharing=locked \
     python3.12 -m venv /opt/bootwright-ansible \
