@@ -889,18 +889,14 @@ func TestPlanApplyAddonsOrdersAddonTasks(t *testing.T) {
 	}
 	gotIDs := applyTaskIDs(tasks)
 	wantIDs := []string{
-		"addon.demo.a.apply",
-		"addon.demo.a.wait",
-		"addon.demo.b.apply",
-		"addon.demo.b.wait",
+		"addon.demo.a",
+		"addon.demo.b",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	assertTaskDeps(t, tasks, "addon.demo.a.apply")
-	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
-	assertTaskDeps(t, tasks, "addon.demo.b.apply", "addon.demo.a.wait")
-	assertTaskDeps(t, tasks, "addon.demo.b.wait", "addon.demo.b.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a")
+	assertTaskDeps(t, tasks, "addon.demo.b", "addon.demo.a")
 }
 
 func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
@@ -910,8 +906,7 @@ func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskDeps(t, tasks, "addon.demo.a.apply", "wait.demo")
-	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a", "wait.demo")
 }
 
 func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
@@ -925,18 +920,14 @@ func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	wantIDs := []string{
 		"iso.demo",
 		"wait.demo",
-		"addon.demo.a.apply",
-		"addon.demo.a.wait",
-		"addon.demo.b.apply",
-		"addon.demo.b.wait",
+		"addon.demo.a",
+		"addon.demo.b",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	assertTaskDeps(t, tasks, "addon.demo.a.apply", "wait.demo")
-	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
-	assertTaskDeps(t, tasks, "addon.demo.b.apply", "addon.demo.a.wait")
-	assertTaskDeps(t, tasks, "addon.demo.b.wait", "addon.demo.b.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a", "wait.demo")
+	assertTaskDeps(t, tasks, "addon.demo.b", "addon.demo.a")
 }
 
 func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
@@ -975,9 +966,8 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 	assertTaskDeps(t, tasks, "storage.ceph", "storageinfra.ceph")
 	assertTaskDeps(t, tasks, "iso.demo")
 	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
-	assertTaskDeps(t, tasks, "addon.demo.odf.apply", "wait.demo")
-	assertTaskDeps(t, tasks, "addon.demo.odf.wait", "addon.demo.odf.apply")
-	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
+	assertTaskDeps(t, tasks, "addon.demo.odf", "wait.demo")
+	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf")
 }
 
 func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundation(t *testing.T) {
@@ -988,7 +978,7 @@ func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundatio
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf")
 }
 
 func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
@@ -1003,7 +993,7 @@ func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
 			t.Fatalf("external storage planned storage task: %v", applyTaskIDs(tasks))
 		}
 	}
-	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "addon.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "addon.demo.odf")
 }
 
 func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
@@ -1078,9 +1068,9 @@ func TestExternalStorageExamplesPlanDataFoundationAttachmentsWithoutCephTask(t *
 				assertTaskMissing(t, tasks, tc.storageTask)
 			}
 			for cluster := range tc.bindings {
-				deps := []string{"wait." + cluster, "addon." + cluster + "." + tc.addon + ".wait"}
+				deps := []string{"wait." + cluster, "addon." + cluster + "." + tc.addon}
 				if tc.wantStorageJob {
-					deps = []string{"wait." + cluster, tc.storageTask, "addon." + cluster + "." + tc.addon + ".wait"}
+					deps = []string{"wait." + cluster, tc.storageTask, "addon." + cluster + "." + tc.addon}
 				}
 				assertTaskDeps(t, tasks, "storageattachment."+cluster+"."+tc.addon+".external-storage.apply", deps...)
 			}
@@ -1516,9 +1506,9 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait")
+	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp")
-	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait", "infra.child-ocp.child-master-0")
+	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization", "infra.child-ocp.child-master-0")
 	assertTaskResourceKeys(t, tasks, "infrafinalize.child-ocp.localhost", "host:localhost:mutating")
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
 }
@@ -1531,7 +1521,7 @@ func TestPlanApplyAllOrdersKubeVirtManagedCephAfterHostReadiness(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "osinstall.ceph-vms", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait")
+	assertTaskDeps(t, tasks, "osinstall.ceph-vms", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "osinstall.ceph-vms", "kubevirt:metal-ocp:bootwright-child-ocp")
 	assertTaskDeps(t, tasks, "storageinfra.ceph-vms", "osinstall.ceph-vms")
 	assertTaskDeps(t, tasks, "storage.ceph-vms", "storageinfra.ceph-vms")

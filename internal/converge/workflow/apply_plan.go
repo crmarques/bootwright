@@ -420,17 +420,20 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 		}
 		for _, extension := range binding.Addons {
 			extension := extension
-			applyID := "addon." + binding.Cluster + "." + extension.Name + ".apply"
-			waitID := "addon." + binding.Cluster + "." + extension.Name + ".wait"
+			// One task per addon installs (oc apply) and then waits for the addon
+			// to report ready; it provides the capabilities downstream tasks need.
+			id := "addon." + binding.Cluster + "." + extension.Name
+			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
 			if err := graph.Add(Activity{
-				ID:                   applyID,
-				Kind:                 ActivityKindClusterAddonApply,
+				ID:                   id,
+				Kind:                 ActivityKindClusterAddon,
+				Provides:             provides,
 				ExplicitDependencies: append([]string(nil), deps...),
 				Task: ApplyTask{
 					Entry: TaskLedgerEntry{
-						ID:          applyID,
-						Kind:        ApplyTaskKindClusterAddonApply,
-						Label:       "addon " + binding.Cluster + " " + extension.Name + " apply",
+						ID:          id,
+						Kind:        ApplyTaskKindClusterAddon,
+						Label:       "addon " + extension.Name,
 						Cluster:     binding.Cluster,
 						ClusterKind: ApplyClusterKindContainer,
 						Status:      TaskStatusPending,
@@ -441,28 +444,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			}); err != nil {
 				return err
 			}
-			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
-			if err := graph.Add(Activity{
-				ID:                   waitID,
-				Kind:                 ActivityKindClusterAddonWait,
-				Provides:             provides,
-				ExplicitDependencies: []string{applyID},
-				Task: ApplyTask{
-					Entry: TaskLedgerEntry{
-						ID:          waitID,
-						Kind:        ApplyTaskKindClusterAddonWait,
-						Label:       "addon " + binding.Cluster + " " + extension.Name + " wait",
-						Cluster:     binding.Cluster,
-						ClusterKind: ApplyClusterKindContainer,
-						Status:      TaskStatusPending,
-					},
-					State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
-					Extension: &extension,
-				},
-			}); err != nil {
-				return err
-			}
-			deps = []string{waitID}
+			deps = []string{id}
 		}
 	}
 	return nil

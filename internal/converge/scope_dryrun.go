@@ -194,7 +194,7 @@ func BuildFullDestroyDryRunReport(ctx workspace.Context, bundleDir string, scope
 func dryRunExtensionPlans(tasks []workflow.ApplyTask) []DryRunAddonPlan {
 	var out []DryRunAddonPlan
 	for _, task := range tasks {
-		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddonApply || task.Extension == nil {
+		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddon || task.Extension == nil {
 			continue
 		}
 		out = append(out, DryRunAddonPlan{

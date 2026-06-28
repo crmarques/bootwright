@@ -4409,8 +4409,7 @@ func TestApplyFullGraphDryRunJSONPlansAddonTasks(t *testing.T) {
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",
-		"addon.sno-libvirt.openshift-virtualization.apply",
-		"addon.sno-libvirt.openshift-virtualization.wait",
+		"addon.sno-libvirt.openshift-virtualization",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("addon task IDs = %v, want %v", gotIDs, wantIDs)
@@ -4448,8 +4447,7 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",
-		"addon.sno-libvirt.openshift-virtualization.apply",
-		"addon.sno-libvirt.openshift-virtualization.wait",
+		"addon.sno-libvirt.openshift-virtualization",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("apply --stage clusters task IDs = %v, want %v", gotIDs, wantIDs)
@@ -4461,8 +4459,7 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 		t.Fatalf("addon resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
 	assertTaskDeps(t, report.ApplyPlan.Tasks, "iso.sno-libvirt")
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.apply", "wait.sno-libvirt")
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.wait", "addon.sno-libvirt.openshift-virtualization.apply")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization", "wait.sno-libvirt")
 }
 
 func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {

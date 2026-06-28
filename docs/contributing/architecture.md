@@ -126,7 +126,7 @@ records. Imported storage clusters skip this storage task entirely.
 For a KubeVirt child `ContainerCluster` that references a Bootwright-managed
 virtualization cluster through `hostClusterRef`, only the full graph and explicit
 parent+child `--clusters` selections add graph edges from the child work to both
-the parent install wait and the parent add-on wait task that provides
+the parent install wait and the parent add-on task that provides
 `kubevirt`.
 
 !!! warning "A scoped child apply does not pull in the parent"

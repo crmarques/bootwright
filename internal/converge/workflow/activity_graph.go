@@ -22,8 +22,7 @@ const (
 	ActivityKindContainerNodeBoot          ActivityKind = "ContainerNodeBoot"
 	ActivityKindContainerInstallWait       ActivityKind = "ContainerInstallWait"
 	ActivityKindStorageAttachmentApply     ActivityKind = "StorageAttachmentApply"
-	ActivityKindClusterAddonApply          ActivityKind = "ClusterAddonApply"
-	ActivityKindClusterAddonWait           ActivityKind = "ClusterAddonWait"
+	ActivityKindClusterAddon               ActivityKind = "ClusterAddon"
 	ActivityKindNodeConfigApply            ActivityKind = "NodeConfigApply"
 )
 

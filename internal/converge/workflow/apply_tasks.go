@@ -23,8 +23,7 @@ const (
 	ApplyTaskKindInstallWait            = "installWait"
 	ApplyTaskKindStorageCluster         = "storageCluster"
 	ApplyTaskKindStorageAttachmentApply = "storageAttachmentApply"
-	ApplyTaskKindClusterAddonApply      = "clusterAddonApply"
-	ApplyTaskKindClusterAddonWait       = "clusterAddonWait"
+	ApplyTaskKindClusterAddon           = "clusterAddon"
 	ApplyTaskKindNodeConfigApply        = "nodeConfigApply"
 
 	ApplyClusterKindContainer = "container"

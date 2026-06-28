@@ -13,7 +13,7 @@ import (
 func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	var lines []cliout.TaskLine
 	for _, task := range tasks {
-		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddonApply || task.Extension == nil {
+		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddon || task.Extension == nil {
 			continue
 		}
 		summary := extensionplan.ResourceSummaries(task.Extension.Extension)

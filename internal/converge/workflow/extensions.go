@@ -29,10 +29,17 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	var result extensionoc.TaskResult
 	var err error
 	switch task.Entry.Kind {
-	case ApplyTaskKindClusterAddonApply:
-		result, err = extensionoc.Apply(ctx, runner, cfg, *task.Extension)
-	case ApplyTaskKindClusterAddonWait:
-		result, err = extensionoc.Wait(ctx, runner, cfg, *task.Extension)
+	case ApplyTaskKindClusterAddon:
+		// Install the addon, then wait for it to report ready. The task is only
+		// "skipped" (nothing converged) when both phases are no-ops.
+		var applied, waited extensionoc.TaskResult
+		applied, err = extensionoc.Apply(ctx, runner, cfg, *task.Extension)
+		if err == nil {
+			waited, err = extensionoc.Wait(ctx, runner, cfg, *task.Extension)
+		}
+		if err == nil && applied.Skipped && waited.Skipped {
+			result = extensionoc.TaskResult{Skipped: true, Reason: applied.Reason}
+		}
 	default:
 		err = fmt.Errorf("unsupported addon task kind %s", task.Entry.Kind)
 	}

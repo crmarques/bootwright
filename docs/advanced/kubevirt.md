@@ -180,7 +180,7 @@ spec:
 ```
 
 In the full apply graph, the child's infra work gets dependency edges to both the
-parent's install wait and the parent's add-on wait that provides `kubevirt`, so
+parent's install wait and the parent's add-on task that provides `kubevirt`, so
 child VMs are only created after the parent is ready. See
 [Add-ons](../concepts/add-ons.md) for the `provides`/readiness model.
 

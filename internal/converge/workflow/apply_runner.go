@@ -25,7 +25,7 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 }
 
 func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
-	if task.Entry.Kind == ApplyTaskKindClusterAddonApply || task.Entry.Kind == ApplyTaskKindClusterAddonWait {
+	if task.Entry.Kind == ApplyTaskKindClusterAddon {
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageAttachmentApply {
