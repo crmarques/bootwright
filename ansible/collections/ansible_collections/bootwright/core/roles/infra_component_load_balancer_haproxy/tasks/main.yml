@@ -12,6 +12,8 @@
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
     tasks_from: infra_component_container_gate.yml
+  vars:
+    bootwright_gate_container_name: "{{ bootwright_haproxy_container_name }}"
 
 - name: Install HAProxy container runtime
   ansible.builtin.package:
@@ -46,7 +48,7 @@
 
 - name: Run HAProxy container
   containers.podman.podman_container:
-    name: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    name: "{{ bootwright_haproxy_container_name }}"
     image: "{{ bootwright_component.image }}"
     state: started
     recreate: "{{ bootwright_haproxy_config.changed }}"
@@ -92,4 +94,4 @@
         bootwright.name: "{{ bootwright_component.name }}"
       attributes:
         componentKind: load-balancer
-        container: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+        container: "{{ bootwright_haproxy_container_name }}"

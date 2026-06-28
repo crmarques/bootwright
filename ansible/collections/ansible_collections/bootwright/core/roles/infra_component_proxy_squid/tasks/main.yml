@@ -11,6 +11,8 @@
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
     tasks_from: infra_component_container_gate.yml
+  vars:
+    bootwright_gate_container_name: "{{ bootwright_squid_container_name }}"
 
 - name: Load Squid package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"

@@ -3,6 +3,8 @@
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
     tasks_from: infra_component_container_gate.yml
+  vars:
+    bootwright_gate_container_name: "{{ bootwright_artifacts_container_name }}"
 
 - name: Validate boot artifact server settings
   ansible.builtin.assert:
@@ -22,7 +24,6 @@
     bootwright_artifacts_tls_cert_path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/tls/server.crt"
     bootwright_artifacts_tls_key_path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/tls/server.key"
     bootwright_artifacts_config_path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/config/nginx.conf"
-    bootwright_artifacts_container_name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_artifacts_https_enabled: "{{ (bootwright_component.listeners | selectattr('protocol', 'equalto', 'https') | list | length) > 0 }}"
   changed_when: false
 

@@ -12,6 +12,16 @@
     bootwright_ownership_destroy_name: "{{ bootwright_ownership_record.name }}"
     bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_record.attributes | default({}) }}"
     bootwright_ownership_destroy_paths: "{{ bootwright_ownership_record.paths | default([]) }}"
+    # A self-contained shared infra-component (artifact server, registry, proxy) the Go
+    # destroy planner found still referenced by another context is RELEASED: skip the
+    # physical teardown of the shared container, firewall ports, and owned paths below,
+    # but still remove this context's ownership record at the end. Scoped narrowly so it
+    # never affects libvirt domains/networks or any non-shared kind.
+    bootwright_ownership_destroy_release: >-
+      {{ bootwright_ownership_record.kind == 'infra-component'
+         and (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') in ['artifacts', 'registry', 'proxy']
+         and bootwright_infra_component_release_records is defined
+         and bootwright_ownership_record.name in bootwright_infra_component_release_records.split(',') }}
   changed_when: false
 
 - name: Stop recorded libvirt domain
@@ -96,7 +106,9 @@
     name: "{{ bootwright_ownership_destroy_attrs.container }}"
     state: absent
   failed_when: false
-  when: bootwright_ownership_destroy_attrs.container | default('') | length > 0
+  when:
+    - not bootwright_ownership_destroy_release
+    - bootwright_ownership_destroy_attrs.container | default('') | length > 0
 
 - name: Close recorded firewalld ports
   ansible.posix.firewalld:
@@ -113,7 +125,9 @@
     - "{{ (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string | length) > 0 else '' }}"
   loop_control:
     label: "{{ item }}"
-  when: item | length > 0
+  when:
+    - not bootwright_ownership_destroy_release
+    - item | length > 0
 
 - name: Remove recorded owned paths
   ansible.builtin.file:
@@ -123,6 +137,7 @@
   loop_control:
     label: "{{ item }}"
   when:
+    - not bootwright_ownership_destroy_release
     - item | length > 0
     # Reject `..` so a corrupted or stale record path cannot escape the
     # allowlisted roots via traversal (e.g. /var/lib/../../etc/... or

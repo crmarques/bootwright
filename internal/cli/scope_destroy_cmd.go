@@ -153,6 +153,22 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
+		// A self-contained shared bastion service (artifact server, registry, proxy)
+		// is one physical container that several contexts reference. Before this
+		// context's teardown removes one, scan the other contexts' ownership stores:
+		// if any still references it, RELEASE it (drop only this context's record)
+		// instead of tearing down a container another context still uses. Only the
+		// scopes that actually tear down infra-components run the scan; a clusters
+		// destroy never touches them. A scan failure fails closed unless --override.
+		tearsDownInfraComponents := artifactServerOnly || runScope.Name == "infra" || fullDestroy
+		var releaseDecision converge.ReleaseDecision
+		if tearsDownInfraComponents {
+			decision, releaseErr := converge.PlanInfraComponentReleases(ctx.Name, ownershipRecords)
+			if releaseErr != nil && !override {
+				return failErr(1, fmt.Errorf("cannot verify whether shared services are still referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", releaseErr))
+			}
+			releaseDecision = decision
+		}
 		var plan converge.WorkflowPlan
 		if artifactServerOnly {
 			plan = converge.PrepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun, ownershipRecords)
@@ -183,6 +199,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			resolvedClusterRoots = sel.AllRoots
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
+		converge.ApplyInfraComponentReleaseExtraVar(&plan, releaseDecision.Names())
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
 		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
 		// below). No Ansible destroy role consumes a destroy-override extra-var, so
@@ -219,6 +236,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			printDestroyPreview(stdout, runScope, clustersDir, plan.State, plan.StorageWorkNames)
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
+		printInfraComponentReleases(stdout, releaseDecision)
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		if !dryRun && !yes && !plan.NoRemoteWork {
 			if !confirm(stdin, stdout, "Continue with destroy? [y/N] (default: no): ") {

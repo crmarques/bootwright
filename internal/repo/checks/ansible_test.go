@@ -2618,6 +2618,94 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 	}
 }
 
+// TestInfraComponentContainerGateUsesLiveProvenanceLabel locks the multi-context fix:
+// the container apply-mode gate must read ownership from the LIVE container's
+// Bootwright provenance labels, not from a per-context ownership-record stat. The
+// bastion runs one global podman store shared by every context while each context
+// keeps its own ownership/ dir, so a per-context stat misreports a shared container
+// created by another context as foreign and blocks the second context's apply.
+func TestInfraComponentContainerGateUsesLiveProvenanceLabel(t *testing.T) {
+	rel := bootwrightCollectionRoleRoot + "/ownership_record/tasks/infra_component_container_gate.yml"
+	body := readRepoFile(t, rel)
+	// The per-context ownership-record stat oracle must be gone entirely.
+	for _, banned := range []string{"bootwright_infra_component_owned_stat", "Stat ownership record", "bootwright_ownership_dir", "ansible.builtin.stat"} {
+		if strings.Contains(body, banned) {
+			t.Fatalf("container gate must not derive ownership from a per-context record; found %q", banned)
+		}
+	}
+
+	tasks := readAnsibleTasks(t, rel)
+	commandArgv := func(task map[string]any) string {
+		command, ok := task["ansible.builtin.command"].(map[string]any)
+		if !ok {
+			t.Fatalf("task %q has no command body", task["name"])
+		}
+		return fmt.Sprint(command["argv"])
+	}
+	ownedProbe := tasks[findAnsibleTaskByPrefix(t, tasks, "Probe Bootwright-owned container")]
+	ownedArgv := commandArgv(ownedProbe)
+	if !strings.Contains(ownedArgv, "label=bootwright.provider=") || !strings.Contains(ownedArgv, "label=bootwright.name=") {
+		t.Fatalf("owned probe must filter by bootwright provenance labels, got %v", ownedArgv)
+	}
+
+	nameProbe := tasks[findAnsibleTaskByPrefix(t, tasks, "Probe any same-named container")]
+	nameArgv := commandArgv(nameProbe)
+	if !strings.Contains(nameArgv, "name=^{{ bootwright_gate_container_name }}$") {
+		t.Fatalf("foreign-squatter probe must match the exact container name, got %v", nameArgv)
+	}
+	if when := fmt.Sprint(nameProbe["when"]); !strings.Contains(when, "bootwright_gate_container_name") {
+		t.Fatalf("foreign-squatter probe must be guarded by a non-empty container name, got when=%v", nameProbe["when"])
+	}
+
+	facts := tasks[findAnsibleTaskByPrefix(t, tasks, "Resolve apply-mode gate facts")]
+	setFact, ok := facts["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("gate facts task has no set_fact body")
+	}
+	owned := fmt.Sprint(setFact["bootwright_gate_owned"])
+	if !strings.Contains(owned, "bootwright_infra_component_owned_probe") || strings.Contains(owned, "name_probe") {
+		t.Fatalf("bootwright_gate_owned must derive ONLY from the label probe, got %v", setFact["bootwright_gate_owned"])
+	}
+	exists := fmt.Sprint(setFact["bootwright_gate_exists"])
+	if !strings.Contains(exists, "bootwright_infra_component_owned_probe") || !strings.Contains(exists, "bootwright_infra_component_name_probe") {
+		t.Fatalf("bootwright_gate_exists must be label-probe OR name-probe, got %v", setFact["bootwright_gate_exists"])
+	}
+}
+
+// TestInfraComponentRolesPassContainerNameToGate verifies every container-backed
+// infra-component role feeds its container name to the gate, so the foreign-squatter
+// name probe is armed (an empty name degrades to label-probe-only).
+func TestInfraComponentRolesPassContainerNameToGate(t *testing.T) {
+	roles := []string{
+		"infra_component_artifact_server_http",
+		"infra_component_registry_mirror",
+		"infra_component_proxy_squid",
+		"infra_component_load_balancer_haproxy",
+		"infra_component_name_resolution_dnsmasq",
+	}
+	for _, role := range roles {
+		tasks := readAnsibleTasks(t, bootwrightCollectionRoleRoot+"/"+role+"/tasks/main.yml")
+		var gate map[string]any
+		for _, task := range tasks {
+			include, ok := task["ansible.builtin.include_role"].(map[string]any)
+			if ok && fmt.Sprint(include["tasks_from"]) == "infra_component_container_gate.yml" {
+				gate = task
+				break
+			}
+		}
+		if gate == nil {
+			t.Fatalf("%s: no include of infra_component_container_gate.yml", role)
+		}
+		vars, ok := gate["vars"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: gate include passes no vars", role)
+		}
+		if name := strings.TrimSpace(fmt.Sprint(vars["bootwright_gate_container_name"])); name == "" {
+			t.Fatalf("%s: gate include must pass bootwright_gate_container_name", role)
+		}
+	}
+}
+
 func TestRegisteredAdapterRolesExist(t *testing.T) {
 	roles := registeredAdapterRoles()
 	for role := range roles {

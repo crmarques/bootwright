@@ -10,6 +10,8 @@
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
     tasks_from: infra_component_container_gate.yml
+  vars:
+    bootwright_gate_container_name: "{{ bootwright_dnsmasq_container_name }}"
 
 - name: Install dnsmasq packages
   ansible.builtin.package:

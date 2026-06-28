@@ -1,0 +1,6 @@
+---
+# Per-component identity for one HTTP boot-artifact server capability. The container
+# name is a default (not a tasks/main.yml set_fact) so the apply-mode gate, which runs
+# before the role's own set_fact block, can pass it as bootwright_gate_container_name
+# for the foreign-squatter probe.
+bootwright_artifacts_container_name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"

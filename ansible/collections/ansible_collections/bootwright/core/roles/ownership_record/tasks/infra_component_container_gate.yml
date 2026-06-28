@@ -1,11 +1,17 @@
 ---
-# Apply-mode gate for a container-backed infra-component. Detects whether a
-# container for this (provider, name) already exists by label (independent of the
-# exact container name each role uses) and whether Bootwright recorded ownership of
-# it, then enforces the apply-mode contract via apply_mode_gate.yml. Safe before the
-# component is created: a missing podman binary or no matching container both read
-# as "does not exist".
-- name: "Probe existing container for {{ bootwright_component.name }}"
+# Apply-mode gate for a container-backed infra-component. Ownership is read from the
+# LIVE container's Bootwright provenance labels, not from a per-context ownership
+# record on disk: the bastion runs a single global podman store shared by every
+# Bootwright context, while each context keeps its own per-context ownership/ dir, so
+# stat-ing a per-context record misreports a shared container created by another
+# context as foreign. The container's own bootwright.provider/bootwright.name labels
+# are context-independent proof Bootwright created it, so a label-probe match is the
+# ownership oracle. A same-named container WITHOUT those labels (a genuine foreign
+# squatter) is detected by an optional name probe and still refused. Safe before the
+# component is created: a missing podman binary or no matching container both read as
+# "does not exist". Callers pass bootwright_gate_container_name to enable the
+# foreign-squatter probe; an empty value degrades to label-probe-only.
+- name: "Probe Bootwright-owned container for {{ bootwright_component.name }}"
   ansible.builtin.command:
     argv:
       - podman
@@ -16,20 +22,31 @@
       - "label=bootwright.provider={{ bootwright_component.providerName }}"
       - --filter
       - "label=bootwright.name={{ bootwright_component.name }}"
-  register: bootwright_infra_component_probe
+  register: bootwright_infra_component_owned_probe
   changed_when: false
   failed_when: false
 
-- name: "Stat ownership record for {{ bootwright_component.name }}"
-  ansible.builtin.stat:
-    path: "{{ bootwright_ownership_dir }}/resources/infra-component/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.json"
-  register: bootwright_infra_component_owned_stat
+- name: "Probe any same-named container for {{ bootwright_component.name }}"
+  ansible.builtin.command:
+    argv:
+      - podman
+      - ps
+      - --all
+      - --quiet
+      - --filter
+      - "name=^{{ bootwright_gate_container_name }}$"
+  register: bootwright_infra_component_name_probe
+  changed_when: false
+  failed_when: false
+  when: (bootwright_gate_container_name | default('') | trim) | length > 0
 
 - name: "Resolve apply-mode gate facts for {{ bootwright_component.name }}"
   ansible.builtin.set_fact:
     bootwright_gate_object: "infra-component {{ bootwright_component.providerName }}/{{ bootwright_component.name }}"
-    bootwright_gate_exists: "{{ (bootwright_infra_component_probe.stdout | default('') | trim) | length > 0 }}"
-    bootwright_gate_owned: "{{ bootwright_infra_component_owned_stat.stat.exists | default(false) }}"
+    bootwright_gate_owned: "{{ (bootwright_infra_component_owned_probe.stdout | default('') | trim) | length > 0 }}"
+    bootwright_gate_exists: >-
+      {{ ((bootwright_infra_component_owned_probe.stdout | default('') | trim) | length > 0)
+         or ((bootwright_infra_component_name_probe.stdout | default('') | trim) | length > 0) }}
   changed_when: false
 
 - name: "Enforce apply mode for {{ bootwright_component.name }}"
