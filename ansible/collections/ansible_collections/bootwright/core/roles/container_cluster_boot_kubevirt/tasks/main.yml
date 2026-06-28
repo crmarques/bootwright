@@ -5,7 +5,7 @@
     bootwright_kubevirt_namespace: "{{ bootwright_component.kubevirt.namespace | default('') }}"
     bootwright_kubevirt_storage_class: "{{ bootwright_component.kubevirt.storageClassRef | default('') }}"
     bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
-    bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-agent-iso"
+    bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-agent-iso"
   changed_when: false
 
 - name: Read generated agent ISO path

@@ -27,13 +27,19 @@ spec:
           guest: {{ bootwright_component.profile.memoryMiB | default(4096, true) }}Mi
         devices:
           disks:
-            - name: agent-iso
-              cdrom:
-                bus: sata
-              bootOrder: 1
+            # Boot the installed root disk first. On the very first boot it is
+            # blank and unbootable, so firmware falls through to the agent-iso
+            # cdrom and the agent install runs. Once RHCOS is written, the root
+            # disk boots directly; the still-attached ISO is never re-entered.
+            # (KubeVirt bootOrder is persistent, unlike one-time BMC media, so a
+            # cdrom-first order would re-run the live ISO on every reboot.)
             - name: root
               disk:
                 bus: virtio
+              bootOrder: 1
+            - name: agent-iso
+              cdrom:
+                bus: sata
               bootOrder: 2
           interfaces:
 {% for iface in bootwright_component.interfaces | default([]) %}
@@ -52,7 +58,7 @@ spec:
       volumes:
         - name: agent-iso
           dataVolume:
-            name: {{ bootwright_current_cluster.name }}-agent-iso
+            name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-agent-iso
         - name: root
           dataVolume:
             name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root
