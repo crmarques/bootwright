@@ -116,12 +116,61 @@
   register: bootwright_virtctl_tmp
   when: bootwright_virtctl_install | bool
 
+# The ConsoleCLIDownload route is served by the host cluster's default ingress
+# router, whose wildcard cert is signed by the cluster ingress CA and is not in
+# the controller trust store. We already hold the host kubeconfig, so verify the
+# download against that cluster's published ingress CA rather than skipping TLS.
+# The mirror path points at an arbitrary (internally trusted) host, so it does
+# not use the ingress CA.
+- name: Read host cluster ingress CA bundle
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_virtctl_kubeconfig }}"
+      - get
+      - configmap
+      - default-ingress-cert
+      - -n
+      - openshift-config-managed
+      - -o
+      - 'jsonpath={.data.ca-bundle\.crt}'
+  register: bootwright_virtctl_ingress_ca
+  changed_when: false
+  when:
+    - bootwright_virtctl_install | bool
+    - (bootwright_virtctl_mirror_base | length) == 0
+
+- name: Validate the host cluster ingress CA bundle is non-empty
+  ansible.builtin.assert:
+    that:
+      - (bootwright_virtctl_ingress_ca.stdout | default('') | trim | length) > 0
+    fail_msg: >-
+      Could not read the ingress CA (configmap default-ingress-cert in
+      openshift-config-managed) from host cluster kubeconfig
+      {{ bootwright_virtctl_kubeconfig }}; cannot verify the virtctl download.
+  when:
+    - bootwright_virtctl_install | bool
+    - (bootwright_virtctl_mirror_base | length) == 0
+
+- name: Write the host cluster ingress CA to the tmp directory
+  ansible.builtin.copy:
+    content: "{{ bootwright_virtctl_ingress_ca.stdout }}"
+    dest: "{{ bootwright_virtctl_tmp.path }}/ingress-ca.crt"
+    mode: "0644"
+  when:
+    - bootwright_virtctl_install | bool
+    - (bootwright_virtctl_mirror_base | length) == 0
+
 - name: Download virtctl archive
   ansible.builtin.get_url:
     url: "{{ bootwright_virtctl_download_url }}"
     dest: "{{ bootwright_virtctl_tmp.path }}/virtctl.tar.gz"
     mode: "0644"
-    validate_certs: "{{ not (bootwright_virtctl_insecure_tls | bool) }}"
+    ca_path: >-
+      {{ (bootwright_virtctl_tmp.path ~ '/ingress-ca.crt')
+         if (bootwright_virtctl_mirror_base | length) == 0
+         else omit }}
   when: bootwright_virtctl_install | bool
 
 - name: Remove stale virtctl from install dir

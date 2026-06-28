@@ -227,6 +227,14 @@ cluster's OpenShift Virtualization `ConsoleCLIDownload`; set
 (the role appends the server-reported version). Each child's boot waits on its
 host's provision.
 
+The `ConsoleCLIDownload` route is served by the host cluster's default ingress,
+whose wildcard cert is typically signed by a self-signed cluster ingress CA. The
+controller does not need that CA in its trust store: the role reads the cluster's
+published ingress CA (`default-ingress-cert` in `openshift-config-managed`) with
+the host kubeconfig it already holds and verifies the download against it. A
+`virtctlMirror` download is instead verified against the controller trust store,
+so a self-signed mirror must have its CA added there.
+
 Because the deps stage installs it, the preflight `virtctl` check is **skipped**
 whenever deps is in scope — including a full `apply` with no `--stage` filter. It
 is only enforced for a `--stage base` run without deps, where nothing provisions

@@ -5,12 +5,11 @@ bootwright_virtctl_tmp_parent: /tmp
 # bootwright_clusters_dir and the host cluster name. Required.
 bootwright_virtctl_kubeconfig: ""
 # Optional disconnected-lab override. Empty means fetch from the host cluster's
-# OpenShift Virtualization ConsoleCLIDownload; when set, the role downloads
-# <base>/<server-version>/virtctl-linux-amd64.tar.gz instead.
+# OpenShift Virtualization ConsoleCLIDownload (verified against that cluster's
+# ingress CA); when set, the role downloads
+# <base>/<server-version>/virtctl-linux-amd64.tar.gz instead, verified against
+# the controller trust store.
 bootwright_virtctl_mirror_base: ""
-# Skip TLS verification when fetching the ConsoleCLIDownload route (self-signed
-# ingress). Defaults to verifying against the controller's trust store.
-bootwright_virtctl_insecure_tls: false
 bootwright_virtctl_console_clidownload: virtctl-clidownloads-kubevirt-hyperconverged
 bootwright_virtctl_packages:
   - tar
