@@ -121,6 +121,9 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		},
 		StatPath: os.Stat,
 		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Python 3.12.4"), nil
+		},
+		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			if name == "kubectl" {
 				return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
 			}
@@ -144,7 +147,7 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
 	check := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
-		CommandOutput: func(name string, args ...string) ([]byte, error) {
+		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			return []byte("Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io \"virtualmachines.kubevirt.io\" not found\n"), errors.New("not found")
 		},
 	})
@@ -163,7 +166,7 @@ func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
 		Namespace: "bootwright-child-ocp",
 	}
 	present := kubeVirtNetworkRefCheck("child-net", ref, "/kc", Deps{
-		CommandOutput: func(_ string, _ ...string) ([]byte, error) {
+		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
 			return []byte("networkattachmentdefinition.k8s.cni.cncf.io/child-net\n"), nil
 		},
 	})
@@ -171,7 +174,7 @@ func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
 		t.Fatalf("present NAD rejected: %+v", present)
 	}
 	missing := kubeVirtNetworkRefCheck("child-net", ref, "/kc", Deps{
-		CommandOutput: func(_ string, _ ...string) ([]byte, error) {
+		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
 			return []byte("Error from server (NotFound): networkattachmentdefinitions.k8s.cni.cncf.io \"child-net\" not found\n"), errors.New("not found")
 		},
 	})
@@ -180,6 +183,86 @@ func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
 	}
 	if !strings.Contains(missing.Remediation, "ClusterUserDefinedNetwork") {
 		t.Fatalf("remediation should name the referenced kind: %q", missing.Remediation)
+	}
+}
+
+// TestKubeVirtHostClusterChecksRunAsLocalRoot pins the privilege fix: the host
+// cluster kubeconfig lives in the 0700 root-owned managed workspace, so the
+// probes must run as local root (CommandOutputLocalRoot), not de-escalated to
+// the caller (CommandOutput). A deps whose caller-routed CommandOutput fails but
+// whose local-root CommandOutputLocalRoot succeeds must still produce OK.
+func TestKubeVirtHostClusterChecksRunAsLocalRoot(t *testing.T) {
+	callerDenied := func(_ string, _ ...string) ([]byte, error) {
+		return []byte(`error loading config file "/var/lib/bootwright/.../kubeconfig": permission denied`), errors.New("exit status 1")
+	}
+
+	api := kubeVirtAPIReadyCheck("metal-ocp", "/kc", Deps{
+		CommandOutput: callerDenied,
+		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
+			return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
+		},
+	})
+	if api.Status != StatusOK {
+		t.Fatalf("KubeVirt API check did not run as local root: %+v", api)
+	}
+
+	ref := v1alpha1.KubeVirtNetworkRef{Kind: v1alpha1.KubeVirtNetworkKindCUDN, Name: "child-net", Namespace: "bootwright-child-ocp"}
+	net := kubeVirtNetworkRefCheck("child-net", ref, "/kc", Deps{
+		CommandOutput: callerDenied,
+		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
+			return []byte("networkattachmentdefinition.k8s.cni.cncf.io/child-net\n"), nil
+		},
+	})
+	if net.Status != StatusOK {
+		t.Fatalf("network ref check did not run as local root: %+v", net)
+	}
+}
+
+// TestKubeVirtChecksClassifyUnreadableKubeconfig pins the remediation fix: an
+// EACCES on the kubeconfig must not be misreported as "KubeVirt not ready" or
+// "create the network" — it names the unreadable kubeconfig instead.
+func TestKubeVirtChecksClassifyUnreadableKubeconfig(t *testing.T) {
+	eacces := func(_ string, _ ...string) ([]byte, error) {
+		return []byte(`error loading config file "/var/lib/bootwright/contexts/x/clusters/metal-ocp/secrets/kubeconfig": permission denied`), errors.New("exit status 1")
+	}
+
+	api := kubeVirtAPIReadyCheck("metal-ocp", "/var/lib/bootwright/contexts/x/clusters/metal-ocp/secrets/kubeconfig", Deps{CommandOutputLocalRoot: eacces})
+	if api.Status != StatusFail {
+		t.Fatalf("unreadable kubeconfig accepted: %+v", api)
+	}
+	if strings.Contains(api.Remediation, "apply --stage clusters") {
+		t.Fatalf("EACCES misreported as KubeVirt-not-ready: %q", api.Remediation)
+	}
+	if !strings.Contains(api.Remediation, "readable, valid kubeconfig") {
+		t.Fatalf("remediation should name the unreadable kubeconfig: %q", api.Remediation)
+	}
+
+	ref := v1alpha1.KubeVirtNetworkRef{Kind: v1alpha1.KubeVirtNetworkKindCUDN, Name: "child-net", Namespace: "bootwright-child-ocp"}
+	net := kubeVirtNetworkRefCheck("child-net", ref, "/var/lib/bootwright/contexts/x/clusters/metal-ocp/secrets/kubeconfig", Deps{CommandOutputLocalRoot: eacces})
+	if net.Status != StatusFail {
+		t.Fatalf("unreadable kubeconfig accepted: %+v", net)
+	}
+	if strings.Contains(net.Remediation, "ClusterUserDefinedNetwork") {
+		t.Fatalf("EACCES misreported as missing network: %q", net.Remediation)
+	}
+	if !strings.Contains(net.Remediation, "readable, valid kubeconfig") {
+		t.Fatalf("remediation should name the unreadable kubeconfig: %q", net.Remediation)
+	}
+}
+
+// TestVSpherePyvmomiCheckRunsAsLocalRoot pins that the managed-venv interpreter
+// probe runs as local root, since the venv lives in the root-owned workspace.
+func TestVSpherePyvmomiCheckRunsAsLocalRoot(t *testing.T) {
+	check := vspherePyvmomiCheck(Deps{
+		CommandOutput: func(_ string, _ ...string) ([]byte, error) {
+			return nil, errors.New("permission denied")
+		},
+		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
+			return []byte(""), nil
+		},
+	})
+	if check.Status != StatusOK {
+		t.Fatalf("pyvmomi check did not run as local root: %+v", check)
 	}
 }
 

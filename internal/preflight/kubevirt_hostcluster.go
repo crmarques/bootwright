@@ -1,0 +1,81 @@
+package preflight
+
+import (
+	"path/filepath"
+	"strings"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps Deps) []Check {
+	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
+		return nil
+	}
+	seen := map[string]bool{}
+	usable := map[string]string{}
+	var checks []Check
+	for _, p := range state.InfraProviders {
+		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil || p.Spec.KubeVirt.HostClusterRef.Name == "" {
+			continue
+		}
+		name := p.Spec.KubeVirt.HostClusterRef.Name
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
+		info, err := deps.StatPath(path)
+		switch {
+		case err != nil:
+			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
+		case info.IsDir():
+			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
+		default:
+			checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
+			checks = append(checks, kubeVirtAPIReadyCheck(name, path, deps))
+			usable[name] = path
+		}
+	}
+	// Per provider (networkAttachments are provider-scoped, even when several
+	// providers share one host cluster), verify the referenced network resolves
+	// on the host cluster whose kubeconfig is usable.
+	for _, p := range state.InfraProviders {
+		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil {
+			continue
+		}
+		path, ok := usable[p.Spec.KubeVirt.HostClusterRef.Name]
+		if !ok {
+			continue
+		}
+		checks = append(checks, kubeVirtNetworkRefChecks(p, path, deps)...)
+	}
+	return checks
+}
+
+func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
+	out, err := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "get", "crd", "virtualmachines.kubevirt.io", "-o", "name")
+	if err != nil {
+		evidence := strings.TrimSpace(string(out))
+		if evidence == "" {
+			evidence = err.Error()
+		}
+		if kubeconfigUnreadable(evidence) {
+			return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need a readable host cluster kubeconfig", "ensure "+kubeconfigPath+" is a readable, valid kubeconfig (bootwright manages it under the root-owned workspace)")
+		}
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
+	}
+	if !strings.Contains(string(out), "virtualmachines.kubevirt.io") {
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
+	}
+	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "virtualmachines.kubevirt.io")
+}
+
+// kubeconfigUnreadable reports whether a kubectl failure is the host cluster
+// kubeconfig being unloadable (unreadable or malformed) rather than the cluster
+// being unreachable or KubeVirt not installed. The two failure classes want
+// different remediations, so an EACCES is never reported as "KubeVirt not ready"
+// or "create the network".
+func kubeconfigUnreadable(evidence string) bool {
+	return strings.Contains(evidence, "error loading config file") ||
+		strings.Contains(evidence, "permission denied")
+}

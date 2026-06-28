@@ -36,11 +36,14 @@ func kubeVirtNetworkRefCheck(attachmentName string, ref v1alpha1.KubeVirtNetwork
 	if ref.Namespace != "" {
 		args = append(args, "-n", ref.Namespace)
 	}
-	out, err := deps.CommandOutput("kubectl", args...)
+	out, err := deps.CommandOutputLocalRoot("kubectl", args...)
 	if err != nil {
 		evidence := strings.TrimSpace(string(out))
 		if evidence == "" {
 			evidence = err.Error()
+		}
+		if kubeconfigUnreadable(evidence) {
+			return failCheck(checkGroupInstallerTools, name, evidence, impact, "ensure "+kubeconfigPath+" is a readable, valid kubeconfig (bootwright manages it under the root-owned workspace)")
 		}
 		return failCheck(checkGroupInstallerTools, name, evidence, impact, remediation)
 	}

@@ -92,7 +92,16 @@ type Deps struct {
 	StatPath         func(path string) (os.FileInfo, error)
 	StatExternalPath func(path string) (os.FileInfo, error)
 	CommandOutput    func(name string, args ...string) ([]byte, error)
-	UID              func() int
+	// CommandOutputLocalRoot runs a command as the local-root process itself,
+	// without de-escalating to the invoking caller. Probes that read root-owned
+	// managed-workspace artifacts (a host cluster kubeconfig, the managed Ansible
+	// venv interpreter) must use it: under a sudo self-escalated apply, the plain
+	// CommandOutput de-escalates to the caller (callerio), who cannot traverse the
+	// 0700 root-owned workspace, so a caller-run kubectl/python fails with EACCES
+	// on a file that is in fact present and valid. This mirrors the apply path,
+	// which runs oc/kubectl against the same kubeconfig as root.
+	CommandOutputLocalRoot func(name string, args ...string) ([]byte, error)
+	UID                    func() int
 	// HTTPDo issues API-endpoint probes (vCenter session auth). A nil
 	// value makes each check build a real client honoring the endpoint's
 	// certificate-verification setting.
@@ -107,6 +116,9 @@ var DefaultDeps = Deps{
 		if out, ok, err := callerio.CommandOutput(name, args...); ok {
 			return out, err
 		}
+		return exec.Command(name, args...).CombinedOutput()
+	},
+	CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 		return exec.Command(name, args...).CombinedOutput()
 	},
 	UID: os.Getuid,
@@ -222,66 +234,6 @@ func stateNeedsKubeVirt(state v1alpha1.State) bool {
 		}
 	}
 	return false
-}
-
-func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps Deps) []Check {
-	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
-		return nil
-	}
-	seen := map[string]bool{}
-	usable := map[string]string{}
-	var checks []Check
-	for _, p := range state.InfraProviders {
-		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil || p.Spec.KubeVirt.HostClusterRef.Name == "" {
-			continue
-		}
-		name := p.Spec.KubeVirt.HostClusterRef.Name
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
-		info, err := deps.StatPath(path)
-		switch {
-		case err != nil:
-			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
-		case info.IsDir():
-			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
-		default:
-			checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
-			checks = append(checks, kubeVirtAPIReadyCheck(name, path, deps))
-			usable[name] = path
-		}
-	}
-	// Per provider (networkAttachments are provider-scoped, even when several
-	// providers share one host cluster), verify the referenced network resolves
-	// on the host cluster whose kubeconfig is usable.
-	for _, p := range state.InfraProviders {
-		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil {
-			continue
-		}
-		path, ok := usable[p.Spec.KubeVirt.HostClusterRef.Name]
-		if !ok {
-			continue
-		}
-		checks = append(checks, kubeVirtNetworkRefChecks(p, path, deps)...)
-	}
-	return checks
-}
-
-func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
-	out, err := deps.CommandOutput("kubectl", "--kubeconfig", kubeconfigPath, "get", "crd", "virtualmachines.kubevirt.io", "-o", "name")
-	if err != nil {
-		evidence := strings.TrimSpace(string(out))
-		if evidence == "" {
-			evidence = err.Error()
-		}
-		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
-	}
-	if !strings.Contains(string(out), "virtualmachines.kubevirt.io") {
-		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
-	}
-	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "virtualmachines.kubevirt.io")
 }
 
 func binaryCheck(group, name string, extraDirs []string, remediation string, deps Deps) Check {

@@ -37,7 +37,7 @@ func stateNeedsVSphere(state v1alpha1.State) bool {
 func vspherePyvmomiCheck(deps Deps) Check {
 	name := "pyvmomi (vCenter SDK)"
 	venvPython := filepath.Join(workspace.AnsibleVenvDir(), "bin", "python")
-	out, err := deps.CommandOutput(venvPython, "-c", "import pyVmomi")
+	out, err := deps.CommandOutputLocalRoot(venvPython, "-c", "import pyVmomi")
 	if err != nil {
 		evidence := strings.TrimSpace(string(out))
 		if evidence == "" {
