@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/media"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -63,6 +64,16 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	}
 	if image["sourceOnTarget"] != true {
 		t.Fatalf("sourceOnTarget = %v, want true for controller-local provider host", image["sourceOnTarget"])
+	}
+	// The renderer owns the shared-source dedup identity and the effective source
+	// path. This image carries no checksum, so its sourceId is the validated media
+	// key; the controller-local install reads the media in place, so the effective
+	// path is the media path itself rather than the staged _source/ ISO.
+	if image["sourceId"] != "rhel-9.7-x86_64-dvd.iso" {
+		t.Fatalf("image sourceId = %v, want the media key", image["sourceId"])
+	}
+	if image["effectiveSourcePath"] != image["path"] {
+		t.Fatalf("image effectiveSourcePath = %v, want image.path %v for sourceOnTarget media", image["effectiveSourcePath"], image["path"])
 	}
 	installer := osInstall["installer"].(map[string]any)
 	if _, ok := installer["sourceURL"]; ok {
@@ -176,6 +187,69 @@ func TestManagedOSInstallVarsFromBootISOFixture(t *testing.T) {
 	repo := repositories[0].(map[string]any)
 	if repo["id"] != "appstream" || repo["baseURL"] != "https://mirror.example.test/rhel/9/AppStream/x86_64/os/" {
 		t.Fatalf("installer.repositories[0] = %v", repo)
+	}
+}
+
+// TestManagedOSInstallImageSourceIdentityAndPath pins the renderer-owned
+// shared-source identity and effective source path that the
+// machine_os_install_anaconda role consumes verbatim. The role no longer
+// re-derives either: it reads image.sourceId and image.effectiveSourcePath.
+func TestManagedOSInstallImageSourceIdentityAndPath(t *testing.T) {
+	const sha = "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd"
+
+	cases := []struct {
+		name           string
+		resolved       media.Resolved
+		checksum       string
+		sourceOnTarget bool
+		wantSourceID   string
+		wantEffective  string
+	}{
+		{
+			name:           "media in place when sourceOnTarget",
+			resolved:       media.Resolved{Kind: "media", Key: "rhel-9.7-x86_64-dvd.iso", Path: "/var/lib/bootwright/media/rhel-9.7-x86_64-dvd.iso", Original: "local-media:rhel-9.7-x86_64-dvd.iso"},
+			sourceOnTarget: true,
+			wantSourceID:   "rhel-9.7-x86_64-dvd.iso",
+			wantEffective:  "/var/lib/bootwright/media/rhel-9.7-x86_64-dvd.iso",
+		},
+		{
+			name:           "file in place when sourceOnTarget",
+			resolved:       media.Resolved{Kind: "file", Path: "/srv/isos/rhel.iso", Original: "file:///srv/isos/rhel.iso"},
+			sourceOnTarget: true,
+			wantSourceID:   "file____srv_isos_rhel.iso",
+			wantEffective:  "/srv/isos/rhel.iso",
+		},
+		{
+			name:          "shared staged source when not sourceOnTarget",
+			resolved:      media.Resolved{Kind: "media", Key: "rhel-9.7-x86_64-dvd.iso", Path: "/var/lib/bootwright/media/rhel-9.7-x86_64-dvd.iso", Original: "local-media:rhel-9.7-x86_64-dvd.iso"},
+			wantSourceID:  "rhel-9.7-x86_64-dvd.iso",
+			wantEffective: "{{ bootwright_provider_state_dir }}/os-install/ceph-libvirt/_source/rhel-9.7-x86_64-dvd.iso.iso",
+		},
+		{
+			name:          "checksum keys the shared source over key",
+			resolved:      media.Resolved{Kind: "media", Key: "rhel-9.7-x86_64-dvd.iso", Path: "/var/lib/bootwright/media/rhel-9.7-x86_64-dvd.iso"},
+			checksum:      "sha256:" + sha,
+			wantSourceID:  sha,
+			wantEffective: "{{ bootwright_provider_state_dir }}/os-install/ceph-libvirt/_source/" + sha + ".iso",
+		},
+		{
+			name:          "url source stages under a sanitized original",
+			resolved:      media.Resolved{Kind: "url", URL: "https://mirror.example.test/rhel.iso", Original: "https://mirror.example.test/rhel.iso"},
+			wantSourceID:  "https___mirror.example.test_rhel.iso",
+			wantEffective: "{{ bootwright_provider_state_dir }}/os-install/ceph-libvirt/_source/https___mirror.example.test_rhel.iso.iso",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			image := machineOSInstallImageVars(tc.resolved, "dvd", tc.checksum, tc.sourceOnTarget, "ceph-libvirt")
+			if image["sourceId"] != tc.wantSourceID {
+				t.Fatalf("sourceId = %v, want %v", image["sourceId"], tc.wantSourceID)
+			}
+			if image["effectiveSourcePath"] != tc.wantEffective {
+				t.Fatalf("effectiveSourcePath = %v, want %v", image["effectiveSourcePath"], tc.wantEffective)
+			}
+		})
 	}
 }
 

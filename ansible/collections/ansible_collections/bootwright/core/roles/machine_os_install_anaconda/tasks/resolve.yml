@@ -12,30 +12,18 @@
   changed_when: false
 
 # Every machine in an OS group installs from the same source ISO; only the
-# per-machine Kickstart differs. Stage that source once per (cluster, image)
-# under a shared _source/ directory instead of copying the full DVD into every
-# machine's work dir, so a multi-node group costs one source copy on the
-# provider host, not N. The image identity (checksum when known, else the
-# sanitised media key) keys the file so two profiles on different images do not
-# collide. Controller-local installs skip the copy entirely (sourceOnTarget).
-- name: Resolve managed OS shared source identity
+# per-machine Kickstart differs. The renderer owns the shared-source identity
+# (image.sourceId) and the effective source path (image.effectiveSourcePath):
+# the staged shared-source ISO under _source/, or the in-place media when the
+# install runs where the source already lives (controller-local sourceOnTarget).
+- name: Resolve managed OS shared source root
   ansible.builtin.set_fact:
-    bootwright_os_source_image_id: >-
-      {{
-        (bootwright_component.osInstall.image.checksum | default('') | regex_replace('^sha256:', ''))
-        if (bootwright_component.osInstall.image.checksum | default('') | length) > 0
-        else (
-          (bootwright_component.osInstall.image.key
-            | default(bootwright_component.osInstall.image.original | default('source')))
-          | regex_replace('[^A-Za-z0-9._-]', '_')
-        )
-      }}
     bootwright_os_source_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_os_group.name }}/_source"
   changed_when: false
 
 - name: Resolve managed OS install files
   ansible.builtin.set_fact:
-    bootwright_os_source_iso: "{{ bootwright_os_source_root }}/{{ bootwright_os_source_image_id }}.iso"
+    bootwright_os_source_iso: "{{ bootwright_os_source_root }}/{{ bootwright_component.osInstall.image.sourceId }}.iso"
     bootwright_os_source_id_path: "{{ bootwright_os_install_root }}/source.id"
     bootwright_os_kickstart_path: "{{ bootwright_os_install_root }}/ks.cfg"
     bootwright_os_install_iso: "{{ bootwright_os_stage_path }}"
@@ -48,13 +36,5 @@
 
 - name: Resolve managed OS install source path
   ansible.builtin.set_fact:
-    bootwright_os_source_iso_effective: >-
-      {{
-        bootwright_component.osInstall.image.path
-        if (
-          (bootwright_component.osInstall.image.kind in ['media', 'file'])
-          and (bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool)
-        )
-        else bootwright_os_source_iso
-      }}
+    bootwright_os_source_iso_effective: "{{ bootwright_component.osInstall.image.effectiveSourcePath }}"
   changed_when: false

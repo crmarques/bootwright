@@ -1,6 +1,8 @@
 package inventory
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -13,6 +15,8 @@ import (
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
+
+var managedOSSourceIDUnsafeRE = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
 func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName string, paths PathOptions) map[string]any {
 	if machine.Spec.Access.SSH == nil {
@@ -57,7 +61,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"architecture": profile.Spec.OS.Architecture,
 		},
 		"installer": installer,
-		"image":     machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m)),
+		"image":     machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName),
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(state, machine),
 			"sshUser":                machine.Spec.Access.SSH.User,
@@ -85,16 +89,23 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 }
 
 // machineOSInstallImageVars renders the normalize-materialized mediaType
-// as-is; the boot.iso filename derivation lives in the normalize phase.
-func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool) map[string]any {
+// as-is; the boot.iso filename derivation lives in the normalize phase. It also
+// owns the shared-source dedup identity (sourceId) and the effective source ISO
+// path: every machine in an OS group installs from one source ISO staged once
+// per (cluster, image), so the role consumes these rather than re-deriving the
+// identity and path policy itself.
+func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool, clusterName string) map[string]any {
 	normalizedChecksum, _ := media.NormalizeSHA256(checksum)
+	useSourceOnTarget := sourceOnTarget && (resolved.Key != "" || resolved.Kind == "file")
+	sourceID := managedOSSourceID(normalizedChecksum, resolved.Key, resolved.Original)
 	out := map[string]any{
 		"kind":      resolved.Kind,
 		"mediaType": mediaType,
 		"original":  resolved.Original,
 		"checksum":  normalizedChecksum,
+		"sourceId":  sourceID,
 	}
-	if sourceOnTarget && (resolved.Key != "" || resolved.Kind == "file") {
+	if useSourceOnTarget {
 		out["sourceOnTarget"] = true
 	}
 	if resolved.Key != "" {
@@ -106,7 +117,30 @@ func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum stri
 	if resolved.URL != "" {
 		out["url"] = resolved.URL
 	}
+	if useSourceOnTarget && (resolved.Kind == "media" || resolved.Kind == "file") {
+		out["effectiveSourcePath"] = resolved.Path
+	} else {
+		out["effectiveSourcePath"] = fmt.Sprintf(
+			"{{ bootwright_provider_state_dir }}/os-install/%s/_source/%s.iso", clusterName, sourceID)
+	}
 	return out
+}
+
+// managedOSSourceID is the shared-source dedup identity: the sha256 checksum
+// when known (already normalized, no sha256: prefix), else the validated media
+// key, else a sanitized original reference (a URL or file path has characters a
+// filename cannot carry), else "source".
+func managedOSSourceID(checksum, key, original string) string {
+	if checksum != "" {
+		return checksum
+	}
+	if key != "" {
+		return key
+	}
+	if original != "" {
+		return managedOSSourceIDUnsafeRE.ReplaceAllString(original, "_")
+	}
+	return "source"
 }
 
 func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.InstallMachine) bool {

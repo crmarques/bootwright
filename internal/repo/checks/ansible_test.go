@@ -780,10 +780,8 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		t.Fatalf("%s is not a set_fact task", topTasks[resolveSourcePathIdx]["name"])
 	}
 	sourcePathExpr := fmt.Sprint(resolveSourcePath["bootwright_os_source_iso_effective"])
-	for _, want := range []string{"sourceOnTarget", "bootwright_component.osInstall.image.path", "bootwright_os_source_iso"} {
-		if !strings.Contains(sourcePathExpr, want) {
-			t.Fatalf("%s effective source path missing %q: %s", topTasks[resolveSourcePathIdx]["name"], want, sourcePathExpr)
-		}
+	if !strings.Contains(sourcePathExpr, "bootwright_component.osInstall.image.effectiveSourcePath") {
+		t.Fatalf("%s must consume the renderer-emitted effective source path, got %s", topTasks[resolveSourcePathIdx]["name"], sourcePathExpr)
 	}
 
 	tasks := nestedAnsibleTasks(t, topTasks[installBlockIdx], "block")

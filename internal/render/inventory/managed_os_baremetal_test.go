@@ -68,6 +68,15 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		if image["sourceOnTarget"] != true {
 			t.Fatalf("component %v sourceOnTarget = %v, want true for a controller-driven bare-metal install", component["name"], image["sourceOnTarget"])
 		}
+		// The renderer owns the shared-source identity and effective path the
+		// install role consumes. With no checksum the sourceId is the media key,
+		// and a controller-local sourceOnTarget install reads the media in place.
+		if image["sourceId"] != "rhel-9.7-x86_64-dvd.iso" {
+			t.Fatalf("component %v sourceId = %v, want the media key", component["name"], image["sourceId"])
+		}
+		if image["effectiveSourcePath"] != image["path"] {
+			t.Fatalf("component %v effectiveSourcePath = %v, want image.path %v", component["name"], image["effectiveSourcePath"], image["path"])
+		}
 
 		// A bare-metal node mounts its managed-OS install ISO over the BMC, so
 		// the install ISO is published through the artifact server for Redfish
