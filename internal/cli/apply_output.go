@@ -189,6 +189,10 @@ func applyTaskDisplayLabel(label string) string {
 		return "Provider services" + strings.TrimPrefix(label, "provider services")
 	case label == "infra component services" || strings.HasPrefix(label, "infra component services "):
 		return "Infra component services" + strings.TrimPrefix(label, "infra component services")
+	case strings.HasPrefix(label, "provision machine "):
+		return "Provision machine " + strings.TrimPrefix(label, "provision machine ")
+	case strings.HasPrefix(label, "finalize infra "):
+		return "Finalize infra " + strings.TrimPrefix(label, "finalize infra ")
 	case strings.HasPrefix(label, "machine infra "):
 		return "Machine infra " + strings.TrimPrefix(label, "machine infra ")
 	case strings.HasPrefix(label, "managed OS "):

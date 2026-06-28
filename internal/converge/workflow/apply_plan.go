@@ -225,7 +225,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Entry: TaskLedgerEntry{
 							ID:            taskID,
 							Kind:          ApplyTaskKindClusterInstall,
-							Label:         "machine infra " + name + "/" + machineName,
+							Label:         "provision machine " + machineName,
 							Cluster:       name,
 							ClusterKind:   ApplyClusterKindContainer,
 							Node:          machineName,
@@ -249,6 +249,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}
 			for _, host := range infraHosts {
 				taskID := "infrafinalize." + name + "." + host
+				// host is "localhost" for KubeVirt/vSphere (the finalize runs on
+				// the controller); only name the host when it is a real, distinct
+				// provider machine (libvirt) where it disambiguates per-host tasks.
+				finalizeLabel := "finalize infra " + name
+				if host != "localhost" {
+					finalizeLabel += " on " + host
+				}
 				deps := append([]string(nil), baseDeps...)
 				deps = append(deps, machineTaskIDsByHost[host]...)
 				if prepareID := prepareDepsByHost[host]; prepareID != "" && len(machineTaskIDsByHost[host]) == 0 {
@@ -264,7 +271,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Entry: TaskLedgerEntry{
 							ID:           taskID,
 							Kind:         ApplyTaskKindMachineInfraFinalize,
-							Label:        "machine infra finalize " + name + " on " + host,
+							Label:        finalizeLabel,
 							Cluster:      name,
 							ClusterKind:  ApplyClusterKindContainer,
 							Host:         host,
