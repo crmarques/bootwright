@@ -16,7 +16,7 @@
 - name: Resolve community Ceph package source
   ansible.builtin.set_fact:
     bootwright_ceph_community_version: "{{ bootwright_ceph_provider.community.version | default('') }}"
-    bootwright_ceph_community_release: "{{ bootwright_ceph_provider.community.release | default('squid') }}"
+    bootwright_ceph_community_release: "{{ bootwright_ceph_provider.community.release | default('') }}"
     bootwright_ceph_community_mirror: "{{ (bootwright_ceph_provider.community.mirror | default(bootwright_ceph_community_default_mirror, true)) | regex_replace('/$', '') }}"
   changed_when: false
 
