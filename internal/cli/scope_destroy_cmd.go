@@ -299,11 +299,15 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				}
 				return failErr(1, gerr)
 			}
-			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames)
 			// A --skip-unreachable teardown that skipped powered-off nodes leaves
 			// those clusters only partially destroyed: stamp their ownership record
 			// (so status flags them and they are not treated as gone) and warn.
+			// Resolve the partial set BEFORE resetting convergence records so the
+			// reset keeps a partially-destroyed cluster's records intact — otherwise
+			// a later apply --expect-new would re-bootstrap atop its residual Ceph
+			// state instead of failing closed.
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
+			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, partial)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
@@ -312,7 +316,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly {
-				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames)
+				// The single-playbook path is the artifact-server / no-remote-work
+				// teardown, which never produces a partial storage destroy.
+				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, nil)
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)

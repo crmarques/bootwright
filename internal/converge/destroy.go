@@ -143,7 +143,18 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 // roots; nil for an unscoped destroy) gates the storage reset exactly as it
 // gates the teardown — a render-reference StorageCluster the destroy did not
 // tear down keeps its records.
-func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State, storageWorkNames []string) {
+//
+// partialStorageClusters names StorageClusters a --skip-unreachable teardown
+// left only partially destroyed (a powered-off node kept its OSD data and local
+// Ceph state). Their convergence records are KEPT — mirroring the Ansible
+// teardown that keeps the ownership record — so a still-alive cluster keeps
+// reading as present and a later apply --expect-new still fails closed over it
+// instead of re-bootstrapping atop residual Ceph state.
+func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string) {
+	partial := make(map[string]bool, len(partialStorageClusters))
+	for _, name := range partialStorageClusters {
+		partial[name] = true
+	}
 	resetScope := runScope
 	if runScope.Name == InfraScope.Name {
 		resetScope = AllScope
@@ -157,6 +168,9 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 	}
 	if tasks, perr := workflow.PlanApplyTasksChecked(target, state); perr == nil {
 		for _, task := range tasks {
+			if isPartialStorageTask(task, partial) {
+				continue
+			}
 			_ = workflow.RemoveApplyTaskConvergeSafety(runsDir, task)
 		}
 		// The ansible cluster destroy runs on the OCP nodes and cannot remove the
@@ -170,10 +184,29 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 	// Storage sub-objects (pools/filesystems/gateways/exports) have no
 	// backing task; a destroyed cluster rm-cluster --zap-osds removes them
 	// all, so reset their records too or a later apply would mis-report a
-	// gone pool as match/drift instead of recreating it.
+	// gone pool as match/drift instead of recreating it. A partially-destroyed
+	// cluster keeps its sub-object records for the same reason it keeps the
+	// cluster record.
 	for _, name := range destroyStorageResetNames(state, storageWorkNames) {
+		if partial[name] {
+			continue
+		}
 		_ = workflow.RemoveStorageSubObjectsConvergeSafety(runsDir, state, name)
 	}
+}
+
+// isPartialStorageTask reports whether an apply task backs a StorageCluster a
+// --skip-unreachable teardown left only partially destroyed, whose convergence
+// records must be kept rather than reset to missing.
+func isPartialStorageTask(task workflow.ApplyTask, partial map[string]bool) bool {
+	if len(partial) == 0 {
+		return false
+	}
+	switch task.Entry.Kind {
+	case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
+		return partial[task.Entry.Cluster]
+	}
+	return false
 }
 
 // destroyStorageResetNames returns the StorageCluster names whose convergence
