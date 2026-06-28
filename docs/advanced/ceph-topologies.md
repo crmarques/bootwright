@@ -275,6 +275,23 @@ should publish that name. The `ceph-ibm-libvirt-lab` and
 `ceph-ibm-baremetal-redfish` [reference examples](examples.md) build the HA
 dashboard end to end.
 
+Two optional blocks secure the gateway:
+
+- `spec.ceph.management.tls` (`certificateRef` + `keyRef`, both required
+  together) supplies a real certificate for the gateway frontend (cephadm
+  `ssl_certificate` / `ssl_certificate_key`). Without it the published `dnsName`
+  serves a self-signed cert that browsers reject.
+- `spec.ceph.management.enableAuth: true` puts the dashboard behind SSO and
+  **requires** `spec.ceph.management.oauth2Proxy` — Bootwright deploys the
+  cephadm `oauth2-proxy` daemon (`providerDisplayName`, `clientId`,
+  `clientSecretRef`, `oidcIssuerUrl`, optional `redirectUrl`, `httpsAddress`,
+  `allowlistDomains`, `cookieSecretRef`). `enableAuth` without `oauth2Proxy`, or
+  an `oauth2Proxy` block without `enableAuth`, is rejected by `validate`.
+
+The cert and OIDC secrets are read from their secrets and inlined only into a
+`0600` spec on the seed host (applied separately from the static service spec),
+so they never land in a locally-rendered file.
+
 ## RGW and ingress
 
 `StorageObjectGateway` owns the RGW service, its storage-owned public S3

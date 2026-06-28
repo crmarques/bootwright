@@ -122,6 +122,9 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
 			entry["clusterSSH"] = clusterSSH
 		}
+		if management := storageManagementVars(cluster, env, paths); management != nil {
+			entry["management"] = management
+		}
 		out = append(out, entry)
 	}
 	return out
@@ -170,6 +173,65 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	}
 	if knownHostsPath := machineKnownHostsPath(machine, env, paths); knownHostsPath != "" {
 		out["knownHostsPath"] = knownHostsPath
+	}
+	return out
+}
+
+// storageManagementVars renders the secret-bearing management gateway
+// (TLS and/or oauth2-proxy) the static render defers: the resolved gateway
+// placement and VIP plus the staged secret file paths. The dedicated
+// management-services apply step assembles the cephadm spec from these, inlining
+// the secrets, so they never appear in a locally-rendered file. Returns nil when
+// the gateway carries no secrets (the static render handles it).
+func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
+	if !cephrender.ManagementHasSecrets(cluster) {
+		return nil
+	}
+	mgmt := cluster.Spec.Ceph.Management
+	endpoint, ok := topology.ManagementIngressEndpoint(mgmt.Ingress)
+	if !ok {
+		return nil
+	}
+	hosts := topology.ResolvePlacement(cluster, mgmt.Ingress.Placement, v1alpha1.StorageCephRoleIngress)
+	if len(hosts) == 0 {
+		return nil
+	}
+	port := mgmt.Port
+	if port == 0 {
+		port = topology.CephManagementDefaultPort
+	}
+	out := map[string]any{
+		"port":       port,
+		"virtualIP":  endpoint.Address,
+		"hosts":      hosts,
+		"enableAuth": mgmt.EnableAuth != nil && *mgmt.EnableAuth,
+	}
+	if mgmt.TLS != nil {
+		out["tls"] = map[string]any{
+			"certificatePath": secret.ResolvePath(mgmt.TLS.CertificateRef.Name, env, paths.SecretsDir),
+			"keyPath":         secret.ResolveTLSKeyPath(mgmt.TLS.KeyRef.Name, env, paths.SecretsDir),
+		}
+	}
+	if o := mgmt.OAuth2Proxy; o != nil {
+		oauth := map[string]any{
+			"providerDisplayName": o.ProviderDisplayName,
+			"clientId":            o.ClientID,
+			"oidcIssuerURL":       o.OIDCIssuerURL,
+			"clientSecretPath":    secret.ResolvePath(o.ClientSecretRef.Name, env, paths.SecretsDir),
+		}
+		if o.RedirectURL != "" {
+			oauth["redirectURL"] = o.RedirectURL
+		}
+		if o.HTTPSAddress != "" {
+			oauth["httpsAddress"] = o.HTTPSAddress
+		}
+		if len(o.AllowlistDomains) > 0 {
+			oauth["allowlistDomains"] = append([]string(nil), o.AllowlistDomains...)
+		}
+		if o.CookieSecretRef.Name != "" {
+			oauth["cookieSecretPath"] = secret.ResolvePath(o.CookieSecretRef.Name, env, paths.SecretsDir)
+		}
+		out["oauth2Proxy"] = oauth
 	}
 	return out
 }

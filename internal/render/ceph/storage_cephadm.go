@@ -414,6 +414,15 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 	return docs
 }
 
+// ManagementHasSecrets reports whether the management gateway carries secret
+// material (a TLS cert or an oauth2-proxy front door). Such a gateway is applied
+// by the dedicated management-services step from staged secrets, not the static
+// late-services render.
+func ManagementHasSecrets(cluster v1alpha1.StorageCluster) bool {
+	mgmt := cluster.Spec.Ceph.Management
+	return mgmt != nil && (mgmt.TLS != nil || mgmt.OAuth2Proxy != nil)
+}
+
 // cephadmManagementSpecs renders native HA access to the Ceph management surface
 // from spec.ceph.management: a mgmt-gateway that reverse-proxies the dashboard
 // and monitoring UIs, plus an ingress in keepalive_only mode that floats the VIP
@@ -439,17 +448,25 @@ func cephadmManagementSpecs(cluster v1alpha1.StorageCluster) []any {
 	if port == 0 {
 		port = topology.CephManagementDefaultPort
 	}
-	// The mgmt-gateway is a cephadm singleton (no service_id): it terminates the
-	// management UIs and advertises them at virtual_ip. enable_auth renders only
-	// when authored so an unset spec keeps cephadm's own default (off).
-	gatewaySpec := map[string]any{
-		"port":       port,
-		"virtual_ip": endpoint.Address,
+	var docs []any
+	// When the gateway carries TLS or an oauth2-proxy front door, its spec embeds
+	// secret material (ssl_certificate, oauth2 client/cookie secrets). That is
+	// applied by a dedicated apply step from staged secret files so the secrets
+	// never land in a locally-rendered spec; the static render skips the gateway
+	// doc here and renders only the (secret-free) keepalive ingress below.
+	if !ManagementHasSecrets(cluster) {
+		// The mgmt-gateway is a cephadm singleton (no service_id): it terminates the
+		// management UIs and advertises them at virtual_ip. enable_auth renders only
+		// when authored so an unset spec keeps cephadm's own default (off).
+		gatewaySpec := map[string]any{
+			"port":       port,
+			"virtual_ip": endpoint.Address,
+		}
+		if mgmt.EnableAuth != nil {
+			gatewaySpec["enable_auth"] = *mgmt.EnableAuth
+		}
+		docs = append(docs, cephadmPlacementService("mgmt-gateway", "", hosts, 0, gatewaySpec))
 	}
-	if mgmt.EnableAuth != nil {
-		gatewaySpec["enable_auth"] = *mgmt.EnableAuth
-	}
-	docs := []any{cephadmPlacementService("mgmt-gateway", "", hosts, 0, gatewaySpec)}
 	// keepalive_only: the ingress contributes only the keepalived VIP/failover —
 	// the mgmt-gateway (not HAProxy) does the reverse-proxying, so backend_service
 	// points at the gateway and no HAProxy frontend is rendered.

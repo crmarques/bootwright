@@ -4457,6 +4457,7 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 		base+"data_foundation_base.yml",
 		base+"topology_operations.yml",
 		base+"late_service_specs.yml",
+		base+"management_services.yml",
 		base+"late_operations.yml",
 		base+"result_and_ownership.yml",
 		base+"cleanup.yml",

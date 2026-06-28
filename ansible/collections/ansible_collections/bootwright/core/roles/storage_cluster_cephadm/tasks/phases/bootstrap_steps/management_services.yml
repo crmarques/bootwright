@@ -1,0 +1,74 @@
+---
+# The secret-bearing management gateway (TLS cert and/or oauth2-proxy front door)
+# is applied here, separately from the static late-services spec, so the cert and
+# OIDC secrets are read from the controller-side secret files and inlined only
+# into a 0600 spec on the seed (cleaned up with the work dir) — never into a
+# locally-rendered file. The render emits the secret-free keepalive ingress in the
+# late-services spec; this step owns the mgmt-gateway (and oauth2-proxy) doc.
+- name: Assemble secret-bearing management service specs
+  ansible.builtin.set_fact:
+    bootwright_ceph_management_specs: >-
+      {{
+        [
+          {
+            'service_type': 'mgmt-gateway',
+            'placement': {'hosts': bootwright_ceph_management.hosts},
+            'spec': (
+              {
+                'port': bootwright_ceph_management.port,
+                'virtual_ip': bootwright_ceph_management.virtualIP,
+                'enable_auth': bootwright_ceph_management.enableAuth
+              }
+              | combine(
+                  {
+                    'ssl_certificate': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath),
+                    'ssl_certificate_key': lookup('ansible.builtin.file', bootwright_ceph_management.tls.keyPath)
+                  } if (bootwright_ceph_management.tls is defined) else {}
+                )
+            )
+          }
+        ]
+        + (
+          [
+            {
+              'service_type': 'oauth2-proxy',
+              'placement': {'hosts': bootwright_ceph_management.hosts},
+              'spec': (
+                {
+                  'provider_display_name': bootwright_ceph_management.oauth2Proxy.providerDisplayName,
+                  'client_id': bootwright_ceph_management.oauth2Proxy.clientId,
+                  'client_secret': lookup('ansible.builtin.file', bootwright_ceph_management.oauth2Proxy.clientSecretPath),
+                  'oidc_issuer_url': bootwright_ceph_management.oauth2Proxy.oidcIssuerURL
+                }
+                | combine({'redirect_url': bootwright_ceph_management.oauth2Proxy.redirectURL} if (bootwright_ceph_management.oauth2Proxy.redirectURL | default('') | length > 0) else {})
+                | combine({'https_address': bootwright_ceph_management.oauth2Proxy.httpsAddress} if (bootwright_ceph_management.oauth2Proxy.httpsAddress | default('') | length > 0) else {})
+                | combine({'allowlist_domains': bootwright_ceph_management.oauth2Proxy.allowlistDomains} if (bootwright_ceph_management.oauth2Proxy.allowlistDomains | default([]) | length > 0) else {})
+                | combine({'cookie_secret': lookup('ansible.builtin.file', bootwright_ceph_management.oauth2Proxy.cookieSecretPath)} if (bootwright_ceph_management.oauth2Proxy.cookieSecretPath | default('') | length > 0) else {})
+                | combine({'ssl_certificate': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath), 'ssl_certificate_key': lookup('ansible.builtin.file', bootwright_ceph_management.tls.keyPath)} if (bootwright_ceph_management.tls is defined) else {})
+              )
+            }
+          ] if (bootwright_ceph_management.oauth2Proxy is defined) else []
+        )
+      }}
+  no_log: true
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Write management service spec
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ceph_remote_work_dir }}/management-services.yaml"
+    content: "{{ bootwright_ceph_management_specs | to_nice_yaml }}"
+    mode: "0600"
+  no_log: true
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Apply management service spec
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - orch
+      - apply
+      - -i
+      - "{{ bootwright_ceph_remote_work_dir }}/management-services.yaml"
+  register: bootwright_ceph_management_apply
+  changed_when: true
+  when: bootwright_ceph_management.hosts is defined

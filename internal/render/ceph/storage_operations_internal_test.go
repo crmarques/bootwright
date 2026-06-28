@@ -625,6 +625,50 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
+// A management gateway carrying TLS or oauth2-proxy is deferred to the dedicated
+// secret-bearing apply step: the static late-services render emits only the
+// keepalive ingress, never a mgmt-gateway doc that would inline secrets.
+func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
+	mk := func(tls *v1alpha1.StorageCephManagementTLS) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+				Management: &v1alpha1.StorageCephManagement{
+					DNSName: "dash.example.com",
+					TLS:     tls,
+					Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+				},
+				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+					Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
+				}}},
+			}},
+		}
+	}
+	// No secrets: the static render still emits the mgmt-gateway.
+	plain := mk(nil)
+	if !hasServiceType(CephadmLateServicesSpec(v1alpha1.State{}, plain), "mgmt-gateway") {
+		t.Fatal("a secret-free management gateway must render in late services")
+	}
+	// With TLS: the gateway is deferred; only the ingress renders statically.
+	withTLS := mk(&v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}})
+	docs := CephadmLateServicesSpec(v1alpha1.State{}, withTLS)
+	if hasServiceType(docs, "mgmt-gateway") {
+		t.Fatal("a TLS management gateway must NOT render in static late services (secrets would leak)")
+	}
+	if !hasServiceType(docs, "ingress") {
+		t.Fatal("the keepalive ingress must still render statically")
+	}
+}
+
+func hasServiceType(docs []any, serviceType string) bool {
+	for _, doc := range docs {
+		if m, ok := doc.(map[string]any); ok && m["service_type"] == serviceType {
+			return true
+		}
+	}
+	return false
+}
+
 // A first-class NFS export renders the nfs service + ingress (backend
 // nfs.<id>) into the late service specs and each export as an idempotent
 // `ceph nfs export create cephfs|rgw` operation keyed by <serviceID>|<pseudo>.

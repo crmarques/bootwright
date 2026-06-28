@@ -37,6 +37,7 @@
     bootwright_ceph_remote_known_hosts: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/known_hosts"
     bootwright_ceph_remote_ssh_config: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/ssh_config"
     bootwright_ceph_remote_registry_json: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/registry-login.json"
+    bootwright_ceph_management: "{{ bootwright_selected_storage_cluster.management | default({}) }}"
     bootwright_ceph_ownership_marker_path: /etc/ceph/.bootwright-owned
     bootwright_ceph_osd_marker_path: /etc/bootwright/ceph-osd-devices.json
     bootwright_ceph_bootstrap_image: "{{ bootwright_selected_storage_cluster.provider.image | default('') }}"

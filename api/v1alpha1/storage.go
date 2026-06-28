@@ -735,11 +735,50 @@ type StorageCephManagement struct {
 	Port int `yaml:"port,omitempty" json:"port,omitempty"`
 	// EnableAuth turns on the mgmt-gateway SSO/oauth2 front door. Unset keeps
 	// cephadm's own default (off); a lab typically leaves it off and reaches the
-	// dashboard directly through the VIP.
+	// dashboard directly through the VIP. When true, oauth2Proxy is required (the
+	// gateway delegates auth to a deployed oauth2-proxy daemon).
 	EnableAuth *bool `yaml:"enableAuth,omitempty" json:"enableAuth,omitempty"`
+	// TLS supplies a real certificate for the mgmt-gateway frontend (cephadm
+	// ssl_certificate / ssl_certificate_key). Absent, cephadm serves a
+	// self-signed cert, which browsers reject on the published dnsName.
+	TLS *StorageCephManagementTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
+	// OAuth2Proxy configures the oauth2-proxy daemon the mgmt-gateway delegates to
+	// when enableAuth is true. Required with enableAuth and rejected without it.
+	OAuth2Proxy *StorageCephOAuth2Proxy `yaml:"oauth2Proxy,omitempty" json:"oauth2Proxy,omitempty"`
 	// Ingress owns the floating VIP. It runs in keepalive_only mode: the
 	// mgmt-gateway does the reverse-proxying; keepalived only floats the VIP.
 	Ingress StorageCephManagementIngress `yaml:"ingress" json:"ingress"`
+}
+
+// StorageCephManagementTLS names the certificate and key secrets for the
+// mgmt-gateway frontend; both are required together. They render as the cephadm
+// ssl_certificate / ssl_certificate_key inline PEM, staged from the secrets so
+// the material never lands in a locally-rendered spec.
+type StorageCephManagementTLS struct {
+	CertificateRef LocalObjectReference `yaml:"certificateRef" json:"certificateRef"`
+	KeyRef         LocalObjectReference `yaml:"keyRef" json:"keyRef"`
+}
+
+// StorageCephOAuth2Proxy mirrors the cephadm oauth2-proxy service spec (native
+// field names: provider_display_name, oidc_issuer_url, redirect_url,
+// https_address, allowlist_domains, client_secret, cookie_secret). Secrets are
+// supplied by ref and staged, not inlined into rendered specs.
+type StorageCephOAuth2Proxy struct {
+	ProviderDisplayName string `yaml:"providerDisplayName" json:"providerDisplayName"`
+	ClientID            string `yaml:"clientId" json:"clientId"`
+	// ClientSecretRef is the OIDC client secret (client_secret).
+	ClientSecretRef LocalObjectReference `yaml:"clientSecretRef" json:"clientSecretRef"`
+	// OIDCIssuerURL is the identity provider issuer (oidc_issuer_url).
+	OIDCIssuerURL string `yaml:"oidcIssuerUrl" json:"oidcIssuerUrl"`
+	// RedirectURL / HTTPSAddress are optional (redirect_url / https_address).
+	RedirectURL  string `yaml:"redirectUrl,omitempty" json:"redirectUrl,omitempty"`
+	HTTPSAddress string `yaml:"httpsAddress,omitempty" json:"httpsAddress,omitempty"`
+	// AllowlistDomains restricts redirect/allowed domains (allowlist_domains) —
+	// the real access-control field (there is no allowed_groups).
+	AllowlistDomains []string `yaml:"allowlistDomains,omitempty" json:"allowlistDomains,omitempty"`
+	// CookieSecretRef is the optional cookie-encryption secret (cookie_secret);
+	// cephadm auto-generates one when omitted.
+	CookieSecretRef LocalObjectReference `yaml:"cookieSecretRef,omitempty" json:"cookieSecretRef,omitempty"`
 }
 
 // StorageCephManagementIngress is the storage-owned management VIP. It mirrors

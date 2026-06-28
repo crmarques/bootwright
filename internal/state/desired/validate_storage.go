@@ -104,7 +104,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
-	errs = append(errs, validateStorageCephManagement(prefix+".management", cluster)...)
+	errs = append(errs, validateStorageCephManagement(prefix+".management", cluster, env)...)
 	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines, storageSiteRequirement(state, cluster))...)
 	if ceph.Topology.Stretch != nil {
@@ -321,6 +321,21 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 		}
 	}
 	return errs
+}
+
+// validateStorageSecretRef checks that a required secret ref is set and, when
+// the Environment is available, resolves to a declared secret.
+func validateStorageSecretRef(owner, ref string, env *v1alpha1.Environment) []string {
+	if ref == "" {
+		return []string{owner + " is required"}
+	}
+	if env == nil {
+		return nil
+	}
+	if _, ok := env.Spec.Secrets[ref]; !ok {
+		return []string{fmt.Sprintf("%s %q does not match any Environment.spec.secrets[] entry", owner, ref)}
+	}
+	return nil
 }
 
 // storageSiteRequirement reports why this cluster's topology hosts must
@@ -611,9 +626,11 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 }
 
 // validateStorageCephManagement checks the management HA surface: a dnsName to
-// publish and report, a valid frontend port, and a complete VIP ingress whose
-// placement resolves to ingress-role hosts (the same rules as the RGW ingress).
-func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster) []string {
+// publish and report, a valid frontend port, a complete VIP ingress whose
+// placement resolves to ingress-role hosts (the same rules as the RGW ingress),
+// and the TLS/oauth2-proxy auth surface (enableAuth and oauth2Proxy are paired,
+// and every secret ref resolves).
+func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment) []string {
 	mgmt := cluster.Spec.Ceph.Management
 	if mgmt == nil {
 		return nil
@@ -636,6 +653,36 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 		errs = append(errs, prefix+".ingress.prefixLength is required")
 	}
 	errs = append(errs, validateStoragePlacementHosts(prefix+".ingress.placement", ingress.Placement, cluster, true, v1alpha1.StorageCephRoleIngress)...)
+	if mgmt.TLS != nil {
+		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, env)...)
+		errs = append(errs, validateStorageSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, env)...)
+	}
+	// enableAuth and oauth2Proxy are paired: the mgmt-gateway delegates auth to a
+	// deployed oauth2-proxy, so enableAuth without it emits a flag whose daemon
+	// never deploys (the dashboard would be unprotected or reconcile would fail),
+	// and an oauth2Proxy block without enableAuth deploys an unused daemon.
+	authOn := mgmt.EnableAuth != nil && *mgmt.EnableAuth
+	switch {
+	case authOn && mgmt.OAuth2Proxy == nil:
+		errs = append(errs, prefix+".enableAuth requires oauth2Proxy to be configured")
+	case !authOn && mgmt.OAuth2Proxy != nil:
+		errs = append(errs, prefix+".oauth2Proxy requires enableAuth: true")
+	}
+	if o := mgmt.OAuth2Proxy; o != nil {
+		if o.ProviderDisplayName == "" {
+			errs = append(errs, prefix+".oauth2Proxy.providerDisplayName is required")
+		}
+		if o.ClientID == "" {
+			errs = append(errs, prefix+".oauth2Proxy.clientId is required")
+		}
+		if o.OIDCIssuerURL == "" {
+			errs = append(errs, prefix+".oauth2Proxy.oidcIssuerUrl is required")
+		}
+		errs = append(errs, validateStorageSecretRef(prefix+".oauth2Proxy.clientSecretRef", o.ClientSecretRef.Name, env)...)
+		if o.CookieSecretRef.Name != "" {
+			errs = append(errs, validateStorageSecretRef(prefix+".oauth2Proxy.cookieSecretRef", o.CookieSecretRef.Name, env)...)
+		}
+	}
 	return errs
 }
 

@@ -939,6 +939,49 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 	}
 }
 
+// TestStorageManagementAuthGate covers the enableAuth/oauth2Proxy pairing and
+// the TLS/oauth2 secret-ref checks.
+func TestStorageManagementAuthGate(t *testing.T) {
+	on := true
+	off := false
+	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+		"cert": {}, "key": {}, "client": {},
+	}}}
+	clusterWith := func(mgmt *v1alpha1.StorageCephManagement) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Management: mgmt,
+			Topology:   v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
+		}}}
+	}
+	baseIngress := v1alpha1.StorageCephManagementIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24}
+	validOAuth := &v1alpha1.StorageCephOAuth2Proxy{ProviderDisplayName: "Corp", ClientID: "id", ClientSecretRef: v1alpha1.LocalObjectReference{Name: "client"}, OIDCIssuerURL: "https://idp"}
+
+	cases := []struct {
+		name string
+		mgmt *v1alpha1.StorageCephManagement
+		want string
+	}{
+		{name: "auth-without-oauth2", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &on, Ingress: baseIngress}, want: "enableAuth requires oauth2Proxy"},
+		{name: "oauth2-without-auth", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &off, OAuth2Proxy: validOAuth, Ingress: baseIngress}, want: "oauth2Proxy requires enableAuth"},
+		{name: "valid-auth", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &on, OAuth2Proxy: validOAuth, Ingress: baseIngress}},
+		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", TLS: &v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" does not match`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(validateStorageCephManagement("spec.ceph.management", clusterWith(tc.mgmt), env), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("unexpected errors: %s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestStorageGatewayRealmAndConfigValidation covers the all-or-nothing realm
 // binding and the per-RGW config one-owner / reserved-key guards.
 func TestStorageGatewayRealmAndConfigValidation(t *testing.T) {
