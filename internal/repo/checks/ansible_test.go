@@ -3256,6 +3256,45 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
 		t.Fatalf("kubevirt delete guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
+
+	// The DataVolume deletes must be gated the same way: read each DV's ownership
+	// label, refuse a non-Bootwright DV, and only then delete.
+	dvReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
+	dvRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt DataVolume")
+	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt DataVolumes")
+	if !(dvReadIdx < dvRefuseIdx && dvRefuseIdx < dvDeleteIdx) {
+		t.Fatalf("kubevirt destroy must read and verify each DataVolume ownership label before deleting (read=%d refuse=%d delete=%d)", dvReadIdx, dvRefuseIdx, dvDeleteIdx)
+	}
+	dvRefuse, ok := tasks[dvRefuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt DataVolume delete guard must be an assert, got %v", tasks[dvRefuseIdx])
+	}
+	if got := fmt.Sprint(dvRefuse["that"]); !strings.Contains(got, "'bootwright'") || !strings.Contains(got, "stdout") {
+		t.Fatalf("kubevirt DataVolume delete guard must require the live managed-by label to equal bootwright, got %v", dvRefuse["that"])
+	}
+	if !strings.Contains(fmt.Sprint(dvRefuse["fail_msg"]), "managed-by") {
+		t.Fatalf("kubevirt DataVolume delete guard message must name the managed-by label, got %v", dvRefuse["fail_msg"])
+	}
+	if got := fmt.Sprint(tasks[dvRefuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
+		t.Fatalf("kubevirt DataVolume delete guard must be skipped under --force-unowned, got when=%v", tasks[dvRefuseIdx]["when"])
+	}
+
+	// The agent-ISO DataVolume is created by virtctl image-upload, which stamps no
+	// labels, so the boot role must label it managed-by=bootwright — otherwise the
+	// destroy gate above could never recognize it as owned.
+	bootTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml")
+	uploadIdx := findAnsibleTask(t, bootTasks, "Upload KubeVirt agent ISO DataVolume")
+	labelIdx := findAnsibleTask(t, bootTasks, "Label KubeVirt agent ISO DataVolume as Bootwright-managed")
+	if !(uploadIdx < labelIdx) {
+		t.Fatalf("boot role must label the agent-ISO DataVolume after uploading it (upload=%d label=%d)", uploadIdx, labelIdx)
+	}
+	label, ok := bootTasks[labelIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("agent-ISO label task must be a command, got %v", bootTasks[labelIdx])
+	}
+	if !stringListContains(label["argv"], "bootwright.io/managed-by=bootwright") {
+		t.Fatalf("agent-ISO label task must stamp bootwright.io/managed-by=bootwright, got %v", label["argv"])
+	}
 }
 
 func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {

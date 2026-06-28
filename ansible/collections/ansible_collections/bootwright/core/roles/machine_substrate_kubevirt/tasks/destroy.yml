@@ -99,6 +99,61 @@
   register: bootwright_kubevirt_vm_delete
   changed_when: "'deleted' in (bootwright_kubevirt_vm_delete.stdout | default(''))"
 
+# The DataVolumes are addressed by computed name in the same shared namespace as
+# the VM. Re-verify each one's live ownership (the bootwright.io/managed-by label
+# the root DataVolume template and the agent-ISO upload stamp) before deleting,
+# so a name collision with a non-Bootwright DataVolume is refused instead of
+# silently deleted. A missing DataVolume (rc != 0) is a no-op.
+- name: Read KubeVirt DataVolume ownership labels
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - datavolume
+      - "{{ item }}"
+      - -o
+      - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
+  loop:
+    - "{{ bootwright_kubevirt_root_dv_name }}"
+    - "{{ bootwright_kubevirt_iso_dv_name }}"
+  register: bootwright_kubevirt_dv_owner
+  changed_when: false
+  failed_when: false
+
+# --force-unowned relaxes this refusal so a DataVolume that matches the computed
+# name but carries a missing or mismatched managed-by label is still deleted.
+- name: Refuse to delete a non-Bootwright KubeVirt DataVolume
+  ansible.builtin.assert:
+    that:
+      - (item.rc | default(1)) != 0 or (item.stdout | default('') | trim) == 'bootwright'
+    fail_msg: >-
+      Refusing to delete DataVolume {{ item.item }} in namespace
+      {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
+      bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
+      Pass --force-unowned to delete it anyway.
+  loop: "{{ bootwright_kubevirt_dv_owner.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not (bootwright_destroy_force_unowned | default(false) | bool)
+
+- name: Warn before force-deleting an unowned KubeVirt DataVolume
+  ansible.builtin.debug:
+    msg: >-
+      --force-unowned: deleting DataVolume {{ item.item }} in namespace
+      {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
+      bootwright.io/managed-by=bootwright ownership label.
+  loop: "{{ bootwright_kubevirt_dv_owner.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - bootwright_destroy_force_unowned | default(false) | bool
+    - (item.rc | default(1)) == 0
+    - (item.stdout | default('') | trim) != 'bootwright'
+
 - name: Delete KubeVirt DataVolumes
   ansible.builtin.command:
     argv:

@@ -83,6 +83,29 @@
   changed_when: bootwright_kubevirt_iso_upload.rc == 0
   no_log: true
 
+# virtctl image-upload stamps no labels, unlike the root DataVolume and VM
+# templates that stamp bootwright.io/managed-by. Label the agent-ISO DataVolume
+# so the destroy ownership gate can recognize it as Bootwright-owned and refuse
+# a name collision with a foreign DataVolume in a shared namespace. --overwrite
+# keeps a re-upload idempotent.
+- name: Label KubeVirt agent ISO DataVolume as Bootwright-managed
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - label
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_dv_name }}"
+      - bootwright.io/managed-by=bootwright
+      - "bootwright.io/cluster={{ bootwright_current_cluster.name }}"
+      - bootwright.io/role=agent-iso
+      - --overwrite
+  register: bootwright_kubevirt_iso_label
+  changed_when: bootwright_kubevirt_iso_label.rc == 0
+
 - name: Start KubeVirt VirtualMachine
   ansible.builtin.command:
     argv:
