@@ -37,8 +37,13 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 		cmd.Stdin = bytes.NewReader(input)
 	}
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = io.MultiWriter(&stdout, r.Stdout)
-	cmd.Stderr = io.MultiWriter(&stderr, r.Stderr)
+	// tee keeps the captured buffer (used for the log and the failure-path error)
+	// while streaming to the caller's writer only when one is set. A quiet runner
+	// (nil writers) suppresses live console output — readiness polls use one so
+	// expected NotFound/"no matches for kind" lines don't reach the terminal —
+	// without losing the log file or error diagnostics.
+	cmd.Stdout = tee(&stdout, r.Stdout)
+	cmd.Stderr = tee(&stderr, r.Stderr)
 	err := cmd.Run()
 	out := append(stdout.Bytes(), stderr.Bytes()...)
 	var logErr error
@@ -59,6 +64,16 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	// unmarshal, so the success path yields stdout only. stderr stays in the log
 	// and in the failure-path error above.
 	return stdout.Bytes(), nil
+}
+
+// tee returns a writer that always captures into buf and additionally streams
+// to w when w is non-nil. It avoids io.MultiWriter's panic on a nil writer so a
+// quiet runner can leave Stdout/Stderr unset.
+func tee(buf *bytes.Buffer, w io.Writer) io.Writer {
+	if w == nil {
+		return buf
+	}
+	return io.MultiWriter(buf, w)
 }
 
 func appendLog(path, name string, args []string, input []byte, output []byte) error {

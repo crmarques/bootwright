@@ -158,7 +158,14 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - storage\n", 1),
 			},
-			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, dataFoundation}`,
+			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, dataFoundation, nmstate}`,
+		},
+		{
+			name: "unsupported-required-capability",
+			files: map[string]string{
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  requires:\n    - storage\n", 1),
+			},
+			wantSubstring: `spec.requires[0] "storage" must be one of {kubevirt, dataFoundation, nmstate}`,
 		},
 		{
 			name: "duplicated-provided-capability",
@@ -239,13 +246,6 @@ spec:
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "        subscription: hco-operatorhub\n", "        subscription: hco-operatorhub\n        condition:\n          type: Available\n          status: \"True\"\n", 1),
 			},
 			wantSubstring: "type=csvSucceeded must not set apiVersion, kind, name, or condition",
-		},
-		{
-			name: "missing-custom-resource-namespace",
-			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "        metadata:\n          name: kubevirt-hyperconverged\n          namespace: openshift-cnv", "        metadata:\n          name: kubevirt-hyperconverged", 1),
-			},
-			wantSubstring: "spec.olm.customResources[0].metadata.namespace is required in MVP",
 		},
 		{
 			name: "unknown-cluster",
@@ -678,6 +678,131 @@ spec:
 			_, err := LoadNormalizeValidate([]string{dir})
 			if err == nil {
 				t.Fatal("expected resource selection error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestClusterAddonAllowsNamespacelessCustomResource(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	// A cluster-scoped custom resource (no metadata.namespace) must validate.
+	files["extension.yaml"] = strings.Replace(extensionYAML("virt"),
+		"        metadata:\n          name: kubevirt-hyperconverged\n          namespace: openshift-cnv",
+		"        metadata:\n          name: kubevirt-hyperconverged", 1)
+	files["set.yaml"] = extensionSetYAML("set", "virt")
+	files["binding.yaml"] = extensionBindingYAML("binding", "set")
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("namespace-less custom resource should validate: %v", err)
+	}
+}
+
+// capabilityAddonYAML builds a minimal OLM ClusterAddon with optional
+// provides/requires and a csvSucceeded readiness check (provides mandates one).
+func capabilityAddonYAML(name string, provides, requires []string) string {
+	spec := "  type: olm\n"
+	if len(provides) > 0 {
+		spec += "  provides:\n"
+		for _, p := range provides {
+			spec += "    - " + p + "\n"
+		}
+	}
+	if len(requires) > 0 {
+		spec += "  requires:\n"
+		for _, r := range requires {
+			spec += "    - " + r + "\n"
+		}
+	}
+	return `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: ` + name + `
+spec:
+` + spec + `  olm:
+    namespace:
+      name: ` + name + `-ns
+      create: true
+    subscription:
+      name: ` + name + `-op
+      package: ` + name + `-op
+      channel: stable
+      source: redhat-operators
+  readiness:
+    checks:
+      - type: csvSucceeded
+        namespace: ` + name + `-ns
+        subscription: ` + name + `-op
+`
+}
+
+func inlineBindingYAML(name string, addonRefs ...string) string {
+	body := `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: ` + name + `
+spec:
+  clusterRef: sno
+  addons:
+`
+	for _, ref := range addonRefs {
+		body += "    - addonRef: " + ref + "\n"
+	}
+	return body
+}
+
+func TestClusterAddonRequiresSatisfiedValidates(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["nmstate.yaml"] = capabilityAddonYAML("nmstate", []string{"nmstate"}, nil)
+	files["vcn.yaml"] = capabilityAddonYAML("vcn", nil, []string{"nmstate"})
+	// vcn listed before its provider on purpose: ordering is resolved by
+	// requires/provides, so a satisfied requirement validates regardless of order.
+	files["binding.yaml"] = inlineBindingYAML("binding", "vcn", "nmstate")
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("satisfied requires should validate: %v", err)
+	}
+}
+
+func TestClusterAddonRequiresValidationRejects(t *testing.T) {
+	cases := []struct {
+		name          string
+		files         map[string]string
+		wantSubstring string
+	}{
+		{
+			name: "unsatisfied-requires",
+			files: map[string]string{
+				"vcn.yaml":     capabilityAddonYAML("vcn", nil, []string{"nmstate"}),
+				"binding.yaml": inlineBindingYAML("binding", "vcn"),
+			},
+			wantSubstring: `ClusterAddon/vcn requires capability "nmstate" but no add-on in this binding provides it`,
+		},
+		{
+			name: "requires-provides-cycle",
+			files: map[string]string{
+				"a.yaml":       capabilityAddonYAML("a", []string{"kubevirt"}, []string{"nmstate"}),
+				"b.yaml":       capabilityAddonYAML("b", []string{"nmstate"}, []string{"kubevirt"}),
+				"binding.yaml": inlineBindingYAML("binding", "a", "b"),
+			},
+			wantSubstring: "spec.requires/spec.provides cycle",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			for name, body := range tc.files {
+				files[name] = body
+			}
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected validation error, got nil")
 			}
 			if !strings.Contains(err.Error(), tc.wantSubstring) {
 				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)

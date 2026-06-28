@@ -59,6 +59,11 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 				Policy:    addons.DefaultPolicy(),
 			})
 		}
+		ordered, err := orderByCapabilities(plan.Addons)
+		if err != nil {
+			return nil, fmt.Errorf("ClusterAddonBinding/%s: %w", binding.Metadata.Name, err)
+		}
+		plan.Addons = ordered
 		out = append(out, plan)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -67,6 +72,65 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 		}
 		return out[i].Binding < out[j].Binding
 	})
+	return out, nil
+}
+
+// orderByCapabilities returns the add-ons stably reordered so each add-on
+// declaring spec.requires comes after the in-binding add-ons that provide those
+// capabilities. It is a stable topological sort: add-ons with no requires/
+// provides edge between them keep their original (binding/profile-expansion)
+// order — only a requirement that would otherwise resolve too late forces a
+// move. A requires whose capability no add-on in the binding provides imposes
+// no edge here (validation reports the unsatisfied requirement separately); a
+// requires/provides cycle is an error.
+func orderByCapabilities(plans []ExtensionPlan) ([]ExtensionPlan, error) {
+	n := len(plans)
+	if n < 2 {
+		return plans, nil
+	}
+	providers := map[string][]int{}
+	for i, plan := range plans {
+		for _, capability := range plan.Extension.Spec.Provides {
+			providers[capability] = append(providers[capability], i)
+		}
+	}
+	indegree := make([]int, n)
+	successors := make([][]int, n)
+	for r, plan := range plans {
+		linked := map[int]bool{}
+		for _, capability := range plan.Extension.Spec.Requires {
+			for _, p := range providers[capability] {
+				if p == r || linked[p] {
+					continue
+				}
+				linked[p] = true
+				successors[p] = append(successors[p], r)
+				indegree[r]++
+			}
+		}
+	}
+	// Kahn's algorithm, draining ready nodes in original index order so the
+	// result is deterministic and preserves binding order for independent add-ons.
+	emitted := make([]bool, n)
+	out := make([]ExtensionPlan, 0, n)
+	for len(out) < n {
+		progressed := false
+		for i := 0; i < n; i++ {
+			if emitted[i] || indegree[i] != 0 {
+				continue
+			}
+			emitted[i] = true
+			out = append(out, plans[i])
+			for _, r := range successors[i] {
+				indegree[r]--
+			}
+			progressed = true
+			break
+		}
+		if !progressed {
+			return nil, fmt.Errorf("ClusterAddon spec.requires/spec.provides ordering has a cycle")
+		}
+	}
 	return out, nil
 }
 

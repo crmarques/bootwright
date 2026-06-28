@@ -14,17 +14,24 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("addon task %s has no addon plan", task.Entry.ID)}
 	}
 	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
+	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
 	runner := extensionoc.CommandRunner{
-		LogPath: TaskLogPath(runsDir, runID, task.Entry.ID),
+		LogPath: logPath,
 		Stdout:  stdout,
 		Stderr:  stderr,
 	}
+	// readRunner serves readiness polls, the idempotency pre-check, and the CSV
+	// gate. It keeps the apply log (same LogPath) but writes nothing to the
+	// console, so expected NotFound / "no matches for kind" poll output does not
+	// surface as alarming error lines during a normal apply.
+	readRunner := extensionoc.CommandRunner{LogPath: logPath}
 	cfg := extensionoc.RunConfig{
 		ClustersDir:  opts.ClustersDir,
 		Kubeconfig:   kubeconfig,
 		RunID:        runID,
 		StartedAt:    time.Now(),
 		PollInterval: 0,
+		ReadRunner:   readRunner,
 	}
 	var result extensionoc.TaskResult
 	var err error

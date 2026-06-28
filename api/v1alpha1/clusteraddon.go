@@ -11,6 +11,7 @@ type ClusterAddon struct {
 type ClusterAddonSpec struct {
 	Type        string                   `yaml:"type" json:"type"`
 	Provides    []string                 `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Requires    []string                 `yaml:"requires,omitempty" json:"requires,omitempty"`
 	Accepts     ClusterAddonAccepts      `yaml:"accepts,omitempty" json:"accepts,omitempty"`
 	OLM         *ClusterAddonOLMSpec     `yaml:"olm,omitempty" json:"olm,omitempty"`
 	ManifestSet *ClusterAddonManifestSet `yaml:"manifestSet,omitempty" json:"manifestSet,omitempty"`

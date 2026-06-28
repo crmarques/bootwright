@@ -331,6 +331,73 @@ func (r *fakeOCRunner) Run(_ context.Context, _ string, args []string, _ []byte)
 	return []byte(response.out), response.err
 }
 
+func TestBindingPlansOrdersByRequiresProvides(t *testing.T) {
+	provider := testExtension("nmstate")
+	provider.Spec.Provides = []string{v1alpha1.ClusterAddonProvidesNMState}
+	consumer := testExtension("vcn")
+	consumer.Spec.Requires = []string{v1alpha1.ClusterAddonProvidesNMState}
+	independent := testExtension("storage")
+	state := v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "demo"}}},
+		ClusterAddons:     []v1alpha1.ClusterAddon{provider, consumer, independent},
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
+			Metadata: v1alpha1.Metadata{Name: "binding"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+				// Authored order puts the consumer before its provider; the provider
+				// (nmstate) must still be applied first. The independent add-on keeps
+				// its authored position relative to the unconstrained pair.
+				Addons: []v1alpha1.ClusterAddonBindingAddon{
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "vcn"}},
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "storage"}},
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "nmstate"}},
+				},
+			},
+		}},
+	}
+	plans, err := extensionplan.BindingPlans(state)
+	if err != nil {
+		t.Fatalf("BindingPlans: %v", err)
+	}
+	var got []string
+	for _, extension := range plans[0].Addons {
+		got = append(got, extension.Name)
+	}
+	// nmstate is pulled ahead of vcn (the only ordering edge); storage, with no
+	// edges, keeps its authored slot — so it stays before nmstate.
+	want := []string{"storage", "nmstate", "vcn"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ordered addons = %v, want %v", got, want)
+	}
+}
+
+func TestBindingPlansRejectsRequiresProvidesCycle(t *testing.T) {
+	a := testExtension("a")
+	a.Spec.Provides = []string{v1alpha1.ClusterAddonProvidesKubeVirt}
+	a.Spec.Requires = []string{v1alpha1.ClusterAddonProvidesNMState}
+	b := testExtension("b")
+	b.Spec.Provides = []string{v1alpha1.ClusterAddonProvidesNMState}
+	b.Spec.Requires = []string{v1alpha1.ClusterAddonProvidesKubeVirt}
+	state := v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "demo"}}},
+		ClusterAddons:     []v1alpha1.ClusterAddon{a, b},
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
+			Metadata: v1alpha1.Metadata{Name: "binding"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+				Addons: []v1alpha1.ClusterAddonBindingAddon{
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "a"}},
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "b"}},
+				},
+			},
+		}},
+	}
+	_, err := extensionplan.BindingPlans(state)
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("BindingPlans err = %v, want a requires/provides cycle error", err)
+	}
+}
+
 func testExtension(name string) v1alpha1.ClusterAddon {
 	return v1alpha1.ClusterAddon{
 		Metadata: v1alpha1.Metadata{Name: name},

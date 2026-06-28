@@ -228,6 +228,7 @@ const (
 	DefaultClusterAddonReadinessTimeout             = "30m"
 	ClusterAddonProvidesKubeVirt                    = "kubevirt"
 	ClusterAddonProvidesDataFoundation              = "dataFoundation"
+	ClusterAddonProvidesNMState                     = "nmstate"
 	ClusterAddonInputSchemaTypeObject               = "object"
 	ClusterAddonInputEffectStorageExportAttachment  = "storageExportAttachment"
 

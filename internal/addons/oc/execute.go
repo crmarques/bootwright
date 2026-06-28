@@ -27,6 +27,18 @@ type RunConfig struct {
 	RunID        string
 	StartedAt    time.Time
 	PollInterval time.Duration
+	// ReadRunner, when set, serves read-only oc calls (readiness polls, the
+	// idempotency pre-check, the CSV gate) so their expected NotFound / "no
+	// matches for kind" output stays off the console. The mutating oc apply
+	// always uses the runner passed to Apply. Nil falls back to that runner.
+	ReadRunner OCRunner
+}
+
+func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
+	if c.ReadRunner != nil {
+		return c.ReadRunner
+	}
+	return fallback
 }
 
 func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (TaskResult, error) {
@@ -37,7 +49,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err != nil {
 		return TaskResult{}, err
 	}
-	if ready, _, err := Ready(ctx, runner, cfg.Kubeconfig, plan.Extension); err == nil && ready {
+	if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
 		record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 		if err != nil {
 			return TaskResult{}, err
@@ -60,7 +72,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
-	observed, failedID, err := applyExtension(ctx, runner, cfg.Kubeconfig, plan)
+	observed, failedID, err := applyExtension(ctx, runner, cfg, plan)
 	now = time.Now().UTC()
 	record.UpdatedAt = now
 	record.ObservedResources = observed
@@ -69,9 +81,17 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		// The apply error carries the raw oc stdout/stderr, which can echo back
 		// user-inlined Secret bytes from the applied manifest. Observed-state
 		// records must never hold secret bytes (specs/security.md), so persist a
-		// non-secret summary naming the failed resource; the full output is kept
-		// only in the sanctioned apply log the runner already wrote.
-		record.LastObserved = applyFailureSummary(failedID)
+		// non-secret summary; the full output is kept only in the sanctioned apply
+		// log the runner already wrote. A CSV-gate timeout is not an apply failure
+		// (the operator resources applied; only the CSV never went Succeeded), so
+		// it gets its own summary rather than naming the already-applied
+		// Subscription as a failed apply target.
+		var gate *csvGateError
+		if errors.As(err, &gate) {
+			record.LastObserved = gate.summary()
+		} else {
+			record.LastObserved = applyFailureSummary(failedID)
+		}
 		_ = extensionrecords.SaveRecord(cfg.ClustersDir, record)
 		return TaskResult{}, err
 	}
@@ -97,7 +117,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		return TaskResult{}, err
 	}
 	if found && record.DesiredHash == hash && record.Status == extensionrecords.RecordStatusReady {
-		ready, _, err := Ready(ctx, runner, cfg.Kubeconfig, plan.Extension)
+		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {
 			return TaskResult{Skipped: true, Reason: "addon already ready for desired inputs"}, nil
 		}
@@ -117,7 +137,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
-	last, err := WaitReady(ctx, runner, cfg.Kubeconfig, plan.Extension, cfg.PollInterval)
+	last, err := WaitReady(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension, cfg.PollInterval)
 	record.UpdatedAt = time.Now().UTC()
 	record.LastObserved = last
 	if err != nil {
@@ -137,19 +157,40 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 // resources already applied plus the identifier of the resource that failed, so
 // callers can record a non-secret failure summary without persisting the raw oc
 // output (which may echo user-inlined secret bytes).
-func applyExtension(ctx context.Context, runner OCRunner, kubeconfig string, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
+//
+// For OLM add-ons it applies the operator-install set (Namespace, OperatorGroup,
+// Subscription) first, then waits for the operator's CSV to reach Succeeded —
+// which establishes the operator's CRDs — before applying the custom resources.
+// Without that gate the custom resources race the operator install and fail with
+// "no matches for kind", forcing the operator to re-run apply to converge.
+func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
+	kubeconfig := cfg.Kubeconfig
 	switch plan.Extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLM:
-		resources, err := extensionrender.OLMResources(plan.Extension)
+		operator, err := extensionrender.OperatorResources(plan.Extension)
 		if err != nil {
 			return nil, "", err
 		}
-		for _, resource := range resources {
-			id := extensionrender.ObservedResourceID(resource.Kind, resource.Namespace, resource.Name)
-			if _, err := runner.Run(ctx, kubeconfig, applyArgs(plan.Policy, "-"), resource.Content); err != nil {
-				return observed, id, err
+		observed, failedID, err = applyResources(ctx, runner, kubeconfig, plan.Policy, operator, observed)
+		if err != nil {
+			return observed, failedID, err
+		}
+		custom, err := extensionrender.CustomResources(plan.Extension)
+		if err != nil {
+			return observed, "", err
+		}
+		if len(custom) > 0 {
+			olm := plan.Extension.Spec.OLM
+			// A gate timeout returns a typed csvGateError (handled by the caller),
+			// so failedID stays empty: the operator resources applied successfully
+			// and naming the Subscription as a failed apply target would be wrong.
+			if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, olm.Namespace.Name, olm.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
+				return observed, "", err
 			}
-			observed = append(observed, id)
+			observed, failedID, err = applyResources(ctx, runner, kubeconfig, plan.Policy, custom, observed)
+			if err != nil {
+				return observed, failedID, err
+			}
 		}
 		return observed, "", nil
 	case v1alpha1.ClusterAddonTypeManifestSet:
@@ -165,6 +206,76 @@ func applyExtension(ctx context.Context, runner OCRunner, kubeconfig string, pla
 	default:
 		return nil, "", fmt.Errorf("ClusterAddon/%s spec.type %q is not executable", plan.Name, plan.Extension.Spec.Type)
 	}
+}
+
+// applyResources applies each rendered resource via stdin, appending its
+// identifier to observed. On failure it returns observed so far plus the failed
+// resource's identifier.
+func applyResources(ctx context.Context, runner OCRunner, kubeconfig string, policy addons.ClusterAddonPolicy, resources []extensionrender.ManifestResource, observed []string) ([]string, string, error) {
+	for _, resource := range resources {
+		id := extensionrender.ObservedResourceID(resource.Kind, resource.Namespace, resource.Name)
+		if _, err := runner.Run(ctx, kubeconfig, applyArgs(policy, "-"), resource.Content); err != nil {
+			return observed, id, err
+		}
+		observed = append(observed, id)
+	}
+	return observed, "", nil
+}
+
+// waitCSVSucceeded polls until the Subscription's installed CSV reports phase
+// Succeeded (the operator's CRDs are then established), bounded by timeout. It
+// uses the supplied runner — the caller passes the read/quiet runner so the
+// inevitable pre-install NotFound / empty-CSV polls stay off the console.
+func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription, timeoutStr string, pollInterval time.Duration) error {
+	timeout, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if pollInterval <= 0 {
+		pollInterval = WaitInterval(timeout)
+	}
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	var last string
+	for {
+		ready, detail, err := csvSucceeded(ctx, runner, kubeconfig, namespace, subscription)
+		if err == nil && ready {
+			return nil
+		}
+		if detail != "" {
+			last = detail
+		} else if err != nil {
+			last = err.Error()
+		}
+		select {
+		case <-ctx.Done():
+			return &csvGateError{namespace: namespace, subscription: subscription, timeout: timeout, lastObserved: last}
+		case <-ticker.C:
+		}
+	}
+}
+
+// csvGateError marks a CSV-gate timeout: the operator-install resources applied
+// successfully but the operator's CSV never reached Succeeded within the
+// readiness timeout. It is distinct from an oc apply failure so callers persist a
+// gate-specific summary rather than naming the already-applied Subscription as a
+// failed apply target. Its strings hold only resource identifiers and CSV phase
+// detail — no user manifest bytes — so the summary is safe to persist.
+type csvGateError struct {
+	namespace    string
+	subscription string
+	timeout      time.Duration
+	lastObserved string
+}
+
+func (e *csvGateError) Error() string {
+	return fmt.Sprintf("Subscription/%s/%s operator CSV did not reach Succeeded within %s; last observed: %s", e.namespace, e.subscription, e.timeout, e.lastObserved)
+}
+
+func (e *csvGateError) summary() string {
+	return fmt.Sprintf("operator CSV for Subscription/%s/%s did not reach Succeeded within %s; see the apply log for details", e.namespace, e.subscription, e.timeout)
 }
 
 // applyFailureSummary returns a non-secret one-line description of an apply

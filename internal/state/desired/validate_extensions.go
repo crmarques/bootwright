@@ -38,6 +38,7 @@ func validateClusterAddons(state v1alpha1.State) []string {
 		}
 		errs = append(errs, validateClusterAddonReadiness(extension)...)
 		errs = append(errs, validateClusterAddonProvides(extension)...)
+		errs = append(errs, validateClusterAddonRequires(extension)...)
 		errs = append(errs, validateClusterAddonAccepts(extension)...)
 	}
 	return errs
@@ -158,19 +159,33 @@ func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterA
 	return errs
 }
 
+// clusterAddonCapabilities is the closed vocabulary shared by spec.provides and
+// spec.requires. capabilityVocabulary renders it for error messages.
+func knownClusterAddonCapability(capability string) bool {
+	switch capability {
+	case v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState:
+		return true
+	default:
+		return false
+	}
+}
+
+func capabilityVocabulary() string {
+	return fmt.Sprintf("{%s, %s, %s}", v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState)
+}
+
 func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
 	var errs []string
 	seen := map[string]bool{}
 	prefix := fmt.Sprintf("ClusterAddon/%s spec.provides", extension.Metadata.Name)
 	for i, capability := range extension.Spec.Provides {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
-		switch capability {
-		case v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation:
-		case "":
+		if capability == "" {
 			errs = append(errs, owner+" must not be empty")
 			continue
-		default:
-			errs = append(errs, fmt.Sprintf("%s %q must be one of {%s, %s}", owner, capability, v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation))
+		}
+		if !knownClusterAddonCapability(capability) {
+			errs = append(errs, fmt.Sprintf("%s %q must be one of %s", owner, capability, capabilityVocabulary()))
 			continue
 		}
 		if seen[capability] {
@@ -181,6 +196,34 @@ func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
 	}
 	if len(extension.Spec.Provides) > 0 && len(extension.Spec.Readiness.Checks) == 0 {
 		errs = append(errs, fmt.Sprintf("%s requires at least one readiness check", prefix))
+	}
+	return errs
+}
+
+// validateClusterAddonRequires checks spec.requires entries against the shared
+// capability vocabulary and rejects duplicates. Unlike provides it imposes no
+// readiness-check requirement. Whether each requirement is actually satisfied by
+// an add-on bound to the same cluster is checked per-binding in
+// validateClusterAddonBindings.
+func validateClusterAddonRequires(extension v1alpha1.ClusterAddon) []string {
+	var errs []string
+	seen := map[string]bool{}
+	prefix := fmt.Sprintf("ClusterAddon/%s spec.requires", extension.Metadata.Name)
+	for i, capability := range extension.Spec.Requires {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if capability == "" {
+			errs = append(errs, owner+" must not be empty")
+			continue
+		}
+		if !knownClusterAddonCapability(capability) {
+			errs = append(errs, fmt.Sprintf("%s %q must be one of %s", owner, capability, capabilityVocabulary()))
+			continue
+		}
+		if seen[capability] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, capability))
+			continue
+		}
+		seen[capability] = true
 	}
 	return errs
 }
@@ -244,9 +287,10 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 		if customResourceString(metadata, "name") == "" {
 			errs = append(errs, itemPrefix+".metadata.name is required")
 		}
-		if customResourceString(metadata, "namespace") == "" {
-			errs = append(errs, itemPrefix+".metadata.namespace is required in MVP")
-		}
+		// metadata.namespace is intentionally optional: cluster-scoped custom
+		// resources (e.g. the kubernetes-nmstate NMState instance) have none, and
+		// oc apply ignores a namespace set on a cluster-scoped resource anyway.
+		// Namespaced custom resources still set it so they land in the right place.
 	}
 	return errs
 }
@@ -526,6 +570,85 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema, loaded)...)
 			}
 		}
+		errs = append(errs, validateBindingCapabilityOrdering(binding, addons, state)...)
+	}
+	return errs
+}
+
+// validateBindingCapabilityOrdering reports, for one binding, spec.requires
+// capabilities that no add-on bound to the same cluster provides (the common
+// "requires nmstate but no nmstate add-on is bound" mistake) and any
+// requires/provides cycle among the bound add-ons. Both are scoped to the
+// binding because order resolution (plan.orderByCapabilities) is per binding.
+// Shape errors on the capability strings are reported by validateClusterAddon*.
+func validateBindingCapabilityOrdering(binding v1alpha1.ClusterAddonBinding, addons map[string]v1alpha1.ClusterAddon, state v1alpha1.State) []string {
+	var errs []string
+	var names []string
+	var provides, requires [][]string
+	for _, item := range addoninputs.EffectiveBindingAddons(state, binding) {
+		ext, ok := addons[item.AddonRef.Name]
+		if !ok {
+			continue
+		}
+		names = append(names, item.AddonRef.Name)
+		provides = append(provides, ext.Spec.Provides)
+		requires = append(requires, ext.Spec.Requires)
+	}
+	providedBy := map[string][]int{}
+	for i, caps := range provides {
+		for _, capability := range caps {
+			providedBy[capability] = append(providedBy[capability], i)
+		}
+	}
+	indegree := make([]int, len(names))
+	successors := make([][]int, len(names))
+	for r, caps := range requires {
+		linked := map[int]bool{}
+		seen := map[string]bool{}
+		for _, capability := range caps {
+			if capability == "" || !knownClusterAddonCapability(capability) || seen[capability] {
+				continue
+			}
+			seen[capability] = true
+			// Ordering is resolved per binding (plan.orderByCapabilities), so the
+			// provider must be in this binding — a provider in a sibling binding on
+			// the same cluster cannot be ordered against. The message says "this
+			// binding", not "this cluster", to point the user at the real fix.
+			if len(providedBy[capability]) == 0 {
+				errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s requires capability %q but no add-on in this binding provides it", binding.Metadata.Name, names[r], capability))
+				continue
+			}
+			for _, p := range providedBy[capability] {
+				if p == r || linked[p] {
+					continue
+				}
+				linked[p] = true
+				successors[p] = append(successors[p], r)
+				indegree[r]++
+			}
+		}
+	}
+	emitted := make([]bool, len(names))
+	drained := 0
+	for {
+		progressed := false
+		for i := range names {
+			if emitted[i] || indegree[i] != 0 {
+				continue
+			}
+			emitted[i] = true
+			drained++
+			for _, r := range successors[i] {
+				indegree[r]--
+			}
+			progressed = true
+		}
+		if !progressed {
+			break
+		}
+	}
+	if drained < len(names) {
+		errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s has a ClusterAddon spec.requires/spec.provides cycle", binding.Metadata.Name))
 	}
 	return errs
 }

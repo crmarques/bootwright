@@ -44,16 +44,30 @@ and binding-scoped inputs.
 
 **Advertised capabilities.** `ClusterAddon.spec.provides[]` advertises
 capabilities that other desired state may depend on. Accepted values are
-`kubevirt` and `dataFoundation`. Use `kubevirt` on the OpenShift Virtualization
-add-on so KubeVirt child infrastructure waits for the host cluster to be ready
-(see [KubeVirt child clusters](../advanced/kubevirt.md)). Use `dataFoundation`
-on the Data Foundation operator add-on (Red Hat ODF or IBM Fusion) so
-storage-export input effects wait for external-mode components to be ready.
+`kubevirt`, `dataFoundation`, and `nmstate`. Use `kubevirt` on the OpenShift
+Virtualization add-on so KubeVirt child infrastructure waits for the host cluster
+to be ready (see [KubeVirt child clusters](../advanced/kubevirt.md)). Use
+`dataFoundation` on the Data Foundation operator add-on (Red Hat ODF or IBM
+Fusion) so storage-export input effects wait for external-mode components to be
+ready. Use `nmstate` on the Kubernetes NMState Operator add-on so add-ons that
+apply `nmstate.io` resources order after it.
 
 !!! warning "`provides[]` requires a readiness check"
     An add-on that advertises any `provides[]` capability must declare at least
     one [`readiness.checks[]`](#readiness) entry, so dependents wait on a real
     readiness signal rather than mere apply completion.
+
+**Required capabilities.** `ClusterAddon.spec.requires[]` lists capabilities
+(same vocabulary as `provides[]`) that another add-on **in the same binding** must
+advertise. Requirements drive apply order: within a binding an add-on is applied
+after every add-on that provides a capability it requires, so a binding lists
+add-ons in any order and they still apply correctly. Ordering is resolved per
+binding, so the provider must be in the same binding as the consumer. Validation
+rejects a binding whose add-on requires a capability nothing in that binding
+provides, and rejects a `requires`/`provides` cycle. For example, a `manifestSet`
+add-on that applies a `NodeNetworkConfigurationPolicy` declares
+`requires: [nmstate]` so it always applies after the NMState operator that
+registers the `nmstate.io` CRDs.
 
 **Binding-scoped inputs.** `ClusterAddon.spec.accepts.inputs[]` declares input
 APIs that bindings supply by name, validated against a per-input schema. A
@@ -74,7 +88,8 @@ discriminated union arm whose key is byte-identical to the `type` value.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.type` | Yes | — | `olm` or `manifestSet`. |
-| `spec.provides[]` | No | — | Capability advertisements; each value is `kubevirt` or `dataFoundation` and must be unique. |
+| `spec.provides[]` | No | — | Capability advertisements; each value is `kubevirt`, `dataFoundation`, or `nmstate` and must be unique. |
+| `spec.requires[]` | No | — | Capabilities (same vocabulary) another add-on on the cluster must provide; drives apply order. |
 | `spec.accepts.inputs[]` | No | — | Binding-scoped input schemas and effects. |
 | `spec.olm` | For `type: olm` | — | OLM resources and optional custom resources. |
 | `spec.manifestSet` | For `type: manifestSet` | — | Ordered manifest file list. |
@@ -142,7 +157,10 @@ spec:
 
 `spec.olm` is required when `spec.type: olm`. It installs an operator through
 OLM: an optional namespace, an optional OperatorGroup, a Subscription, and
-optional raw custom resources applied after the subscription resources.
+optional raw custom resources. The namespace, OperatorGroup, and Subscription are
+applied first; Bootwright then waits for the operator's CSV to reach `Succeeded`
+— which establishes the operator's CRDs — before applying the custom resources,
+so they do not race the operator install.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -158,7 +176,7 @@ optional raw custom resources applied after the subscription resources.
 | `olm.subscription.source` | Yes | — | CatalogSource name (e.g. `redhat-operators`). |
 | `olm.subscription.sourceNamespace` | No | `openshift-marketplace` | CatalogSource namespace. |
 | `olm.subscription.installPlanApproval` | No | `Automatic` | `Automatic` or `Manual`. |
-| `olm.customResources[]` | No | — | Raw custom resources applied after the subscription resources. |
+| `olm.customResources[]` | No | — | Raw custom resources applied after the operator's CSV reaches `Succeeded`. |
 
 !!! note "Required vs defaulted Subscription fields"
     `subscription.sourceNamespace` and `subscription.installPlanApproval` are
@@ -166,9 +184,19 @@ optional raw custom resources applied after the subscription resources.
     is valid and leaves `openshift-marketplace` and `Automatic`. Run
     `bootwright render effective` to see the injected values.
 
-!!! note "Custom resources need full identity"
-    Each `olm.customResources[]` entry must set `apiVersion`, `kind`,
-    `metadata.name`, and `metadata.namespace`; a missing field fails validation.
+!!! note "Custom resources need an identity"
+    Each `olm.customResources[]` entry must set `apiVersion`, `kind`, and
+    `metadata.name`. `metadata.namespace` is optional: set it for namespaced
+    resources, and omit it for cluster-scoped ones (e.g. the kubernetes-nmstate
+    `NMState` instance).
+
+!!! note "Manual approval with custom resources"
+    With `installPlanApproval: Manual`, the operator's CSV only reaches
+    `Succeeded` after the InstallPlan is approved out of band. An add-on that also
+    declares `customResources` therefore blocks on the CSV gate until that
+    approval lands (or until `readiness.timeout` elapses and the apply fails).
+    Approve the InstallPlan, or split the operator and its custom resources into
+    two add-ons, to avoid the wait.
 
 ### Manifest set
 

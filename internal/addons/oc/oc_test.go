@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -218,6 +219,277 @@ func TestWaitSkipsReadyExtensionRecord(t *testing.T) {
 	}
 	if runner.getCalls == 0 {
 		t.Fatal("readiness was not checked")
+	}
+}
+
+func TestApplyOLMWaitsForCSVBeforeCustomResources(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	extension := v1alpha1.ClusterAddon{
+		Metadata: v1alpha1.Metadata{Name: "gated"},
+		Spec: v1alpha1.ClusterAddonSpec{
+			Type: v1alpha1.ClusterAddonTypeOLM,
+			OLM: &v1alpha1.ClusterAddonOLMSpec{
+				Namespace: v1alpha1.ClusterAddonOLMNamespace{Name: "csv-ns", Create: true},
+				Subscription: v1alpha1.ClusterAddonOLMSubscription{
+					Name: "csv-op", Package: "csv-op", Channel: "stable",
+					Source: "redhat-operators", SourceNamespace: "openshift-marketplace",
+					InstallPlanApproval: v1alpha1.InstallPlanApprovalAutomatic,
+				},
+				// Cluster-scoped custom resource (no namespace) — must apply only
+				// after the operator's CSV reports Succeeded.
+				CustomResources: []map[string]any{{
+					"apiVersion": "nmstate.io/v1",
+					"kind":       "NMState",
+					"metadata":   map[string]any{"name": "nmstate"},
+				}},
+			},
+			Readiness: v1alpha1.ClusterAddonReadiness{
+				Timeout: "30m",
+				Checks: []v1alpha1.ClusterAddonReadinessCheck{{
+					Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "csv-ns", Subscription: "csv-op",
+				}},
+			},
+		},
+	}
+	plan := extensionplan.ExtensionPlan{
+		Name: "gated", Binding: "binding", Cluster: "demo", Extension: extension,
+		Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"},
+	}
+	runner := &sequencingRunner{}
+	if _, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond,
+	}, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	var applied []string
+	for _, e := range runner.events {
+		if strings.HasPrefix(e, "apply:") {
+			applied = append(applied, strings.TrimPrefix(e, "apply:"))
+		}
+	}
+	wantApplied := []string{"Namespace", "Subscription", "NMState"}
+	if !reflect.DeepEqual(applied, wantApplied) {
+		t.Fatalf("applied kinds = %v, want %v", applied, wantApplied)
+	}
+	// The CSV gate (a get:csv) must fall between the Subscription apply and the
+	// custom-resource apply — proving the CR does not race the operator CRDs.
+	subIdx, crIdx, gateIdx := -1, -1, -1
+	for i, e := range runner.events {
+		switch {
+		case e == "apply:Subscription":
+			subIdx = i
+		case e == "apply:NMState":
+			crIdx = i
+		case e == "get:csv" && subIdx >= 0 && crIdx < 0:
+			gateIdx = i
+		}
+	}
+	if !(subIdx >= 0 && gateIdx > subIdx && crIdx > gateIdx) {
+		t.Fatalf("expected get:csv between Subscription and NMState apply; events=%v", runner.events)
+	}
+}
+
+// sequencingRunner records the verb sequence: apply:<kind> for stdin applies and
+// get:subscription / get:csv / get:other for reads. CSV reads report Succeeded.
+type sequencingRunner struct {
+	events []string
+}
+
+func (r *sequencingRunner) Run(_ context.Context, _ string, args []string, input []byte) ([]byte, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("empty oc args")
+	}
+	switch args[0] {
+	case "apply":
+		r.events = append(r.events, "apply:"+kindFromManifest(input))
+		return nil, nil
+	case "get":
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "subscription"):
+			r.events = append(r.events, "get:subscription")
+			return []byte(`{"status":{"installedCSV":"csv-op.v1"}}`), nil
+		case strings.Contains(joined, "clusterserviceversion"):
+			r.events = append(r.events, "get:csv")
+			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+		default:
+			r.events = append(r.events, "get:other")
+			return []byte(`{"metadata":{"name":"x"}}`), nil
+		}
+	default:
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+}
+
+func kindFromManifest(input []byte) string {
+	for _, line := range strings.Split(string(input), "\n") {
+		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "kind:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "kind:"))
+		}
+	}
+	return ""
+}
+
+func TestCommandRunnerQuietWriterWithOutputDoesNotPanic(t *testing.T) {
+	// The quiet read runner has nil Stdout/Stderr. A subprocess that writes to
+	// both streams must not panic (the old io.MultiWriter(&buf, nil) did), must
+	// return stdout only, and must still capture both streams to the log.
+	script := "#!/bin/sh\nprintf 'NotFound text\\n'\nprintf 'no matches for kind\\n' 1>&2\nexit 0\n"
+	logPath := filepath.Join(t.TempDir(), "oc.log")
+	runner := CommandRunner{Command: writeScript(t, script), LogPath: logPath}
+	out, err := runner.Run(context.Background(), "/tmp/kubeconfig", []string{"get", "x"}, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if string(out) != "NotFound text\n" {
+		t.Fatalf("out = %q, want stdout only", string(out))
+	}
+	if info, statErr := os.Stat(logPath); statErr != nil || info.Size() == 0 {
+		t.Fatalf("log should capture both streams: size err=%v", statErr)
+	}
+}
+
+func gatedOLMPlan(timeout string) extensionplan.ExtensionPlan {
+	return extensionplan.ExtensionPlan{
+		Name: "gated", Binding: "binding", Cluster: "demo",
+		Extension: v1alpha1.ClusterAddon{
+			Metadata: v1alpha1.Metadata{Name: "gated"},
+			Spec: v1alpha1.ClusterAddonSpec{
+				Type: v1alpha1.ClusterAddonTypeOLM,
+				OLM: &v1alpha1.ClusterAddonOLMSpec{
+					Namespace: v1alpha1.ClusterAddonOLMNamespace{Name: "csv-ns", Create: true},
+					Subscription: v1alpha1.ClusterAddonOLMSubscription{
+						Name: "csv-op", Package: "csv-op", Channel: "stable",
+						Source: "redhat-operators", SourceNamespace: "openshift-marketplace",
+						InstallPlanApproval: v1alpha1.InstallPlanApprovalAutomatic,
+					},
+					CustomResources: []map[string]any{{
+						"apiVersion": "nmstate.io/v1",
+						"kind":       "NMState",
+						"metadata":   map[string]any{"name": "nmstate"},
+					}},
+				},
+				Readiness: v1alpha1.ClusterAddonReadiness{
+					Timeout: timeout,
+					Checks: []v1alpha1.ClusterAddonReadinessCheck{{
+						Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "csv-ns", Subscription: "csv-op",
+					}},
+				},
+			},
+		},
+		Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"},
+	}
+}
+
+// phasedCSVRunner reports the CSV as pending ("Installing") until succeedAfter
+// CSV reads have occurred, then "Succeeded". succeedAfter <= 0 never succeeds.
+type phasedCSVRunner struct {
+	events       []string
+	csvReads     int
+	succeedAfter int
+}
+
+func (r *phasedCSVRunner) Run(_ context.Context, _ string, args []string, input []byte) ([]byte, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("empty oc args")
+	}
+	switch args[0] {
+	case "apply":
+		r.events = append(r.events, "apply:"+kindFromManifest(input))
+		return nil, nil
+	case "get":
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "subscription"):
+			r.events = append(r.events, "get:subscription")
+			return []byte(`{"status":{"installedCSV":"csv-op.v1"}}`), nil
+		case strings.Contains(joined, "clusterserviceversion"):
+			r.csvReads++
+			r.events = append(r.events, "get:csv")
+			phase := "Installing"
+			if r.succeedAfter > 0 && r.csvReads >= r.succeedAfter {
+				phase = "Succeeded"
+			}
+			return []byte(`{"status":{"phase":"` + phase + `"}}`), nil
+		default:
+			r.events = append(r.events, "get:other")
+			return []byte(`{"metadata":{"name":"x"}}`), nil
+		}
+	default:
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+}
+
+func TestApplyOLMGatePollsUntilCSVSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &phasedCSVRunner{succeedAfter: 3} // precheck + ≥1 pending gate poll before Succeeded
+	if _, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond,
+	}, gatedOLMPlan("30m")); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	csvBeforeCR, sawCR := 0, false
+	for _, e := range runner.events {
+		switch e {
+		case "get:csv":
+			if !sawCR {
+				csvBeforeCR++
+			}
+		case "apply:NMState":
+			sawCR = true
+		}
+	}
+	if !sawCR {
+		t.Fatalf("custom resource never applied; events=%v", runner.events)
+	}
+	if csvBeforeCR < 2 {
+		t.Fatalf("gate did not poll while CSV pending (csv reads before CR=%d); events=%v", csvBeforeCR, runner.events)
+	}
+}
+
+func TestApplyOLMGateTimeoutRecordsGateFailureNotApplyFailure(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &phasedCSVRunner{succeedAfter: 0} // CSV never reaches Succeeded
+	plan := gatedOLMPlan("50ms")
+	_, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond,
+	}, plan)
+	if err == nil || !strings.Contains(err.Error(), "did not reach Succeeded") {
+		t.Fatalf("err = %v, want a CSV-gate timeout", err)
+	}
+	record, found, lerr := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if lerr != nil || !found {
+		t.Fatalf("LoadRecord found=%v err=%v", found, lerr)
+	}
+	if !strings.Contains(record.LastObserved, "operator CSV for Subscription/csv-ns/csv-op") {
+		t.Fatalf("LastObserved = %q, want CSV-gate summary", record.LastObserved)
+	}
+	if strings.Contains(record.LastObserved, "oc apply failed") {
+		t.Fatalf("LastObserved must not blame oc apply for a CSV-gate timeout: %q", record.LastObserved)
+	}
+	foundSub := false
+	for _, o := range record.ObservedResources {
+		if o == "Subscription/csv-ns/csv-op" {
+			foundSub = true
+		}
+	}
+	if !foundSub {
+		t.Fatalf("the applied Subscription should be in ObservedResources: %v", record.ObservedResources)
 	}
 }
 

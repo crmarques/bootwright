@@ -29,10 +29,13 @@ The KubeVirt `InfraProvider` sets exactly one host reference, alongside its
 - `kubeconfigRef` for an external virtualization cluster kubeconfig declared in
   `Environment.spec.secrets`
 
-Virtualization-cluster capabilities are advertised by `ClusterAddon.spec.provides`.
-The initial accepted value is `kubevirt`. A child cluster whose KubeVirt provider
-sets `hostClusterRef` is valid only when the referenced parent cluster has a bound
-add-on that provides `kubevirt`.
+Virtualization-cluster capabilities are advertised by `ClusterAddon.spec.provides`
+(accepted values have since grown to `kubevirt`, `dataFoundation`, and `nmstate`).
+A child cluster whose KubeVirt provider sets `hostClusterRef` is valid only when
+the referenced parent cluster has a bound add-on that provides `kubevirt`. Add-ons
+may also declare `spec.requires` to order one add-on after another that provides a
+capability (same vocabulary), used for example by an `nmstate.io` `manifestSet`
+that requires the NMState operator.
 
 The apply graph is responsible for cross-cluster ordering. The full graph and
 explicit parent+child `--clusters` selections make child work wait for the

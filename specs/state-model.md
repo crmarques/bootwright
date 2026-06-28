@@ -832,13 +832,22 @@ Rules:
 - `olm` requires `spec.olm` and must not set `manifestSet`.
   `olm.namespace.name` is required; `olm.subscription` requires `name`,
   `package`, `channel`, `source`, `sourceNamespace`, and `installPlanApproval`;
-  `installPlanApproval` accepts `Automatic` or `Manual`.
+  `installPlanApproval` accepts `Automatic` or `Manual`. Each
+  `olm.customResources[]` entry requires `apiVersion`, `kind`, and
+  `metadata.name`; `metadata.namespace` is optional (omitted for cluster-scoped
+  resources). Apply installs the namespace/OperatorGroup/Subscription, waits for
+  the operator's CSV to reach `Succeeded`, then applies the custom resources.
 - `manifestSet` requires `spec.manifestSet.manifests[]` (at least one) and must
   not set `olm`. Each `manifests[].path` is relative to the `ClusterAddon` file,
   ends in `.yaml`/`.yml`, must stay within the file directory, must not be a
   symlink, and must exist.
-- `spec.provides[]` accepts `kubevirt` or `dataFoundation`; declaring any
-  `provides` value requires at least one `spec.readiness.checks[]` entry.
+- `spec.provides[]` accepts `kubevirt`, `dataFoundation`, or `nmstate`; declaring
+  any `provides` value requires at least one `spec.readiness.checks[]` entry.
+- `spec.requires[]` accepts the same vocabulary as `provides[]`. Each requirement
+  must be provided by another add-on in the same binding (ordering is resolved per
+  binding), and add-ons are applied after the add-ons providing their required
+  capabilities (a per-binding stable topological order). Unsatisfied requirements
+  and `requires`/`provides` cycles are rejected.
 - `spec.readiness.timeout` is a Go duration. `spec.readiness.checks[].type`
   accepts `csvSucceeded` (requires `namespace`, `subscription`), `condition`
   (requires `apiVersion`, `kind`, `name`, `condition.{type,status}`), or

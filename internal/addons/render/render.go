@@ -22,7 +22,29 @@ type ManifestResource struct {
 	Content    []byte
 }
 
+// OLMResources is the full ordered resource list for an OLM add-on: the
+// operator-install set (Namespace, OperatorGroup, Subscription) followed by the
+// declared custom resources. It is the canonical ordering that DesiredHash
+// folds into the add-on hash, so callers that need the two groups separately
+// (the apply path waits for the operator's CSV to succeed before applying the
+// custom resources) use OperatorResources + CustomResources, whose
+// concatenation is byte-identical to this.
 func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
+	operator, err := OperatorResources(extension)
+	if err != nil {
+		return nil, err
+	}
+	custom, err := CustomResources(extension)
+	if err != nil {
+		return nil, err
+	}
+	return append(operator, custom...), nil
+}
+
+// OperatorResources returns the operator-install set (Namespace if create,
+// OperatorGroup if set, then the Subscription) in OLMResources order. The
+// Subscription is always present.
+func OperatorResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	if extension.Spec.OLM == nil {
 		return nil, nil
 	}
@@ -77,7 +99,16 @@ func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 		},
 		"spec": subSpec,
 	}))
-	for _, custom := range olm.CustomResources {
+	return out, nil
+}
+
+// CustomResources returns only the spec.olm.customResources, in declared order.
+func CustomResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
+	if extension.Spec.OLM == nil {
+		return nil, nil
+	}
+	out := make([]ManifestResource, 0, len(extension.Spec.OLM.CustomResources))
+	for _, custom := range extension.Spec.OLM.CustomResources {
 		out = append(out, mustResource(cloneAnyMap(custom)))
 	}
 	return out, nil
