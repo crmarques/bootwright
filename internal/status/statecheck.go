@@ -21,23 +21,20 @@ func StateCheck(state v1alpha1.State, clusterScope string, applyTarget workflow.
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}
-	scoped := sel.Active
 	state = sel.RenderState
-	if scoped {
-		// Match scoped apply: report the transitive data-foundation
-		// attachment-target storage clusters present in the scoped state, not
-		// only the literal --clusters storage names.
-		names := make([]string, 0, len(state.StorageClusters))
-		for _, sc := range state.StorageClusters {
-			names = append(names, sc.Metadata.Name)
-		}
-		applyTarget.StorageClusterNames = names
+	if sel.Active {
+		// Mirror scoped apply exactly: provision-set (and so check-set) storage is
+		// the directly-named storage roots only, never a data-foundation
+		// render-reference pull-in (ADR-0004). StorageWorkNames is the single source
+		// scoped apply uses for applyTarget.StorageClusterNames; reuse it so both
+		// verbs plan the identical storage set.
+		applyTarget.StorageClusterNames = sel.StorageWorkNames()
 	}
 	tasks, err := workflow.PlanApplyTasksChecked(applyTarget, state)
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}
-	report, err := workflow.StateCheck(tasks, state, runsDir)
+	report, err := workflow.StateCheck(tasks, applyTarget, state, runsDir)
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}

@@ -46,7 +46,7 @@ type StateCheckReport struct {
 // it), or missing (never applied). A root whose resources are all missing is
 // reported as one absence instead of a flood of per-resource missing lines; a
 // present root reports only the resources that are not in sync.
-func StateCheck(tasks []ApplyTask, state v1alpha1.State, runsDir string) (StateCheckReport, error) {
+func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, runsDir string) (StateCheckReport, error) {
 	type rootAcc struct {
 		kind, name string
 		total      int
@@ -99,7 +99,16 @@ func StateCheck(tasks []ApplyTask, state v1alpha1.State, runsDir string) (StateC
 	// StorageCluster line. Sub-objects share their owning cluster's
 	// "storage/<cluster>" root, so a never-applied cluster — cluster task and
 	// every sub-object missing — still collapses to a single absence.
+	//
+	// Restricted to the apply target's storage work set so the sub-object
+	// classification mirrors what scoped apply plans: a managed StorageCluster
+	// pulled into the scoped state only as a data-foundation render reference is
+	// neither provisioned by apply nor classified here (ADR-0004), so it does not
+	// report spurious pool/export drift for a cluster a scoped check never touches.
 	for _, cluster := range state.StorageClusters {
+		if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+			continue
+		}
 		acc := rootFor(ApplyClusterKindStorage, cluster.Metadata.Name)
 		for _, sub := range storageSubObjects(state, cluster.Metadata.Name) {
 			class, err := classifyStorageSubObject(state, sub, runsDir)

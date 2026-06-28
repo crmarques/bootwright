@@ -55,7 +55,7 @@ func TestStateCheckClassifiesDriftAbsenceAndMatch(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner) // desired state changed since apply
 	// absent: no record at all -> never applied
 
-	report, err := StateCheck([]ApplyTask{match, drift, absent}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{match, drift, absent}, ApplyTarget{}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestStateCheckGranularDriftMixedResources(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
 	// missing: no record -> never applied, but the root is otherwise present.
 
-	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, ApplyTarget{}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestStateCheckForeignOwner(t *testing.T) {
 	}
 	saveStateCheckRecord(t, runsDir, task, hash, "someone-else")
 
-	report, err := StateCheck([]ApplyTask{task}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{task}, ApplyTarget{}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestStateCheckSharedResourceKeyTasksMatch(t *testing.T) {
 		saveStateCheckRecord(t, runsDir, task, hash, ConvergeSafetyOwner)
 	}
 
-	report, err := StateCheck([]ApplyTask{provider, finalize}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{provider, finalize}, ApplyTarget{}, v1alpha1.State{}, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
 	saveSubObjectRecord(t, runsDir, storageSubObject{storageSubObjectKindPool, cluster, "cephfs-data"}.resourceID(), "sha256:stale", ConvergeSafetyOwner) // pool cephfs-data: drift
 	// export odf: no record -> missing
 
-	report, err := StateCheck([]ApplyTask{clusterTask}, state, runsDir)
+	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestStateCheckStorageSubObjectsCollapseWhenClusterAbsent(t *testing.T) {
 	clusterTask := stateCheckTask("storage."+cluster, "storageCluster", cluster, "storage")
 	// No records at all -> cluster task and every sub-object missing.
 
-	report, err := StateCheck([]ApplyTask{clusterTask}, state, runsDir)
+	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
