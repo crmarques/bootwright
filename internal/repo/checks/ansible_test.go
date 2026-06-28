@@ -2907,6 +2907,32 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 	}
 }
 
+// TestLibvirtContextSweepPreservesForeignDiskUnderRoot pins that the infra-destroy
+// context sweep never deletes a foreign (non-Bootwright) domain's disk parked under
+// the namespaced context root: the blanket root removal is gated on no foreign
+// domain using the root, and when one co-resides only the Bootwright-owned machine
+// subtrees are removed.
+func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_host_libvirt/tasks/destroy_context.yml")
+
+	blanket := tasks[findAnsibleTask(t, tasks, "Remove current-context libvirt storage directory")]
+	if got := fmt.Sprint(blanket["when"]); !strings.Contains(got, "bootwright_libvirt_context_foreign_storage") || !strings.Contains(got, "length == 0") {
+		t.Fatalf("blanket context-root removal must be gated on no foreign domain using the root, got when=%v", blanket["when"])
+	}
+
+	owned := tasks[findAnsibleTask(t, tasks, "Remove owned current-context libvirt machine directories")]
+	ownedFile, ok := owned["ansible.builtin.file"].(map[string]any)
+	if !ok || ownedFile["state"] != "absent" {
+		t.Fatalf("owned machine-dir removal must be a file state=absent task, got %v", owned)
+	}
+	if got := fmt.Sprint(owned["loop"]); !strings.Contains(got, "bootwright_libvirt_context_owned_machine_dirs") {
+		t.Fatalf("owned machine-dir removal must loop over the owned machine dirs, got loop=%v", owned["loop"])
+	}
+	if got := fmt.Sprint(owned["when"]); !strings.Contains(got, "bootwright_libvirt_context_foreign_storage") || !strings.Contains(got, "length > 0") {
+		t.Fatalf("owned machine-dir removal must run only when a foreign domain co-resides, got when=%v", owned["when"])
+	}
+}
+
 func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/virtualmachine.yaml.j2",
