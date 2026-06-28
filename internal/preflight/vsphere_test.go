@@ -61,30 +61,53 @@ func vsphereCheckTestState(t *testing.T) (v1alpha1.State, string) {
 // credentials failure.
 func TestVSphereVCenterSessionCheck(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
-	respond := func(status int) func(req *http.Request, insecure bool) (*http.Response, error) {
+	const sessionID = "session-token-42"
+	respond := func(status int, recorded *[]*http.Request) func(req *http.Request, insecure bool) (*http.Response, error) {
 		return func(req *http.Request, insecure bool) (*http.Response, error) {
-			if req.Method != http.MethodPost || req.URL.String() != "https://vcenter.example.test:443/api/session" {
+			*recorded = append(*recorded, req)
+			if req.URL.String() != "https://vcenter.example.test:443/api/session" {
 				t.Fatalf("unexpected probe request: %s %s", req.Method, req.URL)
 			}
 			if !insecure {
 				t.Fatal("probe must honor disableCertificateVerification")
 			}
-			user, pass, ok := req.BasicAuth()
-			if !ok || user != "administrator@vsphere.local" || pass != "vc-password" {
-				t.Fatalf("probe basic auth = %q/%q", user, pass)
+			switch req.Method {
+			case http.MethodPost:
+				user, pass, ok := req.BasicAuth()
+				if !ok || user != "administrator@vsphere.local" || pass != "vc-password" {
+					t.Fatalf("probe basic auth = %q/%q", user, pass)
+				}
+				header := http.Header{}
+				header.Set("vmware-api-session-id", sessionID)
+				return &http.Response{StatusCode: status, Header: header, Body: io.NopCloser(strings.NewReader(""))}, nil
+			case http.MethodDelete:
+				if got := req.Header.Get("vmware-api-session-id"); got != sessionID {
+					t.Fatalf("session release header = %q, want %q", got, sessionID)
+				}
+				return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader(""))}, nil
+			default:
+				t.Fatalf("unexpected probe method: %s", req.Method)
+				return nil, nil
 			}
-			return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(""))}, nil
 		}
 	}
 
-	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusCreated)})
+	var okRequests []*http.Request
+	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusCreated, &okRequests)})
 	if len(checks) != 1 || checks[0].Status != StatusOK {
 		t.Fatalf("session check with 201 = %+v, want one OK check", checks)
 	}
+	if len(okRequests) != 2 || okRequests[0].Method != http.MethodPost || okRequests[1].Method != http.MethodDelete {
+		t.Fatalf("probe request sequence = %v, want POST then DELETE", okRequests)
+	}
 
-	checks = vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusUnauthorized)})
+	var failRequests []*http.Request
+	checks = vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusUnauthorized, &failRequests)})
 	if len(checks) != 1 || checks[0].Status != StatusFail || !strings.Contains(checks[0].Impact, "rejected the declared credentials") {
 		t.Fatalf("session check with 401 = %+v, want a credentials failure", checks)
+	}
+	if len(failRequests) != 1 || failRequests[0].Method != http.MethodPost {
+		t.Fatalf("failed probe must not release a session: %v", failRequests)
 	}
 }
 

@@ -3,6 +3,7 @@ package preflight
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -108,12 +109,46 @@ func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, resolver secret.Resolver, d
 	defer func() { _ = resp.Body.Close() }()
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		releaseVSphereSession(deps, url, vsphereSessionID(resp), vc.DisableCertificateVerification)
 		return okCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP %d", url, resp.StatusCode))
 	case resp.StatusCode == http.StatusUnauthorized:
 		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP 401", url), "vCenter rejected the declared credentials", "update the "+vc.CredentialsRef.Name+" secret (user:password) with bootwright secret set --name "+vc.CredentialsRef.Name)
 	default:
 		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP %d", url, resp.StatusCode), "vSphere machine creation needs a working vCenter session API", "check the vCenter endpoint health for "+vc.Server)
 	}
+}
+
+// vsphereSessionID extracts the session token the connectivity probe just
+// established, preferring the response header and falling back to the quoted
+// JSON body vCenter returns from POST /api/session.
+func vsphereSessionID(resp *http.Response) string {
+	if id := resp.Header.Get("vmware-api-session-id"); id != "" {
+		return id
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	return strings.Trim(strings.TrimSpace(string(body)), `"`)
+}
+
+// releaseVSphereSession deletes the session the probe opened so each preflight
+// run does not leak a live authenticated vCenter login until it idles out.
+// Cleanup is best-effort: a missing id or a failed DELETE never fails the check.
+func releaseVSphereSession(deps Deps, url, sessionID string, insecureSkipVerify bool) {
+	if sessionID == "" {
+		return
+	}
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("vmware-api-session-id", sessionID)
+	resp, err := vsphereHTTPDo(deps, req, insecureSkipVerify)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 func vsphereHTTPDo(deps Deps, req *http.Request, insecureSkipVerify bool) (*http.Response, error) {
