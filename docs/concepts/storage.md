@@ -238,6 +238,7 @@ All field names render 1:1 into the cephadm OSD drivegroup spec.
 | `osd.walSlots` | No | — | Number of equal WAL slices per shared `walDevices` device (`wal_slots`, non-negative). |
 | `osd.dataAllocateFraction` | No | `1` | Fraction `(0,1]` of each data device to allocate (`data_allocate_fraction`), reserving headroom. |
 | `osd.unmanaged` | No | `false` | Freeze this OSD service so cephadm stops claiming new devices (`unmanaged`, a top-level service-spec key). |
+| `osd.serviceOverrides` | No | — | cephadm common service-spec escape hatch: `extraContainerArgs[]`, `extraEntrypointArgs[]`, `networks[]` (CIDRs), and `customConfigs[]` (`{mountPath, content}`, absolute mount path). Rendered as top-level service-spec keys. |
 
 Each device selector (`dataDevices`, `dbDevices`, `walDevices`) mirrors the
 cephadm drivegroup device filter:

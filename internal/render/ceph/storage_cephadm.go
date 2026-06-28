@@ -104,7 +104,7 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		if len(hosts) > 0 {
 			doc := cephadmPlacementService("mds", fs.Metadata.Name, hosts, 0, nil)
 			if ss := fs.Spec.CephFS.MDS.ServiceSpec; ss != nil {
-				applyCephServiceCommonFields(doc, ss.Unmanaged, ss.ExtraContainerArgs, ss.ExtraEntrypointArgs, ss.Networks)
+				applyCephServiceCommonFields(doc, ss.Unmanaged, ss.ExtraContainerArgs, ss.ExtraEntrypointArgs, ss.Networks, nil)
 			}
 			docs = append(docs, doc)
 		}
@@ -184,7 +184,7 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 // are top-level (siblings of placement/spec), not daemon config: unmanaged,
 // extra_container_args, extra_entrypoint_args, and networks. Each renders only
 // when set so a service without overrides is byte-identical to before.
-func applyCephServiceCommonFields(doc map[string]any, unmanaged bool, extraContainerArgs, extraEntrypointArgs, networks []string) {
+func applyCephServiceCommonFields(doc map[string]any, unmanaged bool, extraContainerArgs, extraEntrypointArgs, networks []string, customConfigs []v1alpha1.StorageCephCustomConfig) {
 	if unmanaged {
 		doc["unmanaged"] = true
 	}
@@ -196,6 +196,13 @@ func applyCephServiceCommonFields(doc map[string]any, unmanaged bool, extraConta
 	}
 	if len(networks) > 0 {
 		doc["networks"] = append([]string(nil), networks...)
+	}
+	if len(customConfigs) > 0 {
+		configs := make([]any, 0, len(customConfigs))
+		for _, cc := range customConfigs {
+			configs = append(configs, map[string]any{"mount_path": cc.MountPath, "content": cc.Content})
+		}
+		doc["custom_configs"] = configs
 	}
 }
 
@@ -242,11 +249,9 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 		// daemon/systemd unit names, where a dotted FQDN is fragile. Placement
 		// still targets node.Hostname so cephadm matches the registered host.
 		doc := cephadmPlacementService("osd", "data-"+node.MachineRef.Name, []string{node.Hostname}, 0, spec)
-		// unmanaged is a top-level service-spec key (a sibling of spec/placement),
-		// not an entry inside the drivegroup spec block.
-		if node.OSD != nil && node.OSD.Unmanaged {
-			doc["unmanaged"] = true
-		}
+		// unmanaged and the service-override keys are top-level service-spec keys
+		// (siblings of spec/placement), not entries inside the drivegroup spec.
+		applyCephOSDServiceFields(doc, node.OSD)
 		docs = append(docs, doc)
 	}
 	// Fleet drivegroups: one OSD doc per entry, the authored serviceID, placement
@@ -259,12 +264,26 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 			continue
 		}
 		doc := cephadmPlacementService("osd", dg.ServiceID, hosts, dg.Placement.CountPerHost, cephadmOSDSpec(&dg.OSD))
-		if dg.OSD.Unmanaged {
-			doc["unmanaged"] = true
-		}
+		applyCephOSDServiceFields(doc, &dg.OSD)
 		docs = append(docs, doc)
 	}
 	return docs
+}
+
+// applyCephOSDServiceFields sets the top-level OSD service-spec keys (unmanaged
+// and the common service overrides) on a rendered OSD doc.
+func applyCephOSDServiceFields(doc map[string]any, osd *v1alpha1.StorageCephHostOSD) {
+	if osd == nil {
+		return
+	}
+	unmanaged := osd.Unmanaged
+	if o := osd.ServiceOverrides; o != nil {
+		applyCephServiceCommonFields(doc, unmanaged, o.ExtraContainerArgs, o.ExtraEntrypointArgs, o.Networks, o.CustomConfigs)
+		return
+	}
+	if unmanaged {
+		doc["unmanaged"] = true
+	}
 }
 
 // cephadmOSDSpec renders the drivegroup-shaped host OSD selection into the
@@ -426,7 +445,7 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 		}
 		doc := cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec)
 		if service.config != nil {
-			applyCephServiceCommonFields(doc, false, nil, nil, service.config.Networks)
+			applyCephServiceCommonFields(doc, false, nil, nil, service.config.Networks, nil)
 		}
 		docs = append(docs, doc)
 	}

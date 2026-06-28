@@ -1025,6 +1025,27 @@ func TestValidCephConfigSectionMasks(t *testing.T) {
 	}
 }
 
+// TestStorageServiceOverridesValidation covers the OSD service-override
+// escape-hatch guards: CIDR networks and well-formed custom configs.
+func TestStorageServiceOverridesValidation(t *testing.T) {
+	ok := validateStorageServiceOverrides("p", &v1alpha1.StorageCephServiceOverrides{
+		Networks:      []string{"10.0.0.0/24"},
+		CustomConfigs: []v1alpha1.StorageCephCustomConfig{{MountPath: "/etc/x", Content: "y"}},
+	})
+	if len(ok) != 0 {
+		t.Fatalf("valid overrides: %v", ok)
+	}
+	bad := strings.Join(validateStorageServiceOverrides("p", &v1alpha1.StorageCephServiceOverrides{
+		Networks:      []string{"not-a-cidr"},
+		CustomConfigs: []v1alpha1.StorageCephCustomConfig{{MountPath: "rel/path", Content: ""}},
+	}), "; ")
+	for _, want := range []string{"is not a valid CIDR", "must be absolute", "content must not be empty"} {
+		if !strings.Contains(bad, want) {
+			t.Fatalf("errors = %q, want substring %q", bad, want)
+		}
+	}
+}
+
 // TestStorageFleetOSDDrivegroupOverlap covers the one-owner rule: a host may not
 // be claimed by both a per-host osd and a fleet, nor by two fleets, and a fleet
 // satisfies the osd-role device requirement.

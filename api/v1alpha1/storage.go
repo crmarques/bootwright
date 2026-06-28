@@ -339,6 +339,30 @@ type StorageCephHostOSD struct {
 	// devices for it. Rendered as the top-level service-spec unmanaged key, the
 	// cephadm-native expression of Bootwright's additive-only philosophy.
 	Unmanaged bool `yaml:"unmanaged,omitempty" json:"unmanaged,omitempty"`
+	// ServiceOverrides passes the cephadm common service-spec escape-hatch fields
+	// (extra_container_args, extra_entrypoint_args, networks, custom_configs)
+	// through to the OSD service — genuinely unreachable otherwise, since osd is a
+	// reserved passthrough type. The typed fields cannot collide with the
+	// drivegroup keys Bootwright owns.
+	ServiceOverrides *StorageCephServiceOverrides `yaml:"serviceOverrides,omitempty" json:"serviceOverrides,omitempty"`
+}
+
+// StorageCephServiceOverrides carries the cephadm common service-spec keys that
+// are top-level (siblings of placement/spec): extra_container_args,
+// extra_entrypoint_args, networks, and custom_configs. Each renders only when
+// set.
+type StorageCephServiceOverrides struct {
+	ExtraContainerArgs  []string                  `yaml:"extraContainerArgs,omitempty" json:"extraContainerArgs,omitempty"`
+	ExtraEntrypointArgs []string                  `yaml:"extraEntrypointArgs,omitempty" json:"extraEntrypointArgs,omitempty"`
+	Networks            []string                  `yaml:"networks,omitempty" json:"networks,omitempty"`
+	CustomConfigs       []StorageCephCustomConfig `yaml:"customConfigs,omitempty" json:"customConfigs,omitempty"`
+}
+
+// StorageCephCustomConfig injects a file into the daemon container (cephadm
+// custom_configs): an absolute mount_path and its content.
+type StorageCephCustomConfig struct {
+	MountPath string `yaml:"mountPath" json:"mountPath"`
+	Content   string `yaml:"content" json:"content"`
 }
 
 // StorageCephDeviceSelection mirrors the cephadm drivegroup device filter:

@@ -1003,6 +1003,30 @@ func validateStorageCephOSDSpec(owner string, osd *v1alpha1.StorageCephHostOSD) 
 	if frac := osd.DataAllocateFraction; frac < 0 || frac > 1 {
 		errs = append(errs, fmt.Sprintf("%s.dataAllocateFraction %v must be in (0, 1]", owner, frac))
 	}
+	if o := osd.ServiceOverrides; o != nil {
+		errs = append(errs, validateStorageServiceOverrides(owner+".serviceOverrides", o)...)
+	}
+	return errs
+}
+
+// validateStorageServiceOverrides checks the common service-spec escape-hatch
+// fields: CIDR networks and well-formed custom configs.
+func validateStorageServiceOverrides(owner string, o *v1alpha1.StorageCephServiceOverrides) []string {
+	var errs []string
+	for i, cidr := range o.Networks {
+		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks[%d]", owner, i), cidr)...)
+	}
+	for i, cc := range o.CustomConfigs {
+		entry := fmt.Sprintf("%s.customConfigs[%d]", owner, i)
+		if cc.MountPath == "" {
+			errs = append(errs, entry+".mountPath is required")
+		} else if !strings.HasPrefix(cc.MountPath, "/") {
+			errs = append(errs, fmt.Sprintf("%s.mountPath %q must be absolute", entry, cc.MountPath))
+		}
+		if cc.Content == "" {
+			errs = append(errs, entry+".content must not be empty")
+		}
+	}
 	return errs
 }
 

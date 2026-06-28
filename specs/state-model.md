@@ -628,8 +628,9 @@ Rules:
   `walDevices` with `paths|pathSpecs|all|model|vendor|rotational|size|limit`,
   plus spec-level `filterLogic`, `encrypted`, `tpm2`, `osdsPerDevice`,
   `crushDeviceClass`, `blockDBSize`/`blockWALSize`/`dbSlots`/`walSlots`,
-  `dataAllocateFraction`, and the top-level `unmanaged`), mutually exclusive
-  with `devices`.
+  `dataAllocateFraction`, the top-level `unmanaged`, and a `serviceOverrides`
+  escape hatch (`extraContainerArgs`/`extraEntrypointArgs`/`networks`/
+  `customConfigs`)), mutually exclusive with `devices`.
   Both require the `osd` role, and every osd-role host must author one of
   them — or be covered by a fleet `spec.ceph.topology.osdDrivegroups[]` entry:
   OSD device consumption is explicit opt-in, so consuming all available

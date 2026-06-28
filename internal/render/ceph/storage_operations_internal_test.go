@@ -573,6 +573,49 @@ func TestDrivegroupOSDExtendedFieldsRender(t *testing.T) {
 	}
 }
 
+// OSD serviceOverrides render the cephadm common service-spec escape-hatch keys
+// (networks, extra_container_args, custom_configs) as top-level keys on the OSD
+// doc — unreachable for the reserved osd type otherwise.
+func TestOSDServiceOverridesRender(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"osd"},
+				OSD: &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+					ServiceOverrides: &v1alpha1.StorageCephServiceOverrides{
+						Networks:           []string{"10.1.0.0/24"},
+						ExtraContainerArgs: []string{"--cpus=4"},
+						CustomConfigs:      []v1alpha1.StorageCephCustomConfig{{MountPath: "/etc/ceph/extra.conf", Content: "x=1"}},
+					},
+				},
+			}}},
+		}},
+	}
+	var osd map[string]any
+	for _, doc := range CephadmCoreServicesSpec(v1alpha1.State{}, cluster) {
+		m := doc.(map[string]any)
+		if m["service_type"] == "osd" {
+			osd = m
+		}
+	}
+	if nets, _ := osd["networks"].([]string); !reflect.DeepEqual(nets, []string{"10.1.0.0/24"}) {
+		t.Fatalf("osd networks = %v", osd["networks"])
+	}
+	if args, _ := osd["extra_container_args"].([]string); !reflect.DeepEqual(args, []string{"--cpus=4"}) {
+		t.Fatalf("osd extra_container_args = %v", osd["extra_container_args"])
+	}
+	cc := osd["custom_configs"].([]any)
+	first := cc[0].(map[string]any)
+	if first["mount_path"] != "/etc/ceph/extra.conf" || first["content"] != "x=1" {
+		t.Fatalf("osd custom_configs = %v", cc)
+	}
+	if _, inSpec := osd["spec"].(map[string]any)["networks"]; inSpec {
+		t.Fatal("overrides must be top-level, not inside spec")
+	}
+}
+
 // A fleet osdDrivegroup renders ONE OSD service with the authored serviceID
 // spanning all resolved osd-role hosts, instead of one per-host doc.
 func TestFleetOSDDrivegroupRendersSingleSpanningSpec(t *testing.T) {
