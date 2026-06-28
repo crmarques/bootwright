@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+FROM docker.io/library/golang:1.25.11 AS gotoolchain
+
 FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92 AS builder
 
 ARG HTTP_PROXY
@@ -7,7 +9,7 @@ ARG NO_PROXY
 ARG http_proxy
 ARG https_proxy
 ARG no_proxy
-ARG PIP_VERSION=26.1.1
+ARG PIP_VERSION=26.1.2
 ARG ANSIBLE_CORE_VERSION=2.21.0
 
 ENV HTTP_PROXY=${HTTP_PROXY} \
@@ -18,17 +20,22 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     no_proxy=${no_proxy} \
     PATH=/opt/bootwright-ansible/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     GOMODCACHE=/go/pkg/mod \
-    GOTOOLCHAIN=go1.25.11
+    GOTOOLCHAIN=local
 
 WORKDIR /src
 
 RUN --mount=type=cache,id=bootwright-dnf-cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,id=bootwright-dnf-lib,target=/var/lib/dnf,sharing=locked \
     dnf install -y --setopt=keepcache=1 \
-        golang \
         python3.12 \
         make \
         git
+
+# Pin the Go toolchain to the version go.mod requires by copying it from the
+# official image instead of letting `go` download it at build time. The runtime
+# download targets storage.googleapis.com, which fails behind a TLS-intercepting
+# proxy; the registry pull used here goes through the same path as the base image.
+COPY --from=gotoolchain /usr/local/go /usr/local/go
 
 RUN go version
 
