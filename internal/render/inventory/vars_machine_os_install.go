@@ -76,13 +76,22 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		},
 	}
 	if machine.Spec.Access.SSH != nil {
-		out["ssh"] = map[string]any{
+		ssh := map[string]any{
 			"address":        v1alpha1.MachineSSHAddress(machine),
 			"user":           machine.Spec.Access.SSH.User,
 			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
-			"knownHostsPath": machineKnownHostsPath(machine, env, paths),
-			"trustDir":       sshtrust.DirForSecrets(paths.trustSecretsDir()),
 		}
+		// The managed trust store has no portable form: in placeholder mode these
+		// resolve empty, so omit the keys rather than emit blank values (matching
+		// how machineInventoryEntry / storageClusterSSHVars already guard them). An
+		// explicit known-hosts SecretRef still tokenizes via machineKnownHostsPath.
+		if knownHosts := machineKnownHostsPath(machine, env, paths); knownHosts != "" {
+			ssh["knownHostsPath"] = knownHosts
+		}
+		if trustDir := sshtrust.DirForSecrets(paths.trustSecretsDir()); trustDir != "" {
+			ssh["trustDir"] = trustDir
+		}
+		out["ssh"] = ssh
 	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
 	return out

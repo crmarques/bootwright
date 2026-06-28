@@ -93,6 +93,7 @@ func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 
 func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
+		inputDir     string
 		outputDir    string
 		clusterScope string
 		sensitive    bool
@@ -107,6 +108,10 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		Example: `  # Export concrete tool input files for external execution
   bootwright render --output-dir ./rendered --sensitive
 
+  # Render a portable bundle from an arbitrary input directory with no
+  # configured context; secrets render as {{ secret <name> }} placeholders
+  bootwright render --input-dir ./lab-input --output-dir ./rendered
+
   # Render only one cluster's external tool input files
   bootwright render --output-dir ./rendered --clusters managed-01 --sensitive
 
@@ -117,6 +122,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
   bootwright render installer`,
 	}
 	cf := addCommonFlags()
+	cmd.Flags().StringVar(&inputDir, "input-dir", "", "render context-free from this input directory (no configured context); secrets render as {{ secret <name> }} placeholders")
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "write concrete tool input files to this directory")
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster and StorageCluster names to render with --output-dir")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")
@@ -126,6 +132,18 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		newRenderStorageCmd(stdout, stderr),
 	)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
+		if inputDir != "" {
+			if outputDir == "" {
+				return failf(2, "render --input-dir requires --output-dir")
+			}
+			if sensitive {
+				return failf(2, "render --input-dir renders {{ secret <name> }} placeholders; --sensitive is not applicable")
+			}
+			if contextOverride != "" {
+				return failf(2, "render --input-dir is context-free; do not combine it with --context")
+			}
+			return runRenderPortable(stdout, inputDir, outputDir, clusterScope)
+		}
 		if outputDir == "" {
 			return c.Help()
 		}

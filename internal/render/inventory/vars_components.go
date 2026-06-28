@@ -249,7 +249,15 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					}
 					if k.HostClusterRef != nil {
 						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
-						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
+						// The host cluster's admin kubeconfig is a sibling-cluster runtime
+						// artifact under the context clusters dir. In placeholder mode that
+						// path ({{ bootwright_clusters_dir }}/...) is unresolvable context-free,
+						// so tokenize it like any other secret material the consumer rehydrates.
+						if secret.IsPlaceholderSecretsDir(secretsDir) {
+							out["kubevirt"].(map[string]any)["kubeconfig"] = secret.SecretPlaceholder(k.HostClusterRef.Name+"-kubeconfig", "")
+						} else {
+							out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
+						}
 					}
 					if k.KubeconfigRef != nil {
 						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render/ceph"
 	"github.com/crmarques/bootwright/internal/render/installer"
 	"github.com/crmarques/bootwright/internal/render/inventory"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
 // File modes for everything the renderer writes. Rendered directories and
@@ -276,6 +277,63 @@ func ToolInputsForContext(contextName, outputDir, secretsDir string, state v1alp
 }
 
 func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return toolInputsOn(fs, outputDir, state, toolInputsParams{
+		secretsDir: secretsDir,
+		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
+			return installer.LoadInstallerSecretsForContext(contextName, s, ocp, secretsDir)
+		},
+		storageOpts: storageAssetWriteOptions{ContextName: contextName, ExternalDetailsSecretsDir: secretsDir},
+	})
+}
+
+// ToolInputsPortable renders the tool-input bundle to outputDir from an
+// arbitrary desired state with NO context and NO secrets directory: every
+// secret reference renders as a "{{ secret <name>[.<role>] }}" substitution
+// token a downstream secrets manager rehydrates. It powers `bootwright render
+// --input-dir`. Unlike ToolInputsForContext it writes no Bootwright ownership
+// marker, so the output stays a plain, relocatable artifact set.
+func ToolInputsPortable(outputDir string, state v1alpha1.State) (Result, error) {
+	cleanOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return Result{}, fmt.Errorf("resolve output dir %s: %w", outputDir, err)
+	}
+	return ToolInputsPortableOn(defaultFS, cleanOutputDir, state)
+}
+
+// ToolInputsPortableOn is ToolInputsPortable parameterised on FileSystem so
+// tests can assert mode invariants without touching disk.
+func ToolInputsPortableOn(fs FileSystem, outputDir string, state v1alpha1.State) (Result, error) {
+	// Fail fast — before any write — on install-config secret material that has
+	// no portable token form, so an unsupported cluster never yields a partial
+	// or silently-incomplete bundle.
+	for _, ocp := range state.ContainerClusters {
+		if err := installer.CheckPortableSupport(state, ocp); err != nil {
+			return Result{}, err
+		}
+	}
+	return toolInputsOn(fs, outputDir, state, toolInputsParams{
+		secretsDir: secret.PlaceholderSecretsDir,
+		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
+			return installer.PortableInstallerSecrets(s, ocp), nil
+		},
+		storageOpts: storageAssetWriteOptions{SecretPlaceholders: true},
+	})
+}
+
+// toolInputsParams parameterises the shared tool-input render core over its two
+// modes: context (real material inlined) and portable ({{ secret }} tokens).
+type toolInputsParams struct {
+	// secretsDir feeds inventory/vars path resolution: a real context secrets
+	// directory, or secret.PlaceholderSecretsDir for the portable token render.
+	secretsDir string
+	// installerSecrets supplies the per-cluster install-config/manifest secrets.
+	installerSecrets func(v1alpha1.State, v1alpha1.ContainerCluster) (installer.InstallerSecrets, error)
+	// storageOpts controls external-cluster-details: a real secrets directory
+	// inlines the imported JSON; an empty value emits the SecretRef placeholder.
+	storageOpts storageAssetWriteOptions
+}
+
+func toolInputsOn(fs FileSystem, outputDir string, state v1alpha1.State, params toolInputsParams) (Result, error) {
 	if err := checkResolvedNames(state); err != nil {
 		return Result{}, err
 	}
@@ -306,8 +364,8 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 	}{
 		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
-		{path: result.InventoryPath, value: inventory.Inventory(state, secretsDir)},
-		{path: result.VarsPath, value: inventory.VarsWithSecretsDir(state, secretsDir)},
+		{path: result.InventoryPath, value: inventory.Inventory(state, params.secretsDir)},
+		{path: result.VarsPath, value: inventory.VarsWithSecretsDir(state, params.secretsDir)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {
@@ -316,7 +374,7 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 	}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
-		secrets, err := installer.LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
+		secrets, err := params.installerSecrets(state, ocp)
 		if err != nil {
 			return result, err
 		}
@@ -338,7 +396,7 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 			return result, err
 		}
 	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state, storageAssetWriteOptions{ContextName: contextName, ExternalDetailsSecretsDir: secretsDir}); err != nil {
+	if err := writeStorageAssets(fs, result.StorageAssets, state, params.storageOpts); err != nil {
 		return result, err
 	}
 	return result, nil

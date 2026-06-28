@@ -241,6 +241,14 @@ func argsNeedLocalRoot(args []string) bool {
 }
 
 func renderArgsHaveExecutionTarget(args []string) bool {
+	// A context-free `render --input-dir <dir> --output-dir <dir>` reads a
+	// user-owned input directory and writes a user-owned output directory with
+	// {{ secret }} placeholders — no context secrets-dir, no root needed. The
+	// carve-out wins over the --output-dir match below so the mode stays
+	// rootless, mirroring validate's -f/--file carve-out.
+	if argsHaveInputDirValue(args) {
+		return false
+	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
@@ -250,6 +258,21 @@ func renderArgsHaveExecutionTarget(args []string) bool {
 			return i+1 < len(args)
 		case strings.HasPrefix(arg, "--output-dir="):
 			return strings.TrimPrefix(arg, "--output-dir=") != ""
+		}
+	}
+	return false
+}
+
+// argsHaveInputDirValue reports whether args carry a --input-dir flag with a
+// non-empty value, the shape the context-free render mode requires.
+func argsHaveInputDirValue(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--input-dir":
+			return i+1 < len(args) && args[i+1] != ""
+		case strings.HasPrefix(arg, "--input-dir="):
+			return strings.TrimPrefix(arg, "--input-dir=") != ""
 		}
 	}
 	return false

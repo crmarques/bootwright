@@ -327,3 +327,9 @@ func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, sta
 func RenderToolInputsForContext(contextName, outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
 	return render.ToolInputsForContext(contextName, outputDir, secretsDir, state)
 }
+
+// RenderToolInputsPortable renders the context-free tool-input bundle with
+// {{ secret <name> }} placeholders. Used by `bootwright render --input-dir`.
+func RenderToolInputsPortable(outputDir string, state v1alpha1.State) (render.Result, error) {
+	return render.ToolInputsPortable(outputDir, state)
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -111,6 +112,43 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	return nil
 }
 
+// runRenderPortable renders the context-free portable bundle: it loads desired
+// state straight from inputDir (no context, the same loader `validate -f` uses)
+// and writes tool inputs to outputDir with every secret rendered as a
+// {{ secret <name> }} placeholder, so neither a configured context nor a
+// secrets directory is required.
+func runRenderPortable(stdout io.Writer, inputDir, outputDir, clusterScope string) error {
+	state, err := desiredstate.LoadNormalizeValidate([]string{inputDir})
+	if err != nil {
+		return failErr(1, err)
+	}
+	sel, err := clusteraccess.Resolve(state, "container-cluster", clusterScope)
+	if err != nil {
+		return failErr(1, err)
+	}
+	state = sel.RenderState
+	outputDir, err = filepath.Abs(outputDir)
+	if err != nil {
+		return failErr(1, fmt.Errorf("resolve --output-dir %s: %w", outputDir, err))
+	}
+	result, err := workflow.RenderToolInputsPortable(outputDir, state)
+	if err != nil {
+		return failErr(1, err)
+	}
+	p := outputpkg(stdout)
+	p.Command("portable render")
+	p.Section("Output")
+	p.Fields([]cliout.Field{
+		{Key: "input-dir", Value: inputDir},
+		{Key: "output-dir", Value: outputDir},
+	})
+	printToolInputArtifacts(stdout, result, "openshift-install ({{ secret }} placeholders)", "storage ({{ secret }} placeholders)")
+	cont := cliout.NewContinuation(stdout)
+	cont.Section("Secrets")
+	cont.Status(cliout.StatusWarn, "placeholders", "substitute every {{ secret <name> }} token before use")
+	return nil
+}
+
 type renderInstallerReport struct {
 	Clusters []renderInstallerCluster `json:"clusters"`
 }
@@ -171,6 +209,10 @@ func printEffectiveInstallerFiles(stdout io.Writer, result render.Result) {
 }
 
 func printToolInputFiles(stdout io.Writer, result render.Result) {
+	printToolInputArtifacts(stdout, result, "openshift-install (secrets inlined)", "storage")
+}
+
+func printToolInputArtifacts(stdout io.Writer, result render.Result, installerLabel, storageLabel string) {
 	var installerPaths []string
 	for _, asset := range result.InstallerAssets {
 		installerPaths = append(installerPaths, asset.InstallConfigPath, asset.AgentConfigPath, asset.InstallManifestsDir)
@@ -187,10 +229,10 @@ func printToolInputFiles(stdout io.Writer, result render.Result) {
 		{Name: "Ansible", Paths: []string{result.InventoryPath, result.VarsPath}},
 	}
 	if len(installerPaths) > 0 {
-		groups = append(groups, cliout.ArtifactGroup{Name: "openshift-install (secrets inlined)", Paths: installerPaths})
+		groups = append(groups, cliout.ArtifactGroup{Name: installerLabel, Paths: installerPaths})
 	}
 	if len(storagePaths) > 0 {
-		groups = append(groups, cliout.ArtifactGroup{Name: "storage", Paths: storagePaths})
+		groups = append(groups, cliout.ArtifactGroup{Name: storageLabel, Paths: storagePaths})
 	}
 	outputpkg(stdout).Artifacts(groups)
 }

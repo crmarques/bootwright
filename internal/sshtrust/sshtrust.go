@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/host/safefs"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
 const (
@@ -53,6 +54,13 @@ func DirForContext(contextDir string) string {
 
 func DirForSecrets(secretsDir string) string {
 	if strings.TrimSpace(secretsDir) == "" {
+		return ""
+	}
+	// The managed trust store is a context artifact, not a named secret, so it
+	// has no portable placeholder form. In placeholder mode return "" and let
+	// callers omit the managed known_hosts / trust-dir entirely; an explicit
+	// known-hosts SecretRef still tokenizes via ResolveMaterialPath.
+	if secret.IsPlaceholderSecretsDir(secretsDir) {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(secretsDir), TrustDirName, SSHDirName)
