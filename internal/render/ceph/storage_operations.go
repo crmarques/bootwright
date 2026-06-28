@@ -90,19 +90,7 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 				"crush-failure-domain=" + topology.StoragePoolFailureDomain(state, cluster, pool),
 			}
 			profileCmd = append(profileCmd, storageECProfileArgs(ec)...)
-			ecProfileOp := operationWithIdempotency("storage", "create-ec-profile-"+pool.Metadata.Name, "ec-profile", profile, profileCmd...)
-			// The EC profile is immutable in Ceph and cannot be deleted while a pool
-			// uses it, so its --override rebuild runs HERE (this op precedes the pool
-			// create): the role compares these authored fields to the live profile and,
-			// on a mismatch, tears down the one dependent pool and the stale profile so
-			// this op recreates the profile and the create-pool op recreates the pool.
-			ecProfileOp["structural"] = map[string]any{
-				"kind":    "ec-profile",
-				"pool":    pool.Metadata.Name,
-				"profile": profile,
-				"fields":  storageECProfileStructuralFields(ec, topology.StoragePoolFailureDomain(state, cluster, pool)),
-			}
-			ops = append(ops, ecProfileOp)
+			ops = append(ops, erasureProfileOperation(pool.Metadata.Name, profile, profileCmd, topology.StoragePoolFailureDomain(state, cluster, pool), ec))
 			createPool := operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name, "erasure", profile)
 			createPool["structural"] = storagePoolStructural(pool)
 			ops = append(ops, createPool)
@@ -397,39 +385,6 @@ func storageECProfileArgs(ec *v1alpha1.StoragePoolErasureCode) []string {
 		args = append(args, key+"="+ec.Parameters[key])
 	}
 	return args
-}
-
-// storageECProfileStructuralFields is the live-comparable identity of an
-// erasure-code profile under --override: the authored fields, keyed by their
-// `ceph osd erasure-code-profile get` JSON spellings and stringified to match the
-// string-valued live profile. The role rebuilds the profile (and its one
-// dependent pool, data-destroying) only when a field here differs from the live
-// profile; Ceph's defaulted keys are absent here and so are ignored.
-func storageECProfileStructuralFields(ec *v1alpha1.StoragePoolErasureCode, failureDomain string) map[string]string {
-	fields := map[string]string{
-		"k":                    fmt.Sprintf("%d", ec.DataChunks),
-		"m":                    fmt.Sprintf("%d", ec.CodingChunks),
-		"crush-failure-domain": failureDomain,
-	}
-	if ec.Plugin != "" {
-		fields["plugin"] = ec.Plugin
-	}
-	if ec.Technique != "" {
-		fields["technique"] = ec.Technique
-	}
-	if ec.CrushDeviceClass != "" {
-		fields["crush-device-class"] = ec.CrushDeviceClass
-	}
-	if ec.CrushRoot != "" {
-		fields["crush-root"] = ec.CrushRoot
-	}
-	if ec.StripeUnit != "" {
-		fields["stripe_unit"] = ec.StripeUnit
-	}
-	for key, value := range ec.Parameters {
-		fields[key] = value
-	}
-	return fields
 }
 
 // storagePoolTuningOperations renders the per-pool steady-state intents
