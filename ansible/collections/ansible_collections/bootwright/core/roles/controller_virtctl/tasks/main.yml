@@ -167,10 +167,17 @@
     url: "{{ bootwright_virtctl_download_url }}"
     dest: "{{ bootwright_virtctl_tmp.path }}/virtctl.tar.gz"
     mode: "0644"
-    ca_path: >-
-      {{ (bootwright_virtctl_tmp.path ~ '/ingress-ca.crt')
-         if (bootwright_virtctl_mirror_base | length) == 0
-         else omit }}
+  # get_url has no CA-file parameter, but its SSL context loads the system trust
+  # plus whatever SSL_CERT_FILE points at. On the ConsoleCLIDownload path that
+  # points verification at the host cluster ingress CA written above; the mirror
+  # path leaves it unset and verifies against the controller trust store. We
+  # rebuild the env explicitly (proxy env + SSL_CERT_FILE) rather than rely on
+  # play/task environment merge semantics.
+  environment: >-
+    {{ (bootwright_proxy_env | default({}))
+       | combine({'SSL_CERT_FILE': bootwright_virtctl_tmp.path ~ '/ingress-ca.crt'})
+       if (bootwright_virtctl_mirror_base | length) == 0
+       else (bootwright_proxy_env | default({})) }}
   when: bootwright_virtctl_install | bool
 
 - name: Remove stale virtctl from install dir
