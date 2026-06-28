@@ -35,6 +35,11 @@ type StateCheckReport struct {
 	// store but no longer present in desired state (orphans left by removing an object
 	// without destroying it). Reported, never mutated; a full `destroy` reclaims them.
 	Undeclared []UndeclaredResource `json:"undeclared,omitempty"`
+	// LoadWarnings carries per-record ownership skip reasons (a record that could
+	// not be read, decoded, or validated). The orphan loader drops such records
+	// silently; surfacing the skip here keeps an orphan whose record is corrupt from
+	// vanishing from the report that exists to find orphans.
+	LoadWarnings []string `json:"loadWarnings,omitempty"`
 }
 
 // StateCheck classifies every task in the selected apply graph, plus each

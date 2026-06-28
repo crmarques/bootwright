@@ -119,6 +119,21 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 		}
 	}
 	printStateCheckOrphans(p, report.Undeclared)
+	printStateCheckLoadWarnings(p, report.LoadWarnings)
+}
+
+// printStateCheckLoadWarnings surfaces ownership records that could not be read,
+// decoded, or validated and were skipped on load, mirroring destroy's skipped-
+// record warning. A skipped record's orphan never appears in the report above, so
+// the operator is told which files to repair rather than letting an orphan vanish.
+func printStateCheckLoadWarnings(p *cliout.Printer, warnings []string) {
+	if len(warnings) == 0 {
+		return
+	}
+	p.Section("Skipped ownership records")
+	for _, warning := range warnings {
+		p.Status(cliout.StatusWarn, "skipped", warning)
+	}
 }
 
 // stateCheckRootSummary describes a present root's out-of-sync resources by
