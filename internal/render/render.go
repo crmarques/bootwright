@@ -92,10 +92,6 @@ func AllWithPathOptions(renderedDir, clustersDir string, paths PathOptions, stat
 	return allOn(defaultFS, renderedDir, clustersDir, paths, state, nil)
 }
 
-func AllWithOwnershipRecords(renderedDir, clustersDir, secretsDir string, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
-	return allOn(defaultFS, renderedDir, clustersDir, PathOptions{SecretsDir: secretsDir}, state, records)
-}
-
 func AllWithOwnershipRecordsAndPathOptions(renderedDir, clustersDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
 	return allOn(defaultFS, renderedDir, clustersDir, paths, state, records)
 }
@@ -277,10 +273,6 @@ func ToolInputsForContext(contextName, outputDir, secretsDir string, state v1alp
 		return Result{}, err
 	}
 	return ToolInputsOnForContext(defaultFS, contextName, cleanOutputDir, secretsDir, state)
-}
-
-func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ToolInputsOnForContext(fs, "test", outputDir, secretsDir, state)
 }
 
 func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {

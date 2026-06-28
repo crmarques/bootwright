@@ -40,8 +40,3 @@ func ProviderDriver(state v1alpha1.State, m v1alpha1.InstallMachine) roles.Dispa
 	}
 	return roles.LookupDispatch("none", "none", "none")
 }
-
-func ProviderDispatch(state v1alpha1.State, m v1alpha1.InstallMachine) (substrate, bmc, boot string) {
-	driver := ProviderDriver(state, m)
-	return driver.Dispatch.SubstrateRole, driver.Dispatch.BMCRole, driver.Dispatch.BootRole
-}

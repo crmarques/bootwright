@@ -72,10 +72,6 @@ func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 	return inventory.OpenShiftClientsReleaseURL(state, version)
 }
 
-func HostGroupCounts(state v1alpha1.State) map[string]int {
-	return inventory.HostGroupCounts(state)
-}
-
 func HostGroupCountsWithOwnershipRecords(state v1alpha1.State, records []ownership.ResourceRecord) map[string]int {
 	return inventory.HostGroupCountsWithOwnershipRecords(state, records)
 }

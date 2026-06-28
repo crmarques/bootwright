@@ -19,35 +19,6 @@ func IsSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return len(ocp.Spec.Hosts) == 1 && ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
 }
 
-// NodeCluster reports the cluster that node-binds a machine, by kind
-// ("ContainerCluster" or "StorageCluster") and name. A machine is node-bound by
-// at most one cluster across all clusters (validation enforces this), so the
-// first match is authoritative. ContainerClusters win ties only in the
-// impossible case of a double-bound machine.
-func NodeCluster(state v1alpha1.State, machineName string) (kind, name string, ok bool) {
-	if machineName == "" {
-		return "", "", false
-	}
-	for _, ocp := range state.ContainerClusters {
-		for _, node := range ocp.Spec.Hosts {
-			if node.MachineRef.Name == machineName {
-				return "ContainerCluster", ocp.Metadata.Name, true
-			}
-		}
-	}
-	for _, sc := range state.StorageClusters {
-		if sc.Spec.Ceph == nil {
-			continue
-		}
-		for _, node := range sc.Spec.Ceph.Topology.Hosts {
-			if node.MachineRef.Name == machineName {
-				return "StorageCluster", sc.Metadata.Name, true
-			}
-		}
-	}
-	return "", "", false
-}
-
 // NodeHostname returns the registered hostname of the node a machine backs —
 // the value its cluster topology carries and that cephadm, the OS installer,
 // and DNS must all agree on. After normalize this is the FQDN from ComposeFQDN

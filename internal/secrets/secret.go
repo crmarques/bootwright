@@ -52,10 +52,6 @@ func ReadUserPasswordFile(path, kind string) (UserPassword, error) {
 	return readUserPasswordFile(path, kind, ReadFile)
 }
 
-func ReadExternalUserPasswordFile(path, kind string) (UserPassword, error) {
-	return readUserPasswordFile(path, kind, ReadExternalFile)
-}
-
 func readUserPasswordFile(path, kind string, read func(string) ([]byte, error)) (UserPassword, error) {
 	if path == "" {
 		return UserPassword{}, fmt.Errorf("%s path is empty", kind)

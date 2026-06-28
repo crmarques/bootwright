@@ -60,24 +60,11 @@ func DestroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, override
 	}
 }
 
-// LoadContextOwnershipRecords loads the resource records destroy acts on.
-// Destroy tears down resources recorded in the context ownership store even
-// when the desired state no longer references them. Load those records so the
-// plan's no-remote-work decision (which gates the confirmation prompt and the
-// become-password prompt) counts the same hosts workflow.Run will act on.
-//
-// Records live under a per-context ownership dir, but drop any record
-// explicitly stamped with a different context as defense in depth: a
-// destroy must never tear down resources recorded for another Bootwright
-// context that share a host or a misconfigured context directory.
-func LoadContextOwnershipRecords(ownershipDir, contextName string) ([]ownership.ResourceRecord, error) {
-	return ownership.LoadContext(ownershipDir, contextName)
-}
-
-// LoadContextOwnershipRecordsWithWarnings is LoadContextOwnershipRecords plus the
-// per-record skip reasons, so the destroy preview can tell the operator which
-// recorded resources were dropped on load (corrupt or policy-rejected) and so will
-// not be reclaimed by the sweep, instead of losing them silently.
+// LoadContextOwnershipRecordsWithWarnings loads the resource records destroy
+// acts on, plus the per-record skip reasons, so the destroy preview can tell
+// the operator which recorded resources were dropped on load (corrupt or
+// policy-rejected) and so will not be reclaimed by the sweep, instead of
+// losing them silently.
 func LoadContextOwnershipRecordsWithWarnings(ownershipDir, contextName string) ([]ownership.ResourceRecord, []error, error) {
 	return ownership.LoadContextWithWarnings(ownershipDir, contextName)
 }

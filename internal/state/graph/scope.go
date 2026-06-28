@@ -3,7 +3,6 @@ package stategraph
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
-	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func FilterStateToClusterRoots(state v1alpha1.State, containerNames, storageNames []string) v1alpha1.State {
@@ -446,10 +445,6 @@ func SelectedClusterForInstall(clusters []v1alpha1.ContainerCluster, infraName s
 		}
 	}
 	return v1alpha1.ContainerCluster{}, false
-}
-
-func ClusterInstallNames(ocp v1alpha1.ContainerCluster) []string {
-	return stateview.ClusterInstallNames(ocp)
 }
 
 func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.State {

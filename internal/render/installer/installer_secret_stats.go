@@ -18,10 +18,6 @@ type InstallerSecretInputStat struct {
 	ModTimeUnixNano int64  `json:"modTimeUnixNano"`
 }
 
-func InstallerSecretInputStats(state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
-	return InstallerSecretInputStatsForContext("test", state, ocp, secretsDir)
-}
-
 func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
 	env := stateview.Environment(state)
 	resolver := secret.NewResolver(contextName, secretsDir, env)

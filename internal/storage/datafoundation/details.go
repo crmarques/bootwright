@@ -96,10 +96,6 @@ func ExternalDetailsSourceSSH(export v1alpha1.StorageExport) *v1alpha1.StorageEx
 	return export.Spec.ExternalDetails.SSHExecution
 }
 
-func LoadExternalDetailsSecretJSON(state v1alpha1.State, secretsDir string, name string) (string, error) {
-	return LoadExternalDetailsSecretJSONForContext("test", state, secretsDir, name)
-}
-
 func LoadExternalDetailsSecretJSONForContext(contextName string, state v1alpha1.State, secretsDir string, name string) (string, error) {
 	if strings.TrimSpace(name) == "" {
 		return "", fmt.Errorf("data foundation externalDetails.fromSecretRef is required")

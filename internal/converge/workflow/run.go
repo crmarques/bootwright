@@ -320,18 +320,8 @@ func RenderEffective(renderedDir string, state v1alpha1.State) (render.Result, e
 	return render.Effective(renderedDir, state)
 }
 
-// ResolveInstaller renders effective OpenShift installer inputs with secret
-// material inlined. Used by `bootwright render installer --sensitive`.
-func ResolveInstaller(clustersDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
-	return render.ResolveInstaller(clustersDir, secretsDir, state)
-}
-
 func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
 	return render.ResolveInstallerForContext(contextName, clustersDir, secretsDir, state)
-}
-
-func RenderToolInputs(outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
-	return render.ToolInputs(outputDir, secretsDir, state)
 }
 
 func RenderToolInputsForContext(contextName, outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {

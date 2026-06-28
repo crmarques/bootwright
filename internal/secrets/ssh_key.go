@@ -9,7 +9,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -38,14 +37,6 @@ func SSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec) (privateKeyPEM, publ
 		return nil, nil, err
 	}
 	return privatePEM, []byte(publicLine), nil
-}
-
-func VerifySSHKeyPairPublicMatchesRequest(publicPath string, source v1alpha1.GeneratedSSHKeyPairSpec) error {
-	data, err := os.ReadFile(publicPath)
-	if err != nil {
-		return fmt.Errorf("read SSH public key: %w", err)
-	}
-	return VerifySSHKeyPairPublicBytesMatchRequest(data, source)
 }
 
 func VerifySSHKeyPairPublicBytesMatchRequest(data []byte, source v1alpha1.GeneratedSSHKeyPairSpec) error {

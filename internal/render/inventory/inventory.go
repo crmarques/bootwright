@@ -46,10 +46,6 @@ func InventoryWithOwnershipRecordsAndPathOptions(state v1alpha1.State, paths Pat
 	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, paths, locality.DefaultPolicy, records)
 }
 
-func InventoryWithLocalityPolicyAndOwnershipRecords(state v1alpha1.State, secretsDir string, localPolicy locality.Policy, records []ownership.ResourceRecord) map[string]any {
-	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, localPolicy, records)
-}
-
 func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1.State, paths PathOptions, localPolicy locality.Policy, records []ownership.ResourceRecord) map[string]any {
 	infraHostSet := infraReferencedHosts(state)
 	providerHostSet := providerReferencedHosts(state)

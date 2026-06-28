@@ -50,13 +50,6 @@ func ParsePythonVersion(s string) (major, minor int, err error) {
 	return major, minor, nil
 }
 
-// ResolvePython312 walks PATH for a python3.12-or-newer interpreter
-// and returns its binary name + true if found. Used by the bootstrap
-// planner to decide whether to add an install step.
-func ResolvePython312() (string, bool) {
-	return ResolvePython312With(DefaultProcessDeps)
-}
-
 func ResolvePython312With(deps ProcessDeps) (string, bool) {
 	for _, bin := range pythonCandidateBins() {
 		path, err := deps.LookPath(bin)
@@ -91,13 +84,6 @@ func pythonAtLeast312(deps ProcessDeps, bin string) bool {
 		return false
 	}
 	return major > 3 || (major == 3 && minor >= 12)
-}
-
-// Python312InstallCmd returns the platform-appropriate install command
-// for python3.12 (dnf or apt-get), prefixed with sudo when not running
-// as root. Returns nil when no supported package manager is on PATH.
-func Python312InstallCmd(preserveProxyEnv bool) []string {
-	return Python312InstallCmdWith(DefaultProcessDeps, preserveProxyEnv)
 }
 
 func Python312InstallCmdWith(deps ProcessDeps, preserveProxyEnv bool) []string {
@@ -148,16 +134,6 @@ func SudoPackageInstallCmd(args []string, preserveProxyEnv bool) []string {
 // SudoPreservedProxyVars is the comma-joined env-var list that sudo
 // should inherit when running install commands behind an HTTP proxy.
 const SudoPreservedProxyVars = "HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy"
-
-// BootstrapPlan computes the controller bootstrap sequence: optionally
-// install python3.12, recreate the venv when it is not pinned, then
-// install pinned pip and ansible-core (and pyvmomi when pyvmomiPin is
-// set — vSphere states drive vCenter through community.vmware modules
-// running on the controller). venvBin returns the absolute path of a
-// venv binary so the plan stays free of cli-package path helpers.
-func BootstrapPlan(venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool, pyvmomiPin string) ([]BootstrapStep, error) {
-	return BootstrapPlanWith(DefaultProcessDeps, venvDir, venvBin, preserveProxyEnv, rootManagedVenv, pyvmomiPin)
-}
 
 func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool, pyvmomiPin string) ([]BootstrapStep, error) {
 	pin, err := AnsibleCorePinnedVersion()
