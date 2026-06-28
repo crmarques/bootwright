@@ -29,6 +29,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
+	"github.com/crmarques/bootwright/internal/state/advice"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -449,6 +450,34 @@ func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
 		if !strings.Contains(stdout, pool) {
 			t.Fatalf("stretch pool notice missing pool %q:\n%s", pool, stdout)
 		}
+	}
+
+	// The same notice must reach `--output json` under .advisories: it now
+	// flows through advice.StorageAdvisories like every other advisory, so text
+	// and JSON can no longer diverge.
+	stdout, stderr, code = runCLI(t, "validate", "-f", example, "--output", "json")
+	if code != 0 {
+		t.Fatalf("validate --output json exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	var report syntaxCheckReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	var stretchNotice *advice.StorageAdvisory
+	for i, a := range report.Advisories {
+		if a.Group == "Stretch pools" {
+			stretchNotice = &report.Advisories[i]
+			break
+		}
+	}
+	if stretchNotice == nil {
+		t.Fatalf("validate --output json missing the stretch-pool advisory:\n%+v", report.Advisories)
+	}
+	if stretchNotice.Severity != advice.SeverityInfo {
+		t.Fatalf("stretch-pool advisory must be INFO in json, got %q", stretchNotice.Severity)
+	}
+	if !strings.Contains(stretchNotice.Finding, "policy-less pools inherit the stretch rule") {
+		t.Fatalf("stretch-pool advisory finding unexpected: %q", stretchNotice.Finding)
 	}
 }
 

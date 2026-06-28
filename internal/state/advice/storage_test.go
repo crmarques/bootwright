@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 // adviceCephCluster builds a minimal managed Ceph StorageCluster whose hosts
@@ -165,6 +166,75 @@ func TestStorageAdvisoriesExemptStretchFromMonCount(t *testing.T) {
 	cluster.Spec.Ceph.Topology.Stretch = &v1alpha1.StorageCephStretch{FailureDomain: "datacenter"}
 	if got := findingsWith(StorageAdvisories(adviceState(cluster)), "mon role"); len(got) != 0 {
 		t.Fatalf("stretch clusters are governed by stretch validation and must be exempt from mon-count advisories, got %+v", got)
+	}
+}
+
+func TestStorageAdvisoriesNoticeStretchPoolInheritance(t *testing.T) {
+	cluster := adviceCephCluster("ceph", v1alpha1.StorageCephDistributionOSS, "",
+		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
+	cluster.Spec.Ceph.Topology.Stretch = &v1alpha1.StorageCephStretch{FailureDomain: "datacenter"}
+	policyLess := v1alpha1.StoragePool{
+		Metadata: v1alpha1.Metadata{Name: "rbd"},
+		Spec:     v1alpha1.StoragePoolSpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"}},
+	}
+	policied := v1alpha1.StoragePool{
+		Metadata: v1alpha1.Metadata{Name: "rgw"},
+		Spec: v1alpha1.StoragePoolSpec{
+			StorageClusterRef:  v1alpha1.LocalObjectReference{Name: "ceph"},
+			PlacementPolicyRef: v1alpha1.LocalObjectReference{Name: "ec-policy"},
+		},
+	}
+	state := adviceState(cluster)
+	state.StoragePools = []v1alpha1.StoragePool{policyLess, policied}
+
+	notices := findingsWith(StorageAdvisories(state), "policy-less pools inherit the stretch rule")
+	if len(notices) != 1 {
+		t.Fatalf("a stretch cluster with a policy-less pool must raise one stretch-pool notice, got %+v", StorageAdvisories(state))
+	}
+	got := notices[0]
+	if got.Severity != SeverityInfo {
+		t.Fatalf("stretch-pool notice must be INFO, got %q", got.Severity)
+	}
+	// The replication figures must come from the topology constants, not a
+	// literal: derive the expected substring from the constants so a future
+	// change to them changes both the renderer and this notice in lockstep.
+	wantSize := fmt.Sprintf("size %d/minSize %d", topology.StretchReplicatedPoolSize, topology.StretchReplicatedPoolMinSize)
+	if !strings.Contains(got.Finding, wantSize) {
+		t.Fatalf("stretch-pool notice must cite the topology constants %q, got %q", wantSize, got.Finding)
+	}
+	if !strings.Contains(got.Finding, "rbd") {
+		t.Fatalf("stretch-pool notice must name the policy-less pool, got %q", got.Finding)
+	}
+	if strings.Contains(got.Finding, "rgw") {
+		t.Fatalf("stretch-pool notice must not name the policied pool, got %q", got.Finding)
+	}
+}
+
+func TestStorageAdvisoriesNoStretchPoolNoticeWithoutStretchOrPools(t *testing.T) {
+	plain := adviceCephCluster("plain", v1alpha1.StorageCephDistributionOSS, "",
+		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
+	state := adviceState(plain)
+	state.StoragePools = []v1alpha1.StoragePool{{
+		Metadata: v1alpha1.Metadata{Name: "rbd"},
+		Spec:     v1alpha1.StoragePoolSpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "plain"}},
+	}}
+	if got := findingsWith(StorageAdvisories(state), "policy-less pools inherit the stretch rule"); len(got) != 0 {
+		t.Fatalf("a non-stretch cluster must raise no stretch-pool notice, got %+v", got)
+	}
+
+	stretchNoPolicyless := adviceCephCluster("ceph", v1alpha1.StorageCephDistributionOSS, "",
+		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
+	stretchNoPolicyless.Spec.Ceph.Topology.Stretch = &v1alpha1.StorageCephStretch{FailureDomain: "datacenter"}
+	onlyPolicied := adviceState(stretchNoPolicyless)
+	onlyPolicied.StoragePools = []v1alpha1.StoragePool{{
+		Metadata: v1alpha1.Metadata{Name: "rgw"},
+		Spec: v1alpha1.StoragePoolSpec{
+			StorageClusterRef:  v1alpha1.LocalObjectReference{Name: "ceph"},
+			PlacementPolicyRef: v1alpha1.LocalObjectReference{Name: "ec-policy"},
+		},
+	}}
+	if got := findingsWith(StorageAdvisories(onlyPolicied), "policy-less pools inherit the stretch rule"); len(got) != 0 {
+		t.Fatalf("a stretch cluster whose pools all reference a policy must raise no stretch-pool notice, got %+v", got)
 	}
 }
 

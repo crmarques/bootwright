@@ -13,18 +13,37 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
+// AdvisorySeverity grades an advisory: a WARN departs from a production
+// recommendation, an INFO merely notices behaviour the operator may not expect.
+// Neither blocks validate, render, or apply.
+type AdvisorySeverity string
+
+const (
+	SeverityWarn AdvisorySeverity = "WARN"
+	SeverityInfo AdvisorySeverity = "INFO"
+)
+
+const (
+	cephBestPracticeGroup = "Ceph best practice"
+	stretchPoolGroup      = "Stretch pools"
+)
+
 // StorageAdvisory is a non-fatal best-practice finding about a managed Ceph
 // StorageCluster. Advisories never block validate, render, or apply — a
 // single-node or lab cluster is a legitimate authored shape — but
-// `bootwright validate` surfaces them as warnings so a cluster that departs
-// from IBM Storage Ceph / upstream production recommendations (sub-quorum
-// monitors, a single manager, an unpinned subscription image) is visible at
-// author time rather than discovered in production.
+// `bootwright validate` surfaces them so a cluster that departs from IBM
+// Storage Ceph / upstream production recommendations (sub-quorum monitors, a
+// single manager, an unpinned subscription image), or behaves in a way its
+// per-object YAML does not reveal (policy-less pools inheriting the stretch
+// rule), is visible at author time rather than discovered in production.
+// INFO advisories carry only a Finding; Impact and Remediation accompany WARN.
 type StorageAdvisory struct {
-	Object      string `json:"object"`
-	Finding     string `json:"finding"`
-	Impact      string `json:"impact"`
-	Remediation string `json:"remediation"`
+	Severity    AdvisorySeverity `json:"severity"`
+	Group       string           `json:"group"`
+	Object      string           `json:"object"`
+	Finding     string           `json:"finding"`
+	Impact      string           `json:"impact,omitempty"`
+	Remediation string           `json:"remediation,omitempty"`
 }
 
 // StorageAdvisories returns the best-practice advisories for every managed Ceph
@@ -44,6 +63,7 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageManagerAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
+		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
 	}
 	return out
 }
@@ -91,6 +111,8 @@ func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluste
 		}
 	}
 	return []StorageAdvisory{{
+		Severity:    SeverityWarn,
+		Group:       cephBestPracticeGroup,
 		Object:      object,
 		Finding:     "monitoring/ingress sidecar images are not pinned to the entitled registry or mirror",
 		Impact:      "cephadm pulls prometheus/grafana/alertmanager/node-exporter/haproxy/keepalived from upstream defaults this cluster cannot reach; the monitoring stack and every HA VIP fail to deploy",
@@ -110,6 +132,8 @@ func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []
 	switch {
 	case mons < 3:
 		return []StorageAdvisory{{
+			Severity:    SeverityWarn,
+			Group:       cephBestPracticeGroup,
 			Object:      object,
 			Finding:     fmt.Sprintf("%d host(s) carry the mon role", mons),
 			Impact:      "IBM Storage Ceph recommends at least 3 monitors for quorum; fewer cannot survive a single monitor failure without losing the cluster",
@@ -117,6 +141,8 @@ func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []
 		}}
 	case mons%2 == 0:
 		return []StorageAdvisory{{
+			Severity:    SeverityWarn,
+			Group:       cephBestPracticeGroup,
 			Object:      object,
 			Finding:     fmt.Sprintf("%d hosts carry the mon role (an even count)", mons),
 			Impact:      "an even monitor count tolerates no more failures than the next-lower odd count, so the extra monitor adds cost without availability",
@@ -131,6 +157,8 @@ func storageManagerAdvisories(object string, cluster v1alpha1.StorageCluster) []
 	mgrs := len(topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMGR))
 	if mgrs < 2 {
 		return []StorageAdvisory{{
+			Severity:    SeverityWarn,
+			Group:       cephBestPracticeGroup,
 			Object:      object,
 			Finding:     fmt.Sprintf("%d host(s) carry the mgr role", mgrs),
 			Impact:      "IBM Storage Ceph recommends at least 2 managers; a single manager is a single point of failure for orchestration, the dashboard, and metrics",
@@ -155,9 +183,43 @@ func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []St
 		return nil
 	}
 	return []StorageAdvisory{{
+		Severity:    SeverityWarn,
+		Group:       cephBestPracticeGroup,
 		Object:      object,
 		Finding:     fmt.Sprintf("distribution %q pins no spec.ceph.image", distribution),
 		Impact:      "the install uses the distribution-packaged cephadm's default image tag, which floats; the running Ceph version is not reproducible across re-installs",
 		Remediation: "set spec.ceph.image to a digest-pinned reference (for example cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:...)",
+	}}
+}
+
+// storageStretchPoolAdvisories notices stretch pool inheritance: on a
+// stretch-mode cluster every pool that references no placement policy renders
+// with the stretch CRUSH rule and the stretch replication regardless of its own
+// YAML, so authoring topology.stretch re-rules and resizes those pools on the
+// next apply. An author reading only the StoragePool file would predict the
+// global default, hence the INFO notice. The replication figures come from the
+// topology constants the renderer applies, so the notice can never drift from
+// what apply actually does.
+func storageStretchPoolAdvisories(object string, state v1alpha1.State, cluster v1alpha1.StorageCluster) []StorageAdvisory {
+	if cluster.Spec.Ceph.Topology.Stretch == nil {
+		return nil
+	}
+	var pools []string
+	for _, pool := range state.StoragePools {
+		if pool.Spec.StorageClusterRef.Name == cluster.Metadata.Name && pool.Spec.PlacementPolicyRef.Name == "" {
+			pools = append(pools, pool.Metadata.Name)
+		}
+	}
+	if len(pools) == 0 {
+		return nil
+	}
+	return []StorageAdvisory{{
+		Severity: SeverityInfo,
+		Group:    stretchPoolGroup,
+		Object:   object,
+		Finding: fmt.Sprintf(
+			"policy-less pools inherit the stretch rule and size %d/minSize %d: %s",
+			topology.StretchReplicatedPoolSize, topology.StretchReplicatedPoolMinSize, strings.Join(pools, ", "),
+		),
 	}}
 }
