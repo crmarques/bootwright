@@ -4,7 +4,7 @@
     argv: "{{ bootwright_ceph_op_command }}"
   register: bootwright_ceph_op_run
   changed_when: true
-  no_log: "{{ bootwright_ceph_op_capture | length > 0 }}"
+  no_log: "{{ (bootwright_ceph_op_capture | length > 0) or (bootwright_ceph_op_no_log | bool) }}"
   when:
     - not bootwright_ceph_op_skip | bool
     - bootwright_ceph_op_command | length > 0

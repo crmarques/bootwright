@@ -3,6 +3,7 @@
   ansible.builtin.set_fact:
     bootwright_ceph_op_name: "{{ bootwright_ceph_op.name | default('') }}"
     bootwright_ceph_op_capture: "{{ bootwright_ceph_op.capture | default({}) }}"
+    bootwright_ceph_op_no_log: "{{ bootwright_ceph_op.no_log | default(false) }}"
     bootwright_ceph_op_idempotency: "{{ bootwright_ceph_op.idempotency | default({}) }}"
     bootwright_ceph_op_idempotency_kind: "{{ bootwright_ceph_op.idempotency.kind | default('none') }}"
     bootwright_ceph_op_idempotency_name: "{{ bootwright_ceph_op.idempotency.name | default('') }}"

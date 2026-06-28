@@ -127,6 +127,10 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	assertOperationCapture(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "ceph-auth-key", "dc1-metal-ocp", "rbdNodeKey")
 	assertOperationPhase(t, ops, "create-rgw-admin-user-odf-rgw", "object-gateway")
 	assertOperationIdempotency(t, ops, "create-rgw-admin-user-odf-rgw", "rgw-user", "bootwright-odf-rgw-admin")
+	// The standalone gateway does not capture the admin keys, so the op must
+	// carry an explicit redaction flag to keep `user create`/`user info` output
+	// (keys[].access_key/secret_key) out of the apply logs.
+	assertOperationNoLog(t, ops, "create-rgw-admin-user-odf-rgw")
 
 	attachment := attachmentAsset(t, asset, "dc1-metal-ocp")
 	external := readYAMLDoc(t, attachment.ExternalClusterDetailsPath)
@@ -534,6 +538,21 @@ func assertOperationCapture(t *testing.T, ops []any, name, captureType, cluster,
 		capture := op["capture"].(map[string]any)
 		if capture["type"] != captureType || capture["cluster"] != cluster || capture["field"] != field {
 			t.Fatalf("operation %s capture = %#v", name, capture)
+		}
+		return
+	}
+	t.Fatalf("operation %s not found in %#v", name, ops)
+}
+
+func assertOperationNoLog(t *testing.T, ops []any, name string) {
+	t.Helper()
+	for _, item := range ops {
+		op := item.(map[string]any)
+		if op["name"] != name {
+			continue
+		}
+		if op["no_log"] != true {
+			t.Fatalf("operation %s no_log = %#v, want true", name, op["no_log"])
 		}
 		return
 	}

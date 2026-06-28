@@ -222,7 +222,13 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			continue
 		}
 		uid := "bootwright-" + gw.Metadata.Name + "-admin"
-		ops = append(ops, operationWithIdempotency("object-gateway", "create-rgw-admin-user-"+gw.Metadata.Name, "rgw-user", uid, "radosgw-admin", "user", "create", "--uid", uid, "--display-name", "Bootwright "+gw.Metadata.Name+" admin", "--format", "json"))
+		// The standalone gateway has no consumer for the admin keys, so unlike the
+		// data-foundation twin this op does not capture them. It must still redact
+		// the `user create`/`user info` output (keys[].access_key/secret_key), so
+		// it carries an explicit no_log flag the role honors independently of capture.
+		adminUser := operationWithIdempotency("object-gateway", "create-rgw-admin-user-"+gw.Metadata.Name, "rgw-user", uid, "radosgw-admin", "user", "create", "--uid", uid, "--display-name", "Bootwright "+gw.Metadata.Name+" admin", "--format", "json")
+		adminUser["no_log"] = true
+		ops = append(ops, adminUser)
 	}
 	ops = append(ops, nfsExportOperations(state, cluster)...)
 	ops = append(ops, dataFoundationCredentialOperations(state, cluster)...)
