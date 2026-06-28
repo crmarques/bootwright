@@ -1,0 +1,171 @@
+package desiredstate
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/entitlements"
+)
+
+func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment) []string {
+	distribution := storageCephDistribution(cluster)
+	if cluster.Spec.Ceph.Distribution != "" && distribution == "" {
+		return []string{fmt.Sprintf("%s.distribution %q must be one of {%s, %s, %s}",
+			prefix, cluster.Spec.Ceph.Distribution, v1alpha1.StorageCephDistributionOSS, v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM)}
+	}
+	ref := cluster.Spec.Ceph.EntitlementRef.Name
+	switch distribution {
+	case v1alpha1.StorageCephDistributionOSS:
+		if ref != "" {
+			return []string{prefix + ".entitlementRef must be empty when distribution=oss"}
+		}
+		return nil
+	case v1alpha1.StorageCephDistributionRedHat:
+		return validateStorageCephDistributionEntitlement(prefix, env, ref, v1alpha1.EntitlementProviderRedHat, v1alpha1.EntitlementProductCeph)
+	case v1alpha1.StorageCephDistributionIBM:
+		return validateStorageCephDistributionEntitlement(prefix, env, ref, v1alpha1.EntitlementProviderIBM, v1alpha1.EntitlementProductIBMStorageCeph)
+	default:
+		return nil
+	}
+}
+
+func validateStorageCephDistributionEntitlement(prefix string, env *v1alpha1.Environment, ref, provider, product string) []string {
+	if ref == "" {
+		return []string{prefix + ".entitlementRef is required when distribution requires subscription or license handling"}
+	}
+	entitlement, ok := entitlements.Find(env, ref)
+	if !ok {
+		return []string{fmt.Sprintf("%s.entitlementRef %q does not match any Environment.spec.entitlements[].name", prefix, ref)}
+	}
+	var errs []string
+	if entitlement.Provider != provider {
+		errs = append(errs, fmt.Sprintf("%s.entitlementRef %q resolves to provider %q, want %q", prefix, ref, entitlement.Provider, provider))
+	}
+	if entitlement.Product != product {
+		errs = append(errs, fmt.Sprintf("%s.entitlementRef %q resolves to product %q, want %q", prefix, ref, entitlement.Product, product))
+	}
+	return errs
+}
+
+// validateStorageCephRelease checks spec.ceph.release against the meaning the
+// chosen distribution gives it: an upstream release name or x.y.z version for
+// oss, a product stream version for the subscription-backed distributions.
+func validateStorageCephRelease(prefix, distribution, release string) []string {
+	if release == "" {
+		return nil
+	}
+	switch distribution {
+	case v1alpha1.StorageCephDistributionOSS:
+		if !cephOSSReleaseNamePattern.MatchString(release) && !cephOSSReleaseVersionPattern.MatchString(release) {
+			return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
+		}
+	case v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM:
+		if !cephSubscriptionStreamPattern.MatchString(release) {
+			return []string{fmt.Sprintf("%s.release %q must be a product stream version such as 9 or 9.1", prefix, release)}
+		}
+	}
+	return nil
+}
+
+// validateStorageCephImage checks spec.ceph.image pins a reproducible reference,
+// reusing the same tag/digest rules enforced for pinned component images.
+func validateStorageCephImage(prefix, image string) []string {
+	if image == "" {
+		return nil
+	}
+	if err := validatePinnedImageReference(image); err != "" {
+		return []string{fmt.Sprintf("%s.image %q %s", prefix, image, err)}
+	}
+	return nil
+}
+
+func validateStorageCephCommunity(prefix string, cluster v1alpha1.StorageCluster) []string {
+	community := cluster.Spec.Ceph.Community
+	if community == nil {
+		return nil
+	}
+	if storageCephDistribution(cluster) != v1alpha1.StorageCephDistributionOSS {
+		return []string{prefix + " must be empty unless distribution=oss"}
+	}
+	var errs []string
+	if mirror := community.Mirror; mirror != "" && !isHTTPURL(mirror) {
+		errs = append(errs, fmt.Sprintf("%s.mirror %q must be an http or https URL", prefix, mirror))
+	}
+	return errs
+}
+
+func isHTTPURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
+	distribution := storageCephDistribution(cluster)
+	if distribution == v1alpha1.StorageCephDistributionOSS {
+		return nil
+	}
+	var errs []string
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
+			continue
+		}
+		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
+		if !ok {
+			continue
+		}
+		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.hosts[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Hostname, profile.Metadata.Name)
+		if strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
+			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
+			continue
+		}
+		if !storageCephDistributionSupportsRHELVersion(distribution, profile.Spec.OS.Version) {
+			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q; supported RHEL versions are %s", owner, profile.Spec.OS.Version, distribution, strings.Join(v1alpha1.StorageCephRHELVersions(), ", ")))
+		}
+	}
+	return errs
+}
+
+// validateStorageCephFIPS gates a FIPS-declared managed Ceph cluster. FIPS is
+// delivered by each node's OS install (MachineInstallProfile
+// customizations.security.fips), so this enforces the cluster-level intent is
+// consistent: the distribution must be FIPS-validated (redhat or ibm, not the
+// community oss images), and every Ceph node whose OS Bootwright installs must
+// install in FIPS mode. Provided-OS nodes (no install profile) are skipped —
+// like validateStorageCephManagedOS — and must be FIPS-installed out of band.
+func validateStorageCephFIPS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
+	if !cluster.Spec.Ceph.Security.FIPS.Enabled {
+		return nil
+	}
+	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph.security.fips.enabled", cluster.Metadata.Name)
+	if storageCephDistribution(cluster) == v1alpha1.StorageCephDistributionOSS {
+		return []string{prefix + " requires distribution redhat or ibm"}
+	}
+	var errs []string
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
+			continue
+		}
+		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
+		if !ok {
+			continue
+		}
+		if !profile.Spec.Customizations.Security.FIPS.Enabled {
+			errs = append(errs, fmt.Sprintf("%s requires MachineInstallProfile/%s (Ceph host %s) spec.customizations.security.fips.enabled: true", prefix, profile.Metadata.Name, node.MachineRef.Name))
+		}
+	}
+	return errs
+}
+
+func storageCephDistributionSupportsRHELVersion(distribution, version string) bool {
+	if distribution != v1alpha1.StorageCephDistributionRedHat && distribution != v1alpha1.StorageCephDistributionIBM {
+		return true
+	}
+	return v1alpha1.StorageCephSupportsRHELVersion(version)
+}
