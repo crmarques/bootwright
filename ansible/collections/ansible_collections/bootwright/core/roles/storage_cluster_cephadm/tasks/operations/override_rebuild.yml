@@ -133,16 +133,78 @@
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
     - (bootwright_apply_mode | default('continue')) == 'override'
 
-# Recreate only when the filesystem exists AND its live metadata pool is readable AND
-# differs from desired. An unreadable live metadata pool does NOT recreate (fail-safe).
+# The default data pool is also a structural identity Ceph cannot change in place,
+# but `ceph fs ls` does not expose its ordering. `ceph fs get` does: the FIRST entry
+# of the live filesystem's mdsmap data_pools is the default. Resolve that pool id to
+# a name (via `ceph osd pool ls detail`) so it can be compared to the desired
+# default data pool. Any unreadable input leaves the resolved name empty, so the
+# decision below never rebuilds on it (fail-safe).
+- name: Inspect existing CephFS detail for default-data-pool override rebuild
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - fs
+      - get
+      - "{{ bootwright_ceph_op_idempotency_name }}"
+      - --format
+      - json
+  register: bootwright_ceph_fs_get_detail
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+- name: Inspect Ceph pools for CephFS default-data-pool resolution
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - osd
+      - pool
+      - ls
+      - detail
+      - --format
+      - json
+  register: bootwright_ceph_fs_pool_detail
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+- name: Resolve live CephFS default data pool for structural override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_fs_default_pool_live: >-
+      {{ ((bootwright_ceph_fs_pool_detail.stdout | default('[]')) | from_json)
+         | selectattr('pool_id', 'equalto',
+             (((((bootwright_ceph_fs_get_detail.stdout | default('{}')) | from_json).mdsmap
+                | default({})).data_pools | default([])) | first | default(-1)))
+         | map(attribute='pool_name') | list | first | default('') }}
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+# Recreate when the filesystem exists AND a readable, immutable structural field
+# differs from desired: the metadata pool OR the default data pool. Each is checked
+# only when its live value is readable (fail-safe: an unreadable live value never
+# triggers a destructive rebuild).
 - name: Decide CephFS structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_fs_recreate: >-
       {{
         (bootwright_ceph_op_fs_live.name | default('') | length > 0)
-        and (bootwright_ceph_op_fs_live.metadata_pool | default('') | length > 0)
-        and (bootwright_ceph_op_fs_live.metadata_pool | default('')
-             != bootwright_ceph_op.structural.metadataPool | default(''))
+        and (
+          (
+            (bootwright_ceph_op_fs_live.metadata_pool | default('') | length > 0)
+            and (bootwright_ceph_op_fs_live.metadata_pool | default('')
+                 != bootwright_ceph_op.structural.metadataPool | default(''))
+          )
+          or (
+            (bootwright_ceph_op_fs_default_pool_live | default('') | length > 0)
+            and (bootwright_ceph_op_fs_default_pool_live | default('')
+                 != bootwright_ceph_op.structural.defaultDataPool | default(''))
+          )
+        )
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'

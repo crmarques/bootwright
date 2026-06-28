@@ -297,6 +297,20 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if !ok || !strings.Contains(fmt.Sprint(fsRm["argv"]), "--yes-i-really-really-mean-it") {
 		t.Fatalf("CephFS rebuild must rm with --yes-i-really-really-mean-it, got %v", fsBlock[fsRmIdx])
 	}
+
+	// The CephFS rebuild decision considers BOTH immutable structural pools — the
+	// metadata pool and the default data pool — comparing each to its live value.
+	fsDecide := tasks[findAnsibleTask(t, tasks, "Decide CephFS structural override rebuild")]
+	fsDecideFact, ok := fsDecide["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("CephFS rebuild decision must be a set_fact, got %v", fsDecide)
+	}
+	fsExpr := fmt.Sprint(fsDecideFact["bootwright_ceph_op_fs_recreate"])
+	for _, want := range []string{"structural.metadataPool", "structural.defaultDataPool", "bootwright_ceph_op_fs_default_pool_live"} {
+		if !strings.Contains(fsExpr, want) {
+			t.Fatalf("CephFS rebuild decision must compare live to desired %q, got %s", want, fsExpr)
+		}
+	}
 }
 
 // The erasure-code profile is immutable in Ceph and cannot be removed while a pool

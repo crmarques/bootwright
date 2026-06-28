@@ -403,11 +403,13 @@ desired state leaves the live filesystem running (additive-only).
     A single data pool becomes the default automatically. With multiple data
     pools you must mark **exactly one** as `default: true`.
 
-!!! warning "Changing the metadata pool recreates the filesystem"
-    The CephFS metadata pool is part of the filesystem's structural identity —
-    Ceph cannot move a live CephFS to a different metadata pool — so changing
-    `spec.cephfs.metadataPoolRef` is a data-destroying, `apply --override`-only
-    recreate (`ceph fs rm` then recreate), not an in-place reconcile.
+!!! warning "Changing the metadata pool or default data pool recreates the filesystem"
+    The CephFS metadata pool and its default data pool are part of the
+    filesystem's structural identity — Ceph cannot move a live CephFS to a
+    different metadata or default data pool — so changing
+    `spec.cephfs.metadataPoolRef`, or which `dataPoolRefs[]` entry is the default,
+    is a data-destroying, `apply --override`-only recreate (`ceph fs rm` then
+    recreate), not an in-place reconcile.
 
 ### Subvolume groups
 

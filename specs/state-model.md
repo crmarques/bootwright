@@ -742,7 +742,10 @@ Rules:
   (a single entry becomes the default automatically) or `{name, default}` to
   elect the default data pool on multi-pool filesystems. Each must reference a
   `StoragePool` on the same `StorageCluster`, must differ from the metadata
-  pool, and exactly one must be the default.
+  pool, and exactly one must be the default. The default data pool is also part
+  of the filesystem's structural identity: changing which data pool is the
+  default is the same data-destroying, `--override`-only recreate as the metadata
+  pool (Ceph cannot move a live CephFS to a different default data pool in place).
 - `spec.cephfs.mds.placement` defaults to every topology host with the `mds`
   role; `sites`/`hosts` narrow the selection and must resolve to at least one
   `mds`-capable host. On stretch-mode clusters the resolved placement must

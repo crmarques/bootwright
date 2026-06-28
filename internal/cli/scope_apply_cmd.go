@@ -249,11 +249,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 			// --override rebuilds drifted storage sub-objects; a structural change
-			// (pool type, CephFS metadata pool) is data-destroying. Warn before the
-			// confirm prompt so the operator sees which pools/filesystems are at risk.
+			// (pool type/erasure profile, CephFS metadata or default data pool) is
+			// data-destroying. Warn before the confirm prompt so the operator sees
+			// which pools/filesystems are at risk.
 			if mode == workflow.ApplyModeOverride {
 				if rebuilt := converge.OverrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
-					cliout.NewContinuation(stdout).Warning("override", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type or CephFS metadata pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
+					cliout.NewContinuation(stdout).Warning("override", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type/erasure profile, or a CephFS metadata or default data pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
 				}
 			}
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
