@@ -168,31 +168,12 @@ can be authorized only through `destroy --override`, never through
     On a protected context a `destroy` without `--override` fails closed,
     regardless of `--yes`.
 
-## Validating only the selected scope
+## Whole-input validation
 
-By default `apply` and `destroy` validate the **whole** input before doing any
-work, so a desired-state error anywhere — even in a cluster you did not select —
-blocks the run. When you are deliberately acting on part of the workspace,
-`--scoped-validation` narrows that check to the resources the
-`--clusters`/`--stage` selection will actually touch:
-
-```text
-bootwright apply --clusters ocp1,ocp2 --scoped-validation
-```
-
-With the flag set, a desired-state error in an out-of-scope object — for example
-a broken `StorageCluster` you are not applying — no longer blocks the scoped run.
-It has no effect without a narrowing selector: a run over the whole graph still
-validates everything. Dependencies are still validated — if a selected cluster
-pulls another object in transitively (such as a Data Foundation storage
-attachment), that object stays in scope and is validated with it.
-
-A reference that dangles **only because** the object it points at was scoped out
-is treated as a scoping artifact, not an error: a shared `InfraComponent` (such
-as an artifact server) whose host machine the selection does not pull in, or a
-Data Foundation attachment whose consuming `ContainerCluster` a storage-cluster
-apply leaves out, no longer fails the run. A reference that is broken in the
-whole input — the object it names is declared nowhere — still blocks it.
+`apply` and `destroy` validate the **whole** input before doing any work, even
+when you narrow the run with `--clusters`/`--stage`, so a desired-state error
+anywhere — including in a cluster you did not select — blocks the run. Fix the
+offending object (the error names it) before retrying the scoped run.
 
 ## Focused recovery of one component
 

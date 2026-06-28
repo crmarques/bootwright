@@ -20,7 +20,6 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		flags           scopeCommonFlags
 		dryRun          bool
 		trustOnFirstUse bool
-		streamAnsible   bool
 	)
 	cmd := &cobra.Command{
 		Use:     "preflight",
@@ -32,7 +31,6 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "preflight", true, scopeTargetKind(scope))
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
-	addStreamAnsibleFlag(cmd, &streamAnsible)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
@@ -97,7 +95,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, scope, state, limit, dryRun, streamAnsible, reporter)
+		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, scope, state, limit, dryRun, false, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}

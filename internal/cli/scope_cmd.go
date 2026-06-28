@@ -7,6 +7,7 @@ import (
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 // scopeCommonFlags collects the four flags shared by every scope
@@ -29,7 +30,7 @@ func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClus
 
 func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool, targetKind string) {
 	if includeAnsible {
-		addAnsiblePlaybookFlag(cmd, &f.executable)
+		f.executable = workspace.ResolveAnsiblePlaybook()
 	}
 	addOutputFlagDryRun(cmd, &f.output)
 	if allowClusterScope {

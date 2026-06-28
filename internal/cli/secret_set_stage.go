@@ -14,8 +14,8 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool, yes bool) (int, error) {
-	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(stdin, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate, yes)
+func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username string, passwordStdin, generate bool, yes bool) (int, error) {
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(stdin, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, passwordStdin, generate, yes)
 	if err != nil {
 		return 1, err
 	}
@@ -23,7 +23,7 @@ func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, std
 	return runWithLocalRoot(ctx, rootArgs, rootStdin, stdout, stderr, false)
 }
 
-func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool, yes bool) ([]string, io.Reader, func(), error) {
+func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username string, passwordStdin, generate bool, yes bool) ([]string, io.Reader, func(), error) {
 	rootArgs := []string{"secret", "set", "--name", name}
 	if yes {
 		rootArgs = append(rootArgs, "--yes")
@@ -120,13 +120,6 @@ func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey,
 			return nil, nil, func() {}, err
 		}
 		path, err := stage("credentials", data)
-		if err != nil {
-			cleanup()
-			return nil, nil, func() {}, err
-		}
-		rootArgs = append(rootArgs, "--from-file", path)
-	case password != "":
-		path, err := stageCredentialsInput(stage, username, password)
 		if err != nil {
 			cleanup()
 			return nil, nil, func() {}, err

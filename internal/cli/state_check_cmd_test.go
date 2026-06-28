@@ -32,12 +32,14 @@ func TestStateCheckAcceptsSubPhaseStages(t *testing.T) {
 }
 
 func TestStateCheckRejectsOverride(t *testing.T) {
+	// state-check never mutates state, so it carries no --override flag at all;
+	// cobra rejects it as unknown.
 	stdout, stderr, code := runCLI(t, "state-check", "--override")
 	if code != 2 {
 		t.Fatalf("state-check --override exit = %d, want 2 (stderr=%q)", code, stderr)
 	}
-	if !strings.Contains(stdout+stderr, "--override is not valid for state-check") {
-		t.Fatalf("expected override rejection, stdout=%q stderr=%q", stdout, stderr)
+	if !strings.Contains(stdout+stderr, "unknown flag: --override") {
+		t.Fatalf("expected unknown-flag rejection, stdout=%q stderr=%q", stdout, stderr)
 	}
 }
 

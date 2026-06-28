@@ -119,41 +119,18 @@ func TestClusterTargets(t *testing.T) {
 	}
 }
 
-func TestBastionGroupExposesSetupAndCheck(t *testing.T) {
+func TestBastionGroupExposesSetup(t *testing.T) {
 	stdout, stderr, code := runCLI(t, "bastion", "--help")
 	if code != 0 {
 		t.Fatalf("bastion --help exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"setup", "check"} {
-		if !strings.Contains(stdout, want) {
-			t.Fatalf("bastion --help missing subcommand %q:\n%s", want, stdout)
-		}
+	if !strings.Contains(stdout, "setup") {
+		t.Fatalf("bastion --help missing subcommand %q:\n%s", "setup", stdout)
 	}
-	if _, stderr, code = runCLI(t, "bastion", "check", "--help"); code != 0 {
-		t.Fatalf("bastion check --help exited %d, stderr=%q", code, stderr)
-	}
-}
-
-// TestBastionCheckMirrorsPreflightBastion pins bastion check as the
-// bastion-grouped alias of preflight bastion: same read-only dependency
-// checks, byte-identical output, and the same exit code.
-func TestBastionCheckMirrorsPreflightBastion(t *testing.T) {
-	initTestContext(t, "001-sno-libvirt")
-
-	checkOut, checkErr, checkCode := runCLI(t, "bastion", "check")
-	preOut, preErr, preCode := runCLI(t, "preflight", "bastion")
-
-	if checkCode != preCode {
-		t.Fatalf("bastion check exit %d != preflight bastion exit %d (checkErr=%q preErr=%q)", checkCode, preCode, checkErr, preErr)
-	}
-	if checkOut != preOut {
-		t.Fatalf("bastion check stdout differs from preflight bastion:\n--- bastion check ---\n%s\n--- preflight bastion ---\n%s", checkOut, preOut)
-	}
-	if checkErr != preErr {
-		t.Fatalf("bastion check stderr differs from preflight bastion:\n--- bastion check ---\n%s\n--- preflight bastion ---\n%s", checkErr, preErr)
-	}
-	if !strings.Contains(checkOut, "Bastion tools") {
-		t.Fatalf("bastion check output missing Bastion tools group:\n%s", checkOut)
+	// The read-only dependency check lives only under preflight; the bastion
+	// group no longer carries a duplicate "check" subcommand.
+	if _, _, code = runCLI(t, "bastion", "check"); code == 0 {
+		t.Fatalf("bastion check should be removed in favor of preflight bastion, got exit 0:\n%s", stdout)
 	}
 }
 
@@ -177,9 +154,8 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 		}
 	}
 	// Match the removed --scope flag at its token boundary (trailing space) so
-	// the assertion still rejects a resurrected --scope without snagging the
-	// legitimate --scoped-validation flag, whose name shares the prefix.
-	for _, reject := range []string{"--scope ", "--cluster ", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
+	// the assertion still rejects a resurrected --scope.
+	for _, reject := range []string{"--scope ", "--cluster ", "--scoped-validation", "--check", "--stream-ansible", "--ansible-playbook", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("apply help exposes removed flag or help section %q:\n%s", reject, stdout)
 		}
@@ -1506,7 +1482,10 @@ func TestApplyKubeVirtParentAndChildSelectionAccepted(t *testing.T) {
 	}
 }
 
-func TestScopedValidationIgnoresOutOfScopeErrors(t *testing.T) {
+// TestScopedRunValidatesWholeInput pins the behavior after --scoped-validation
+// was removed: every scoped apply/destroy validates the whole input, so a broken
+// out-of-scope object blocks the run, and the removed flag is rejected.
+func TestScopedRunValidatesWholeInput(t *testing.T) {
 	setTestHomeAndRoot(t)
 	if stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt")); code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
@@ -1516,36 +1495,31 @@ func TestScopedValidationIgnoresOutOfScopeErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Inject a StorageCluster that fails validation (spec.type must be ceph) and
-	// is independent of the sno-libvirt container cluster. Scoping a run to
-	// sno-libvirt drops it from the work set, so --scoped-validation must not
-	// validate it. Written after context init because init validates the input.
+	// is independent of the sno-libvirt container cluster. Written after context
+	// init because init validates the input.
 	orphan := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata:\n  name: orphan-ceph\nspec:\n  type: bogus\n"
 	if err := os.WriteFile(filepath.Join(ctx.InputDir, "orphan-storage-cluster.yaml"), []byte(orphan), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	// Default whole-input validation catches the broken StorageCluster and
-	// blocks the scoped apply, naming the offending object.
+	// Whole-input validation catches the broken StorageCluster and blocks the
+	// scoped apply, naming the offending object.
 	stdout, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false")
 	if code == 0 {
-		t.Fatalf("apply without --scoped-validation ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
+		t.Fatalf("scoped apply ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
 	}
 	if !strings.Contains(stdout+stderr, "orphan-ceph") {
 		t.Fatalf("apply error does not name the out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
 	}
 
-	// --scoped-validation narrows validation to the sno-libvirt scope, so the
-	// out-of-scope error no longer blocks apply or destroy.
-	if stdout, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--scoped-validation", "--ask-become-pass=false"); code != 0 {
-		t.Fatalf("apply --scoped-validation exited %d despite the error being out of scope, stdout=%q stderr=%q", code, stdout, stderr)
-	}
-	if stdout, stderr, code := runCLI(t, "destroy", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--scoped-validation", "--ask-become-pass=false"); code != 0 {
-		t.Fatalf("destroy --scoped-validation exited %d despite the error being out of scope, stdout=%q stderr=%q", code, stdout, stderr)
+	// Destroy validates the whole input too and stays blocked.
+	if stdout, stderr, code := runCLI(t, "destroy", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false"); code == 0 {
+		t.Fatalf("scoped destroy ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
 	}
 
-	// Without the flag, destroy validates the whole input too and stays blocked.
-	if stdout, stderr, code := runCLI(t, "destroy", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false"); code == 0 {
-		t.Fatalf("destroy without --scoped-validation ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
+	// The removed --scoped-validation flag is rejected.
+	if _, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--scoped-validation", "--ask-become-pass=false"); code == 0 || !strings.Contains(stderr, "unknown flag") {
+		t.Fatalf("apply --scoped-validation should be an unknown flag, code=%d stderr=%q", code, stderr)
 	}
 }
 
@@ -2524,11 +2498,11 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"cluster", "list"}, want: true},
 		{args: []string{"cluster", "access"}, want: true},
 		{args: []string{"cluster", "kubeconfig", "--name", "managed-01"}, want: true},
-		// Bare `bastion` only prints help; its subcommands read the root-owned
-		// context and stay rootful (setup mutates the host, check is read-only).
+		// Bare `bastion` only prints help; setup reads the root-owned context and
+		// mutates the host, so it stays rootful. The read-only check moved to
+		// preflight bastion.
 		{args: []string{"bastion"}, want: false},
 		{args: []string{"bastion", "setup"}, want: true},
-		{args: []string{"bastion", "check"}, want: true},
 		{args: []string{"example", "init", "--name", "lab", "--output-dir", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
@@ -2622,9 +2596,9 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		want bool
 	}{
 		{args: []string{"bastion", "setup"}, want: true},
-		// bastion check is read-only: it escalates to read the context but must
-		// never prompt for a sudo become password the way setup does.
-		{args: []string{"bastion", "check"}, want: false},
+		// preflight is read-only: it escalates to read the context but must never
+		// prompt for a sudo become password the way setup does.
+		{args: []string{"preflight", "bastion"}, want: false},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--stage", "clusters"}, want: true},
 		{args: []string{"apply"}, want: true},
@@ -2943,7 +2917,7 @@ func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
 }
 
 func TestSecretSetStagesPasswordInputBeforeSudo(t *testing.T) {
-	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "", "proxy", "", true, false, false)
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "", "proxy", true, false, false)
 	if err != nil {
 		t.Fatalf("stagedSecretSetRootArgs: %v", err)
 	}
@@ -2978,7 +2952,7 @@ func TestSecretSetStagesRawFileInputBeforeSudo(t *testing.T) {
 	if err := os.WriteFile(source, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rootArgs, _, cleanup, err := stagedSecretSetRootArgs(strings.NewReader(""), "shared-ceph-external-details", "", "", "", source, "", "", "", false, false, false)
+	rootArgs, _, cleanup, err := stagedSecretSetRootArgs(strings.NewReader(""), "shared-ceph-external-details", "", "", "", source, "", "", false, false, false)
 	if err != nil {
 		t.Fatalf("stagedSecretSetRootArgs: %v", err)
 	}
@@ -3364,7 +3338,7 @@ func TestContextPrintEnvRequiresSensitiveForProxyCredentials(t *testing.T) {
 	if !strings.Contains(stderr, "--sensitive") {
 		t.Fatalf("stderr = %q, want --sensitive hint", stderr)
 	}
-	_, stderr, code = runCLI(t, "secret", "set", "--name", "proxy-credentials", "--username", "proxy", "--password", "secret")
+	_, stderr, code = runCLIWithInput(t, "secret\n", "secret", "set", "--name", "proxy-credentials", "--username", "proxy", "--password-stdin")
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}
@@ -4261,7 +4235,6 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
 		t.Fatalf("mkdir fake bin: %v", err)
 	}
-	fakeAnsible := filepath.Join(fakeBin, "ansible-playbook")
 	for name, body := range map[string]string{
 		"python3":          "#!/bin/sh\nexit 0\n",
 		"ansible-playbook": "#!/bin/sh\nprintf '%s\\n' 'ansible should not run' >&2\nexit 33\n",
@@ -4292,7 +4265,7 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 		t.Fatalf("write sentinel install-config: %v", err)
 	}
 
-	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--clusters", clusterName, "--yes", "--ask-become-pass=false", "--ansible-playbook", fakeAnsible)
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--clusters", clusterName, "--yes", "--ask-become-pass=false")
 	if code == 0 {
 		t.Fatalf("apply --stage clusters unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}

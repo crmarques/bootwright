@@ -33,22 +33,19 @@ type scopeApplyOptions struct {
 func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := converge.ScopeUsesAnsible(scope)
 	var (
-		flags            scopeCommonFlags
-		dryRun           = options.defaultPlan
-		check            bool
-		askBecomePass    bool
-		yes              bool
-		strictSecrets    bool
-		override         bool
-		expectNew        bool
-		trustOnFirstUse  bool
-		parallelism      int
-		perHost          int
-		redfish          int
-		stage            string
-		through          string
-		streamAnsible    bool
-		scopedValidation bool
+		flags           scopeCommonFlags
+		dryRun          = options.defaultPlan
+		askBecomePass   bool
+		yes             bool
+		strictSecrets   bool
+		override        bool
+		expectNew       bool
+		trustOnFirstUse bool
+		parallelism     int
+		perHost         int
+		redfish         int
+		stage           string
+		through         string
 	)
 	use := "apply"
 	if options.use != "" {
@@ -82,9 +79,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		_ = cmd.Flags().MarkHidden("dry-run")
 	}
 	if usesAnsible {
-		cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 		addAskBecomePassFlag(cmd, &askBecomePass)
-		addStreamAnsibleFlag(cmd, &streamAnsible)
 	}
 	if !options.hideApproval {
 		addYesFlag(cmd, &yes, action)
@@ -102,7 +97,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	}
 	if options.stageSelector {
 		if usesAnsible {
-			addAnsiblePlaybookFlag(cmd, &flags.executable)
+			flags.executable = workspace.ResolveAnsiblePlaybook()
 		}
 		addOutputFlagDryRun(cmd, &flags.output)
 		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to %s: %s (or sub-phase %s); default: full graph", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
@@ -110,7 +105,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit %s to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply (default: all)")
-		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, flagScopedValidationUsage)
 	} else {
 		registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
 	}
@@ -172,11 +166,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
 		var state v1alpha1.State
-		if scopedValidation {
-			state, err = loadDesiredStateScopedValidation(cf, runScope.Name, flags.clusterScope)
-		} else {
-			state, err = loadDesiredState(cf)
-		}
+		state, err = loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -241,7 +231,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, check, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.State, plan.Limit))
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
 		if !dryRun {
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
@@ -313,7 +303,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, check, become.PasswordFile, dryRun, runCommandLabel, mode, streamAnsible)
+		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if options.stageSelector {
@@ -331,7 +321,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			return nil
 		}
-		renderResult, bundleResult, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), streamAnsible))
+		renderResult, bundleResult, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 		if err != nil {
 			if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 				return silentExit(1)

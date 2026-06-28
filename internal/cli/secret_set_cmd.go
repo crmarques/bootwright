@@ -24,7 +24,6 @@ func newSecretSetCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		tlsCert       string
 		tlsKey        string
 		username      string
-		password      string
 		passwordStdin bool
 		generate      bool
 		yes           bool
@@ -66,9 +65,8 @@ provides. Use --generate for test fixtures.`,
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to a PEM TLS private key file")
 	cmd.Flags().StringVar(&rawFile, "raw-file", "", "path to a file containing arbitrary secret bytes")
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "path to a file containing one line: username:password")
-	cmd.Flags().StringVar(&username, "username", "", "username (required with --password, --password-stdin, or --generate)")
-	cmd.Flags().StringVar(&password, "password", "", "password (mutually exclusive with --password-stdin and --generate)")
-	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read password from stdin instead of --password")
+	cmd.Flags().StringVar(&username, "username", "", "username (required with --password-stdin or --generate)")
+	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read the password from stdin")
 	cmd.Flags().BoolVar(&generate, "generate", false, "generate a strong random password (intended for test fixtures)")
 	addYesFlag(cmd, &yes, "overwrite")
 	cf := addCommonFlags()
@@ -92,9 +90,6 @@ provides. Use --generate for test fixtures.`,
 		if rawFile != "" {
 			modes++
 		}
-		if password != "" {
-			modes++
-		}
 		if passwordStdin {
 			modes++
 		}
@@ -102,13 +97,13 @@ provides. Use --generate for test fixtures.`,
 			modes++
 		}
 		if modes == 0 {
-			return failf(2, "one of --pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password, --password-stdin, or --generate is required")
+			return failf(2, "one of --pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password-stdin, or --generate is required")
 		}
 		if modes > 1 {
-			return failf(2, "--pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password, --password-stdin, and --generate are mutually exclusive")
+			return failf(2, "--pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password-stdin, and --generate are mutually exclusive")
 		}
 		if shouldRunLocalRootChild() {
-			code, err := runSecretSetWithLocalRoot(c.Context(), c.InOrStdin(), stdout, c.ErrOrStderr(), name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate, yes)
+			code, err := runSecretSetWithLocalRoot(c.Context(), c.InOrStdin(), stdout, c.ErrOrStderr(), name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, passwordStdin, generate, yes)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -131,7 +126,7 @@ provides. Use --generate for test fixtures.`,
 		if rawFile != "" {
 			return runSecretSetRawFile(stdin, stdout, name, rawFile, ctx.Name, ctx.SecretsDir, yes)
 		}
-		return runSecretSetCredentials(c, stdin, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.Name, ctx.SecretsDir, yes)
+		return runSecretSetCredentials(c, stdin, stdout, name, fromFile, username, passwordStdin, generate, ctx.Name, ctx.SecretsDir, yes)
 	}
 	return cmd
 }
@@ -238,7 +233,7 @@ func runSecretSetRawFile(stdin io.Reader, stdout io.Writer, name, fromFile, cont
 	return nil
 }
 
-func runSecretSetCredentials(c *cobra.Command, stdin io.Reader, stdout io.Writer, name, fromFile, username, password string, passwordStdin, generate bool, contextName, secretsDir string, yes bool) error {
+func runSecretSetCredentials(c *cobra.Command, stdin io.Reader, stdout io.Writer, name, fromFile, username string, passwordStdin, generate bool, contextName, secretsDir string, yes bool) error {
 	var resolvedUser, resolvedPass string
 	switch {
 	case fromFile != "":
@@ -251,11 +246,6 @@ func runSecretSetCredentials(c *cobra.Command, stdin io.Reader, stdout io.Writer
 			return failErr(1, err)
 		}
 		resolvedUser, resolvedPass = u, p
-	case password != "":
-		if username == "" {
-			return failf(2, "--username is required with --password")
-		}
-		resolvedUser, resolvedPass = username, password
 	case passwordStdin:
 		if username == "" {
 			return failf(2, "--username is required with --password-stdin")

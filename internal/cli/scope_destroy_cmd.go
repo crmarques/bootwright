@@ -28,17 +28,14 @@ type scopeDestroyOptions struct {
 
 func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
-		flags            scopeCommonFlags
-		dryRun           bool
-		check            bool
-		askBecomePass    bool
-		yes              bool
-		override         bool
-		forceUnowned     bool
-		skipUnreachable  bool
-		stage            string
-		streamAnsible    bool
-		scopedValidation bool
+		flags           scopeCommonFlags
+		dryRun          bool
+		askBecomePass   bool
+		yes             bool
+		override        bool
+		forceUnowned    bool
+		skipUnreachable bool
+		stage           string
 	)
 	use := "destroy"
 	if options.use != "" {
@@ -61,20 +58,17 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
-	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 	addAskBecomePassFlag(cmd, &askBecomePass)
 	addYesFlag(cmd, &yes, "destroy")
 	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	cmd.Flags().BoolVar(&forceUnowned, "force-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --override. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
-	addStreamAnsibleFlag(cmd, &streamAnsible)
 	if options.stageSelector {
-		addAnsiblePlaybookFlag(cmd, &flags.executable)
+		flags.executable = workspace.ResolveAnsiblePlaybook()
 		addOutputFlagDryRun(cmd, &flags.output)
 		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to destroy: %s (sub-phases %s are apply-only); default: full teardown of clusters then infra", strings.Join(converge.DestroyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerStageCompletion(cmd, converge.DestroyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy (default: all); implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
-		cmd.Flags().BoolVar(&scopedValidation, "scoped-validation", false, flagScopedValidationUsage)
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
@@ -122,11 +116,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
 		var state v1alpha1.State
-		if scopedValidation {
-			state, err = loadDesiredStateScopedValidation(cf, runScope.Name, flags.clusterScope)
-		} else {
-			state, err = loadDesiredState(cf)
-		}
+		state, err = loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -211,7 +201,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				}
 				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, override))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, check, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
 		}
 		if !dryRun && destroySafety.RequiredOverride {
 			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))
@@ -291,8 +281,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			renderResult = result
 		case useGraph:
-			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, streamAnsible)
-			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
+			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
+			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
 			if gerr != nil {
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
@@ -311,7 +301,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
-			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
+			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter)
 			if derr != nil {
 				return failErr(1, derr)
 			}

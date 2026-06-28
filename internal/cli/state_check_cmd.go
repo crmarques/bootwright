@@ -20,7 +20,6 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		through      string
 		clusterScope string
 		output       string
-		override     bool
 	)
 	cmd := &cobra.Command{
 		Use:   "state-check",
@@ -48,13 +47,9 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
 	addOutputFlag(cmd, &output)
-	cmd.Flags().BoolVar(&override, "override", false, "rejected: state-check never mutates state or suppresses drift")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
-		}
-		if override {
-			return failErr(2, errors.New("--override is not valid for state-check; it never mutates state or suppresses drift"))
 		}
 		if stage != "" && through != "" {
 			return failErr(2, errors.New("--stage and --through are mutually exclusive: --stage limits to exactly that phase, --through limits to every phase from the beginning up to and including it"))

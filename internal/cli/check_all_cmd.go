@@ -14,12 +14,11 @@ import (
 
 func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
-		executable      string
 		dryRun          bool
 		output          string
 		trustOnFirstUse bool
-		streamAnsible   bool
 	)
+	executable := workspace.ResolveAnsiblePlaybook()
 	cmd := &cobra.Command{
 		Use:   "all",
 		Short: "Check all provisioning prerequisites",
@@ -31,11 +30,9 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
   bootwright preflight all --dry-run`,
 	}
 	cf := addCommonFlags()
-	addAnsiblePlaybookFlag(cmd, &executable)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addOutputFlagDryRun(cmd, &output)
 	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
-	addStreamAnsibleFlag(cmd, &streamAnsible)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
@@ -82,7 +79,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, executable, bundle.Dir, converge.AllScope, state, "", dryRun, streamAnsible, reporter)
+		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, executable, bundle.Dir, converge.AllScope, state, "", dryRun, false, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}

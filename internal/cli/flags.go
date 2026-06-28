@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 // stripLeadingGlobalFlags drops a leading global persistent flag (currently
@@ -41,14 +39,11 @@ const (
 	flagOutputUsage       = "output format (text|json)"
 	flagOutputDryRunUsage = "output format (text|json); json requires --dry-run"
 
-	flagDryRunUsage           = "render artifacts and print the plan; change nothing remote"
-	flagStreamAnsibleUsage    = "also stream raw Ansible output to the terminal (default: log only)"
-	flagAskBecomePassUsage    = "prompt for the Ansible become password (default: false as root, true otherwise)"
-	flagAnsiblePlaybookUsage  = "ansible-playbook executable to run (default: bootwright-managed venv)"
-	flagTrustOnFirstUseUsage  = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
-	flagStrictSecretsUsage    = "abort if the context secrets-dir is not 0700 or any secret file is not 0600 (default: warn only)"
-	flagScopedValidationUsage = "validate only resources within the selected --clusters/--stage scope (no effect without --clusters)"
-	flagContextUsage          = "context to operate in (default: current context)"
+	flagDryRunUsage          = "render artifacts and print the plan; change nothing remote"
+	flagAskBecomePassUsage   = "prompt for the Ansible become password (default: false as root, true otherwise)"
+	flagTrustOnFirstUseUsage = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
+	flagStrictSecretsUsage   = "abort if the context secrets-dir is not 0700 or any secret file is not 0600 (default: warn only)"
+	flagContextUsage         = "context to operate in (default: current context)"
 )
 
 func validateOutputFormat(value string) error {
@@ -82,19 +77,9 @@ func addYesFlag(cmd *cobra.Command, p *bool, action string) {
 	cmd.Flags().BoolVar(p, "yes", false, "skip the "+action+" confirmation prompt")
 }
 
-// addAnsiblePlaybookFlag registers the --ansible-playbook executable override.
-func addAnsiblePlaybookFlag(cmd *cobra.Command, p *string) {
-	cmd.Flags().StringVar(p, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), flagAnsiblePlaybookUsage)
-}
-
 // addAskBecomePassFlag registers --ask-become-pass with its root-aware default.
 func addAskBecomePassFlag(cmd *cobra.Command, p *bool) {
 	cmd.Flags().BoolVar(p, "ask-become-pass", askBecomePassDefault(), flagAskBecomePassUsage)
-}
-
-// addStreamAnsibleFlag registers --stream-ansible.
-func addStreamAnsibleFlag(cmd *cobra.Command, p *bool) {
-	cmd.Flags().BoolVar(p, "stream-ansible", false, flagStreamAnsibleUsage)
 }
 
 // addTrustOnFirstUseFlag registers --trust-on-first-use (default true).

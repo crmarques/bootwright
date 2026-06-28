@@ -223,8 +223,8 @@ bootwright destroy --stage infra --clusters artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. `bastion setup` remains a
-separate prerequisite command, and `bastion check` re-runs its read-only
-dependency checks (the same checks as `preflight bastion`). Graph apply and destroy use
+separate prerequisite command; its read-only dependency checks run under
+`preflight bastion`. Graph apply and destroy use
 `--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
 and tears down the whole context for `destroy` (clusters then infra). Top-level
 groups are `validate`,

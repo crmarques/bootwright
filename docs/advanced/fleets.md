@@ -144,19 +144,11 @@ bootwright apply --stage clusters --clusters dc1-ocp --yes
 `destroy` accepts only the two families. The full stage model — families versus
 sub-phases — is on [Concepts → Apply stages](../concepts/index.md).
 
-### Scoped validation
+### Whole-input validation
 
-A scoped command still loads the full state by default, so a desired-state error
-anywhere in the fleet blocks even a narrowed run. `--scoped-validation` narrows
-validation to the resources inside the selected `--clusters`/`--stage` scope,
-ignoring desired-state errors in objects outside it:
-
-```text
-bootwright apply --clusters dc1-ocp --scoped-validation --yes
-```
-
-It has no effect without `--clusters`. Use it to converge a healthy cluster while
-an unrelated cluster elsewhere in the fleet is mid-edit.
+A scoped command still loads and validates the full state, so a desired-state
+error anywhere in the fleet blocks even a narrowed run. Fix the offending object
+(the error names it) before retrying the scoped command.
 
 !!! warning "A scoped apply cannot silently narrow a shared service"
     The shared machine-service graph — built from every `InfraComponent`, the
