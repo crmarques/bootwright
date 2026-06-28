@@ -190,13 +190,31 @@ apply` document.
 | `topology.hosts[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
 | `topology.hosts[].devices[]` | No | — | Literal OSD device paths; shorthand for `osd.dataDevices.paths`. Requires the `osd` role. Mutually exclusive with `osd`. |
 | `topology.hosts[].osd` | No | — | Drivegroup-shaped OSD device selection; see [OSD device selection](#osd-device-selection). Requires the `osd` role. Mutually exclusive with `devices`. |
+| `topology.osdDrivegroups[]` | No | — | Fleet OSD specs spanning many hosts; see [Fleet OSD drivegroups](#fleet-osd-drivegroups). |
 
 !!! note "Cross-field rules"
-    - An `osd`-role host **must** select devices via `devices[]` or `osd`.
-      Consuming all available devices is the explicit opt-in
-      `osd: {dataDevices: {all: true}}`, never the omission default.
+    - An `osd`-role host **must** select devices via `devices[]`, `osd`, or a
+      fleet `osdDrivegroups[]` entry that covers it. Consuming all available
+      devices is the explicit opt-in `osd: {dataDevices: {all: true}}`, never the
+      omission default.
     - `devices[]` and `osd` are mutually exclusive (`devices[]` is the shorthand
       for `osd.dataDevices.paths`).
+    - A host is owned by **one** OSD spec: a host covered by a fleet
+      `osdDrivegroups[]` entry must not also author per-host `devices[]`/`osd`,
+      and no two fleet entries may claim the same host.
+
+#### Fleet OSD drivegroups
+
+For homogeneous racks, `topology.osdDrivegroups[]` renders **one** cephadm OSD
+service spanning many hosts (the dominant declarative cephadm idiom) instead of
+one spec per host. Per-host `hosts[].osd` remains the override for heterogeneous
+nodes.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `serviceID` | Yes | — | cephadm OSD service ID; unique across drivegroups. |
+| `placement` | No | every `osd`-role host | Narrow the span by `sites`/`hosts`; see [Shared placement](#shared-placement). |
+| `osd` | Yes | — | The drivegroup-shaped selection (same fields as [OSD device selection](#osd-device-selection)). |
 
 #### OSD device selection
 

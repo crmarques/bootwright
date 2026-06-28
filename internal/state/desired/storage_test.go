@@ -715,7 +715,7 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = nil
 			},
-			want: `spec.ceph.topology.hosts[2] carries the "osd" role but selects no devices; author devices or osd.dataDevices (osd: {dataDevices: {all: true}} consumes all available devices)`,
+			want: `spec.ceph.topology.hosts[2] carries the "osd" role but selects no devices; author devices, osd.dataDevices, or cover it with a fleet osdDrivegroup`,
 		},
 		{
 			name: "devices-without-osd-role",
@@ -1022,6 +1022,66 @@ func TestValidCephConfigSectionMasks(t *testing.T) {
 		if validCephConfigSection(s) {
 			t.Errorf("section %q should be invalid", s)
 		}
+	}
+}
+
+// TestStorageFleetOSDDrivegroupOverlap covers the one-owner rule: a host may not
+// be claimed by both a per-host osd and a fleet, nor by two fleets, and a fleet
+// satisfies the osd-role device requirement.
+func TestStorageFleetOSDDrivegroupOverlap(t *testing.T) {
+	dg := func(id string, hosts ...string) v1alpha1.StorageCephOSDDrivegroup {
+		return v1alpha1.StorageCephOSDDrivegroup{
+			ServiceID: id,
+			Placement: v1alpha1.StoragePlacement{Hosts: hosts},
+			OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
+		}
+	}
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.State)
+		want string
+	}{
+		{
+			name: "fleet-covers-osd-role-host-passes",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Hostname)}
+			},
+		},
+		{
+			name: "per-host-and-fleet-overlap-rejected",
+			edit: func(state *v1alpha1.State) {
+				host := state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Hostname)}
+			},
+			want: "covered by a fleet osdDrivegroup; a host is owned by one OSD spec",
+		},
+		{
+			name: "duplicate-fleet-service-id-rejected",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Hostname), dg("fleet")}
+			},
+			want: `.serviceID "fleet" is duplicated`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storageValidationState()
+			tc.edit(&state)
+			got := strings.Join(validateStorage(state), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("unexpected errors: %s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
 	}
 }
 

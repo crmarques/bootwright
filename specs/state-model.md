@@ -631,9 +631,15 @@ Rules:
   `dataAllocateFraction`, and the top-level `unmanaged`), mutually exclusive
   with `devices`.
   Both require the `osd` role, and every osd-role host must author one of
-  them: OSD device consumption is explicit opt-in, so consuming all available
+  them — or be covered by a fleet `spec.ceph.topology.osdDrivegroups[]` entry:
+  OSD device consumption is explicit opt-in, so consuming all available
   devices is the authored `osd: {dataDevices: {all: true}}`, never an
   omission default.
+  `spec.ceph.topology.osdDrivegroups[]` are fleet OSD specs ({`serviceID`,
+  `placement`, `osd`}): one cephadm OSD service spanning the resolved osd-role
+  hosts instead of one spec per host. A host is owned by exactly one OSD spec —
+  validation rejects a host claimed by both a fleet and a per-host
+  `osd`/`devices`, or by two fleets.
   `hostname` is the rendered cephadm host-spec
   hostname; it defaults to the `machineRef` name and is authored only when the
   Ceph hostname genuinely differs from the Machine name. It is rendered

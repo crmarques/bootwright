@@ -573,6 +573,48 @@ func TestDrivegroupOSDExtendedFieldsRender(t *testing.T) {
 	}
 }
 
+// A fleet osdDrivegroup renders ONE OSD service with the authored serviceID
+// spanning all resolved osd-role hosts, instead of one per-host doc.
+func TestFleetOSDDrivegroupRendersSingleSpanningSpec(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Hosts: []v1alpha1.StorageCephHost{
+					{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"osd"}},
+					{Hostname: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{"osd"}},
+				},
+				OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
+					ServiceID: "rack1",
+					OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Model: "MZ7"}, Unmanaged: true},
+				}},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	var osdDocs []map[string]any
+	for _, doc := range CephadmCoreServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		if m["service_type"] == "osd" {
+			osdDocs = append(osdDocs, m)
+		}
+	}
+	if len(osdDocs) != 1 {
+		t.Fatalf("fleet drivegroup must render exactly one osd doc, got %d", len(osdDocs))
+	}
+	dg := osdDocs[0]
+	if dg["service_id"] != "rack1" || dg["unmanaged"] != true {
+		t.Fatalf("fleet osd doc = %v", dg)
+	}
+	hosts := dg["placement"].(map[string]any)["hosts"].([]string)
+	if !reflect.DeepEqual(hosts, []string{"ceph-0", "ceph-1"}) {
+		t.Fatalf("fleet spans hosts = %v, want both osd hosts", hosts)
+	}
+	if dg["spec"].(map[string]any)["data_devices"].(map[string]any)["model"] != "MZ7" {
+		t.Fatalf("fleet drivegroup spec = %v", dg["spec"])
+	}
+}
+
 // OSD device consumption is explicit opt-in: the authored
 // osd: {dataDevices: {all: true}} renders a per-host OSD service, and an
 // osd-role host without a device selection (unreachable for validated state)

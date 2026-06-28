@@ -213,6 +213,23 @@ type StorageCephNetworks struct {
 type StorageCephTopology struct {
 	Stretch *StorageCephStretch `yaml:"stretch,omitempty" json:"stretch,omitempty"`
 	Hosts   []StorageCephHost   `yaml:"hosts" json:"hosts"`
+	// OSDDrivegroups are fleet OSD specs: one cephadm OSD service whose drivegroup
+	// spans many hosts (the dominant declarative cephadm idiom for homogeneous
+	// racks), instead of one spec per host. Each renders a single OSD doc with
+	// the authored serviceID and the resolved placement. A host is owned by at
+	// most one OSD spec: a host covered by a drivegroup must not also author a
+	// per-host hosts[].osd / devices (and vice versa). Per-host osd remains the
+	// override for heterogeneous hosts.
+	OSDDrivegroups []StorageCephOSDDrivegroup `yaml:"osdDrivegroups,omitempty" json:"osdDrivegroups,omitempty"`
+}
+
+// StorageCephOSDDrivegroup is one fleet OSD service: an authored serviceID, a
+// placement (defaulting to every osd-role host, narrowable by sites/hosts), and
+// the drivegroup-shaped osd selection (same shape as hosts[].osd).
+type StorageCephOSDDrivegroup struct {
+	ServiceID string             `yaml:"serviceID" json:"serviceID"`
+	Placement StoragePlacement   `yaml:"placement,omitempty" json:"placement,omitempty"`
+	OSD       StorageCephHostOSD `yaml:"osd" json:"osd"`
 }
 
 // StorageCephStretch enables stretch mode by presence: authoring the stretch

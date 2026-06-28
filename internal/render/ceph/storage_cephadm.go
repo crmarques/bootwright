@@ -249,6 +249,21 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 		}
 		docs = append(docs, doc)
 	}
+	// Fleet drivegroups: one OSD doc per entry, the authored serviceID, placement
+	// resolved across the osd-role hosts (narrowable by sites/hosts). Validation
+	// guarantees no host is owned by both a fleet and a per-host drivegroup.
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		hosts := topology.ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD)
+		if len(hosts) == 0 {
+			continue
+		}
+		doc := cephadmPlacementService("osd", dg.ServiceID, hosts, dg.Placement.CountPerHost, cephadmOSDSpec(&dg.OSD))
+		if dg.OSD.Unmanaged {
+			doc["unmanaged"] = true
+		}
+		docs = append(docs, doc)
+	}
 	return docs
 }
 
