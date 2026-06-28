@@ -34,29 +34,32 @@ func EffectiveBindingAddons(state v1alpha1.State, binding v1alpha1.ClusterAddonB
 		positions[item.AddonRef.Name] = len(expanded)
 		expanded = append(expanded, item)
 	}
-	var visitProfile func(string, map[string]bool)
-	visitProfile = func(name string, stack map[string]bool) {
-		if stack[name] {
-			return
-		}
+	// Mirrors internal/addons/plan.expandSet: the same ProfileRefs-then-AddonRefs
+	// walk of the ClusterAddonProfile DAG, breaking on a profile already on the
+	// current path. Cycles are rejected upstream by state/desired (the cycle
+	// authority), so this path is unreachable on valid state; keeping the same
+	// shape as plan keeps the two traversals from drifting apart.
+	var visitProfile func(string, []string)
+	visitProfile = func(name string, stack []string) {
 		profile, ok := sets[name]
 		if !ok {
 			return
 		}
-		nextStack := map[string]bool{}
-		for key, value := range stack {
-			nextStack[key] = value
+		for _, item := range stack {
+			if item == name {
+				return
+			}
 		}
-		nextStack[name] = true
+		stack = append(stack, name)
 		for _, ref := range profile.Spec.ProfileRefs {
-			visitProfile(ref.Name, nextStack)
+			visitProfile(ref.Name, stack)
 		}
 		for _, ref := range profile.Spec.AddonRefs {
 			add(v1alpha1.ClusterAddonBindingAddon{AddonRef: ref})
 		}
 	}
 	for _, ref := range binding.Spec.AddonProfileRefs {
-		visitProfile(ref.Name, map[string]bool{})
+		visitProfile(ref.Name, nil)
 	}
 	for _, item := range binding.Spec.Addons {
 		add(item)
