@@ -136,4 +136,6 @@
     owner: root
     group: root
     mode: "0644"
+    modification_time: preserve
+    access_time: preserve
   when: bootwright_ceph_provider.requiresLicense | default(false) | bool
