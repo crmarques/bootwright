@@ -209,7 +209,9 @@ operator-owned files at their declared paths.
 | --- | --- |
 | Pull secret or context-local secret | `bootwright secret set --name openshift-pull-secret --pull-secret ~/pull-secret.json` |
 | TLS certificate and key | `bootwright secret set --name ingress-serving-tls --tls-cert ./tls.crt --tls-key ./tls.key` |
+| CA / trust bundle (PEM) | `bootwright secret set --name corporate-ca --raw-file ./ca.pem` |
 | Credentials | `bootwright secret set --name proxy-credentials --username proxy --password-stdin` |
+| Credentials from a `username:password` file | `bootwright secret set --name bmc-credentials --from-file ./bmc.txt` |
 | Converge `generated:` and context-storage entries | `bootwright secret generate` |
 | Verify every declared secret has local material | `bootwright secret check` |
 | Inspect required material | `bootwright secret list` |

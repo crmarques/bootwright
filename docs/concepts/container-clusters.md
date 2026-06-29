@@ -129,7 +129,9 @@ Author either a combined key pair or split public/private references — not bot
 
 `install.servingCertificates` overrides the default cluster serving
 certificates. Both arms are optional, but each arm validates its contents once
-present.
+present. For the end-to-end corporate-PKI walkthrough — serving certificates
+together with `additionalTrustBundleRefs` — see
+[Corporate TLS](../advanced/corporate-certificates.md).
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |

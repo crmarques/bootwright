@@ -114,6 +114,7 @@ nav:
       - advanced/index.md
       - Multi-cluster fleets & shared services: advanced/fleets.md
       - Disconnected & proxied installs: advanced/disconnected-proxy.md
+      - Corporate TLS certificates & trusted CAs: advanced/corporate-certificates.md
       - Managed OS installs: advanced/managed-os.md
       - Ceph topologies: advanced/ceph-topologies.md
       - KubeVirt nested clusters: advanced/kubevirt.md

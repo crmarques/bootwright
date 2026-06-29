@@ -1,0 +1,48 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: sno-libvirt
+spec:
+  distribution:
+    release:
+      version: 4.21.15
+
+  install:
+    nodeSSH:
+      keyPairRef: sno-libvirt-cluster-admin-ssh-key
+    endpoints:
+      # Single-node OpenShift has no load balancer or VIP: the API and ingress
+      # are served on the node's own IP (Machine spec.addresses ip), so both
+      # endpoints resolve there.
+      api:
+        address: 192.168.132.20
+        source:
+          type: external
+      ingress:
+        address: 192.168.132.20
+        source:
+          type: external
+    # Corporate CAs this cluster must trust, beyond the public bundle. These
+    # land in install-config additionalTrustBundle (policy Always). The same CA
+    # can instead be trusted fleet-wide via Environment.spec.installTrust.caBundleRefs.
+    additionalTrustBundleRefs:
+      - corporate-ca
+    # Replace the default self-signed cluster URL certificates with
+    # corporate-issued ones. The API named certificate serves only the external
+    # api.<cluster>.<baseDomain> host — never api-int (the internal endpoint
+    # keeps its installer-generated cert). The ingress default certificate must
+    # cover the *.apps.<cluster>.<baseDomain> wildcard.
+    servingCertificates:
+      apiServer:
+        namedCertificates:
+          - names:
+              - api.sno-libvirt.bootwright.test
+            secretRef: api-serving-tls
+      ingress:
+        defaultCertificateRef: ingress-serving-tls
+
+  hosts:
+
+  - hostname: master-0
+    role: master
+    machineRef: sno-libvirt-master-0

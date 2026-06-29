@@ -1,0 +1,25 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt-provider
+spec:
+  type: libvirt
+
+  networkAttachments:
+
+  - name: sno-bridge
+    libvirt:
+      bridge: vbr-cb-sno
+
+  libvirt:
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      auth:
+        credentialsRef: bmc-credentials
+    machineRef: bastion
+    machineProfiles:
+    - name: sno
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120

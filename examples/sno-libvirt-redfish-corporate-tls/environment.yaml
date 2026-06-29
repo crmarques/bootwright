@@ -1,0 +1,53 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: sno-libvirt-redfish-corporate-tls
+spec:
+  baseDomain: bootwright.test
+
+  secrets:
+    - openshift-pull-secret
+    - sno-libvirt-cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-sno-libvirt-cluster-admin
+    - bastion-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials:
+        generated:
+          credentials:
+            username: admin
+    # Corporate root CA the cluster must trust. In a real estate this is your
+    # PKI's root/intermediate chain, loaded with
+    # `bootwright secret set --name corporate-ca --raw-file ./ca.pem`. Here it
+    # is a generated self-signed cert so the example stays self-contained.
+    - corporate-ca:
+        generated:
+          selfSignedCertificate:
+            commonName: corp-root-ca.bootwright.test
+            dnsNames:
+              - corp-root-ca.bootwright.test
+    # Serving certificate for the external API URL (api.<cluster>.<baseDomain>).
+    # In production this is issued by the corporate CA above and loaded with
+    # `bootwright secret set --name api-serving-tls --tls-cert api.crt --tls-key api.key`.
+    - api-serving-tls:
+        generated:
+          selfSignedCertificate:
+            commonName: api.sno-libvirt.bootwright.test
+            dnsNames:
+              - api.sno-libvirt.bootwright.test
+    # Serving certificate for the ingress/apps wildcard
+    # (*.apps.<cluster>.<baseDomain>) — a wildcard so it covers the console,
+    # oauth, and every other apps route host.
+    - ingress-serving-tls:
+        generated:
+          selfSignedCertificate:
+            commonName: apps.sno-libvirt.bootwright.test
+            dnsNames:
+              - "*.apps.sno-libvirt.bootwright.test"
+
+  infraComponents:
+    nameResolution:
+      - name: default
+        management: managed
+        componentRef: name-resolution

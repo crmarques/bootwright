@@ -85,6 +85,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"docs/advanced/index.md",
 		"docs/advanced/fleets.md",
 		"docs/advanced/disconnected-proxy.md",
+		"docs/advanced/corporate-certificates.md",
 		"docs/advanced/managed-os.md",
 		"docs/advanced/ceph-topologies.md",
 		"docs/advanced/kubevirt.md",

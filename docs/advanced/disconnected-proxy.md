@@ -192,7 +192,9 @@ Mirror, proxy, and install trust material are declared as `Environment` secrets
 and referenced by name: `trustBundleRef` on the mirror registry, the proxy
 `auth.proxyAuthRef`, and `MachineImage.spec.trustRefs[]` for managed-OS ISO
 downloads. The secret bytes are never checked in; they live in the local context.
-See [Secrets](../concepts/secrets.md).
+See [Secrets](../concepts/secrets.md). For trusting corporate CAs and serving
+corporate certificates on the cluster URLs, see
+[Corporate TLS](corporate-certificates.md).
 
 ### Boot artifacts and the minimal ISO
 
