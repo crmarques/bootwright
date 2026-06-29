@@ -66,6 +66,7 @@
       - "{{ '/var/lib/containers' if bootwright_preflight_storage_containers.stat.exists | default(false) else '/var/lib' }}"
   register: bootwright_preflight_storage_container_df
   changed_when: false
+  become: true
   when: bootwright_host_storage_nodes | length > 0
 
 - name: Assert storage container filesystem free space
@@ -82,6 +83,10 @@
       - --no-act
       - --noheadings
       - "{{ item.1 }}"
+  # Run privileged to match the identical check in the apply path: an unprivileged
+  # wipefs on a block device returns EACCES (rc!=0), which would false-fail this
+  # safety-critical "OSD device is empty" gate for a non-root storage SSH user.
+  become: true
   register: bootwright_preflight_storage_device
   changed_when: false
   failed_when: bootwright_preflight_storage_device.rc != 0 or (bootwright_preflight_storage_device.stdout | trim | length > 0)
