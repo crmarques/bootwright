@@ -3,6 +3,11 @@
   ansible.builtin.set_fact:
     bootwright_ownership_package_safe: "{{ bootwright_ownership_package_name | regex_replace('[^A-Za-z0-9_.-]', '_') }}"
     bootwright_ownership_package_record_path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}/{{ bootwright_ownership_package_name | regex_replace('[^A-Za-z0-9_.-]', '_') }}.json"
+    # Reset per package: this file is included once per package in a loop, and a
+    # skipped "Decode" set_fact below would otherwise leave the previous
+    # iteration's record in place, so a record-less package would inherit the
+    # prior package's requiredBy/preexisting.
+    bootwright_ownership_existing_package_record: {}
   changed_when: false
 
 - name: Stat existing package ownership record
