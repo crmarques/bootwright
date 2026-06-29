@@ -69,11 +69,18 @@
   changed_when: false
   failed_when: false
 
-- name: Decide whether virtctl needs install (require server version match)
+- name: Decide whether virtctl needs install (require exact server version match)
   ansible.builtin.set_fact:
     bootwright_virtctl_install: >-
       {{ bootwright_virtctl_installed_probe.rc != 0
-         or bootwright_virtctl_server_version not in (bootwright_virtctl_installed_probe.stdout | default('')) }}
+         or bootwright_virtctl_installed_client_version != bootwright_virtctl_server_version }}
+  vars:
+    # Extract the client GitVersion token rather than substring-matching the
+    # whole `virtctl version --client` line: a substring check makes server
+    # v1.2.1 spuriously match an installed v1.2.10 (and vice versa).
+    bootwright_virtctl_installed_client_version: >-
+      {{ bootwright_virtctl_installed_probe.stdout | default('')
+         | regex_search('GitVersion:"?(v[0-9][^",}\s]*)', '\1') | default('', true) }}
   changed_when: false
 
 - name: Resolve virtctl ConsoleCLIDownload from the host cluster
@@ -213,11 +220,15 @@
 - name: Verify installed virtctl matches the host cluster KubeVirt version
   ansible.builtin.assert:
     that:
-      - bootwright_virtctl_server_version in (bootwright_virtctl_final_probe.stdout | default(''))
+      - bootwright_virtctl_installed_client_version == bootwright_virtctl_server_version
     fail_msg: >-
       Installed virtctl does not match host cluster KubeVirt version
       {{ bootwright_virtctl_server_version }}:
       {{ bootwright_virtctl_final_probe.stdout | default('<unknown>') }}.
+  vars:
+    bootwright_virtctl_installed_client_version: >-
+      {{ bootwright_virtctl_final_probe.stdout | default('')
+         | regex_search('GitVersion:"?(v[0-9][^",}\s]*)', '\1') | default('', true) }}
   when: bootwright_virtctl_install | bool
 
 - name: Remove virtctl tmp directory
