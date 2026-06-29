@@ -32,6 +32,30 @@
       KubeVirt boot for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is missing kubeconfig, namespace, or generated agent ISO path.
 
+# On a re-boot the VM may already be running and holding the agent-ISO
+# DataVolume. Deleting/re-uploading the DV under a running VMI deletes an in-use
+# volume and leaves the VMI on the stale ISO (the later `virtctl start` tolerates
+# "already running" and no-ops). Stop the VM first, mirroring the destroy path
+# (machine_substrate_kubevirt/tasks/destroy.yml), so the start below re-attaches
+# the freshly uploaded ISO.
+- name: Stop KubeVirt VirtualMachine before replacing the agent ISO
+  ansible.builtin.command:
+    argv:
+      - virtctl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - stop
+      - "{{ bootwright_kubevirt_vm_name }}"
+      - --namespace
+      - "{{ bootwright_kubevirt_namespace }}"
+      - --force
+  register: bootwright_kubevirt_vm_stop
+  changed_when: bootwright_kubevirt_vm_stop.rc == 0
+  failed_when:
+    - bootwright_kubevirt_vm_stop.rc != 0
+    - "'not running' not in ((bootwright_kubevirt_vm_stop.stderr | default('')) | lower)"
+    - "'not found' not in ((bootwright_kubevirt_vm_stop.stderr | default('')) | lower)"
+
 - name: Remove previous KubeVirt agent ISO DataVolume
   ansible.builtin.command:
     argv:
