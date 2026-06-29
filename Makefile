@@ -170,7 +170,7 @@ test:
 
 # Order checks from cheapest to slowest so local runs fail before starting
 # race tests or clean-copy tests when lightweight guardrails already caught it.
-check: check-fast sync-bundle
+check: check-fast
 	$(GO) vet $(GO_TEST_PACKAGES)
 	$(MAKE) staticcheck
 	$(MAKE) go-mod-tidy-check
@@ -180,7 +180,10 @@ check: check-fast sync-bundle
 	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) go-test-clean-checkout
 
-check-fast: cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check check-e2e-deps
+# sync-bundle first so the embedded ansible bundle matches the source tree
+# before the go tests run; otherwise TestEmbeddedBundleMatchesSourceAnsible
+# fails (or skips) against a stale or absent gitignored bundle artifact.
+check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check check-e2e-deps
 	$(GO) test $(GO_TEST_PACKAGES)
 
 check-go-source-visibility:
