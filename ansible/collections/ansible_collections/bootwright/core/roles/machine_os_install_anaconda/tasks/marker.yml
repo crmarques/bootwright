@@ -18,4 +18,10 @@
         | sudo tee {{ bootwright_os_marker_path | quote }} >/dev/null
         && sudo chmod 0644 {{ bootwright_os_marker_path | quote }}
   delegate_to: localhost
-  changed_when: false
+  # The kickstart %post already writes this marker on a fresh install, and
+  # probe_existing.yml records whether the on-host marker already matches the
+  # desired payload. Skip the redundant SSH rewrite on a converged host, and
+  # report changed honestly when a real (re)write happens instead of hiding the
+  # remote mutation behind changed_when:false.
+  changed_when: true
+  when: not (bootwright_os_pre_marker_matches | default(false) | bool)
