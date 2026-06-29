@@ -60,17 +60,15 @@
   when: bootwright_ceph_rhsm_satellite_hostname | length > 0
 
 - name: Register storage node with RHSM
-  ansible.builtin.command:
-    argv:
-      - subscription-manager
-      - register
-      - --org
-      - "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_organization_path) | trim }}"
-      - --activationkey
-      - "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_activation_key_path) | trim }}"
-      - --force
+  # redhat_subscription checks the node's registration identity and only registers
+  # when needed, instead of re-registering with --force on every apply (which
+  # mints a fresh consumer record and rotates entitlement certs each run). Honest
+  # change reporting also restores the drift signal that changed_when:false hid.
+  community.general.redhat_subscription:
+    state: present
+    org_id: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_organization_path) | trim }}"
+    activationkey: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_activation_key_path) | trim }}"
   register: bootwright_ceph_rhsm_register
-  changed_when: false
   no_log: true
 
 - name: Refresh RHSM subscription metadata
@@ -78,7 +76,8 @@
     argv:
       - subscription-manager
       - refresh
-  changed_when: false
+  changed_when: bootwright_ceph_rhsm_register is changed
+  when: bootwright_ceph_rhsm_register is changed
 
 # subscription-manager register does not connect Red Hat Insights on its own;
 # honor the entitlement's connectToInsights intent explicitly when set, matching
@@ -92,24 +91,15 @@
   changed_when: bootwright_ceph_insights_register.rc == 0
   when: bootwright_ceph_provider.rhsm.connectToInsights | default(false) | bool
 
-- name: Disable unrelated RHSM repositories
-  ansible.builtin.command:
-    argv:
-      - subscription-manager
-      - repos
-      - --disable=*
-  changed_when: false
-
-- name: Enable subscription-backed Ceph repositories
-  ansible.builtin.command:
-    argv:
-      - subscription-manager
-      - repos
-      - "--enable={{ item }}"
-  loop: "{{ bootwright_ceph_provider.repository.redhatRepos | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
-  changed_when: false
+- name: Enable subscription-backed Ceph repositories (and disable the rest)
+  # rhsm_repository with purge:true declaratively enables exactly the named repos
+  # and disables all others, idempotently and with honest change reporting --
+  # replacing the unconditional `repos --disable=* / --enable=` commands that ran
+  # every apply behind changed_when:false.
+  community.general.rhsm_repository:
+    name: "{{ bootwright_ceph_provider.repository.redhatRepos | default([]) }}"
+    purge: true
+  when: (bootwright_ceph_provider.repository.redhatRepos | default([]) | length) > 0
 
 - name: Install vendor Ceph repository definition
   ansible.builtin.get_url:
