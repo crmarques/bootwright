@@ -1,9 +1,21 @@
 visible_hostname bootwright-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}
 http_port 0.0.0.0:{{ bootwright_component.port }}
 
+{% if (bootwright_proxy_credentials_ref | default('') | length) > 0 %}
 auth_param basic program /usr/local/squid/libexec/basic_ncsa_auth /etc/squid/auth/htpasswd
 auth_param basic realm bootwright-{{ bootwright_component.name }}
 acl authenticated proxy_auth REQUIRED
+{% else %}
+# No proxyAuthRef is configured for this proxy, so no htpasswd is written. Fall
+# back to network-based access control (private and link-local ranges) instead
+# of requiring an auth file that does not exist, which would deny every request.
+# Set spec.auth.proxyAuthRef to require credentials instead of network trust.
+acl localnet src 10.0.0.0/8
+acl localnet src 172.16.0.0/12
+acl localnet src 192.168.0.0/16
+acl localnet src fc00::/7
+acl localnet src fe80::/10
+{% endif %}
 
 acl SSL_ports port 443
 acl Safe_ports port 80
@@ -13,7 +25,11 @@ acl CONNECT method CONNECT
 
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
+{% if (bootwright_proxy_credentials_ref | default('') | length) > 0 %}
 http_access allow authenticated
+{% else %}
+http_access allow localnet
+{% endif %}
 http_access deny all
 
 negative_dns_ttl 5 seconds
