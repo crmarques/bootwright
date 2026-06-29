@@ -76,7 +76,10 @@
     argv: "{{ bootwright_ceph_bootstrap_argv }}"
   register: bootwright_ceph_bootstrap
   changed_when: true
-  no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
+  # cephadm prints the one-time dashboard admin password to stdout for EVERY
+  # provider (not just registry-authed ones), and that stdout is shown on
+  # failure and under -v. Always redact, regardless of registry credentials.
+  no_log: true
   # cephadm bootstrap is a one-time, non-idempotent operation that refuses to
   # run when /etc/ceph/ceph.conf already exists. Gate purely on that file, the
   # same marker cephadm itself checks: an already-bootstrapped node must never
