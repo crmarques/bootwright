@@ -5,6 +5,7 @@
     bootwright_bmc_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_component.providerName }}"
     bootwright_bmc_vmedia_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/{{ bootwright_component.providerName }}/vmedia"
     bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"
+    bootwright_bmc_libvirt_uri: "{{ bootwright_component.bmcEmulated.libvirtURI }}"
   changed_when: false
 
 - name: Stop sushy-emulator service
@@ -46,6 +47,7 @@
 - name: Destroy libvirt vmedia pool
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    uri: "{{ bootwright_bmc_libvirt_uri }}"
     state: absent
   failed_when: false
 

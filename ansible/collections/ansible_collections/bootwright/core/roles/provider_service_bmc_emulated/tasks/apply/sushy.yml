@@ -26,6 +26,7 @@
 - name: Deactivate mismatched libvirt vmedia storage pool
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    uri: "{{ bootwright_bmc_libvirt_uri }}"
     state: inactive
   failed_when: false
   when: bootwright_bmc_vmedia_pool_redefine | bool
@@ -33,6 +34,7 @@
 - name: Undefine mismatched libvirt vmedia storage pool
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    uri: "{{ bootwright_bmc_libvirt_uri }}"
     state: absent
   failed_when: false
   when: bootwright_bmc_vmedia_pool_redefine | bool
@@ -40,6 +42,7 @@
 - name: Define libvirt vmedia storage pool
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    uri: "{{ bootwright_bmc_libvirt_uri }}"
     state: present
     autostart: true
     xml: "{{ lookup('ansible.builtin.template', 'vmedia/pool.xml.j2') }}"
@@ -48,6 +51,7 @@
 - name: Activate libvirt vmedia storage pool
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    uri: "{{ bootwright_bmc_libvirt_uri }}"
     state: active
   register: bootwright_bmc_vmedia_pool_activate
 
