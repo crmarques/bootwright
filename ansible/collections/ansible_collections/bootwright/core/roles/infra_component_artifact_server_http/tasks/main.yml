@@ -76,15 +76,18 @@
   when: bootwright_artifacts_https_enabled | bool
 
 - name: Render boot artifact TLS OpenSSL config
+  # Render unconditionally so a change to the desired SANs/CN (dnsNames,
+  # commonName, ipAddresses) surfaces as a content change and drives a cert
+  # regeneration below. Gating this on "material absent" left an edited SAN list
+  # serving a stale certificate that fails client hostname verification.
   ansible.builtin.template:
     src: artifacts-openssl.cnf.j2
     dest: "{{ bootwright_artifacts_tls_dir }}/openssl.cnf"
     owner: root
     group: root
     mode: "0644"
-  when:
-    - bootwright_artifacts_https_enabled | bool
-    - not (bootwright_artifacts_tls_material_present | default(false) | bool)
+  register: bootwright_artifacts_tls_openssl_cnf
+  when: bootwright_artifacts_https_enabled | bool
 
 - name: Generate boot artifact TLS certificate
   ansible.builtin.command:
@@ -110,7 +113,8 @@
   changed_when: true
   when:
     - bootwright_artifacts_https_enabled | bool
-    - not (bootwright_artifacts_tls_material_present | default(false) | bool)
+    - (not (bootwright_artifacts_tls_material_present | default(false) | bool))
+      or (bootwright_artifacts_tls_openssl_cnf is changed)
 
 - name: Restrict boot artifact TLS key
   ansible.builtin.file:
