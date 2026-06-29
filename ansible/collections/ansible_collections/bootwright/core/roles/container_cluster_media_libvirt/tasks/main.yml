@@ -67,6 +67,11 @@
   changed_when: bootwright_libvirt_media_insert.stdout is search('(?m)^changed=true$')
   delegate_to: "{{ bootwright_component.boot.media.libvirt.machineRef }}"
   become: true
+  # stagePath embeds the agent-ISO publish token (substituted in
+  # container_cluster_agent_install boot_machine.yml); without no_log the full
+  # token is written to stdout/logs, matching how the Redfish backend and the
+  # neighbouring set_fact tasks already redact it.
+  no_log: true
   when: bootwright_libvirt_media_insert_requested | bool
 
 - name: Record direct libvirt virtual media attachment
