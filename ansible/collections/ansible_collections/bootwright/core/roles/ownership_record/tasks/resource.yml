@@ -15,9 +15,21 @@
     group: root
     mode: "0700"
 
+- name: Resolve ownership resource record path
+  ansible.builtin.set_fact:
+    bootwright_ownership_resource_path: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{ bootwright_ownership_name }}.json"
+  changed_when: false
+
+- name: Load existing ownership resource record
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ownership_resource_path }}"
+  register: bootwright_ownership_resource_slurp
+  changed_when: false
+  failed_when: false
+
 - name: Write ownership resource record
   ansible.builtin.copy:
-    dest: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{ bootwright_ownership_name }}.json"
+    dest: "{{ bootwright_ownership_resource_path }}"
     owner: root
     group: root
     mode: "0600"
@@ -36,9 +48,27 @@
         ansible_user: "{{ ansible_user | default('') }}"
         ansible_connection: "{{ ansible_connection | default('') }}"
         ansible_ssh_common_args: "{{ ansible_ssh_common_args | default('') }}"
-    bootwright_ownership_record: >-
+    bootwright_ownership_record_desired: >-
       {{
         bootwright_ownership_record_base
         | combine(bootwright_ownership_fields | default({}), recursive=True)
-        | combine({'updatedAt': now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ')}, recursive=True)
+      }}
+    # Reuse the prior updatedAt when nothing else changed so the written file is
+    # byte-identical and the copy reports no change; only stamp a new timestamp
+    # when the substantive record actually differs. The desired content is always
+    # written regardless, so this only affects the timestamp, never correctness.
+    bootwright_ownership_existing: >-
+      {{ (bootwright_ownership_resource_slurp.content | b64decode | from_json)
+         if (bootwright_ownership_resource_slurp.content is defined)
+         else {} }}
+    bootwright_ownership_record: >-
+      {{
+        bootwright_ownership_record_desired
+        | combine({'updatedAt':
+            bootwright_ownership_existing.updatedAt
+            if (bootwright_ownership_existing.updatedAt is defined
+                and (bootwright_ownership_record_desired
+                     | combine({'updatedAt': bootwright_ownership_existing.updatedAt}))
+                    == bootwright_ownership_existing)
+            else now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ')})
       }}
