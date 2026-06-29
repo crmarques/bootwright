@@ -1,3 +1,21 @@
+# The build COPYs only its real inputs (api, cmd, internal, ansible, scripts,
+# go.mod/go.sum, Makefile, and .git for version stamping). Everything below is
+# excluded from the build context so it neither slows the context transfer nor
+# invalidates any build layer. .git is deliberately NOT excluded: a raw
+# `docker build` self-stamps version metadata from it in the compile stage, and
+# a repo guard test (TestContainerfileStampsBuildMetadata) enforces its presence.
+.github/
+.agents/
+docs/
+examples/
+specs/
+images/
+test/
+README.md
+AGENTS.md
+CLAUDE.md
+mkdocs.yml
+.editorconfig
 .cache/
 .state/
 .codex/

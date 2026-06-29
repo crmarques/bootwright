@@ -351,7 +351,7 @@ func TestContainerfileStampsBuildMetadata(t *testing.T) {
 		`git_commit="${GIT_COMMIT}"`,
 		"git describe --tags --always --dirty",
 		"git rev-parse --short HEAD",
-		`make build VERSION="${version}" GIT_COMMIT="${git_commit}"`,
+		`make go-build VERSION="${version}" GIT_COMMIT="${git_commit}"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Containerfile missing build metadata fragment %q", want)

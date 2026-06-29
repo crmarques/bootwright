@@ -85,7 +85,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -112,8 +112,17 @@ endif
 LDFLAGS = -X github.com/crmarques/bootwright/internal/cli.versionString=$(VERSION) \
           -X github.com/crmarques/bootwright/internal/cli.gitCommit=$(GIT_COMMIT)
 
+GO_BUILD_CMD = $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/bootwright
+
 build: $(BIN_DIR) sync-bundle
-	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/bootwright
+	$(GO_BUILD_CMD)
+
+# Compile the binary assuming the embedded ansible bundle is already in place.
+# The container build runs `sync-bundle` and this compile in separate layers so
+# the per-commit version stamp only re-links here instead of re-packing the
+# bundle. Local developers should keep using `build`, which syncs first.
+go-build: $(BIN_DIR)
+	$(GO_BUILD_CMD)
 
 container-build:
 	@test -n "$(CONTAINER_CACHE_DIR)" || { printf '%s\n' 'CONTAINER_CACHE_DIR must not be empty'; exit 1; }
