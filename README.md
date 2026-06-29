@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo-circle.png" alt="Bootwright" width="400">
+  <img src="docs/assets/images/logo-circle.png" alt="Bootwright" width="400">
 </p>
 
 # Bootwright
@@ -67,7 +67,7 @@ then the infra they ran on). Unscoped `destroy --stage infra` performs
 current-context VM cleanup.
 
 <p align="center">
-  <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
+  <img src="docs/assets/images/high-level-overview.png" alt="Bootwright overview" width="800">
 </p>
 
 ## Start Here

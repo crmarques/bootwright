@@ -1,47 +1,39 @@
 package repocheck
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 )
 
-// mkdocs cannot read assets outside docs_dir, so the README's images/ and the
-// site's docs/assets/images/ keep their own copies of the shared logo/overview
-// art. Any asset present in both directories must stay byte-identical so the
-// GitHub README and the published site never drift to different diagrams.
-func TestSharedImageAssetsStayIdentical(t *testing.T) {
+// The GitHub README is rendered from the repo root and now points at the
+// published site's assets under docs/assets/images/ instead of keeping a
+// duplicate top-level images/ copy. Guard that every local image the README
+// references still resolves to a real file so the README art never 404s.
+var readmeImageSrc = regexp.MustCompile(`<img[^>]*\bsrc="([^"]+)"`)
+
+func TestReadmeImagesResolve(t *testing.T) {
 	root := repoRoot(t)
-	repoImages := filepath.Join(root, "images")
-	docsImages := filepath.Join(root, "docs", "assets", "images")
-	entries, err := os.ReadDir(repoImages)
+	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
 	if err != nil {
-		t.Fatalf("read %s: %v", repoImages, err)
+		t.Fatalf("read README.md: %v", err)
 	}
-	shared := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
+
+	checked := 0
+	for _, match := range readmeImageSrc.FindAllStringSubmatch(string(readme), -1) {
+		src := match[1]
+		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 			continue
 		}
-		docsCopy := filepath.Join(docsImages, entry.Name())
-		if _, err := os.Stat(docsCopy); err != nil {
-			continue
-		}
-		shared++
-		a, err := os.ReadFile(filepath.Join(repoImages, entry.Name()))
-		if err != nil {
-			t.Fatalf("read %s: %v", entry.Name(), err)
-		}
-		b, err := os.ReadFile(docsCopy)
-		if err != nil {
-			t.Fatalf("read %s: %v", docsCopy, err)
-		}
-		if !bytes.Equal(a, b) {
-			t.Fatalf("images/%s and docs/assets/images/%s have drifted; keep the shared asset identical", entry.Name(), entry.Name())
+		checked++
+		path := filepath.Join(root, filepath.FromSlash(src))
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("README image %q does not resolve to a file: %v", src, err)
 		}
 	}
-	if shared == 0 {
-		t.Fatal("expected at least one shared asset between images/ and docs/assets/images/")
+	if checked == 0 {
+		t.Fatal("expected at least one local image reference in README.md")
 	}
 }

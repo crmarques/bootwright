@@ -3,7 +3,11 @@ title: Home
 description: Objective, scope, and documentation map for Bootwright.
 ---
 
-# Bootwright
+<p align="center">
+  <img src="assets/images/logo-horizontal.png"
+       alt="Bootwright"
+       width="520">
+</p>
 
 Bootwright is a desired-state orchestrator for turning cloud platform intent
 into reality. You describe the platform you want — substrates, machines, managed
@@ -12,6 +16,12 @@ OS installs, networks, shared services, clusters, storage, and bootstrap add-ons
 official tools expect (`openshift-install`, `cephadm`, `oc`, and your providers),
 and converges the dependency graph idempotently until reality matches what you
 declared.
+
+<p align="center">
+  <img src="assets/images/high-level-overview.png"
+       alt="Bootwright"
+       width="900">
+</p>
 
 The same desired state works at two scales. You can stand up a **whole cloud
 platform from scratch**, or converge a **single isolated component** for
