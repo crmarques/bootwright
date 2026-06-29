@@ -36,6 +36,10 @@
     state: disabled
     permanent: true
     immediate: true
+  # Tolerate firewalld errors during teardown (e.g. firewalld not running), the
+  # same as every sibling destroy role; a best-effort port close must not abort
+  # the rest of the destroy.
+  failed_when: false
   loop: "{{ bootwright_component.listeners | default([]) }}"
   loop_control:
     label: "{{ item.protocol }}:{{ item.port }}"
