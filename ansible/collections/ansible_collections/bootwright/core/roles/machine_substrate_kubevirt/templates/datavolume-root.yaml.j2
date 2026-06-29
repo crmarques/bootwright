@@ -4,6 +4,11 @@ kind: DataVolume
 metadata:
   name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root
   namespace: {{ bootwright_component.kubevirt.namespace }}
+  annotations:
+    # Force CDI to bind this blank PVC immediately. The VM is created stopped, so
+    # on a WaitForFirstConsumer storage class (e.g. LVMS) the PVC would otherwise
+    # have no consumer until boot and never reach Ready, deadlocking the wait.
+    cdi.kubevirt.io/storage.bind.immediate.requested: "true"
   labels:
     bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}
     bootwright.io/cluster: {{ bootwright_current_cluster.name }}
