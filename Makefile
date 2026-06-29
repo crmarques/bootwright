@@ -171,6 +171,12 @@ $(COLLECTIONS_STAMP): $(COLLECTIONS_REQUIREMENTS) $(COLLECTIONS_LOCK)
 		-name tests -o -name docs -o -name examples -o -name changelogs \
 		-o -name .github -o -name .azure-pipelines -o -name ci \
 		\) -exec rm -rf {} +
+	@# Verify the freshly-installed collections against requirements.lock.yml at
+	@# install time -- before the bundle is packed and embedded -- so a tampered or
+	@# unexpected download fails the build the moment it is unpacked. The post-pack
+	@# Go test (TestAnsibleCollectionLockMatchesEmbeddedManifest) remains a second
+	@# line of defence on the shipped artifact.
+	@$(PYTHON) scripts/verify-ansible-collections.py --collections $(EMBED_COLLECTIONS_DIR) --lock $(COLLECTIONS_LOCK)
 	@touch $@
 
 $(BIN_DIR):
