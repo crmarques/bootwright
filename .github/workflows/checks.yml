@@ -26,7 +26,7 @@ jobs:
       - name: Install Ansible
         run: >-
           python3 -m pip install --disable-pip-version-check
-          ansible-core==2.21.0
+          ansible-core==2.21.0 ansible-lint yamllint
 
       - name: Sync ansible bundle
         run: make sync-bundle
@@ -59,6 +59,9 @@ jobs:
 
       - name: Ansible syntax check
         run: make ansible-syntax-check
+
+      - name: Ansible lint
+        run: make ansible-lint-check
 
       - name: Repository guardrails
         run: |

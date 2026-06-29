@@ -1,0 +1,28 @@
+---
+# yamllint config for the embedded Ansible collection. Structural rules stay on
+# (indentation, duplicate keys, trailing whitespace, final newline); style rules
+# that fight intentional house style (long inline Jinja, `{{ }}` flow-brace false
+# positives) are relaxed so the gate is signal, not noise.
+extends: default
+
+rules:
+  # Long inline Jinja/`when` expressions are deliberate and span to ~490 cols.
+  line-length: disable
+  # `{{ ... }}` and inline filter dicts are parsed as flow mappings by yamllint
+  # and produce spurious "too many spaces inside braces" on Jinja.
+  braces: disable
+  comments:
+    require-starting-space: true
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  octal-values: disable
+  truthy:
+    # Ansible booleans are normalized elsewhere; allow yes/no/on keys (CI yaml).
+    check-keys: false
+  empty-lines:
+    max: 2
+    max-start: 0
+    max-end: 1
+
+ignore: |
+  .github/

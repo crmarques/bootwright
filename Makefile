@@ -33,6 +33,8 @@ ANSIBLE_SRC_DIR = ansible
 EMBED_BUNDLE_ARCHIVE = internal/converge/bundle/ansible_bundle.zip
 BUNDLE_WORK_DIR = $(STATE_DIR)/ansible-bundle
 ANSIBLE_GALAXY ?= $(shell command -v ansible-galaxy 2>/dev/null)
+ANSIBLE_LINT ?= $(shell command -v ansible-lint 2>/dev/null)
+YAMLLINT ?= $(shell command -v yamllint 2>/dev/null)
 COLLECTIONS_REQUIREMENTS = $(ANSIBLE_SRC_DIR)/collections/requirements.yml
 COLLECTIONS_LOCK = $(ANSIBLE_SRC_DIR)/collections/requirements.lock.yml
 EMBED_COLLECTIONS_DIR = $(BUNDLE_WORK_DIR)/collections
@@ -85,7 +87,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -186,6 +188,7 @@ check: check-fast
 	$(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
+	$(MAKE) ansible-lint-check
 	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) go-test-clean-checkout
 
@@ -262,6 +265,22 @@ ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)
 	@for playbook in $(ANSIBLE_SYNTAX_PLAYBOOKS); do \
 		$(ANSIBLE_SYNTAX_ENV) $(ANSIBLE_PLAYBOOK) --syntax-check -i localhost, "$$playbook"; \
 	done
+
+# Lint the embedded collection: yamllint for YAML formatting, ansible-lint for
+# Ansible semantics (idempotency, no_log, command-vs-module, ...). The current
+# tree is a green baseline; .ansible-lint skips only reviewed house-style rules,
+# so the gate catches new regressions in those classes. ansible-lint runs from
+# the collection root for role/playbook auto-discovery, with the same collection
+# path the syntax check uses so community.* dependencies resolve.
+ansible-lint-check: check-e2e-deps $(COLLECTIONS_STAMP)
+	@test -n "$(YAMLLINT)" || { printf '%s\n' 'yamllint not found in PATH; install with python3 -m pip install yamllint or set YAMLLINT=/path/to/yamllint'; exit 1; }
+	@test -n "$(ANSIBLE_LINT)" || { printf '%s\n' 'ansible-lint not found in PATH; install with python3 -m pip install ansible-lint or set ANSIBLE_LINT=/path/to/ansible-lint'; exit 1; }
+	$(YAMLLINT) -c $(CURDIR)/.yamllint $(ANSIBLE_SRC_DIR)
+	cd $(BOOTWRIGHT_COLLECTION_ROOT) && \
+		ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR) \
+		ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local \
+		ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote \
+		$(ANSIBLE_LINT) --offline -c $(CURDIR)/.ansible-lint
 
 stale-term-check:
 	@if command -v rg >/dev/null 2>&1; then \
