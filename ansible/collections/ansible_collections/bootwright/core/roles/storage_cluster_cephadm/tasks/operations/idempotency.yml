@@ -323,6 +323,7 @@
     bootwright_ceph_op_output: "{{ bootwright_ceph_rgw_user_info.stdout | default('') }}"
   no_log: "{{ (bootwright_ceph_op_capture | length > 0) or (bootwright_ceph_op_no_log | bool) }}"
   when:
+    - bootwright_ceph_op_idempotency_kind == 'rgw-user'
     - bootwright_ceph_rgw_user_info is defined
     - bootwright_ceph_rgw_user_info.rc | default(1) == 0
 
