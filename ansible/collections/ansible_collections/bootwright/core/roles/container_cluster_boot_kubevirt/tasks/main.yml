@@ -122,6 +122,30 @@
     - bootwright_kubevirt_vm_start.rc != 0
     - "'already' not in ((bootwright_kubevirt_vm_start.stderr | default('')) | lower)"
 
+- name: Wait for the KubeVirt VirtualMachineInstance to be created
+  # virtctl start returns before virt-controller has created the VMI object, so
+  # the readiness wait below can hit "no matching resources found" and fail the
+  # boot spuriously when the controller is slow (busy hub, parallel boots). Wait
+  # for the object to exist first; `kubectl wait --for=condition=Ready` then
+  # polls correctly once the VMI is present.
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - "vmi/{{ bootwright_kubevirt_vm_name }}"
+      - -o
+      - name
+  register: bootwright_kubevirt_vmi_present
+  changed_when: false
+  failed_when: false
+  until: bootwright_kubevirt_vmi_present.rc == 0
+  retries: 30
+  delay: 2
+
 - name: Wait for KubeVirt VirtualMachineInstance readiness
   ansible.builtin.command:
     argv:
