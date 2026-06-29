@@ -1,6 +1,7 @@
 ---
 - name: Destroy provider services
   hosts: bootwright_provider_hosts
+  strategy: free
   gather_subset:
     - "!all"
     - min

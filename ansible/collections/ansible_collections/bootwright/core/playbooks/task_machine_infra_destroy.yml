@@ -1,6 +1,7 @@
 ---
 - name: Destroy cluster infrastructure
   hosts: bootwright_provider_hosts:bootwright_infra_hosts
+  strategy: free
   gather_subset:
     - "!all"
     - min

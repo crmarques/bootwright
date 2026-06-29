@@ -1,6 +1,7 @@
 ---
 - name: Destroy infra component services
   hosts: bootwright_infra_component_hosts
+  strategy: free
   gather_subset:
     - "!all"
     - min
