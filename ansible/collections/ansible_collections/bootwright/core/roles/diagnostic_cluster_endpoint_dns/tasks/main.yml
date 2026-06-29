@@ -15,10 +15,10 @@
       }}
   changed_when: false
 
-- name: Skip when no external endpoints
-  ansible.builtin.meta: end_play
-  when: bootwright_external_endpoints | length == 0
-
+# No end_play here: this role runs inside a multi-host, strategy:free play, where
+# meta:end_play would abort the play for ALL hosts, not just this one. The probe
+# and report tasks below already no-op when bootwright_external_endpoints is empty
+# (their loops iterate an empty list), so no short-circuit is needed.
 - name: Validate external endpoint DNS
   ansible.builtin.command:
     argv:
