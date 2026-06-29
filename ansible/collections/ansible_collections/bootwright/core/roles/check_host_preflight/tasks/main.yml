@@ -72,3 +72,14 @@
   ansible.builtin.debug:
     msg: "/dev/kvm={{ bootwright_preflight_kvm.stat.exists | default(false) }}"
   when: bootwright_host_kvm_machines | length > 0
+
+- name: Require /dev/kvm for hosts that run KVM-backed machines
+  ansible.builtin.assert:
+    that:
+      - bootwright_preflight_kvm.stat.exists | default(false) | bool
+    fail_msg: >-
+      Host {{ inventory_hostname }} must expose /dev/kvm to provision its
+      {{ bootwright_host_kvm_machines | length }} KVM-backed machine(s), but
+      /dev/kvm is absent. Enable virtualization/nested-virt and load the kvm
+      kernel modules, then re-run preflight.
+  when: bootwright_host_kvm_machines | length > 0
