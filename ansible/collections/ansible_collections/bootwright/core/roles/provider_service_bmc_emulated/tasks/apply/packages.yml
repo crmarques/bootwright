@@ -48,14 +48,16 @@
     creates: "{{ bootwright_bmc_root }}/venv/bin/python"
 
 - name: Install sushy-tools into virtualenv
-  ansible.builtin.command:
-    argv:
-      - "{{ bootwright_bmc_root }}/venv/bin/pip"
-      - install
-      - --no-deps
-      - "sushy-tools=={{ bootwright_sushy_tools_version }}"
-  args:
-    creates: "{{ bootwright_bmc_root }}/venv/bin/sushy-emulator"
+  # Use the pip module with an explicit version rather than command + creates:
+  # the creates guard was pinned to the sushy-emulator entrypoint, so a bump to
+  # bootwright_sushy_tools_version was never reconciled on an already-provisioned
+  # host. pip reinstalls when the pinned version differs and reports changed.
+  ansible.builtin.pip:
+    name: sushy-tools
+    version: "{{ bootwright_sushy_tools_version }}"
+    virtualenv: "{{ bootwright_bmc_root }}/venv"
+    extra_args: --no-deps
+  register: bootwright_bmc_sushy_pip
 
 - name: Ensure SELinux file context labels venv binaries as bin_t
   community.general.sefcontext:

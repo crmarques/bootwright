@@ -96,6 +96,7 @@
         'restarted'
         if (bootwright_bmc_sushy_conf.changed
             or bootwright_bmc_sushy_unit.changed
+            or bootwright_bmc_sushy_pip.changed | default(false)
             or bootwright_bmc_sushy_restorecon.changed | default(false)
             or bootwright_bmc_vmedia_pool_redefine | default(false) | bool
             or bootwright_bmc_vmedia_pool_define.changed | default(false)
