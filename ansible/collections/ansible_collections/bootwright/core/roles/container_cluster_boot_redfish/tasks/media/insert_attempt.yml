@@ -50,9 +50,20 @@
         | default((bootwright_redfish_vmedia_selected | default({})).get('@odata.etag', ''), true)
         | default('*', true)
       }}
+  changed_when: false
+
+- name: Capture original VerifyCertificate state once per boot
+  # The pre-patch probe reflects the live value, which this same attempt then
+  # PATCHes to false. Recapturing on every retry would record the
+  # already-disabled value and make the role's always-block skip the restore,
+  # leaving BMC certificate verification permanently off after a fail-then-retry.
+  # Capture only on the first attempt; the value then stays stable across retries.
+  ansible.builtin.set_fact:
     bootwright_redfish_vmedia_verify_certificate_supported: "{{ 'VerifyCertificate' in (bootwright_redfish_vmedia_pre_patch_probe.json | default({})) }}"
     bootwright_redfish_vmedia_verify_certificate_original: "{{ (bootwright_redfish_vmedia_pre_patch_probe.json | default({})).VerifyCertificate | default(false) | bool }}"
+    bootwright_redfish_vmedia_verify_certificate_captured: true
   changed_when: false
+  when: not (bootwright_redfish_vmedia_verify_certificate_captured | default(false) | bool)
 
 - name: Disable HTTPS certificate verification for virtual-media fetch
   ansible.builtin.uri:

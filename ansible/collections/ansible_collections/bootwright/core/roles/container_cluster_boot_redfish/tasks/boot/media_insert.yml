@@ -170,6 +170,11 @@
         }}
   changed_when: false
 
+- name: Reset per-boot VerifyCertificate capture before the insert retry loop
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_verify_certificate_captured: false
+  changed_when: false
+
 - name: Retry Redfish virtual media insertion until attached
   ansible.builtin.include_tasks:
     file: ../media/insert_attempt.yml
