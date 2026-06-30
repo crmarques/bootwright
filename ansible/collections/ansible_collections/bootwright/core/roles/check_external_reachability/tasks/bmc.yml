@@ -41,7 +41,7 @@
     url_password: "{{ bootwright_validate_bmc_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_external_validate_bmc_timeout }}"
     status_code: 200
-  no_log: "{{ (bootwright_validate_bmc_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_validate_bmc_cred_path | length) > 0) }}"
   register: bootwright_validate_bmc_probe
   changed_when: false
   # Failure here is fatal: include_tasks bubbles the error and the

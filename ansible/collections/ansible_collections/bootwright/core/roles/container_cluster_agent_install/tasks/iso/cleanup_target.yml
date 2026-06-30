@@ -3,13 +3,13 @@
   ansible.builtin.set_fact:
     bootwright_agent_iso_publish_stage_path: "{{ bootwright_agent_iso_publish_target.stagePath | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve staged agent ISO publish directory
   ansible.builtin.set_fact:
     bootwright_agent_iso_publish_stage_dir: "{{ bootwright_agent_iso_publish_stage_path | dirname }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve redacted staged agent ISO publish directory
   ansible.builtin.set_fact:
@@ -31,4 +31,4 @@
     state: absent
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"

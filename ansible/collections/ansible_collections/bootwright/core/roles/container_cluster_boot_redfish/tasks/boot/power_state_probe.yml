@@ -12,7 +12,7 @@
   register: bootwright_redfish_power_state_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Capture Redfish system power state status
   ansible.builtin.set_fact:

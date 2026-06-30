@@ -17,7 +17,7 @@
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   register: bootwright_vsphere_probe
   failed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve vSphere virtual machine presence
   ansible.builtin.set_fact:
@@ -39,7 +39,7 @@
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   failed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_vsphere_managed_os_reset | bool
 
 - name: Remove managed OS vSphere VM for override reinstall
@@ -56,5 +56,5 @@
     force: true
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_vsphere_managed_os_reset | bool

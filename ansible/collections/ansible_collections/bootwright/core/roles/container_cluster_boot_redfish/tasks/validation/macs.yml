@@ -13,7 +13,7 @@
   register: bootwright_redfish_system_mac_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Resolve Redfish EthernetInterface collection
   ansible.builtin.set_fact:
@@ -40,7 +40,7 @@
   register: bootwright_redfish_ethernet_interfaces_list
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Probe Redfish EthernetInterface members
   ansible.builtin.uri:
@@ -57,7 +57,7 @@
   register: bootwright_redfish_ethernet_interface_member_probes
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: (bootwright_redfish_ethernet_interfaces_list.status | default(0) | int) == 200
 
 - name: Compare declared interface MACs with Redfish inventory

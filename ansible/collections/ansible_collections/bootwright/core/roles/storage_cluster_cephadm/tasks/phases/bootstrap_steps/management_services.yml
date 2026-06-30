@@ -50,7 +50,7 @@
           ] if (bootwright_ceph_management.oauth2Proxy is defined) else []
         )
       }}
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_management.hosts is defined
 
 - name: Write management service spec
@@ -58,7 +58,7 @@
     dest: "{{ bootwright_ceph_remote_work_dir }}/management-services.yaml"
     content: "{{ bootwright_ceph_management_specs | to_nice_yaml }}"
     mode: "0600"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_management.hosts is defined
 
 - name: Apply management service spec

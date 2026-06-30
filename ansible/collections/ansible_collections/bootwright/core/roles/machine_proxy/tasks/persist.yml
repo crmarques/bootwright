@@ -17,7 +17,7 @@
           http_proxy={{ bootwright_proxy_http_effective }}
           https_proxy={{ bootwright_proxy_https_effective }}
           no_proxy={{ bootwright_proxy_no }}
-      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_proxy_credentialed_url) }}"
       when: not bootwright_proxy_credentialed_url
 
     - name: Render /etc/profile.d/bootwright-proxy.sh
@@ -33,7 +33,7 @@
           export http_proxy="{{ bootwright_proxy_http_effective }}"
           export https_proxy="{{ bootwright_proxy_https_effective }}"
           export no_proxy="{{ bootwright_proxy_no }}"
-      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_proxy_credentialed_url) }}"
       when: not bootwright_proxy_credentialed_url
 
     # Strip bare-URL leftovers from older runs; env vars from /etc/environment
@@ -100,7 +100,7 @@
         content: |
           [global]
           proxy = {{ bootwright_proxy_primary }}
-      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_proxy_credentialed_url) }}"
       when: bootwright_proxy_has_url
 
     - name: Remove stale pip proxy config when URL proxy is disabled
@@ -157,7 +157,7 @@
         content: |
           [Manager]
           DefaultEnvironment="HTTP_PROXY={{ bootwright_proxy_http_effective }}" "HTTPS_PROXY={{ bootwright_proxy_https_effective }}" "NO_PROXY={{ bootwright_proxy_no }}" "http_proxy={{ bootwright_proxy_http_effective }}" "https_proxy={{ bootwright_proxy_https_effective }}" "no_proxy={{ bootwright_proxy_no }}"
-      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_proxy_credentialed_url) }}"
       register: bootwright_proxy_systemd_dropin
 
     - name: Reload systemd manager when proxy drop-in changed

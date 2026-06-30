@@ -34,7 +34,7 @@
   delay: "{{ bootwright_redfish_vmedia_probe_delay_seconds }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: List Redfish managers
   ansible.builtin.uri:
@@ -50,7 +50,7 @@
   register: bootwright_redfish_managers_list
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Initialize Redfish manager VirtualMedia collection URLs
   ansible.builtin.set_fact:
@@ -78,7 +78,7 @@
   register: bootwright_redfish_manager_vm_lists
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Initialize Redfish VirtualMedia member references
   ansible.builtin.set_fact:
@@ -124,7 +124,7 @@
   register: bootwright_redfish_vmedia_member_probes
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Resolve Redfish VirtualMedia candidates
   ansible.builtin.set_fact:
@@ -224,7 +224,7 @@
   register: bootwright_redfish_vmedia_vmm_action_info_probes
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - (bootwright_redfish_vmedia_standard_insert_target | length) == 0
     - (bootwright_redfish_vmedia_vmm_actions | selectattr('actionInfo', 'defined') | list | length) > 0

@@ -21,12 +21,12 @@
   ansible.builtin.slurp:
     src: "{{ bootwright_creds_path }}"
   register: bootwright_creds_slurp
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   delegate_to: localhost
   become: false
 
 - name: "Parse {{ bootwright_creds_label }}"
   ansible.builtin.set_fact:
     "{{ bootwright_creds_var }}": "{{ bootwright_creds_slurp | bootwright.core.bootwright_parse_credential(bootwright_creds_label) }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   changed_when: false

@@ -17,14 +17,14 @@
       delegate_to: localhost
       become: false
       failed_when: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when: (bootwright_current_cluster.agentIsoPublishTargets | default([]) | length) > 0
 
     - name: Set previous agent ISO publish token
       ansible.builtin.set_fact:
         bootwright_agent_iso_publish_token: "{{ bootwright_previous_agent_iso_publish_token_file.content | b64decode | trim }}"
       changed_when: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when:
         - bootwright_previous_agent_iso_publish_token_file is defined
         - (bootwright_previous_agent_iso_publish_token_file.content | default('') | length) > 0
@@ -65,7 +65,7 @@
         - agent-iso-publish-token
       delegate_to: localhost
       become: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Find stale remote agent ISO files
       ansible.builtin.find:
@@ -99,7 +99,7 @@
       ansible.builtin.set_fact:
         bootwright_agent_iso_publish_token: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_lowercase,digits') }}"
       changed_when: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Record agent ISO publish token
       ansible.builtin.copy:
@@ -108,7 +108,7 @@
         content: "{{ bootwright_agent_iso_publish_token }}\n"
       delegate_to: localhost
       become: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Resolve direct agent ISO publish target
       ansible.builtin.set_fact:
@@ -131,13 +131,13 @@
             | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)
           }}
       changed_when: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Resolve direct agent ISO staging directory
       ansible.builtin.set_fact:
         bootwright_agent_iso_direct_stage_dir: "{{ bootwright_agent_iso_direct_stage_path | dirname }}"
       changed_when: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Resolve redacted direct agent ISO stage path
@@ -155,7 +155,7 @@
         mode: "0700"
       delegate_to: "{{ bootwright_agent_iso_direct_publish_target.stageHost | default(inventory_hostname) }}"
       become: true
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Remove direct staged agent ISO output path
@@ -164,7 +164,7 @@
         state: absent
       delegate_to: "{{ bootwright_agent_iso_direct_publish_target.stageHost | default(inventory_hostname) }}"
       become: true
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Link installer agent ISO output to direct publish path
@@ -173,7 +173,7 @@
         dest: "{{ bootwright_install_work_dir }}/agent.x86_64.iso"
         state: link
         force: true
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Create agent ISO
@@ -193,7 +193,7 @@
       ansible.builtin.stat:
         path: "{{ bootwright_agent_iso_direct_stage_path }}"
       register: bootwright_agent_iso_direct_stat
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when: (bootwright_agent_iso_direct_stage_path | default('') | length) > 0
 
     - name: Locate generated agent ISO
@@ -222,14 +222,14 @@
             else (bootwright_agent_iso_find.files | sort(attribute='mtime', reverse=true) | map(attribute='path') | first)
           }}
       changed_when: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Record generated agent ISO path
       ansible.builtin.copy:
         dest: "{{ bootwright_install_work_dir }}/agent-iso.path"
         mode: "0600"
         content: "{{ bootwright_agent_iso_path }}\n"
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Determine whether local agent ISO transfer is needed
       ansible.builtin.set_fact:
@@ -302,7 +302,7 @@
         content: "{{ (bootwright_install_local_work_dir ~ '/' ~ (bootwright_agent_iso_path | basename)) if (bootwright_agent_iso_requires_local_copy | bool) else bootwright_agent_iso_path }}\n"
       delegate_to: localhost
       become: false
-      no_log: true
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
     - name: Set local generated agent ISO path
       ansible.builtin.set_fact:

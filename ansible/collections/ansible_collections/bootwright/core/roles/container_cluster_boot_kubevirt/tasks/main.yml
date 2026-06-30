@@ -14,13 +14,13 @@
   register: bootwright_kubevirt_agent_iso_path_file
   delegate_to: localhost
   become: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Set generated agent ISO path
   ansible.builtin.set_fact:
     bootwright_kubevirt_agent_iso_path: "{{ bootwright_kubevirt_agent_iso_path_file.content | b64decode | trim }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Validate KubeVirt boot inputs
   ansible.builtin.assert:
@@ -98,14 +98,14 @@
         )
       }}
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Upload KubeVirt agent ISO DataVolume
   ansible.builtin.command:
     argv: "{{ bootwright_kubevirt_upload_argv }}"
   register: bootwright_kubevirt_iso_upload
   changed_when: bootwright_kubevirt_iso_upload.rc == 0
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 # virtctl image-upload stamps no labels, unlike the root DataVolume and VM
 # templates that stamp bootwright.io/managed-by. Label the agent-ISO DataVolume

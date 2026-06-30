@@ -69,7 +69,7 @@
     org_id: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_organization_path) | trim }}"
     activationkey: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_activation_key_path) | trim }}"
   register: bootwright_ceph_rhsm_register
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Refresh RHSM subscription metadata
   ansible.builtin.command:

@@ -118,7 +118,7 @@
   retries: 30
   delay: 2
   until: bootwright_bmc_sushy_ready.status == 200
-  no_log: "{{ (bootwright_bmc_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_bmc_cred_path | length) > 0) }}"
 
 - name: Open Redfish port on host firewall
   ansible.posix.firewalld:

@@ -88,7 +88,7 @@
   register: bootwright_redfish_security_service_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
     - (bootwright_redfish_security_service_member | default('') | length) > 0
@@ -130,7 +130,7 @@
   register: bootwright_redfish_security_service_https_transfer_patch
   failed_when: false
   changed_when: (bootwright_redfish_security_service_https_transfer_patch.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
     - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool

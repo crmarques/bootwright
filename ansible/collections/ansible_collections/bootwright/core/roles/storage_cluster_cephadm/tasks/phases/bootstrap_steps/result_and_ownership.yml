@@ -15,7 +15,7 @@
     mode: "0600"
   delegate_to: localhost
   become: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
 
 - name: Record storage cluster ownership

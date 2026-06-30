@@ -69,7 +69,7 @@
           else []
         )
       }}
-  no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_registry_credentials is defined) }}"
 
 - name: Bootstrap Ceph cluster when absent
   ansible.builtin.command:
@@ -79,7 +79,7 @@
   # cephadm prints the one-time dashboard admin password to stdout for EVERY
   # provider (not just registry-authed ones), and that stdout is shown on
   # failure and under -v. Always redact, regardless of registry credentials.
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   # cephadm bootstrap is a one-time, non-idempotent operation that refuses to
   # run when /etc/ceph/ceph.conf already exists. Gate purely on that file, the
   # same marker cephadm itself checks: an already-bootstrapped node must never

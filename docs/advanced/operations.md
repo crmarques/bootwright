@@ -306,6 +306,24 @@ wipe them manually, before reusing the hardware.
     `--skip-unreachable` does not relax any device data-safety check, and like
     `--force-unowned` it does not imply `--yes`.
 
+## Surfacing redacted output with `--verbose`
+
+`apply` and `destroy` redact credential-handling task output by default: secret
+material shows as `censored due to no_log` in both the terminal and the persisted
+run log. `--verbose`/`-v` disables that `no_log` redaction so the same output is
+printed in full.
+
+```text
+bootwright apply --clusters ceph-nprd --verbose
+```
+
+!!! danger "`--verbose` prints secrets to the terminal **and** the run log"
+    With `--verbose` set, secret bytes that are normally censored — BMC, registry,
+    RHSM, and proxy credentials, tokens, and generated Ceph keys — reach both the
+    terminal and the `0600` run log under `runs/history/<run-id>/`. It is an
+    opt-in debugging aid only; default runs stay redacted. Avoid it on shared
+    terminals and scrub any logs captured during a verbose run.
+
 ## Where run logs, the ledger, and leases live
 
 Mutating runs write their state under the root-managed context tree at

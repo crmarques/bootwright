@@ -11,7 +11,7 @@
     timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_systems_list
   when: (bootwright_component.boot.redfish.systemId | default('') | length) == 0
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Resolve effective Redfish System ID
   ansible.builtin.set_fact:

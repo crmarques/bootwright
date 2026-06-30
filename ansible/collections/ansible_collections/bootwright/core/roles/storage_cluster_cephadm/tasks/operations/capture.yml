@@ -4,7 +4,7 @@
     bootwright_ceph_op_capture_cluster: "{{ bootwright_ceph_op_capture.cluster | default('') }}"
     bootwright_ceph_op_capture_field: "{{ bootwright_ceph_op_capture.field | default('') }}"
     bootwright_ceph_op_key_line: "{{ (bootwright_ceph_op_output.split('\n') | select('match', '^\\s*key\\s*=') | list | first | default('')) }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_ceph_op_capture | length > 0
     - bootwright_ceph_op_capture.type | default('') == 'ceph-auth-key'
@@ -21,7 +21,7 @@
       }}
   vars:
     bootwright_ceph_op_key: "{{ bootwright_ceph_op_key_line | regex_replace('^\\s*key\\s*=\\s*', '') | trim }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_ceph_op_capture_cluster | default('') | length > 0
     - bootwright_ceph_op_capture_field | default('') | length > 0
@@ -30,7 +30,7 @@
 - name: Classify RGW capture operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_capture_rgw: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_ceph_op_capture | length > 0
     - bootwright_ceph_op_capture.type | default('') == 'rgw-user'
@@ -40,7 +40,7 @@
   ansible.builtin.set_fact:
     bootwright_ceph_op_capture_cluster: "{{ bootwright_ceph_op_capture.cluster | default('') }}"
     bootwright_ceph_op_rgw_payload: "{{ bootwright_ceph_op_output | from_json }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_op_capture_rgw | bool
 
 - name: Add captured RGW user to Data Foundation result
@@ -58,7 +58,7 @@
       }}
   vars:
     bootwright_ceph_op_rgw_first_key: "{{ bootwright_ceph_op_rgw_payload['keys'] | default([]) | first | default({}) }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_ceph_op_capture_rgw | bool
     - bootwright_ceph_op_capture_cluster | default('') | length > 0

@@ -34,7 +34,7 @@
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   register: bootwright_vsphere_apply
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 # Disk-first ordering is the libvirt disk-first analogue: a blank disk has
 # no bootable EFI entry so firmware falls through to the install CD, and the
@@ -64,4 +64,4 @@
       - cdrom
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"

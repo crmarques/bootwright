@@ -16,7 +16,7 @@
   register: bootwright_redfish_artifact_cert_remove_standard
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_remove_standard.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: (bootwright_redfish_artifact_cert_ref | default('') | length) > 0
 
 - name: Build xFusion remote-HTTPS-server root-CA delete body
@@ -42,7 +42,7 @@
   register: bootwright_redfish_artifact_cert_remove_xfusion
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_remove_xfusion.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_artifact_root_cert_imported_id is defined
     - (bootwright_redfish_xfusion_delete_target | default('') | length) > 0

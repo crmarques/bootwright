@@ -21,7 +21,7 @@
     timeout: "{{ bootwright_redfish_request_timeout }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: (bootwright_redfish_insert_media_attempt | int) > 1
 
 - name: Refresh virtual media metadata before PATCH operations
@@ -38,7 +38,7 @@
   register: bootwright_redfish_vmedia_pre_patch_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Resolve virtual media PATCH precondition
   ansible.builtin.set_fact:
@@ -83,7 +83,7 @@
   register: bootwright_redfish_vmedia_verify_certificate_patch
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
 
 - name: Build standard Redfish InsertMedia request body
@@ -93,7 +93,7 @@
       Inserted: true
       TransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'standard-insert-media'
 
 - name: Build Redfish VMM virtual media request body
@@ -102,7 +102,7 @@
       VmmControlType: Connect
       Image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'vmm-control'
 
 - name: Insert the agent ISO as virtual media
@@ -120,7 +120,7 @@
   register: bootwright_redfish_insert_media
   failed_when: false
   changed_when: (bootwright_redfish_insert_media.status | default(0) | int) in [200, 202, 204]
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve Redfish InsertMedia request status
   ansible.builtin.set_fact:
@@ -183,7 +183,7 @@
   delay: "{{ bootwright_redfish_insert_task_delay_seconds }}"
   failed_when: false
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_redfish_insert_request_succeeded | bool
     - bootwright_redfish_insert_task_url | length > 0
@@ -225,7 +225,7 @@
           else 0
         }}
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve Redfish InsertMedia task result
   ansible.builtin.set_fact:
@@ -294,7 +294,7 @@
   register: bootwright_redfish_vmedia_failed_task_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: not (bootwright_redfish_insert_task_succeeded | bool)
 
 - name: Probe virtual media after mounted InsertMedia task
@@ -311,7 +311,7 @@
   register: bootwright_redfish_vmedia_mounted_task_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_insert_task_succeeded | bool
     - bootwright_redfish_insert_task_mounted | bool
@@ -339,7 +339,7 @@
   delay: "{{ bootwright_redfish_vmedia_insert_delay_seconds }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_insert_task_succeeded | bool
     - not (bootwright_redfish_insert_task_mounted | bool)
@@ -398,7 +398,7 @@
   register: bootwright_redfish_vmedia_patch_insert
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_patch_insert.status | default(0) | int) in [200, 202, 204]
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_redfish_vmedia_patch_attempted | bool
 
 - name: Wait for virtual media to report inserted agent ISO after PATCH fallback
@@ -424,7 +424,7 @@
   delay: "{{ bootwright_redfish_vmedia_insert_delay_seconds }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_vmedia_patch_attempted | bool
     - not (bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool)
@@ -487,7 +487,7 @@
         }}
       insertTaskMounted: "{{ bootwright_redfish_insert_task_mounted | default(false) | bool }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve virtual media attachment sources
   ansible.builtin.set_fact:

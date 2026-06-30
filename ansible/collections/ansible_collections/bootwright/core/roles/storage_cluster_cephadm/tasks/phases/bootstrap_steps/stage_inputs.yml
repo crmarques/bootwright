@@ -48,7 +48,7 @@
         } | to_json
       }}
     mode: "0600"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_ceph_registry_url | length > 0
     - bootwright_ceph_registry_credentials is defined
@@ -58,7 +58,7 @@
     src: "{{ bootwright_selected_storage_cluster.clusterSSH.privateKeyPath }}"
     dest: "{{ bootwright_ceph_remote_private_key }}"
     mode: "0600"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
 
 - name: Copy cephadm cluster public SSH key
@@ -66,7 +66,7 @@
     src: "{{ bootwright_selected_storage_cluster.clusterSSH.publicKeyPath }}"
     dest: "{{ bootwright_ceph_remote_public_key }}"
     mode: "0644"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
 
 - name: Copy cephadm cluster known hosts
@@ -101,7 +101,7 @@
       - "true"
   register: bootwright_ceph_seed_ssh_check
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   loop: "{{ bootwright_selected_storage_cluster.hosts | default([]) }}"
   loop_control:
     label: "{{ item.hostname }}"

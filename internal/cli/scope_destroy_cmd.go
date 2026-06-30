@@ -35,6 +35,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		override        bool
 		forceUnowned    bool
 		skipUnreachable bool
+		verbose         bool
 		stage           string
 	)
 	use := "destroy"
@@ -63,6 +64,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	cmd.Flags().BoolVar(&forceUnowned, "force-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --override. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
+	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
 		flags.executable = workspace.ResolveAnsiblePlaybook()
 		addOutputFlagDryRun(cmd, &flags.output)
@@ -200,6 +202,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
 		converge.ApplyInfraComponentReleaseExtraVar(&plan, releaseDecision.Names())
+		// Stamp the verbose-output gate after the destroy-scoping extra-vars so
+		// it flows to both the --dry-run command preview and the real run.
+		converge.ApplyVerboseExtraVar(&plan, verbose)
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
 		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
 		// below). No Ansible destroy role consumes a destroy-override extra-var, so

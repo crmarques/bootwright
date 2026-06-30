@@ -14,7 +14,7 @@
   register: bootwright_redfish_vmedia_eject
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_eject.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Wait for virtual media to report ejected
   ansible.builtin.uri:
@@ -35,7 +35,7 @@
   delay: "{{ bootwright_redfish_vmedia_eject_delay_seconds }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Capture virtual media eject status
   ansible.builtin.set_fact:
@@ -47,7 +47,7 @@
         else (bootwright_redfish_vmedia_eject_probe.json.Image | default('<not reported>', true))
       }}
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Confirm virtual media is ejected
   ansible.builtin.assert:

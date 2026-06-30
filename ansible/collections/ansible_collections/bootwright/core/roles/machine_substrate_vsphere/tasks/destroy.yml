@@ -45,7 +45,7 @@
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   register: bootwright_vsphere_destroy_info
   failed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 # failed_when: false rewrites the registered .failed to false, so presence
 # must come from the success-only `instance` return instead — a missing VM
@@ -109,7 +109,7 @@
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   failed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_vsphere_vm_present | bool
 
 - name: Delete vSphere VM
@@ -126,7 +126,7 @@
     force: true
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_vsphere_vm_present | bool
 
 # The vsphere media role records every uploaded ISO under a vsphere-vmedia
@@ -159,7 +159,7 @@
   loop_control:
     label: "{{ item.attributes.path | default('') }}"
   failed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - item.attributes.datastore | default('') | length > 0
     - item.attributes.path | default('') | length > 0

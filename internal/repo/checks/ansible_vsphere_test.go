@@ -164,9 +164,7 @@ func TestVSphereTasksPinVenvInterpreterAndRedactCredentials(t *testing.T) {
 			if !strings.Contains(interpreter, "bootwright_vsphere_python") {
 				t.Fatalf("%s: task %q (%s) must pin ansible_python_interpreter to the managed venv via bootwright_vsphere_python", rel, name, module)
 			}
-			if noLog, _ := task["no_log"].(bool); !noLog {
-				t.Fatalf("%s: task %q (%s) passes vCenter credentials and must set no_log: true", rel, name, module)
-			}
+			assertRedactsByDefault(t, fmt.Sprintf("%s: task %q (%s)", rel, name, module), task["no_log"])
 		}
 	}
 }

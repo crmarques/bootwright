@@ -179,6 +179,17 @@ Generated output boundaries are part of the safety contract:
   operator-requested secret-inlined tool inputs under `<dir>` with restrictive
   file modes. The command must fail without `--sensitive`.
 
+### Redaction escape hatch
+
+Ansible tasks that handle credentials gate `no_log` on `bootwright_no_log`, which
+defaults to `true` so secret bytes are redacted as `censored due to no_log` in
+both the terminal and the persisted `0600` run log. `apply` and `destroy` accept
+`--verbose`/`-v`, which sets `bootwright_no_log` to `false`. This is a deliberate,
+opt-in operator escape hatch for debugging: with it set, the secret bytes those
+tasks handle (BMC, registry, RHSM, and proxy credentials, tokens, and generated
+Ceph keys) reach both the terminal and the `0600` run log in full. Default runs
+remain redacted.
+
 ## Code Surface Hygiene
 
 Unused code and duplicated implementations are security and maintenance risks.

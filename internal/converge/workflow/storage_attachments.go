@@ -361,7 +361,7 @@ func writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath str
 				},
 				"register":     "bootwright_external_details",
 				"changed_when": true,
-				"no_log":       true,
+				"no_log":       "{{ bootwright_no_log | default(true) | bool }}",
 			},
 			map[string]any{
 				"name": "Store Data Foundation external details artifact",
@@ -372,7 +372,7 @@ func writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath str
 				},
 				"delegate_to": "localhost",
 				"become":      false,
-				"no_log":      true,
+				"no_log":      "{{ bootwright_no_log | default(true) | bool }}",
 			},
 		},
 	}}

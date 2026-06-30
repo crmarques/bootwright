@@ -17,6 +17,30 @@ import (
 
 const bootwrightCollectionRoleRoot = "ansible/collections/ansible_collections/bootwright/core/roles"
 
+// assertRedactsByDefault asserts a task's no_log still hides output when the
+// operator has not opted into --verbose: either the literal bool true, or a
+// template gated on bootwright_no_log defaulting to redact. Qualifying
+// directives are rewritten from the literal `true` into either
+//
+//	{{ bootwright_no_log | default(true) | bool }}
+//
+// or, for credential-gated tasks,
+//
+//	{{ (bootwright_no_log | default(true) | bool) and (<original gate>) }}
+//
+// so the security guarantee — redact by default when the var is unset — is
+// preserved while still allowing an explicit opt-out.
+func assertRedactsByDefault(t *testing.T, name string, noLog any) {
+	t.Helper()
+	if noLog == true {
+		return
+	}
+	s := fmt.Sprint(noLog)
+	if !strings.Contains(s, "bootwright_no_log | default(true) | bool") {
+		t.Fatalf("%s must redact by default, got no_log=%v", name, noLog)
+	}
+}
+
 func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/eject.yml")
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
@@ -152,9 +176,7 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	}
 	// stagePath embeds the agent-ISO publish token, so the insert command must
 	// redact its output with no_log to keep the token out of stdout/logs.
-	if got := mainTasks[insertIdx]["no_log"]; got != true {
-		t.Fatalf("%s must no_log the agent-ISO publish token, got no_log=%v", mainTasks[insertIdx]["name"], got)
-	}
+	assertRedactsByDefault(t, fmt.Sprint(mainTasks[insertIdx]["name"]), mainTasks[insertIdx]["no_log"])
 	insertArgv := fmt.Sprint(insertCommand["argv"])
 	for _, want := range []string{"/var/tmp/bootwright-libvirt-media-insert.py", "bootwright_component.boot.agentIso.stagePath", "bootwright_libvirt_media_boot_order"} {
 		if !strings.Contains(insertArgv, want) {
@@ -2121,9 +2143,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if got := fmt.Sprint(captureEjectFact["bootwright_redfish_vmedia_eject_image_redacted"]); !strings.Contains(got, "replace(bootwright_agent_iso_publish_token, '<redacted>')") {
 		t.Fatalf("virtual media eject status must redact the agent ISO token, got %v", got)
 	}
-	if got := ejectTasks[captureEjectIdx]["no_log"]; got != true {
-		t.Fatalf("virtual media eject redaction fact must stay no_log, got %v", got)
-	}
+	assertRedactsByDefault(t, "virtual media eject redaction fact", ejectTasks[captureEjectIdx]["no_log"])
 	failMsg := fmt.Sprint(ejectAssert["fail_msg"])
 	if !strings.Contains(failMsg, "bootwright_redfish_vmedia_eject_image_redacted") || strings.Contains(failMsg, "Image={{ bootwright_redfish_vmedia_eject_probe.json.Image") {
 		t.Fatalf("virtual media eject assertion must use redacted image status, got %v", failMsg)
@@ -3167,9 +3187,7 @@ func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
 	if got := fmt.Sprint(step["when"]); !strings.Contains(got, "bootwright_ceph_registry_credentials is defined") {
 		t.Fatalf("registry login must be gated on resolved credentials, got when=%v", step["when"])
 	}
-	if step["no_log"] != true {
-		t.Fatalf("registry login must set no_log: true, got %v", step["no_log"])
-	}
+	assertRedactsByDefault(t, "registry login", step["no_log"])
 	pinIdx := findAnsibleTask(t, tasks, "Pin cephadm container image base to the distribution registry")
 	if !(pinIdx < idx) {
 		t.Fatalf("registry login reconcile must run after the cluster exists (pin=%d login=%d)", pinIdx, idx)
@@ -3893,9 +3911,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	// stage pulls the licensed cephadm/ceph packages.
 	subscriptionTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml")
 	rhsmRegister := subscriptionTasks[findAnsibleTask(t, subscriptionTasks, "Register storage node with RHSM")]
-	if got := rhsmRegister["no_log"]; got != true {
-		t.Fatalf("RHSM registration must be no_log, got %v", got)
-	}
+	assertRedactsByDefault(t, "RHSM registration", rhsmRegister["no_log"])
 	licenseAcceptIdx := findAnsibleTask(t, subscriptionTasks, "Accept vendor Ceph license provisions")
 	if got := fmt.Sprint(subscriptionTasks[licenseAcceptIdx]["when"]); !strings.Contains(got, "requiresLicense") {
 		t.Fatalf("license acceptance must gate on requiresLicense, got when=%v", got)
@@ -3903,9 +3919,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 
 	registryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/registry.yml")
 	registryLogin := registryTasks[findAnsibleTask(t, registryTasks, "Log storage node into cephadm registry")]
-	if got := registryLogin["no_log"]; got != true {
-		t.Fatalf("registry login must be no_log, got %v", got)
-	}
+	assertRedactsByDefault(t, "registry login", registryLogin["no_log"])
 	if _, ok := registryLogin["containers.podman.podman_login"].(map[string]any); !ok {
 		t.Fatalf("registry login must use podman_login, got %v", registryLogin)
 	}
@@ -4007,9 +4021,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		"Write captured storage result",
 	} {
 		task := block[findAnsibleTask(t, block, name)]
-		if got := task["no_log"]; got != true {
-			t.Fatalf("%s must be no_log, got %v", name, got)
-		}
+		assertRedactsByDefault(t, name, task["no_log"])
 	}
 	ensureClient := block[findAnsibleTask(t, block, "Ensure Ceph client tooling is present for cephadm orchestration")]
 	ensureClientBody, ok := ensureClient["ansible.builtin.package"].(map[string]any)
@@ -4339,9 +4351,7 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	if got := tasks[recordTokenIdx]["delegate_to"]; got != "localhost" {
 		t.Fatalf("publish token record must run locally, got %v", got)
 	}
-	if got := tasks[recordTokenIdx]["no_log"]; got != true {
-		t.Fatalf("publish token record must be hidden, got %v", got)
-	}
+	assertRedactsByDefault(t, "publish token record", tasks[recordTokenIdx]["no_log"])
 	directTarget, ok := tasks[directTargetIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s has no set_fact body", tasks[directTargetIdx]["name"])

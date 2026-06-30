@@ -117,7 +117,7 @@
     key: "{{ lookup('ansible.builtin.file', bootwright_selected_storage_cluster.clusterSSH.publicKeyPath) }}"
     state: present
     manage_dir: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
 

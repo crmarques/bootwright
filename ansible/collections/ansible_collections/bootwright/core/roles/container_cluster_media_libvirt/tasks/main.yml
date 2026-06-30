@@ -38,7 +38,7 @@
     bootwright_libvirt_media_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
     bootwright_libvirt_media_boot_order: "{{ bootwright_component.boot.media.libvirt.bootOrder | default('disk-first') }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Install virtual media insert helper
   ansible.builtin.copy:
@@ -71,7 +71,7 @@
   # container_cluster_agent_install boot_machine.yml); without no_log the full
   # token is written to stdout/logs, matching how the Redfish backend and the
   # neighbouring set_fact tasks already redact it.
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_libvirt_media_insert_requested | bool
 
 - name: Record direct libvirt virtual media attachment
@@ -81,5 +81,5 @@
     bootwright_redfish_vmedia_backend_image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
     bootwright_redfish_vmedia_backend_image_name: "{{ bootwright_component.boot.agentIso.stagePath | basename }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_libvirt_media_insert_requested | bool

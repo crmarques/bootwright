@@ -25,4 +25,4 @@
     # Reset the per-kind idempotency probe register too: it is registered only
     # for rgw-user ops and would otherwise persist across the operations loop.
     bootwright_ceph_rgw_user_info: {}
-  no_log: "{{ bootwright_ceph_op.capture is defined }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op.capture is defined) }}"

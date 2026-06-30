@@ -13,7 +13,7 @@
   register: bootwright_redfish_vmedia_restore_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - not (bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool)
     - (bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'
@@ -54,7 +54,7 @@
   register: bootwright_redfish_vmedia_verify_certificate_restore
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_verify_certificate_restore.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_vmedia_restore_if_match is defined
 
@@ -72,7 +72,7 @@
   register: bootwright_redfish_security_service_restore_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - not (bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool)
     - (bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'
@@ -114,7 +114,7 @@
   register: bootwright_redfish_security_service_https_transfer_restore
   failed_when: false
   changed_when: (bootwright_redfish_security_service_https_transfer_restore.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_security_service_restore_if_match is defined
 

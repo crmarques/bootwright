@@ -13,7 +13,7 @@
   register: bootwright_redfish_system_boot_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Resolve Redfish system PATCH precondition
   ansible.builtin.set_fact:
@@ -71,7 +71,7 @@
   register: bootwright_redfish_reset_action_info_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   loop: "{{ bootwright_redfish_system_reset_actions | selectattr('actionInfo', 'defined') | list }}"
 
 - name: Resolve Redfish power-on reset type
@@ -99,7 +99,7 @@
   register: bootwright_redfish_boot_source_patch
   failed_when: false
   changed_when: (bootwright_redfish_boot_source_patch.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
 
 - name: Confirm one-time CD boot override was accepted
@@ -131,7 +131,7 @@
     timeout: "{{ bootwright_redfish_request_timeout }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Initialize Redfish power state wait for PowerState=Off
   ansible.builtin.set_fact:
@@ -188,7 +188,7 @@
   register: bootwright_redfish_power_on_request
   failed_when: false
   changed_when: (bootwright_redfish_power_on_request.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Confirm Redfish power-on request can be verified
   ansible.builtin.assert:

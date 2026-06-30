@@ -41,6 +41,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		override        bool
 		expectNew       bool
 		trustOnFirstUse bool
+		verbose         bool
 		parallelism     int
 		perHost         int
 		redfish         int
@@ -86,6 +87,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, flagStrictSecretsUsage)
+	addVerboseFlag(cmd, &verbose)
 	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
 	if converge.ScopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
@@ -227,6 +229,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(1, err)
 		}
+		// Stamp the verbose-output gate after PlanScopedApply has composed
+		// plan.ExtraVarPairs so it flows to both the --dry-run JSON command
+		// preview and the real run (BuildApplyRunOptions copies ExtraVarPairs).
+		converge.ApplyVerboseExtraVar(&plan, verbose)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))

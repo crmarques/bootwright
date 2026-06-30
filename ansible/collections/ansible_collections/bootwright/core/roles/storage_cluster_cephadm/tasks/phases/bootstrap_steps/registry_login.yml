@@ -20,5 +20,5 @@
       - "{{ bootwright_ceph_remote_registry_json }}"
   register: bootwright_ceph_registry_login
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_registry_credentials is defined

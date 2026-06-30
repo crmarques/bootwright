@@ -44,6 +44,7 @@ const (
 	flagTrustOnFirstUseUsage = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
 	flagStrictSecretsUsage   = "abort if the context secrets-dir is not 0700 or any secret file is not 0600 (default: warn only)"
 	flagContextUsage         = "context to operate in (default: current context)"
+	flagVerboseUsage         = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )
 
 func validateOutputFormat(value string) error {
@@ -85,4 +86,11 @@ func addAskBecomePassFlag(cmd *cobra.Command, p *bool) {
 // addTrustOnFirstUseFlag registers --trust-on-first-use (default true).
 func addTrustOnFirstUseFlag(cmd *cobra.Command, p *bool) {
 	cmd.Flags().BoolVar(p, "trust-on-first-use", true, flagTrustOnFirstUseUsage)
+}
+
+// addVerboseFlag registers the standard --verbose/-v flag (default false), which
+// surfaces task output normally redacted by no_log. The "-v" shorthand is not
+// taken on the apply/destroy commands.
+func addVerboseFlag(cmd *cobra.Command, p *bool) {
+	cmd.Flags().BoolVarP(p, "verbose", "v", false, flagVerboseUsage)
 }

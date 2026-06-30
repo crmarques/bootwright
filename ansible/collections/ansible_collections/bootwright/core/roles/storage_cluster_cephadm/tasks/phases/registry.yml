@@ -25,7 +25,7 @@
     registry: "{{ bootwright_ceph_registry_url }}"
     username: "{{ bootwright_ceph_registry_credentials.username }}"
     password: "{{ bootwright_ceph_registry_credentials.password }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_ceph_registry_url | length > 0
     - bootwright_ceph_registry_credentials is defined

@@ -79,7 +79,7 @@
   register: bootwright_redfish_vmedia_cert_member_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Probe Redfish SecurityService for an xFusion root-CA import action
   ansible.builtin.uri:
@@ -95,7 +95,7 @@
   register: bootwright_redfish_security_service_actions_probe
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: (bootwright_redfish_security_service_member | default('') | length) > 0
 
 - name: Resolve certificate import targets
@@ -161,7 +161,7 @@
     timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_artifact_cert_import_standard
   changed_when: (bootwright_redfish_artifact_cert_import_standard.status | default(0) | int) in [200, 201, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: bootwright_redfish_artifact_cert_method == 'standard'
 
 - name: Record DMTF imported certificate reference for cleanup
@@ -190,7 +190,7 @@
         }
       }}
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_redfish_artifact_cert_method == 'xfusion'
 
 - name: Import the artifact certificate as a remote HTTPS server root CA (xFusion)
@@ -214,7 +214,7 @@
   # credential-safe assert below.
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_import_xfusion.status | default(0) | int) in [200, 201, 202, 204]
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_redfish_artifact_cert_method == 'xfusion'
 
 # A non-2xx here is the iBMC refusing the action, not a malformed request: the

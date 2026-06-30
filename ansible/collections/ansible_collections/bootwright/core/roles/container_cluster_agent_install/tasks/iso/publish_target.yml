@@ -4,7 +4,7 @@
     bootwright_agent_iso_stage_path: "{{ bootwright_agent_iso_publish_target.stagePath | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
     bootwright_agent_iso_fetch_url: "{{ bootwright_agent_iso_publish_target.fetchUrl | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Resolve redacted agent ISO publish target
   ansible.builtin.set_fact:
@@ -36,7 +36,7 @@
   ansible.builtin.set_fact:
     bootwright_agent_iso_stage_dir: "{{ bootwright_agent_iso_stage_path | dirname }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Determine agent ISO publish locality
   ansible.builtin.set_fact:
@@ -47,7 +47,7 @@
   ansible.builtin.set_fact:
     bootwright_agent_iso_already_staged: "{{ bootwright_agent_iso_path == bootwright_agent_iso_stage_path }}"
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 # 0711, not 0700, so an unprivileged qemu process can traverse this per-token
 # directory to reach a directly-attached agent ISO. The libvirt-direct media
@@ -67,7 +67,7 @@
     mode: "0711"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Link agent ISO at the BMC fetch location
   ansible.builtin.command:
@@ -80,7 +80,7 @@
   changed_when: bootwright_agent_iso_stage_link.rc == 0
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_agent_iso_stage_local_to_install_host | bool
     - not (bootwright_agent_iso_already_staged | bool)
@@ -100,7 +100,7 @@
   changed_when: true
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - bootwright_agent_iso_stage_local_to_install_host | bool
     - not (bootwright_agent_iso_already_staged | bool)
@@ -115,7 +115,7 @@
     mode: "0600"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when:
     - not (bootwright_agent_iso_stage_local_to_install_host | bool)
     - not (bootwright_agent_iso_already_staged | bool)
@@ -128,7 +128,7 @@
     mode: "0600"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Align agent ISO staging directory label with publish root
   ansible.builtin.command:
@@ -141,7 +141,7 @@
   changed_when: false
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Align staged agent ISO label with staging directory
   ansible.builtin.command:
@@ -154,7 +154,7 @@
   changed_when: false
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Probe staged agent ISO fetch URL
   ansible.builtin.uri:
@@ -169,7 +169,7 @@
   become: false
   failed_when: false
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Probe staged agent ISO byte-range fetch
   ansible.builtin.uri:
@@ -186,7 +186,7 @@
   become: false
   failed_when: false
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_agent_iso_publish_target.requiresByteRange | default(false) | bool
 
 - name: Confirm staged agent ISO fetch URL is reachable

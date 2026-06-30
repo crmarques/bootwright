@@ -110,7 +110,10 @@ the Go layer.
   `..`, and refuse mounted, in-use, or system devices before wiping.
 - A destructive role must be safe to re-run: a second identical run is a no-op or
   tolerates already-absent state without error.
-- Never log secrets; set `no_log: true` on tasks that handle credentials.
+- Never log secrets: gate `no_log` on every task that handles credentials through
+  the standard form `no_log: "{{ bootwright_no_log | default(true) | bool }}"`
+  (for conditionally-sensitive tasks, AND the sensitivity condition after that
+  gate). This redacts by default yet honors the operator's `--verbose` override.
 - Which resources to act on, the scope, and the authorization come from
   Go-rendered variables, not from Ansible re-deriving them.
 

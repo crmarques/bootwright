@@ -12,4 +12,4 @@
     state: powered-on
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"

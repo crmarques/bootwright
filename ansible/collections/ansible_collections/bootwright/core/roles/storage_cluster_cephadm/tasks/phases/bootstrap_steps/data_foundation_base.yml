@@ -13,14 +13,14 @@
     label: "{{ item.name }}"
   register: bootwright_ceph_base_secret_commands
   changed_when: false
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
 
 - name: Initialize Data Foundation result
   ansible.builtin.set_fact:
     bootwright_ceph_base_secrets: "{{ dict(bootwright_ceph_base_secret_commands.results | map(attribute='item.name') | zip(bootwright_ceph_base_secret_commands.results | map(attribute='stdout'))) }}"
     bootwright_data_foundation_result: {}
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
 
 - name: Add base Data Foundation credentials for each binding
@@ -40,5 +40,5 @@
   loop: "{{ bootwright_selected_storage_cluster.dataFoundationBindings | default([]) }}"
   loop_control:
     label: "{{ item.cluster }}"
-  no_log: true
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
