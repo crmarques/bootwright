@@ -114,7 +114,13 @@ endif
 LDFLAGS = -X github.com/crmarques/bootwright/internal/cli.versionString=$(VERSION) \
           -X github.com/crmarques/bootwright/internal/cli.gitCommit=$(GIT_COMMIT)
 
-GO_BUILD_CMD = $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/bootwright
+# CGO_ENABLED=0 forces a static, self-contained binary. The CLI is copied out of
+# the container image and installed onto operator/bastion hosts whose glibc may
+# be older than the build host's; a dynamically linked cgo build (pulled in by
+# os/user and the net resolver) segfaults at load time on those hosts. Disabling
+# cgo also makes Go use its pure-Go os/user and net implementations, which need
+# no shared libraries at runtime.
+GO_BUILD_CMD = CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/bootwright
 
 build: $(BIN_DIR) sync-bundle
 	$(GO_BUILD_CMD)
