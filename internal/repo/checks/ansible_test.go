@@ -2659,7 +2659,10 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 
 	imp := readRepoFile(t, root+"/media/import_certificate.yml")
 	for _, want := range []string{
-		"community.crypto.get_certificate",
+		// Retrieve the artifact cert with the openssl client (no cryptography
+		// Python library on the executor) and extract the leaf PEM.
+		"s_client",
+		"-----BEGIN CERTIFICATE-----",
 		// DMTF VirtualMedia Certificates collection path.
 		"CertificateString",
 		"CertificateType: PEM",

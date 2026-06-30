@@ -12,11 +12,58 @@
     bootwright_redfish_artifact_cert_port: "{{ (bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('port')) | default('443', true) }}"
   changed_when: false
 
+# Read the artifact server's leaf TLS certificate straight off the live HTTPS
+# endpoint with the openssl client, rather than community.crypto.get_certificate:
+# that module needs the cryptography Python library on the host that executes it,
+# and the bare-metal nodes are not yet provisioned, so these Redfish tasks run on
+# the controller driving the BMCs -- a host that is not guaranteed to ship it.
+# openssl is already a Bootwright dependency (the artifact server role installs it
+# to mint this very certificate). Empty stdin makes s_client return as soon as it
+# has presented the certificate; `timeout` bounds a TCP-open-but-unresponsive
+# endpoint so a misconfigured artifact server fails fast instead of hanging the
+# play (community.crypto.get_certificate defaulted to a 10s socket timeout).
 - name: Retrieve the artifact server certificate
-  community.crypto.get_certificate:
-    host: "{{ bootwright_redfish_artifact_cert_host }}"
-    port: "{{ bootwright_redfish_artifact_cert_port | int }}"
-  register: bootwright_redfish_artifact_cert
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "{{ bootwright_redfish_request_timeout }}"
+      - openssl
+      - s_client
+      - -connect
+      - "{{ bootwright_redfish_artifact_cert_host }}:{{ bootwright_redfish_artifact_cert_port | int }}"
+      - -servername
+      - "{{ bootwright_redfish_artifact_cert_host }}"
+    stdin: ""
+  register: bootwright_redfish_artifact_cert_probe
+  changed_when: false
+  # s_client exits non-zero on the artifact server's self-signed/untrusted cert
+  # (and on a `timeout` kill), but it still prints the certificate it received.
+  # Treat the run as successful whenever a complete certificate was captured, and
+  # fail only when a non-zero exit left us with no certificate to import.
+  failed_when: >-
+    bootwright_redfish_artifact_cert_probe.rc != 0
+    and ('END CERTIFICATE' not in (bootwright_redfish_artifact_cert_probe.stdout | default('')))
+
+- name: Extract the artifact server certificate PEM
+  ansible.builtin.set_fact:
+    bootwright_redfish_artifact_cert_pem: >-
+      {{
+        bootwright_redfish_artifact_cert_probe.stdout
+        | regex_search('(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----')
+        | default('', true)
+      }}
+  changed_when: false
+
+- name: Confirm the artifact server certificate was retrieved
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_artifact_cert_pem | default('', true) | length) > 0
+    fail_msg: >-
+      Could not retrieve a TLS certificate from artifact server
+      {{ bootwright_redfish_artifact_cert_host }}:{{ bootwright_redfish_artifact_cert_port }}
+      with openssl s_client. Confirm the artifact server is reachable from this host
+      and serving HTTPS, or use ignoreVerification or a BMC-trusted artifact server
+      certificate instead.
 
 - name: Refresh VirtualMedia member to locate a DMTF certificate store
   ansible.builtin.uri:
@@ -104,7 +151,7 @@
     method: POST
     body_format: json
     body:
-      CertificateString: "{{ bootwright_redfish_artifact_cert.cert }}"
+      CertificateString: "{{ bootwright_redfish_artifact_cert_pem }}"
       CertificateType: PEM
     status_code: [200, 201, 202, 204]
     validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
@@ -133,7 +180,7 @@
       {{
         {
           'Type': 'text',
-          'Content': bootwright_redfish_artifact_cert.cert,
+          'Content': bootwright_redfish_artifact_cert_pem,
           'Usage': 'FileTransfer',
           'RootCertId': (bootwright_redfish_artifact_root_cert_id | int)
         }
