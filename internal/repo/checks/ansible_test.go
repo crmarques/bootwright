@@ -3580,7 +3580,29 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 }
 
 func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
+	// Fail closed by default: an unreachable host cluster aborts with guidance (not
+	// a raw kubectl error); --skip-unreachable opts into treating the guests as
+	// already-absent. The reachability probe and assert run before the teardown,
+	// which is gated on the host being reachable.
+	probeIdx := findAnsibleTask(t, topTasks, "Probe KubeVirt host cluster reachability")
+	gateIdx := findAnsibleTask(t, topTasks, "Require the KubeVirt host cluster to be reachable")
+	blockIdx := findAnsibleTask(t, topTasks, "Tear down KubeVirt guest on the reachable host cluster")
+	if !(probeIdx < gateIdx && gateIdx < blockIdx) {
+		t.Fatalf("kubevirt destroy must probe and gate host reachability before the teardown (probe=%d gate=%d block=%d)", probeIdx, gateIdx, blockIdx)
+	}
+	if got := fmt.Sprint(topTasks[gateIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_skip_unreachable") {
+		t.Fatalf("host-reachability gate must fail closed unless --skip-unreachable, got when=%v", topTasks[gateIdx]["when"])
+	}
+	if _, ok := topTasks[gateIdx]["ansible.builtin.assert"]; !ok {
+		t.Fatalf("host-reachability gate must be a hard assert, got %v", topTasks[gateIdx])
+	}
+	if got := fmt.Sprint(topTasks[blockIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_reachable") {
+		t.Fatalf("guest teardown must be gated on host reachability, got when=%v", topTasks[blockIdx]["when"])
+	}
+	// The ownership read/decide/refuse/delete tasks live inside that reachable-host
+	// block, so a no-op on an unreachable host never reaches a kubectl delete.
+	tasks := nestedAnsibleTasks(t, topTasks[blockIdx], "block")
 	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")
 	decideIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt VirtualMachine ownership for destroy")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt VirtualMachine")

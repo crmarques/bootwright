@@ -17,161 +17,243 @@
       KubeVirt destroy for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is missing kubeconfig or namespace.
 
-# The VM is addressed by computed name in a namespace that may be shared with
-# foreign workloads. Re-verify live ownership (the bootwright.io/managed-by label
-# the template stamps) before deleting, so a name collision with a non-Bootwright
-# VM is refused instead of silently deleted. A missing VM (rc != 0) is a no-op.
-- name: Read KubeVirt VirtualMachine ownership label
+# A teardown can target guests on a host cluster that was never installed or is
+# itself being destroyed, so its kubeconfig may be missing or its API unreachable.
+# Probe the API up front (independent of any VM/DataVolume, and bounded by a
+# request timeout so an unreachable endpoint cannot hang) and classify the host as
+# reachable or not. /version answers on any running API server regardless of
+# cluster readiness, so a partially-up cluster mid-teardown still reads reachable.
+- name: Probe KubeVirt host cluster reachability
   ansible.builtin.command:
     argv:
       - kubectl
       - --kubeconfig
       - "{{ bootwright_kubevirt_kubeconfig }}"
-      - -n
-      - "{{ bootwright_kubevirt_namespace }}"
+      - --request-timeout=15s
       - get
-      - virtualmachine
-      - "{{ bootwright_kubevirt_vm_name }}"
-      - -o
-      - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
-  register: bootwright_kubevirt_vm_owner
+      - --raw=/version
+  register: bootwright_kubevirt_host_probe
   changed_when: false
   failed_when: false
 
-- name: Resolve KubeVirt VirtualMachine ownership for destroy
+- name: Resolve KubeVirt host cluster reachability
   ansible.builtin.set_fact:
-    bootwright_kubevirt_destroy_owned: >-
-      {{ (bootwright_kubevirt_vm_owner.rc | default(1)) != 0
-         or (bootwright_kubevirt_vm_owner.stdout | default('') | trim) == 'bootwright' }}
+    bootwright_kubevirt_host_reachable: "{{ (bootwright_kubevirt_host_probe.rc | default(1)) == 0 }}"
   changed_when: false
 
-# --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a
-# VirtualMachine that matches the computed name but carries a missing or
-# mismatched managed-by label — e.g. after the desired-state names changed
-# post-apply — is still deleted. Without it, the mismatch fails closed as before.
-- name: Refuse to delete a non-Bootwright KubeVirt VirtualMachine
+# Fail closed by default: an unreachable host cluster aborts with actionable
+# guidance instead of a raw kubectl connection error mid-delete. --skip-unreachable
+# opts into treating the guests as already-absent (they cannot exist without their
+# host cluster), so a never-provisioned or co-destroyed host cluster tears down to
+# a clean no-op. This mirrors the storage teardown's --skip-unreachable contract.
+- name: Require the KubeVirt host cluster to be reachable
   ansible.builtin.assert:
     that:
-      - bootwright_kubevirt_destroy_owned | default(false) | bool
+      - bootwright_kubevirt_host_reachable | bool
     fail_msg: >-
-      Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
-      {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
-      bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-      Pass --force-unowned to delete it anyway.
-  when: not (bootwright_destroy_force_unowned | default(false) | bool)
+      KubeVirt host cluster for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is unreachable (kubeconfig {{ bootwright_kubevirt_kubeconfig }}: API not reachable or
+      file missing). Its guest VirtualMachine and DataVolumes cannot be removed. If the host
+      cluster was never provisioned or is itself being torn down, re-run with
+      --skip-unreachable to treat these guests as already-absent; otherwise bring the host
+      cluster back up and retry.
+  when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
-- name: Warn before force-deleting an unowned KubeVirt VirtualMachine
+- name: Note skipped KubeVirt teardown on unreachable host cluster
   ansible.builtin.debug:
     msg: >-
-      --force-unowned: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
-      namespace {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
-      bootwright.io/managed-by=bootwright ownership label.
+      --skip-unreachable: host cluster for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is unreachable; treating guest VirtualMachine {{ bootwright_kubevirt_vm_name }} and its
+      DataVolumes as already-absent.
   when:
-    - bootwright_destroy_force_unowned | default(false) | bool
-    - not (bootwright_kubevirt_destroy_owned | default(false) | bool)
+    - bootwright_destroy_skip_unreachable | default(false) | bool
+    - not (bootwright_kubevirt_host_reachable | bool)
 
-- name: Stop KubeVirt VirtualMachine
-  ansible.builtin.command:
-    argv:
-      - virtctl
-      - --kubeconfig
-      - "{{ bootwright_kubevirt_kubeconfig }}"
-      - stop
-      - "{{ bootwright_kubevirt_vm_name }}"
-      - --namespace
-      - "{{ bootwright_kubevirt_namespace }}"
-  register: bootwright_kubevirt_vm_stop
-  changed_when: bootwright_kubevirt_vm_stop.rc == 0
-  failed_when: false
+# Everything below runs only on a reachable host cluster. On an unreachable one,
+# the assert above has already failed closed (default) or --skip-unreachable has
+# turned the teardown into a no-op (block skipped); either way no kubectl delete
+# runs against an unreachable API.
+- name: Tear down KubeVirt guest on the reachable host cluster
+  when: bootwright_kubevirt_host_reachable | bool
+  block:
+    # The VM is addressed by computed name in a namespace that may be shared with
+    # foreign workloads. Re-verify live ownership (the bootwright.io/managed-by
+    # label the template stamps) before deleting, so a name collision with a
+    # non-Bootwright VM is refused instead of silently deleted. With the host
+    # cluster proven reachable, rc != 0 here means the VM is genuinely gone
+    # (NotFound), so the stop/delete are skipped as a no-op.
+    - name: Read KubeVirt VirtualMachine ownership label
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - get
+          - virtualmachine
+          - "{{ bootwright_kubevirt_vm_name }}"
+          - -o
+          - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
+      register: bootwright_kubevirt_vm_owner
+      changed_when: false
+      failed_when: false
 
-- name: Delete KubeVirt VirtualMachine
-  ansible.builtin.command:
-    argv:
-      - kubectl
-      - --kubeconfig
-      - "{{ bootwright_kubevirt_kubeconfig }}"
-      - -n
-      - "{{ bootwright_kubevirt_namespace }}"
-      - delete
-      - virtualmachine
-      - "{{ bootwright_kubevirt_vm_name }}"
-      - --ignore-not-found=true
-  register: bootwright_kubevirt_vm_delete
-  changed_when: "'deleted' in (bootwright_kubevirt_vm_delete.stdout | default(''))"
+    - name: Resolve KubeVirt VirtualMachine ownership for destroy
+      ansible.builtin.set_fact:
+        # rc == 0 proves the VM exists on the reachable host; only then is there
+        # anything to stop or delete.
+        bootwright_kubevirt_vm_present: "{{ (bootwright_kubevirt_vm_owner.rc | default(1)) == 0 }}"
+        bootwright_kubevirt_destroy_owned: >-
+          {{ (bootwright_kubevirt_vm_owner.rc | default(1)) != 0
+             or (bootwright_kubevirt_vm_owner.stdout | default('') | trim) == 'bootwright' }}
+      changed_when: false
 
-# The DataVolumes are addressed by computed name in the same shared namespace as
-# the VM. Re-verify each one's live ownership (the bootwright.io/managed-by label
-# the root DataVolume template and the agent-ISO upload stamp) before deleting,
-# so a name collision with a non-Bootwright DataVolume is refused instead of
-# silently deleted. A missing DataVolume (rc != 0) is a no-op.
-- name: Read KubeVirt DataVolume ownership labels
-  ansible.builtin.command:
-    argv:
-      - kubectl
-      - --kubeconfig
-      - "{{ bootwright_kubevirt_kubeconfig }}"
-      - -n
-      - "{{ bootwright_kubevirt_namespace }}"
-      - get
-      - datavolume
-      - "{{ item }}"
-      - -o
-      - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
-  loop:
-    - "{{ bootwright_kubevirt_root_dv_name }}"
-    - "{{ bootwright_kubevirt_iso_dv_name }}"
-  register: bootwright_kubevirt_dv_owner
-  changed_when: false
-  failed_when: false
+    - name: Note already-absent KubeVirt VirtualMachine
+      ansible.builtin.debug:
+        msg: >-
+          VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
+          {{ bootwright_kubevirt_namespace }} is not present on the host cluster;
+          nothing to tear down.
+      when: not (bootwright_kubevirt_vm_present | bool)
 
-# --force-unowned relaxes this refusal so a DataVolume that matches the computed
-# name but carries a missing or mismatched managed-by label is still deleted.
-- name: Refuse to delete a non-Bootwright KubeVirt DataVolume
-  ansible.builtin.assert:
-    that:
-      - (item.rc | default(1)) != 0 or (item.stdout | default('') | trim) == 'bootwright'
-    fail_msg: >-
-      Refusing to delete DataVolume {{ item.item }} in namespace
-      {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
-      bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-      Pass --force-unowned to delete it anyway.
-  loop: "{{ bootwright_kubevirt_dv_owner.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: not (bootwright_destroy_force_unowned | default(false) | bool)
+    # --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a
+    # VirtualMachine that matches the computed name but carries a missing or
+    # mismatched managed-by label — e.g. after the desired-state names changed
+    # post-apply — is still deleted. Without it, the mismatch fails closed.
+    - name: Refuse to delete a non-Bootwright KubeVirt VirtualMachine
+      ansible.builtin.assert:
+        that:
+          - bootwright_kubevirt_destroy_owned | default(false) | bool
+        fail_msg: >-
+          Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
+          {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
+          bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
+          Pass --force-unowned to delete it anyway.
+      when: not (bootwright_destroy_force_unowned | default(false) | bool)
 
-- name: Warn before force-deleting an unowned KubeVirt DataVolume
-  ansible.builtin.debug:
-    msg: >-
-      --force-unowned: deleting DataVolume {{ item.item }} in namespace
-      {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
-      bootwright.io/managed-by=bootwright ownership label.
-  loop: "{{ bootwright_kubevirt_dv_owner.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when:
-    - bootwright_destroy_force_unowned | default(false) | bool
-    - (item.rc | default(1)) == 0
-    - (item.stdout | default('') | trim) != 'bootwright'
+    - name: Warn before force-deleting an unowned KubeVirt VirtualMachine
+      ansible.builtin.debug:
+        msg: >-
+          --force-unowned: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
+          namespace {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
+          bootwright.io/managed-by=bootwright ownership label.
+      when:
+        - bootwright_destroy_force_unowned | default(false) | bool
+        - not (bootwright_kubevirt_destroy_owned | default(false) | bool)
 
-- name: Delete KubeVirt DataVolumes
-  ansible.builtin.command:
-    argv:
-      - kubectl
-      - --kubeconfig
-      - "{{ bootwright_kubevirt_kubeconfig }}"
-      - -n
-      - "{{ bootwright_kubevirt_namespace }}"
-      - delete
-      - datavolume
-      - "{{ item }}"
-      - --ignore-not-found=true
-  loop:
-    - "{{ bootwright_kubevirt_root_dv_name }}"
-    - "{{ bootwright_kubevirt_iso_dv_name }}"
-  register: bootwright_kubevirt_dv_delete
-  changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
+    - name: Stop KubeVirt VirtualMachine
+      ansible.builtin.command:
+        argv:
+          - virtctl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - stop
+          - "{{ bootwright_kubevirt_vm_name }}"
+          - --namespace
+          - "{{ bootwright_kubevirt_namespace }}"
+      register: bootwright_kubevirt_vm_stop
+      changed_when: bootwright_kubevirt_vm_stop.rc == 0
+      failed_when: false
+      when: bootwright_kubevirt_vm_present | bool
 
+    - name: Delete KubeVirt VirtualMachine
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - delete
+          - virtualmachine
+          - "{{ bootwright_kubevirt_vm_name }}"
+          - --ignore-not-found=true
+      register: bootwright_kubevirt_vm_delete
+      changed_when: "'deleted' in (bootwright_kubevirt_vm_delete.stdout | default(''))"
+      when: bootwright_kubevirt_vm_present | bool
+
+    # The DataVolumes are addressed by computed name in the same shared namespace
+    # as the VM. Re-verify each one's live ownership (the bootwright.io/managed-by
+    # label the root DataVolume template and the agent-ISO upload stamp) before
+    # deleting, so a name collision with a non-Bootwright DataVolume is refused
+    # instead of silently deleted. On the reachable host, rc != 0 means the
+    # DataVolume is genuinely gone (NotFound) and its delete is skipped.
+    - name: Read KubeVirt DataVolume ownership labels
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - get
+          - datavolume
+          - "{{ item }}"
+          - -o
+          - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
+      loop:
+        - "{{ bootwright_kubevirt_root_dv_name }}"
+        - "{{ bootwright_kubevirt_iso_dv_name }}"
+      register: bootwright_kubevirt_dv_owner
+      changed_when: false
+      failed_when: false
+
+    # --force-unowned relaxes this refusal so a DataVolume that matches the
+    # computed name but carries a missing or mismatched managed-by label is still
+    # deleted.
+    - name: Refuse to delete a non-Bootwright KubeVirt DataVolume
+      ansible.builtin.assert:
+        that:
+          - (item.rc | default(1)) != 0 or (item.stdout | default('') | trim) == 'bootwright'
+        fail_msg: >-
+          Refusing to delete DataVolume {{ item.item }} in namespace
+          {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
+          bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
+          Pass --force-unowned to delete it anyway.
+      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: not (bootwright_destroy_force_unowned | default(false) | bool)
+
+    - name: Warn before force-deleting an unowned KubeVirt DataVolume
+      ansible.builtin.debug:
+        msg: >-
+          --force-unowned: deleting DataVolume {{ item.item }} in namespace
+          {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
+          bootwright.io/managed-by=bootwright ownership label.
+      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - bootwright_destroy_force_unowned | default(false) | bool
+        - (item.rc | default(1)) == 0
+        - (item.stdout | default('') | trim) != 'bootwright'
+
+    # Delete only the DataVolumes whose ownership read succeeded (rc == 0): those
+    # exist on the host. DataVolumes read as absent (rc != 0) are skipped.
+    - name: Delete KubeVirt DataVolumes
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - delete
+          - datavolume
+          - "{{ item.item }}"
+          - --ignore-not-found=true
+      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: (item.rc | default(1)) == 0
+      register: bootwright_kubevirt_dv_delete
+      changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
+
+# The machine is now gone (deleted on the reachable host, or treated as
+# already-absent on an unreachable one under --skip-unreachable), so drop its
+# ownership record: a later apply recreates it instead of skipping a gone machine.
 - name: Remove KubeVirt machine ownership record
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

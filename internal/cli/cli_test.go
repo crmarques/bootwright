@@ -1228,7 +1228,16 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 	}
 }
 
-func TestProtectedApplyOverrideFailsClosed(t *testing.T) {
+// The destroy-protection gate on apply --override is scope- and drift-aware: it
+// fires only when the selected scope would DESTRUCTIVELY rebuild a drifted,
+// protected resource (a cluster, storage, or machine). A greenfield scope (here a
+// freshly initialized context — the cluster is unrecorded, so override creates it
+// rather than rebuilding) has nothing destructive to rebuild, so the gate does NOT
+// fire. The run still fails closed downstream (missing host trust under --yes), but
+// never at the protection gate. The gate's firing/exemption logic is covered
+// precisely by workflow.TestOverrideDestructiveDriftedObjects and
+// converge.TestCheckApplyOverrideDestroyProtectionScopeAware.
+func TestProtectedApplyOverrideGreenfieldNotGatedByProtection(t *testing.T) {
 	initProtectedTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
 		"apply",
@@ -1239,17 +1248,15 @@ func TestProtectedApplyOverrideFailsClosed(t *testing.T) {
 		"--ask-become-pass=false",
 	)
 	if code == 0 {
-		t.Fatalf("protected apply --override unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply --override unexpectedly succeeded (no real infra)\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	// --override must not rebuild protected resources through apply; the operator
-	// is directed to cross the destroy authorization boundary first.
-	for _, want := range []string{"destroy-protected", "destroy --override"} {
-		if !strings.Contains(stderr, want) {
-			t.Fatalf("protected apply --override stderr missing %q:\n%s", want, stderr)
+	// The fix: a non-destructive (greenfield) override scope is no longer blocked by
+	// destroy protection, so the operator is not trapped in a drift→override→destroy
+	// loop. The failure must come from elsewhere, not the protection gate.
+	for _, unwanted := range []string{"destroy-protected", "destructively rebuild"} {
+		if strings.Contains(stderr, unwanted) {
+			t.Fatalf("greenfield apply --override must not be blocked by destroy protection; stderr contained %q:\n%s", unwanted, stderr)
 		}
-	}
-	if strings.Contains(stdout, "Start") || strings.Contains(stdout, "Bundle") {
-		t.Fatalf("protected apply --override progressed to workflow setup\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 }
 

@@ -30,13 +30,18 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
 		}
-		// Sequential chain: each task depends on the previous (teardown order).
+		// Sequential chain: each task is ORDERING-sequenced after the previous
+		// (teardown order preserved) without a hard dependency, so a failed stage
+		// does not block the rest. Hard Dependencies stay empty.
+		if len(task.Entry.Dependencies) != 0 {
+			t.Fatalf("task[%d] hard deps = %v, want none (ordering only)", i, task.Entry.Dependencies)
+		}
 		if i == 0 {
-			if len(task.Entry.Dependencies) != 0 {
-				t.Fatalf("first task deps = %v, want none", task.Entry.Dependencies)
+			if len(task.Entry.OrderingDependencies) != 0 {
+				t.Fatalf("first task ordering deps = %v, want none", task.Entry.OrderingDependencies)
 			}
-		} else if len(task.Entry.Dependencies) != 1 || task.Entry.Dependencies[0] != wantIDs[i-1] {
-			t.Fatalf("task[%d] deps = %v, want [%s]", i, task.Entry.Dependencies, wantIDs[i-1])
+		} else if len(task.Entry.OrderingDependencies) != 1 || task.Entry.OrderingDependencies[0] != wantIDs[i-1] {
+			t.Fatalf("task[%d] ordering deps = %v, want [%s]", i, task.Entry.OrderingDependencies, wantIDs[i-1])
 		}
 	}
 	if tasks[0].Playbook == "" || tasks[0].Playbook == tasks[2].Playbook {
@@ -53,14 +58,17 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	if len(tasks) != 2 || tasks[0].Entry.ID != wantIDs[0] || tasks[1].Entry.ID != wantIDs[1] {
 		t.Fatalf("clusters chain = %+v, want %v", tasks, wantIDs)
 	}
-	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != wantIDs[0] {
-		t.Fatalf("container destroy must follow storage destroy: %v", tasks[1].Entry.Dependencies)
+	if len(tasks[1].Entry.OrderingDependencies) != 1 || tasks[1].Entry.OrderingDependencies[0] != wantIDs[0] {
+		t.Fatalf("container destroy must be ordering-sequenced after storage destroy: %v", tasks[1].Entry.OrderingDependencies)
+	}
+	if len(tasks[1].Entry.Dependencies) != 0 {
+		t.Fatalf("destroy steps must not carry hard deps (ordering only): %v", tasks[1].Entry.Dependencies)
 	}
 }
 
 // TestPlanDestroyTasksAllChain locks in the whole-context (stage omitted)
 // teardown order: the clusters chain first, then the infra they ran on, as one
-// sequential dependency chain — the reverse of the apply order.
+// sequential ORDERING chain (no hard deps) — the reverse of the apply order.
 func TestPlanDestroyTasksAllChain(t *testing.T) {
 	limit := ""
 	extra := []string{"bootwright_infra_destroy_context_sweep=true"}
@@ -85,12 +93,15 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
 		}
+		if len(task.Entry.Dependencies) != 0 {
+			t.Fatalf("task[%d] hard deps = %v, want none (ordering only)", i, task.Entry.Dependencies)
+		}
 		if i == 0 {
-			if len(task.Entry.Dependencies) != 0 {
-				t.Fatalf("first task deps = %v, want none", task.Entry.Dependencies)
+			if len(task.Entry.OrderingDependencies) != 0 {
+				t.Fatalf("first task ordering deps = %v, want none", task.Entry.OrderingDependencies)
 			}
-		} else if len(task.Entry.Dependencies) != 1 || task.Entry.Dependencies[0] != wantIDs[i-1] {
-			t.Fatalf("task[%d] deps = %v, want [%s]", i, task.Entry.Dependencies, wantIDs[i-1])
+		} else if len(task.Entry.OrderingDependencies) != 1 || task.Entry.OrderingDependencies[0] != wantIDs[i-1] {
+			t.Fatalf("task[%d] ordering deps = %v, want [%s]", i, task.Entry.OrderingDependencies, wantIDs[i-1])
 		}
 	}
 }

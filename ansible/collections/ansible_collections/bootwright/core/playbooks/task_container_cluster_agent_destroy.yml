@@ -1,17 +1,23 @@
 ---
 - name: Destroy OpenShift agent install state
   hosts: bootwright_ocp_hosts
-  gather_subset:
-    - "!all"
-    - min
+  # Fact-gathering is deferred to an explicit task after reachability is
+  # classified, so an unreachable node (e.g. a never-provisioned cluster) is
+  # classified and reported with guidance instead of failing at the implicit
+  # connect with a raw SSH error. There is no irreversible device wipe here.
+  gather_facts: false
   become: true
-  # --skip-unreachable tolerates powered-off OCP nodes: skip them and continue
-  # tearing down the reachable ones. There is no irreversible device wipe here, so
-  # no ownership/seed gate is needed. Default (var unset) keeps the historical
-  # behaviour where an unreachable node fails the teardown.
+  # Play-level default for connecting tasks; the reachability probe overrides it
+  # per-task so classification runs even by default. With gather_facts: false
+  # there is no implicit gather to abort, so this only shapes post-classification
+  # tasks (off by default, on under --skip-unreachable).
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
+  # Proxy facts resolve in pre_tasks, but every task is controller-side (set_fact
+  # and a delegate_to: localhost credential slurp — nothing connects to the managed
+  # host), so with gather_facts: false this runs without contacting an unreachable
+  # node, before the reachability probe and the teardown below.
   pre_tasks:
     - name: Resolve proxy environment
       ansible.builtin.import_role:
@@ -19,16 +25,40 @@
         tasks_from: facts
 
   tasks:
+    # Probe every node first; ignore_unreachable keeps an unreachable node in the
+    # play (recorded as unreachable) so the gates below decide what to do with it.
     - name: Probe OCP host reachability before teardown
       ansible.builtin.ping:
       register: bootwright_ocp_reachable_probe
-      when: bootwright_destroy_skip_unreachable | default(false) | bool
+      ignore_unreachable: true
+      failed_when: false
+
+    # Fail by default with actionable guidance (not a raw SSH error) when a node
+    # is unreachable; --skip-unreachable opts out and skips it instead.
+    - name: Require OCP hosts reachable unless --skip-unreachable
+      ansible.builtin.assert:
+        that:
+          - not (bootwright_ocp_reachable_probe.unreachable | default(false) | bool)
+        fail_msg: >-
+          OpenShift node {{ inventory_hostname }} is unreachable. If the cluster was
+          never provisioned there is nothing to clean — re-run with --skip-unreachable
+          to treat it as already-absent. Otherwise power the node(s) on and retry.
+      when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
     - name: Stop tearing down unreachable OCP hosts
       ansible.builtin.meta: end_host
       when:
         - bootwright_destroy_skip_unreachable | default(false) | bool
         - bootwright_ocp_reachable_probe.unreachable | default(false) | bool
+
+    # Gather facts on the reachable, in-scope nodes the play deferred; when every
+    # node was unreachable and skipped, none remain and the teardown is a no-op.
+    - name: Gather facts on reachable OCP hosts
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - min
+      ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
 
     - name: Destroy per cluster
       ansible.builtin.include_role:

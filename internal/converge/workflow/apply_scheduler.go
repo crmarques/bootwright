@@ -542,6 +542,17 @@ func taskReady(ledger RunLedger, task TaskLedgerEntry) bool {
 			return false
 		}
 	}
+	// Ordering deps only sequence: wait until each is terminal (any outcome),
+	// then run regardless. A failed ordering dep does not block this task.
+	for _, dep := range task.OrderingDependencies {
+		depTask, ok := ledger.Task(dep)
+		if !ok {
+			return false
+		}
+		if !taskTerminal(depTask.Status) {
+			return false
+		}
+	}
 	return true
 }
 

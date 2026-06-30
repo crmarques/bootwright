@@ -99,12 +99,18 @@ type destroyStep struct {
 }
 
 // destroyChain turns the ordered steps into a sequential task chain (each task
-// depends on the previous emitted step), preserving the monolith's teardown
-// order. When a --clusters selection narrows storage teardown, the storage step
-// is dropped if no storage cluster is selected, or labelled with the selected
-// roots otherwise; skipped steps do not break the dependency chain because prev
-// only advances for emitted steps. The DestroyStorageScopeExtraVar allowlist
-// that actually gates the wipe is composed once onto the plan's extra-vars
+// is sequenced after the previous emitted step), preserving the monolith's
+// teardown order. The link is an ORDERING dependency, not a hard one: a step
+// runs after the prior step reaches a terminal state regardless of its outcome,
+// so one stage failing (e.g. an unreachable storage seed) no longer blocks the
+// independent later stages — a destroy makes maximal progress instead of leaving
+// the rest BLOCKED. Each step carries its own ownership/safety gate (the storage
+// seed gate, the per-VM ownership refusals), so the chain order is correctness,
+// not a safety boundary. When a --clusters selection narrows storage teardown,
+// the storage step is dropped if no storage cluster is selected, or labelled with
+// the selected roots otherwise; skipped steps do not break the chain because prev
+// only advances for emitted steps. The DestroyStorageScopeExtraVar allowlist that
+// actually gates the wipe is composed once onto the plan's extra-vars
 // (converge.ApplyDestroyScopeExtraVars) and flows in via extraVars, so the
 // task-graph and single-playbook paths share one gate; this only decides the
 // graph's shape (drop the step) and progress label.
@@ -130,7 +136,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			Status:       TaskStatusPending,
 		}
 		if prev != "" {
-			entry.Dependencies = []string{prev}
+			entry.OrderingDependencies = []string{prev}
 		}
 		tasks = append(tasks, ApplyTask{
 			Entry:         entry,

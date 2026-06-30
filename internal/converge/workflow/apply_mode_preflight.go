@@ -62,3 +62,38 @@ func summarizeApplyObjects(objs []ObjectClassification) string {
 	sort.Strings(parts)
 	return strings.Join(parts, ", ")
 }
+
+// overrideReconfigureOnlyKinds are the object kinds whose --override rebuild is an
+// idempotent re-apply — a fabric-service reconfigure, a node-config or add-on
+// re-push, a storage attachment refresh — that destroys no data, OS, or VM. Drift
+// on these never crosses the destroy-protection boundary. Every other kind (a
+// container or storage cluster, a managed-OS or substrate machine) is treated as a
+// destructive rebuild. The set is an ALLOWLIST so a kind not classified here is
+// gated by default: a new destructive kind fails safe rather than slipping past.
+var overrideReconfigureOnlyKinds = map[string]bool{
+	ApplyTaskKindProvider:               true,
+	ApplyTaskKindInfraComponentServices: true,
+	ApplyTaskKindNodeConfigApply:        true,
+	ApplyTaskKindHostVirtctl:            true,
+	ApplyTaskKindClusterAddon:           true,
+	ApplyTaskKindStorageAttachmentApply: true,
+}
+
+// OverrideDestructiveDriftedObjects returns the labels of the selected objects
+// whose --override rebuild would be destructive: drifted (recorded and changed,
+// so override rebuilds rather than creates) and of a kind that is not
+// reconfigure-only. The destroy-protection gate keys on this so a scoped apply
+// --override whose only drift is a reconfigure-only service does not need to cross
+// the destroy boundary, while one that would reinstall a VM or wipe a cluster
+// still does. Missing (greenfield) objects are never destructive and are excluded.
+func OverrideDestructiveDriftedObjects(objects []ObjectClassification) []string {
+	var labels []string
+	for _, o := range objects {
+		if !o.HasDrift() || overrideReconfigureOnlyKinds[o.Kind] {
+			continue
+		}
+		labels = append(labels, o.Label)
+	}
+	sort.Strings(labels)
+	return labels
+}

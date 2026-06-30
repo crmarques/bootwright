@@ -82,24 +82,33 @@ type RunActivity struct {
 }
 
 type TaskLedgerEntry struct {
-	ID             string     `json:"id"`
-	Kind           string     `json:"kind"`
-	Label          string     `json:"label"`
-	Cluster        string     `json:"cluster,omitempty"`
-	ClusterKind    string     `json:"clusterKind,omitempty"`
-	Node           string     `json:"node,omitempty"`
-	Host           string     `json:"host,omitempty"`
-	ResourceKeys   []string   `json:"resourceKeys,omitempty"`
-	HostSlotKey    string     `json:"hostSlotKey,omitempty"`
-	HostSlotCount  int        `json:"hostSlotCount,omitempty"`
-	Status         TaskStatus `json:"status"`
-	Dependencies   []string   `json:"dependencies,omitempty"`
-	StartedAt      *time.Time `json:"startedAt,omitempty"`
-	EndedAt        *time.Time `json:"endedAt,omitempty"`
-	LogPath        string     `json:"logPath,omitempty"`
-	ClusterLogPath string     `json:"clusterLogPath,omitempty"`
-	Failure        string     `json:"failure,omitempty"`
-	SkippedReason  string     `json:"skippedReason,omitempty"`
+	ID            string     `json:"id"`
+	Kind          string     `json:"kind"`
+	Label         string     `json:"label"`
+	Cluster       string     `json:"cluster,omitempty"`
+	ClusterKind   string     `json:"clusterKind,omitempty"`
+	Node          string     `json:"node,omitempty"`
+	Host          string     `json:"host,omitempty"`
+	ResourceKeys  []string   `json:"resourceKeys,omitempty"`
+	HostSlotKey   string     `json:"hostSlotKey,omitempty"`
+	HostSlotCount int        `json:"hostSlotCount,omitempty"`
+	Status        TaskStatus `json:"status"`
+	Dependencies  []string   `json:"dependencies,omitempty"`
+	// OrderingDependencies sequence this task AFTER the named tasks without
+	// blocking on their outcome: the task waits until each is terminal (any of
+	// OK/Skipped/Failed/Blocked/Cancelled) and then runs regardless. Hard
+	// Dependencies, by contrast, must reach OK/Skipped or this task is blocked.
+	// Destroy uses ordering deps so a failed stage preserves teardown order yet
+	// still lets the independent later stages make maximal progress; each step
+	// carries its own ownership/safety gate, so the chain order is correctness,
+	// not a safety boundary.
+	OrderingDependencies []string   `json:"orderingDependencies,omitempty"`
+	StartedAt            *time.Time `json:"startedAt,omitempty"`
+	EndedAt              *time.Time `json:"endedAt,omitempty"`
+	LogPath              string     `json:"logPath,omitempty"`
+	ClusterLogPath       string     `json:"clusterLogPath,omitempty"`
+	Failure              string     `json:"failure,omitempty"`
+	SkippedReason        string     `json:"skippedReason,omitempty"`
 }
 
 type ProgressCount struct {

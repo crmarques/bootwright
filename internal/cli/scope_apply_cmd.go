@@ -208,19 +208,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		if override {
-			// apply --override authorizes Bootwright-owned destructive rebuilds
-			// (managed-OS VM reinstall, owned-Ceph wipe-and-rebuild). On a
-			// destroy-protected Environment that destruction must cross the destroy
-			// authorization boundary instead of slipping in through apply, so fail
-			// closed before any mutation and direct the operator to destroy first.
-			// Dry-run/plan still previews the override plan.
-			if !dryRun {
-				if err := converge.CheckApplyOverrideDestroyProtection(plan.State); err != nil {
-					return failErr(1, err)
-				}
-			}
-		}
 		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, sel.StorageWorkNames(), sel.Active, workflow.ConcurrencyLimits{
 			Parallelism:        parallelism,
 			ParallelismPerHost: perHost,
@@ -243,6 +230,19 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
 				return failErr(1, err)
+			}
+			// apply --override authorizes Bootwright-owned destructive rebuilds
+			// (managed-OS VM reinstall, owned-Ceph wipe-and-rebuild, cluster
+			// reinstall). On a destroy-protected Environment that destruction must
+			// cross the destroy authorization boundary instead of slipping in through
+			// apply, so fail closed before any mutation and direct the operator to
+			// destroy first. Scope/drift-aware (keyed on the classified objects): a
+			// scoped apply whose only drift is a reconfigure-only fabric service is
+			// not blocked. Dry-run/plan still previews the override plan.
+			if override {
+				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects); err != nil {
+					return failErr(1, err)
+				}
 			}
 			// --override rebuilds drifted storage sub-objects; a structural change
 			// (pool type/erasure profile, CephFS metadata or default data pool) is

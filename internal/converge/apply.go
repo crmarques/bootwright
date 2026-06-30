@@ -14,19 +14,32 @@ import (
 )
 
 // CheckApplyOverrideDestroyProtection fails closed when apply --override would
-// rebuild destroy-protected resources.
+// DESTRUCTIVELY rebuild a drifted, destroy-protected resource.
 //
-// apply --override authorizes Bootwright-owned destructive rebuilds
-// (managed-OS VM reinstall, owned-Ceph wipe-and-rebuild). On a
+// apply --override authorizes Bootwright-owned destructive rebuilds (managed-OS
+// VM reinstall, owned-Ceph wipe-and-rebuild, cluster reinstall). On a
 // destroy-protected Environment that destruction must cross the destroy
-// authorization boundary instead of slipping in through apply, so fail
-// closed before any mutation and direct the operator to destroy first.
-// Dry-run/plan still previews the override plan.
-func CheckApplyOverrideDestroyProtection(state v1alpha1.State) error {
-	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
-		return fmt.Errorf("apply --override would rebuild destroy-protected resources (%s); run `bootwright destroy --override` for the affected scope, then re-apply", strings.Join(protected, ", "))
+// authorization boundary instead of slipping in through apply, so fail closed
+// before any mutation and direct the operator to destroy first.
+//
+// The gate is scope- and drift-aware (it takes the classified objects of the
+// selected scope, not just the Environment): it fires only when an in-scope
+// object is drifted AND its rebuild is destructive. A scoped apply whose only
+// drift is a reconfigure-only fabric service (an infra-component or provider
+// service that override merely re-applies, never wipes) is not blocked, so a
+// drifted shared service can be reconciled in place without a destroy detour;
+// likewise a greenfield (missing) object is created, not destroyed. Dry-run/plan
+// still previews the override plan.
+func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification) error {
+	protected := workflow.ProtectedEnvironments(state)
+	if len(protected) == 0 {
+		return nil
 	}
-	return nil
+	destructive := workflow.OverrideDestructiveDriftedObjects(objects)
+	if len(destructive) == 0 {
+		return nil
+	}
+	return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; run `bootwright destroy --override` for that scope first, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "))
 }
 
 // PlanScopedApply stamps the apply safety mode onto the plan's extra vars,

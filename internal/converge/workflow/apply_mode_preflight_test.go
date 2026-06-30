@@ -84,6 +84,40 @@ func TestEvaluateApplyModePreflightContinueAllMatchProceeds(t *testing.T) {
 	}
 }
 
+// TestOverrideDestructiveDriftedObjects locks in the destroy-protection gate's
+// classification: only a drifted object of a destructive kind (a cluster, storage,
+// or machine rebuild) counts. A drifted reconfigure-only fabric service is exempt
+// (override re-applies it in place, destroying nothing), and a missing object is a
+// greenfield create, not a destroy.
+func TestOverrideDestructiveDriftedObjects(t *testing.T) {
+	runsDir := t.TempDir()
+	infra := classifyTask("infra-component.bastion", ApplyTaskKindInfraComponentServices, "")
+	provider := classifyTask("provider.bastion", ApplyTaskKindProvider, "")
+	storage := classifyTask("storage.ceph", ApplyTaskKindStorageCluster, "ceph")
+	matchedStorage := classifyTask("storage.ceph2", ApplyTaskKindStorageCluster, "ceph2")
+	missingCluster := classifyTask("iso.ocp", ApplyTaskKindClusterISO, "ocp")
+
+	// Drift everything but the matched storage and the missing cluster.
+	saveStateCheckRecord(t, runsDir, infra, "sha256:stale", ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, provider, "sha256:stale", ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, storage, "sha256:stale", ConvergeSafetyOwner)
+	matchedHash, err := ApplyTaskDesiredHash(matchedStorage)
+	if err != nil {
+		t.Fatalf("desired hash: %v", err)
+	}
+	saveStateCheckRecord(t, runsDir, matchedStorage, matchedHash, ConvergeSafetyOwner)
+	// missingCluster: no record.
+
+	objs, err := ClassifyApplyObjects([]ApplyTask{infra, provider, storage, matchedStorage, missingCluster}, runsDir)
+	if err != nil {
+		t.Fatalf("ClassifyApplyObjects: %v", err)
+	}
+	got := OverrideDestructiveDriftedObjects(objs)
+	if len(got) != 1 || got[0] != "StorageCluster/ceph" {
+		t.Fatalf("destructive drift = %v, want only [StorageCluster/ceph]: reconfigure-only drift, matched, and missing must all be exempt", got)
+	}
+}
+
 func TestEvaluateApplyModePreflightOverrideOnlyFailsForeign(t *testing.T) {
 	objs := preflightObjects(t, t.TempDir())
 	err := EvaluateApplyModePreflight(ApplyModeOverride, objs)
