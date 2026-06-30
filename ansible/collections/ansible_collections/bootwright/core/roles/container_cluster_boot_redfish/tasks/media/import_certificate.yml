@@ -236,11 +236,17 @@
         | default(bootwright_redfish_artifact_cert_import_xfusion.content
                   | default(bootwright_redfish_artifact_cert_import_xfusion.msg | default('<no response body>', true), true), true)
       }}.
-      A 403 is an authorization/firmware refusal, not a bad body: confirm the
-      Redfish account holds the iBMC security-configuration privilege, or that
-      this firmware accepts an inline (Type=text) certificate. Otherwise fall
-      back to hardware.management.bmc.virtualMediaCertificate.ignoreVerification
-      or serve a BMC-trusted artifact server certificate instead.
+      MessageId Base.1.0.InsufficientPrivilege means the credentials authenticated
+      but the account's iBMC role lacks the "Security Configuration" right this
+      action requires. Redfish binds the privilege to the role, not to the auth
+      transport, so basic-auth-vs-session makes no difference. The fixed Operator
+      and Common User roles do not hold this right -- use an Administrator-role
+      account, or grant a Custom Role the "Security Configuration" right, then
+      re-run with the same credentials. ignoreVerification will not help such an
+      account either: disabling the iBMC HttpsTransferCertVerification flag is the
+      same SecurityService write and needs the same right. The privilege-free path
+      is to serve a BMC-trusted artifact server certificate (CA-signed, or
+      pre-loaded into the iBMC trust store) so no import is needed.
   when: bootwright_redfish_artifact_cert_method == 'xfusion'
 
 - name: Record xFusion imported root-CA slot for cleanup
