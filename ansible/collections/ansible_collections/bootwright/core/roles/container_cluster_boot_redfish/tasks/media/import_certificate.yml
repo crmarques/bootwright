@@ -174,6 +174,11 @@
   changed_when: false
   when: bootwright_redfish_artifact_cert_method == 'standard'
 
+# The iBMC import action takes RootCertId and Usage as mutually exclusive forms:
+# RootCertId writes the cert to a specific slot (replacing any occupant), while
+# Usage auto-allocates a slot tagged by purpose. Sending both is non-conformant
+# and the iBMC rejects it (HTTP 403). We pin a fixed slot so remove_certificate.yml
+# can delete it deterministically by RootCertId, so send RootCertId alone.
 - name: Build xFusion remote-HTTPS-server root-CA import body
   ansible.builtin.set_fact:
     bootwright_redfish_xfusion_import_body: >-
@@ -181,7 +186,6 @@
         {
           'Type': 'text',
           'Content': bootwright_redfish_artifact_cert_pem,
-          'Usage': 'FileTransfer',
           'RootCertId': (bootwright_redfish_artifact_root_cert_id | int)
         }
       }}

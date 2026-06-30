@@ -2670,13 +2670,18 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 		// xFusion / Huawei iBMC SecurityService action path.
 		"#SecurityService.ImportRemoteHttpsServerRootCA",
 		"#SecurityService.DeleteRemoteHttpsServerRootCA",
-		"'Usage': 'FileTransfer'",
-		"RootCertId",
+		"'RootCertId': (bootwright_redfish_artifact_root_cert_id | int)",
 		"bootwright_redfish_artifact_root_cert_imported_id",
 	} {
 		if !strings.Contains(imp, want) {
 			t.Fatalf("import_certificate.yml missing %q", want)
 		}
+	}
+	// The iBMC import action takes RootCertId and Usage as mutually exclusive
+	// forms; sending both is non-conformant and rejected with HTTP 403. We pin a
+	// fixed RootCertId slot for deterministic cleanup, so Usage must not appear.
+	if strings.Contains(imp, "'Usage'") {
+		t.Fatalf("import_certificate.yml must not send Usage alongside RootCertId; the iBMC rejects the conflicting pair (403)")
 	}
 
 	rem := readRepoFile(t, root+"/media/remove_certificate.yml")
