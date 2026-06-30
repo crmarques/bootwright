@@ -182,14 +182,16 @@ HTTPS connection. The usual cause is the artifact server's **self-signed
 certificate**: the BMC will not trust it, and the standard Redfish "skip
 verification" toggles are unimplemented or ineffective on much firmware. Make
 the BMC trust the certificate with
-`Machine.spec.hardware.management.bmc.virtualMediaCertificate`:
+`Machine.spec.hardware.management.bmc.virtualMedia.tls` (or set it once on the
+provider's `baremetal.defaults.bmc.virtualMedia.tls` to cover the whole fleet):
 
-- `importCertificate: true` uploads the artifact server certificate into the
-  BMC trust store before the fetch (and `removeAfterBoot: true` removes it once
-  the ISO is mounted). Needs a Redfish VirtualMedia Certificates collection on
-  the BMC.
-- `ignoreVerification: true` asks the BMC to skip verifying the certificate
-  (best-effort; some firmware ignores it).
+- `importServerCertificate: true` uploads the artifact server certificate into the
+  BMC trust store before the fetch (and `removeServerCertificateAfterBoot: true`
+  removes it once the ISO is mounted). Uses the Redfish VirtualMedia Certificates
+  collection or the xFusion/Huawei iBMC `SecurityService.ImportRemoteHttpsServerRootCA`
+  action.
+- `verify: false` asks the BMC to skip verifying the certificate (best-effort;
+  some firmware ignores it).
 
 Alternatively serve a BMC-trusted certificate, or — if the failure is a TLS
 *handshake* mismatch rather than trust — relax the listener with

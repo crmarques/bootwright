@@ -180,14 +180,18 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server 
 		"baseUrl":        baseURL,
 		"systemId":       systemID,
 		"credentialsRef": bmc.CredentialsRef.Name,
-		"validateCerts":  !bmc.DisableCertificateVerification,
+		"validateCerts":  bmc.TLS.VerifyEnabled(),
 		"setBootSource":  true,
 	}
-	if vmc := bmc.VirtualMediaCertificate; vmc != nil {
+	// The rendered boot.redfish.artifactCertificate contract (ignoreVerification/
+	// import/removeAfterBoot) is unchanged for the ansible role; only its source
+	// schema changed (bmc.virtualMedia.tls). Provider defaults are merged onto the
+	// machine in Normalize, so this reads one effective value.
+	if vm := bmc.VirtualMedia; vm != nil && vm.TLS != nil {
 		redfish["artifactCertificate"] = map[string]any{
-			"ignoreVerification": vmc.IgnoreVerification,
-			"import":             vmc.ImportCertificate,
-			"removeAfterBoot":    vmc.RemoveAfterBoot,
+			"ignoreVerification": !vm.TLS.VerifyEnabled(),
+			"import":             vm.TLS.ImportServerCertificate,
+			"removeAfterBoot":    vm.TLS.RemoveServerCertificateAfterBoot,
 		}
 	}
 

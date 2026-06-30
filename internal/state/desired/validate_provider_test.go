@@ -168,3 +168,40 @@ func TestVSphereISOStagingValidation(t *testing.T) {
 		t.Fatalf("missing %q in %v", want, errs)
 	}
 }
+
+// TestBareMetalProviderBMCDefaults covers the provider-default BMC arm: a
+// cert-only default (no credentialsRef) is accepted (the require is relaxed),
+// and a virtualMedia.tls block must obey the same invariants as the per-machine
+// one, reported against the provider path.
+func TestBareMetalProviderBMCDefaults(t *testing.T) {
+	mk := func(bmc *v1alpha1.BMCDefaults) v1alpha1.InfraProvider {
+		return v1alpha1.InfraProvider{
+			Metadata: v1alpha1.Metadata{Name: "bm"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type:      v1alpha1.ProvisionerBareMetal,
+				BareMetal: &v1alpha1.InfraProviderBareMetal{Defaults: v1alpha1.BareMetalDefaultsSpec{BMC: bmc}},
+			},
+		}
+	}
+	noMachines := map[string]v1alpha1.Machine{}
+	noClusters := map[string]v1alpha1.ContainerCluster{}
+
+	verifyFalse := false
+	certOnly := validateProviderSpec(mk(&v1alpha1.BMCDefaults{
+		TLS:          &v1alpha1.BMCTLS{Verify: &verifyFalse},
+		VirtualMedia: &v1alpha1.BMCVirtualMedia{TLS: &v1alpha1.BMCVirtualMediaTLS{ImportServerCertificate: true}},
+	}), noMachines, noClusters)
+	for _, bad := range []string{"defaults.bmc.credentialsRef", "virtualMedia.tls"} {
+		if strings.Contains(strings.Join(certOnly, "\n"), bad) {
+			t.Fatalf("cert-only provider BMC default must not error on %q: %v", bad, certOnly)
+		}
+	}
+
+	badRemove := validateProviderSpec(mk(&v1alpha1.BMCDefaults{
+		VirtualMedia: &v1alpha1.BMCVirtualMedia{TLS: &v1alpha1.BMCVirtualMediaTLS{RemoveServerCertificateAfterBoot: true}},
+	}), noMachines, noClusters)
+	want := "spec.bareMetal.defaults.bmc.virtualMedia.tls.removeServerCertificateAfterBoot requires importServerCertificate"
+	if !strings.Contains(strings.Join(badRemove, "\n"), want) {
+		t.Fatalf("missing %q in %v", want, badRemove)
+	}
+}

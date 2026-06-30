@@ -57,34 +57,57 @@ type MachineHardwareManagement struct {
 }
 
 type BMCSpec struct {
-	Address                        string                      `yaml:"address,omitempty" json:"address,omitempty"`
-	Protocol                       string                      `yaml:"protocol,omitempty" json:"protocol,omitempty"`
-	CredentialsRef                 SecretRef                   `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
-	DisableCertificateVerification bool                        `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
-	VirtualMediaCertificate        *BMCVirtualMediaCertificate `yaml:"virtualMediaCertificate,omitempty" json:"virtualMediaCertificate,omitempty"`
+	Address        string    `yaml:"address,omitempty" json:"address,omitempty"`
+	Protocol       string    `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+	CredentialsRef SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	// TLS governs the TLS connection bootwright opens TO this BMC (the Redfish
+	// API leg, bootwright → BMC).
+	TLS *BMCTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
+	// VirtualMedia governs the BMC's own virtual-media client — the connection the
+	// BMC opens to the artifact server to fetch the boot ISO (BMC → artifact
+	// server).
+	VirtualMedia *BMCVirtualMedia `yaml:"virtualMedia,omitempty" json:"virtualMedia,omitempty"`
 }
 
-// BMCVirtualMediaCertificate controls how the BMC handles the artifact server's
-// TLS certificate when it fetches the agent ISO as Redfish virtual media. Use it
-// when a BMC rejects the artifact server's self-signed certificate and aborts the
-// InsertMedia fetch. This is distinct from the sibling
-// disableCertificateVerification, which governs the controller's own HTTPS leg to
-// the BMC, not the BMC's leg to the artifact server.
-type BMCVirtualMediaCertificate struct {
-	// IgnoreVerification instructs the BMC to skip verifying the artifact server
-	// certificate for the virtual-media fetch and leaves that verification
-	// disabled afterward instead of restoring it. Best-effort: some firmware does
-	// not expose a working toggle, in which case ImportCertificate is the fix.
-	IgnoreVerification bool `yaml:"ignoreVerification,omitempty" json:"ignoreVerification,omitempty"`
-	// ImportCertificate uploads the artifact server's certificate into the BMC's
-	// trusted certificate store before the fetch so the BMC accepts it. Requires
-	// the BMC to expose a Redfish VirtualMedia Certificates collection.
-	ImportCertificate bool `yaml:"importCertificate,omitempty" json:"importCertificate,omitempty"`
-	// RemoveAfterBoot removes the imported certificate from the BMC once the agent
-	// ISO is mounted, leaving the BMC trust store as it was. Requires
-	// ImportCertificate.
-	RemoveAfterBoot bool `yaml:"removeAfterBoot,omitempty" json:"removeAfterBoot,omitempty"`
+// BMCTLS configures TLS for a connection to a BMC. Verify is tri-state: nil means
+// verify the certificate (the secure default); set it false only for a
+// lab/self-signed BMC certificate.
+type BMCTLS struct {
+	Verify *bool `yaml:"verify,omitempty" json:"verify,omitempty"`
 }
+
+// VerifyEnabled reports the effective verify decision; a nil receiver or unset
+// Verify means verify (the default).
+func (t *BMCTLS) VerifyEnabled() bool { return t == nil || t.Verify == nil || *t.Verify }
+
+// BMCVirtualMedia configures the BMC's virtual-media client — how it fetches the
+// boot ISO from the artifact server.
+type BMCVirtualMedia struct {
+	// TLS governs how the BMC handles the artifact server's TLS certificate on the
+	// virtual-media fetch (BMC → artifact server), distinct from BMCSpec.TLS
+	// (bootwright → BMC).
+	TLS *BMCVirtualMediaTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
+}
+
+// BMCVirtualMediaTLS controls how the BMC handles the artifact server's TLS
+// certificate when it fetches the boot ISO. Use it when a BMC rejects the
+// artifact server's self-signed certificate and aborts the InsertMedia fetch.
+type BMCVirtualMediaTLS struct {
+	// Verify is tri-state: nil means verify (the default). Set it false to have
+	// the BMC skip verifying the artifact server certificate (best-effort; some
+	// firmware ignores it, in which case ImportServerCertificate is the fix).
+	Verify *bool `yaml:"verify,omitempty" json:"verify,omitempty"`
+	// ImportServerCertificate uploads the artifact server's certificate into the
+	// BMC trust store before the fetch so the BMC accepts a self-signed cert.
+	ImportServerCertificate bool `yaml:"importServerCertificate,omitempty" json:"importServerCertificate,omitempty"`
+	// RemoveServerCertificateAfterBoot removes that imported certificate once the
+	// ISO is mounted. Requires ImportServerCertificate.
+	RemoveServerCertificateAfterBoot bool `yaml:"removeServerCertificateAfterBoot,omitempty" json:"removeServerCertificateAfterBoot,omitempty"`
+}
+
+// VerifyEnabled reports the effective verify decision; a nil receiver or unset
+// Verify means verify (the default).
+func (t *BMCVirtualMediaTLS) VerifyEnabled() bool { return t == nil || t.Verify == nil || *t.Verify }
 
 type RootDeviceHints struct {
 	DeviceName       string `yaml:"deviceName,omitempty" json:"deviceName,omitempty"`

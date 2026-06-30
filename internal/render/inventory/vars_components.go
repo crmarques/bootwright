@@ -286,10 +286,12 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 				out["server"] = serverVars
 				if bmc := server.Spec.Hardware.Management.BMC; bmc.Address != "" {
 					out["bmc"] = map[string]any{
-						"address":                        bmc.Address,
-						"protocol":                       bmc.Protocol,
-						"credentialsRef":                 bmc.CredentialsRef.Name,
-						"disableCertificateVerification": bmc.DisableCertificateVerification,
+						"address":        bmc.Address,
+						"protocol":       bmc.Protocol,
+						"credentialsRef": bmc.CredentialsRef.Name,
+						// Rendered key kept stable for machine-manifest.yml.j2; sourced
+						// from the new bmc.tls schema (provider default merged in Normalize).
+						"disableCertificateVerification": !bmc.TLS.VerifyEnabled(),
 					}
 				}
 			}

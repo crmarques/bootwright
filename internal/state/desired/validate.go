@@ -593,7 +593,10 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults.auth.credentialsRef",
 				p.Metadata.Name), p.Spec.Libvirt.BMCEmulationDefaults.Auth.CredentialsRef)
 		}
-		if p.Spec.BareMetal != nil && p.Spec.BareMetal.Defaults.BMC != nil {
+		// credentialsRef on the provider BMC default is optional (a cert-only default
+		// is valid); validate it only when set. Per-machine credentialsRef is
+		// independently required in validate_machine.go.
+		if p.Spec.BareMetal != nil && p.Spec.BareMetal.Defaults.BMC != nil && p.Spec.BareMetal.Defaults.BMC.CredentialsRef.Name != "" {
 			require(fmt.Sprintf("InfraProvider/%s spec.bareMetal.defaults.bmc.credentialsRef",
 				p.Metadata.Name), p.Spec.BareMetal.Defaults.BMC.CredentialsRef)
 		}

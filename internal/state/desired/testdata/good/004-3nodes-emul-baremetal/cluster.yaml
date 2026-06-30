@@ -36,7 +36,8 @@ spec:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
         protocol: redfish
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: primary
 
@@ -82,7 +83,8 @@ spec:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-1
         protocol: redfish
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: primary
 
@@ -128,7 +130,8 @@ spec:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-2
         protocol: redfish
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: primary
 

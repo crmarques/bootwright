@@ -90,7 +90,7 @@ func bareMetalProviderVars(b *v1alpha1.InfraProviderBareMetal) map[string]any {
 	if b.Defaults.BMC != nil {
 		out["defaults"] = map[string]any{"bmc": map[string]any{
 			"credentialsRef":                 b.Defaults.BMC.CredentialsRef.Name,
-			"disableCertificateVerification": b.Defaults.BMC.DisableCertificateVerification,
+			"disableCertificateVerification": !b.Defaults.BMC.TLS.VerifyEnabled(),
 		}}
 	}
 	return out

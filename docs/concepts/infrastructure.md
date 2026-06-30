@@ -80,13 +80,15 @@ attachment.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `baremetal.boot.method` | No | — | Boot method. Free-form string today; `external` is the supported value for Redfish virtual media. |
-| `baremetal.defaults.bmc.credentialsRef` | No | — | Default BMC credentials secret, inherited by machines that omit their own. |
-| `baremetal.defaults.bmc.disableCertificateVerification` | No | `false` | Lab-only BMC TLS verification opt-out for the control-node-to-BMC leg. |
+| `baremetal.defaults.bmc.credentialsRef` | No | — | Default BMC credentials secret. Not inherited by machines — credentials stay per-machine. |
+| `baremetal.defaults.bmc.tls.verify` | No | `true` | Default for the bootwright→BMC TLS leg; `false` is a lab opt-out. Inherited by machines that omit `bmc.tls`. |
+| `baremetal.defaults.bmc.virtualMedia.tls.{verify,importServerCertificate,removeServerCertificateAfterBoot}` | No | — | Default for the BMC→artifact-server virtual-media TLS. Inherited by machines that omit `bmc.virtualMedia`. |
 
-`defaults.bmc` supplies provider-wide BMC defaults; an individual server can
-override them through its own `Machine.spec.hardware.management.bmc`.
-`disableCertificateVerification: true` is a lab posture for BMCs without trusted
-TLS — do not treat it as the production default.
+`defaults.bmc` supplies provider-wide BMC defaults: `tls` and `virtualMedia` are
+inherited by every Machine that omits them (credentialsRef stays per-machine). An
+individual server overrides them through its own
+`Machine.spec.hardware.management.bmc`. `tls.verify: false` is a lab posture for
+BMCs without trusted TLS — do not treat it as the production default.
 
 A provider plus its physical-server `Machine` companion:
 
@@ -103,7 +105,12 @@ spec:
     defaults:
       bmc:
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
+        virtualMedia:
+          tls:
+            importServerCertificate: true
+            removeServerCertificateAfterBoot: true
   networkAttachments:
     - name: rack1-vlan140-machine
       baremetal:
@@ -147,7 +154,7 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        # tls + virtualMedia inherited from the provider's defaults.bmc
   addresses:
     - name: ip
       address: 192.168.140.20

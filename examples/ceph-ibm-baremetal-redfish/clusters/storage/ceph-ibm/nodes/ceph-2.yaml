@@ -41,7 +41,8 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://ceph-2-bmc.example.com/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
 
   addresses:
     - name: ssh

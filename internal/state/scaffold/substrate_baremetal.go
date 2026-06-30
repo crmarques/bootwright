@@ -46,7 +46,8 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.example.test/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
   os:
     provided: false
     install:

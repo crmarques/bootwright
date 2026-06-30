@@ -522,10 +522,13 @@ func TestBareMetalBootRendersVirtualMediaCertificateTrust(t *testing.T) {
 		if state.Machines[i].Spec.Hardware.Management.BMC.Address == "" {
 			continue
 		}
-		state.Machines[i].Spec.Hardware.Management.BMC.VirtualMediaCertificate = &v1alpha1.BMCVirtualMediaCertificate{
-			IgnoreVerification: true,
-			ImportCertificate:  true,
-			RemoveAfterBoot:    true,
+		verifyFalse := false
+		state.Machines[i].Spec.Hardware.Management.BMC.VirtualMedia = &v1alpha1.BMCVirtualMedia{
+			TLS: &v1alpha1.BMCVirtualMediaTLS{
+				Verify:                           &verifyFalse,
+				ImportServerCertificate:          true,
+				RemoveServerCertificateAfterBoot: true,
+			},
 		}
 		set++
 	}

@@ -39,7 +39,8 @@ spec:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: eno1
 
@@ -88,7 +89,8 @@ spec:
         address: redfish-virtualmedia+https://bmc-rack1-srv2.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: eno1
 
@@ -137,7 +139,8 @@ spec:
         address: redfish-virtualmedia+https://bmc-rack1-srv3.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: eno1
 

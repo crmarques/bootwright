@@ -35,7 +35,8 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-dc2-master-0.bootwright.test/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: primary
 
@@ -80,7 +81,8 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-dc2-master-1.bootwright.test/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: primary
 
@@ -125,7 +127,8 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-dc2-master-2.bootwright.test/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+        tls:
+          verify: false
     boot:
       nicRef: primary
 

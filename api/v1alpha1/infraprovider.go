@@ -45,9 +45,13 @@ type BareMetalDefaultsSpec struct {
 	BMC *BMCDefaults `yaml:"bmc,omitempty" json:"bmc,omitempty"`
 }
 
+// BMCDefaults are bare-metal BMC settings inherited by every Machine bound to the
+// provider that omits them. CredentialsRef stays per-machine (not defaulted here);
+// TLS and VirtualMedia inherit (see internal/state/desired applyBareMetalBMCDefaults).
 type BMCDefaults struct {
-	CredentialsRef                 SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
-	DisableCertificateVerification bool      `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
+	CredentialsRef SecretRef        `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	TLS            *BMCTLS          `yaml:"tls,omitempty" json:"tls,omitempty"`
+	VirtualMedia   *BMCVirtualMedia `yaml:"virtualMedia,omitempty" json:"virtualMedia,omitempty"`
 }
 
 type InfraProviderVSphere struct {

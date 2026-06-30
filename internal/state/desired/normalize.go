@@ -33,6 +33,7 @@ func Normalize(state *v1alpha1.State) {
 	}
 	applyClusterPlatformDefaults(state)
 	applyEnvironmentArtifactAccessDefaults(state, env)
+	applyBareMetalBMCDefaults(state)
 	for i := range state.ClusterAddons {
 		normalizeClusterAddon(&state.ClusterAddons[i])
 	}
@@ -53,6 +54,59 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageExports {
 		normalizeStorageExport(&state.StorageExports[i], storageClusters)
 	}
+}
+
+// applyBareMetalBMCDefaults lets a bare-metal InfraProvider set BMC TLS behavior
+// once (spec.baremetal.defaults.bmc) and have every Machine bound to it inherit
+// what it omits. credentialsRef is never defaulted (it stays per-machine). The
+// merge mutates the effective machine spec so every consumer — boot vars, the
+// substrate manifest, validation, and render effective — reads one value.
+func applyBareMetalBMCDefaults(state *v1alpha1.State) {
+	for i := range state.Machines {
+		bmc := &state.Machines[i].Spec.Hardware.Management.BMC
+		// Never invent a BMC on a machine that declares none.
+		if bmc.Address == "" {
+			continue
+		}
+		provider, ok := stateview.Provider(*state, state.Machines[i].Spec.Substrate.ProviderRef.Name)
+		if !ok || provider.Spec.Type != v1alpha1.ProvisionerBareMetal || provider.Spec.BareMetal == nil {
+			continue
+		}
+		d := provider.Spec.BareMetal.Defaults.BMC
+		if d == nil {
+			continue
+		}
+		// tls.verify: tri-state; inherit field-level only when the machine left it unset.
+		if d.TLS != nil && d.TLS.Verify != nil {
+			if bmc.TLS == nil {
+				bmc.TLS = &v1alpha1.BMCTLS{}
+			}
+			if bmc.TLS.Verify == nil {
+				v := *d.TLS.Verify
+				bmc.TLS.Verify = &v
+			}
+		}
+		// virtualMedia: an authored node block wins whole; otherwise deep-copy the default.
+		if bmc.VirtualMedia == nil && d.VirtualMedia != nil {
+			bmc.VirtualMedia = deepCopyBMCVirtualMedia(d.VirtualMedia)
+		}
+	}
+}
+
+func deepCopyBMCVirtualMedia(src *v1alpha1.BMCVirtualMedia) *v1alpha1.BMCVirtualMedia {
+	if src == nil {
+		return nil
+	}
+	out := &v1alpha1.BMCVirtualMedia{}
+	if src.TLS != nil {
+		tls := *src.TLS
+		if src.TLS.Verify != nil {
+			v := *src.TLS.Verify
+			tls.Verify = &v
+		}
+		out.TLS = &tls
+	}
+	return out
 }
 
 func normalizeEnvironment(env *v1alpha1.Environment) {

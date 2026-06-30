@@ -225,7 +225,7 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 			}
 		}
 	}
-	validateBMC := requireBareMetalBoot || bmc.Address != "" || bmc.Protocol != "" || bmc.CredentialsRef.Name != "" || bmc.DisableCertificateVerification
+	validateBMC := requireBareMetalBoot || bmc.Address != "" || bmc.Protocol != "" || bmc.CredentialsRef.Name != "" || bmc.TLS != nil || bmc.VirtualMedia != nil
 	if validateBMC && bmc.Address == "" {
 		errs = append(errs, prefix+".management.bmc.address is required")
 	}
@@ -235,13 +235,22 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 	if validateBMC && bmc.CredentialsRef.Name == "" {
 		errs = append(errs, prefix+".management.bmc.credentialsRef is required")
 	}
-	if vmc := bmc.VirtualMediaCertificate; vmc != nil {
-		if vmc.RemoveAfterBoot && !vmc.ImportCertificate {
-			errs = append(errs, prefix+".management.bmc.virtualMediaCertificate.removeAfterBoot requires importCertificate")
-		}
-		if !vmc.IgnoreVerification && !vmc.ImportCertificate && !vmc.RemoveAfterBoot {
-			errs = append(errs, prefix+".management.bmc.virtualMediaCertificate sets no option; set ignoreVerification and/or importCertificate")
-		}
+	if vm := bmc.VirtualMedia; vm != nil && vm.TLS != nil {
+		errs = append(errs, validateBMCVirtualMediaTLS(prefix+".management.bmc.virtualMedia.tls", vm.TLS)...)
+	}
+	return errs
+}
+
+// validateBMCVirtualMediaTLS holds the invariants for the BMC → artifact-server
+// virtual-media TLS block, shared by the per-machine and provider-default
+// validators so they stay in lockstep.
+func validateBMCVirtualMediaTLS(prefix string, tls *v1alpha1.BMCVirtualMediaTLS) []string {
+	var errs []string
+	if tls.RemoveServerCertificateAfterBoot && !tls.ImportServerCertificate {
+		errs = append(errs, prefix+".removeServerCertificateAfterBoot requires importServerCertificate")
+	}
+	if tls.Verify == nil && !tls.ImportServerCertificate && !tls.RemoveServerCertificateAfterBoot {
+		errs = append(errs, prefix+" sets no option; set verify and/or importServerCertificate")
 	}
 	return errs
 }

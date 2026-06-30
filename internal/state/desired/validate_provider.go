@@ -38,6 +38,9 @@ func validateProviderSpec(provider v1alpha1.InfraProvider, machines map[string]v
 	case v1alpha1.ProvisionerBareMetal:
 		if provider.Spec.BareMetal == nil {
 			errs = append(errs, prefix+".bareMetal is required when type=baremetal")
+		} else if bmc := provider.Spec.BareMetal.Defaults.BMC; bmc != nil && bmc.VirtualMedia != nil && bmc.VirtualMedia.TLS != nil {
+			errs = append(errs, validateBMCVirtualMediaTLS(
+				prefix+".bareMetal.defaults.bmc.virtualMedia.tls", bmc.VirtualMedia.TLS)...)
 		}
 		errs = append(errs, rejectProviderArms(prefix, provider, "bareMetal")...)
 	case v1alpha1.ProvisionerVSphere:
