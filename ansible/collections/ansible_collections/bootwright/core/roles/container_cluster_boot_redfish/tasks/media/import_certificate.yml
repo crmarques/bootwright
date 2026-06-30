@@ -1,17 +1,24 @@
 ---
-# Upload the artifact server's TLS certificate into the BMC's trusted store so a
-# BMC that rejects the self-signed artifact certificate accepts the virtual-media
-# HTTPS fetch. Requires the BMC to expose a Redfish VirtualMedia Certificates
-# collection (DMTF CertificateCollection); the assert below fails clearly when it
-# does not, so the operator can fall back to ignoreVerification or a BMC-trusted
-# artifact server certificate.
+# Make the BMC trust the artifact server's TLS certificate so it accepts the
+# virtual-media HTTPS fetch. Two mechanisms, chosen by what the BMC exposes:
+#   - DMTF: a Certificates collection on the VirtualMedia member (POST the cert).
+#   - xFusion / Huawei iBMC: the SecurityService
+#     #SecurityService.ImportRemoteHttpsServerRootCA action.
+# The assert below fails clearly when the BMC exposes neither, so the operator can
+# fall back to ignoreVerification or a BMC-trusted artifact server certificate.
 - name: Resolve artifact server certificate source
   ansible.builtin.set_fact:
     bootwright_redfish_artifact_cert_host: "{{ bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('hostname') }}"
     bootwright_redfish_artifact_cert_port: "{{ (bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('port')) | default('443', true) }}"
   changed_when: false
 
-- name: Refresh VirtualMedia member to locate its certificate store
+- name: Retrieve the artifact server certificate
+  community.crypto.get_certificate:
+    host: "{{ bootwright_redfish_artifact_cert_host }}"
+    port: "{{ bootwright_redfish_artifact_cert_port | int }}"
+  register: bootwright_redfish_artifact_cert
+
+- name: Refresh VirtualMedia member to locate a DMTF certificate store
   ansible.builtin.uri:
     url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
@@ -27,7 +34,24 @@
   changed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
 
-- name: Resolve VirtualMedia certificate collection URL
+- name: Probe Redfish SecurityService for an xFusion root-CA import action
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_security_service_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_security_service_actions_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: (bootwright_redfish_security_service_member | default('') | length) > 0
+
+- name: Resolve certificate import targets
   ansible.builtin.set_fact:
     bootwright_redfish_vmedia_certificates_url: >-
       {{
@@ -36,26 +60,45 @@
         if ((((bootwright_redfish_vmedia_cert_member_probe.json | default({})).Certificates | default({})).get('@odata.id', '')) | length) > 0
         else ''
       }}
+    bootwright_redfish_xfusion_import_target: >-
+      {{
+        (((bootwright_redfish_security_service_actions_probe.json | default({})).Actions | default({})).get('#SecurityService.ImportRemoteHttpsServerRootCA', {}).get('target', ''))
+        | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)
+        if ((((bootwright_redfish_security_service_actions_probe.json | default({})).Actions | default({})).get('#SecurityService.ImportRemoteHttpsServerRootCA', {}).get('target', '')) | length) > 0
+        else ''
+      }}
+    bootwright_redfish_xfusion_delete_target: >-
+      {{
+        (((bootwright_redfish_security_service_actions_probe.json | default({})).Actions | default({})).get('#SecurityService.DeleteRemoteHttpsServerRootCA', {}).get('target', ''))
+        | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)
+        if ((((bootwright_redfish_security_service_actions_probe.json | default({})).Actions | default({})).get('#SecurityService.DeleteRemoteHttpsServerRootCA', {}).get('target', '')) | length) > 0
+        else ''
+      }}
   changed_when: false
 
-- name: Confirm the BMC exposes a VirtualMedia certificate store
+- name: Resolve effective certificate import method
+  ansible.builtin.set_fact:
+    bootwright_redfish_artifact_cert_method: >-
+      {{
+        'standard' if (bootwright_redfish_vmedia_certificates_url | length) > 0
+        else 'xfusion' if (bootwright_redfish_xfusion_import_target | length) > 0
+        else ''
+      }}
+  changed_when: false
+
+- name: Confirm the BMC exposes a certificate trust store
   ansible.builtin.assert:
     that:
-      - (bootwright_redfish_vmedia_certificates_url | length) > 0
+      - (bootwright_redfish_artifact_cert_method | length) > 0
     fail_msg: >-
       hardware.management.bmc.virtualMediaCertificate.importCertificate is set,
       but BMC VirtualMedia member {{ bootwright_redfish_vmedia_member }} exposes
-      no Redfish Certificates collection to import the artifact server certificate
-      into. Use ignoreVerification, or serve a BMC-trusted artifact server
-      certificate, instead.
+      neither a Redfish Certificates collection nor an xFusion SecurityService
+      ImportRemoteHttpsServerRootCA action to import the artifact server
+      certificate into. Use ignoreVerification, or serve a BMC-trusted artifact
+      server certificate, instead.
 
-- name: Retrieve the artifact server certificate
-  community.crypto.get_certificate:
-    host: "{{ bootwright_redfish_artifact_cert_host }}"
-    port: "{{ bootwright_redfish_artifact_cert_port | int }}"
-  register: bootwright_redfish_artifact_cert
-
-- name: Import the artifact server certificate into the BMC trust store
+- name: Import the artifact certificate via the DMTF VirtualMedia store
   ansible.builtin.uri:
     url: "{{ bootwright_redfish_vmedia_certificates_url }}"
     method: POST
@@ -69,15 +112,55 @@
     url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
-  register: bootwright_redfish_artifact_cert_import
-  changed_when: (bootwright_redfish_artifact_cert_import.status | default(0) | int) in [200, 201, 202, 204]
+  register: bootwright_redfish_artifact_cert_import_standard
+  changed_when: (bootwright_redfish_artifact_cert_import_standard.status | default(0) | int) in [200, 201, 202, 204]
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: bootwright_redfish_artifact_cert_method == 'standard'
 
-- name: Record imported artifact certificate reference for cleanup
+- name: Record DMTF imported certificate reference for cleanup
   ansible.builtin.set_fact:
     bootwright_redfish_artifact_cert_ref: >-
       {{
-        (bootwright_redfish_artifact_cert_import.location | default('', true))
-        | default(((bootwright_redfish_artifact_cert_import.json | default({})).get('@odata.id', '')), true)
+        (bootwright_redfish_artifact_cert_import_standard.location | default('', true))
+        | default(((bootwright_redfish_artifact_cert_import_standard.json | default({})).get('@odata.id', '')), true)
       }}
   changed_when: false
+  when: bootwright_redfish_artifact_cert_method == 'standard'
+
+- name: Build xFusion remote-HTTPS-server root-CA import body
+  ansible.builtin.set_fact:
+    bootwright_redfish_xfusion_import_body: >-
+      {{
+        {
+          'Type': 'text',
+          'Content': bootwright_redfish_artifact_cert.cert,
+          'Usage': 'FileTransfer',
+          'RootCertId': (bootwright_redfish_artifact_root_cert_id | int)
+        }
+      }}
+  changed_when: false
+  no_log: true
+  when: bootwright_redfish_artifact_cert_method == 'xfusion'
+
+- name: Import the artifact certificate as a remote HTTPS server root CA (xFusion)
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_xfusion_import_target }}"
+    method: POST
+    body_format: json
+    body: "{{ bootwright_redfish_xfusion_import_body }}"
+    status_code: [200, 201, 202, 204]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_artifact_cert_import_xfusion
+  changed_when: (bootwright_redfish_artifact_cert_import_xfusion.status | default(0) | int) in [200, 201, 202, 204]
+  no_log: true
+  when: bootwright_redfish_artifact_cert_method == 'xfusion'
+
+- name: Record xFusion imported root-CA slot for cleanup
+  ansible.builtin.set_fact:
+    bootwright_redfish_artifact_root_cert_imported_id: "{{ bootwright_redfish_artifact_root_cert_id | int }}"
+  changed_when: false
+  when: bootwright_redfish_artifact_cert_method == 'xfusion'

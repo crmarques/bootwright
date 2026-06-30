@@ -2660,10 +2660,16 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 	imp := readRepoFile(t, root+"/media/import_certificate.yml")
 	for _, want := range []string{
 		"community.crypto.get_certificate",
+		// DMTF VirtualMedia Certificates collection path.
 		"CertificateString",
 		"CertificateType: PEM",
 		"bootwright_redfish_artifact_cert_ref",
-		"no Redfish Certificates collection",
+		// xFusion / Huawei iBMC SecurityService action path.
+		"#SecurityService.ImportRemoteHttpsServerRootCA",
+		"#SecurityService.DeleteRemoteHttpsServerRootCA",
+		"'Usage': 'FileTransfer'",
+		"RootCertId",
+		"bootwright_redfish_artifact_root_cert_imported_id",
 	} {
 		if !strings.Contains(imp, want) {
 			t.Fatalf("import_certificate.yml missing %q", want)
@@ -2674,6 +2680,8 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 	for _, want := range []string{
 		"method: DELETE",
 		"(bootwright_redfish_artifact_cert_ref | default('') | length) > 0",
+		"bootwright_redfish_xfusion_delete_target",
+		"bootwright_redfish_artifact_root_cert_imported_id is defined",
 	} {
 		if !strings.Contains(rem, want) {
 			t.Fatalf("remove_certificate.yml missing %q", want)

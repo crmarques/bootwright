@@ -117,7 +117,7 @@ provider with `os.provided: false`, `nics[]` (each with a `macAddress`) and
 | `hardware.management.bmc.credentialsRef` | Required when any BMC field is set | None | Secret containing BMC credentials. |
 | `hardware.management.bmc.disableCertificateVerification` | No | `false` | Lab-only TLS verification opt-out for the control-node-to-BMC leg. |
 | `hardware.management.bmc.virtualMediaCertificate.ignoreVerification` | No | `false` | Tell the BMC to skip verifying the artifact server certificate for the virtual-media fetch and leave verification disabled afterward (best-effort; some firmware ignores it). |
-| `hardware.management.bmc.virtualMediaCertificate.importCertificate` | No | `false` | Upload the artifact server certificate into the BMC trust store before the fetch so the BMC accepts a self-signed certificate. Needs a Redfish VirtualMedia Certificates collection on the BMC. |
+| `hardware.management.bmc.virtualMediaCertificate.importCertificate` | No | `false` | Upload the artifact server certificate into the BMC trust store before the fetch so the BMC accepts a self-signed certificate. Uses the Redfish VirtualMedia Certificates collection, or the xFusion/Huawei iBMC `SecurityService.ImportRemoteHttpsServerRootCA` action; fails clearly if the BMC exposes neither. |
 | `hardware.management.bmc.virtualMediaCertificate.removeAfterBoot` | No | `false` | Remove the imported certificate from the BMC after the agent ISO is mounted. Requires `importCertificate`. |
 
 A per-`Machine` `hardware.management.bmc` block overrides the provider's
