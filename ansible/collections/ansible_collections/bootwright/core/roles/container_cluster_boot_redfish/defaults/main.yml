@@ -18,9 +18,10 @@ bootwright_redfish_vmedia_eject_retries: 24
 bootwright_redfish_vmedia_eject_delay_seconds: 5
 
 # Slot the xFusion/Huawei iBMC SecurityService.ImportRemoteHttpsServerRootCA
-# action writes the artifact server CA into (RootCertId, 1..8). Fixed so removal
-# is deterministic and re-import overwrites rather than accumulates; the top slot
-# avoids colliding with operator-managed certificates that usually start at 1.
+# action writes the artifact server CA into. The remote-HTTPS-server root-CA store
+# accepts RootCertId 5..8 (not 1..8); values outside that range are rejected.
+# Fixed so removal is deterministic and re-import overwrites rather than
+# accumulates; the top slot avoids colliding with operator-managed certificates.
 bootwright_redfish_artifact_root_cert_id: 8
 
 bootwright_redfish_vmedia_probe_retries: 12

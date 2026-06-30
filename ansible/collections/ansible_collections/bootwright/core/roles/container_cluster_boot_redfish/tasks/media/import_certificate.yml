@@ -199,6 +199,7 @@
     method: POST
     body_format: json
     body: "{{ bootwright_redfish_xfusion_import_body }}"
+    return_content: true
     status_code: [200, 201, 202, 204]
     validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
     force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
@@ -206,8 +207,40 @@
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_artifact_cert_import_xfusion
+  # Don't let the uri module's status_code mismatch raise the bare
+  # "Status code was 403 ..." here: that message carries no iBMC detail, and the
+  # task's no_log (which protects url_password) buries the response body that
+  # explains the refusal. Tolerate any status, then surface the iBMC message in a
+  # credential-safe assert below.
+  failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_import_xfusion.status | default(0) | int) in [200, 201, 202, 204]
   no_log: true
+  when: bootwright_redfish_artifact_cert_method == 'xfusion'
+
+# A non-2xx here is the iBMC refusing the action, not a malformed request: the
+# body is a documented-valid form (Type/Content/RootCertId, RootCertId in the
+# xFusion 5..8 range). The reason lives in the response body the import task's
+# no_log hides, so re-surface it. Only status/json/content/msg are interpolated
+# -- none of which carry url_password -- so the credential stays redacted.
+- name: Confirm the xFusion root-CA import was accepted
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_artifact_cert_import_xfusion.status | default(0) | int) in [200, 201, 202, 204]
+    fail_msg: >-
+      xFusion iBMC refused the remote-HTTPS-server root-CA import at
+      {{ bootwright_redfish_xfusion_import_target }} with HTTP
+      {{ bootwright_redfish_artifact_cert_import_xfusion.status | default('unknown') }}.
+      iBMC response:
+      {{
+        bootwright_redfish_artifact_cert_import_xfusion.json
+        | default(bootwright_redfish_artifact_cert_import_xfusion.content
+                  | default(bootwright_redfish_artifact_cert_import_xfusion.msg | default('<no response body>', true), true), true)
+      }}.
+      A 403 is an authorization/firmware refusal, not a bad body: confirm the
+      Redfish account holds the iBMC security-configuration privilege, or that
+      this firmware accepts an inline (Type=text) certificate. Otherwise fall
+      back to hardware.management.bmc.virtualMediaCertificate.ignoreVerification
+      or serve a BMC-trusted artifact server certificate instead.
   when: bootwright_redfish_artifact_cert_method == 'xfusion'
 
 - name: Record xFusion imported root-CA slot for cleanup
