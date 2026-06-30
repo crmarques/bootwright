@@ -175,6 +175,12 @@
     bootwright_redfish_vmedia_verify_certificate_captured: false
   changed_when: false
 
+- name: Import artifact server certificate into the BMC trust store
+  ansible.builtin.include_tasks: ../media/import_certificate.yml
+  when:
+    - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_component.boot.redfish.artifactCertificate.import | default(false) | bool
+
 - name: Retry Redfish virtual media insertion until attached
   ansible.builtin.include_tasks:
     file: ../media/insert_attempt.yml

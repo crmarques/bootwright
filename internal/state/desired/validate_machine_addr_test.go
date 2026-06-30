@@ -19,6 +19,41 @@ func interfaceAddrMachine(ifAddr []v1alpha1.MachineInterfaceAddress, addrs []v1a
 	}
 }
 
+func TestValidateMachineVirtualMediaCertificate(t *testing.T) {
+	machine := func(vmc *v1alpha1.BMCVirtualMediaCertificate) v1alpha1.Machine {
+		return v1alpha1.Machine{
+			Metadata: v1alpha1.Metadata{Name: "node"},
+			Spec: v1alpha1.MachineSpec{
+				Hardware: v1alpha1.MachineHardware{
+					Management: v1alpha1.MachineHardwareManagement{
+						BMC: v1alpha1.BMCSpec{
+							Address:                 "redfish-virtualmedia+https://bmc.test/redfish/v1/Systems/1",
+							CredentialsRef:          v1alpha1.SecretRef{Name: "bmc-creds"},
+							VirtualMediaCertificate: vmc,
+						},
+					},
+				},
+			},
+		}
+	}
+	prefix := "Machine/node spec.hardware"
+
+	ok := machine(&v1alpha1.BMCVirtualMediaCertificate{ImportCertificate: true, RemoveAfterBoot: true})
+	if errs := validateMachineHardware(prefix, ok, v1alpha1.InfraProvider{}, false); containsSubstring(errs, "virtualMediaCertificate") {
+		t.Fatalf("valid import+remove rejected: %v", errs)
+	}
+
+	badRemove := machine(&v1alpha1.BMCVirtualMediaCertificate{RemoveAfterBoot: true})
+	if !containsSubstring(validateMachineHardware(prefix, badRemove, v1alpha1.InfraProvider{}, false), "removeAfterBoot requires importCertificate") {
+		t.Fatalf("expected removeAfterBoot dependency error")
+	}
+
+	empty := machine(&v1alpha1.BMCVirtualMediaCertificate{})
+	if !containsSubstring(validateMachineHardware(prefix, empty, v1alpha1.InfraProvider{}, false), "sets no option") {
+		t.Fatalf("expected empty virtualMediaCertificate error")
+	}
+}
+
 func TestValidateMachineInterfaceAddresses(t *testing.T) {
 	addrs := []v1alpha1.MachineAddress{{Name: "ip", Address: "192.0.2.20"}}
 

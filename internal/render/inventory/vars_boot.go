@@ -176,14 +176,23 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server 
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
 	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, ci, isoBasename)
 
+	redfish := map[string]any{
+		"baseUrl":        baseURL,
+		"systemId":       systemID,
+		"credentialsRef": bmc.CredentialsRef.Name,
+		"validateCerts":  !bmc.DisableCertificateVerification,
+		"setBootSource":  true,
+	}
+	if vmc := bmc.VirtualMediaCertificate; vmc != nil {
+		redfish["artifactCertificate"] = map[string]any{
+			"ignoreVerification": vmc.IgnoreVerification,
+			"import":             vmc.ImportCertificate,
+			"removeAfterBoot":    vmc.RemoveAfterBoot,
+		}
+	}
+
 	return map[string]any{
-		"redfish": map[string]any{
-			"baseUrl":        baseURL,
-			"systemId":       systemID,
-			"credentialsRef": bmc.CredentialsRef.Name,
-			"validateCerts":  !bmc.DisableCertificateVerification,
-			"setBootSource":  true,
-		},
+		"redfish": redfish,
 		"readiness": map[string]any{
 			"type": "ssh",
 			"ssh": map[string]any{

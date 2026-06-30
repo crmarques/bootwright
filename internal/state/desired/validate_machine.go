@@ -235,6 +235,14 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 	if validateBMC && bmc.CredentialsRef.Name == "" {
 		errs = append(errs, prefix+".management.bmc.credentialsRef is required")
 	}
+	if vmc := bmc.VirtualMediaCertificate; vmc != nil {
+		if vmc.RemoveAfterBoot && !vmc.ImportCertificate {
+			errs = append(errs, prefix+".management.bmc.virtualMediaCertificate.removeAfterBoot requires importCertificate")
+		}
+		if !vmc.IgnoreVerification && !vmc.ImportCertificate && !vmc.RemoveAfterBoot {
+			errs = append(errs, prefix+".management.bmc.virtualMediaCertificate sets no option; set ignoreVerification and/or importCertificate")
+		}
+	}
 	return errs
 }
 

@@ -1,0 +1,83 @@
+---
+# Upload the artifact server's TLS certificate into the BMC's trusted store so a
+# BMC that rejects the self-signed artifact certificate accepts the virtual-media
+# HTTPS fetch. Requires the BMC to expose a Redfish VirtualMedia Certificates
+# collection (DMTF CertificateCollection); the assert below fails clearly when it
+# does not, so the operator can fall back to ignoreVerification or a BMC-trusted
+# artifact server certificate.
+- name: Resolve artifact server certificate source
+  ansible.builtin.set_fact:
+    bootwright_redfish_artifact_cert_host: "{{ bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('hostname') }}"
+    bootwright_redfish_artifact_cert_port: "{{ (bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('port')) | default('443', true) }}"
+  changed_when: false
+
+- name: Refresh VirtualMedia member to locate its certificate store
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_cert_member_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Resolve VirtualMedia certificate collection URL
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_certificates_url: >-
+      {{
+        (((bootwright_redfish_vmedia_cert_member_probe.json | default({})).Certificates | default({})).get('@odata.id', ''))
+        | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)
+        if ((((bootwright_redfish_vmedia_cert_member_probe.json | default({})).Certificates | default({})).get('@odata.id', '')) | length) > 0
+        else ''
+      }}
+  changed_when: false
+
+- name: Confirm the BMC exposes a VirtualMedia certificate store
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_vmedia_certificates_url | length) > 0
+    fail_msg: >-
+      hardware.management.bmc.virtualMediaCertificate.importCertificate is set,
+      but BMC VirtualMedia member {{ bootwright_redfish_vmedia_member }} exposes
+      no Redfish Certificates collection to import the artifact server certificate
+      into. Use ignoreVerification, or serve a BMC-trusted artifact server
+      certificate, instead.
+
+- name: Retrieve the artifact server certificate
+  community.crypto.get_certificate:
+    host: "{{ bootwright_redfish_artifact_cert_host }}"
+    port: "{{ bootwright_redfish_artifact_cert_port | int }}"
+  register: bootwright_redfish_artifact_cert
+
+- name: Import the artifact server certificate into the BMC trust store
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_vmedia_certificates_url }}"
+    method: POST
+    body_format: json
+    body:
+      CertificateString: "{{ bootwright_redfish_artifact_cert.cert }}"
+      CertificateType: PEM
+    status_code: [200, 201, 202, 204]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_artifact_cert_import
+  changed_when: (bootwright_redfish_artifact_cert_import.status | default(0) | int) in [200, 201, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Record imported artifact certificate reference for cleanup
+  ansible.builtin.set_fact:
+    bootwright_redfish_artifact_cert_ref: >-
+      {{
+        (bootwright_redfish_artifact_cert_import.location | default('', true))
+        | default(((bootwright_redfish_artifact_cert_import.json | default({})).get('@odata.id', '')), true)
+      }}
+  changed_when: false

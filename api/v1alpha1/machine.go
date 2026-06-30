@@ -57,10 +57,33 @@ type MachineHardwareManagement struct {
 }
 
 type BMCSpec struct {
-	Address                        string    `yaml:"address,omitempty" json:"address,omitempty"`
-	Protocol                       string    `yaml:"protocol,omitempty" json:"protocol,omitempty"`
-	CredentialsRef                 SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
-	DisableCertificateVerification bool      `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
+	Address                        string                      `yaml:"address,omitempty" json:"address,omitempty"`
+	Protocol                       string                      `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+	CredentialsRef                 SecretRef                   `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	DisableCertificateVerification bool                        `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
+	VirtualMediaCertificate        *BMCVirtualMediaCertificate `yaml:"virtualMediaCertificate,omitempty" json:"virtualMediaCertificate,omitempty"`
+}
+
+// BMCVirtualMediaCertificate controls how the BMC handles the artifact server's
+// TLS certificate when it fetches the agent ISO as Redfish virtual media. Use it
+// when a BMC rejects the artifact server's self-signed certificate and aborts the
+// InsertMedia fetch. This is distinct from the sibling
+// disableCertificateVerification, which governs the controller's own HTTPS leg to
+// the BMC, not the BMC's leg to the artifact server.
+type BMCVirtualMediaCertificate struct {
+	// IgnoreVerification instructs the BMC to skip verifying the artifact server
+	// certificate for the virtual-media fetch and leaves that verification
+	// disabled afterward instead of restoring it. Best-effort: some firmware does
+	// not expose a working toggle, in which case ImportCertificate is the fix.
+	IgnoreVerification bool `yaml:"ignoreVerification,omitempty" json:"ignoreVerification,omitempty"`
+	// ImportCertificate uploads the artifact server's certificate into the BMC's
+	// trusted certificate store before the fetch so the BMC accepts it. Requires
+	// the BMC to expose a Redfish VirtualMedia Certificates collection.
+	ImportCertificate bool `yaml:"importCertificate,omitempty" json:"importCertificate,omitempty"`
+	// RemoveAfterBoot removes the imported certificate from the BMC once the agent
+	// ISO is mounted, leaving the BMC trust store as it was. Requires
+	// ImportCertificate.
+	RemoveAfterBoot bool `yaml:"removeAfterBoot,omitempty" json:"removeAfterBoot,omitempty"`
 }
 
 type RootDeviceHints struct {

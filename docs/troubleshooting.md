@@ -177,10 +177,24 @@ the ISO, verify reachability from the BMC network and prefer an IP-address
 
 If the BMC accepts the `InsertMedia` task but the task then ends in
 `Exception`/`ConnectionFailed` ("Failed to connect to virtual media") — common
-on legacy BMCs such as Huawei iBMC — the BMC reached the listener but could not
-complete the TLS handshake, even with BMC certificate verification disabled.
-Relax the listener's TLS with `InfraComponent.spec.artifactServer.tls.minVersion`
-and `tls.ciphers` (see [Artifact Server](concepts/infrastructure.md#artifact-server)).
+on BMCs such as Huawei iBMC — the BMC reached the listener but rejected the
+HTTPS connection. The usual cause is the artifact server's **self-signed
+certificate**: the BMC will not trust it, and the standard Redfish "skip
+verification" toggles are unimplemented or ineffective on much firmware. Make
+the BMC trust the certificate with
+`Machine.spec.hardware.management.bmc.virtualMediaCertificate`:
+
+- `importCertificate: true` uploads the artifact server certificate into the
+  BMC trust store before the fetch (and `removeAfterBoot: true` removes it once
+  the ISO is mounted). Needs a Redfish VirtualMedia Certificates collection on
+  the BMC.
+- `ignoreVerification: true` asks the BMC to skip verifying the certificate
+  (best-effort; some firmware ignores it).
+
+Alternatively serve a BMC-trusted certificate, or — if the failure is a TLS
+*handshake* mismatch rather than trust — relax the listener with
+`InfraComponent.spec.artifactServer.tls.minVersion`/`tls.ciphers` (see
+[Artifact Server](concepts/infrastructure.md#artifact-server)).
 
 ## Resources no longer in desired state (orphans)
 

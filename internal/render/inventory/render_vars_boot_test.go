@@ -202,6 +202,9 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			if got := redfish["validateCerts"]; got != tc.wantValidate {
 				t.Errorf("redfish.validateCerts got %v, want %v", got, tc.wantValidate)
 			}
+			if _, ok := redfish["artifactCertificate"]; ok {
+				t.Errorf("redfish.artifactCertificate present by default; should be omitted unless bmc.virtualMediaCertificate is set")
+			}
 			if got := machine["bootApplyRole"]; got != "bootwright.core.container_cluster_boot_redfish" {
 				t.Errorf("bootApplyRole got %v, want bootwright.core.container_cluster_boot_redfish", got)
 			}
@@ -506,6 +509,38 @@ func TestBareMetalArtifactFetchURLUsesArtifactServerListenerPort(t *testing.T) {
 	}
 	if got := tls["ipAddresses"]; !containsAnyString(got.([]any), "192.168.132.1") {
 		t.Errorf("artifact service tls.ipAddresses got %v, want endpoint host", got)
+	}
+}
+
+func TestBareMetalBootRendersVirtualMediaCertificateTrust(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	set := 0
+	for i := range state.Machines {
+		if state.Machines[i].Spec.Hardware.Management.BMC.Address == "" {
+			continue
+		}
+		state.Machines[i].Spec.Hardware.Management.BMC.VirtualMediaCertificate = &v1alpha1.BMCVirtualMediaCertificate{
+			IgnoreVerification: true,
+			ImportCertificate:  true,
+			RemoveAfterBoot:    true,
+		}
+		set++
+	}
+	if set == 0 {
+		t.Fatal("fixture has no baremetal BMC machine to configure")
+	}
+
+	cluster := Vars(state)["bootwright_clusters"].([]any)[0].(map[string]any)
+	redfish := firstMachineComponent(t, cluster)["boot"].(map[string]any)["redfish"].(map[string]any)
+	ac, ok := redfish["artifactCertificate"].(map[string]any)
+	if !ok {
+		t.Fatalf("redfish.artifactCertificate missing: %v", redfish)
+	}
+	if ac["ignoreVerification"] != true || ac["import"] != true || ac["removeAfterBoot"] != true {
+		t.Errorf("artifactCertificate got %v, want all flags true", ac)
 	}
 }
 

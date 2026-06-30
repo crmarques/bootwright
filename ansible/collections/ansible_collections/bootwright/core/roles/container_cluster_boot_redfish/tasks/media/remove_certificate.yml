@@ -1,0 +1,19 @@
+---
+# Drop the certificate import_certificate.yml added, so the BMC trust store is
+# left as bootwright found it. Runs in the boot role's always block; tolerant of
+# a missing reference (import skipped/failed) and of a 404 (already gone).
+- name: Remove imported artifact certificate from the BMC trust store
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_artifact_cert_ref | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: DELETE
+    status_code: [200, 202, 204, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_artifact_cert_remove
+  failed_when: false
+  changed_when: (bootwright_redfish_artifact_cert_remove.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: (bootwright_redfish_artifact_cert_ref | default('') | length) > 0

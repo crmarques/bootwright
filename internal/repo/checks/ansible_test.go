@@ -685,6 +685,8 @@ func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/eject.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/import_certificate.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/remove_certificate.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/media_insert.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_override.yml",
@@ -2638,6 +2640,57 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 	}
 	if got := waitURI["status_code"]; got != 404 {
 		t.Fatalf("artifact readiness probe must expect directory listing rejection, got %v", got)
+	}
+}
+
+func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
+	root := "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks"
+
+	mediaInsert := readRepoFile(t, root+"/boot/media_insert.yml")
+	for _, want := range []string{
+		"../media/import_certificate.yml",
+		"bootwright_component.boot.redfish.artifactCertificate.import | default(false) | bool",
+		"bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'",
+	} {
+		if !strings.Contains(mediaInsert, want) {
+			t.Fatalf("media_insert.yml must gate certificate import on the operator flag; missing %q", want)
+		}
+	}
+
+	imp := readRepoFile(t, root+"/media/import_certificate.yml")
+	for _, want := range []string{
+		"community.crypto.get_certificate",
+		"CertificateString",
+		"CertificateType: PEM",
+		"bootwright_redfish_artifact_cert_ref",
+		"no Redfish Certificates collection",
+	} {
+		if !strings.Contains(imp, want) {
+			t.Fatalf("import_certificate.yml missing %q", want)
+		}
+	}
+
+	rem := readRepoFile(t, root+"/media/remove_certificate.yml")
+	for _, want := range []string{
+		"method: DELETE",
+		"(bootwright_redfish_artifact_cert_ref | default('') | length) > 0",
+	} {
+		if !strings.Contains(rem, want) {
+			t.Fatalf("remove_certificate.yml missing %q", want)
+		}
+	}
+
+	restore := readRepoFile(t, root+"/media/restore_certificate_verification.yml")
+	if strings.Count(restore, "not (bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool)") < 2 {
+		t.Fatalf("both restore PATCHes must skip when ignoreVerification leaves BMC verification disabled")
+	}
+	for _, want := range []string{
+		"remove_certificate.yml",
+		"bootwright_component.boot.redfish.artifactCertificate.removeAfterBoot | default(false) | bool",
+	} {
+		if !strings.Contains(restore, want) {
+			t.Fatalf("restore_certificate_verification.yml missing %q", want)
+		}
 	}
 }
 
