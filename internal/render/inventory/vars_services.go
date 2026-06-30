@@ -212,11 +212,21 @@ func artifactServerTLSVars(state v1alpha1.State, server artifacts.Server) map[st
 		}
 		dnsNames = append(dnsNames, host)
 	}
-	return map[string]any{
+	tls := map[string]any{
 		"commonName":  commonName,
 		"dnsNames":    dnsNames,
 		"ipAddresses": ipAddresses,
 	}
+	if cfg := server.Config; cfg != nil && cfg.TLS != nil {
+		if protocols := v1alpha1.TLSProtocolsFrom(cfg.TLS.MinVersion); len(protocols) > 0 {
+			tls["minVersion"] = cfg.TLS.MinVersion
+			tls["protocols"] = strings.Join(protocols, " ")
+		}
+		if cfg.TLS.Ciphers != "" {
+			tls["ciphers"] = cfg.TLS.Ciphers
+		}
+	}
+	return tls
 }
 
 func artifactServerTLSHosts(state v1alpha1.State, server artifacts.Server) []string {

@@ -711,6 +711,29 @@ spec:
 			wantSubstring: "field addressName not found",
 		},
 		{
+			name: "artifact-server-tls-minversion-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
+				"    machineRef: services-host\n",
+				"    machineRef: services-host\n    tls:\n      minVersion: TLSv1.4\n", 1)},
+			wantSubstring: `spec.artifactServer.tls.minVersion "TLSv1.4" must be one of`,
+		},
+		{
+			name: "artifact-server-tls-ciphers-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
+				"    machineRef: services-host\n",
+				"    machineRef: services-host\n    tls:\n      ciphers: \"HIGH; rm -rf\"\n", 1)},
+			wantSubstring: "spec.artifactServer.tls.ciphers",
+		},
+		{
+			name: "artifact-server-tls-without-https-listener-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(
+				strings.Replace(newInfraComponentYAML,
+					"    machineRef: services-host\n",
+					"    machineRef: services-host\n    tls:\n      minVersion: TLSv1.2\n", 1),
+				"protocol: https", "protocol: http", 1)},
+			wantSubstring: "spec.artifactServer.tls is set but no https listener",
+		},
+		{
 			name: "artifact-access-endpoint-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"endpointRef: bmc",

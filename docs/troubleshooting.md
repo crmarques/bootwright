@@ -175,6 +175,13 @@ the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
 `ContainerCluster.spec.install.artifactAccess.redfishVirtualMedia.endpointRef`.
 
+If the BMC accepts the `InsertMedia` task but the task then ends in
+`Exception`/`ConnectionFailed` ("Failed to connect to virtual media") — common
+on legacy BMCs such as Huawei iBMC — the BMC reached the listener but could not
+complete the TLS handshake, even with BMC certificate verification disabled.
+Relax the listener's TLS with `InfraComponent.spec.artifactServer.tls.minVersion`
+and `tls.ciphers` (see [Artifact Server](concepts/infrastructure.md#artifact-server)).
+
 ## Resources no longer in desired state (orphans)
 
 `apply` is additive: it creates and converges what desired state declares and

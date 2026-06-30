@@ -2577,6 +2577,18 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 			t.Fatalf("artifact nginx template missing %q", want)
 		}
 	}
+	// Legacy-BMC TLS relaxation: ssl_protocols/ssl_ciphers render only when the
+	// component sets them, so the default keeps the server's built-in TLS.
+	for _, want := range []string{
+		"bootwright_component.tls.protocols | default('')",
+		"ssl_protocols {{ bootwright_component.tls.protocols }};",
+		"bootwright_component.tls.ciphers | default('')",
+		"ssl_ciphers {{ bootwright_component.tls.ciphers }};",
+	} {
+		if !strings.Contains(nginx, want) {
+			t.Fatalf("artifact nginx template missing TLS-relaxation directive %q", want)
+		}
+	}
 	tlsTemplate := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/templates/artifacts-openssl.cnf.j2")
 	for _, want := range []string{"subjectAltName", "bootwright_component.tls.dnsNames", "bootwright_component.tls.ipAddresses"} {
 		if !strings.Contains(tlsTemplate, want) {

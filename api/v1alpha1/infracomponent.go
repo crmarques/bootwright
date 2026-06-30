@@ -50,8 +50,54 @@ func (s InfraComponentSpec) SetSlots() []string {
 type ArtifactServerComponent struct {
 	MachineRef  LocalObjectReference     `yaml:"machineRef" json:"machineRef"`
 	BindAddress string                   `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+	TLS         *ArtifactServerTLS       `yaml:"tls,omitempty" json:"tls,omitempty"`
 	Listeners   []ArtifactServerListener `yaml:"listeners,omitempty" json:"listeners,omitempty"`
 	Endpoints   []ArtifactServerEndpoint `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+}
+
+// ArtifactServerTLS relaxes the TLS handshake the artifact server's HTTPS
+// listeners present, for legacy Redfish BMC clients (e.g. Huawei iBMC) whose
+// virtual-media HTTPS client cannot negotiate the modern defaults the bundled
+// nginx/OpenSSL build offers and aborts the InsertMedia fetch with a generic
+// connection failure. Both fields are optional; when unset the listeners keep
+// the server's built-in TLS defaults. Applies to https listeners only.
+type ArtifactServerTLS struct {
+	// MinVersion is the lowest TLS protocol version the HTTPS listeners accept,
+	// one of TLSv1, TLSv1.1, TLSv1.2, TLSv1.3. It renders nginx ssl_protocols
+	// spanning MinVersion up to TLSv1.3.
+	MinVersion string `yaml:"minVersion,omitempty" json:"minVersion,omitempty"`
+	// Ciphers is the OpenSSL cipher string the HTTPS listeners offer, rendered
+	// verbatim as nginx ssl_ciphers (e.g. "DEFAULT:@SECLEVEL=0" to admit the
+	// legacy ciphers and key sizes an old BMC requires).
+	Ciphers string `yaml:"ciphers,omitempty" json:"ciphers,omitempty"`
+}
+
+// tlsVersionsAscending lists the accepted TLS protocol version names from
+// lowest to highest. A minVersion selects this slice from its own index to the
+// end, which becomes the nginx ssl_protocols list.
+var tlsVersionsAscending = []string{TLSVersion10, TLSVersion11, TLSVersion12, TLSVersion13}
+
+// IsValidTLSVersion reports whether v names a TLS protocol version that
+// ArtifactServerTLS.minVersion accepts.
+func IsValidTLSVersion(v string) bool {
+	for _, known := range tlsVersionsAscending {
+		if v == known {
+			return true
+		}
+	}
+	return false
+}
+
+// TLSProtocolsFrom returns the TLS version names from minVersion up to the
+// highest supported version, the span an nginx ssl_protocols directive lists.
+// It returns nil when minVersion is empty or not a recognised version.
+func TLSProtocolsFrom(minVersion string) []string {
+	for i, known := range tlsVersionsAscending {
+		if minVersion == known {
+			return append([]string(nil), tlsVersionsAscending[i:]...)
+		}
+	}
+	return nil
 }
 
 type ArtifactServerListener struct {

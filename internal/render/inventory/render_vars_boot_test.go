@@ -509,6 +509,45 @@ func TestBareMetalArtifactFetchURLUsesArtifactServerListenerPort(t *testing.T) {
 	}
 }
 
+func TestArtifactServerTLSRelaxationRendersNginxDirectives(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	setArtifactTLS(&state, &v1alpha1.ArtifactServerTLS{
+		MinVersion: v1alpha1.TLSVersion12,
+		Ciphers:    "DEFAULT:@SECLEVEL=0",
+	})
+
+	services := Vars(state)["bootwright_infra_component_services"].([]any)
+	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifactServer)
+	tls := service["tls"].(map[string]any)
+	if got := tls["minVersion"]; got != v1alpha1.TLSVersion12 {
+		t.Errorf("tls.minVersion got %v, want %s", got, v1alpha1.TLSVersion12)
+	}
+	if got := tls["protocols"]; got != "TLSv1.2 TLSv1.3" {
+		t.Errorf("tls.protocols got %v, want span from minVersion to highest", got)
+	}
+	if got := tls["ciphers"]; got != "DEFAULT:@SECLEVEL=0" {
+		t.Errorf("tls.ciphers got %v, want verbatim cipher string", got)
+	}
+}
+
+func TestArtifactServerTLSOmittedByDefault(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	services := Vars(state)["bootwright_infra_component_services"].([]any)
+	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifactServer)
+	tls := service["tls"].(map[string]any)
+	for _, key := range []string{"minVersion", "protocols", "ciphers"} {
+		if _, ok := tls[key]; ok {
+			t.Errorf("tls[%q] present without configured relaxation; default must keep server TLS defaults", key)
+		}
+	}
+}
+
 func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {

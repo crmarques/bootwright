@@ -3,6 +3,7 @@ package desiredstate
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/roles"
@@ -63,10 +64,41 @@ func validateArtifactServerComponent(component v1alpha1.InfraComponent, machines
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", server.MachineRef, machines, v1alpha1.ComponentSlotArtifactServer, v1alpha1.ArtifactServerProtocolHTTP)...)
 	errs = append(errs, validateServiceParams(prefix, server.BindAddress, 0)...)
 	errs = append(errs, validateArtifactServerListeners(prefix, server.Listeners)...)
+	errs = append(errs, validateArtifactServerTLS(prefix, server.TLS, server.Listeners)...)
 	if machine, ok := machines[server.MachineRef.Name]; ok {
 		errs = append(errs, validateArtifactServerEndpoints(prefix, server.Listeners, server.Endpoints, machine)...)
 	}
 	return errs
+}
+
+func validateArtifactServerTLS(prefix string, tls *v1alpha1.ArtifactServerTLS, listeners []v1alpha1.ArtifactServerListener) []string {
+	if tls == nil {
+		return nil
+	}
+	var errs []string
+	if tls.MinVersion != "" && !v1alpha1.IsValidTLSVersion(tls.MinVersion) {
+		errs = append(errs, fmt.Sprintf("%s.tls.minVersion %q must be one of {%s, %s, %s, %s}",
+			prefix, tls.MinVersion,
+			v1alpha1.TLSVersion10, v1alpha1.TLSVersion11, v1alpha1.TLSVersion12, v1alpha1.TLSVersion13))
+	}
+	// ciphers renders verbatim into the nginx ssl_ciphers directive, so reject
+	// anything that could terminate the directive or open a new one.
+	if tls.Ciphers != "" && strings.ContainsAny(tls.Ciphers, ";{}\n\r") {
+		errs = append(errs, fmt.Sprintf("%s.tls.ciphers %q must not contain ';', '{', '}', or newlines", prefix, tls.Ciphers))
+	}
+	if (tls.MinVersion != "" || tls.Ciphers != "") && !artifactServerHasHTTPSListener(listeners) {
+		errs = append(errs, prefix+".tls is set but no https listener exists to apply it to")
+	}
+	return errs
+}
+
+func artifactServerHasHTTPSListener(listeners []v1alpha1.ArtifactServerListener) bool {
+	for _, listener := range listeners {
+		if listener.Protocol == v1alpha1.ArtifactServerProtocolHTTPS {
+			return true
+		}
+	}
+	return false
 }
 
 func validateArtifactServerListeners(prefix string, listeners []v1alpha1.ArtifactServerListener) []string {

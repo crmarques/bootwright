@@ -68,6 +68,14 @@ func setArtifactHTTPPort(state *v1alpha1.State, port int) {
 	}
 }
 
+func setArtifactTLS(state *v1alpha1.State, tls *v1alpha1.ArtifactServerTLS) {
+	for i := range state.InfraComponents {
+		if server := state.InfraComponents[i].Spec.ArtifactServer; server != nil {
+			server.TLS = tls
+		}
+	}
+}
+
 func containsAnyString(values []any, want string) bool {
 	for _, value := range values {
 		if value == want {

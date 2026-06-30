@@ -172,7 +172,7 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		ApplyRole:        "bootwright.core.infra_component_artifact_server_http",
 		DestroyRole:      "bootwright.core.infra_component_artifact_server_http",
 		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
-		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "listeners", "endpoints"},
+		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "tls", "listeners", "endpoints"},
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentSlotArtifactServer,
 			Type:       v1alpha1.ComponentImageTypeArtifactsHTTP,

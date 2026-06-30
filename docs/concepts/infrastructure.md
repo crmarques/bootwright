@@ -468,6 +468,8 @@ default HTTPS listener on port `8443`.
 | --- | --- | --- | --- |
 | `artifactServer.machineRef` | Yes | — | Machine that runs the service. |
 | `artifactServer.bindAddress` | No | — | Bind address; must be a valid IP when set. |
+| `artifactServer.tls.minVersion` | No | server default | Lowest TLS version the HTTPS listeners accept (`TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`); renders `ssl_protocols` from it up to `TLSv1.3`. Lower it for a legacy BMC HTTPS client. |
+| `artifactServer.tls.ciphers` | No | server default | OpenSSL cipher string rendered verbatim as `ssl_ciphers` (e.g. `DEFAULT:@SECLEVEL=0`). Requires an `https` listener. |
 | `artifactServer.listeners[]` | Yes | — | At least one listener. |
 | `artifactServer.listeners[].name` | Yes | — | Listener name; DNS label, unique within the service. |
 | `artifactServer.listeners[].protocol` | Yes | — | `http` or `https`. |
@@ -484,6 +486,17 @@ default HTTPS listener on port `8443`.
     aliases, and Bootwright uses the matched address value directly in the ISO URL
     sent to Redfish — controller reachability alone is not enough for virtual-media
     ISO fetches.
+
+!!! note "Legacy BMC HTTPS virtual media"
+    A legacy BMC HTTPS virtual-media client (e.g. Huawei iBMC) can fail to fetch
+    the agent ISO from an `https` listener even with BMC certificate verification
+    disabled, aborting the InsertMedia task with a generic connection failure,
+    because it cannot negotiate the modern TLS the bundled nginx/OpenSSL build
+    offers. Set `artifactServer.tls.minVersion` and `artifactServer.tls.ciphers`
+    to relax the handshake the listener presents — start broad (e.g.
+    `minVersion: TLSv1` with `ciphers: "DEFAULT:@SECLEVEL=0"`) and tighten to the
+    weakest profile the BMC accepts. This weakens TLS on a management network the
+    BMCs reach; the unguessable per-ISO publish token still gates the path.
 
 ### Load Balancer
 

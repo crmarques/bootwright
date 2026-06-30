@@ -207,6 +207,13 @@ const (
 	ArtifactConsumerMachineBoot             = "machineBoot"
 	ArtifactConsumerContainerClusterInstall = "containerClusterInstall"
 
+	// TLS protocol version names, lowest to highest, as accepted by
+	// ArtifactServerTLS.minVersion and emitted into nginx ssl_protocols.
+	TLSVersion10 = "TLSv1"
+	TLSVersion11 = "TLSv1.1"
+	TLSVersion12 = "TLSv1.2"
+	TLSVersion13 = "TLSv1.3"
+
 	// Component image catalog — closed set of (component type, implementation)
 	// pairs that Environment.spec.componentImages may pin. Categories are the
 	// ComponentSlot* values; implementations the InfraComponentType* values,

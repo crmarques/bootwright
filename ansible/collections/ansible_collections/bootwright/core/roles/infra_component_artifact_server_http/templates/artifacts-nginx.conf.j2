@@ -12,6 +12,12 @@ http {
 {% if listener.protocol == 'https' %}
     ssl_certificate /etc/bootwright-artifacts/server.crt;
     ssl_certificate_key /etc/bootwright-artifacts/server.key;
+{% if bootwright_component.tls.protocols | default('') %}
+    ssl_protocols {{ bootwright_component.tls.protocols }};
+{% endif %}
+{% if bootwright_component.tls.ciphers | default('') %}
+    ssl_ciphers {{ bootwright_component.tls.ciphers }};
+{% endif %}
 {% endif %}
     root /usr/share/nginx/html;
     autoindex off;
