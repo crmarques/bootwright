@@ -150,8 +150,10 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a command task", mainTasks[insertIdx]["name"])
 	}
-	if _, ok := mainTasks[insertIdx]["no_log"]; ok {
-		t.Fatalf("%s must not hide virsh stderr when direct libvirt media insertion fails", mainTasks[insertIdx]["name"])
+	// stagePath embeds the agent-ISO publish token, so the insert command must
+	// redact its output with no_log to keep the token out of stdout/logs.
+	if got := mainTasks[insertIdx]["no_log"]; got != true {
+		t.Fatalf("%s must no_log the agent-ISO publish token, got no_log=%v", mainTasks[insertIdx]["name"], got)
 	}
 	insertArgv := fmt.Sprint(insertCommand["argv"])
 	for _, want := range []string{"/var/tmp/bootwright-libvirt-media-insert.py", "bootwright_component.boot.agentIso.stagePath", "bootwright_libvirt_media_boot_order"} {
@@ -2581,11 +2583,20 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 			t.Fatalf("artifact TLS template must render SANs; missing %q", want)
 		}
 	}
-	for _, idx := range []int{tlsConfigIdx, tlsGenerateIdx} {
-		when := fmt.Sprint(tasks[idx]["when"])
-		if !strings.Contains(when, "not (bootwright_artifacts_tls_material_present") {
-			t.Fatalf("%s must preserve existing TLS material, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
-		}
+	// The OpenSSL config renders unconditionally so a change to the desired
+	// SANs/CN surfaces as a content change; it must not be gated on existing
+	// material or an edited SAN list would keep serving a stale certificate.
+	if when := fmt.Sprint(tasks[tlsConfigIdx]["when"]); strings.Contains(when, "bootwright_artifacts_tls_material_present") {
+		t.Fatalf("%s must render unconditionally to detect SAN/CN drift, got when=%v", tasks[tlsConfigIdx]["name"], tasks[tlsConfigIdx]["when"])
+	}
+	// Cert generation preserves existing material unless it is absent or the
+	// rendered OpenSSL config (SANs/CN) changed, which rotates the certificate.
+	genWhen := fmt.Sprint(tasks[tlsGenerateIdx]["when"])
+	if !strings.Contains(genWhen, "not (bootwright_artifacts_tls_material_present") {
+		t.Fatalf("%s must preserve existing TLS material, got when=%v", tasks[tlsGenerateIdx]["name"], tasks[tlsGenerateIdx]["when"])
+	}
+	if !strings.Contains(genWhen, "bootwright_artifacts_tls_openssl_cnf is changed") {
+		t.Fatalf("%s must rotate the certificate when the OpenSSL config changes, got when=%v", tasks[tlsGenerateIdx]["name"], tasks[tlsGenerateIdx]["when"])
 	}
 
 	container, ok := tasks[containerIdx]["containers.podman.podman_container"].(map[string]any)
