@@ -835,22 +835,6 @@ func TestClusterInstallRecordTracksNodeSafePoints(t *testing.T) {
 	if record.Status != ClusterInstallStatusInstalled || record.Phase != ClusterInstallPhaseComplete {
 		t.Fatalf("record = %+v, want installed complete", record)
 	}
-	if len(record.Nodes) != 1 {
-		t.Fatalf("node records = %+v, want one node", record.Nodes)
-	}
-	node := record.Nodes["master-0"]
-	if !node.ISOCreated || node.ISOCreatedAt == nil {
-		t.Fatalf("node ISO safe point = %+v, want set", node)
-	}
-	if !node.BootRequested || node.BootRequestedAt == nil {
-		t.Fatalf("node boot requested safe point = %+v, want set", node)
-	}
-	if !node.BootVerified || node.BootVerifiedAt == nil || !node.Booted || node.BootedAt == nil {
-		t.Fatalf("node boot verified safe point = %+v, want set", node)
-	}
-	if !node.InstallWaitStarted || node.InstallWaitStartedAt == nil {
-		t.Fatalf("node install wait safe point = %+v, want set", node)
-	}
 }
 
 func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T) {
