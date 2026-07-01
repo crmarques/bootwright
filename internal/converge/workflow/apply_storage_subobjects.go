@@ -12,13 +12,14 @@ import (
 )
 
 // Storage sub-object kinds. Each StoragePool/StorageFilesystem/StorageObjectGateway/
-// StorageExport is classified and (under --override) rebuilt independently of its
-// owning StorageCluster, so each is its own object in the apply preflight and
-// state-check, keyed "<Kind>/<cluster>.<name>".
+// StorageNFSExport/StorageExport is classified and (under --override) rebuilt
+// independently of its owning StorageCluster, so each is its own object in the apply
+// preflight and state-check, keyed "<Kind>/<cluster>.<name>".
 const (
 	storageSubObjectKindPool       = "StoragePool"
 	storageSubObjectKindFilesystem = "StorageFilesystem"
 	storageSubObjectKindGateway    = "StorageObjectGateway"
+	storageSubObjectKindNFSExport  = "StorageNFSExport"
 	storageSubObjectKindExport     = "StorageExport"
 )
 
@@ -27,7 +28,7 @@ const (
 // the sub-object entries out of a mixed ObjectClassification set.
 func IsStorageSubObjectKind(kind string) bool {
 	switch kind {
-	case storageSubObjectKindPool, storageSubObjectKindFilesystem, storageSubObjectKindGateway, storageSubObjectKindExport:
+	case storageSubObjectKindPool, storageSubObjectKindFilesystem, storageSubObjectKindGateway, storageSubObjectKindNFSExport, storageSubObjectKindExport:
 		return true
 	}
 	return false
@@ -67,6 +68,11 @@ func storageSubObjects(state v1alpha1.State, cluster string) []storageSubObject 
 			out = append(out, storageSubObject{storageSubObjectKindGateway, cluster, gw.Metadata.Name})
 		}
 	}
+	for _, nfs := range state.StorageNFSExports {
+		if nfs.Spec.StorageClusterRef.Name == cluster {
+			out = append(out, storageSubObject{storageSubObjectKindNFSExport, cluster, nfs.Metadata.Name})
+		}
+	}
 	for _, export := range state.StorageExports {
 		if export.Spec.StorageClusterRef.Name == cluster {
 			out = append(out, storageSubObject{storageSubObjectKindExport, cluster, export.Metadata.Name})
@@ -97,6 +103,12 @@ func storageSubObjectSpec(state v1alpha1.State, sub storageSubObject) any {
 		for _, gw := range state.StorageObjectGateways {
 			if gw.Spec.StorageClusterRef.Name == sub.Cluster && gw.Metadata.Name == sub.Name {
 				return gw.Spec
+			}
+		}
+	case storageSubObjectKindNFSExport:
+		for _, nfs := range state.StorageNFSExports {
+			if nfs.Spec.StorageClusterRef.Name == sub.Cluster && nfs.Metadata.Name == sub.Name {
+				return nfs.Spec
 			}
 		}
 	case storageSubObjectKindExport:

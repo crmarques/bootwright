@@ -418,6 +418,9 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	for _, item := range state.StorageObjectGateways {
 		out[resourceKey{kind: v1alpha1.KindStorageObjectGateway, name: item.Metadata.Name}] = true
 	}
+	for _, item := range state.StorageNFSExports {
+		out[resourceKey{kind: v1alpha1.KindStorageNFSExport, name: item.Metadata.Name}] = true
+	}
 	for _, item := range state.StorageExports {
 		out[resourceKey{kind: v1alpha1.KindStorageExport, name: item.Metadata.Name}] = true
 	}

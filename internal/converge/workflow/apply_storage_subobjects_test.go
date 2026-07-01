@@ -107,6 +107,63 @@ func TestClassifyApplyObjectsExpandsStorageSubObjects(t *testing.T) {
 	}
 }
 
+// An NFS-Ganesha service added to a converged cluster follows the same worked
+// example as the 5th pool: the cluster stays match (its hash excludes NFS
+// exports) and only the new StorageNFSExport reads missing.
+func TestClassifyApplyObjectsExpandsStorageNFSExports(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Unix(1700000000, 0)
+	base := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{Metadata: v1alpha1.Metadata{Name: "demo"}}},
+	}
+	baseTask := ApplyTask{
+		Entry:           TaskLedgerEntry{ID: "storage.demo", Kind: ApplyTaskKindStorageCluster, Cluster: "demo"},
+		State:           base,
+		DesiredHashVars: storageClusterDesiredHashVars(base, "demo"),
+	}
+	if err := MarkApplyTaskConvergeSafety(runsDir, "", "", baseTask, ConvergeSafetyStatusReconciled, now); err != nil {
+		t.Fatalf("mark cluster: %v", err)
+	}
+	if err := MarkStorageSubObjectsConvergeSafety(runsDir, "", "", base, "demo", ConvergeSafetyStatusReconciled, now); err != nil {
+		t.Fatalf("mark sub-objects: %v", err)
+	}
+
+	grown := base
+	grown.StorageNFSExports = []v1alpha1.StorageNFSExport{{
+		Metadata: v1alpha1.Metadata{Name: "shares"},
+		Spec: v1alpha1.StorageNFSExportSpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+			Ceph: v1alpha1.StorageNFSExportCephSpec{
+				ServiceID: "shares",
+				Placement: v1alpha1.StoragePlacement{Hosts: []string{"node-0"}},
+			},
+			Exports: []v1alpha1.StorageNFSExportEntry{{Pseudo: "/shares", FilesystemRef: v1alpha1.LocalObjectReference{Name: "fs"}}},
+		},
+	}}
+	grownTask := ApplyTask{
+		Entry:           TaskLedgerEntry{ID: "storage.demo", Kind: ApplyTaskKindStorageCluster, Cluster: "demo"},
+		State:           grown,
+		DesiredHashVars: storageClusterDesiredHashVars(grown, "demo"),
+	}
+	objs, err := ClassifyApplyObjects([]ApplyTask{grownTask}, runsDir)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+	got := map[string]ConvergeSafetyClassification{}
+	for _, o := range objs {
+		got[o.ObjectKey] = o.Class
+	}
+	if got["StorageCluster/demo"] != ConvergeSafetyMatch {
+		t.Errorf("cluster = %q, want match (NFS exports must not drift the cluster hash)", got["StorageCluster/demo"])
+	}
+	if got["StorageNFSExport/demo.shares"] != ConvergeSafetyMissing {
+		t.Errorf("nfs export = %q, want missing", got["StorageNFSExport/demo.shares"])
+	}
+	if !IsStorageSubObjectKind("StorageNFSExport") {
+		t.Error("StorageNFSExport must be an independently-classified sub-object kind")
+	}
+}
+
 // Editing an existing pool's size drifts only that pool; the cluster and other pools
 // stay match. A default apply would FAIL on this drift; --override rebuilds only this pool.
 func TestClassifyApplyObjectsReportsSubObjectDrift(t *testing.T) {

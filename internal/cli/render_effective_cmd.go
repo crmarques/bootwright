@@ -65,12 +65,14 @@ type stateObjectCounts struct {
 	MachineInstallProfiles   int `json:"machineInstallProfiles"`
 	NetworkConfigs           int `json:"networkConfigs"`
 	InfraProviders           int `json:"infraProviders"`
+	InfraComponents          int `json:"infraComponents"`
 	ContainerClusters        int `json:"containerClusters"`
 	StorageClusters          int `json:"storageClusters"`
 	StoragePlacementPolicies int `json:"storagePlacementPolicies"`
 	StoragePools             int `json:"storagePools"`
 	StorageFilesystems       int `json:"storageFilesystems"`
 	StorageObjectGateways    int `json:"storageObjectGateways"`
+	StorageNFSExports        int `json:"storageNFSExports"`
 	StorageExports           int `json:"storageExports"`
 	ClusterAddons            int `json:"clusterAddons"`
 	Profiles                 int `json:"clusterAddonProfiles"`
@@ -85,12 +87,14 @@ func stateCountsReport(stateCounted v1alpha1.State) stateObjectCounts {
 		MachineInstallProfiles:   len(stateCounted.MachineInstallProfiles),
 		NetworkConfigs:           len(stateCounted.NetworkConfigs),
 		InfraProviders:           len(stateCounted.InfraProviders),
+		InfraComponents:          len(stateCounted.InfraComponents),
 		ContainerClusters:        len(stateCounted.ContainerClusters),
 		StorageClusters:          len(stateCounted.StorageClusters),
 		StoragePlacementPolicies: len(stateCounted.StoragePlacementPolicies),
 		StoragePools:             len(stateCounted.StoragePools),
 		StorageFilesystems:       len(stateCounted.StorageFilesystems),
 		StorageObjectGateways:    len(stateCounted.StorageObjectGateways),
+		StorageNFSExports:        len(stateCounted.StorageNFSExports),
 		StorageExports:           len(stateCounted.StorageExports),
 		ClusterAddons:            len(stateCounted.ClusterAddons),
 		Profiles:                 len(stateCounted.ClusterAddonProfiles),

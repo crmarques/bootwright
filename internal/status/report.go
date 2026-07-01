@@ -218,5 +218,5 @@ func BuildAddons(state v1alpha1.State, clustersDir string) map[string][]Extensio
 }
 
 func HasAnyState(s v1alpha1.State) bool {
-	return len(s.Environments)+len(s.Machines)+len(s.MachineImages)+len(s.MachineInstallProfiles)+len(s.InfraProviders)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
+	return len(s.Environments)+len(s.Machines)+len(s.MachineImages)+len(s.MachineInstallProfiles)+len(s.NetworkConfigs)+len(s.InfraProviders)+len(s.InfraComponents)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageNFSExports)+len(s.StorageExports)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
 }
