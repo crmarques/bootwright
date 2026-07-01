@@ -1882,19 +1882,18 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if _, ok := standardBody["WriteProtected"]; ok {
 		t.Fatalf("standard InsertMedia body must not send WriteProtected by default, got %v", standardBody)
 	}
-	skipVerifyIdx := findAnsibleTask(t, insertAttemptTasks, "Skip BMC certificate verification on the InsertMedia fetch when opted out")
-	if !(standardBodyIdx < skipVerifyIdx && skipVerifyIdx < vmmBodyIdx) {
-		t.Fatalf("the VerifyCertificate opt-out must sit between the standard body build (%d) and the vmm body build (%d), got %d", standardBodyIdx, vmmBodyIdx, skipVerifyIdx)
+	// The standard InsertMedia body must stay canonical (Image, Inserted,
+	// TransferProtocolType). VerifyCertificate must never be injected as an action
+	// parameter: xFusion/iBMC exposes the resource property but 501s a PATCH to it
+	// and 400s an InsertMedia action carrying it. Verification is disabled via the
+	// per-resource and SecurityService PATCHes instead.
+	if _, ok := standardBody["VerifyCertificate"]; ok {
+		t.Fatalf("standard InsertMedia body must not carry VerifyCertificate (iBMC 400s on it), got %v", standardBody)
 	}
-	skipVerifyFact, ok := insertAttemptTasks[skipVerifyIdx]["ansible.builtin.set_fact"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s has no set_fact task", insertAttemptTasks[skipVerifyIdx]["name"])
-	}
-	if got := skipVerifyFact["bootwright_redfish_insert_media_body"]; got != "{{ bootwright_redfish_insert_media_body | combine({'VerifyCertificate': false}) }}" {
-		t.Fatalf("the opt-out task must combine VerifyCertificate=false into the InsertMedia body, got %v", got)
-	}
-	if got := insertAttemptTasks[skipVerifyIdx]["when"]; !stringListContains(got, "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'") || !stringListContains(got, "bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool") || !stringListContains(got, "bootwright_redfish_vmedia_verify_certificate_supported | default(false) | bool") {
-		t.Fatalf("the opt-out task must gate on an HTTPS fetch, artifactCertificate.ignoreVerification, and VerifyCertificate support, got when=%v", got)
+	for _, task := range insertAttemptTasks {
+		if name, _ := task["name"].(string); name == "Skip BMC certificate verification on the InsertMedia fetch when opted out" {
+			t.Fatalf("InsertMedia body must not inject VerifyCertificate as an action parameter; disable verification via the resource and SecurityService PATCHes")
+		}
 	}
 	vmmBodyFact, ok := insertAttemptTasks[vmmBodyIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
