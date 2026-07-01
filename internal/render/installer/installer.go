@@ -22,7 +22,6 @@ const (
 // outputs.
 type InstallerAsset struct {
 	ClusterName                  string
-	Method                       string
 	ClusterDir                   string
 	Dir                          string
 	InstallConfigPath            string
@@ -43,7 +42,6 @@ func InstallerAssets(clustersDir string, state v1alpha1.State) []InstallerAsset 
 		workDir := filepath.Join(clusterDir, "runtime", RuntimeRelativeDir)
 		assets = append(assets, InstallerAsset{
 			ClusterName:                  ocp.Metadata.Name,
-			Method:                       ocp.Spec.Install.Method,
 			ClusterDir:                   clusterDir,
 			Dir:                          dir,
 			InstallConfigPath:            filepath.Join(dir, "install-config.yaml"),
@@ -67,7 +65,6 @@ func InstallerToolInputAssets(outputDir string, state v1alpha1.State) []Installe
 		agentConfigPath := filepath.Join(dir, "agent-config.yaml")
 		assets = append(assets, InstallerAsset{
 			ClusterName:                  ocp.Metadata.Name,
-			Method:                       ocp.Spec.Install.Method,
 			Dir:                          dir,
 			InstallConfigPath:            installConfigPath,
 			AgentConfigPath:              agentConfigPath,

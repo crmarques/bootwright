@@ -7,10 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func validateClusterServices(v1alpha1.ClusterInstall, map[string]v1alpha1.InfraProvider) []string {
-	return nil
-}
-
 func validateLoadBalancerBindAddresses(prefix string, binds []v1alpha1.LoadBalancerBindAddress, referenced map[string]bool) []string {
 	var errs []string
 	if len(binds) == 0 {

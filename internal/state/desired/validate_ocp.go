@@ -39,7 +39,6 @@ func validateContainerClusters(state v1alpha1.State) []string {
 			errs = append(errs, validateClusterEndpoints(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ci, components, networkConfigs, true)...)
 			errs = append(errs, validateClusterArtifactAccess(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ocp.Spec.Install.ArtifactAccess, ocp.DefaultedRefs, env, components)...)
 			errs = append(errs, validateMachineNetworkBindings(ci, providers, networkConfigs)...)
-			errs = append(errs, validateClusterServices(ci, providers)...)
 			errs = append(errs, validateContainerEndpointRefs(ocp, ci)...)
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)
 		}

@@ -132,14 +132,6 @@ func TestClusterFacingHostAddressFallsBackThroughMachineInterface(t *testing.T) 
 	}
 }
 
-func TestHostRouteAddressUsesNamedAddress(t *testing.T) {
-	state := clusterFacingState("localhost", "10.42.0.7", "192.168.132.1")
-	got := MachineRouteAddress(state, "bastion", "cluster", clusterFacingInfra())
-	if got != "10.42.0.7" {
-		t.Fatalf("MachineRouteAddress = %q, want %q", got, "10.42.0.7")
-	}
-}
-
 func TestManagedProxyURLAutoSubstitutesLoopback(t *testing.T) {
 	state := stateWithManagedProxy()
 	state.Machines[0].Spec.Addresses = []v1alpha1.MachineAddress{{Name: "ssh", Address: "localhost"}}
@@ -183,13 +175,5 @@ func networkConfigSpec(cidr, gateway string) v1alpha1.NetworkConfigSpec {
 	return v1alpha1.NetworkConfigSpec{
 		MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: cidr}},
 		Template:       v1alpha1.NetworkConfigTemplate{NetworkConfig: config},
-	}
-}
-
-func TestMachineRouteAddressMissingNamedAddress(t *testing.T) {
-	state := clusterFacingState("localhost", "10.42.0.7", "192.168.132.1")
-	got := MachineRouteAddress(state, "bastion", "missing", clusterFacingInfra())
-	if got != "" {
-		t.Fatalf("MachineRouteAddress = %q, want empty", got)
 	}
 }

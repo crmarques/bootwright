@@ -53,15 +53,6 @@ type Context struct {
 	InputPaths         []string `yaml:"-" json:"inputPaths"`
 }
 
-type ClusterPaths struct {
-	Name        string
-	BaseDir     string
-	RenderedDir string
-	RuntimeDir  string
-	SecretsDir  string
-	RunsDir     string
-}
-
 var contextNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 var rootDir = DefaultRootDir
 
@@ -115,18 +106,6 @@ func newContextAt(name, baseDir string) Context {
 		ManagedServicesDir: filepath.Join(baseDir, ManagedServicesName),
 		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
 		OwnershipDir:       filepath.Join(baseDir, OwnershipName),
-	}
-}
-
-func (ctx Context) Cluster(name string) ClusterPaths {
-	baseDir := filepath.Join(ctx.ClustersDir, name)
-	return ClusterPaths{
-		Name:        name,
-		BaseDir:     baseDir,
-		RenderedDir: filepath.Join(baseDir, RenderedDirName),
-		RuntimeDir:  filepath.Join(baseDir, "runtime"),
-		SecretsDir:  filepath.Join(baseDir, SecretsDirName),
-		RunsDir:     filepath.Join(baseDir, RunsDirName),
 	}
 }
 
