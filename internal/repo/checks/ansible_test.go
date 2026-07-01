@@ -2593,7 +2593,7 @@ func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/tasks/main.yml")
 	validateIdx := findAnsibleTask(t, tasks, "Validate boot artifact server settings")
-	pathsIdx := findAnsibleTask(t, tasks, "Resolve boot artifact paths")
+	pathsIdx := findAnsibleTask(t, tasks, "Resolve boot artifact HTTPS mode")
 	packagesIdx := findAnsibleTask(t, tasks, "Install boot artifact server packages")
 	dirsIdx := findAnsibleTask(t, tasks, "Create boot artifact directories")
 	tlsCertIdx := findAnsibleTask(t, tasks, "Stat boot artifact TLS certificate")
@@ -4215,7 +4215,7 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/controller_dns.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_destroy/tasks/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/destroy.yml",
 	} {
 		body := readRepoFile(t, path)
 		for _, forbidden := range []string{"/etc/hosts", "blockinfile", "unsafe_writes"} {
@@ -4653,7 +4653,7 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 }
 
 func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
-	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_destroy/tasks/main.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/destroy.yml")
 	for _, want := range []string{
 		"bootwright_cluster_installer_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer\"",
 		"bootwright_cluster_addon_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/addons\"",

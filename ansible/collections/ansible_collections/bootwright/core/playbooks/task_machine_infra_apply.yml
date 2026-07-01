@@ -57,13 +57,9 @@
         bootwright_component: "{{ bootwright_selected_machine_components | first }}"
       changed_when: false
 
-    - name: Dispatch selected machine substrate role entrypoint
-      ansible.builtin.include_role:
-        name: "{{ bootwright_component.substrateApplyRole }}"
-        tasks_from: "{{ bootwright_component.substrateApplyFrom }}"
-      when: (bootwright_component.substrateApplyFrom | default('') | length) > 0
-
+    # substrateApplyFrom selects the role entrypoint; the renderer omits it for
+    # substrates driven from their default main.yml, so fall back to main.
     - name: Dispatch selected machine substrate role
       ansible.builtin.include_role:
         name: "{{ bootwright_component.substrateApplyRole }}"
-      when: (bootwright_component.substrateApplyFrom | default('') | length) == 0
+        tasks_from: "{{ bootwright_component.substrateApplyFrom | default('main', true) }}"

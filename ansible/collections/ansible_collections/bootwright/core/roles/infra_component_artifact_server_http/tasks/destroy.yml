@@ -49,7 +49,7 @@
 
 - name: Remove boot artifact state directory
   ansible.builtin.file:
-    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+    path: "{{ bootwright_artifacts_root }}"
     state: absent
   when: not bootwright_component_release
 

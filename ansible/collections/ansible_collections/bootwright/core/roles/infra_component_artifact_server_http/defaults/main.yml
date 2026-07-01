@@ -4,3 +4,14 @@
 # before the role's own set_fact block, can pass it as bootwright_gate_container_name
 # for the foreign-squatter probe.
 bootwright_artifacts_container_name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+
+# Per-component on-disk layout, derived from the managed-services dir. Kept in
+# defaults (like the sibling infra-component roles) so destroy.yml can reference
+# the same root without re-inlining the literal path.
+bootwright_artifacts_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+bootwright_artifacts_config_dir: "{{ bootwright_artifacts_root }}/config"
+bootwright_artifacts_tls_dir: "{{ bootwright_artifacts_root }}/tls"
+bootwright_artifacts_public_dir: "{{ bootwright_artifacts_root }}/public"
+bootwright_artifacts_tls_cert_path: "{{ bootwright_artifacts_tls_dir }}/server.crt"
+bootwright_artifacts_tls_key_path: "{{ bootwright_artifacts_tls_dir }}/server.key"
+bootwright_artifacts_config_path: "{{ bootwright_artifacts_config_dir }}/nginx.conf"

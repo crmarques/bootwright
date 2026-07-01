@@ -15,15 +15,8 @@
       - (bootwright_component.endpoints | default([])) | length > 0
     fail_msg: "artifacts_http requires component.{image,bindAddress,listeners,endpoints}"
 
-- name: Resolve boot artifact paths
+- name: Resolve boot artifact HTTPS mode
   ansible.builtin.set_fact:
-    bootwright_artifacts_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
-    bootwright_artifacts_config_dir: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/config"
-    bootwright_artifacts_tls_dir: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/tls"
-    bootwright_artifacts_public_dir: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/public"
-    bootwright_artifacts_tls_cert_path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/tls/server.crt"
-    bootwright_artifacts_tls_key_path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/tls/server.key"
-    bootwright_artifacts_config_path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/config/nginx.conf"
     bootwright_artifacts_https_enabled: "{{ (bootwright_component.listeners | selectattr('protocol', 'equalto', 'https') | list | length) > 0 }}"
   changed_when: false
 

@@ -62,7 +62,8 @@
 
     - name: Destroy per cluster
       ansible.builtin.include_role:
-        name: bootwright.core.container_cluster_agent_destroy
+        name: bootwright.core.container_cluster_agent_install
+        tasks_from: destroy.yml
       loop: "{{ bootwright_clusters | default([]) }}"
       loop_control:
         loop_var: bootwright_current_cluster

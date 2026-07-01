@@ -68,16 +68,12 @@
         bootwright_component: "{{ bootwright_current_machines | first }}"
       changed_when: false
 
-    - name: Dispatch substrate per managed OS machine entrypoint
-      ansible.builtin.include_role:
-        name: "{{ bootwright_component.substrateApplyRole }}"
-        tasks_from: "{{ bootwright_component.substrateApplyFrom }}"
-      when: (bootwright_component.substrateApplyFrom | default('') | length) > 0
-
+    # substrateApplyFrom selects the role entrypoint; the renderer omits it for
+    # substrates driven from their default main.yml, so fall back to main.
     - name: Dispatch substrate per managed OS machine
       ansible.builtin.include_role:
         name: "{{ bootwright_component.substrateApplyRole }}"
-      when: (bootwright_component.substrateApplyFrom | default('') | length) == 0
+        tasks_from: "{{ bootwright_component.substrateApplyFrom | default('main', true) }}"
 
     - name: Install managed operating system on selected machine
       ansible.builtin.include_role:
