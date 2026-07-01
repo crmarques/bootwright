@@ -66,7 +66,7 @@ var allowedImports = map[string][]string{
 	"internal/render":           {"api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/render/inventory", "internal/roles", "internal/secrets", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology"},
 	"internal/render/ceph":      {"api/v1alpha1", "internal/addons/inputs", "internal/host/shellquote", "internal/storage/datafoundation", "internal/storage/topology"},
 	"internal/render/installer": {"api/v1alpha1", "internal/infra/artifacts", "internal/infra/proxy", "internal/nmstate", "internal/secrets", "internal/state/view"},
-	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/datafoundation", "internal/storage/topology"},
 
 	// Convergence: root orchestrates; subpackages never import the root.
 	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/workspace"},
@@ -83,7 +83,7 @@ var allowedImports = map[string][]string{
 	"internal/storage/topology":       {"api/v1alpha1", "internal/state/view"},
 	"internal/addons":                 {},
 	"internal/addons/inputs":          {"api/v1alpha1"},
-	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render"},
+	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/shellquote"},
 	"internal/addons/plan":            {"api/v1alpha1", "internal/addons", "internal/addons/render"},
 	"internal/addons/records":         {"internal/host/safefs"},
 	"internal/addons/render":          {"api/v1alpha1", "internal/addons"},
