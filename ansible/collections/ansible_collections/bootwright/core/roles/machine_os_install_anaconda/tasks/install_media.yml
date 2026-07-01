@@ -272,14 +272,39 @@
         group: root
         mode: "{{ '0600' if ((bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) or (bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length > 0)) else '0644' }}"
 
-    - name: Restore managed OS virtual media labels
+    # bootwright_os_install_iso is built directly into its publish directory
+    # (== boot.agentIso.stagePath). For bare-metal that directory is the artifact
+    # server's nginx document root, bind-mounted into the container with :Z, so it
+    # carries a private container_file_t MCS label a file created there inherits
+    # and the nginx container_t process can read. restorecon would instead reset
+    # the token directory and ISO to the filesystem-default var_lib_t, which the
+    # container cannot read (SELinux AVC denies the read -> nginx 404 -> the BMC
+    # reports iBMC.1.0.ConnectionFailed on the media fetch). Align the staged
+    # directory and ISO to their publish root's label instead -- exactly what the
+    # agent-ISO publish flow does (container_cluster_agent_install .../iso/
+    # publish_target.yml). For provider media backends (libvirt/vSphere) the
+    # publish root carries the provider's own label and libvirt re-labels the disk
+    # on attach regardless, so inheriting the publish root stays correct there too.
+    - name: Align managed OS virtual media directory label with its publish root
       ansible.builtin.command:
         argv:
-          - restorecon
-          - -RFv
+          - chcon
+          - "--reference={{ bootwright_os_install_iso | dirname | dirname }}"
           - "{{ bootwright_os_install_iso | dirname }}"
-      register: bootwright_os_install_iso_restorecon
-      changed_when: bootwright_os_install_iso_restorecon.stdout | length > 0
+      register: bootwright_os_install_iso_dir_label
+      failed_when: false
+      changed_when: false
+      when: ansible_selinux.status | default('disabled') == 'enabled'
+
+    - name: Align managed OS virtual media label with its staging directory
+      ansible.builtin.command:
+        argv:
+          - chcon
+          - "--reference={{ bootwright_os_install_iso | dirname }}"
+          - "{{ bootwright_os_install_iso }}"
+      register: bootwright_os_install_iso_label
+      failed_when: false
+      changed_when: false
       when: ansible_selinux.status | default('disabled') == 'enabled'
 
     - name: Resolve managed OS Redfish boot component

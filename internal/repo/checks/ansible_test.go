@@ -1139,12 +1139,13 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		}
 	}
 	stagePermsIdx := findAnsibleTask(t, tasks, "Set managed OS virtual media permissions")
-	restoreLabelsIdx := findAnsibleTask(t, tasks, "Restore managed OS virtual media labels")
+	dirLabelIdx := findAnsibleTask(t, tasks, "Align managed OS virtual media directory label with its publish root")
+	fileLabelIdx := findAnsibleTask(t, tasks, "Align managed OS virtual media label with its staging directory")
 	resolveBootComponentIdx := findAnsibleTask(t, tasks, "Resolve managed OS Redfish boot component")
 	prepareMediaIdx := findAnsibleTask(t, tasks, "Prepare provider virtual media before managed OS boot")
 	bootMediaIdx := findAnsibleTask(t, tasks, "Boot managed OS installer through Redfish virtual media")
 	persistentCleanupIdx := findAnsibleTask(t, tasks, "Clean managed OS persistent virtual media after installer boot")
-	if !(buildISOWithCmdlineIdx < stagePermsIdx && stagePermsIdx < restoreLabelsIdx && restoreLabelsIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx && bootMediaIdx < persistentCleanupIdx) {
+	if !(buildISOWithCmdlineIdx < stagePermsIdx && stagePermsIdx < dirLabelIdx && dirLabelIdx < fileLabelIdx && fileLabelIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx && bootMediaIdx < persistentCleanupIdx) {
 		t.Fatalf("Anaconda role must resolve tokenized boot component before media preparation, boot, and persistent cleanup")
 	}
 	stagePerms, ok := tasks[stagePermsIdx]["ansible.builtin.file"].(map[string]any)
@@ -1154,18 +1155,41 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if ((bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) or (bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length > 0)) else '0644' }}" {
 		t.Fatalf("%s must set permissions on the published install ISO, got %v", tasks[stagePermsIdx]["name"], stagePerms)
 	}
-	restoreLabels, ok := tasks[restoreLabelsIdx]["ansible.builtin.command"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s is not a command task", tasks[restoreLabelsIdx]["name"])
-	}
-	restoreLabelsArgv := fmt.Sprint(restoreLabels["argv"])
-	for _, want := range []string{"restorecon", "-RFv", "bootwright_os_install_iso | dirname"} {
-		if !strings.Contains(restoreLabelsArgv, want) {
-			t.Fatalf("%s argv missing %q: %v", tasks[restoreLabelsIdx]["name"], want, restoreLabels["argv"])
+	// The staged ISO must inherit its publish directory's SELinux label (the
+	// artifact server's :Z container_file_t for bare-metal), NOT be reset to the
+	// filesystem default with restorecon -- otherwise the nginx container cannot
+	// read it and the BMC fetch 404s. Mirror the agent-ISO publish flow's chcon
+	// --reference alignment (dir <- publish root, ISO <- dir).
+	for _, tc := range []struct {
+		idx       int
+		reference string
+		target    string
+	}{
+		{dirLabelIdx, "--reference={{ bootwright_os_install_iso | dirname | dirname }}", "{{ bootwright_os_install_iso | dirname }}"},
+		{fileLabelIdx, "--reference={{ bootwright_os_install_iso | dirname }}", "{{ bootwright_os_install_iso }}"},
+	} {
+		labelCmd, ok := tasks[tc.idx]["ansible.builtin.command"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s is not a command task", tasks[tc.idx]["name"])
+		}
+		labelArgv := fmt.Sprint(labelCmd["argv"])
+		for _, want := range []string{"chcon", tc.reference, tc.target} {
+			if !strings.Contains(labelArgv, want) {
+				t.Fatalf("%s argv missing %q: %v", tasks[tc.idx]["name"], want, labelCmd["argv"])
+			}
+		}
+		if strings.Contains(labelArgv, "restorecon") {
+			t.Fatalf("%s must align labels with chcon --reference, not restorecon (which resets to var_lib_t and 404s the nginx :Z mount): %v", tasks[tc.idx]["name"], labelCmd["argv"])
+		}
+		if got := tasks[tc.idx]["failed_when"]; got != false {
+			t.Fatalf("%s must tolerate hosts without chcon, got failed_when=%v", tasks[tc.idx]["name"], got)
+		}
+		if got := tasks[tc.idx]["when"]; got != "ansible_selinux.status | default('disabled') == 'enabled'" {
+			t.Fatalf("%s must only run with SELinux enabled, got when=%v", tasks[tc.idx]["name"], got)
 		}
 	}
-	if got := tasks[restoreLabelsIdx]["when"]; got != "ansible_selinux.status | default('disabled') == 'enabled'" {
-		t.Fatalf("%s must only run with SELinux enabled, got when=%v", tasks[restoreLabelsIdx]["name"], got)
+	if findAnsibleTaskIndex(tasks, "Restore managed OS virtual media labels") >= 0 {
+		t.Fatalf("Anaconda role must not restorecon the staged ISO (resets to var_lib_t, unreadable by the nginx :Z container)")
 	}
 	resolveBootComponent, ok := tasks[resolveBootComponentIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
