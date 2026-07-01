@@ -46,7 +46,7 @@ func loadVSphereCredentials(state v1alpha1.State, ci v1alpha1.ClusterInstall, re
 		if err != nil {
 			return nil, err
 		}
-		out[name] = InstallerUserPass(creds)
+		out[name] = creds
 	}
 	return out, nil
 }

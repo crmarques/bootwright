@@ -20,26 +20,29 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 	if !MonitoringEnabled(cluster) {
 		return nil
 	}
-	monitoring := cluster.Spec.Ceph.Monitoring
+	// monitoring is nil for a zero-config cluster; a nil per-service config keeps
+	// cephadm's own default deployment. Populate each entry inline so adding or
+	// reordering a service can never desync a positional back-patch.
+	var prometheus, grafana, alertmanager, nodeExporter, loki, promtail *v1alpha1.StorageCephMonitoringService
+	if monitoring := cluster.Spec.Ceph.Monitoring; monitoring != nil {
+		prometheus = monitoring.Prometheus
+		grafana = monitoring.Grafana
+		alertmanager = monitoring.Alertmanager
+		nodeExporter = monitoring.NodeExporter
+		loki = monitoring.Loki
+		promtail = monitoring.Promtail
+	}
 	services := []struct {
 		serviceType string
 		role        string
 		config      *v1alpha1.StorageCephMonitoringService
 	}{
-		{"prometheus", v1alpha1.StorageCephRolePrometheus, nil},
-		{"grafana", v1alpha1.StorageCephRoleGrafana, nil},
-		{"alertmanager", v1alpha1.StorageCephRoleAlertmanager, nil},
-		{"node-exporter", "", nil},
-		{"loki", "", nil},
-		{"promtail", "", nil},
-	}
-	if monitoring != nil {
-		services[0].config = monitoring.Prometheus
-		services[1].config = monitoring.Grafana
-		services[2].config = monitoring.Alertmanager
-		services[3].config = monitoring.NodeExporter
-		services[4].config = monitoring.Loki
-		services[5].config = monitoring.Promtail
+		{"prometheus", v1alpha1.StorageCephRolePrometheus, prometheus},
+		{"grafana", v1alpha1.StorageCephRoleGrafana, grafana},
+		{"alertmanager", v1alpha1.StorageCephRoleAlertmanager, alertmanager},
+		{"node-exporter", "", nodeExporter},
+		{"loki", "", loki},
+		{"promtail", "", promtail},
 	}
 	var docs []any
 	for _, service := range services {

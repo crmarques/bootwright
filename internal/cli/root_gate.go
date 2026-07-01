@@ -81,7 +81,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 		childEnv,
 		args,
 	)
-	cmdArgs := sudoSession.SudoArgs(rootArgs...)
+	cmdArgs := become.SudoArgs(rootArgs...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout

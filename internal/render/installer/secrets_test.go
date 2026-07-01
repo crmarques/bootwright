@@ -182,7 +182,7 @@ func installerNodeMachine(name string) v1alpha1.Machine {
 
 func TestMergeMirrorAuth(t *testing.T) {
 	original := `{"auths":{"quay.io":{"auth":"ZXhpc3Q="}}}`
-	merged, err := mergeMirrorAuth(original, "mirror.local:5000", userPass{Username: "alice", Password: "s3cret"})
+	merged, err := mergeMirrorAuth(original, "mirror.local:5000", InstallerUserPass{Username: "alice", Password: "s3cret"})
 	if err != nil {
 		t.Fatalf("mergeMirrorAuth: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestMergeMirrorAuth(t *testing.T) {
 }
 
 func TestMergeMirrorAuthEmptyDoc(t *testing.T) {
-	merged, err := mergeMirrorAuth(`{}`, "mirror.local:5000", userPass{Username: "u", Password: "p"})
+	merged, err := mergeMirrorAuth(`{}`, "mirror.local:5000", InstallerUserPass{Username: "u", Password: "p"})
 	if err != nil {
 		t.Fatalf("mergeMirrorAuth: %v", err)
 	}
@@ -222,13 +222,13 @@ func TestMergeMirrorAuthEmptyDoc(t *testing.T) {
 }
 
 func TestMergeMirrorAuthInvalidJSON(t *testing.T) {
-	if _, err := mergeMirrorAuth("not json", "mirror.local:5000", userPass{Username: "u", Password: "p"}); err == nil {
+	if _, err := mergeMirrorAuth("not json", "mirror.local:5000", InstallerUserPass{Username: "u", Password: "p"}); err == nil {
 		t.Fatal("expected error for invalid pull secret JSON")
 	}
 }
 
 func TestMergeMirrorAuthRejectsEmptyRegistryURL(t *testing.T) {
-	if _, err := mergeMirrorAuth(`{"auths":{}}`, "", userPass{Username: "u", Password: "p"}); err == nil {
+	if _, err := mergeMirrorAuth(`{"auths":{}}`, "", InstallerUserPass{Username: "u", Password: "p"}); err == nil {
 		t.Fatal("expected error for empty registry URL")
 	}
 }
@@ -362,14 +362,14 @@ func TestBakeProxyCredentials(t *testing.T) {
 	cases := []struct {
 		name    string
 		raw     string
-		creds   userPass
+		creds   InstallerUserPass
 		wantErr bool
 		want    string
 	}{
-		{name: "happy path", raw: "http://proxy.lab:3128", creds: userPass{Username: "u", Password: "p"}, want: "http://u:p@proxy.lab:3128"},
-		{name: "dollar preserved", raw: "http://proxy.lab:3128", creds: userPass{Username: "u", Password: "p$w"}, want: "http://u:p$w@proxy.lab:3128"},
-		{name: "special chars escaped", raw: "https://proxy.lab", creds: userPass{Username: "u@x", Password: "p:s/q"}, want: "https://u%40x:p%3As%2Fq@proxy.lab"},
-		{name: "replaces existing user", raw: "http://old:old@proxy.lab", creds: userPass{Username: "n", Password: "n"}, want: "http://n:n@proxy.lab"},
+		{name: "happy path", raw: "http://proxy.lab:3128", creds: InstallerUserPass{Username: "u", Password: "p"}, want: "http://u:p@proxy.lab:3128"},
+		{name: "dollar preserved", raw: "http://proxy.lab:3128", creds: InstallerUserPass{Username: "u", Password: "p$w"}, want: "http://u:p$w@proxy.lab:3128"},
+		{name: "special chars escaped", raw: "https://proxy.lab", creds: InstallerUserPass{Username: "u@x", Password: "p:s/q"}, want: "https://u%40x:p%3As%2Fq@proxy.lab"},
+		{name: "replaces existing user", raw: "http://old:old@proxy.lab", creds: InstallerUserPass{Username: "n", Password: "n"}, want: "http://n:n@proxy.lab"},
 		{name: "missing scheme", raw: "proxy.lab", wantErr: true},
 		{name: "missing host", raw: "http:///path", wantErr: true},
 	}

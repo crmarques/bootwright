@@ -73,7 +73,9 @@ func NewSession(ctx context.Context, readPassword func() (string, error), stderr
 	return nil, fmt.Errorf("sudo authentication failed after %d attempts", localSudoPasswordAttempts)
 }
 
-func (s *Session) SudoArgs(args ...string) []string {
+// SudoArgs prepends the non-interactive flag to argv for a sudo invocation. It
+// carries no session state, so it is a package function rather than a method.
+func SudoArgs(args ...string) []string {
 	out := []string{"-n"}
 	return append(out, args...)
 }

@@ -280,20 +280,15 @@ func validatePullSecret(content, path string) error {
 	return nil
 }
 
-type userPass struct {
-	Username string
-	Password string
-}
-
-func readUserPassMaterial(resolver secret.Resolver, name string, role secret.MaterialRole, kind string) (userPass, error) {
+func readUserPassMaterial(resolver secret.Resolver, name string, role secret.MaterialRole, kind string) (InstallerUserPass, error) {
 	creds, err := resolver.ReadUserPasswordMaterial(name, role, kind)
 	if err != nil {
-		return userPass{}, err
+		return InstallerUserPass{}, err
 	}
-	return userPass{Username: creds.Username, Password: creds.Password}, nil
+	return InstallerUserPass{Username: creds.Username, Password: creds.Password}, nil
 }
 
-func mergeMirrorAuth(pullSecret, registryURL string, creds userPass) (string, error) {
+func mergeMirrorAuth(pullSecret, registryURL string, creds InstallerUserPass) (string, error) {
 	if strings.TrimSpace(registryURL) == "" {
 		return "", errors.New("merge mirror auth: registry URL is empty")
 	}
@@ -318,7 +313,7 @@ func mergeMirrorAuth(pullSecret, registryURL string, creds userPass) (string, er
 	return string(out), nil
 }
 
-func bakeProxyCredentials(rawURL string, creds userPass) (string, error) {
+func bakeProxyCredentials(rawURL string, creds InstallerUserPass) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", err
