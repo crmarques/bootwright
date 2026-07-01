@@ -86,18 +86,12 @@ func LoadConvergeSafetyRecord(runsDir, resourceID string) (ConvergeSafetyRecord,
 
 func SaveConvergeSafetyRecord(runsDir string, record ConvergeSafetyRecord) error {
 	path := ConvergeSafetyRecordPath(runsDir, record.ResourceID)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create converge safety record directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod converge safety record directory: %w", err)
-	}
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode converge safety record: %w", err)
 	}
 	data = append(data, '\n')
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write converge safety record: %w", err)
 	}
 	return nil

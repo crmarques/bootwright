@@ -39,6 +39,22 @@ func WriteNewFile(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// WriteFileEnsuringDir atomically writes data to path, first creating the parent
+// directory and tightening it to 0700. It is the shared save path for state and
+// secret records: MkdirAll leaves an existing directory's mode untouched, so the
+// explicit Chmod keeps the parent private even when it pre-existed with looser
+// permissions.
+func WriteFileEnsuringDir(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return fmt.Errorf("chmod directory %s: %w", dir, err)
+	}
+	return AtomicWriteFile(path, data, mode)
+}
+
 func AtomicWriteFile(path string, data []byte, mode os.FileMode) error {
 	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
 	if err != nil {

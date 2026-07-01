@@ -186,13 +186,7 @@ func SaveResource(root string, record ResourceRecord) error {
 		return fmt.Errorf("encode ownership resource: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create ownership resource directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod ownership resource directory: %w", err)
-	}
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write ownership resource: %w", err)
 	}
 	return nil

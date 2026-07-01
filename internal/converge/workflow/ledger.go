@@ -189,18 +189,12 @@ func LoadRunLease(runsDir string) (RunLease, bool, error) {
 
 func SaveRunLease(runsDir string, lease RunLease) error {
 	path := LeasePath(runsDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create apply lease directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod apply lease directory: %w", err)
-	}
 	data, err := json.MarshalIndent(lease, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode apply lease: %w", err)
 	}
 	data = append(data, '\n')
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write apply lease: %w", err)
 	}
 	return nil
@@ -279,18 +273,12 @@ func AcquireRunLease(runsDir string, lease RunLease, now time.Time) error {
 
 func SaveRunLedger(runsDir string, ledger RunLedger) error {
 	path := LedgerPath(runsDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create apply ledger directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod apply ledger directory: %w", err)
-	}
 	data, err := json.MarshalIndent(ledger, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode apply ledger: %w", err)
 	}
 	data = append(data, '\n')
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write apply ledger: %w", err)
 	}
 	return nil

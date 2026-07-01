@@ -36,17 +36,11 @@ func LoadDataFoundationAttachmentDetails(clustersDir, cluster, addon, input stri
 
 func SaveDataFoundationAttachmentDetails(clustersDir, cluster, addon, input, detailsJSON string) error {
 	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, addon, input)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create Data Foundation storage attachment details directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod Data Foundation storage attachment details directory: %w", err)
-	}
 	details, err := datafoundation.NormalizeExternalDetailsJSON(addon+"/"+input, path, []byte(detailsJSON))
 	if err != nil {
 		return err
 	}
-	if err := safefs.AtomicWriteFile(path, append([]byte(details), '\n'), 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, append([]byte(details), '\n'), 0o600); err != nil {
 		return fmt.Errorf("write Data Foundation storage attachment details: %w", err)
 	}
 	return nil

@@ -17,8 +17,8 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/state/graph"
-	"github.com/crmarques/bootwright/internal/state/view"
+	stategraph "github.com/crmarques/bootwright/internal/state/graph"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 const (
@@ -155,18 +155,12 @@ func LoadClusterInstallRecord(clustersDir, cluster string) (ClusterInstallRecord
 
 func SaveClusterInstallRecord(clustersDir string, record ClusterInstallRecord) error {
 	path := ClusterInstallRecordPath(clustersDir, record.Cluster)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create cluster install record directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod cluster install record directory: %w", err)
-	}
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode cluster install record: %w", err)
 	}
 	data = append(data, '\n')
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write cluster install record: %w", err)
 	}
 	return nil
@@ -174,18 +168,12 @@ func SaveClusterInstallRecord(clustersDir string, record ClusterInstallRecord) e
 
 func SaveClusterConnectionRecord(clustersDir string, record ClusterConnectionRecord) error {
 	path := ClusterConnectionPath(clustersDir, record.Cluster)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create cluster connection record directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod cluster connection record directory: %w", err)
-	}
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode cluster connection record: %w", err)
 	}
 	data = append(data, '\n')
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write cluster connection record: %w", err)
 	}
 	return nil
