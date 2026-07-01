@@ -708,7 +708,11 @@ func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/import_certificate.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/import_certificate/standard.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/import_certificate/security_service.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/remove_certificate.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/remove_certificate/standard.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/remove_certificate/security_service.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/media_insert.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_override.yml",
@@ -2704,42 +2708,81 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 		}
 	}
 
+	// The shared import file owns discovery of both trust-store mechanisms and
+	// dispatches to a per-method task file; it must not inline a vendor branch.
 	imp := readRepoFile(t, root+"/media/import_certificate.yml")
 	for _, want := range []string{
 		// Retrieve the artifact cert with the openssl client (no cryptography
 		// Python library on the executor) and extract the leaf PEM.
 		"s_client",
 		"-----BEGIN CERTIFICATE-----",
-		// DMTF VirtualMedia Certificates collection path.
-		"CertificateString",
-		"CertificateType: PEM",
-		"bootwright_redfish_artifact_cert_ref",
-		// xFusion / Huawei iBMC SecurityService action path.
+		// Discover both mechanisms: DMTF collection and the SecurityService OEM
+		// import/delete actions.
 		"#SecurityService.ImportRemoteHttpsServerRootCA",
 		"#SecurityService.DeleteRemoteHttpsServerRootCA",
-		"'RootCertId': (bootwright_redfish_artifact_root_cert_id | int)",
-		"bootwright_redfish_artifact_root_cert_imported_id",
+		// Dispatch to the discovered method's dedicated task file.
+		`include_tasks: "import_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"`,
 	} {
 		if !strings.Contains(imp, want) {
 			t.Fatalf("import_certificate.yml missing %q", want)
 		}
 	}
-	// The iBMC import action takes RootCertId and Usage as mutually exclusive
-	// forms; sending both is non-conformant and rejected with HTTP 403. We pin a
-	// fixed RootCertId slot for deterministic cleanup, so Usage must not appear.
-	if strings.Contains(imp, "'Usage'") {
-		t.Fatalf("import_certificate.yml must not send Usage alongside RootCertId; the iBMC rejects the conflicting pair (403)")
+
+	// Standard DMTF method: POST the PEM to the VirtualMedia Certificates
+	// collection and record the reference for cleanup.
+	impStd := readRepoFile(t, root+"/media/import_certificate/standard.yml")
+	for _, want := range []string{
+		"CertificateString",
+		"CertificateType: PEM",
+		"bootwright_redfish_artifact_cert_ref",
+	} {
+		if !strings.Contains(impStd, want) {
+			t.Fatalf("import_certificate/standard.yml missing %q", want)
+		}
 	}
 
+	// SecurityService OEM method: import the PEM to a fixed RootCertId slot and
+	// record it for cleanup.
+	impOEM := readRepoFile(t, root+"/media/import_certificate/security_service.yml")
+	for _, want := range []string{
+		"'RootCertId': (bootwright_redfish_security_service_root_cert_id | int)",
+		"bootwright_redfish_artifact_root_cert_imported_id",
+	} {
+		if !strings.Contains(impOEM, want) {
+			t.Fatalf("import_certificate/security_service.yml missing %q", want)
+		}
+	}
+	// The SecurityService import action takes RootCertId and Usage as mutually
+	// exclusive forms; sending both is non-conformant and rejected with HTTP 403.
+	// We pin a fixed RootCertId slot for deterministic cleanup, so Usage must not
+	// appear.
+	if strings.Contains(impOEM, "'Usage'") {
+		t.Fatalf("import_certificate/security_service.yml must not send Usage alongside RootCertId; the iBMC rejects the conflicting pair (403)")
+	}
+
+	// The shared remove file dispatches to the same discovered method.
 	rem := readRepoFile(t, root+"/media/remove_certificate.yml")
+	if want := `include_tasks: "remove_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"`; !strings.Contains(rem, want) {
+		t.Fatalf("remove_certificate.yml missing %q", want)
+	}
+
+	remStd := readRepoFile(t, root+"/media/remove_certificate/standard.yml")
 	for _, want := range []string{
 		"method: DELETE",
 		"(bootwright_redfish_artifact_cert_ref | default('') | length) > 0",
-		"bootwright_redfish_xfusion_delete_target",
+	} {
+		if !strings.Contains(remStd, want) {
+			t.Fatalf("remove_certificate/standard.yml missing %q", want)
+		}
+	}
+
+	remOEM := readRepoFile(t, root+"/media/remove_certificate/security_service.yml")
+	for _, want := range []string{
+		"bootwright_redfish_security_service_delete_target",
 		"bootwright_redfish_artifact_root_cert_imported_id is defined",
 	} {
-		if !strings.Contains(rem, want) {
-			t.Fatalf("remove_certificate.yml missing %q", want)
+		if !strings.Contains(remOEM, want) {
+			t.Fatalf("remove_certificate/security_service.yml missing %q", want)
 		}
 	}
 
@@ -4523,7 +4566,7 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
 	recordIdx := findAnsibleTask(t, tasks, "Record local kubeconfig path")
-	cleanRedfishIdx := findAnsibleTask(t, tasks, "Clean Redfish virtual media after successful install")
+	cleanMediaIdx := findAnsibleTask(t, tasks, "Clean virtual media after successful install")
 	findRemoteIdx := findAnsibleTask(t, tasks, "Find remote generated agent ISO files")
 	removeRemoteIdx := findAnsibleTask(t, tasks, "Remove remote generated agent ISO files")
 	removeBootArtifactsIdx := findAnsibleTask(t, tasks, "Remove remote generated boot artifacts")
@@ -4531,32 +4574,35 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	removeLocalIdx := findAnsibleTask(t, tasks, "Remove local generated agent ISO files")
 	removeRemotePathIdx := findAnsibleTask(t, tasks, "Remove remote agent ISO path record")
 	removeLocalPathIdx := findAnsibleTask(t, tasks, "Remove local agent ISO path record")
-	if !(recordIdx < cleanRedfishIdx && cleanRedfishIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
+	if !(recordIdx < cleanMediaIdx && cleanMediaIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
 		t.Fatalf("wait_install must fetch credentials before removing generated ISO artifacts")
 	}
-	assertIncludeRoleName(t, tasks[cleanRedfishIdx], "bootwright.core.container_cluster_boot_redfish")
-	if got := tasks[cleanRedfishIdx]["loop"]; !strings.Contains(fmt.Sprint(got), "bootApplyRole") || !strings.Contains(fmt.Sprint(got), "bootwright.core.container_cluster_boot_redfish") {
-		t.Fatalf("Redfish cleanup must loop over boot_redfish components, got %v", got)
+	// Media cleanup is pure dispatch: the include_role name is the rendered
+	// cleanupMediaRole, and the loop selects every component that carries one --
+	// no enumeration of specific boot roles.
+	assertIncludeRoleName(t, tasks[cleanMediaIdx], "{{ bootwright_cleanup_media_component.cleanupMediaRole }}")
+	if got := tasks[cleanMediaIdx]["loop"]; !strings.Contains(fmt.Sprint(got), "selectattr('cleanupMediaRole', 'defined')") {
+		t.Fatalf("media cleanup must loop over components with a cleanupMediaRole, got %v", got)
 	}
-	cleanVars, ok := tasks[cleanRedfishIdx]["vars"].(map[string]any)
+	cleanVars, ok := tasks[cleanMediaIdx]["vars"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no vars", tasks[cleanRedfishIdx]["name"])
+		t.Fatalf("%s has no vars", tasks[cleanMediaIdx]["name"])
 	}
-	if got := cleanVars["bootwright_component"]; got != "{{ bootwright_cleanup_redfish_component }}" {
-		t.Fatalf("Redfish cleanup component var got %v", got)
+	if got := cleanVars["bootwright_component"]; got != "{{ bootwright_cleanup_media_component }}" {
+		t.Fatalf("media cleanup component var got %v", got)
 	}
 	if got := cleanVars["bootwright_redfish_action"]; got != "cleanup_media" {
-		t.Fatalf("Redfish cleanup action got %v", got)
+		t.Fatalf("media cleanup action got %v", got)
 	}
-	cleanLoopControl, ok := tasks[cleanRedfishIdx]["loop_control"].(map[string]any)
+	cleanLoopControl, ok := tasks[cleanMediaIdx]["loop_control"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no loop_control", tasks[cleanRedfishIdx]["name"])
+		t.Fatalf("%s has no loop_control", tasks[cleanMediaIdx]["name"])
 	}
-	if got := cleanLoopControl["loop_var"]; got != "bootwright_cleanup_redfish_component" {
-		t.Fatalf("Redfish cleanup loop_var got %v", got)
+	if got := cleanLoopControl["loop_var"]; got != "bootwright_cleanup_media_component" {
+		t.Fatalf("media cleanup loop_var got %v", got)
 	}
-	if got := cleanLoopControl["label"]; got != "{{ bootwright_cleanup_redfish_component.name }}" {
-		t.Fatalf("Redfish cleanup label got %v", got)
+	if got := fmt.Sprint(cleanLoopControl["label"]); !strings.Contains(got, "bootwright_cleanup_media_component.name") {
+		t.Fatalf("media cleanup label got %v", got)
 	}
 
 	remoteFind, ok := tasks[findRemoteIdx]["ansible.builtin.find"].(map[string]any)
@@ -4582,7 +4628,7 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	if got := tasks[removeLocalPathIdx]["delegate_to"]; got != "localhost" {
 		t.Fatalf("local ISO path cleanup must run locally, got %v", got)
 	}
-	for _, idx := range []int{cleanRedfishIdx, findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
+	for _, idx := range []int{cleanMediaIdx, findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
 		if got := tasks[idx]["when"]; got != "bootwright_install_wait.rc == 0" {
 			t.Fatalf("%s must only clean after successful wait, got when=%v", tasks[idx]["name"], got)
 		}

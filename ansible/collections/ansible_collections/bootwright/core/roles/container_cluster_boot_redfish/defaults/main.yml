@@ -17,12 +17,16 @@ bootwright_redfish_vmedia_insert_delay_seconds: 5
 bootwright_redfish_vmedia_eject_retries: 24
 bootwright_redfish_vmedia_eject_delay_seconds: 5
 
-# Slot the xFusion/Huawei iBMC SecurityService.ImportRemoteHttpsServerRootCA
-# action writes the artifact server CA into. The remote-HTTPS-server root-CA store
-# accepts RootCertId 5..8 (not 1..8); values outside that range are rejected.
+# Data for the manager SecurityService OEM certificate-import method
+# (media/import_certificate/security_service.yml), used by Huawei/xFusion iBMC and
+# compatible BMCs that expose #SecurityService.ImportRemoteHttpsServerRootCA. Slot
+# the action writes the artifact server CA into: the remote-HTTPS-server root-CA
+# store accepts RootCertId 5..8 (not 1..8); values outside that range are rejected.
 # Fixed so removal is deterministic and re-import overwrites rather than
 # accumulates; the top slot avoids colliding with operator-managed certificates.
-bootwright_redfish_artifact_root_cert_id: 8
+# Adding another OEM import method is a data entry here plus a
+# media/import_certificate/<method>.yml (and matching remove_certificate) file.
+bootwright_redfish_security_service_root_cert_id: 8
 
 bootwright_redfish_vmedia_probe_retries: 12
 bootwright_redfish_vmedia_probe_delay_seconds: 2

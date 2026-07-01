@@ -252,6 +252,9 @@ func TestEmulatedLibvirtBootProjectsMediaBackend(t *testing.T) {
 	if got := machine["mediaPrepareRole"]; got != "bootwright.core.container_cluster_media_libvirt" {
 		t.Fatalf("mediaPrepareRole got %v, want bootwright.core.container_cluster_media_libvirt", got)
 	}
+	if got := machine["cleanupMediaRole"]; got != "bootwright.core.container_cluster_boot_redfish" {
+		t.Fatalf("cleanupMediaRole got %v, want bootwright.core.container_cluster_boot_redfish", got)
+	}
 	redfish := boot["redfish"].(map[string]any)
 	if got := redfish["setBootSource"]; got != false {
 		t.Fatalf("setBootSource got %v, want false for media backend", got)
@@ -278,6 +281,11 @@ func TestBareMetalBootDoesNotProjectMediaBackend(t *testing.T) {
 	}
 	if _, ok := machine["mediaPrepareRole"]; ok {
 		t.Fatalf("bare-metal machine unexpectedly has mediaPrepareRole: %v", machine)
+	}
+	// Bare metal has no host-side media backend, but the BMC still holds virtual
+	// media that the boot role's cleanup_media action must eject after install.
+	if got := machine["cleanupMediaRole"]; got != "bootwright.core.container_cluster_boot_redfish" {
+		t.Fatalf("cleanupMediaRole got %v, want bootwright.core.container_cluster_boot_redfish", got)
 	}
 	redfish := boot["redfish"].(map[string]any)
 	if got := redfish["setBootSource"]; got != true {

@@ -347,6 +347,9 @@ func applyMachineRoleContract(out map[string]any, roles roles.RoleContract) {
 	if roles.MediaPrepareRole != "" {
 		out["mediaPrepareRole"] = roles.MediaPrepareRole
 	}
+	if roles.CleanupMediaRole != "" {
+		out["cleanupMediaRole"] = roles.CleanupMediaRole
+	}
 	if roles.RequiresKVM {
 		out["requiresKVM"] = true
 	}

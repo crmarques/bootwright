@@ -1,0 +1,27 @@
+---
+# Standard DMTF trust-store method: POST the artifact server's leaf certificate to
+# the Certificates collection on the VirtualMedia member. Selected by
+# media/import_certificate.yml when the BMC advertises that collection.
+# Credentials/TLS/timeout come from the role-wide ansible.builtin.uri
+# module_defaults set in tasks/main.yml.
+- name: Import the artifact certificate via the DMTF VirtualMedia store
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_vmedia_certificates_url }}"
+    method: POST
+    body_format: json
+    body:
+      CertificateString: "{{ bootwright_redfish_artifact_cert_pem }}"
+      CertificateType: PEM
+    status_code: [200, 201, 202, 204]
+  register: bootwright_redfish_artifact_cert_import_standard
+  changed_when: (bootwright_redfish_artifact_cert_import_standard.status | default(0) | int) in [200, 201, 202, 204]
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+
+- name: Record DMTF imported certificate reference for cleanup
+  ansible.builtin.set_fact:
+    bootwright_redfish_artifact_cert_ref: >-
+      {{
+        (bootwright_redfish_artifact_cert_import_standard.location | default('', true))
+        | default(((bootwright_redfish_artifact_cert_import_standard.json | default({})).get('@odata.id', '')), true)
+      }}
+  changed_when: false

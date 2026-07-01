@@ -98,6 +98,7 @@ bootwright_clusters:
         bmcDestroyRole: bootwright.core.provider_service_bmc_emulated
         bootApplyRole: bootwright.core.container_cluster_boot_redfish
         mediaPrepareRole: bootwright.core.container_cluster_media_libvirt
+        cleanupMediaRole: bootwright.core.container_cluster_boot_redfish
         machineSetupRoles:
           - bootwright.core.provider_host_libvirt
         networkAttachment:
@@ -522,8 +523,11 @@ services such as `ntp` consume package/config fields, and the `bmc_emulated`
 role consumes provider BMC service `bmcEmulated.*`. Layer playbooks dispatch exact
 rendered role names and task entrypoints (`applyRole`, `destroyRole`,
 `substratePrepareRole`, `substratePrepareFrom`, `substrateApplyRole`,
-`substrateApplyFrom`, `bootApplyRole`, and `mediaPrepareRole`) rather than
-constructing role names from diagnostic labels.
+`substrateApplyFrom`, `bootApplyRole`, `mediaPrepareRole`, and
+`cleanupMediaRole`) rather than constructing role names from diagnostic labels.
+`cleanupMediaRole` is set only for boot backends that own a `cleanup_media`
+action (Redfish, vSphere), so post-install media cleanup dispatches on it without
+enumerating boot roles.
 
 ## Task-Scoped Apply Vars
 

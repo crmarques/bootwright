@@ -1,0 +1,28 @@
+---
+# Remove the root CA the manager SecurityService OEM method imported, by the same
+# fixed RootCertId slot it was written to. Gated on the import having recorded the
+# slot; tolerant of 400/404 (already gone), so it is a no-op when import was
+# skipped or failed. Credentials/TLS/timeout come from the role-wide
+# ansible.builtin.uri module_defaults set in tasks/main.yml.
+- name: Build SecurityService remote-HTTPS-server root-CA delete body
+  ansible.builtin.set_fact:
+    bootwright_redfish_security_service_delete_body: "{{ {'RootCertId': (bootwright_redfish_artifact_root_cert_imported_id | int)} }}"
+  changed_when: false
+  when:
+    - bootwright_redfish_artifact_root_cert_imported_id is defined
+    - (bootwright_redfish_security_service_delete_target | default('') | length) > 0
+
+- name: Remove imported artifact root CA from the SecurityService store
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_security_service_delete_target }}"
+    method: POST
+    body_format: json
+    body: "{{ bootwright_redfish_security_service_delete_body }}"
+    status_code: [200, 202, 204, 400, 404]
+  register: bootwright_redfish_artifact_cert_remove_security_service
+  failed_when: false
+  changed_when: (bootwright_redfish_artifact_cert_remove_security_service.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+  when:
+    - bootwright_redfish_artifact_root_cert_imported_id is defined
+    - (bootwright_redfish_security_service_delete_target | default('') | length) > 0

@@ -31,6 +31,7 @@ type RoleContract struct {
 	BMCDestroyRole       string
 	BootApplyRole        string
 	MediaPrepareRole     string
+	CleanupMediaRole     string
 	RequiresKVM          bool
 }
 
@@ -69,6 +70,7 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 			BMCDestroyRole:       "bootwright.core.provider_service_bmc_emulated",
 			BootApplyRole:        "bootwright.core.container_cluster_boot_redfish",
 			MediaPrepareRole:     "bootwright.core.container_cluster_media_libvirt",
+			CleanupMediaRole:     "bootwright.core.container_cluster_boot_redfish",
 			RequiresKVM:          true,
 		},
 		Status:  StatusSupported,
@@ -82,6 +84,7 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 			BMCApplyRole:         "bootwright.core.provider_service_bmc_external_redfish",
 			BMCDestroyRole:       "bootwright.core.provider_service_bmc_external_redfish",
 			BootApplyRole:        "bootwright.core.container_cluster_boot_redfish",
+			CleanupMediaRole:     "bootwright.core.container_cluster_boot_redfish",
 		},
 		Status:  StatusSupported,
 		Summary: "bare metal with Redfish virtual media",
@@ -95,6 +98,7 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 			BMCDestroyRole:       "bootwright.core.provider_service_bmc_none",
 			BootApplyRole:        "bootwright.core.container_cluster_boot_vsphere",
 			MediaPrepareRole:     "bootwright.core.container_cluster_media_vsphere",
+			CleanupMediaRole:     "bootwright.core.container_cluster_boot_vsphere",
 		},
 		Status:  StatusSupported,
 		Summary: "vCenter-managed vSphere VMs",

@@ -1,38 +1,10 @@
 ---
 # Drop the certificate import_certificate.yml added, so the BMC trust store is
-# left as bootwright found it. Runs in the boot role's always block; each removal
-# is gated on its import having recorded a handle, and tolerant of a 404 (already
-# gone), so it is a no-op when import was skipped or failed.
-- name: Remove imported artifact certificate from the DMTF VirtualMedia store
-  ansible.builtin.uri:
-    url: "{{ bootwright_redfish_artifact_cert_ref | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
-    method: DELETE
-    status_code: [200, 202, 204, 404]
-  register: bootwright_redfish_artifact_cert_remove_standard
-  failed_when: false
-  changed_when: (bootwright_redfish_artifact_cert_remove_standard.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
-  when: (bootwright_redfish_artifact_cert_ref | default('') | length) > 0
-
-- name: Build xFusion remote-HTTPS-server root-CA delete body
-  ansible.builtin.set_fact:
-    bootwright_redfish_xfusion_delete_body: "{{ {'RootCertId': (bootwright_redfish_artifact_root_cert_imported_id | int)} }}"
-  changed_when: false
-  when:
-    - bootwright_redfish_artifact_root_cert_imported_id is defined
-    - (bootwright_redfish_xfusion_delete_target | default('') | length) > 0
-
-- name: Remove imported artifact root CA from the xFusion SecurityService store
-  ansible.builtin.uri:
-    url: "{{ bootwright_redfish_xfusion_delete_target }}"
-    method: POST
-    body_format: json
-    body: "{{ bootwright_redfish_xfusion_delete_body }}"
-    status_code: [200, 202, 204, 400, 404]
-  register: bootwright_redfish_artifact_cert_remove_xfusion
-  failed_when: false
-  changed_when: (bootwright_redfish_artifact_cert_remove_xfusion.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
-  when:
-    - bootwright_redfish_artifact_root_cert_imported_id is defined
-    - (bootwright_redfish_xfusion_delete_target | default('') | length) > 0
+# left as bootwright found it. Runs in the boot role's always block. Dispatches to
+# the same discovered method the import used; each per-method file is gated on its
+# import having recorded a handle and tolerant of a 404 (already gone), so it is a
+# no-op when import was skipped or failed. Skipped entirely when no import method
+# was ever resolved (import did not run).
+- name: Remove the imported artifact certificate via the discovered trust-store method
+  ansible.builtin.include_tasks: "remove_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"
+  when: (bootwright_redfish_artifact_cert_method | default('') | length) > 0

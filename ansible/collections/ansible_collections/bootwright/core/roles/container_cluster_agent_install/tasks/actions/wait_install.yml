@@ -104,28 +104,21 @@
       become: false
       when: bootwright_install_wait.rc == 0
 
-    - name: Clean Redfish virtual media after successful install
+    # Media cleanup dispatches on the rendered cleanupMediaRole so this play never
+    # enumerates boot backends: the renderer sets it only for boot roles that own a
+    # cleanup_media action (Redfish, vSphere) and leaves it unset otherwise (KubeVirt
+    # deletes its DataVolume during boot; none is a no-op). Adding a media-bearing
+    # boot backend is a registry entry, not a new branch here.
+    - name: Clean virtual media after successful install
       ansible.builtin.include_role:
-        name: bootwright.core.container_cluster_boot_redfish
+        name: "{{ bootwright_cleanup_media_component.cleanupMediaRole }}"
       vars:
-        bootwright_component: "{{ bootwright_cleanup_redfish_component }}"
+        bootwright_component: "{{ bootwright_cleanup_media_component }}"
         bootwright_redfish_action: cleanup_media
-      loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('bootApplyRole', 'defined') | selectattr('bootApplyRole', 'equalto', 'bootwright.core.container_cluster_boot_redfish') | list }}"
+      loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('cleanupMediaRole', 'defined') | list }}"
       loop_control:
-        loop_var: bootwright_cleanup_redfish_component
-        label: "{{ bootwright_cleanup_redfish_component.name }}"
-      when: bootwright_install_wait.rc == 0
-
-    - name: Clean vSphere virtual media after successful install
-      ansible.builtin.include_role:
-        name: bootwright.core.container_cluster_boot_vsphere
-      vars:
-        bootwright_component: "{{ bootwright_cleanup_vsphere_component }}"
-        bootwright_redfish_action: cleanup_media
-      loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('bootApplyRole', 'defined') | selectattr('bootApplyRole', 'equalto', 'bootwright.core.container_cluster_boot_vsphere') | list }}"
-      loop_control:
-        loop_var: bootwright_cleanup_vsphere_component
-        label: "{{ bootwright_cleanup_vsphere_component.name }}"
+        loop_var: bootwright_cleanup_media_component
+        label: "{{ bootwright_cleanup_media_component.name }} via {{ bootwright_cleanup_media_component.cleanupMediaRole }}"
       when: bootwright_install_wait.rc == 0
 
     - name: Find remote generated agent ISO files
