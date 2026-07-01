@@ -13,7 +13,10 @@ import (
 )
 
 func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
-	var storageScope string
+	var (
+		storageScope string
+		output       string
+	)
 	cmd := &cobra.Command{
 		Use:   "storage",
 		Short: "Render storage tool inputs",
@@ -22,31 +25,77 @@ func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
   bootwright render storage
 
   # Render only one StorageCluster
-  bootwright render storage --clusters ceph-stretch`,
+  bootwright render storage --clusters ceph-stretch
+
+  # Machine-readable output for CI
+  bootwright render storage --output json`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&storageScope, "clusters", "", "comma-separated StorageCluster names to render (default: all)")
-	cmd.RunE = func(c *cobra.Command, _ []string) error {
+	addOutputFlag(cmd, &output)
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		if err := validateOutputFormat(output); err != nil {
+			return failErr(2, err)
+		}
 		state, err := loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
 		}
 		ctx := cf.ctx
-		names, err := clusteraccess.StorageClusterNamesForTarget(state, storageScope)
+		state, err = clusteraccess.StorageRenderState(state, storageScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		state = clusteraccess.FilterStateToStorageClusters(state, names)
-		state.ContainerClusters = nil
 		result, err := workflow.RenderOnly(ctx.RenderedDir, workspace.ControllerClustersDir(ctx.Name), ctx.SecretsDir, state)
 		if err != nil {
 			return failErr(1, err)
+		}
+		if output == outputJSON {
+			return cliout.JSON(stdout, renderStorageReport{Clusters: renderStorageClusters(result.StorageAssets)})
 		}
 		outputpkg(stdout).Command("storage render")
 		printStorageFiles(stdout, result)
 		return nil
 	}
 	return cmd
+}
+
+type renderStorageReport struct {
+	Clusters []renderStorageCluster `json:"clusters"`
+}
+
+type renderStorageCluster struct {
+	Name                 string   `json:"name"`
+	ApplyScriptPath      string   `json:"applyScriptPath,omitempty"`
+	ApplyLibPath         string   `json:"applyLibPath,omitempty"`
+	BootstrapSpecPath    string   `json:"bootstrapSpecPath,omitempty"`
+	CoreServicesSpecPath string   `json:"coreServicesSpecPath,omitempty"`
+	OperationsPath       string   `json:"operationsPath,omitempty"`
+	LateServicesSpecPath string   `json:"lateServicesSpecPath,omitempty"`
+	Attachments          []string `json:"attachments,omitempty"`
+}
+
+// renderStorageClusters projects rendered StorageAssets into the JSON report
+// shape shared by `render storage --output json` and the top-level tool-input
+// render, so the two never spell the same paths differently.
+func renderStorageClusters(assets []render.StorageAsset) []renderStorageCluster {
+	clusters := make([]renderStorageCluster, 0, len(assets))
+	for _, asset := range assets {
+		entry := renderStorageCluster{
+			Name:                 asset.StorageClusterName,
+			ApplyScriptPath:      asset.ApplyScriptPath,
+			ApplyLibPath:         asset.ApplyLibPath,
+			BootstrapSpecPath:    asset.BootstrapSpecPath,
+			CoreServicesSpecPath: asset.CoreServicesSpecPath,
+			OperationsPath:       asset.OperationsPath,
+			LateServicesSpecPath: asset.LateServicesSpecPath,
+		}
+		for _, attachment := range asset.Attachments {
+			entry.Attachments = appendNonEmpty(entry.Attachments, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
+		}
+		clusters = append(clusters, entry)
+	}
+	return clusters
 }
 
 func printStorageFiles(stdout io.Writer, result render.Result) {

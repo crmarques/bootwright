@@ -97,6 +97,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		outputDir    string
 		clusterScope string
 		sensitive    bool
+		output       string
 	)
 	cmd := &cobra.Command{
 		Use:   "render [target]",
@@ -112,8 +113,12 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
   # configured context; secrets render as {{ secret <name> }} placeholders
   bootwright render --input-dir ./lab-input --output-dir ./rendered
 
-  # Render only one cluster's external tool input files
+  # Render only one cluster's external tool input files (ContainerCluster
+  # or StorageCluster)
   bootwright render --output-dir ./rendered --clusters managed-01 --sensitive
+
+  # Machine-readable manifest of the exported files for CI
+  bootwright render --output-dir ./rendered --sensitive --output json
 
   # Inspect normalized desired state with defaults applied
   bootwright render effective
@@ -126,12 +131,16 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "write concrete tool input files to this directory")
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster and StorageCluster names to render with --output-dir")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")
+	addOutputFlag(cmd, &output)
 	cmd.AddCommand(
 		newRenderEffectiveCmd(stdout, stderr),
 		newRenderClusterInstallFilesCmd(stdout, stderr),
 		newRenderStorageCmd(stdout, stderr),
 	)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
+		if err := validateOutputFormat(output); err != nil {
+			return failErr(2, err)
+		}
 		if inputDir != "" {
 			if outputDir == "" {
 				return failf(2, "render --input-dir requires --output-dir")
@@ -142,7 +151,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			if contextOverride != "" {
 				return failf(2, "render --input-dir is context-free; do not combine it with --context")
 			}
-			return runRenderPortable(stdout, inputDir, outputDir, clusterScope)
+			return runRenderPortable(stdout, inputDir, outputDir, clusterScope, output)
 		}
 		if outputDir == "" {
 			return c.Help()
@@ -150,7 +159,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		if !sensitive {
 			return failErr(1, renderOutputDirRequiresSensitiveError(outputDir))
 		}
-		return runRenderToolInputs(c, stdout, cf, outputDir, clusterScope)
+		return runRenderToolInputs(c, stdout, cf, outputDir, clusterScope, output)
 	}
 	return cmd
 }

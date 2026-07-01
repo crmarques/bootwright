@@ -354,3 +354,23 @@ func StorageClusterNamesForTarget(state v1alpha1.State, scope string) ([]string,
 func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1.State {
 	return stategraph.FilterStateToStorageClusters(state, names)
 }
+
+// StorageRenderState resolves the StorageCluster --clusters scope (all clusters
+// when scope is empty) and narrows the state to a storage-only render set: the
+// selected StorageClusters plus the machines and providers backing them, with
+// ContainerClusters dropped so `render storage` never emits OpenShift installer
+// inputs. It gives `render storage` the same single-call scoping shape
+// `render installer` gets from Resolve, keeping the storage-only narrowing policy
+// in this package rather than mutating state fields in the CLI handler. It is
+// deliberately narrower than Resolve(state, "storage-cluster", scope): it does
+// not follow the data-foundation attachment edge, so a StorageCluster's OpenShift
+// consumers are never pulled into the render set.
+func StorageRenderState(state v1alpha1.State, scope string) (v1alpha1.State, error) {
+	names, err := StorageClusterNamesForTarget(state, scope)
+	if err != nil {
+		return v1alpha1.State{}, err
+	}
+	state = FilterStateToStorageClusters(state, names)
+	state.ContainerClusters = nil
+	return state, nil
+}

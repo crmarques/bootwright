@@ -269,7 +269,9 @@ CLIs. OpenShift installer files land under
 `<dir>/openshift-install/<cluster>/{install,agent}-config.yaml`; Ansible
 inventory and vars files land under `<dir>/ansible/`; storage files land under
 `<dir>/storage/<storageCluster>/`. The effective-state snapshot and lock file sit
-at the top level of `<dir>`.
+at the top level of `<dir>`. `--clusters` accepts both ContainerCluster and
+StorageCluster names (like `apply`); add `--output json` for a machine-readable
+manifest of every written path.
 
 !!! warning "Rendered runtime inputs can carry secret bytes"
     Because runtime installer files inline secret material, `render --output-dir`

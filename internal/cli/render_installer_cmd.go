@@ -83,14 +83,16 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 	return cmd
 }
 
-func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, outputDir, clusterScope string) error {
+func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, outputDir, clusterScope, output string) error {
 	state, err := loadDesiredState(cf)
 	if err != nil {
 		return failErr(1, err)
 	}
 	ctx := cf.ctx
 	warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-	sel, err := clusteraccess.Resolve(state, "container-cluster", clusterScope)
+	// "all" so --clusters accepts both ContainerCluster and StorageCluster names,
+	// matching the flag help and `apply`; the tool-input bundle covers both.
+	sel, err := clusteraccess.Resolve(state, "all", clusterScope)
 	if err != nil {
 		return failErr(1, err)
 	}
@@ -102,6 +104,9 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	result, err := workflow.RenderToolInputsForContext(ctx.Name, outputDir, ctx.SecretsDir, state)
 	if err != nil {
 		return failErr(1, err)
+	}
+	if output == outputJSON {
+		return writeRenderToolInputsJSON(stdout, "", outputDir, result)
 	}
 	p := outputpkg(stdout)
 	p.Command("tool input render")
@@ -117,12 +122,14 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 // and writes tool inputs to outputDir with every secret rendered as a
 // {{ secret <name> }} placeholder, so neither a configured context nor a
 // secrets directory is required.
-func runRenderPortable(stdout io.Writer, inputDir, outputDir, clusterScope string) error {
+func runRenderPortable(stdout io.Writer, inputDir, outputDir, clusterScope, output string) error {
 	state, err := desiredstate.LoadNormalizeValidate([]string{inputDir})
 	if err != nil {
 		return failErr(1, err)
 	}
-	sel, err := clusteraccess.Resolve(state, "container-cluster", clusterScope)
+	// "all" so --clusters accepts both ContainerCluster and StorageCluster names,
+	// matching the flag help and `apply`; the tool-input bundle covers both.
+	sel, err := clusteraccess.Resolve(state, "all", clusterScope)
 	if err != nil {
 		return failErr(1, err)
 	}
@@ -134,6 +141,9 @@ func runRenderPortable(stdout io.Writer, inputDir, outputDir, clusterScope strin
 	result, err := workflow.RenderToolInputsPortable(outputDir, state)
 	if err != nil {
 		return failErr(1, err)
+	}
+	if output == outputJSON {
+		return writeRenderToolInputsJSON(stdout, inputDir, outputDir, result)
 	}
 	p := outputpkg(stdout)
 	p.Command("portable render")
@@ -184,6 +194,43 @@ func writeRenderInstallerJSON(stdout io.Writer, result render.Result, resolved r
 			entry.EffectiveInstallManifestsDir = effective.EffectiveInstallManifestsDir
 		}
 		report.Clusters = append(report.Clusters, entry)
+	}
+	return cliout.JSON(stdout, report)
+}
+
+// renderToolInputsReport is the machine-readable form of a top-level
+// `render --output-dir` / `render --input-dir` bundle: the shared Bootwright and
+// Ansible artifacts plus the per-cluster installer and storage inputs. InputDir
+// is set only for the portable ({{ secret }} placeholder) render.
+type renderToolInputsReport struct {
+	InputDir           string                   `json:"inputDir,omitempty"`
+	OutputDir          string                   `json:"outputDir"`
+	EffectiveStatePath string                   `json:"effectiveStatePath"`
+	LockPath           string                   `json:"lockPath,omitempty"`
+	InventoryPath      string                   `json:"inventoryPath"`
+	VarsPath           string                   `json:"varsPath"`
+	Installer          []renderInstallerCluster `json:"installer,omitempty"`
+	Storage            []renderStorageCluster   `json:"storage,omitempty"`
+}
+
+func writeRenderToolInputsJSON(stdout io.Writer, inputDir, outputDir string, result render.Result) error {
+	report := renderToolInputsReport{
+		InputDir:           inputDir,
+		OutputDir:          outputDir,
+		EffectiveStatePath: result.EffectiveStatePath,
+		LockPath:           result.LockPath,
+		InventoryPath:      result.InventoryPath,
+		VarsPath:           result.VarsPath,
+		Installer:          make([]renderInstallerCluster, 0, len(result.InstallerAssets)),
+		Storage:            renderStorageClusters(result.StorageAssets),
+	}
+	for _, asset := range result.InstallerAssets {
+		report.Installer = append(report.Installer, renderInstallerCluster{
+			Name:                asset.ClusterName,
+			InstallConfigPath:   asset.InstallConfigPath,
+			AgentConfigPath:     asset.AgentConfigPath,
+			InstallManifestsDir: asset.InstallManifestsDir,
+		})
 	}
 	return cliout.JSON(stdout, report)
 }
