@@ -8,11 +8,6 @@
     url: "{{ bootwright_redfish_artifact_cert_ref | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: DELETE
     status_code: [200, 202, 204, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_artifact_cert_remove_standard
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_remove_standard.status | default(0) | int) in [200, 202, 204]
@@ -34,11 +29,6 @@
     body_format: json
     body: "{{ bootwright_redfish_xfusion_delete_body }}"
     status_code: [200, 202, 204, 400, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_artifact_cert_remove_xfusion
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_remove_xfusion.status | default(0) | int) in [200, 202, 204]

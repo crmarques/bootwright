@@ -14,11 +14,6 @@
     body_format: json
     body: "{{ bootwright_redfish_vmedia_eject_body }}"
     status_code: [200, 202, 204, 400, 404, 409, 500]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   failed_when: false
   changed_when: false
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
@@ -30,11 +25,6 @@
     method: GET
     return_content: true
     status_code: [200, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_pre_patch_probe
   failed_when: false
   changed_when: false
@@ -75,11 +65,6 @@
     body:
       VerifyCertificate: false
     status_code: [200, 202, 204, 400, 405, 501]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_verify_certificate_patch
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204]
@@ -112,11 +97,6 @@
     body_format: json
     body: "{{ bootwright_redfish_insert_media_body }}"
     status_code: [200, 202, 204]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_insert_media
   failed_when: false
   changed_when: (bootwright_redfish_insert_media.status | default(0) | int) in [200, 202, 204]
@@ -160,11 +140,6 @@
     method: GET
     return_content: true
     status_code: [200, 202, 204]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_insert_task_probe
   until:
     - >-
@@ -286,11 +261,6 @@
     method: GET
     return_content: true
     status_code: [200]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_failed_task_probe
   failed_when: false
   changed_when: false
@@ -303,11 +273,6 @@
     method: GET
     return_content: true
     status_code: [200]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_mounted_task_probe
   failed_when: false
   changed_when: false
@@ -322,11 +287,6 @@
     method: GET
     return_content: true
     status_code: [200]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_insert_probe
   until:
     - >-
@@ -390,11 +350,6 @@
     body_format: json
     body: "{{ bootwright_redfish_insert_media_body }}"
     status_code: [200, 202, 204, 400, 405, 501]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_patch_insert
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_patch_insert.status | default(0) | int) in [200, 202, 204]
@@ -407,11 +362,6 @@
     method: GET
     return_content: true
     status_code: [200]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_patch_probe
   until:
     - >-

@@ -11,32 +11,8 @@
 # owns (bare-metal NIC, vSphere portgroup, kubevirt NAD) and needs no
 # Linux IP plumbing.
 
-- name: Resolve LB components for this cluster on this host
-  ansible.builtin.set_fact:
-    bootwright_vip_lbs: >-
-      {{
-        bootwright_current_cluster.components
-        | selectattr('kind', 'equalto', 'loadBalancer')
-        | selectattr('machineRef', 'defined')
-        | selectattr('machineRef', 'equalto', bootwright_host_name)
-        | list
-      }}
-  changed_when: false
-
-- name: Collect libvirt-attached VIP targets
-  ansible.builtin.set_fact:
-    bootwright_vip_libvirt_targets: >-
-      {{
-        bootwright_vip_lbs
-        | map(attribute='frontends')
-        | flatten
-        | selectattr('attachment', 'defined')
-        | selectattr('attachment.kind', 'equalto', 'libvirt')
-        | selectattr('vip', 'defined')
-        | rejectattr('vip', 'equalto', '')
-        | list
-      }}
-  changed_when: false
+- name: Resolve libvirt-attached VIP targets
+  ansible.builtin.include_tasks: resolve_targets.yml
 
 - name: Attach VIPs to libvirt bridge
   ansible.builtin.command:

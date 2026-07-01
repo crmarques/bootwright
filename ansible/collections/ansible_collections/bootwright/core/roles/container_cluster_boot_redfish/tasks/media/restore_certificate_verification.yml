@@ -5,11 +5,6 @@
     method: GET
     return_content: true
     status_code: [200, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_restore_probe
   failed_when: false
   changed_when: false
@@ -46,11 +41,6 @@
     body:
       VerifyCertificate: true
     status_code: [200, 202, 204, 400, 405, 501]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_verify_certificate_restore
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_verify_certificate_restore.status | default(0) | int) in [200, 202, 204]
@@ -64,11 +54,6 @@
     method: GET
     return_content: true
     status_code: [200, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_security_service_restore_probe
   failed_when: false
   changed_when: false
@@ -106,11 +91,6 @@
     body:
       HttpsTransferCertVerification: true
     status_code: [200, 202, 204, 400, 405, 501]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_security_service_https_transfer_restore
   failed_when: false
   changed_when: (bootwright_redfish_security_service_https_transfer_restore.status | default(0) | int) in [200, 202, 204]

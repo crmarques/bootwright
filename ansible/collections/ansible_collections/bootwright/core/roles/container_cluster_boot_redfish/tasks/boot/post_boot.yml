@@ -132,11 +132,6 @@
     method: GET
     return_content: true
     status_code: [200, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_system_boot_probe
   failed_when: false
   changed_when: false
@@ -165,11 +160,6 @@
         BootSourceOverrideEnabled: Continuous
         BootSourceOverrideTarget: Hdd
     status_code: [200, 202, 204, 400, 405, 501]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_disk_boot_patch
   failed_when: false
   changed_when: (bootwright_redfish_disk_boot_patch.status | default(0) | int) in [200, 202, 204]

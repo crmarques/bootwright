@@ -1331,8 +1331,34 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 	}
 }
 
+func assertRedfishURIModuleDefaults(t *testing.T, block map[string]any) {
+	t.Helper()
+	defaults, ok := block["module_defaults"].(map[string]any)
+	if !ok {
+		t.Fatalf("redfish boot block must set module_defaults, got %v", block["module_defaults"])
+	}
+	uri, ok := defaults["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("redfish boot block module_defaults must cover ansible.builtin.uri, got %v", defaults)
+	}
+	for key, want := range map[string]string{
+		"url_username":     "bootwright_redfish_credentials.username",
+		"url_password":     "bootwright_redfish_credentials.password",
+		"validate_certs":   "bootwright_component.boot.redfish.validateCerts",
+		"timeout":          "bootwright_redfish_request_timeout",
+		"force_basic_auth": "bootwright_redfish_cred_path",
+	} {
+		if !strings.Contains(fmt.Sprint(uri[key]), want) {
+			t.Fatalf("redfish uri module_defaults %q must reference %q, got %v", key, want, uri[key])
+		}
+	}
+}
+
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
-	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml")
+	mainFileTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml")
+	outerBlockIdx := findAnsibleTask(t, mainFileTasks, "Boot via Redfish with shared request defaults")
+	assertRedfishURIModuleDefaults(t, mainFileTasks[outerBlockIdx])
+	mainTasks := nestedAnsibleTasks(t, mainFileTasks[outerBlockIdx], "block")
 	validateActionIdx := findAnsibleTask(t, mainTasks, "Validate selected Redfish boot action")
 	systemIdx := findAnsibleTask(t, mainTasks, "Resolve Redfish system")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
@@ -2454,9 +2480,10 @@ func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s has no uri body", tasks[idx]["name"])
 		}
+		// Credentials/TLS are supplied role-wide via ansible.builtin.uri module_defaults
+		// (asserted in TestBootRedfishDispatchesMediaBackendBeforeInsert); each MAC-probe
+		// uri must still reference the credential path so its output stays hidden.
 		for _, want := range []string{
-			"bootwright_redfish_credentials.username",
-			"bootwright_redfish_credentials.password",
 			"bootwright_redfish_cred_path",
 		} {
 			if !strings.Contains(fmt.Sprint(uri), want) && !strings.Contains(fmt.Sprint(tasks[idx]["no_log"]), want) {

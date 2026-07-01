@@ -6,11 +6,6 @@
     body_format: json
     body: "{{ bootwright_redfish_vmedia_eject_body }}"
     status_code: [200, 202, 204, 400, 404, 409, 500]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_eject
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_eject.status | default(0) | int) in [200, 202, 204]
@@ -22,11 +17,6 @@
     method: GET
     return_content: true
     status_code: [200, 404]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vmedia_eject_probe
   until:
     - (bootwright_redfish_vmedia_eject_probe.status | default(0) | int) in [200, 404]
