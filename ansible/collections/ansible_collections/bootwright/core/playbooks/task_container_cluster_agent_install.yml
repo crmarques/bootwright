@@ -18,8 +18,11 @@
         tasks_from: facts
 
   tasks:
+    # install_agent owns the full per-cluster agent flow: create ISO -> boot each
+    # machine via its boot driver -> wait for install complete.
     - name: Install agent per cluster
-      ansible.builtin.include_tasks: tasks/container_cluster/agent_install_cluster.yml
+      ansible.builtin.include_role:
+        name: bootwright.core.container_cluster_agent_install
       loop: "{{ bootwright_clusters | default([]) }}"
       loop_control:
         loop_var: bootwright_current_cluster

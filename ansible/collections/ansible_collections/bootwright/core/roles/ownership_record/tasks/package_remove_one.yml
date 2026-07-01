@@ -22,22 +22,21 @@
   when: bootwright_ownership_package_record_stat.stat.exists | default(false)
   changed_when: false
 
+- name: Coerce existing package requiredBy to a list
+  ansible.builtin.include_tasks: coerce_required_by.yml
+  vars:
+    bootwright_ownership_required_by_raw: "{{ bootwright_ownership_package_record.requiredBy | default([]) }}"
+  when: bootwright_ownership_package_record_stat.stat.exists | default(false)
+
 - name: Resolve remaining package ownership requirements
   ansible.builtin.set_fact:
     bootwright_ownership_package_remaining_required_by: "{{ bootwright_ownership_package_remaining_required_by_next }}"
   vars:
-    bootwright_ownership_package_required_by_raw: "{{ bootwright_ownership_package_record.requiredBy | default([]) }}"
-    bootwright_ownership_package_required_by_list: >-
-      {{
-        bootwright_ownership_package_required_by_raw
-        if bootwright_ownership_package_required_by_raw is sequence and bootwright_ownership_package_required_by_raw is not string
-        else ([bootwright_ownership_package_required_by_raw] if bootwright_ownership_package_required_by_raw | default('') | length > 0 else [])
-      }}
     bootwright_ownership_package_remaining_required_by_next: >-
       {{
-        bootwright_ownership_package_required_by_list
+        bootwright_ownership_required_by_list
         if bootwright_ownership_required_by | default('') | length == 0
-        else (bootwright_ownership_package_required_by_list | reject('equalto', bootwright_ownership_required_by) | list)
+        else (bootwright_ownership_required_by_list | reject('equalto', bootwright_ownership_required_by) | list)
       }}
   when: bootwright_ownership_package_record_stat.stat.exists | default(false)
   changed_when: false

@@ -1,9 +1,0 @@
----
-# Inner per-cluster install dispatch. Called once per cluster from the
-# outer install layer; `bootwright_current_cluster` is already set.
-# install_agent owns the full agent flow: create ISO → boot each
-# machine via its boot driver → wait for install complete.
-
-- name: Run agent installer for this cluster
-  ansible.builtin.include_role:
-    name: bootwright.core.container_cluster_agent_install

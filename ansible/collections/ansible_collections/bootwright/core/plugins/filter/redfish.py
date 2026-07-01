@@ -23,20 +23,11 @@ def bootwright_redfish_url(ref, base_url):
 
 
 def bootwright_redfish_action_descriptors(resource, action_name):
-    if not isinstance(resource, dict) or not isinstance(action_name, str) or not action_name:
-        return []
-
-    actions = []
-
-    def add_action(container, path, source, vendor=""):
-        if not isinstance(container, dict):
-            return
-        action = container.get(action_name)
-        if not isinstance(action, dict):
-            return
+    descriptors = []
+    for path, source, vendor, action in _iter_action_objects(resource, action_name):
         target = action.get("target")
         if not isinstance(target, str) or not target:
-            return
+            continue
         descriptor = {
             "target": target,
             "path": path,
@@ -47,27 +38,8 @@ def bootwright_redfish_action_descriptors(resource, action_name):
             descriptor["actionInfo"] = action_info
         if vendor:
             descriptor["vendor"] = vendor
-        actions.append(descriptor)
-
-    add_action(
-        resource.get("Actions"),
-        f"Actions.{action_name}",
-        "standard",
-    )
-
-    oem = resource.get("Oem")
-    if isinstance(oem, dict):
-        for vendor, value in oem.items():
-            if not isinstance(vendor, str) or not isinstance(value, dict):
-                continue
-            add_action(
-                value.get("Actions"),
-                f"Oem.{vendor}.Actions.{action_name}",
-                "oem",
-                vendor,
-            )
-
-    return actions
+        descriptors.append(descriptor)
+    return descriptors
 
 
 def bootwright_redfish_vmm_control_actions(actions, action_info_results):
@@ -198,7 +170,7 @@ def _action_info_accepts_vmm_control(action_info):
 
 def _reset_type_allowable_values(resource, action_info_results):
     values = []
-    for action in _action_objects(resource, "#ComputerSystem.Reset"):
+    for _path, _source, _vendor, action in _iter_action_objects(resource, "#ComputerSystem.Reset"):
         values.extend(_string_list(action.get("ResetType@Redfish.AllowableValues")))
 
     if isinstance(action_info_results, dict):
@@ -218,22 +190,26 @@ def _reset_type_allowable_values(resource, action_info_results):
     return ordered
 
 
-def _action_objects(resource, action_name):
+def _iter_action_objects(resource, action_name):
+    """Yield (path, source, vendor, action) for each occurrence of action_name in
+    the resource's standard Actions and each Oem vendor's Actions."""
     if not isinstance(resource, dict) or not isinstance(action_name, str) or not action_name:
-        return []
-    actions = []
+        return
     container = resource.get("Actions")
-    if isinstance(container, dict) and isinstance(container.get(action_name), dict):
-        actions.append(container[action_name])
+    if isinstance(container, dict):
+        action = container.get(action_name)
+        if isinstance(action, dict):
+            yield f"Actions.{action_name}", "standard", "", action
     oem = resource.get("Oem")
     if isinstance(oem, dict):
-        for value in oem.values():
-            if not isinstance(value, dict):
+        for vendor, value in oem.items():
+            if not isinstance(vendor, str) or not isinstance(value, dict):
                 continue
             container = value.get("Actions")
-            if isinstance(container, dict) and isinstance(container.get(action_name), dict):
-                actions.append(container[action_name])
-    return actions
+            if isinstance(container, dict):
+                action = container.get(action_name)
+                if isinstance(action, dict):
+                    yield f"Oem.{vendor}.Actions.{action_name}", "oem", vendor, action
 
 
 def _action_info_parameter_values(action_info, parameter_name):
