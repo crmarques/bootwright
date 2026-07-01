@@ -1244,15 +1244,25 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}",
 		"selinux --{{ selinux.mode }}",
 		"firewall --{{ 'enabled' if firewall.enabled else 'disabled' }}",
-		"services{% if disabled_services | length > 0 %} --disabled={{ disabled_services | join(',') }}{% endif %}{% if enabled_services | length > 0 %} --enabled={{ enabled_services | join(',') }}{% endif %}",
+		"services{{ svc_opts }}",
+		"{% if enabled_services | length > 0 %}{% set svc_opts = svc_opts ~ ' --enabled=' ~ (enabled_services | join(',')) %}{% endif %}",
 		"{% set ssh_key = '' %}",
 		"{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}",
 		"{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}",
-		"%packages{% if packages.excludeDocs | default(false) %} --excludedocs{% endif %}{% if not (packages.installWeakDeps | default(true)) %} --exclude-weakdeps{% endif %}{% if packages.languages | default([]) | length > 0 %} --inst-langs={{ packages.languages | join(',') }}{% endif %}",
+		"%packages{{ pkg_opts }}",
+		"{% if packages.languages | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (packages.languages | join(',')) %}{% endif %}",
 		"@^{{ packages.environment | default('minimal') }}-environment",
 		"{% set marker = bootwright_component.osInstall.marker | default({}) %}",
 		"cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'",
 		"{{ marker | to_nice_json }}",
+		// An omitted ssh.user is an empty (defined) string, which `default('root')`
+		// would NOT replace; the `, true` makes it fall back to root so the sshkey /
+		// user lines never render an empty username.
+		"sshkey --username={{ ks.sshUser | default('root', true) }}",
+		"{% if (ks.sshUser | default('root', true)) != 'root' %}",
+		// urlencode leaves '/' unescaped (safe='/'); a credential containing '/'
+		// must be %2F-encoded or it terminates the proxy URL authority early.
+		"| urlencode | replace('/', '%2F')",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Kickstart template missing %q", want)
@@ -1264,6 +1274,31 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 	for _, forbidden := range []string{"reboot --eject", "poweroff"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("Kickstart template must rely on boot control, not %q", forbidden)
+		}
+	}
+}
+
+// TestManagedOSKickstartTemplateNoCommandGluedToBlockTag guards the whole class
+// of bug behind `rhsm ...:8080lang en_US.UTF-8` and `%packages ...@^...-environment`:
+// Ansible renders this template with trim_blocks=True, which strips the newline
+// after every {% ... %} tag. A line that mixes literal kickstart content (a command
+// or a {{ expression }}) with a TRAILING block tag therefore loses its newline and
+// the next kickstart command collapses onto it. Every command line must end in
+// literal text or a {{ expression }}; only pure control lines may end in a tag.
+func TestManagedOSKickstartTemplateNoCommandGluedToBlockTag(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/templates/ks.cfg.j2")
+	blockTag := regexp.MustCompile(`\{%.*?%\}`)
+	commentTag := regexp.MustCompile(`\{#.*?#\}`)
+	for i, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimRight(line, " \t")
+		if !strings.HasSuffix(trimmed, "%}") {
+			continue
+		}
+		// Strip control/comment blocks; whatever remains is literal content or a
+		// {{ expression }} that trim_blocks would glue onto the following line.
+		residue := strings.TrimSpace(commentTag.ReplaceAllString(blockTag.ReplaceAllString(trimmed, ""), ""))
+		if residue != "" {
+			t.Fatalf("ks.cfg.j2:%d ends in a {%% %%} tag with trailing content %q; trim_blocks will glue the next line onto it — end command lines in literal text or a {{ expression }} instead", i+1, residue)
 		}
 	}
 }

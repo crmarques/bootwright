@@ -16,7 +16,10 @@ reboot
 {% if (proxy.url | default('') | length > 0) and (proxy.credentialsPath | default('') | length > 0) %}
 {% set _proxy_creds = (lookup('ansible.builtin.file', proxy.credentialsPath) | trim).split(':', 1) %}
 {% set _proxy_scheme, _proxy_hostport = proxy.url.split('://', 1) %}
-{% set proxy_url = _proxy_scheme ~ '://' ~ (_proxy_creds[0] | urlencode) ~ ':' ~ (_proxy_creds[1] | urlencode) ~ '@' ~ _proxy_hostport %}
+{# urlencode uses safe='/', so it does NOT escape '/'. A credential containing '/'
+   (common in base64/random secrets) would otherwise terminate the URL authority at
+   the first '/' and lose the host/port/creds, so encode '/' as %2F explicitly. #}
+{% set proxy_url = _proxy_scheme ~ '://' ~ (_proxy_creds[0] | urlencode | replace('/', '%2F')) ~ ':' ~ (_proxy_creds[1] | urlencode | replace('/', '%2F')) ~ '@' ~ _proxy_hostport %}
 {% endif %}
 {% set satellite = rhsm.satellite | default({}) %}
 {% set sat_enabled = (rhsm.enabled | default(false)) and (satellite.hostname | default('') | length > 0) %}
@@ -82,18 +85,21 @@ autopart --type=lvm --fstype=xfs
 {% set enabled_services = services.enabled | default([]) %}
 {% set disabled_services = services.disabled | default([]) %}
 {% if enabled_services | length > 0 or disabled_services | length > 0 %}
-services{% if disabled_services | length > 0 %} --disabled={{ disabled_services | join(',') }}{% endif %}{% if enabled_services | length > 0 %} --enabled={{ enabled_services | join(',') }}{% endif %}
+{% set svc_opts = '' %}
+{% if disabled_services | length > 0 %}{% set svc_opts = svc_opts ~ ' --disabled=' ~ (disabled_services | join(',')) %}{% endif %}
+{% if enabled_services | length > 0 %}{% set svc_opts = svc_opts ~ ' --enabled=' ~ (enabled_services | join(',')) %}{% endif %}
+services{{ svc_opts }}
 {% endif %}
 
 {% set ssh_key = '' %}
 {% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}
 {% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}
 {% endif %}
-{% if (ks.sshUser | default('root')) != 'root' %}
+{% if (ks.sshUser | default('root', true)) != 'root' %}
 user --name={{ ks.sshUser }} --groups=wheel --lock
 {% endif %}
 {% if ssh_key | length > 0 %}
-sshkey --username={{ ks.sshUser | default('root') }} "{{ ssh_key | trim }}"
+sshkey --username={{ ks.sshUser | default('root', true) }} "{{ ssh_key | trim }}"
 {% endif %}
 
 {% if sat_enabled and sat_ca %}
@@ -110,7 +116,14 @@ update-ca-trust extract
 
 {% endif %}
 {% set packages = ks.packages | default({}) %}
-%packages{% if packages.excludeDocs | default(false) %} --excludedocs{% endif %}{% if not (packages.installWeakDeps | default(true)) %} --exclude-weakdeps{% endif %}{% if packages.languages | default([]) | length > 0 %} --inst-langs={{ packages.languages | join(',') }}{% endif %}
+{# Precompute so the %packages header ends in a {{ expression }} and keeps its
+   newline: trim_blocks eats the newline after a trailing {% endif %}, which would
+   otherwise glue the @^...-environment group onto the header line. #}
+{% set pkg_opts = '' %}
+{% if packages.excludeDocs | default(false) %}{% set pkg_opts = pkg_opts ~ ' --excludedocs' %}{% endif %}
+{% if not (packages.installWeakDeps | default(true)) %}{% set pkg_opts = pkg_opts ~ ' --exclude-weakdeps' %}{% endif %}
+{% if packages.languages | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (packages.languages | join(',')) %}{% endif %}
+%packages{{ pkg_opts }}
 @^{{ packages.environment | default('minimal') }}-environment
 {% for package in packages.install | default([]) %}
 {{ package }}
@@ -127,7 +140,7 @@ cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT
 BOOTWRIGHT_SATELLITE_CA
 update-ca-trust extract
 {% endif %}
-{% if (ks.sshUser | default('root')) != 'root' %}
+{% if (ks.sshUser | default('root', true)) != 'root' %}
 echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/99-bootwright-wheel
 chmod 0440 /etc/sudoers.d/99-bootwright-wheel
 {% endif %}
