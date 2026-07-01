@@ -83,14 +83,19 @@
 
 - name: Skip BMC certificate verification on the InsertMedia fetch when opted out
   # bmc.virtualMedia.tls.verify=false (rendered artifactCertificate.ignoreVerification)
-  # -> pass VerifyCertificate=false straight in the InsertMedia action body. This is
-  # the DMTF VirtualMedia InsertMedia parameter, honored under the plain VirtualMedia
-  # privilege the BMC account already holds -- unlike the SecurityService
-  # HttpsTransferCertVerification PATCH and the root-CA import, which need the
-  # "Security Configuration" right a restricted account (e.g. an iBMC operator role)
-  # lacks and which 403 there. Added only when verification was opted out, so a
-  # verifying fetch keeps the BMC's default behaviour and a BMC that predates the
-  # parameter is unaffected.
+  # -> pass VerifyCertificate=false in the InsertMedia action body, but ONLY when the
+  # VirtualMedia resource actually exposes VerifyCertificate (captured above as
+  # bootwright_redfish_vmedia_verify_certificate_supported). VerifyCertificate is a
+  # DMTF VirtualMedia property honored under the plain VirtualMedia privilege the BMC
+  # account already holds -- unlike the SecurityService HttpsTransferCertVerification
+  # PATCH and the root-CA import, which need the "Security Configuration" right a
+  # restricted account (e.g. an iBMC operator role) lacks and which 403 there.
+  # Gating on support is required: Huawei/xFusion iBMC does not implement the property
+  # (it 501s the VerifyCertificate PATCH) and rejects an InsertMedia action that
+  # carries it with HTTP 400 -- so injecting it unconditionally breaks the very fetch
+  # it means to permit. There the fetch instead rides the manager SecurityService
+  # HttpsTransferCertVerification setting handled above. This mirrors the restore
+  # path, which likewise gates its VerifyCertificate PATCH on support.
   ansible.builtin.set_fact:
     bootwright_redfish_insert_media_body: "{{ bootwright_redfish_insert_media_body | combine({'VerifyCertificate': false}) }}"
   changed_when: false
@@ -99,6 +104,7 @@
     - (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'standard-insert-media'
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
     - bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool
+    - bootwright_redfish_vmedia_verify_certificate_supported | default(false) | bool
 
 - name: Build Redfish VMM virtual media request body
   ansible.builtin.set_fact:
