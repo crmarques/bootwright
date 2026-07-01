@@ -133,11 +133,26 @@ const (
 	ProviderServiceKindBMC = "bmc"
 
 	// EnvironmentComponentNone is the reserved component name/ref sentinel
-	// (never a management value); External and Managed are the
-	// Environment.spec.infraComponents entry management vocabulary.
-	EnvironmentComponentNone     = "none"
-	EnvironmentComponentExternal = "external"
-	EnvironmentComponentManaged  = "managed"
+	// (never a management value); External, Managed, and Reference are the
+	// Environment.spec.infraComponents entry management vocabulary. Managed:
+	// this context provisions the service and may destroy it. External: a
+	// non-bootwright endpoint bootwright only consumes (a raw URL/address).
+	// Reference: a service OWNED (managed) by a sibling bootwright context;
+	// this context consumes it and contributes additive entries but never
+	// provisions or destroys the base.
+	EnvironmentComponentNone      = "none"
+	EnvironmentComponentExternal  = "external"
+	EnvironmentComponentManaged   = "managed"
+	EnvironmentComponentReference = "reference"
+
+	// ComponentRole names the two lifecycle roles a bootwright context can
+	// hold over a shared infra-component, stamped on the ownership record's
+	// role field. owner provisions and may destroy the base; reference only
+	// contributes/consumes. An absent role reads as owner (backward compatible
+	// with records written before the field existed). The Ansible ownership
+	// role writes the same literals; keep the two in sync.
+	ComponentRoleOwner     = "owner"
+	ComponentRoleReference = "reference"
 
 	EnvironmentDestroyProtectionAllow            = "allow"
 	EnvironmentDestroyProtectionRequiredOverride = "requiredOverride"

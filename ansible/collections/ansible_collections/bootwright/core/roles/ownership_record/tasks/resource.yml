@@ -17,7 +17,17 @@
 
 - name: Resolve ownership resource record path
   ansible.builtin.set_fact:
-    bootwright_ownership_resource_path: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{ bootwright_ownership_name }}.json"
+    bootwright_ownership_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    # A reference record shares kind+name+host with the owner it references, so it
+    # is written as <name>@<context>.json to avoid overwriting the owner's
+    # <name>.json. This mirrors ownership.ResourcePath on the Go side; keep the two
+    # in sync. owner/default records keep the plain <name>.json filename.
+    bootwright_ownership_resource_path: >-
+      {{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{
+        (bootwright_ownership_name ~ '@' ~ (bootwright_clusters_dir | dirname | basename))
+        if (bootwright_ownership_role | default('owner')) == 'reference'
+        else bootwright_ownership_name
+      }}.json
   changed_when: false
 
 - name: Load existing ownership resource record
@@ -48,9 +58,17 @@
         ansible_user: "{{ ansible_user | default('') }}"
         ansible_connection: "{{ ansible_connection | default('') }}"
         ansible_ssh_common_args: "{{ ansible_ssh_common_args | default('') }}"
+    # role is stamped only for a reference record; an owner/default record omits it
+    # so every existing (non-infra-component) ownership record stays byte-identical
+    # and the Go side reads an absent role as owner (ownership.EffectiveRole).
+    bootwright_ownership_role_field: >-
+      {{ {'role': bootwright_ownership_role}
+         if (bootwright_ownership_role | default('owner')) == 'reference'
+         else {} }}
     bootwright_ownership_record_desired: >-
       {{
         bootwright_ownership_record_base
+        | combine(bootwright_ownership_role_field)
         | combine(bootwright_ownership_fields | default({}), recursive=True)
       }}
     # Reuse the prior updatedAt when nothing else changed so the written file is

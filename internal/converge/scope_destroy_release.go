@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/ownership"
@@ -11,50 +12,42 @@ import (
 // stamp for container-backed bastion services (artifact server, registry, proxy, …).
 const ownershipInfraComponentKind = "infra-component"
 
-// selfContainedSharedComponentKinds are the recorded componentKind values — the
-// ownership record's bootwright.kind label, stamped by the infra_component_* roles —
-// of the self-contained shared bastion services: those that render their whole config
-// from the InfraComponent spec and so can be safely co-owned by several contexts on one
-// bastion and released (kept) when another context still references them. Keyed by the
-// role-stamped kind (e.g. the artifact server stamps "artifacts") because that is what
-// an ownership record carries on disk; the slot-vocabulary sibling is
-// stategraph.selfContainedSharedServiceSlots (it gates scoped apply, a separate
-// concern, and includes the BMC provider service which is not a container record here).
-// Degrading services (load-balancer, nameResolution, ntp) render per-cluster config and
-// are deliberately absent: they must never be released across contexts.
-var selfContainedSharedComponentKinds = map[string]bool{
-	"artifacts": true,
-	"registry":  true,
-	"proxy":     true,
-}
-
-// recordedComponentKindIsSelfContainedShared reports whether an ownership record's
-// componentKind (its bootwright.kind label) names a self-contained shared bastion
-// service eligible for cross-context release.
-func recordedComponentKindIsSelfContainedShared(componentKind string) bool {
-	return selfContainedSharedComponentKinds[strings.TrimSpace(componentKind)]
-}
-
 // InfraComponentReleaseExtraVar carries the comma-joined ownership-record names of the
-// shared, self-contained infra-components this destroy must RELEASE — drop only this
-// context's reference to — instead of tearing down, because another Bootwright context
-// on the same bastion still references them. The infra-component destroy roles and the
-// ownership-record teardown skip their destructive steps for a released component but
-// still remove this context's own ownership record.
+// shared infra-components this destroy must RELEASE — remove only this context's
+// contribution (fragment) and its own reference record — instead of tearing down,
+// because this context only REFERENCES them (role: reference); the owner context runs
+// the base. The infra-component destroy roles and the ownership-record teardown skip
+// their destructive steps for a released component but still remove this context's own
+// reference record. A reference is released regardless of component kind: additive
+// contributions (artifact media, DNS drop-ins, proxy/registry/NTP entries) are always
+// caller-scoped, so removing one never degrades the owner's base.
 const InfraComponentReleaseExtraVar = "bootwright_infra_component_release_records"
 
-// InfraComponentRelease is one shared, self-contained infra-component kept alive on
-// destroy because one or more other contexts still reference it.
+// InfraComponentRelease is one shared infra-component this context's destroy RELEASES
+// (keeps the owner's base, removes only this context's contribution) because this
+// context only references it.
 type InfraComponentRelease struct {
+	Name          string // ownership record name (<provider>-<component>)
+	Host          string // host the shared component runs on
+	ComponentKind string // recorded bootwright.kind (artifacts/registry/proxy/nameResolution/…)
+}
+
+// InfraComponentReferencedOwner is a base infra-component this context OWNS that one or
+// more sibling contexts still reference, so tearing it down would break them. The
+// destroy is refused unless the operator passes --override.
+type InfraComponentReferencedOwner struct {
 	Name          string   // ownership record name (<provider>-<component>)
 	Host          string   // host the shared component runs on
-	ComponentKind string   // recorded bootwright.kind (artifacts/registry/proxy)
-	Referrers     []string // other context names still referencing it
+	ComponentKind string   // recorded bootwright.kind
+	Referrers     []string // sibling context names still referencing it
 }
 
 // ReleaseDecision is the outcome of the cross-context shared-service reference scan.
 type ReleaseDecision struct {
 	Releases []InfraComponentRelease
+	// Blocks are owner-held components that sibling contexts still reference; a
+	// destroy that would tear one down must fail closed unless --override.
+	Blocks []InfraComponentReferencedOwner
 	// Warnings carries per-sibling-store load failures. The scan continues past them
 	// (best effort), so a single unreadable sibling never strands a destroy.
 	Warnings []error
@@ -69,20 +62,27 @@ func (d ReleaseDecision) Names() []string {
 	return names
 }
 
-// PlanInfraComponentReleases scans every OTHER Bootwright context's ownership store on
-// this bastion for self-contained shared infra-components this context's destroy would
-// otherwise tear down, and returns those still referenced elsewhere so the teardown
-// releases (keeps) them. records is this context's own ownership set (already
-// context-filtered). A genuine failure to enumerate sibling contexts is returned as an
-// error so the caller can fail closed; an individual unreadable sibling store is a
-// warning and the scan continues (over-counting fails safe toward release).
+// PlanInfraComponentReleases decides, for this context's infra-component teardown, which
+// records to RELEASE and which owner-held bases are still referenced elsewhere (and so
+// must block the destroy). records is this context's own ownership set (already
+// context-filtered). The decision keys on each record's ownership ROLE:
+//
+//   - role reference  -> this context only contributes to / consumes a service another
+//     context owns; its teardown removes only this context's fragment + reference
+//     record, never the owner's base, for ALL component kinds. Released without a
+//     sibling scan (a reference is always caller-scoped).
+//   - role owner       -> this context runs the base. If any sibling context holds a
+//     reference record for the same (kind,name,host), tearing the base down would break
+//     those referrers, so it is reported in Blocks for the caller to refuse (unless
+//     --override).
+//
+// A genuine failure to enumerate sibling contexts is returned as an error so the caller
+// can fail closed; an individual unreadable sibling store is a warning and the scan
+// continues (over-counting referrers fails safe toward blocking the owner teardown).
 func PlanInfraComponentReleases(selfContext string, records []ownership.ResourceRecord) (ReleaseDecision, error) {
 	stores, err := siblingContextStores(selfContext)
 	if err != nil {
 		return ReleaseDecision{}, err
-	}
-	if len(stores) == 0 {
-		return ReleaseDecision{}, nil
 	}
 	var decision ReleaseDecision
 	for _, record := range records {
@@ -90,17 +90,25 @@ func PlanInfraComponentReleases(selfContext string, records []ownership.Resource
 			continue
 		}
 		componentKind := strings.TrimSpace(record.Labels["bootwright.kind"])
-		if !recordedComponentKindIsSelfContainedShared(componentKind) {
+		if record.IsReference() {
+			decision.Releases = append(decision.Releases, InfraComponentRelease{
+				Name:          record.Name,
+				Host:          record.Host,
+				ComponentKind: componentKind,
+			})
 			continue
 		}
-		referrers, skipped := ownership.OtherContextReferrers(stores, selfContext, ownership.SharedComponentID{
+		if len(stores) == 0 {
+			continue
+		}
+		referrers, skipped := ownership.ReferenceContexts(stores, selfContext, ownership.SharedComponentID{
 			Kind: record.Kind,
 			Name: record.Name,
 			Host: record.Host,
 		})
 		decision.Warnings = append(decision.Warnings, skipped...)
 		if len(referrers) > 0 {
-			decision.Releases = append(decision.Releases, InfraComponentRelease{
+			decision.Blocks = append(decision.Blocks, InfraComponentReferencedOwner{
 				Name:          record.Name,
 				Host:          record.Host,
 				ComponentKind: componentKind,
@@ -109,6 +117,19 @@ func PlanInfraComponentReleases(selfContext string, records []ownership.Resource
 		}
 	}
 	return decision, nil
+}
+
+// ReferencedOwnerError renders the owner-refuse-while-referenced blocks into a single
+// actionable error for the destroy command to fail closed with (unless --override).
+func ReferencedOwnerError(blocks []InfraComponentReferencedOwner) error {
+	if len(blocks) == 0 {
+		return nil
+	}
+	parts := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		parts = append(parts, fmt.Sprintf("%s (referrers: %s)", block.Name, strings.Join(block.Referrers, ", ")))
+	}
+	return fmt.Errorf("refusing to tear down shared infra-component(s) still referenced by other contexts: %s; detach the referrers first, or re-run with --override to tear them down regardless", strings.Join(parts, "; "))
 }
 
 // ApplyInfraComponentReleaseExtraVar stamps the release set onto a destroy plan. A

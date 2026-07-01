@@ -169,6 +169,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if releaseErr != nil && !override {
 				return failErr(1, fmt.Errorf("cannot verify whether shared services are still referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", releaseErr))
 			}
+			// Owner-refuse-while-referenced: this context owns a shared base that
+			// sibling contexts still reference. Tearing it down would break them, so
+			// fail closed unless --override.
+			if err := converge.ReferencedOwnerError(decision.Blocks); err != nil && !override {
+				return failErr(1, err)
+			}
 			releaseDecision = decision
 		}
 		var plan converge.WorkflowPlan

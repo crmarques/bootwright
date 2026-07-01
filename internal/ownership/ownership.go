@@ -23,11 +23,26 @@ const ResourceDirName = "resources"
 // (resource.yml owner: bootwright); keep the two in sync.
 const Owner = "bootwright"
 
+// Role names the lifecycle relationship a context holds over a shared
+// infra-component. RoleOwner provisions the base and may destroy it; RoleReference
+// only contributes/consumes and is released (never torn down) by another context's
+// destroy. An empty Role reads as RoleOwner, so records written before the field
+// existed and single-context records keep owner semantics. The Ansible
+// ownership_record role writes the same literals (mirrors api/v1alpha1.ComponentRole*);
+// keep the three in sync.
+const (
+	RoleOwner     = "owner"
+	RoleReference = "reference"
+)
+
 type ResourceRecord struct {
-	APIVersion string            `json:"apiVersion"`
-	Kind       string            `json:"kind"`
-	Name       string            `json:"name"`
-	Owner      string            `json:"owner"`
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	Owner      string `json:"owner"`
+	// Role is the context's lifecycle relationship to the resource
+	// (owner|reference); empty reads as owner. See RoleOwner/RoleReference.
+	Role       string            `json:"role,omitempty"`
 	Context    string            `json:"context,omitempty"`
 	Host       string            `json:"host,omitempty"`
 	Provider   string            `json:"provider,omitempty"`
@@ -40,6 +55,21 @@ type ResourceRecord struct {
 	UpdatedAt  time.Time         `json:"updatedAt"`
 }
 
+// EffectiveRole returns the record's lifecycle role, defaulting an empty stamp to
+// RoleOwner so pre-existing and single-context records read as owner.
+func (record ResourceRecord) EffectiveRole() string {
+	if role := strings.TrimSpace(record.Role); role != "" {
+		return role
+	}
+	return RoleOwner
+}
+
+// IsReference reports whether the record is a cross-context reference: a context
+// that contributes to and consumes a service another context owns.
+func (record ResourceRecord) IsReference() bool {
+	return record.EffectiveRole() == RoleReference
+}
+
 var safeSegmentRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
@@ -48,6 +78,7 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 		Kind       string                     `json:"kind"`
 		Name       string                     `json:"name"`
 		Owner      string                     `json:"owner"`
+		Role       string                     `json:"role,omitempty"`
 		Context    string                     `json:"context,omitempty"`
 		Host       string                     `json:"host,omitempty"`
 		Provider   string                     `json:"provider,omitempty"`
@@ -67,6 +98,7 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 		Kind:       wire.Kind,
 		Name:       wire.Name,
 		Owner:      wire.Owner,
+		Role:       wire.Role,
 		Context:    wire.Context,
 		Host:       wire.Host,
 		Provider:   wire.Provider,
@@ -116,7 +148,20 @@ func ResourcePath(root string, record ResourceRecord) (string, error) {
 	if err := validateSegment(record.Name); err != nil {
 		return "", fmt.Errorf("name: %w", err)
 	}
-	return filepath.Join(root, ResourceDirName, record.Kind, record.Name+".json"), nil
+	base := record.Name
+	// A reference record shares Kind+Name+Host with the owner it references, so
+	// it must not overwrite the owner's <name>.json. Give it a context-suffixed
+	// filename; the un-suffixed file then belongs to exactly one owner, making
+	// single-owner a filesystem invariant. LoadResources still discovers it and
+	// matches it by Kind+Name+Host regardless of filename. The Ansible
+	// ownership_record role names the file identically; keep the two in sync.
+	if record.IsReference() {
+		if err := validateSegment(record.Context); err != nil {
+			return "", fmt.Errorf("reference record context: %w", err)
+		}
+		base = record.Name + "@" + record.Context
+	}
+	return filepath.Join(root, ResourceDirName, record.Kind, base+".json"), nil
 }
 
 func SaveResource(root string, record ResourceRecord) error {
@@ -263,6 +308,11 @@ func ValidateResource(record ResourceRecord) error {
 	}
 	if err := validateSegment(record.Name); err != nil {
 		return fmt.Errorf("name: %w", err)
+	}
+	switch strings.TrimSpace(record.Role) {
+	case "", RoleOwner, RoleReference:
+	default:
+		return fmt.Errorf("ownership resource %s/%s role %q must be one of {%s, %s}", record.Kind, record.Name, record.Role, RoleOwner, RoleReference)
 	}
 	for _, values := range []map[string]string{record.HostFacts, record.Labels, record.Attributes} {
 		for key, value := range values {

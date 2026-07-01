@@ -50,27 +50,40 @@ func printSkippedOwnershipRecords(w io.Writer, warnings []error) {
 	}
 }
 
-// printInfraComponentReleases lists self-contained shared bastion services (artifact
-// server, registry, proxy) this destroy will RELEASE rather than tear down, because
-// another Bootwright context on the same bastion still references them: only this
-// context's ownership record is dropped, the shared container and its data stay. It
-// also surfaces any sibling ownership store that could not be read during the scan, so
-// an unverifiable reference is visible rather than silently treated as absent. Read-only.
+// printInfraComponentReleases previews the cross-context outcome of an infra-component
+// teardown: shared bastion services this context only REFERENCES are released (the
+// owner's base and data stay, only this context's contribution + reference record are
+// removed), and owner-held bases that sibling contexts still reference are surfaced as
+// BLOCKED (the destroy refuses unless --override). It also surfaces any sibling
+// ownership store that could not be read during the scan, so an unverifiable reference
+// is visible rather than silently treated as absent. Read-only.
 func printInfraComponentReleases(w io.Writer, decision converge.ReleaseDecision) {
-	if len(decision.Releases) == 0 && len(decision.Warnings) == 0 {
+	if len(decision.Releases) == 0 && len(decision.Blocks) == 0 && len(decision.Warnings) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
-	p.Section("Will release (kept; still referenced by other contexts)")
-	for _, release := range decision.Releases {
-		label := release.ComponentKind + " " + release.Name
-		if release.Host != "" {
-			label += " on " + release.Host
+	if len(decision.Releases) > 0 {
+		p.Section("Will release (this context only references; owner's base kept)")
+		for _, release := range decision.Releases {
+			label := release.ComponentKind + " " + release.Name
+			if release.Host != "" {
+				label += " on " + release.Host
+			}
+			p.Status(output.StatusInfo, label, "removing only this context's contribution and reference record")
 		}
-		p.Status(output.StatusInfo, label, "referenced by "+strings.Join(release.Referrers, ", ")+"; dropping only this context's ownership record")
+	}
+	if len(decision.Blocks) > 0 {
+		p.Section("Blocked (owned base still referenced by other contexts)")
+		for _, block := range decision.Blocks {
+			label := block.ComponentKind + " " + block.Name
+			if block.Host != "" {
+				label += " on " + block.Host
+			}
+			p.Status(output.StatusWarn, label, "referenced by "+strings.Join(block.Referrers, ", ")+"; refused unless --override")
+		}
 	}
 	for _, warning := range decision.Warnings {
-		p.Status(output.StatusWarn, "reference scan", warning.Error()+"; treated as still-referenced (kept)")
+		p.Status(output.StatusWarn, "reference scan", warning.Error()+"; treated as still-referenced")
 	}
 }
 

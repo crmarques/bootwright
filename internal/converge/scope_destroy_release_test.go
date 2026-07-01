@@ -8,28 +8,64 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func TestPlanInfraComponentReleasesKeepsSharedServiceReferencedByOtherContext(t *testing.T) {
+func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileReferenced(t *testing.T) {
 	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
-	ctxA := mustContext(t, "ctx-a")
-	ctxB := mustContext(t, "ctx-b")
+	ctxHub := mustContext(t, "hub")
+	ctxSpoke := mustContext(t, "spoke")
 
-	shared := sharedArtifactRecord()
-	saveRecord(t, ctxA.OwnershipDir, shared)
-	saveRecord(t, ctxB.OwnershipDir, shared)
+	owner := sharedArtifactRecord() // hub owns the base (role empty => owner)
+	reference := owner
+	reference.Role = ownership.RoleReference
+	reference.Context = "spoke"
+	saveRecord(t, ctxHub.OwnershipDir, owner)
+	saveRecord(t, ctxSpoke.OwnershipDir, reference)
 
-	decision, err := PlanInfraComponentReleases("ctx-a", []ownership.ResourceRecord{shared})
+	// hub (the owner) must be blocked from tearing the base down: spoke references it.
+	decision, err := PlanInfraComponentReleases("hub", []ownership.ResourceRecord{owner})
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	if len(decision.Releases) != 1 {
-		t.Fatalf("want 1 release, got %d (%+v)", len(decision.Releases), decision.Releases)
+	if len(decision.Releases) != 0 {
+		t.Fatalf("owner teardown is not a release, got %+v", decision.Releases)
 	}
-	release := decision.Releases[0]
-	if release.Name != "prov1-edge" || release.ComponentKind != "artifacts" || !slices.Equal(release.Referrers, []string{"ctx-b"}) {
-		t.Fatalf("unexpected release %+v", release)
+	if len(decision.Blocks) != 1 {
+		t.Fatalf("want 1 block, got %d (%+v)", len(decision.Blocks), decision.Blocks)
 	}
-	if names := decision.Names(); !slices.Equal(names, []string{"prov1-edge"}) {
-		t.Fatalf("want release names [prov1-edge], got %v", names)
+	block := decision.Blocks[0]
+	if block.Name != "prov1-edge" || block.ComponentKind != "artifacts" || !slices.Equal(block.Referrers, []string{"spoke"}) {
+		t.Fatalf("unexpected block %+v", block)
+	}
+	if refErr := ReferencedOwnerError(decision.Blocks); refErr == nil {
+		t.Fatalf("blocks must render a refusal error")
+	}
+}
+
+func TestPlanInfraComponentReleasesReleasesReferenceForAllKinds(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
+	ctxHub := mustContext(t, "hub")
+	ctxSpoke := mustContext(t, "spoke")
+
+	// A reference is released (fragment-only) regardless of component kind, including
+	// a degrading service (load-balancer) the old model could never release.
+	base := ownership.ResourceRecord{
+		Kind: "infra-component", Name: "prov1-lb", Host: "bastion.lab",
+		Owner: ownership.Owner, Labels: map[string]string{"bootwright.kind": "load-balancer"},
+	}
+	reference := base
+	reference.Role = ownership.RoleReference
+	reference.Context = "spoke"
+	saveRecord(t, ctxHub.OwnershipDir, base)
+	saveRecord(t, ctxSpoke.OwnershipDir, reference)
+
+	decision, err := PlanInfraComponentReleases("spoke", []ownership.ResourceRecord{reference})
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(decision.Blocks) != 0 {
+		t.Fatalf("a referrer teardown is never blocked, got %+v", decision.Blocks)
+	}
+	if names := decision.Names(); !slices.Equal(names, []string{"prov1-lb"}) {
+		t.Fatalf("want reference released [prov1-lb], got %v", names)
 	}
 }
 
@@ -45,29 +81,8 @@ func TestPlanInfraComponentReleasesTearsDownWhenSoleOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	if len(decision.Releases) != 0 {
-		t.Fatalf("sole owner must tear down, got releases %+v", decision.Releases)
-	}
-}
-
-func TestPlanInfraComponentReleasesIgnoresDegradingSharedService(t *testing.T) {
-	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
-	ctxA := mustContext(t, "ctx-a")
-	ctxB := mustContext(t, "ctx-b")
-
-	lb := ownership.ResourceRecord{
-		Kind: "infra-component", Name: "prov1-lb", Host: "bastion.lab",
-		Owner: ownership.Owner, Labels: map[string]string{"bootwright.kind": "load-balancer"},
-	}
-	saveRecord(t, ctxA.OwnershipDir, lb)
-	saveRecord(t, ctxB.OwnershipDir, lb)
-
-	decision, err := PlanInfraComponentReleases("ctx-a", []ownership.ResourceRecord{lb})
-	if err != nil {
-		t.Fatalf("plan: %v", err)
-	}
-	if len(decision.Releases) != 0 {
-		t.Fatalf("degrading shared service must never be released, got %+v", decision.Releases)
+	if len(decision.Releases) != 0 || len(decision.Blocks) != 0 {
+		t.Fatalf("sole owner must tear down unblocked, got releases %+v blocks %+v", decision.Releases, decision.Blocks)
 	}
 }
 
@@ -81,19 +96,6 @@ func TestApplyInfraComponentReleaseExtraVar(t *testing.T) {
 	want := InfraComponentReleaseExtraVar + "=prov1-edge,prov1-proxy"
 	if len(plan.ExtraVarPairs) != 1 || plan.ExtraVarPairs[0] != want {
 		t.Fatalf("want %q, got %v", want, plan.ExtraVarPairs)
-	}
-}
-
-func TestRecordedComponentKindIsSelfContainedShared(t *testing.T) {
-	for _, kind := range []string{"artifacts", "registry", "proxy"} {
-		if !recordedComponentKindIsSelfContainedShared(kind) {
-			t.Errorf("componentKind %q should be self-contained shared (release-aware)", kind)
-		}
-	}
-	for _, kind := range []string{"load-balancer", "nameResolution", "ntp", "", "libvirt-domain"} {
-		if recordedComponentKindIsSelfContainedShared(kind) {
-			t.Errorf("componentKind %q must not be release-aware", kind)
-		}
 	}
 }
 
