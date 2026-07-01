@@ -82,7 +82,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}
 			if err := graph.Add(Activity{
 				ID:                   taskID,
-				Kind:                 ActivityKindManagedOSInstall,
 				Requires:             requires,
 				Provides:             provides,
 				ExplicitDependencies: deps,
@@ -127,7 +126,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			deps = append(deps, managedOSDepsByCluster[cluster.Metadata.Name]...)
 			if err := graph.Add(Activity{
 				ID:                   taskID,
-				Kind:                 ActivityKindStorageNodePrepare,
 				Provides:             []CapabilityRef{{Kind: "storage.nodes-ready", Name: cluster.Metadata.Name}},
 				ExplicitDependencies: deps,
 				Task: ApplyTask{
@@ -167,7 +165,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			deps = append(deps, storageInfraDepsByCluster[cluster.Metadata.Name]...)
 			if err := graph.Add(Activity{
 				ID:                   taskID,
-				Kind:                 ActivityKindStorageClusterProvision,
 				Provides:             []CapabilityRef{{Kind: "storage.cluster-ready", Name: cluster.Metadata.Name}},
 				ExplicitDependencies: deps,
 				Task: ApplyTask{
@@ -217,7 +214,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				machineTaskIDsByHost[host] = append(machineTaskIDsByHost[host], taskID)
 				if err := graph.Add(Activity{
 					ID:                   taskID,
-					Kind:                 ActivityKindMachineInstantiate,
 					Requires:             kubeVirtReqsByCluster[name],
 					Provides:             []CapabilityRef{machineInstantiatedCapability(machineName)},
 					ExplicitDependencies: deps,
@@ -264,7 +260,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
 				if err := graph.Add(Activity{
 					ID:                   taskID,
-					Kind:                 ActivityKindMachineSubstratePrepare,
 					Requires:             kubeVirtReqsByCluster[name],
 					ExplicitDependencies: deps,
 					Task: ApplyTask{
@@ -313,7 +308,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}
 			if err := graph.Add(Activity{
 				ID:       virtctlID,
-				Kind:     ActivityKindHostVirtctlProvision,
 				Requires: hostVirtctlReadiness[host],
 				Provides: []CapabilityRef{virtctlProvisionedCapability(host)},
 				Task: ApplyTask{
@@ -345,7 +339,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			if err := graph.Add(Activity{
 				ID:                   isoTaskID,
-				Kind:                 ActivityKindContainerInstallAssets,
 				Requires:             kubeVirtReqsByCluster[name],
 				ExplicitDependencies: infraDeps,
 				Task: ApplyTask{
@@ -391,7 +384,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				}
 				if err := graph.Add(Activity{
 					ID:                   bootTaskID,
-					Kind:                 ActivityKindContainerNodeBoot,
 					Requires:             bootRequires,
 					ExplicitDependencies: isoDeps,
 					Task: ApplyTask{
@@ -427,7 +419,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			waitID := "wait." + name
 			if err := graph.Add(Activity{
 				ID:                   waitID,
-				Kind:                 ActivityKindContainerInstallWait,
 				Provides:             []CapabilityRef{clusterInstalledCapability(name)},
 				ExplicitDependencies: waitDeps,
 				Task: ApplyTask{
@@ -485,7 +476,6 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
 			if err := graph.Add(Activity{
 				ID:                   id,
-				Kind:                 ActivityKindClusterAddon,
 				Provides:             provides,
 				ExplicitDependencies: append([]string(nil), deps...),
 				Task: ApplyTask{
@@ -539,7 +529,6 @@ func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State
 		out[host] = taskID
 		if err := graph.Add(Activity{
 			ID:                   taskID,
-			Kind:                 ActivityKindMachineSubstratePrepare,
 			Requires:             []CapabilityRef{providerHostReadyCapability(host)},
 			ExplicitDependencies: append([]string(nil), deps...),
 			Task: ApplyTask{
@@ -579,7 +568,6 @@ func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State
 		out[host] = taskID
 		if err := graph.Add(Activity{
 			ID:                   taskID,
-			Kind:                 ActivityKindMachineSubstratePrepare,
 			Requires:             []CapabilityRef{providerHostReadyCapability(host)},
 			ExplicitDependencies: append([]string(nil), deps...),
 			Task: ApplyTask{

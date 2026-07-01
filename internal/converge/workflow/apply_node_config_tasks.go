@@ -27,7 +27,6 @@ func planNodeConfigActivities(graph *ActivityGraph, state v1alpha1.State, instal
 		id := "nodeconfig." + cluster + ".apply"
 		if err := graph.Add(Activity{
 			ID:                   id,
-			Kind:                 ActivityKindNodeConfigApply,
 			ExplicitDependencies: deps,
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{

@@ -33,7 +33,6 @@ func planStorageAttachmentActivities(graph *ActivityGraph, state v1alpha1.State,
 		attachmentPlan := StorageAttachmentPlan{Cluster: cluster, Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input}
 		if err := graph.Add(Activity{
 			ID:                   id,
-			Kind:                 ActivityKindStorageAttachmentApply,
 			ExplicitDependencies: deps,
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{

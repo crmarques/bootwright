@@ -6,27 +6,6 @@ import (
 	"strings"
 )
 
-type ActivityKind string
-
-const (
-	ActivityKindProviderHostPrepare        ActivityKind = "ProviderHostPrepare"
-	ActivityKindProviderServiceApply       ActivityKind = "ProviderServiceApply"
-	ActivityKindMachineSubstratePrepare    ActivityKind = "MachineSubstratePrepare"
-	ActivityKindMachineInstantiate         ActivityKind = "MachineInstantiate"
-	ActivityKindManagedOSInstall           ActivityKind = "ManagedOSInstall"
-	ActivityKindInfraComponentServiceApply ActivityKind = "InfraComponentServiceApply"
-	ActivityKindStorageNodePrepare         ActivityKind = "StorageNodePrepare"
-	ActivityKindStorageClusterProvision    ActivityKind = "StorageClusterProvision"
-	ActivityKindStorageExternalDetails     ActivityKind = "StorageExternalDetailsGather"
-	ActivityKindContainerInstallAssets     ActivityKind = "ContainerInstallAssets"
-	ActivityKindHostVirtctlProvision       ActivityKind = "HostVirtctlProvision"
-	ActivityKindContainerNodeBoot          ActivityKind = "ContainerNodeBoot"
-	ActivityKindContainerInstallWait       ActivityKind = "ContainerInstallWait"
-	ActivityKindStorageAttachmentApply     ActivityKind = "StorageAttachmentApply"
-	ActivityKindClusterAddon               ActivityKind = "ClusterAddon"
-	ActivityKindNodeConfigApply            ActivityKind = "NodeConfigApply"
-)
-
 type CapabilityRef struct {
 	Kind string
 	Name string
@@ -38,7 +17,6 @@ func (c CapabilityRef) key() string {
 
 type Activity struct {
 	ID                   string
-	Kind                 ActivityKind
 	Task                 ApplyTask
 	Requires             []CapabilityRef
 	Provides             []CapabilityRef

@@ -13,7 +13,6 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ph
 			taskIDs = append(taskIDs, taskID)
 			if err := graph.Add(Activity{
 				ID:       taskID,
-				Kind:     ActivityKindProviderHostPrepare,
 				Requires: []CapabilityRef{machineOSReadyCapability(host)},
 				Provides: []CapabilityRef{providerHostReadyCapability(host), providerServiceReadyCapability(host)},
 				Task: ApplyTask{
@@ -42,7 +41,6 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ph
 			taskIDs = append(taskIDs, taskID)
 			if err := graph.Add(Activity{
 				ID:       taskID,
-				Kind:     ActivityKindInfraComponentServiceApply,
 				Requires: []CapabilityRef{machineOSReadyCapability(host)},
 				Provides: []CapabilityRef{serviceEndpointReadyCapability(host)},
 				Task: ApplyTask{
