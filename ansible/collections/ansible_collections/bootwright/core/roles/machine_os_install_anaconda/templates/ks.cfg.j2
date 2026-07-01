@@ -21,10 +21,19 @@ reboot
 {% set satellite = rhsm.satellite | default({}) %}
 {% set sat_enabled = (rhsm.enabled | default(false)) and (satellite.hostname | default('') | length > 0) %}
 {% set sat_ca = (satellite.caPath | default('') | length > 0) %}
+{# Ansible renders this template with trim_blocks=True, which strips the newline
+   after every {% ... %} tag. A command line that ENDS in a conditional therefore
+   loses its trailing newline and the next kickstart command collapses onto it
+   (e.g. `rhsm ... --proxy=...:8080lang en_US.UTF-8`). Precompute the optional
+   flags so each command line ends in a {{ expression }} and keeps its newline. #}
+{% set proxy_flag = (' --proxy=' ~ proxy_url) if (proxy_url | length > 0) else '' %}
 {% if rhsm.enabled | default(false) %}
-rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{% if sat_enabled %} --server-hostname={{ satellite.hostname }}{% if satellite.contentBaseURL | default('') | length > 0 %} --rhsm-baseurl={{ satellite.contentBaseURL }}{% endif %}{% endif %}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}{% if rhsm.connectToInsights | default(false) %} --connect-to-insights{% endif %}
+{% set sat_flag = '' %}
+{% if sat_enabled %}{% set sat_flag = ' --server-hostname=' ~ satellite.hostname %}{% if satellite.contentBaseURL | default('') | length > 0 %}{% set sat_flag = sat_flag ~ ' --rhsm-baseurl=' ~ satellite.contentBaseURL %}{% endif %}{% endif %}
+{% set insights_flag = ' --connect-to-insights' if (rhsm.connectToInsights | default(false)) else '' %}
+rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{{ sat_flag }}{{ proxy_flag }}{{ insights_flag }}
 {% elif installer.sourceURL | default('') | length > 0 %}
-url --url={{ installer.sourceURL }}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}
+url --url={{ installer.sourceURL }}{{ proxy_flag }}
 {% else %}
 cdrom
 {% endif %}
@@ -51,7 +60,7 @@ network --device={{ net.device | default('link') }} --bootproto=dhcp{% if net.dn
 {% endif %}
 
 {% for repo in installer.repositories | default([]) %}
-repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}{% if proxy_url | length > 0 %} --proxy={{ proxy_url }}{% endif %}
+repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}{{ proxy_flag }}
 {% endfor %}
 
 {% set storage = ks.storage | default({}) %}
