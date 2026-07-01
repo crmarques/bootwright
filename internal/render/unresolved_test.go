@@ -55,7 +55,7 @@ func TestRenderFailsOnUnresolvedEndpointBindAddress(t *testing.T) {
 	if _, err := render.Effective(t.TempDir(), state); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("render.Effective error = %v, want unresolved bindAddress error", err)
 	}
-	if _, err := render.ToolInputs(t.TempDir(), t.TempDir(), state); err == nil || !strings.Contains(err.Error(), want) {
+	if _, err := render.ToolInputsForContext("test", t.TempDir(), t.TempDir(), state); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("render.ToolInputs error = %v, want unresolved bindAddress error", err)
 	}
 }

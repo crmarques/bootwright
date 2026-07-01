@@ -559,7 +559,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
 	managedServicesDir := filepath.Join(dir, "managed-services")
-	hash, err := clusterInstallDesiredHash(state, "sno-libvirt", secretsDir)
+	hash, err := clusterInstallDesiredHashForContext("test", state, "sno-libvirt", secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
@@ -721,7 +721,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
 	managedServicesDir := filepath.Join(dir, "managed-services")
-	hash, err := clusterInstallDesiredHash(state, "sno-libvirt", secretsDir)
+	hash, err := clusterInstallDesiredHashForContext("test", state, "sno-libvirt", secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
@@ -859,7 +859,7 @@ func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	clusterName := "3-nodes-ocp-emul-baremetal"
 
-	first, err := clusterInstallDesiredHash(state, clusterName, secretsDir)
+	first, err := clusterInstallDesiredHashForContext("test", state, clusterName, secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash first: %v", err)
 	}
@@ -871,7 +871,7 @@ func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T
 	if err := os.Chtimes(proxyCreds, changedAt, changedAt); err != nil {
 		t.Fatalf("chtimes proxy credentials: %v", err)
 	}
-	second, err := clusterInstallDesiredHash(state, clusterName, secretsDir)
+	second, err := clusterInstallDesiredHashForContext("test", state, clusterName, secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash second: %v", err)
 	}

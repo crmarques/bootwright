@@ -14,7 +14,7 @@ func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
 		t.Fatalf("write secret: %v", err)
 	}
 	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{File: secretPath})
-	entries, err := declaredSecretEntries(t.TempDir(), state)
+	entries, err := declaredSecretEntriesForContext("test", t.TempDir(), state)
 	if err != nil {
 		t.Fatalf("declaredSecretEntries: %v", err)
 	}

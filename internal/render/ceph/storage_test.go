@@ -342,7 +342,7 @@ func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecre
 		t.Fatalf("normal render missing placeholder: %s", placeholder)
 	}
 
-	sensitive, err := render.ToolInputs(filepath.Join(t.TempDir(), "sensitive"), t.TempDir(), state)
+	sensitive, err := render.ToolInputsForContext("test", filepath.Join(t.TempDir(), "sensitive"), t.TempDir(), state)
 	if err != nil {
 		t.Fatalf("render.ToolInputs: %v", err)
 	}

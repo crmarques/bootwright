@@ -161,7 +161,7 @@ func TestResolveInstallerWritesEffectiveFilesUnderClusterRuntimeDir(t *testing.T
 
 	fs := &recordingFS{}
 	clustersDir := "/var/lib/bootwright/contexts/lab/clusters"
-	if _, err := render.ResolveInstallerOn(fs, clustersDir, secretsDir, state); err != nil {
+	if _, err := render.ResolveInstallerOnForContext(fs, "test", clustersDir, secretsDir, state); err != nil {
 		t.Fatalf("ResolveInstallerOn: %v", err)
 	}
 

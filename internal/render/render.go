@@ -137,25 +137,17 @@ func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, st
 	return result, nil
 }
 
-// ResolveInstaller writes install-config / agent-config with real
+// ResolveInstallerForContext writes install-config / agent-config with real
 // secret material inlined under each cluster's runtime work dir.
 // Placeholder copies under the rendered installer dir are left untouched.
-// Uses the default os-backed FileSystem; tests use ResolveInstallerOn.
-func ResolveInstaller(clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ResolveInstallerForContext("test", clustersDir, secretsDir, state)
-}
-
+// Uses the default os-backed FileSystem; tests use ResolveInstallerOnForContext.
 func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	return ResolveInstallerOnForContext(defaultFS, contextName, clustersDir, secretsDir, state)
 }
 
-// ResolveInstallerOn is ResolveInstaller parameterised on FileSystem so
-// tests can assert mode invariants on the secret-inlined work-dir
-// writes without touching disk. Production callers use ResolveInstaller.
-func ResolveInstallerOn(fs FileSystem, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ResolveInstallerOnForContext(fs, "test", clustersDir, secretsDir, state)
-}
-
+// ResolveInstallerOnForContext is ResolveInstallerForContext parameterised on
+// FileSystem so tests can assert mode invariants on the secret-inlined work-dir
+// writes without touching disk.
 func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	result := Result{InstallerAssets: InstallerAssets(clustersDir, state)}
 	for _, ocp := range state.ContainerClusters {
@@ -193,10 +185,6 @@ func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secre
 func runtimeInstallerDirs(asset InstallerAsset) []string {
 	clusterRuntimeDir := filepath.Dir(asset.WorkDir)
 	return []string{asset.ClusterDir, clusterRuntimeDir, asset.WorkDir, asset.ClusterSecretsDir}
-}
-
-func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ToolInputsForContext("test", outputDir, secretsDir, state)
 }
 
 func ToolInputsForContext(contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {

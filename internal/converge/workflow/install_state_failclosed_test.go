@@ -23,7 +23,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 
 	matchingHash := func(t *testing.T, secretsDir string) string {
 		t.Helper()
-		hash, err := clusterInstallDesiredHash(state, cluster, secretsDir)
+		hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
 		if err != nil {
 			t.Fatalf("clusterInstallDesiredHash: %v", err)
 		}

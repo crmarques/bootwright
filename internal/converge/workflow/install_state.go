@@ -467,10 +467,6 @@ func clusterInstallPhaseMayHaveBooted(phase ClusterInstallPhase) bool {
 	}
 }
 
-func clusterInstallDesiredHash(state v1alpha1.State, clusterName, secretsDir string) (string, error) {
-	return clusterInstallDesiredHashForContext("test", state, clusterName, secretsDir)
-}
-
 func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
 	contextName = effectiveContextName(contextName)
 	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})

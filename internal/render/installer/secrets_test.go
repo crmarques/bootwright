@@ -162,7 +162,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 		},
 	}
 
-	secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+	secrets, err := LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
 	if err != nil {
 		t.Fatalf("LoadInstallerSecrets: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 		},
 	}
 
-	secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+	secrets, err := LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
 	if err != nil {
 		t.Fatalf("LoadInstallerSecrets: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 		},
 	}
 
-	secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+	secrets, err := LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
 	if err != nil {
 		t.Fatalf("LoadInstallerSecrets: %v", err)
 	}

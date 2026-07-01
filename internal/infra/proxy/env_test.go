@@ -81,7 +81,7 @@ func TestResolveProxyEnvHonorsProxyForNone(t *testing.T) {
 		},
 	}}}
 
-	got, err := resolveProxyEnv(state, t.TempDir())
+	got, err := ResolveEnvForContext("test", state, t.TempDir())
 	if err != nil {
 		t.Fatalf("resolveProxyEnv: %v", err)
 	}

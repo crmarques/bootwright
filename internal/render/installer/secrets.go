@@ -38,10 +38,6 @@ type InstallerUserPass struct {
 	Password string
 }
 
-func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) (InstallerSecrets, error) {
-	return LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
-}
-
 func LoadInstallerSecretsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) (InstallerSecrets, error) {
 	env := stateview.Environment(state)
 	resolver := secret.NewResolver(contextName, secretsDir, env)

@@ -77,10 +77,6 @@ func newSecretListCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretListEntry, error) {
-	return declaredSecretEntriesForContext("test", secretsDir, state)
-}
-
 func declaredSecretEntriesForContext(contextName, secretsDir string, state v1alpha1.State) ([]secretListEntry, error) {
 	env := stateview.Environment(state)
 	if env == nil || len(env.Spec.Secrets) == 0 {

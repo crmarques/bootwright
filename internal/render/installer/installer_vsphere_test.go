@@ -102,7 +102,7 @@ func TestLoadInstallerSecretsResolvesVSphereCredentials(t *testing.T) {
 	state := vsphereInstallerTestState()
 	ocp := state.ContainerClusters[0]
 
-	secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+	secrets, err := LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
 	if err != nil {
 		t.Fatalf("LoadInstallerSecrets: %v", err)
 	}

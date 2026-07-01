@@ -2233,7 +2233,7 @@ func TestSecretListReportsUnreadableFileAsFailedEntry(t *testing.T) {
 			},
 		}},
 	}
-	entries, err := declaredSecretEntries(filepath.Join(dir, "context-secrets"), state)
+	entries, err := declaredSecretEntriesForContext("test", filepath.Join(dir, "context-secrets"), state)
 	if err != nil {
 		t.Fatalf("declaredSecretEntries: %v", err)
 	}
