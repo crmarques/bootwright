@@ -7,10 +7,6 @@ from urllib.parse import urlsplit
 _MAC_RE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
 
-def bootwright_redfish_action_targets(resource, action_name):
-    return [action["target"] for action in bootwright_redfish_action_descriptors(resource, action_name)]
-
-
 def bootwright_redfish_url(ref, base_url):
     ref_text = _string(ref).strip()
     if not ref_text:
@@ -335,8 +331,6 @@ class FilterModule:
     def filters(self):
         return {
             "bootwright_redfish_action_descriptors": bootwright_redfish_action_descriptors,
-            "bootwright_redfish_action_targets": bootwright_redfish_action_targets,
-            "bootwright_redfish_ethernet_macs": bootwright_redfish_ethernet_macs,
             "bootwright_redfish_mac_validation": bootwright_redfish_mac_validation,
             "bootwright_redfish_url": bootwright_redfish_url,
             "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,

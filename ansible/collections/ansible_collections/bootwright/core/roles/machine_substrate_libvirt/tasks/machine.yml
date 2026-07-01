@@ -1,20 +1,7 @@
 ---
-- name: Resolve cluster libvirt network from the machine network config
-  ansible.builtin.set_fact:
-    bootwright_libvirt_network: >-
-      {{
-        (bootwright_current_cluster.networks
-         | selectattr('name', 'equalto', bootwright_component.networkConfig.ref)
-         | first)
-      }}
-  changed_when: false
-
 - name: Resolve libvirt machine identifiers
   ansible.builtin.set_fact:
-    bootwright_libvirt_bridge: "{{ bootwright_component.networkAttachment.libvirt.bridge }}"
     bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
-    bootwright_libvirt_network_uuid: "{{ (bootwright_current_cluster.name ~ '-net') | to_uuid }}"
-    bootwright_libvirt_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt"
     bootwright_libvirt_machine_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt/machines/{{ bootwright_component.name }}"
     bootwright_libvirt_storage_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters/{{ bootwright_current_cluster.name }}/machines/{{ bootwright_component.name }}"
     bootwright_libvirt_domain_uuid: "{{ (bootwright_current_cluster.name ~ '-' ~ bootwright_component.name) | to_uuid }}"

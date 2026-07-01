@@ -1,6 +1,0 @@
----
-- name: Prepare libvirt network
-  ansible.builtin.include_tasks: network.yml
-
-- name: Apply libvirt machine
-  ansible.builtin.include_tasks: machine.yml

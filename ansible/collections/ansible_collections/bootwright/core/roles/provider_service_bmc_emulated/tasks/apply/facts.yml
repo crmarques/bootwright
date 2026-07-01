@@ -2,7 +2,6 @@
 - name: Resolve BMC emulator parameters
   ansible.builtin.set_fact:
     bootwright_bmc_provider_name: "{{ bootwright_component.providerName }}"
-    bootwright_bmc_protocol: "{{ bootwright_component.bmcEmulated.protocol }}"
     bootwright_bmc_libvirt_uri: "{{ bootwright_component.bmcEmulated.libvirtURI }}"
     bootwright_bmc_bind: "{{ bootwright_component.bmcEmulated.bindAddress }}"
     bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"

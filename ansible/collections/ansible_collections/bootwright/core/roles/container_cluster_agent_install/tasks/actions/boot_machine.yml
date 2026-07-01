@@ -28,24 +28,10 @@
       when: bootwright_agent_node_machine_name is defined
       changed_when: false
 
-    - name: Resolve selected machine from task variable
-      ansible.builtin.set_fact:
-        bootwright_boot_components: >-
-          {{
-            bootwright_current_cluster.components
-            | selectattr('kind', 'equalto', 'machines')
-            | selectattr('name', 'equalto', bootwright_task_machine_name)
-            | list
-          }}
-      when: bootwright_task_machine_name is defined
-      changed_when: false
-
     - name: Resolve selected machine from loop variable
       ansible.builtin.set_fact:
         bootwright_boot_components: "{{ [bootwright_component] }}"
-      when:
-        - bootwright_task_machine_name is not defined
-        - bootwright_component is defined
+      when: bootwright_component is defined
       changed_when: false
 
     - name: Assert selected machine exists
@@ -53,7 +39,7 @@
         that:
           - bootwright_boot_components | default([]) | length == 1
         fail_msg: >-
-          Could not resolve machine {{ bootwright_agent_node_machine_name | default(bootwright_task_machine_name | default('<unset>')) }}
+          Could not resolve machine {{ bootwright_agent_node_machine_name | default('<unset>') }}
           for cluster {{ bootwright_current_cluster.name }}.
 
     - name: Set selected machine component

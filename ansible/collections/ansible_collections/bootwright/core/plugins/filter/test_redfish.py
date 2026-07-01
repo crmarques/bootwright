@@ -15,7 +15,6 @@ _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 
 bootwright_redfish_action_descriptors = _module.bootwright_redfish_action_descriptors
-bootwright_redfish_action_targets = _module.bootwright_redfish_action_targets
 bootwright_redfish_ethernet_macs = _module.bootwright_redfish_ethernet_macs
 bootwright_redfish_mac_validation = _module.bootwright_redfish_mac_validation
 bootwright_redfish_power_on_reset_type = _module.bootwright_redfish_power_on_reset_type
@@ -73,10 +72,6 @@ class RedfishActionDescriptors(unittest.TestCase):
                     "vendor": "VendorA",
                 },
             ],
-        )
-        self.assertEqual(
-            bootwright_redfish_action_targets(resource, "#VirtualMedia.VmmControl"),
-            ["/top/oem/vmm", "/vendor-a/vmm"],
         )
 
     def test_ignores_missing_or_invalid_targets(self):
@@ -402,8 +397,6 @@ class FilterRegistration(unittest.TestCase):
     def test_filter_module_exposes_filter(self):
         registered = _module.FilterModule().filters()
         self.assertIn("bootwright_redfish_action_descriptors", registered)
-        self.assertIn("bootwright_redfish_action_targets", registered)
-        self.assertIn("bootwright_redfish_ethernet_macs", registered)
         self.assertIn("bootwright_redfish_mac_validation", registered)
         self.assertIn("bootwright_redfish_url", registered)
         self.assertIn("bootwright_redfish_vmedia_attached", registered)
@@ -411,11 +404,6 @@ class FilterRegistration(unittest.TestCase):
         self.assertIs(
             registered["bootwright_redfish_action_descriptors"],
             bootwright_redfish_action_descriptors,
-        )
-        self.assertIs(registered["bootwright_redfish_action_targets"], bootwright_redfish_action_targets)
-        self.assertIs(
-            registered["bootwright_redfish_ethernet_macs"],
-            bootwright_redfish_ethernet_macs,
         )
         self.assertIs(
             registered["bootwright_redfish_mac_validation"],
