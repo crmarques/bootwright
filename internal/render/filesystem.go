@@ -10,9 +10,14 @@ import (
 // File modes for everything the renderer writes. Rendered directories and
 // runtime work dirs are owner-only because they hold rendered install-config
 // copies; the YAML files themselves are written 0600 for the same reason.
+// Generated apply scripts are the one exception: they carry no secret material
+// (secret-bearing command output is redacted) and are meant to be executed, so
+// they are written executable. The owner-only parent directory still gates
+// access, so the world bits are inert.
 const (
-	localDirMode  os.FileMode = 0o700
-	localFileMode os.FileMode = 0o600
+	localDirMode    os.FileMode = 0o700
+	localFileMode   os.FileMode = 0o600
+	localScriptMode os.FileMode = 0o755
 )
 
 // FileSystem is the side-effect surface render uses to materialize

@@ -219,7 +219,7 @@ func printToolInputArtifacts(stdout io.Writer, result render.Result, installerLa
 	}
 	var storagePaths []string
 	for _, asset := range result.StorageAssets {
-		storagePaths = appendNonEmpty(storagePaths, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
+		storagePaths = appendNonEmpty(storagePaths, asset.ApplyScriptPath, asset.ApplyLibPath, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
 		for _, attachment := range asset.Attachments {
 			storagePaths = appendNonEmpty(storagePaths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
 		}
@@ -249,16 +249,24 @@ func printToolInputCommands(stdout io.Writer, result render.Result) {
 		p.CommandLine("create agent image ["+asset.ClusterName+"]", []string{"openshift-install", "agent", "create", "image", "--dir", asset.Dir})
 		p.CommandLine("wait for install complete ["+asset.ClusterName+"]", []string{"openshift-install", "agent", "wait-for", "install-complete", "--dir", asset.Dir, "--log-level", "info"})
 	}
-	if len(result.StorageAssets) > 0 {
-		p.Section("Storage commands")
+	hasStorageScript := false
+	for _, asset := range result.StorageAssets {
+		if asset.ApplyScriptPath != "" {
+			hasStorageScript = true
+			break
+		}
+	}
+	if hasStorageScript {
+		p.Section("Ceph apply (native CLIs)")
 	}
 	for _, asset := range result.StorageAssets {
-		if asset.BootstrapSpecPath == "" {
+		if asset.ApplyScriptPath == "" {
 			continue
 		}
-		p.CommandLine("bootstrap ceph ["+asset.StorageClusterName+"]", []string{"cephadm", "bootstrap", "--apply-spec", asset.BootstrapSpecPath, "--mon-ip", "<derived-bootstrap-mon-ip>"})
-		p.CommandLine("apply ceph core services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.CoreServicesSpecPath})
-		p.CommandLine("apply ceph operations ["+asset.StorageClusterName+"]", []string{"bootwright", "apply", "--stage", "clusters", "--clusters", asset.StorageClusterName, "--yes"})
-		p.CommandLine("apply ceph late services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.LateServicesSpecPath})
+		// The generated apply.sh subsumes cephadm bootstrap, the `ceph orch
+		// apply -i` service specs, and every imperative ceph/radosgw-admin/rbd
+		// object bootwright configures, in order. It reproduces the same target
+		// state as `bootwright apply` using only native CLIs.
+		p.CommandLine("apply ceph objects ["+asset.StorageClusterName+"]", []string{asset.ApplyScriptPath})
 	}
 }

@@ -17,7 +17,12 @@ type StorageAsset struct {
 	CoreServicesSpecPath string
 	LateServicesSpecPath string
 	OperationsPath       string
-	Attachments          []StorageAttachmentAsset
+	// ApplyScriptPath / ApplyLibPath are the generated native-CLI apply
+	// script and its helper library (managed clusters only). Running the
+	// script reproduces the same Ceph objects `bootwright apply` configures.
+	ApplyScriptPath string
+	ApplyLibPath    string
+	Attachments     []StorageAttachmentAsset
 }
 
 type StorageAttachmentAsset struct {
@@ -63,6 +68,8 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 			asset.CoreServicesSpecPath = filepath.Join(dir, "cephadm", "core-services.yaml")
 			asset.LateServicesSpecPath = filepath.Join(dir, "cephadm", "late-services.yaml")
 			asset.OperationsPath = filepath.Join(dir, "ceph", "operations.yaml")
+			asset.ApplyScriptPath = filepath.Join(dir, "apply.sh")
+			asset.ApplyLibPath = filepath.Join(dir, "lib.sh")
 		}
 		for _, attachment := range attachmentsByCluster[cluster.Metadata.Name] {
 			containerCluster := attachment.Binding.Spec.ClusterRef.Name
