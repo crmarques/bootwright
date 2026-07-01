@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/ownership"
 	secret "github.com/crmarques/bootwright/internal/secrets"
@@ -209,7 +210,7 @@ func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, paths 
 }
 
 func sshCommonArgs(knownHostsPath string) string {
-	return shellQuoteArgs([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownHostsPath})
+	return shellquote.QuoteWords([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownHostsPath})
 }
 
 func localmachineInventoryEntry() map[string]any {

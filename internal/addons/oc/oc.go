@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 )
 
 type OCRunner interface {
@@ -52,9 +54,9 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	}
 	if err != nil {
 		if logErr != nil {
-			return out, fmt.Errorf("run %s %s: %w: %s (also failed to append oc log %s: %v)", name, shellJoin(command), err, strings.TrimSpace(string(out)), r.LogPath, logErr)
+			return out, fmt.Errorf("run %s %s: %w: %s (also failed to append oc log %s: %v)", name, shellquote.Quote(command), err, strings.TrimSpace(string(out)), r.LogPath, logErr)
 		}
-		return out, fmt.Errorf("run %s %s: %w: %s", name, shellJoin(command), err, strings.TrimSpace(string(out)))
+		return out, fmt.Errorf("run %s %s: %w: %s", name, shellquote.Quote(command), err, strings.TrimSpace(string(out)))
 	}
 	if logErr != nil {
 		return stdout.Bytes(), fmt.Errorf("append oc log %s: %w", r.LogPath, logErr)
@@ -84,7 +86,7 @@ func appendLog(path, name string, args []string, input []byte, output []byte) er
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(file, "$ %s %s\n", name, shellJoin(args)); err != nil {
+	if _, err := fmt.Fprintf(file, "$ %s %s\n", name, shellquote.Quote(args)); err != nil {
 		_ = file.Close()
 		return err
 	}
@@ -113,22 +115,6 @@ func appendLog(path, name string, args []string, input []byte, output []byte) er
 		}
 	}
 	return file.Close()
-}
-
-func shellJoin(args []string) string {
-	parts := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "" {
-			parts = append(parts, "''")
-			continue
-		}
-		if strings.ContainsAny(arg, " \t\n'\"$`\\") {
-			parts = append(parts, "'"+strings.ReplaceAll(arg, "'", "'\\''")+"'")
-			continue
-		}
-		parts = append(parts, arg)
-	}
-	return strings.Join(parts, " ")
 }
 
 func WaitInterval(timeout time.Duration) time.Duration {
