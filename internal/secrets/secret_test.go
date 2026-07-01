@@ -164,38 +164,6 @@ func TestParseBMCCredentials(t *testing.T) {
 	}
 }
 
-func TestReadUserPasswordFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "credentials")
-	if err := os.WriteFile(path, []byte("admin:s3:cret\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	creds, err := ReadUserPasswordFile(path, "proxy credentials")
-	if err != nil {
-		t.Fatalf("ReadUserPasswordFile: %v", err)
-	}
-	if creds.Username != "admin" || creds.Password != "s3:cret" {
-		t.Fatalf("credentials = %q/%q, want admin/s3:cret", creds.Username, creds.Password)
-	}
-}
-
-func TestReadUserPasswordFileAddsPathContext(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "credentials")
-	if err := os.WriteFile(path, []byte("admin\nother"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err := ReadUserPasswordFile(path, "proxy credentials")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	for _, want := range []string{"proxy credentials", path, "single username:password"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error %q does not contain %q", err, want)
-		}
-	}
-}
-
 func TestValidateBMCUsername(t *testing.T) {
 	bad := []string{"", "user:name", "user name", "user\tname", "user\nname"}
 	for _, in := range bad {

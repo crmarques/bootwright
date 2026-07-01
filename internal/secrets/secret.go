@@ -48,37 +48,9 @@ type UserPassword struct {
 	Password string
 }
 
-func ReadUserPasswordFile(path, kind string) (UserPassword, error) {
-	return readUserPasswordFile(path, kind, ReadFile)
-}
-
-func readUserPasswordFile(path, kind string, read func(string) ([]byte, error)) (UserPassword, error) {
-	if path == "" {
-		return UserPassword{}, fmt.Errorf("%s path is empty", kind)
-	}
-	data, err := read(path)
-	if err != nil {
-		return UserPassword{}, fmt.Errorf("read %s at %s: %w", kind, path, err)
-	}
-	username, password, err := ParseBMCCredentials(data)
-	if err != nil {
-		return UserPassword{}, fmt.Errorf("%s at %s: %w", kind, path, err)
-	}
-	return UserPassword{Username: username, Password: password}, nil
-}
-
 func ReadExternalFile(path string) ([]byte, error) {
 	if data, ok, err := callerio.ReadFile(path); ok {
 		return data, err
-	}
-	return os.ReadFile(path)
-}
-
-func ReadFile(path string) ([]byte, error) {
-	if pathUsesCaller(path) {
-		if data, ok, err := callerio.ReadFile(path); ok {
-			return data, err
-		}
 	}
 	return os.ReadFile(path)
 }

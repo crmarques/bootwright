@@ -71,60 +71,6 @@ func TestValidatePullSecret(t *testing.T) {
 	}
 }
 
-func TestReadUserPassFile(t *testing.T) {
-	cases := []struct {
-		name        string
-		content     string
-		wantUser    string
-		wantPass    string
-		wantErrPart string
-	}{
-		{name: "happy path", content: "alice:s3cret", wantUser: "alice", wantPass: "s3cret"},
-		{name: "trailing newline ok", content: "alice:s3cret\n", wantUser: "alice", wantPass: "s3cret"},
-		{name: "password with colon", content: "alice:s3:cret", wantUser: "alice", wantPass: "s3:cret"},
-		{name: "empty", content: "", wantErrPart: "is empty"},
-		{name: "no colon", content: "alice", wantErrPart: "single username:password"},
-		{name: "empty user", content: ":pass", wantErrPart: "single username:password"},
-		{name: "empty pass", content: "alice:", wantErrPart: "single username:password"},
-		{name: "two lines", content: "alice:pass\nbob:other", wantErrPart: "single username:password"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, "creds")
-			if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
-				t.Fatalf("write fixture: %v", err)
-			}
-			got, err := readUserPassFile(path, "credential")
-			if tc.wantErrPart != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got user=%q pass=%q", tc.wantErrPart, got.Username, got.Password)
-				}
-				if !strings.Contains(err.Error(), tc.wantErrPart) {
-					t.Fatalf("error %q missing substring %q", err, tc.wantErrPart)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got.Username != tc.wantUser || got.Password != tc.wantPass {
-				t.Fatalf("user/pass got %q/%q, want %q/%q", got.Username, got.Password, tc.wantUser, tc.wantPass)
-			}
-		})
-	}
-}
-
-func TestReadUserPassFileMissingFile(t *testing.T) {
-	_, err := readUserPassFile("/nonexistent/credential", "credential")
-	if err == nil {
-		t.Fatal("expected error for missing file")
-	}
-	if !strings.Contains(err.Error(), "/nonexistent/credential") {
-		t.Fatalf("error %q missing the path", err)
-	}
-}
-
 func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 	secretsDir := t.TempDir()
 	writeEncryptedSecret(t, secretsDir, "pull", secretstore.MaterialPrimary, `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`)

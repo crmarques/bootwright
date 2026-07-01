@@ -285,14 +285,6 @@ type userPass struct {
 	Password string
 }
 
-func readUserPassFile(path, kind string) (userPass, error) {
-	creds, err := secret.ReadUserPasswordFile(path, kind)
-	if err != nil {
-		return userPass{}, err
-	}
-	return userPass{Username: creds.Username, Password: creds.Password}, nil
-}
-
 func readUserPassMaterial(resolver secret.Resolver, name string, role secret.MaterialRole, kind string) (userPass, error) {
 	creds, err := resolver.ReadUserPasswordMaterial(name, role, kind)
 	if err != nil {
