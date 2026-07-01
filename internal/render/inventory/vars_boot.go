@@ -35,6 +35,18 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha
 	return machineBootVarsWithISO(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName))
 }
 
+// sshReadinessVars is the shared post-boot readiness probe every substrate uses:
+// wait for the core user's ssh to answer on port 22.
+func sshReadinessVars() map[string]any {
+	return map[string]any{
+		"type": "ssh",
+		"ssh": map[string]any{
+			"user": "core",
+			"port": 22,
+		},
+	}
+}
+
 func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string) map[string]any {
 	provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
 	if !ok {
@@ -121,13 +133,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 			// share no such state, so they leave it unset (default false).
 			"vmediaColdInitRetry": true,
 		},
-		"readiness": map[string]any{
-			"type": "ssh",
-			"ssh": map[string]any{
-				"user": "core",
-				"port": 22,
-			},
-		},
+		"readiness": sshReadinessVars(),
 		"agentIso": map[string]any{
 			"stageHost": machineRef,
 			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
@@ -156,13 +162,7 @@ func vsphereBootVars(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.Machi
 	staging := vSphereISOStagingVars(spec, fd)
 	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/vsphere/%s/vmedia", m.Source.ProviderRef.Name)
 	return map[string]any{
-		"readiness": map[string]any{
-			"type": "ssh",
-			"ssh": map[string]any{
-				"user": "core",
-				"port": 22,
-			},
-		},
+		"readiness": sshReadinessVars(),
 		"agentIso": map[string]any{
 			"stageHost": "localhost",
 			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
@@ -196,14 +196,8 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server 
 	}
 
 	return map[string]any{
-		"redfish": redfish,
-		"readiness": map[string]any{
-			"type": "ssh",
-			"ssh": map[string]any{
-				"user": "core",
-				"port": 22,
-			},
-		},
+		"redfish":   redfish,
+		"readiness": sshReadinessVars(),
 		"agentIso": map[string]any{
 			"stageHost": stageHost,
 			"stagePath": stagePath,
