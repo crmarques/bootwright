@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -325,13 +324,13 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 // fields (the networks CIDRs) are rejected — one owner per fact.
 func validateStorageCephConfig(prefix string, config map[string]map[string]string) []string {
 	var errs []string
-	for _, section := range sortedStringKeys(config) {
+	for _, section := range sortedKeys(config) {
 		owner := fmt.Sprintf("%s[%s]", prefix, section)
 		if !validCephConfigSection(section) {
 			errs = append(errs, fmt.Sprintf("%s is not a valid ceph config section (accepted: global, mon, mgr, osd, mds, client, <type>.<id>, optionally with a /<mask> such as /class:ssd or /rack:r1)", owner))
 		}
 		options := config[section]
-		for _, key := range sortedStringKeys2(options) {
+		for _, key := range sortedKeys(options) {
 			keyOwner := fmt.Sprintf("%s.%s", owner, key)
 			if key == "" {
 				errs = append(errs, owner+" contains an empty option key")
@@ -381,24 +380,6 @@ func validCephConfigWho(who string) bool {
 		}
 	}
 	return false
-}
-
-func sortedStringKeys(m map[string]map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func sortedStringKeys2(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func validateStorageCephMgrModules(prefix string, modules []string) []string {

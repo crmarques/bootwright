@@ -389,7 +389,7 @@ func validateStorageGatewayConfig(prefix string, gw v1alpha1.StorageObjectGatewa
 	if clusterOK && cluster.Spec.Ceph != nil {
 		clusterSection = cluster.Spec.Ceph.Config["client.rgw."+gw.Spec.Ceph.ServiceID]
 	}
-	for _, key := range sortedStringKeys2(gw.Spec.Ceph.Config) {
+	for _, key := range sortedKeys(gw.Spec.Ceph.Config) {
 		owner := fmt.Sprintf("%s.%s", prefix, key)
 		if key == "rgw_frontend_port" {
 			errs = append(errs, owner+" is owned by spec.ceph.frontendPort; declare it there")

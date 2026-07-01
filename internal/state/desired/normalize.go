@@ -637,7 +637,7 @@ func clusterNodeProviderBinding(state v1alpha1.State, cluster v1alpha1.Container
 	return binding
 }
 
-func sortedKeys(set map[string]bool) []string {
+func sortedKeys[V any](set map[string]V) []string {
 	out := make([]string, 0, len(set))
 	for key := range set {
 		out = append(out, key)
