@@ -871,10 +871,14 @@ Rules:
 - `spec.type` is required and must be `olm` or `manifestSet`; the two
   arms are mutually exclusive.
 - `olm` requires `spec.olm` and must not set `manifestSet`.
-  `olm.namespace.name` is required; `olm.subscription` requires `name`,
-  `package`, `channel`, `source`, `sourceNamespace`, and `installPlanApproval`;
-  `installPlanApproval` accepts `Automatic` or `Manual`. Each
-  `olm.customResources[]` entry requires `apiVersion`, `kind`, and
+  `olm.namespace.name` is required; optional `olm.namespace.create` and
+  `olm.namespace.labels` control namespace creation and labels. Optional
+  `olm.operatorGroup` sets the OperatorGroup `name` and `targetNamespaces[]`.
+  `olm.subscription` requires `name`, `package`, `channel`, and `source`;
+  `sourceNamespace` defaults to `openshift-marketplace` and `installPlanApproval`
+  defaults to `Automatic` (both normalize-materialized; `installPlanApproval`
+  accepts `Automatic` or `Manual`), and optional `startingCSV` pins the initial
+  CSV. Each `olm.customResources[]` entry requires `apiVersion`, `kind`, and
   `metadata.name`; `metadata.namespace` is optional (omitted for cluster-scoped
   resources). Apply installs the namespace/OperatorGroup/Subscription, waits for
   the operator's CSV to reach `Succeeded`, then applies the custom resources.
@@ -893,12 +897,15 @@ Rules:
   accepts `csvSucceeded` (requires `namespace`, `subscription`), `condition`
   (requires `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
-- `spec.accepts.inputs[]` declare binding-scoped inputs; each schema property
-  sets exactly one of `refKind` (a known Bootwright kind) or `secret`. A
-  `dataFoundation` `storageExportAttachment` effect requires the schema to declare
-  exactly one property, literally named `exportRef`, with
-  `refKind: StorageExport` and listed in `required` — the attachment machinery
-  reads that exact value name.
+- `spec.accepts.inputs[]` declare binding-scoped inputs. Each input has a `name`,
+  an optional `schema` (`type`, `required[]`, and `properties` keyed by property
+  name, each property setting exactly one of `refKind` — a known Bootwright
+  kind — or `secret: true`), and optional `effects[]`. Each effect sets a `type`
+  and an optional `provider`; the only supported effect `type` is
+  `storageExportAttachment`, whose `provider` must be `dataFoundation`. A
+  `storageExportAttachment` effect requires the schema to declare exactly one
+  property, literally named `exportRef`, with `refKind: StorageExport` and listed
+  in `required` — the attachment machinery reads that exact value name.
 
 ## ClusterAddonProfile
 
