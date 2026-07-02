@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+// TestOverrideReconfigureOnlyKindsMatchPublishedContract binds the code allowlist
+// to the reconfigure-vs-rebuild taxonomy published in the specs/state-model.md
+// --override CLI Contract (and docs/advanced/ownership-and-safety.md). A change to
+// the set must update that spec so the published consequence class never drifts
+// from what the destroy-protection gate actually enforces.
+func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
+	want := map[string]bool{
+		ApplyTaskKindProvider:               true,
+		ApplyTaskKindInfraComponentServices: true,
+		ApplyTaskKindNodeConfigApply:        true,
+		ApplyTaskKindHostVirtctl:            true,
+		ApplyTaskKindClusterAddon:           true,
+		ApplyTaskKindStorageAttachmentApply: true,
+	}
+	if len(overrideReconfigureOnlyKinds) != len(want) {
+		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --override taxonomy", len(overrideReconfigureOnlyKinds), len(want))
+	}
+	for kind := range want {
+		if !overrideReconfigureOnlyKinds[kind] {
+			t.Errorf("published reconfigure-only kind %q missing from overrideReconfigureOnlyKinds", kind)
+		}
+	}
+	for kind := range overrideReconfigureOnlyKinds {
+		if !want[kind] {
+			t.Errorf("overrideReconfigureOnlyKinds has unpublished kind %q; add it to the specs/state-model.md --override taxonomy", kind)
+		}
+	}
+}
+
 // preflightObjects builds a real object set from seeded converge-safety records so
 // the preflight is exercised through the same classification path apply uses.
 func preflightObjects(t *testing.T, runsDir string) []ObjectClassification {

@@ -121,11 +121,15 @@ existing resource lock, derives a non-secret desired hash and Bootwright owner
 identity, and writes a durable convergence-safety record. The records classifier
 compares that recorded evidence against current desired state into the four
 outcomes `state-check` reports (`missing`/`foreign`/`match`/`drift`; defined in
-the `state-model.md` CLI Contract); the classification is not itself an
-apply-time skip gate. Most provider-service and infra-component config tasks have no reliable
-external probe: they re-run and rely on idempotent execution, and their record is
-marked `unknown` (recorded but not classified) as durable evidence rather than an
-apply-time skip. Apply-time fail-closed gating lives at the concrete-probe sites.
+the `state-model.md` CLI Contract). A records-based apply-mode preflight uses that
+classification to fail closed on `drift` or `foreign` before any mutation, for
+every kind, so plain `apply` never silently reconciles drift; but the
+classification is not itself a per-task execution-time skip gate. Once a run
+proceeds (a clean run, or `--override`), most provider-service and infra-component
+config tasks have no reliable external probe: they re-run and rely on idempotent
+execution, and their record is marked `unknown` (recorded but not classified) as
+durable evidence rather than an apply-time skip. Execution-time skip-vs-fail
+decisions live at the concrete-probe sites.
 Cluster install reconcile reads per-cluster install records and probes live
 cluster availability, skips completed installs, resumes only from known-safe
 phases, and fails closed when install state exists for missing or different

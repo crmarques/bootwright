@@ -1127,12 +1127,23 @@ Rules:
   created — a foreign or co-resident cluster fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
+- `--override`'s consequence depends on the object kind, and this split gates
+  destroy protection (below). For the reconfigure-only kinds — provider host
+  services, infra-component services, node-config apply, per-host `virtctl`
+  provisioning, cluster add-ons, and storage-attachment apply — it is an
+  idempotent, non-destructive re-apply that touches no data, OS, or VM. For every
+  other kind — a managed-OS or substrate machine (reinstall; disks wiped) and a
+  container or storage cluster (reinstall / `cephadm rm-cluster --zap-osds`) — it
+  is a destructive rebuild. A kind is destructive unless it is on the
+  reconfigure-only allowlist, so a newly added kind fails safe.
 - When selected state contains `Environment.spec.safety.destroyProtection:
-  requiredOverride`, `apply --override` fails closed before any mutation rather
+  requiredOverride`, `apply --override` fails closed before any mutation when the
+  drift it would resolve is a destructive rebuild (a machine or cluster), rather
   than rebuilding protected resources: that destruction must cross the destroy
   authorization boundary, so the operator runs `destroy --override` for the
-  affected scope and then re-applies. Dry-run/plan still previews the override
-  plan.
+  affected scope and then re-applies. Drift confined to reconfigure-only kinds is
+  an in-place re-apply and does not trip the protection gate. Dry-run/plan still
+  previews the override plan.
 - `bootwright host trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
   runs never record trust on first use, so pipelines record it with `host

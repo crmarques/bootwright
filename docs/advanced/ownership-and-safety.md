@@ -58,15 +58,27 @@ hosts:
 | --- | --- | --- |
 | `missing` | No record exists | Create it |
 | `match` | Recorded desired hash equals current | Skip (when a concrete probe supports it) |
-| `drift` | Recorded desired hash differs | Fail closed — needs `--override` to rebuild |
+| `drift` | Recorded desired hash differs | Fail closed — needs `--override` (config-only kinds re-apply in place; machines/clusters rebuild destructively) |
 | `foreign` | Record carries a non-Bootwright owner | Fail closed — never touched |
 
+Under `--override`, the consequence depends on the object kind: for the
+reconfigure-only kinds (provider host services, infra-component services,
+node-config apply, per-host `virtctl`, cluster add-ons, storage-attachment apply)
+it is an idempotent in-place re-apply that touches no data, OS, or VM; for a
+machine (managed-OS reinstall, disks wiped) or a container/storage cluster
+(reinstall / `cephadm rm-cluster --zap-osds`) it is a destructive rebuild. Only
+the destructive kinds cross the destroy-protection boundary (below).
+
 !!! warning "Classification is not a blanket skip gate"
-    Many provider-service and component-config tasks have no reliable external
-    probe, so they **re-run and rely on idempotent execution** rather than being
-    skipped — their record is durable evidence, not a skip decision. Fail-closed
-    *gating* lives only at concrete-probe sites: cluster install records, add-on
-    records, managed-OS markers, provider metadata, and storage comparisons.
+    Before any mutation, a records-based apply-mode preflight fails closed when
+    any selected object is `drift` or `foreign`, for **every** kind — so plain
+    `apply` never silently reconciles drift. Once a run proceeds (a clean run, or
+    `--override`), execution-time behavior differs by task: many provider-service
+    and component-config tasks have no reliable external probe, so they **re-run
+    and rely on idempotent execution** rather than being skipped — their record is
+    durable evidence, not a skip decision. Concrete-probe sites — cluster install
+    records, add-on records, managed-OS markers, provider metadata, and storage
+    comparisons — decide skip-vs-fail against live state.
     Cluster install reconcile reads the per-cluster install record, probes live
     cluster availability, skips completed installs, resumes only from known-safe
     phases, and refuses to proceed when install state exists for different inputs
