@@ -194,6 +194,44 @@ func TestContainerClusterNetworkingValidation(t *testing.T) {
 	}
 }
 
+func TestMachineInstallIPOutsideNetworkRejected(t *testing.T) {
+	interfaceAddrConfig := `  network:
+    config:
+      networkConfigRef: cluster-net
+      attachmentRef: cluster-net
+      interfaceAddresses:
+        - { interface: primary, addressRef: ip, prefixLength: 24 }
+    interfaceBinding:
+      - nicRef: primary
+        interfaceName: primary
+`
+	cluster := strings.Replace(newClusterYAML, baselineMachineNetworkConfigYAML(), interfaceAddrConfig, 1)
+
+	// In-CIDR install IP validates: the containment check is not a false positive.
+	dirOK := t.TempDir()
+	okFiles := newBaselineFiles()
+	okFiles["cluster.yaml"] = cluster
+	writeFiles(t, dirOK, okFiles)
+	if _, err := LoadNormalizeValidate([]string{dirOK}); err != nil {
+		t.Fatalf("in-CIDR interfaceAddresses install IP should validate, got: %v", err)
+	}
+
+	// Off-CIDR install IP fails naming the machine, the interfaceAddresses entry,
+	// and the resolved address.
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(cluster, "{ name: ip, address: 192.168.132.20 }", "{ name: ip, address: 192.168.99.20 }", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected validation error for off-network install IP, got nil")
+	}
+	want := `resolves to 192.168.99.20, which is outside the selected NetworkConfig machine networks`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
 func TestValidationErrorReportsInvalidClusterCIDR(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -2521,6 +2559,26 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 `)
 			},
 			wantSubstring: `spec.install.endpoints.api.address "192.168.140.10" is outside selected NetworkConfig machine networks`,
+		},
+		{
+			name: "infracomponent-bind-address-outside-machine-network-rejected",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      source:
+        type: infraComponent
+        componentRef: control-plane
+    api-int:
+      source:
+        type: infraComponent
+        componentRef: control-plane
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
+`)
+				addLoadBalancerInfraComponent(files, "control-plane", "- address: 10.99.0.10\n")
+			},
+			wantSubstring: "source.bindAddressRef resolves to 10.99.0.10, which is outside selected NetworkConfig machine networks",
 		},
 		{
 			name: "invalid-source-rejected",

@@ -985,7 +985,15 @@ Rules:
   names against both kinds, so a name is declared by at most one cluster root
   across the two kinds (in addition to the per-kind duplicate rules).
 - Container cluster endpoints must resolve to valid addresses or valid
-  InfraComponent bind addresses.
+  InfraComponent bind addresses. When the cluster selects a machine network, a
+  resolved endpoint address — the direct `address` or the `infraComponent`
+  source's bind address — must fall inside a selected `NetworkConfig`
+  `machineNetwork[].cidr`; an out-of-network endpoint fails validation naming the
+  slot and value.
+- A machine's `interfaceAddresses`-resolved install IP must fall inside a
+  `machineNetwork[].cidr` of its selected `NetworkConfig`; an address outside
+  every machine network fails validation naming the `Machine`, the
+  `interfaceAddresses` entry, and the resolved IP.
 - Bare-metal boot requires BMC details and artifact access suitable for the
   configured boot method.
 - KubeVirt `hostClusterRef` dependencies must be acyclic. A cluster cannot

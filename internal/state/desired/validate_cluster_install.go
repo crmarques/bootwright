@@ -120,6 +120,7 @@ func validateClusterEndpoint(prefix string, ci v1alpha1.ClusterInstall, componen
 			errs = append(errs, prefix+".address must be empty when source.type=infraComponent; use source.bindAddressRef")
 		}
 		errs = append(errs, validateEndpointProvider(prefix, endpoint.Source, components)...)
+		errs = append(errs, validateEndpointBindAddressNetwork(prefix, ci, components, endpoint.Source, networkConfigs)...)
 	default:
 		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s}",
 			prefix, endpoint.Source.Type, v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
@@ -144,6 +145,51 @@ func validateEndpointAddressNetwork(prefix string, ci v1alpha1.ClusterInstall, n
 		errs = append(errs, fmt.Sprintf("%s %q matches multiple selected NetworkConfigs (%s)", prefix, address, joinSortedNames(matches)))
 	}
 	return errs
+}
+
+// validateEndpointBindAddressNetwork checks that an infraComponent-sourced
+// endpoint's resolved load-balancer bind address falls inside the cluster's
+// selected machine networks, the same containment rule direct endpoint addresses
+// already carry. Resolution errors are left to validateEndpointProvider.
+func validateEndpointBindAddressNetwork(prefix string, ci v1alpha1.ClusterInstall, components map[string]v1alpha1.InfraComponent, source v1alpha1.EndpointSource, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+	if !clusterInstallHasSelectedInstallNetwork(ci) {
+		return nil
+	}
+	component, ok := components[source.ComponentRef.Name]
+	if !ok || component.Spec.LoadBalancer == nil {
+		return nil
+	}
+	address := resolveLoadBalancerBindAddress(component, source.BindAddressRef.Name)
+	if address == "" {
+		return nil
+	}
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return nil
+	}
+	if len(endpointNetworkMatches(ci, networkConfigs, ip)) == 0 {
+		return []string{fmt.Sprintf("%s.source.bindAddressRef resolves to %s, which is outside selected NetworkConfig machine networks", prefix, address)}
+	}
+	return nil
+}
+
+func resolveLoadBalancerBindAddress(component v1alpha1.InfraComponent, ref string) string {
+	if component.Spec.LoadBalancer == nil {
+		return ""
+	}
+	binds := component.Spec.LoadBalancer.BindAddresses
+	if ref == "" {
+		if len(binds) == 1 {
+			return binds[0].Address
+		}
+		return ""
+	}
+	for _, bind := range binds {
+		if bind.Name == ref {
+			return bind.Address
+		}
+	}
+	return ""
 }
 
 func validateEndpointPrefixLength(prefix string, prefixLength int, ip net.IP) []string {

@@ -59,6 +59,41 @@ func cidrContainsIP(cidr string, ip net.IP) bool {
 	return false
 }
 
+// selectedMachineNetworkCIDRs returns the machineNetwork CIDRs of the
+// NetworkConfig a machine's network config selects (by ref or inline spec).
+func selectedMachineNetworkCIDRs(config v1alpha1.MachineNetworkConfig, networks map[string]v1alpha1.NetworkConfig) []string {
+	var cidrs []string
+	if config.NetworkConfigRef.Name != "" {
+		if n, ok := networks[config.NetworkConfigRef.Name]; ok {
+			for _, mn := range n.Spec.MachineNetwork {
+				cidrs = append(cidrs, mn.CIDR)
+			}
+		}
+	}
+	if config.Spec != nil {
+		for _, mn := range config.Spec.MachineNetwork {
+			cidrs = append(cidrs, mn.CIDR)
+		}
+	}
+	return cidrs
+}
+
+// addressInAnyCIDR reports whether address is contained by one of cidrs. A
+// malformed address returns true so the dedicated address-format check owns that
+// error rather than double-reporting it here.
+func addressInAnyCIDR(cidrs []string, address string) bool {
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return true
+	}
+	for _, cidr := range cidrs {
+		if cidrContainsIP(cidr, ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func networkInterfaceNames(config map[string]any) []string {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {

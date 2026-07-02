@@ -278,6 +278,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 		}
 	}
 	errs = append(errs, validateMachineInterfaceAddresses(prefix+".config.interfaceAddresses", machine, config)...)
+	errs = append(errs, validateMachineInstallIPInNetwork(prefix+".config.interfaceAddresses", machine, config, networks)...)
 	injects := machineConfigInterfaceAddresses(machine, config)
 	var effective map[string]any
 	if config.NetworkConfigRef.Name != "" {
@@ -343,6 +344,32 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 			errs = append(errs, fmt.Sprintf("%s.prefixLength %d out of range", owner, ia.PrefixLength))
 		case (ia.Family == "" || ia.Family == "ipv4") && ia.PrefixLength > 32:
 			errs = append(errs, fmt.Sprintf("%s.prefixLength %d out of IPv4 range", owner, ia.PrefixLength))
+		}
+	}
+	return errs
+}
+
+// validateMachineInstallIPInNetwork checks that each interfaceAddresses-resolved
+// install IP falls inside a machineNetwork CIDR of the selected NetworkConfig, so
+// a renumbered node that lands off its machine network fails at validate instead
+// of stalling the agent boot with an unreachable address.
+func validateMachineInstallIPInNetwork(prefix string, machine v1alpha1.Machine, config v1alpha1.MachineNetworkConfig, networks map[string]v1alpha1.NetworkConfig) []string {
+	cidrs := selectedMachineNetworkCIDRs(config, networks)
+	if len(cidrs) == 0 {
+		return nil
+	}
+	var errs []string
+	for i, ia := range config.InterfaceAddresses {
+		if ia.AddressRef.Name == "" {
+			continue
+		}
+		address, ok := v1alpha1.MachineAddressByName(machine, ia.AddressRef.Name)
+		if !ok || address == "" {
+			continue
+		}
+		if !addressInAnyCIDR(cidrs, address) {
+			errs = append(errs, fmt.Sprintf("%s[%d].addressRef %q resolves to %s, which is outside the selected NetworkConfig machine networks {%s}",
+				prefix, i, ia.AddressRef.Name, address, strings.Join(cidrs, ", ")))
 		}
 	}
 	return errs
