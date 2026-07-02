@@ -220,12 +220,9 @@
         mode: "0700"
       when: bootwright_os_install_iso_rebuild_needed | bool
 
-    # mkksiso repacks the whole source ISO, so each build needs roughly the
-    # source size in scratch space under its TMPDIR on top of the retained
-    # output ISO. Bare-metal/API-native machines collapse onto the controller,
-    # so an un-throttled group runs N repacks at once and peaks at N x source
-    # size of transient scratch. throttle holds it to one build at a time: the
-    # output ISOs are unavoidably per-machine, but the scratch peak stays at one.
+    # The source ISO is shared, but Kickstart, TMPDIR, and output ISO are
+    # per-machine, so these builds can fan out under the task's Ansible forks.
+    # Each active build still needs roughly one source ISO of scratch space.
     - name: Build managed OS install ISO
       ansible.builtin.command:
         argv:
@@ -239,7 +236,6 @@
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
       changed_when: true
-      throttle: 1
       when:
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
@@ -259,7 +255,6 @@
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
       changed_when: true
-      throttle: 1
       when:
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0

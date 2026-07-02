@@ -407,6 +407,9 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 			t.Fatalf("%s environment %s got %v, want bootwright_os_install_tmpdir", tasks[buildISOIdx]["name"], key, got)
 		}
 	}
+	if got, ok := tasks[buildISOIdx]["throttle"]; ok {
+		t.Fatalf("%s must use managed-OS host fanout instead of task throttle, got throttle=%v", tasks[buildISOIdx]["name"], got)
+	}
 	if got := tasks[buildISOWithCmdlineIdx]["when"]; !stringListContains(got, "bootwright_os_install_iso_rebuild_needed | bool") || !stringListContains(got, "(bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0") {
 		t.Fatalf("%s must run only when rebuild is needed and kernel args are present, got when=%v", tasks[buildISOWithCmdlineIdx]["name"], got)
 	}
@@ -427,6 +430,9 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		if got := buildWithCmdlineEnv[key]; got != "{{ bootwright_os_install_tmpdir }}" {
 			t.Fatalf("%s environment %s got %v, want bootwright_os_install_tmpdir", tasks[buildISOWithCmdlineIdx]["name"], key, got)
 		}
+	}
+	if got, ok := tasks[buildISOWithCmdlineIdx]["throttle"]; ok {
+		t.Fatalf("%s must use managed-OS host fanout instead of task throttle, got throttle=%v", tasks[buildISOWithCmdlineIdx]["name"], got)
 	}
 	if findAnsibleTaskIndex(tasks, "Stage managed OS install ISO for virtual media") >= 0 {
 		t.Fatalf("Anaconda role must not stage install.iso with ansible.builtin.copy")
