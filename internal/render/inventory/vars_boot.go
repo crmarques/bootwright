@@ -2,11 +2,13 @@ package inventory
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/render/installer"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -135,9 +137,10 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 		},
 		"readiness": sshReadinessVars(),
 		"agentIso": map[string]any{
-			"stageHost": machineRef,
-			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
-			"fetchUrl":  fmt.Sprintf("http://127.0.0.1:%d/%s/%s", vMediaPort, agentISOPublishTokenExpr, isoBasename),
+			"stageHost":        machineRef,
+			"stagePath":        fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
+			"fetchUrl":         fmt.Sprintf("http://127.0.0.1:%d/%s/%s", vMediaPort, agentISOPublishTokenExpr, isoBasename),
+			"transferProtocol": "HTTP",
 		},
 		"media": map[string]any{
 			"libvirt": map[string]any{
@@ -174,7 +177,8 @@ func vsphereBootVars(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.Machi
 func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server v1alpha1.Machine, isoBasename string) map[string]any {
 	bmc := server.Spec.Hardware.Management.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
-	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, ci, isoBasename)
+	stageHost, stagePath, fetchURL, fetchBase := baremetalAgentISOTarget(state, ci, isoBasename)
+	origin, _ := url.Parse(fetchBase)
 
 	redfish := map[string]any{
 		"baseUrl":        baseURL,
@@ -188,36 +192,58 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server 
 	// schema changed (bmc.virtualMedia.tls). Provider defaults are merged onto the
 	// machine in Normalize, so this reads one effective value.
 	if vm := bmc.VirtualMedia; vm != nil && vm.TLS != nil {
-		redfish["artifactCertificate"] = map[string]any{
+		certificate := map[string]any{
 			"ignoreVerification": !vm.TLS.VerifyEnabled(),
 			"import":             vm.TLS.ImportServerCertificate,
 			"removeAfterBoot":    vm.TLS.RemoveServerCertificateAfterBoot,
 		}
+		if origin != nil && origin.Hostname() != "" {
+			certificate["host"] = origin.Hostname()
+			certificate["port"] = artifactCertificatePort(origin)
+		}
+		redfish["artifactCertificate"] = certificate
 	}
 
+	agentISO := map[string]any{
+		"stageHost": stageHost,
+		"stagePath": stagePath,
+		"fetchUrl":  fetchURL,
+	}
+	if origin != nil && origin.Scheme != "" {
+		agentISO["transferProtocol"] = strings.ToUpper(origin.Scheme)
+	}
 	return map[string]any{
 		"redfish":   redfish,
 		"readiness": sshReadinessVars(),
-		"agentIso": map[string]any{
-			"stageHost": stageHost,
-			"stagePath": stagePath,
-			"fetchUrl":  fetchURL,
-		},
+		"agentIso":  agentISO,
 	}
 }
 
-func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInstall, isoBasename string) (stageHost, stagePath, fetchURL string) {
+// artifactCertificatePort mirrors the scheme defaults the BMC uses for the
+// certificate fetch when the endpoint URL carries no explicit port.
+func artifactCertificatePort(origin *url.URL) string {
+	if port := origin.Port(); port != "" {
+		return port
+	}
+	if origin.Scheme == "http" {
+		return "80"
+	}
+	return "443"
+}
+
+func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInstall, isoBasename string) (stageHost, stagePath, fetchURL, fetchBase string) {
 	server, endpoint, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia)
 	if !ok {
-		return "", "", ""
+		return "", "", "", ""
 	}
+	fetchBase = installer.ArtifactServerEndpointURL(state, server, endpoint)
 	fetchURL = artifactEndpointFetchURL(state, server, endpoint, agentISOPublishTokenExpr, isoBasename)
 	if fetchURL == "" || server.Config == nil {
-		return "", "", fetchURL
+		return "", "", fetchURL, fetchBase
 	}
 	machineRef := server.Config.MachineRef.Name
 	stagePath = fmt.Sprintf("{{ bootwright_managed_services_dir }}/%s/public/%s/%s", server.Component.Metadata.Name, agentISOPublishTokenExpr, isoBasename)
-	return machineRef, stagePath, fetchURL
+	return machineRef, stagePath, fetchURL, fetchBase
 }
 
 func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) []any {

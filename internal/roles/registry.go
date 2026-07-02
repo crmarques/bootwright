@@ -20,6 +20,14 @@ type Dispatch struct {
 	BootRole      string
 }
 
+// ExternalBMC reports whether the dispatch targets an operator-owned external
+// BMC (bare-metal Redfish), as opposed to a Bootwright-managed emulated BMC or
+// no BMC at all. The renderer projects it so playbooks select probe targets
+// from this fact instead of comparing bmcRole labels.
+func (d Dispatch) ExternalBMC() bool {
+	return d.BMCRole == "redfish"
+}
+
 type RoleContract struct {
 	MachineSetupRoles    []string
 	SubstratePrepareRole string

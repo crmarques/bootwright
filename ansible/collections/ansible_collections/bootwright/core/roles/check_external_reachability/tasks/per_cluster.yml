@@ -10,7 +10,7 @@
       {{
         bootwright_validate_cluster.components
         | selectattr('kind', 'equalto', 'machines')
-        | selectattr('bmcRole', 'equalto', 'redfish')
+        | selectattr('externalBMC', 'defined')
         | selectattr('boot', 'defined')
         | list
       }}

@@ -185,6 +185,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"bootRole":      driver.Dispatch.BootRole,
 		"networkConfig": clusterMachineNetworkConfigVars(m.Network),
 	}
+	if driver.Dispatch.ExternalBMC() {
+		out["externalBMC"] = true
+	}
 	if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
 		out["networkAttachment"] = attachment
 	}

@@ -23,18 +23,19 @@
 
 # Bare metal carries no mediaPrepareRole, so the cleanup above is skipped and
 # the BMC virtual media would stay mapped (a lingering /dev/sr0). Eject it
-# directly through the Redfish boot role's cleanup_media action, mirroring the
-# agent-install post-install eject. boot_redfish reads bootwright_redfish_action.
-- name: Eject Redfish virtual media after SSH is ready
+# through the rendered cleanupMediaRole, mirroring the agent-install
+# post-install eject: the registry sets that role only for boot drivers that
+# own a cleanup_media action, so no boot backend is enumerated here.
+- name: Eject boot virtual media after SSH is ready
   ansible.builtin.include_role:
-    name: "{{ bootwright_component.bootApplyRole }}"
+    name: "{{ bootwright_component.cleanupMediaRole }}"
   vars:
     bootwright_component: "{{ bootwright_managed_os_boot_component }}"
     bootwright_redfish_action: cleanup_media
   when:
     - bootwright_managed_os_boot_component is defined
     - (bootwright_component.mediaPrepareRole | default('') | length) == 0
-    - (bootwright_component.bootApplyRole | default('')) == 'bootwright.core.container_cluster_boot_redfish'
+    - (bootwright_component.cleanupMediaRole | default('') | length) > 0
 
 - name: Record managed OS SSH host key
   ansible.builtin.include_tasks: ssh_trust.yml

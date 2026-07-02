@@ -16,8 +16,8 @@
 # supplied role-wide by the module_defaults block in tasks/main.yml.
 - name: Resolve artifact server certificate source
   ansible.builtin.set_fact:
-    bootwright_redfish_artifact_cert_host: "{{ bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('hostname') }}"
-    bootwright_redfish_artifact_cert_port: "{{ (bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('port')) | default('443', true) }}"
+    bootwright_redfish_artifact_cert_host: "{{ bootwright_component.boot.redfish.artifactCertificate.host }}"
+    bootwright_redfish_artifact_cert_port: "{{ bootwright_component.boot.redfish.artifactCertificate.port }}"
   changed_when: false
 
 # Read the artifact server's leaf TLS certificate straight off the live HTTPS

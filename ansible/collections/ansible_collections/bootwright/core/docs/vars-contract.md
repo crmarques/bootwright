@@ -89,6 +89,9 @@ bootwright_clusters:
         substrateRole: libvirt
         bmcRole: emulated
         bootRole: redfish
+        externalBMC: true       # only on operator-owned external BMCs (bare-metal
+                                # Redfish); reachability checks select probe
+                                # targets from this fact, never from bmcRole
         substratePrepareRole: bootwright.core.machine_substrate_libvirt
         substratePrepareFrom: network
         substrateApplyRole: bootwright.core.machine_substrate_libvirt
@@ -133,9 +136,13 @@ bootwright_clusters:
           isoStaging: { datastore, folder }  # defaults applied by the renderer
           template: rhcos-template      # optional clone source; absent = blank create
         boot:
-          redfish: {}
-          agentIso: {}        # vsphere machines: stageHost is localhost and
-                              # fetchUrl is the "[datastore] path" attach target
+          redfish: {}         # bare-metal artifactCertificate additionally carries
+                              # host/port (the artifact endpoint origin) so the
+                              # certificate import never re-parses fetchUrl
+          agentIso: {}        # HTTP-fetched media carries transferProtocol
+                              # (HTTP | HTTPS, renderer-derived); vsphere machines:
+                              # stageHost is localhost and fetchUrl is the
+                              # "[datastore] path" attach target with no protocol
           readiness: {}       # ssh (cluster flow) or none (managed OS)
           media:
             libvirt: {}         # consumed only by bootwright.core.container_cluster_media_libvirt

@@ -163,7 +163,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
-	baremetalEjectIdx := findAnsibleTask(t, topTasks, "Eject Redfish virtual media after SSH is ready")
+	baremetalEjectIdx := findAnsibleTask(t, topTasks, "Eject boot virtual media after SSH is ready")
 	recordHostKeyIdx := findAnsibleTask(t, topTasks, "Record managed OS SSH host key")
 	verifySSHIdx := findAnsibleTask(t, topTasks, "Verify managed OS SSH authentication")
 	writeMarkerIdx := findAnsibleTask(t, topTasks, "Write managed OS install marker")
@@ -198,9 +198,10 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		t.Fatalf("%s must clean resolved managed OS media, got vars=%v", topTasks[cleanupMediaIdx]["name"], cleanupVars)
 	}
 	// Bare metal has no mediaPrepareRole, so the cleanup above is skipped; the
-	// install role must still eject the BMC virtual media via the boot role's
-	// cleanup_media action or it lingers as a /dev/sr0.
-	assertIncludeRoleName(t, topTasks[baremetalEjectIdx], "{{ bootwright_component.bootApplyRole }}")
+	// install role must still eject the BMC virtual media through the rendered
+	// cleanupMediaRole (never a hard-coded boot role name) or it lingers as a
+	// /dev/sr0.
+	assertIncludeRoleName(t, topTasks[baremetalEjectIdx], "{{ bootwright_component.cleanupMediaRole }}")
 	baremetalVars, ok := topTasks[baremetalEjectIdx]["vars"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx])
@@ -208,8 +209,12 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if baremetalVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || baremetalVars["bootwright_redfish_action"] != "cleanup_media" {
 		t.Fatalf("%s must eject resolved managed OS media via cleanup_media, got vars=%v", topTasks[baremetalEjectIdx]["name"], baremetalVars)
 	}
-	if got := fmt.Sprint(topTasks[baremetalEjectIdx]["when"]); !strings.Contains(got, "bootwright_managed_os_boot_component is defined") || !strings.Contains(got, "container_cluster_boot_redfish") || !strings.Contains(got, "mediaPrepareRole") {
-		t.Fatalf("%s must run only for boot_redfish machines without a mediaPrepareRole on the install run, got when=%v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx]["when"])
+	baremetalEjectWhen := fmt.Sprint(topTasks[baremetalEjectIdx]["when"])
+	if !strings.Contains(baremetalEjectWhen, "bootwright_managed_os_boot_component is defined") || !strings.Contains(baremetalEjectWhen, "cleanupMediaRole") || !strings.Contains(baremetalEjectWhen, "mediaPrepareRole") {
+		t.Fatalf("%s must run only for machines with a cleanupMediaRole and no mediaPrepareRole, got when=%v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx]["when"])
+	}
+	if strings.Contains(baremetalEjectWhen, "bootwright.core.") {
+		t.Fatalf("%s must not compare rendered role names, got when=%v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx]["when"])
 	}
 	validateSource, ok := topTasks[validateSourceIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {

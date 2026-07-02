@@ -1,7 +1,7 @@
 ---
 - name: Resolve virtual media transfer protocol
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_transfer_protocol: "{{ bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('scheme') | upper }}"
+    bootwright_redfish_vmedia_transfer_protocol: "{{ bootwright_component.boot.agentIso.transferProtocol }}"
   changed_when: false
 
 - name: Resolve redacted agent ISO fetch URL
