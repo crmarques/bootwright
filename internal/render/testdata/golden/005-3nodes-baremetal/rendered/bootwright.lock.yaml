@@ -1,0 +1,23 @@
+apiVersion: bootwright.io/v1alpha1
+components:
+    - name: ansible-core
+      version: 2.21.0
+      source: https://pypi.org/project/ansible-core/
+      lookupDate: "2026-05-31"
+    - name: pip
+      version: 26.1.1
+      source: https://pypi.org/project/pip/
+      lookupDate: "2026-05-21"
+    - name: go.yaml.in/yaml/v3
+      version: v3.0.4
+      source: https://go.yaml.in/yaml/v3
+      lookupDate: "2026-05-21"
+    - name: http
+      version: 1.29.8-alpine3.23
+      source: https://hub.docker.com/_/nginx
+      lookupDate: "2026-05-26"
+    - name: openshift-install
+      version: 4.21.15
+      source: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.15/
+      lookupDate: "2026-05-21"
+kind: BootwrightLock

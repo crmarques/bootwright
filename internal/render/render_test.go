@@ -25,10 +25,9 @@ const fixtureRoot = "../state/desired/testdata/good"
 // (effective-state, lock, inventory, vars) plus per-cluster install
 // assets, with the file modes the rest of the pipeline relies on.
 //
-// This is a smoke test rather than a golden test — Go map iteration is
-// nondeterministic and YAML marshal layout shifts between go.yaml.in
-// versions, so byte equality would be brittle. We instead assert
-// structural invariants the downstream Ansible layers depend on.
+// This test covers structural invariants across every fixture; byte-level
+// determinism and exact output are pinned per fixture by the golden files
+// in TestRenderGoldenFixtures (golden_test.go).
 func TestAllSucceedsForGoodFixtures(t *testing.T) {
 	entries, err := os.ReadDir(fixtureRoot)
 	if err != nil {
@@ -331,42 +330,6 @@ func TestAllTightensLooseRenderedDirMode(t *testing.T) {
 		t.Fatalf("render.All: %v", err)
 	}
 	assertDirMode(t, renderedDir, 0o700)
-}
-
-// TestAllIsStableAcrossRuns asserts render.All produces byte-identical
-// inventory/vars on a second invocation against the same state. This
-// is the floor for downstream determinism — Ansible artifact dirs and
-// the GitOps publish target both diff these files between runs.
-func TestAllIsStableAcrossRuns(t *testing.T) {
-	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
-	if err != nil {
-		t.Fatalf("LoadNormalizeValidate: %v", err)
-	}
-
-	first := t.TempDir()
-	second := t.TempDir()
-	secretsDir := t.TempDir()
-	a, err := render.All(first, t.TempDir(), secretsDir, state)
-	if err != nil {
-		t.Fatalf("first All: %v", err)
-	}
-	b, err := render.All(second, t.TempDir(), secretsDir, state)
-	if err != nil {
-		t.Fatalf("second All: %v", err)
-	}
-
-	for _, pair := range []struct {
-		label string
-		left  string
-		right string
-	}{
-		{"inventory", a.InventoryPath, b.InventoryPath},
-		{"vars", a.VarsPath, b.VarsPath},
-	} {
-		if !sameFile(t, pair.left, pair.right) {
-			t.Fatalf("%s output differs between runs:\n  %s\n  %s", pair.label, pair.left, pair.right)
-		}
-	}
 }
 
 func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {

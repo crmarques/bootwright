@@ -1,0 +1,35 @@
+apiVersion: bootwright.io/v1alpha1
+components:
+    - name: ansible-core
+      version: 2.21.0
+      source: https://pypi.org/project/ansible-core/
+      lookupDate: "2026-05-31"
+    - name: pip
+      version: 26.1.1
+      source: https://pypi.org/project/pip/
+      lookupDate: "2026-05-21"
+    - name: go.yaml.in/yaml/v3
+      version: v3.0.4
+      source: https://go.yaml.in/yaml/v3
+      lookupDate: "2026-05-21"
+    - name: sushy-tools
+      version: 2.2.0
+      source: https://pypi.org/project/sushy-tools/
+      lookupDate: "2026-05-21"
+    - name: haproxy
+      version: 3.3.10
+      source: https://hub.docker.com/_/haproxy
+      lookupDate: "2026-05-21"
+    - name: squid
+      version: 7.5-oe2403sp3
+      source: https://hub.docker.com/r/openeuler/squid
+      lookupDate: "2026-05-21"
+    - name: dnsmasq
+      version: 2.92_p2
+      source: https://hub.docker.com/r/dockurr/dnsmasq
+      lookupDate: "2026-05-21"
+    - name: openshift-install
+      version: 4.21.15
+      source: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.15/
+      lookupDate: "2026-05-21"
+kind: BootwrightLock

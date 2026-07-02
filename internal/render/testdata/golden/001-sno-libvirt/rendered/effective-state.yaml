@@ -1,0 +1,258 @@
+environments:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Environment
+      metadata:
+        name: sno-libvirt
+      spec:
+        baseDomain: bootwright.test
+        secretStorage:
+            mode: source
+        proxyFor:
+            bootwright: default
+            containerClusterInstall: default
+        infraComponents:
+            proxies:
+                - name: default
+                  management: managed
+                  componentRef: proxy
+            nameResolution:
+                - name: default
+                  management: managed
+                  componentRef: name-resolution
+            ntp:
+                - name: default
+                  management: managed
+                  componentRef: ntp-server
+                  endpointRef: cluster
+        secrets:
+            - bastion-host-ssh:
+                file: ~/.ssh/bootwright-ssh-key
+            - bmc-credentials:
+                generated:
+                    credentials:
+                        username: admin
+            - openshift-pull-secret
+            - proxy-credentials:
+                generated:
+                    credentials:
+                        username: proxy
+            - sno-libvirt-cluster-admin-ssh-key:
+                generated:
+                    sshKeyPair:
+                        type: ed25519
+                        comment: bootwright-sno-libvirt-cluster-admin
+machines:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Machine
+      metadata:
+        name: bastion
+      spec:
+        capabilities:
+            - container-runtime
+            - libvirt
+            - load-balancer
+            - proxy
+            - name-resolution
+            - ntp
+        os:
+            provided: true
+        addresses:
+            - name: ssh
+              address: localhost
+            - name: cluster-lan
+              address: 192.168.132.1
+        access:
+            ssh:
+                addressRef: ssh
+                keyRef: bastion-host-ssh
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Machine
+      metadata:
+        name: master-0
+      spec:
+        capabilities:
+            - openshift-node
+        substrate:
+            providerRef: lab-libvirt-provider
+            profileRef: sno
+        os:
+            provided: false
+            install:
+                rootDeviceHints:
+                    deviceName: /dev/vda
+        network:
+            config:
+                networkConfigRef: sno-bridge
+                attachmentRef: sno-bridge
+                interfaceAddresses:
+                    - interface: primary
+                      addressRef: ip
+                      prefixLength: 24
+        addresses:
+            - name: ip
+              address: 192.168.132.20
+networkConfigs:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: NetworkConfig
+      metadata:
+        name: sno-bridge
+      spec:
+        machineNetwork:
+            - cidr: 192.168.132.0/24
+        nameResolutionRefs:
+            - default
+        template:
+            networkConfig:
+                dns-resolver:
+                    config:
+                        server:
+                            - 192.168.132.1
+                interfaces:
+                    - ipv4:
+                        dhcp: false
+                        enabled: true
+                      ipv6:
+                        enabled: false
+                      name: primary
+                      state: up
+                      type: ethernet
+                routes:
+                    config:
+                        - destination: 0.0.0.0/0
+                          next-hop-address: 192.168.132.1
+                          next-hop-interface: primary
+                          table-id: 254
+infraProviders:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraProvider
+      metadata:
+        name: lab-libvirt-provider
+      spec:
+        type: libvirt
+        libvirt:
+            machineRef: bastion
+            uri: qemu:///system
+            bmcEmulationDefaults:
+                enabled: true
+                protocol: redfish
+                emulator: sushy-tools
+                bindAddress: 0.0.0.0
+                port: 8000
+                vMediaPort: 8001
+                auth:
+                    credentialsRef: bmc-credentials
+            machineProfiles:
+                - name: sno
+                  cpu: 8
+                  memoryMiB: 16384
+                  diskGiB: 120
+        networkAttachments:
+            - name: sno-bridge
+              libvirt:
+                bridge: vbr-cb-sno
+infraComponents:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraComponent
+      metadata:
+        name: load-balancer
+      spec:
+        type: loadBalancer
+        loadBalancer:
+            implementation: haproxy
+            machineRef: bastion
+            bindAddresses:
+                - name: control-plane
+                  address: 192.168.132.10
+                - name: apps
+                  address: 192.168.132.11
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraComponent
+      metadata:
+        name: name-resolution
+      spec:
+        type: nameResolution
+        nameResolution:
+            implementation: dnsmasq
+            machineRef: bastion
+            bindAddress: 192.168.132.1
+            port: 53
+            additionalIngressHosts:
+                - console-openshift-console.apps.sno-libvirt.bootwright.test
+                - oauth-openshift.apps.sno-libvirt.bootwright.test
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraComponent
+      metadata:
+        name: ntp-server
+      spec:
+        type: ntp
+        ntp:
+            implementation: chrony
+            machineRef: bastion
+            bindAddress: 192.168.132.1
+            port: 123
+            endpoints:
+                - name: cluster
+                  addressRef: cluster-lan
+            upstreamSources:
+                - time.bootwright.test
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraComponent
+      metadata:
+        name: proxy
+      spec:
+        type: proxy
+        proxy:
+            implementation: squid
+            machineRef: bastion
+            bindAddress: 0.0.0.0
+            port: 3128
+containerClusters:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: ContainerCluster
+      metadata:
+        name: sno-libvirt
+      spec:
+        distribution:
+            type: openshift
+            release:
+                version: 4.21.15
+        install:
+            method: agent
+            mode: connected
+            platform:
+                type: baremetal
+                baremetal:
+                    provisioningNetwork: disabled
+            endpoints:
+                api:
+                    source:
+                        type: infraComponent
+                        componentRef: load-balancer
+                        bindAddressRef: control-plane
+                api-int:
+                    source:
+                        type: infraComponent
+                        componentRef: load-balancer
+                        bindAddressRef: control-plane
+                ingress:
+                    source:
+                        type: infraComponent
+                        componentRef: load-balancer
+                        bindAddressRef: apps
+            pullSecretRef: openshift-pull-secret
+            nodeSSH:
+                keyPairRef: sno-libvirt-cluster-admin-ssh-key
+        controlPlane:
+            replicas: 1
+        compute:
+            - {}
+        networking:
+            clusterNetwork:
+                - cidr: 10.128.0.0/14
+                  hostPrefix: 23
+            serviceNetwork:
+                - 172.30.0.0/16
+        hosts:
+            - hostname: master-0
+              role: master
+              machineRef: master-0

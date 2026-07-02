@@ -1,0 +1,39 @@
+additionalNTPSources:
+    - 192.168.132.1
+apiVersion: v1beta1
+hosts:
+    - hostname: master-0
+      interfaces:
+        - macAddress: 52:54:00:16:3c:f8
+          name: primary
+      networkConfig:
+        dns-resolver:
+            config:
+                server:
+                    - 192.168.132.1
+        interfaces:
+            - ipv4:
+                address:
+                    - ip: 192.168.132.20
+                      prefix-length: 24
+                dhcp: false
+                enabled: true
+              ipv6:
+                enabled: false
+              mac-address: 52:54:00:16:3c:f8
+              name: primary
+              state: up
+              type: ethernet
+        routes:
+            config:
+                - destination: 0.0.0.0/0
+                  next-hop-address: 192.168.132.1
+                  next-hop-interface: primary
+                  table-id: 254
+      role: master
+      rootDeviceHints:
+        deviceName: /dev/vda
+kind: AgentConfig
+metadata:
+    name: sno-libvirt
+rendezvousIP: 192.168.132.20

@@ -1,0 +1,201 @@
+apiVersion: v1beta1
+hosts:
+    - hostname: master-0
+      interfaces:
+        - macAddress: 00:25:90:5a:10:01
+          name: eno1
+        - macAddress: 00:25:90:5a:10:02
+          name: eno2
+      networkConfig:
+        dns-resolver:
+            config:
+                server:
+                    - 192.168.10.53
+        interfaces:
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              mac-address: 00:25:90:5a:10:01
+              name: eno1
+              state: up
+              type: ethernet
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              mac-address: 00:25:90:5a:10:02
+              name: eno2
+              state: up
+              type: ethernet
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              link-aggregation:
+                mode: active-backup
+                options:
+                    miimon: "100"
+                port:
+                    - eno1
+                    - eno2
+              name: bond0
+              state: up
+              type: bond
+            - ipv4:
+                address:
+                    - ip: 192.168.140.20
+                      prefix-length: 24
+                dhcp: false
+                enabled: true
+              ipv6:
+                enabled: false
+              name: bond0.140
+              state: up
+              type: vlan
+              vlan:
+                base-iface: bond0
+                id: 140
+        routes:
+            config:
+                - destination: 0.0.0.0/0
+                  next-hop-address: 192.168.140.1
+                  next-hop-interface: bond0.140
+                  table-id: 254
+      role: master
+      rootDeviceHints:
+        deviceName: /dev/sda
+    - hostname: master-1
+      interfaces:
+        - macAddress: 00:25:90:5a:11:01
+          name: eno1
+        - macAddress: 00:25:90:5a:11:02
+          name: eno2
+      networkConfig:
+        dns-resolver:
+            config:
+                server:
+                    - 192.168.10.53
+        interfaces:
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              mac-address: 00:25:90:5a:11:01
+              name: eno1
+              state: up
+              type: ethernet
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              mac-address: 00:25:90:5a:11:02
+              name: eno2
+              state: up
+              type: ethernet
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              link-aggregation:
+                mode: active-backup
+                options:
+                    miimon: "100"
+                port:
+                    - eno1
+                    - eno2
+              name: bond0
+              state: up
+              type: bond
+            - ipv4:
+                address:
+                    - ip: 192.168.140.21
+                      prefix-length: 24
+                dhcp: false
+                enabled: true
+              ipv6:
+                enabled: false
+              name: bond0.140
+              state: up
+              type: vlan
+              vlan:
+                base-iface: bond0
+                id: 140
+        routes:
+            config:
+                - destination: 0.0.0.0/0
+                  next-hop-address: 192.168.140.1
+                  next-hop-interface: bond0.140
+                  table-id: 254
+      role: master
+      rootDeviceHints:
+        deviceName: /dev/sda
+    - hostname: master-2
+      interfaces:
+        - macAddress: 00:25:90:5a:12:01
+          name: eno1
+        - macAddress: 00:25:90:5a:12:02
+          name: eno2
+      networkConfig:
+        dns-resolver:
+            config:
+                server:
+                    - 192.168.10.53
+        interfaces:
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              mac-address: 00:25:90:5a:12:01
+              name: eno1
+              state: up
+              type: ethernet
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              mac-address: 00:25:90:5a:12:02
+              name: eno2
+              state: up
+              type: ethernet
+            - ipv4:
+                enabled: false
+              ipv6:
+                enabled: false
+              link-aggregation:
+                mode: active-backup
+                options:
+                    miimon: "100"
+                port:
+                    - eno1
+                    - eno2
+              name: bond0
+              state: up
+              type: bond
+            - ipv4:
+                address:
+                    - ip: 192.168.140.22
+                      prefix-length: 24
+                dhcp: false
+                enabled: true
+              ipv6:
+                enabled: false
+              name: bond0.140
+              state: up
+              type: vlan
+              vlan:
+                base-iface: bond0
+                id: 140
+        routes:
+            config:
+                - destination: 0.0.0.0/0
+                  next-hop-address: 192.168.140.1
+                  next-hop-interface: bond0.140
+                  table-id: 254
+      role: master
+      rootDeviceHints:
+        deviceName: /dev/sda
+kind: AgentConfig
+metadata:
+    name: 3-nodes-ocp-baremetal
+rendezvousIP: 192.168.140.20

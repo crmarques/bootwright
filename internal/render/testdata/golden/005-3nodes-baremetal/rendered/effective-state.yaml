@@ -1,0 +1,352 @@
+environments:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Environment
+      metadata:
+        name: 3-nodes-ocp-baremetal
+      spec:
+        baseDomain: bootwright.test
+        secretStorage:
+            mode: source
+        proxyFor:
+            bootwright: default
+            containerClusterInstall: default
+        infraComponents:
+            proxies:
+                - name: default
+                  management: external
+                  connection:
+                    httpProxy: http://proxy.bootwright.test:3128
+                    httpsProxy: http://proxy.bootwright.test:3128
+                    noProxy:
+                        - .bootwright.test
+                        - 192.168.140.0/24
+                    auth:
+                        proxyAuthRef: proxy-credentials
+            artifactServers:
+                - name: default
+                  management: managed
+                  componentRef: artifact-server
+        secrets:
+            - 3-nodes-ocp-baremetal-cluster-admin-ssh-key:
+                generated:
+                    sshKeyPair:
+                        type: ed25519
+                        comment: bootwright-3-nodes-ocp-baremetal-cluster-admin
+            - bastion-host-ssh:
+                file: ~/.ssh/bootwright-ssh-key
+            - bmc-credentials:
+                generated:
+                    credentials:
+                        username: admin
+            - openshift-pull-secret
+            - proxy-credentials:
+                generated:
+                    credentials:
+                        username: proxy
+machines:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Machine
+      metadata:
+        name: bastion
+      spec:
+        capabilities:
+            - container-runtime
+            - artifact-server
+        os:
+            provided: true
+        addresses:
+            - name: ssh
+              address: bastion.bootwright.test
+            - name: lab-lan
+              address: 192.168.140.5
+        access:
+            ssh:
+                addressRef: ssh
+                keyRef: bastion-host-ssh
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Machine
+      metadata:
+        name: rack1-srv1
+      spec:
+        capabilities:
+            - openshift-node
+        substrate:
+            providerRef: rack1-baremetal-provider
+        hardware:
+            nics:
+                - name: eno1
+                  macAddress: 00:25:90:5a:10:01
+                - name: eno2
+                  macAddress: 00:25:90:5a:10:02
+            boot:
+                nicRef: eno1
+            management:
+                bmc:
+                    address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
+                    protocol: redfish
+                    credentialsRef: bmc-credentials
+                    tls:
+                        verify: false
+        os:
+            provided: false
+            install:
+                rootDeviceHints:
+                    deviceName: /dev/sda
+        network:
+            config:
+                networkConfigRef: rack1-bond140-machine
+                attachmentRef: rack1-bond140-machine
+                interfaceAddresses:
+                    - interface: bond0.140
+                      addressRef: ip
+                      prefixLength: 24
+            interfaceBinding:
+                - nicRef: eno1
+                  interfaceName: eno1
+                - nicRef: eno2
+                  interfaceName: eno2
+        addresses:
+            - name: ip
+              address: 192.168.140.20
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Machine
+      metadata:
+        name: rack1-srv2
+      spec:
+        capabilities:
+            - openshift-node
+        substrate:
+            providerRef: rack1-baremetal-provider
+        hardware:
+            nics:
+                - name: eno1
+                  macAddress: 00:25:90:5a:11:01
+                - name: eno2
+                  macAddress: 00:25:90:5a:11:02
+            boot:
+                nicRef: eno1
+            management:
+                bmc:
+                    address: redfish-virtualmedia+https://bmc-rack1-srv2.bootwright.test/redfish/v1/Systems/1
+                    protocol: redfish
+                    credentialsRef: bmc-credentials
+                    tls:
+                        verify: false
+        os:
+            provided: false
+            install:
+                rootDeviceHints:
+                    deviceName: /dev/sda
+        network:
+            config:
+                networkConfigRef: rack1-bond140-machine
+                attachmentRef: rack1-bond140-machine
+                interfaceAddresses:
+                    - interface: bond0.140
+                      addressRef: ip
+                      prefixLength: 24
+            interfaceBinding:
+                - nicRef: eno1
+                  interfaceName: eno1
+                - nicRef: eno2
+                  interfaceName: eno2
+        addresses:
+            - name: ip
+              address: 192.168.140.21
+    - apiVersion: bootwright.io/v1alpha1
+      kind: Machine
+      metadata:
+        name: rack1-srv3
+      spec:
+        capabilities:
+            - openshift-node
+        substrate:
+            providerRef: rack1-baremetal-provider
+        hardware:
+            nics:
+                - name: eno1
+                  macAddress: 00:25:90:5a:12:01
+                - name: eno2
+                  macAddress: 00:25:90:5a:12:02
+            boot:
+                nicRef: eno1
+            management:
+                bmc:
+                    address: redfish-virtualmedia+https://bmc-rack1-srv3.bootwright.test/redfish/v1/Systems/1
+                    protocol: redfish
+                    credentialsRef: bmc-credentials
+                    tls:
+                        verify: false
+        os:
+            provided: false
+            install:
+                rootDeviceHints:
+                    deviceName: /dev/sda
+        network:
+            config:
+                networkConfigRef: rack1-bond140-machine
+                attachmentRef: rack1-bond140-machine
+                interfaceAddresses:
+                    - interface: bond0.140
+                      addressRef: ip
+                      prefixLength: 24
+            interfaceBinding:
+                - nicRef: eno1
+                  interfaceName: eno1
+                - nicRef: eno2
+                  interfaceName: eno2
+        addresses:
+            - name: ip
+              address: 192.168.140.22
+networkConfigs:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: NetworkConfig
+      metadata:
+        name: rack1-bond140-machine
+      spec:
+        machineNetwork:
+            - cidr: 192.168.140.0/24
+        template:
+            networkConfig:
+                dns-resolver:
+                    config:
+                        server:
+                            - 192.168.10.53
+                interfaces:
+                    - ipv4:
+                        enabled: false
+                      ipv6:
+                        enabled: false
+                      name: eno1
+                      state: up
+                      type: ethernet
+                    - ipv4:
+                        enabled: false
+                      ipv6:
+                        enabled: false
+                      name: eno2
+                      state: up
+                      type: ethernet
+                    - ipv4:
+                        enabled: false
+                      ipv6:
+                        enabled: false
+                      link-aggregation:
+                        mode: active-backup
+                        options:
+                            miimon: "100"
+                        port:
+                            - eno1
+                            - eno2
+                      name: bond0
+                      state: up
+                      type: bond
+                    - ipv4:
+                        dhcp: false
+                        enabled: true
+                      ipv6:
+                        enabled: false
+                      name: bond0.140
+                      state: up
+                      type: vlan
+                      vlan:
+                        base-iface: bond0
+                        id: 140
+                routes:
+                    config:
+                        - destination: 0.0.0.0/0
+                          next-hop-address: 192.168.140.1
+                          next-hop-interface: bond0.140
+                          table-id: 254
+infraProviders:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraProvider
+      metadata:
+        name: rack1-baremetal-provider
+      spec:
+        type: baremetal
+        baremetal:
+            boot:
+                method: external
+        networkAttachments:
+            - name: rack1-bond140-machine
+              baremetal:
+                vlan: 140
+infraComponents:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: InfraComponent
+      metadata:
+        name: artifact-server
+      spec:
+        type: artifactServer
+        artifactServer:
+            machineRef: bastion
+            bindAddress: 0.0.0.0
+            listeners:
+                - name: https
+                  protocol: https
+                  port: 8443
+            endpoints:
+                - name: bmc
+                  listenerRef: https
+                  addressRef: lab-lan
+                - name: cluster
+                  listenerRef: https
+                  addressRef: lab-lan
+containerClusters:
+    - apiVersion: bootwright.io/v1alpha1
+      kind: ContainerCluster
+      metadata:
+        name: 3-nodes-ocp-baremetal
+      spec:
+        distribution:
+            type: openshift
+            release:
+                version: 4.21.15
+        install:
+            method: agent
+            mode: connected
+            platform:
+                type: baremetal
+                baremetal:
+                    provisioningNetwork: disabled
+            endpoints:
+                api:
+                    address: 192.168.140.10
+                    source:
+                        type: external
+                api-int:
+                    address: 192.168.140.10
+                    source:
+                        type: external
+                ingress:
+                    address: 192.168.140.11
+                    source:
+                        type: external
+            artifactAccess:
+                serverRef: default
+                redfishVirtualMedia:
+                    endpointRef: bmc
+            pullSecretRef: openshift-pull-secret
+            nodeSSH:
+                keyPairRef: 3-nodes-ocp-baremetal-cluster-admin-ssh-key
+        controlPlane:
+            replicas: 3
+        compute:
+            - {}
+        networking:
+            clusterNetwork:
+                - cidr: 10.128.0.0/14
+                  hostPrefix: 23
+            serviceNetwork:
+                - 172.30.0.0/16
+        hosts:
+            - hostname: master-0
+              role: master
+              machineRef: rack1-srv1
+            - hostname: master-1
+              role: master
+              machineRef: rack1-srv2
+            - hostname: master-2
+              role: master
+              machineRef: rack1-srv3

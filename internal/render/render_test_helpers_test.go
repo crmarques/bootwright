@@ -1,12 +1,9 @@
 package render_test
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"testing"
-
-	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
@@ -76,37 +73,6 @@ func assertDirMode(t *testing.T, path string, want os.FileMode) {
 	if got := info.Mode().Perm(); got != want {
 		t.Fatalf("%s mode got %#o, want %#o", path, got, want)
 	}
-}
-
-func sameFile(t *testing.T, a, b string) bool {
-	t.Helper()
-	ab, err := os.ReadFile(a)
-	if err != nil {
-		t.Fatalf("read %s: %v", a, err)
-	}
-	bb, err := os.ReadFile(b)
-	if err != nil {
-		t.Fatalf("read %s: %v", b, err)
-	}
-	// Compare structurally (decoded YAML) so unrelated whitespace or
-	// key-order shifts inside the yaml library don't flake the test.
-	var ad, bd any
-	if err := yaml.Unmarshal(ab, &ad); err != nil {
-		t.Fatalf("decode %s: %v", a, err)
-	}
-	if err := yaml.Unmarshal(bb, &bd); err != nil {
-		t.Fatalf("decode %s: %v", b, err)
-	}
-	return deepEqualYAML(ad, bd)
-}
-
-// deepEqualYAML compares two yaml-decoded values without depending on
-// reflect.DeepEqual semantics for map[string]any (which is order-
-// insensitive on its own).
-func deepEqualYAML(a, b any) bool {
-	ay, _ := yaml.Marshal(a)
-	by, _ := yaml.Marshal(b)
-	return bytes.Equal(ay, by)
 }
 
 // compile-time check that render.Result hasn't lost the fields the

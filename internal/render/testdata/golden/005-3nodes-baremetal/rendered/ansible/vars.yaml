@@ -1,0 +1,471 @@
+bootwright_clusters:
+    - agentIsoPublishTargets:
+        - fetchUrl: https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso
+          requiresByteRange: true
+          requiresHTTPS: true
+          stageHost: bastion
+          stagePath: '{{ bootwright_managed_services_dir }}/artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso'
+      baseDomain: bootwright.test
+      components:
+        - bmc:
+            address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
+            credentialsRef: bmc-credentials
+            disableCertificateVerification: true
+            protocol: redfish
+          bmcApplyRole: bootwright.core.provider_service_bmc_external_redfish
+          bmcDestroyRole: bootwright.core.provider_service_bmc_external_redfish
+          bmcRole: redfish
+          boot:
+            agentIso:
+                fetchUrl: https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso
+                stageHost: bastion
+                stagePath: '{{ bootwright_managed_services_dir }}/artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso'
+                transferProtocol: HTTPS
+            readiness:
+                ssh:
+                    port: 22
+                    user: core
+                type: ssh
+            redfish:
+                baseUrl: https://bmc-rack1-srv1.bootwright.test
+                credentialsRef: bmc-credentials
+                setBootSource: true
+                systemId: "1"
+                validateCerts: false
+          bootApplyRole: bootwright.core.container_cluster_boot_redfish
+          bootRole: redfish
+          cleanupMediaRole: bootwright.core.container_cluster_boot_redfish
+          clusterName: 3-nodes-ocp-baremetal
+          externalBMC: true
+          fromName: rack1-srv1
+          interfaces:
+            - macAddress: 00:25:90:5a:10:01
+              name: eno1
+            - macAddress: 00:25:90:5a:10:02
+              name: eno2
+          kind: machines
+          managedRootDevice: /dev/sda
+          name: rack1-srv1
+          networkAttachment:
+            baremetal:
+                vlan: 140
+            kind: baremetal
+          networkConfig:
+            ref: rack1-bond140-machine
+          osManaged: true
+          osProvided: false
+          primaryIPAddress: 192.168.140.20
+          providerName: rack1-baremetal-provider
+          rootDeviceHints:
+            deviceName: /dev/sda
+          server:
+            interfaces:
+                - macAddress: 00:25:90:5a:10:01
+                  name: eno1
+                - macAddress: 00:25:90:5a:10:02
+                  name: eno2
+            name: rack1-srv1
+          substrateApplyRole: bootwright.core.machine_substrate_baremetal
+          substrateDestroyRole: bootwright.core.machine_substrate_baremetal
+          substrateRole: baremetal
+        - bmc:
+            address: redfish-virtualmedia+https://bmc-rack1-srv2.bootwright.test/redfish/v1/Systems/1
+            credentialsRef: bmc-credentials
+            disableCertificateVerification: true
+            protocol: redfish
+          bmcApplyRole: bootwright.core.provider_service_bmc_external_redfish
+          bmcDestroyRole: bootwright.core.provider_service_bmc_external_redfish
+          bmcRole: redfish
+          boot:
+            agentIso:
+                fetchUrl: https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso
+                stageHost: bastion
+                stagePath: '{{ bootwright_managed_services_dir }}/artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso'
+                transferProtocol: HTTPS
+            readiness:
+                ssh:
+                    port: 22
+                    user: core
+                type: ssh
+            redfish:
+                baseUrl: https://bmc-rack1-srv2.bootwright.test
+                credentialsRef: bmc-credentials
+                setBootSource: true
+                systemId: "1"
+                validateCerts: false
+          bootApplyRole: bootwright.core.container_cluster_boot_redfish
+          bootRole: redfish
+          cleanupMediaRole: bootwright.core.container_cluster_boot_redfish
+          clusterName: 3-nodes-ocp-baremetal
+          externalBMC: true
+          fromName: rack1-srv2
+          interfaces:
+            - macAddress: 00:25:90:5a:11:01
+              name: eno1
+            - macAddress: 00:25:90:5a:11:02
+              name: eno2
+          kind: machines
+          managedRootDevice: /dev/sda
+          name: rack1-srv2
+          networkAttachment:
+            baremetal:
+                vlan: 140
+            kind: baremetal
+          networkConfig:
+            ref: rack1-bond140-machine
+          osManaged: true
+          osProvided: false
+          primaryIPAddress: 192.168.140.21
+          providerName: rack1-baremetal-provider
+          rootDeviceHints:
+            deviceName: /dev/sda
+          server:
+            interfaces:
+                - macAddress: 00:25:90:5a:11:01
+                  name: eno1
+                - macAddress: 00:25:90:5a:11:02
+                  name: eno2
+            name: rack1-srv2
+          substrateApplyRole: bootwright.core.machine_substrate_baremetal
+          substrateDestroyRole: bootwright.core.machine_substrate_baremetal
+          substrateRole: baremetal
+        - bmc:
+            address: redfish-virtualmedia+https://bmc-rack1-srv3.bootwright.test/redfish/v1/Systems/1
+            credentialsRef: bmc-credentials
+            disableCertificateVerification: true
+            protocol: redfish
+          bmcApplyRole: bootwright.core.provider_service_bmc_external_redfish
+          bmcDestroyRole: bootwright.core.provider_service_bmc_external_redfish
+          bmcRole: redfish
+          boot:
+            agentIso:
+                fetchUrl: https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso
+                stageHost: bastion
+                stagePath: '{{ bootwright_managed_services_dir }}/artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso'
+                transferProtocol: HTTPS
+            readiness:
+                ssh:
+                    port: 22
+                    user: core
+                type: ssh
+            redfish:
+                baseUrl: https://bmc-rack1-srv3.bootwright.test
+                credentialsRef: bmc-credentials
+                setBootSource: true
+                systemId: "1"
+                validateCerts: false
+          bootApplyRole: bootwright.core.container_cluster_boot_redfish
+          bootRole: redfish
+          cleanupMediaRole: bootwright.core.container_cluster_boot_redfish
+          clusterName: 3-nodes-ocp-baremetal
+          externalBMC: true
+          fromName: rack1-srv3
+          interfaces:
+            - macAddress: 00:25:90:5a:12:01
+              name: eno1
+            - macAddress: 00:25:90:5a:12:02
+              name: eno2
+          kind: machines
+          managedRootDevice: /dev/sda
+          name: rack1-srv3
+          networkAttachment:
+            baremetal:
+                vlan: 140
+            kind: baremetal
+          networkConfig:
+            ref: rack1-bond140-machine
+          osManaged: true
+          osProvided: false
+          primaryIPAddress: 192.168.140.22
+          providerName: rack1-baremetal-provider
+          rootDeviceHints:
+            deviceName: /dev/sda
+          server:
+            interfaces:
+                - macAddress: 00:25:90:5a:12:01
+                  name: eno1
+                - macAddress: 00:25:90:5a:12:02
+                  name: eno2
+            name: rack1-srv3
+          substrateApplyRole: bootwright.core.machine_substrate_baremetal
+          substrateDestroyRole: bootwright.core.machine_substrate_baremetal
+          substrateRole: baremetal
+        - applyRole: bootwright.core.infra_component_artifact_server_http
+          bindAddress: 0.0.0.0
+          componentName: artifact-server
+          destroyRole: bootwright.core.infra_component_artifact_server_http
+          endpoints:
+            - addressRef: lab-lan
+              listenerRef: https
+              name: bmc
+            - addressRef: lab-lan
+              listenerRef: https
+              name: cluster
+          image: docker.io/library/nginx:1.29.8-alpine3.23
+          kind: artifactServer
+          listeners:
+            - name: https
+              port: 8443
+              protocol: https
+          machineAddress: bastion.bootwright.test
+          machineRef: bastion
+          name: artifact-server
+          port: 8443
+          providerName: InfraComponent
+          realisation: http
+          tls:
+            commonName: 192.168.140.5
+            dnsNames: []
+            ipAddresses:
+                - 192.168.140.5
+      distribution:
+        release:
+            channel: stable-4.21
+            version: 4.21.15
+        type: openshift
+      endpoints:
+        - address: 192.168.140.10
+          name: api
+          source:
+            type: external
+        - address: 192.168.140.10
+          name: api-int
+          source:
+            type: external
+        - address: 192.168.140.11
+          name: ingress
+          source:
+            type: external
+      installMethod: agent
+      installMode: connected
+      name: 3-nodes-ocp-baremetal
+      networks:
+        - cidr: 192.168.140.0/24
+          dnsServers:
+            - 192.168.10.53
+          gateway: 192.168.140.1
+          machineNetwork:
+            - cidr: 192.168.140.0/24
+          name: rack1-bond140-machine
+          template:
+            dns-resolver:
+                config:
+                    server:
+                        - 192.168.10.53
+            interfaces:
+                - ipv4:
+                    enabled: false
+                  ipv6:
+                    enabled: false
+                  name: eno1
+                  state: up
+                  type: ethernet
+                - ipv4:
+                    enabled: false
+                  ipv6:
+                    enabled: false
+                  name: eno2
+                  state: up
+                  type: ethernet
+                - ipv4:
+                    enabled: false
+                  ipv6:
+                    enabled: false
+                  link-aggregation:
+                    mode: active-backup
+                    options:
+                        miimon: "100"
+                    port:
+                        - eno1
+                        - eno2
+                  name: bond0
+                  state: up
+                  type: bond
+                - ipv4:
+                    dhcp: false
+                    enabled: true
+                  ipv6:
+                    enabled: false
+                  name: bond0.140
+                  state: up
+                  type: vlan
+                  vlan:
+                    base-iface: bond0
+                    id: 140
+            routes:
+                config:
+                    - destination: 0.0.0.0/0
+                      next-hop-address: 192.168.140.1
+                      next-hop-interface: bond0.140
+                      table-id: 254
+      nodeSSHPrivateKeyPath: /bootwright-golden/secrets/3-nodes-ocp-baremetal-cluster-admin-ssh-key
+      nodes:
+        master-0:
+            machineRef:
+                name: rack1-srv1
+            role: master
+        master-1:
+            machineRef:
+                name: rack1-srv2
+            role: master
+        master-2:
+            machineRef:
+                name: rack1-srv3
+            role: master
+bootwright_component_pins:
+    - lookupDate: "2026-05-31"
+      name: ansible-core
+      source: https://pypi.org/project/ansible-core/
+      version: 2.21.0
+    - lookupDate: "2026-05-21"
+      name: pip
+      source: https://pypi.org/project/pip/
+      version: 26.1.1
+    - lookupDate: "2026-05-21"
+      name: go.yaml.in/yaml/v3
+      source: https://go.yaml.in/yaml/v3
+      version: v3.0.4
+    - lookupDate: "2026-05-26"
+      name: http
+      source: https://hub.docker.com/_/nginx
+      version: 1.29.8-alpine3.23
+    - lookupDate: "2026-05-21"
+      name: openshift-install
+      source: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.15/
+      version: 4.21.15
+bootwright_environment:
+    baseDomain: bootwright.test
+    infraComponents:
+        artifactServers:
+            - componentRef: artifact-server
+              management: managed
+              name: default
+        proxies:
+            - connection:
+                auth:
+                    proxyAuthRef: proxy-credentials
+                httpProxy: http://proxy.bootwright.test:3128
+                httpsProxy: http://proxy.bootwright.test:3128
+                noProxy:
+                    - .bootwright.test
+                    - 192.168.140.0/24
+              management: external
+              name: default
+    name: 3-nodes-ocp-baremetal
+    proxyFor:
+        bootwright: default
+        containerClusterInstall: default
+bootwright_infra_component_services:
+    - applyRole: bootwright.core.infra_component_artifact_server_http
+      bindAddress: 0.0.0.0
+      componentName: artifact-server
+      consumingClusters:
+        - 3-nodes-ocp-baremetal
+      destroyRole: bootwright.core.infra_component_artifact_server_http
+      endpoints:
+        - addressRef: lab-lan
+          listenerRef: https
+          name: bmc
+        - addressRef: lab-lan
+          listenerRef: https
+          name: cluster
+      image: docker.io/library/nginx:1.29.8-alpine3.23
+      kind: artifactServer
+      listeners:
+        - name: https
+          port: 8443
+          protocol: https
+      machineAddress: bastion.bootwright.test
+      machineRef: bastion
+      name: artifact-server
+      port: 8443
+      providerName: InfraComponent
+      realisation: http
+      tls:
+        commonName: 192.168.140.5
+        dnsNames: []
+        ipAddresses:
+            - 192.168.140.5
+bootwright_infra_components:
+    - artifactServer:
+        bindAddress: 0.0.0.0
+        endpoints:
+            - addressRef: lab-lan
+              listenerRef: https
+              name: bmc
+            - addressRef: lab-lan
+              listenerRef: https
+              name: cluster
+        listeners:
+            - name: https
+              port: 8443
+              protocol: https
+        machineRef: bastion
+      name: artifact-server
+bootwright_machines:
+    - addresses:
+        - address: bastion.bootwright.test
+          name: ssh
+        - address: 192.168.140.5
+          name: lab-lan
+      capabilities:
+        - container-runtime
+        - artifact-server
+      name: bastion
+      sshAddress: bastion.bootwright.test
+      sshAddressName: ssh
+      sshKeyName: bastion-host-ssh
+      sshUser: ""
+    - addresses:
+        - address: 192.168.140.20
+          name: ip
+      capabilities:
+        - openshift-node
+      name: rack1-srv1
+    - addresses:
+        - address: 192.168.140.21
+          name: ip
+      capabilities:
+        - openshift-node
+      name: rack1-srv2
+    - addresses:
+        - address: 192.168.140.22
+          name: ip
+      capabilities:
+        - openshift-node
+      name: rack1-srv3
+bootwright_providers:
+    - capabilities:
+        bareMetal:
+            boot:
+                method: external
+        networkAttachments:
+            - baremetal:
+                vlan: 140
+              kind: baremetal
+              name: rack1-bond140-machine
+        type: baremetal
+      name: rack1-baremetal-provider
+bootwright_proxy:
+    auth:
+        proxyAuthRef: proxy-credentials
+    http: http://proxy.bootwright.test:3128
+    https: http://proxy.bootwright.test:3128
+    noProxy:
+        - .3-nodes-ocp-baremetal.bootwright.test
+        - .bootwright.test
+        - .cluster.local
+        - .svc
+        - 10.128.0.0/14
+        - 127.0.0.1
+        - 172.30.0.0/16
+        - 192.168.140.0/24
+        - 192.168.140.10
+        - 192.168.140.11
+        - 192.168.140.20
+        - 192.168.140.21
+        - 192.168.140.22
+        - 192.168.140.5
+        - ::1
+        - bastion.bootwright.test
+        - localhost

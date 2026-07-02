@@ -29,6 +29,9 @@ rendered/
 site/
 tmp/
 internal/converge/bundle/ansible_bundle.zip
+# Committed golden fixtures mirror rendered output trees, so their inner
+# rendered/ directories must escape the generated-output rule above.
+!internal/render/testdata/golden/**
 
 # Tooling
 .DS_Store

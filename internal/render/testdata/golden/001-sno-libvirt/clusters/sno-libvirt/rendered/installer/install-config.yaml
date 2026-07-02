@@ -1,0 +1,26 @@
+apiVersion: v1
+baseDomain: bootwright.test
+compute:
+    - name: worker
+      replicas: 0
+controlPlane:
+    name: master
+    replicas: 1
+metadata:
+    name: sno-libvirt
+networking:
+    clusterNetwork:
+        - cidr: 10.128.0.0/14
+          hostPrefix: 23
+    machineNetwork:
+        - cidr: 192.168.132.0/24
+    serviceNetwork:
+        - 172.30.0.0/16
+platform:
+    none: {}
+proxy:
+    httpProxy: http://192.168.132.1:3128
+    httpsProxy: http://192.168.132.1:3128
+    noProxy: .bootwright.test,.cluster.local,.sno-libvirt.bootwright.test,.svc,10.128.0.0/14,127.0.0.1,172.30.0.0/16,192.168.132.0/24,192.168.132.1,192.168.132.10,192.168.132.11,192.168.132.20,::1,localhost
+pullSecret: '{"auths":{"bootwright-secret-ref:openshift-pull-secret":{}}}'
+sshKey: <bootwright-ssh-key-ref:sno-libvirt-cluster-admin-ssh-key>

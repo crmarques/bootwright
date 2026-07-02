@@ -1,0 +1,60 @@
+all:
+    children:
+        bootwright_agent_node_hosts:
+            hosts:
+                3-nodes-ocp-baremetal__rack1-srv1: {}
+                3-nodes-ocp-baremetal__rack1-srv2: {}
+                3-nodes-ocp-baremetal__rack1-srv3: {}
+        bootwright_agent_node_hosts_3_nodes_ocp_baremetal:
+            hosts:
+                3-nodes-ocp-baremetal__rack1-srv1: {}
+                3-nodes-ocp-baremetal__rack1-srv2: {}
+                3-nodes-ocp-baremetal__rack1-srv3: {}
+        bootwright_boot_hosts:
+            hosts:
+                bastion: {}
+        bootwright_controller_hosts:
+            hosts:
+                localhost: {}
+        bootwright_infra_component_hosts:
+            hosts:
+                bastion: {}
+        bootwright_infra_hosts:
+            hosts: {}
+        bootwright_machine_task_hosts:
+            hosts: {}
+        bootwright_ocp_hosts:
+            hosts:
+                localhost: {}
+        bootwright_provider_hosts:
+            hosts: {}
+        bootwright_storage_hosts:
+            hosts: {}
+    hosts:
+        3-nodes-ocp-baremetal__rack1-srv1:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_agent_node_cluster_name: 3-nodes-ocp-baremetal
+            bootwright_agent_node_machine_name: rack1-srv1
+            bootwright_host_name: localhost
+        3-nodes-ocp-baremetal__rack1-srv2:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_agent_node_cluster_name: 3-nodes-ocp-baremetal
+            bootwright_agent_node_machine_name: rack1-srv2
+            bootwright_host_name: localhost
+        3-nodes-ocp-baremetal__rack1-srv3:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_agent_node_cluster_name: 3-nodes-ocp-baremetal
+            bootwright_agent_node_machine_name: rack1-srv3
+            bootwright_host_name: localhost
+        bastion:
+            ansible_host: bastion.bootwright.test
+            ansible_ssh_common_args: -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/bootwright-golden/trust/ssh/known_hosts
+            ansible_ssh_private_key_file: /bootwright-golden/home/.ssh/bootwright-ssh-key
+            bootwright_host_name: bastion
+        localhost:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_host_name: localhost

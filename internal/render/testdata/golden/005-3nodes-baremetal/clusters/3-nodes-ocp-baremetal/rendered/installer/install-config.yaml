@@ -1,0 +1,33 @@
+apiVersion: v1
+baseDomain: bootwright.test
+compute:
+    - name: worker
+      replicas: 0
+controlPlane:
+    name: master
+    replicas: 3
+metadata:
+    name: 3-nodes-ocp-baremetal
+networking:
+    clusterNetwork:
+        - cidr: 10.128.0.0/14
+          hostPrefix: 23
+    machineNetwork:
+        - cidr: 192.168.140.0/24
+    serviceNetwork:
+        - 172.30.0.0/16
+platform:
+    baremetal:
+        apiVIPs:
+            - 192.168.140.10
+        ingressVIPs:
+            - 192.168.140.11
+        loadBalancer:
+            type: UserManaged
+        provisioningNetwork: Disabled
+proxy:
+    httpProxy: http://proxy.bootwright.test:3128
+    httpsProxy: http://proxy.bootwright.test:3128
+    noProxy: .bootwright.test,192.168.140.0/24,.3-nodes-ocp-baremetal.bootwright.test,.cluster.local,.svc,10.128.0.0/14,127.0.0.1,172.30.0.0/16,192.168.140.10,192.168.140.11,192.168.140.20,192.168.140.21,192.168.140.22,192.168.140.5,::1,bastion.bootwright.test,localhost
+pullSecret: '{"auths":{"bootwright-secret-ref:openshift-pull-secret":{}}}'
+sshKey: <bootwright-ssh-key-ref:3-nodes-ocp-baremetal-cluster-admin-ssh-key>

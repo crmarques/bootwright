@@ -1,0 +1,56 @@
+all:
+    children:
+        bootwright_agent_node_hosts:
+            hosts:
+                sno-libvirt__master-0: {}
+        bootwright_agent_node_hosts_sno_libvirt:
+            hosts:
+                sno-libvirt__master-0: {}
+        bootwright_boot_hosts:
+            hosts:
+                bastion: {}
+        bootwright_controller_hosts:
+            hosts:
+                localhost: {}
+        bootwright_infra_component_hosts:
+            hosts:
+                bastion: {}
+        bootwright_infra_hosts:
+            hosts:
+                bastion: {}
+        bootwright_machine_task_hosts:
+            hosts:
+                machine__container__sno-libvirt__master-0: {}
+        bootwright_machine_task_hosts_container_sno_libvirt:
+            hosts:
+                machine__container__sno-libvirt__master-0: {}
+        bootwright_ocp_hosts:
+            hosts:
+                localhost: {}
+        bootwright_provider_hosts:
+            hosts:
+                bastion: {}
+        bootwright_storage_hosts:
+            hosts: {}
+    hosts:
+        bastion:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_host_name: bastion
+        localhost:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_host_name: localhost
+        machine__container__sno-libvirt__master-0:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_host_name: bastion
+            bootwright_machine_task_cluster_name: sno-libvirt
+            bootwright_machine_task_machine_name: master-0
+            bootwright_machine_task_provider_host_name: bastion
+        sno-libvirt__master-0:
+            ansible_connection: local
+            ansible_host: localhost
+            bootwright_agent_node_cluster_name: sno-libvirt
+            bootwright_agent_node_machine_name: master-0
+            bootwright_host_name: localhost

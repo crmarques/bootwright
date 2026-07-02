@@ -1,0 +1,577 @@
+bootwright_clusters:
+    - agentIsoPublishTargets:
+        - fetchUrl: http://127.0.0.1:8001/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso
+          requiresByteRange: false
+          requiresHTTPS: false
+          stageHost: bastion
+          stagePath: /var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso
+      baseDomain: bootwright.test
+      components:
+        - bmcApplyRole: bootwright.core.provider_service_bmc_emulated
+          bmcDestroyRole: bootwright.core.provider_service_bmc_emulated
+          bmcEmulated:
+            bindAddress: 0.0.0.0
+            credentialsRef: bmc-credentials
+            libvirtURI: qemu:///system
+            port: 8000
+            protocol: redfish
+            sushyToolsVersion: 2.2.0
+            vMediaPort: 8001
+          bmcRole: emulated
+          boot:
+            agentIso:
+                fetchUrl: http://127.0.0.1:8001/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso
+                stageHost: bastion
+                stagePath: /var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso
+                transferProtocol: HTTP
+            media:
+                libvirt:
+                    domain: sno-libvirt-master-0
+                    machineRef: bastion
+                    uri: qemu:///system
+            readiness:
+                ssh:
+                    port: 22
+                    user: core
+                type: ssh
+            redfish:
+                baseUrl: http://localhost:8000
+                credentialsRef: bmc-credentials
+                setBootSource: false
+                systemId: 7ec5d09a-2be9-5fc1-8505-0dea5887aa8a
+                validateCerts: false
+                vmediaColdInitRetry: true
+          bootApplyRole: bootwright.core.container_cluster_boot_redfish
+          bootRole: redfish
+          cleanupMediaRole: bootwright.core.container_cluster_boot_redfish
+          clusterName: sno-libvirt
+          fromName: master-0
+          fromProfile: sno
+          interfaces:
+            - macAddress: 52:54:00:16:3c:f8
+              name: primary
+          kind: machines
+          libvirt:
+            machineRef: bastion
+            uri: qemu:///system
+          machineAddress: localhost
+          machineRef: bastion
+          machineSetupRoles:
+            - bootwright.core.provider_host_libvirt
+          managedRootDevice: /dev/vda
+          mediaPrepareRole: bootwright.core.container_cluster_media_libvirt
+          name: master-0
+          networkAttachment:
+            kind: libvirt
+            libvirt:
+                bridge: vbr-cb-sno
+          networkConfig:
+            ref: sno-bridge
+          osManaged: true
+          osProvided: false
+          primaryIPAddress: 192.168.132.20
+          profile:
+            cpu: 8
+            dataDisks: []
+            diskGiB: 120
+            memoryMiB: 16384
+            name: sno
+          providerName: lab-libvirt-provider
+          requiresKVM: true
+          rootDeviceHints:
+            deviceName: /dev/vda
+          server:
+            interfaces: []
+            name: master-0
+          substrateApplyFrom: machine
+          substrateApplyRole: bootwright.core.machine_substrate_libvirt
+          substrateDestroyRole: bootwright.core.machine_substrate_libvirt
+          substratePrepareFrom: network
+          substratePrepareRole: bootwright.core.machine_substrate_libvirt
+          substrateRole: libvirt
+        - applyRole: bootwright.core.infra_component_load_balancer_haproxy
+          capabilityName: load-balancer
+          clusterName: sno-libvirt
+          componentName: load-balancer
+          destroyRole: bootwright.core.infra_component_load_balancer_haproxy
+          frontends:
+            - attachment:
+                kind: libvirt
+                libvirt:
+                    bridge: vbr-cb-sno
+                    prefix: 24
+              backends:
+                - address: 192.168.132.20
+                  name: master-0
+                  role: master
+              clusterName: sno-libvirt
+              name: api
+              ports:
+                - listenPort: 6443
+                  targetPort: 6443
+              vip: 192.168.132.10
+            - attachment:
+                kind: libvirt
+                libvirt:
+                    bridge: vbr-cb-sno
+                    prefix: 24
+              backends:
+                - address: 192.168.132.20
+                  name: master-0
+                  role: master
+              clusterName: sno-libvirt
+              name: api-int
+              ports:
+                - listenPort: 22623
+                  targetPort: 22623
+              vip: 192.168.132.10
+            - attachment:
+                kind: libvirt
+                libvirt:
+                    bridge: vbr-cb-sno
+                    prefix: 24
+              backends:
+                - address: 192.168.132.20
+                  name: master-0
+                  role: master
+              clusterName: sno-libvirt
+              name: ingress
+              ports:
+                - listenPort: 80
+                  targetPort: 80
+                - listenPort: 443
+                  targetPort: 443
+              vip: 192.168.132.11
+          image: docker.io/library/haproxy:3.3.10
+          kind: loadBalancer
+          machineAddress: localhost
+          machineRef: bastion
+          name: load-balancer
+          providerName: InfraComponent
+          realisation: haproxy
+        - applyRole: bootwright.core.infra_component_proxy_squid
+          bindAddress: 0.0.0.0
+          componentName: proxy
+          destroyRole: bootwright.core.infra_component_proxy_squid
+          entryName: default
+          image: docker.io/openeuler/squid:7.5-oe2403sp3
+          kind: proxy
+          machineAddress: localhost
+          machineRef: bastion
+          name: proxy
+          port: 3128
+          providerName: InfraComponent
+          realisation: squid
+          url: http://localhost:3128
+        - additionalIngressHosts:
+            - console-openshift-console.apps.sno-libvirt.bootwright.test
+            - oauth-openshift.apps.sno-libvirt.bootwright.test
+          applyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+          bindAddress: 192.168.132.1
+          componentName: name-resolution
+          destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+          domainRecords:
+            - address: 192.168.132.11
+              name: apps.sno-libvirt.bootwright.test
+          entryName: default
+          hostRecords:
+            - address: 192.168.132.10
+              name: api-int.sno-libvirt.bootwright.test
+            - address: 192.168.132.10
+              name: api.sno-libvirt.bootwright.test
+            - address: 192.168.132.11
+              name: console-openshift-console.apps.sno-libvirt.bootwright.test
+            - address: 192.168.132.11
+              name: oauth-openshift.apps.sno-libvirt.bootwright.test
+          image: docker.io/dockurr/dnsmasq:2.92_p2
+          kind: nameResolution
+          machineAddress: localhost
+          machineRef: bastion
+          name: name-resolution
+          port: 53
+          providerName: InfraComponent
+          realisation: dnsmasq
+        - applyRole: bootwright.core.infra_component_ntp_chrony
+          bindAddress: 192.168.132.1
+          componentName: ntp-server
+          destroyRole: bootwright.core.infra_component_ntp_chrony
+          entryName: default
+          kind: ntp
+          machineAddress: localhost
+          machineRef: bastion
+          name: ntp-server
+          port: 123
+          providerName: InfraComponent
+          realisation: chrony
+          upstreamSources:
+            - time.bootwright.test
+      controllerNameResolvers:
+        - bindAddress: 192.168.132.1
+          domain: bootwright.test
+      distribution:
+        release:
+            channel: stable-4.21
+            version: 4.21.15
+        type: openshift
+      endpoints:
+        - address: 192.168.132.10
+          name: api
+          source:
+            bindAddressRef: control-plane
+            componentRef: load-balancer
+            type: infraComponent
+        - address: 192.168.132.10
+          name: api-int
+          source:
+            bindAddressRef: control-plane
+            componentRef: load-balancer
+            type: infraComponent
+        - address: 192.168.132.11
+          name: ingress
+          source:
+            bindAddressRef: apps
+            componentRef: load-balancer
+            type: infraComponent
+      installMethod: agent
+      installMode: connected
+      name: sno-libvirt
+      networks:
+        - cidr: 192.168.132.0/24
+          dnsServers:
+            - 192.168.132.1
+          gateway: 192.168.132.1
+          machineNetwork:
+            - cidr: 192.168.132.0/24
+          name: sno-bridge
+          template:
+            dns-resolver:
+                config:
+                    server:
+                        - 192.168.132.1
+            interfaces:
+                - ipv4:
+                    dhcp: false
+                    enabled: true
+                  ipv6:
+                    enabled: false
+                  name: primary
+                  state: up
+                  type: ethernet
+            routes:
+                config:
+                    - destination: 0.0.0.0/0
+                      next-hop-address: 192.168.132.1
+                      next-hop-interface: primary
+                      table-id: 254
+      nodeSSHPrivateKeyPath: /bootwright-golden/secrets/sno-libvirt-cluster-admin-ssh-key
+      nodes:
+        master-0:
+            machineRef:
+                name: master-0
+            role: master
+bootwright_component_pins:
+    - lookupDate: "2026-05-31"
+      name: ansible-core
+      source: https://pypi.org/project/ansible-core/
+      version: 2.21.0
+    - lookupDate: "2026-05-21"
+      name: pip
+      source: https://pypi.org/project/pip/
+      version: 26.1.1
+    - lookupDate: "2026-05-21"
+      name: go.yaml.in/yaml/v3
+      source: https://go.yaml.in/yaml/v3
+      version: v3.0.4
+    - lookupDate: "2026-05-21"
+      name: sushy-tools
+      source: https://pypi.org/project/sushy-tools/
+      version: 2.2.0
+    - lookupDate: "2026-05-21"
+      name: haproxy
+      source: https://hub.docker.com/_/haproxy
+      version: 3.3.10
+    - lookupDate: "2026-05-21"
+      name: squid
+      source: https://hub.docker.com/r/openeuler/squid
+      version: 7.5-oe2403sp3
+    - lookupDate: "2026-05-21"
+      name: dnsmasq
+      source: https://hub.docker.com/r/dockurr/dnsmasq
+      version: 2.92_p2
+    - lookupDate: "2026-05-21"
+      name: openshift-install
+      source: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.15/
+      version: 4.21.15
+bootwright_environment:
+    baseDomain: bootwright.test
+    infraComponents:
+        nameResolution:
+            - componentRef: name-resolution
+              management: managed
+              name: default
+        ntp:
+            - componentRef: ntp-server
+              endpointRef: cluster
+              management: managed
+              name: default
+        proxies:
+            - componentRef: proxy
+              management: managed
+              name: default
+    name: sno-libvirt
+    proxyFor:
+        bootwright: default
+        containerClusterInstall: default
+bootwright_infra_component_services:
+    - applyRole: bootwright.core.infra_component_load_balancer_haproxy
+      capabilityName: load-balancer
+      componentName: load-balancer
+      consumingClusters:
+        - sno-libvirt
+      destroyRole: bootwright.core.infra_component_load_balancer_haproxy
+      frontends:
+        - attachment:
+            kind: libvirt
+            libvirt:
+                bridge: vbr-cb-sno
+                prefix: 24
+          backends:
+            - address: 192.168.132.20
+              name: master-0
+              role: master
+          clusterName: sno-libvirt
+          name: api
+          ports:
+            - listenPort: 6443
+              targetPort: 6443
+          vip: 192.168.132.10
+        - attachment:
+            kind: libvirt
+            libvirt:
+                bridge: vbr-cb-sno
+                prefix: 24
+          backends:
+            - address: 192.168.132.20
+              name: master-0
+              role: master
+          clusterName: sno-libvirt
+          name: api-int
+          ports:
+            - listenPort: 22623
+              targetPort: 22623
+          vip: 192.168.132.10
+        - attachment:
+            kind: libvirt
+            libvirt:
+                bridge: vbr-cb-sno
+                prefix: 24
+          backends:
+            - address: 192.168.132.20
+              name: master-0
+              role: master
+          clusterName: sno-libvirt
+          name: ingress
+          ports:
+            - listenPort: 80
+              targetPort: 80
+            - listenPort: 443
+              targetPort: 443
+          vip: 192.168.132.11
+      image: docker.io/library/haproxy:3.3.10
+      kind: loadBalancer
+      machineAddress: localhost
+      machineRef: bastion
+      name: load-balancer
+      providerName: InfraComponent
+      realisation: haproxy
+    - additionalIngressHosts:
+        - console-openshift-console.apps.sno-libvirt.bootwright.test
+        - oauth-openshift.apps.sno-libvirt.bootwright.test
+      applyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+      bindAddress: 192.168.132.1
+      componentName: name-resolution
+      consumingClusters:
+        - sno-libvirt
+      destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+      domainRecords:
+        - address: 192.168.132.11
+          name: apps.sno-libvirt.bootwright.test
+      entryName: default
+      hostRecords:
+        - address: 192.168.132.10
+          name: api-int.sno-libvirt.bootwright.test
+        - address: 192.168.132.10
+          name: api.sno-libvirt.bootwright.test
+        - address: 192.168.132.11
+          name: console-openshift-console.apps.sno-libvirt.bootwright.test
+        - address: 192.168.132.11
+          name: oauth-openshift.apps.sno-libvirt.bootwright.test
+      image: docker.io/dockurr/dnsmasq:2.92_p2
+      kind: nameResolution
+      machineAddress: localhost
+      machineRef: bastion
+      name: name-resolution
+      port: 53
+      providerName: InfraComponent
+      realisation: dnsmasq
+    - allowedNetworks:
+        - 192.168.132.0/24
+      applyRole: bootwright.core.infra_component_ntp_chrony
+      bindAddress: 192.168.132.1
+      componentName: ntp-server
+      consumingClusters:
+        - sno-libvirt
+      destroyRole: bootwright.core.infra_component_ntp_chrony
+      entryName: default
+      kind: ntp
+      machineAddress: localhost
+      machineRef: bastion
+      name: ntp-server
+      port: 123
+      providerName: InfraComponent
+      realisation: chrony
+      upstreamSources:
+        - time.bootwright.test
+    - applyRole: bootwright.core.infra_component_proxy_squid
+      bindAddress: 0.0.0.0
+      componentName: proxy
+      consumingClusters:
+        - sno-libvirt
+      destroyRole: bootwright.core.infra_component_proxy_squid
+      entryName: default
+      image: docker.io/openeuler/squid:7.5-oe2403sp3
+      kind: proxy
+      machineAddress: localhost
+      machineRef: bastion
+      name: proxy
+      port: 3128
+      providerName: InfraComponent
+      realisation: squid
+      url: http://localhost:3128
+bootwright_infra_components:
+    - loadBalancer:
+        bindAddresses:
+            - address: 192.168.132.10
+              name: control-plane
+            - address: 192.168.132.11
+              name: apps
+        implementation: haproxy
+        machineRef: bastion
+      name: load-balancer
+    - name: name-resolution
+      nameResolution:
+        additionalIngressHosts:
+            - console-openshift-console.apps.sno-libvirt.bootwright.test
+            - oauth-openshift.apps.sno-libvirt.bootwright.test
+        bindAddress: 192.168.132.1
+        implementation: dnsmasq
+        machineRef: bastion
+        port: 53
+    - name: ntp-server
+      ntp:
+        bindAddress: 192.168.132.1
+        endpoints:
+            - addressRef: cluster-lan
+              name: cluster
+        implementation: chrony
+        machineRef: bastion
+        port: 123
+        upstreamSources:
+            - time.bootwright.test
+    - name: proxy
+      proxy:
+        bindAddress: 0.0.0.0
+        implementation: squid
+        machineRef: bastion
+        port: 3128
+bootwright_machines:
+    - addresses:
+        - address: localhost
+          name: ssh
+        - address: 192.168.132.1
+          name: cluster-lan
+      capabilities:
+        - container-runtime
+        - libvirt
+        - load-balancer
+        - proxy
+        - name-resolution
+        - ntp
+      name: bastion
+      sshAddress: localhost
+      sshAddressName: ssh
+      sshKeyName: bastion-host-ssh
+      sshUser: ""
+    - addresses:
+        - address: 192.168.132.20
+          name: ip
+      capabilities:
+        - openshift-node
+      name: master-0
+bootwright_provider_machine_setups:
+    - applyRole: bootwright.core.provider_host_libvirt
+      machineAddress: localhost
+      machineRef: bastion
+bootwright_provider_services:
+    - applyRole: bootwright.core.provider_service_bmc_emulated
+      bmcEmulated:
+        bindAddress: 0.0.0.0
+        credentialsRef: bmc-credentials
+        libvirtURI: qemu:///system
+        port: 8000
+        protocol: redfish
+        sushyToolsVersion: 2.2.0
+        vMediaPort: 8001
+      bmcRole: emulated
+      configConsistent: true
+      consumingClusters:
+        - sno-libvirt
+      destroyRole: bootwright.core.provider_service_bmc_emulated
+      kind: bmc
+      machineAddress: localhost
+      machineRef: bastion
+      machines:
+        - bmcEmulated:
+            bindAddress: 0.0.0.0
+            credentialsRef: bmc-credentials
+            libvirtURI: qemu:///system
+            port: 8000
+            protocol: redfish
+            sushyToolsVersion: 2.2.0
+            vMediaPort: 8001
+          clusterName: sno-libvirt
+          name: master-0
+          providerName: lab-libvirt-provider
+      name: emulated
+      providerName: lab-libvirt-provider
+      realisation: emulated
+bootwright_providers:
+    - capabilities:
+        libvirt:
+            bmcEmulationDefaults:
+                bindAddress: 0.0.0.0
+                credentialsRef: bmc-credentials
+                emulator: sushy-tools
+                enabled: true
+                port: 8000
+                protocol: redfish
+                vMediaPort: 8001
+            machineRef: bastion
+            uri: qemu:///system
+        machineProfiles:
+            - cpu: 8
+              dataDisks: []
+              diskGiB: 120
+              failureDomainRef: ""
+              memoryMiB: 16384
+              name: sno
+              template: ""
+        networkAttachments:
+            - kind: libvirt
+              libvirt:
+                bridge: vbr-cb-sno
+              name: sno-bridge
+        type: libvirt
+      name: lab-libvirt-provider
+bootwright_resolved_ntp_sources:
+    - 192.168.132.1
