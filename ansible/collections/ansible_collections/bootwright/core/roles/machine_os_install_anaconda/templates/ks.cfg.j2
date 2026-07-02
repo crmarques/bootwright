@@ -43,8 +43,14 @@ cdrom
 lang en_US.UTF-8
 keyboard us
 timezone UTC --utc
-rootpw --lock
 {% set ks = bootwright_component.osInstall.kickstart %}
+{% set ssh_user = ks.sshUser | default('root', true) %}
+{% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}
+{% if ssh_user == 'root' and ssh_password_hash | length > 0 %}
+rootpw --iscrypted {{ ssh_password_hash }}
+{% else %}
+rootpw --lock
+{% endif %}
 {% set security = ks.security | default({}) %}
 {% set selinux = security.selinux | default({}) %}
 {% if selinux.mode | default('') | length > 0 %}
@@ -101,11 +107,13 @@ services{{ svc_opts }}
 {% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}
 {% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}
 {% endif %}
-{% if (ks.sshUser | default('root', true)) != 'root' %}
-user --name={{ ks.sshUser }} --groups=wheel --lock
+{% if ssh_user != 'root' and ssh_password_hash | length > 0 %}
+user --name={{ ssh_user }} --groups=wheel --password={{ ssh_password_hash }} --iscrypted
+{% elif ssh_user != 'root' %}
+user --name={{ ssh_user }} --groups=wheel --lock
 {% endif %}
 {% if ssh_key | length > 0 %}
-sshkey --username={{ ks.sshUser | default('root', true) }} "{{ ssh_key | trim }}"
+sshkey --username={{ ssh_user }} "{{ ssh_key | trim }}"
 {% endif %}
 
 {% if sat_enabled and sat_ca %}
@@ -146,7 +154,7 @@ cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT
 BOOTWRIGHT_SATELLITE_CA
 update-ca-trust extract
 {% endif %}
-{% if (ks.sshUser | default('root', true)) != 'root' %}
+{% if ssh_user != 'root' %}
 echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/99-bootwright-wheel
 chmod 0440 /etc/sudoers.d/99-bootwright-wheel
 {% endif %}

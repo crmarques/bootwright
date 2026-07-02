@@ -540,6 +540,10 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% set satellite = rhsm.satellite | default({}) %}",
 		"{% set proxy_flag = (' --proxy=' ~ proxy_url) if (proxy_url | length > 0) else '' %}",
 		"{% if sat_enabled %}{% set sat_flag = ' --server-hostname=' ~ satellite.hostname %}{% if satellite.contentBaseURL | default('') | length > 0 %}{% set sat_flag = sat_flag ~ ' --rhsm-baseurl=' ~ satellite.contentBaseURL %}{% endif %}{% endif %}",
+		"{% set ssh_user = ks.sshUser | default('root', true) %}",
+		"{% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}",
+		"{% if ssh_user == 'root' and ssh_password_hash | length > 0 %}",
+		"rootpw --iscrypted {{ ssh_password_hash }}",
 		"%pre --erroronfail",
 		"cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT_SATELLITE_CA'",
 		"update-ca-trust extract",
@@ -562,6 +566,8 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% set ssh_key = '' %}",
 		"{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}",
 		"{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}",
+		"{% if ssh_user != 'root' and ssh_password_hash | length > 0 %}",
+		"user --name={{ ssh_user }} --groups=wheel --password={{ ssh_password_hash }} --iscrypted",
 		"%packages{{ pkg_opts }}",
 		"{% if packages.languages | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (packages.languages | join(',')) %}{% endif %}",
 		"@^{{ packages.environment | default('minimal') }}-environment",
@@ -571,8 +577,8 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		// An omitted ssh.user is an empty (defined) string, which `default('root')`
 		// would NOT replace; the `, true` makes it fall back to root so the sshkey /
 		// user lines never render an empty username.
-		"sshkey --username={{ ks.sshUser | default('root', true) }}",
-		"{% if (ks.sshUser | default('root', true)) != 'root' %}",
+		"sshkey --username={{ ssh_user }}",
+		"{% if ssh_user != 'root' %}",
 		// urlencode leaves '/' unescaped (safe='/'); a credential containing '/'
 		// must be %2F-encoded or it terminates the proxy URL authority early.
 		"| urlencode | replace('/', '%2F')",
@@ -583,6 +589,14 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 	}
 	if strings.Contains(body, "systemctl enable sshd") {
 		t.Fatalf("Kickstart template must not force-enable sshd outside customizations.services.enabled")
+	}
+	for _, forbidden := range []string{
+		"sshkey --username={{ ks.sshUser | default('root', true) }}",
+		"user --name={{ ks.sshUser }} --groups=wheel --lock",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Kickstart template must render the normalized ssh_user and password hash, not %q", forbidden)
+		}
 	}
 	for _, forbidden := range []string{"reboot --eject", "poweroff"} {
 		if strings.Contains(body, forbidden) {

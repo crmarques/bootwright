@@ -90,6 +90,9 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if ks["hostname"] != "ceph-0" {
 		t.Fatalf("kickstart hostname = %v", ks["hostname"])
 	}
+	if got, _ := ks["sshPasswordHash"].(string); !strings.HasPrefix(got, "$6$") {
+		t.Fatalf("kickstart sshPasswordHash = %v, want a SHA-512 crypt hash", ks["sshPasswordHash"])
+	}
 	packages := ks["packages"].(map[string]any)
 	if packages["environment"] != "minimal" || packages["installWeakDeps"] != false || packages["excludeDocs"] != true {
 		t.Fatalf("kickstart package options = %v", packages)
@@ -168,6 +171,9 @@ func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
 	}
 	if got := osInstall["kickstart"].(map[string]any)["sshUser"]; got != "root" {
 		t.Fatalf("managed OS kickstart.sshUser = %v, want root for omitted Machine.spec.access.ssh.user", got)
+	}
+	if got := osInstall["kickstart"].(map[string]any)["sshPasswordHash"]; got != managedOSSSHLoginPasswordHash {
+		t.Fatalf("managed OS kickstart.sshPasswordHash = %v, want stable login hash", got)
 	}
 }
 

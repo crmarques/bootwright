@@ -18,6 +18,12 @@ import (
 
 var managedOSSourceIDUnsafeRE = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
+// managedOSSSHLoginPasswordHash is a stable SHA-512 crypt hash of a discarded
+// high-entropy random value. Anaconda must leave the account unlocked for
+// OpenSSH/PAM to accept public-key auth, while sshd password auth remains
+// controlled separately by spec.customizations.ssh.passwordAuthentication.
+const managedOSSSHLoginPasswordHash = "$6$bwmossshlogin$Ol7r6C1RKzV8XE5IhNM4r2XrCBVflPt5NX.xLZ51oqBSBQMN/cmkAP0nHExtyEB7NiXgGuYuU9PQwUDnJIo.x."
+
 func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName string, paths PathOptions) map[string]any {
 	if machine.Spec.Access.SSH == nil {
 		return nil
@@ -66,6 +72,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(state, machine),
 			"sshUser":                sshUser,
+			"sshPasswordHash":        managedOSSSHLoginPasswordHash,
 			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
