@@ -230,8 +230,8 @@ func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 	assertIncludeRoleName(t, tasks[bootIdx], "bootwright.core.container_cluster_agent_install")
 }
 
-func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml")
+func TestSupportSSHReadinessAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
+	tasks := supportSSHReadinessProbeTasks(t)
 	contextIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key execution context")
 	prefixIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key caller command prefix")
 	checkIdx := findAnsibleTask(t, tasks, "Check node SSH auth probe key")
@@ -244,7 +244,7 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 	if !ok {
 		t.Fatalf("execution context task is not set_fact: %v", tasks[contextIdx])
 	}
-	expr := fmt.Sprint(setFact["bootwright_node_ready_ssh_key_exec_user"])
+	expr := fmt.Sprint(setFact["bootwright_ssh_ready_key_exec_user"])
 	for _, want := range []string{"BOOTWRIGHT_INTERNAL_LOCAL_ROOT", "SUDO_UID", "'#'"} {
 		if !strings.Contains(expr, want) {
 			t.Fatalf("execution user expression missing %q: %s", want, expr)
@@ -254,11 +254,11 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 	if !ok {
 		t.Fatalf("command prefix task is not set_fact: %v", tasks[prefixIdx])
 	}
-	prefix, ok := prefixFact["bootwright_node_ready_ssh_key_command_prefix"].([]any)
+	prefix, ok := prefixFact["bootwright_ssh_ready_key_command_prefix"].([]any)
 	if !ok {
 		t.Fatalf("command prefix is not a list: %v", prefixFact)
 	}
-	for _, want := range []string{"sudo", "-n", "-u", "{{ bootwright_node_ready_ssh_key_exec_user }}", "--"} {
+	for _, want := range []string{"sudo", "-n", "-u", "{{ bootwright_ssh_ready_key_exec_user }}", "--"} {
 		if !slices.Contains(prefix, any(want)) {
 			t.Fatalf("command prefix missing %q: %v", want, prefix)
 		}
@@ -268,7 +268,7 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 		t.Fatalf("key check task is not command: %v", tasks[checkIdx])
 	}
 	checkArgv := fmt.Sprint(checkCommand["argv"])
-	for _, want := range []string{"bootwright_node_ready_ssh_key_command_prefix", "'test'", "'-f'", "bootwright_node_ready_ssh_key_path"} {
+	for _, want := range []string{"bootwright_ssh_ready_key_command_prefix", "'test'", "'-f'", "bootwright_ssh_ready_key_path"} {
 		if !strings.Contains(checkArgv, want) {
 			t.Fatalf("key check argv missing %q: %s", want, checkArgv)
 		}
@@ -278,7 +278,7 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 		t.Fatalf("SSH auth task is not command: %v", tasks[authIdx])
 	}
 	authArgv := fmt.Sprint(authCommand["argv"])
-	for _, want := range []string{"bootwright_node_ready_ssh_key_command_prefix", "'ssh'", "bootwright_node_ready_ssh_key_path"} {
+	for _, want := range []string{"bootwright_ssh_ready_key_command_prefix", "'ssh'", "bootwright_ssh_ready_key_path"} {
 		if !strings.Contains(authArgv, want) {
 			t.Fatalf("SSH auth argv missing %q: %s", want, authArgv)
 		}
@@ -288,6 +288,14 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 			t.Fatalf("%s must not use Ansible become_user for caller key access", task["name"])
 		}
 	}
+}
+
+// supportSSHReadinessProbeTasks returns the SSH-probe block of the shared
+// support_ssh_readiness role, the readiness fragment the boot drivers include.
+func supportSSHReadinessProbeTasks(t *testing.T) []map[string]any {
+	t.Helper()
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/support_ssh_readiness/tasks/main.yml")
+	return nestedAnsibleTasks(t, tasks[findAnsibleTask(t, tasks, "Probe node readiness over SSH")], "block")
 }
 
 func assertRedfishURIModuleDefaults(t *testing.T, block map[string]any) {
@@ -458,9 +466,11 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	captureMediaIdx := findAnsibleTask(t, insertAttemptTasks, "Capture virtual media attachment status")
 	resolveAttachmentSourcesIdx := findAnsibleTask(t, insertAttemptTasks, "Resolve virtual media attachment sources")
 	resolveAttachedIdx := findAnsibleTask(t, insertAttemptTasks, "Resolve virtual media attachment result")
-	waitSSHIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to confirm live ISO boot complete")
-	sshAuthIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to accept configured key")
-	sshAuthConfirmIdx := findAnsibleTask(t, postTasks, "Confirm node SSH accepted configured key")
+	readinessProbeTasks := supportSSHReadinessProbeTasks(t)
+	sshReadinessIdx := findAnsibleTask(t, postTasks, "Wait for node SSH readiness")
+	waitSSHIdx := findAnsibleTask(t, readinessProbeTasks, "Wait for node SSH to confirm live ISO boot complete")
+	sshAuthIdx := findAnsibleTask(t, readinessProbeTasks, "Wait for node SSH to accept configured key")
+	sshAuthConfirmIdx := findAnsibleTask(t, readinessProbeTasks, "Confirm node SSH accepted configured key")
 	diskBootRefreshIdx := findAnsibleTask(t, postTasks, "Refresh Redfish system metadata before disk boot override")
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")
@@ -502,9 +512,13 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(retryDelayIdx < retryEjectIdx && retryEjectIdx < refreshMediaIdx && refreshMediaIdx < mediaPreconditionIdx && mediaPreconditionIdx < verifyCertIdx && verifyCertIdx < standardBodyIdx && standardBodyIdx < vmmBodyIdx && vmmBodyIdx < insertIdx && insertIdx < requestStatusIdx && requestStatusIdx < taskRefIdx && taskRefIdx < taskURLIdx && taskURLIdx < waitTaskIdx && waitTaskIdx < captureTaskIdx && captureTaskIdx < taskResultIdx && taskResultIdx < failedTaskProbeIdx && failedTaskProbeIdx < mountedTaskProbeIdx && mountedTaskProbeIdx < waitMediaIdx && waitMediaIdx < resolveProbeAfterInsertIdx && resolveProbeAfterInsertIdx < patchPreconditionIdx && patchPreconditionIdx < patchAttemptIdx && patchAttemptIdx < patchMediaIdx && patchMediaIdx < waitPatchMediaIdx && waitPatchMediaIdx < resolveProbeAfterPatchIdx && resolveProbeAfterPatchIdx < captureMediaIdx && captureMediaIdx < resolveAttachmentSourcesIdx && resolveAttachmentSourcesIdx < resolveAttachedIdx) {
 		t.Fatalf("boot_redfish insert attempt must verify async task and virtual media insertion before reporting success")
 	}
-	if !(waitSSHIdx < sshAuthIdx && sshAuthIdx < sshAuthConfirmIdx && sshAuthConfirmIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
+	if !(waitSSHIdx < sshAuthIdx && sshAuthIdx < sshAuthConfirmIdx) {
+		t.Fatalf("support_ssh_readiness must wait for the SSH port, probe auth, then confirm the key")
+	}
+	if !(sshReadinessIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
 		t.Fatalf("boot_redfish must verify SSH auth before switching subsequent boots back to disk")
 	}
+	assertIncludeRoleName(t, postTasks[sshReadinessIdx], "bootwright.core.support_ssh_readiness")
 	if !(restoreVMediaRefreshIdx < restoreVMediaPreconditionIdx && restoreVMediaPreconditionIdx < restoreVMediaIdx && restoreVMediaIdx < restoreSecurityRefreshIdx && restoreSecurityRefreshIdx < restoreSecurityPreconditionIdx && restoreSecurityPreconditionIdx < restoreSecurityIdx) {
 		t.Fatalf("boot_redfish restore tasks must restore virtual media then SecurityService certificate verification")
 	}
@@ -1031,7 +1045,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 		if _, ok := task["ansible.builtin.include_tasks"]; ok {
 			t.Fatalf("post-boot Redfish media eject must not dispatch media backend include_tasks: %v", task["name"])
 		}
-		if _, ok := task["ansible.builtin.include_role"]; ok {
+		if include, ok := task["ansible.builtin.include_role"].(map[string]any); ok && include["name"] != "bootwright.core.support_ssh_readiness" {
 			t.Fatalf("post-boot Redfish media eject must not dispatch media backend include_role: %v", task["name"])
 		}
 	}
@@ -1058,19 +1072,26 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if got := postTasks[diskBootIdx]["changed_when"]; got != "(bootwright_redfish_disk_boot_patch.status | default(0) | int) in [200, 202, 204]" {
 		t.Fatalf("disk boot override must mark accepted PATCH responses changed, got %v", got)
 	}
-	sshAuth, ok := postTasks[sshAuthIdx]["ansible.builtin.command"].(map[string]any)
+	sshAuth, ok := readinessProbeTasks[sshAuthIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no command task", postTasks[sshAuthIdx]["name"])
+		t.Fatalf("%s has no command task", readinessProbeTasks[sshAuthIdx]["name"])
 	}
-	if argv := fmt.Sprint(sshAuth["argv"]); !strings.Contains(argv, "BatchMode=yes") || !strings.Contains(argv, "bootwright_node_ready_ssh_user") || !strings.Contains(argv, "bootwright_node_probe_address") || !strings.Contains(argv, "bootwright_node_ready_probe_port_effective") {
+	if argv := fmt.Sprint(sshAuth["argv"]); !strings.Contains(argv, "BatchMode=yes") || !strings.Contains(argv, "bootwright_ssh_ready_user") || !strings.Contains(argv, "bootwright_ssh_ready_address") || !strings.Contains(argv, "bootwright_ssh_ready_port_effective") {
 		t.Fatalf("SSH auth probe must use noninteractive rendered SSH readiness, got %v", sshAuth["argv"])
 	}
-	sshAuthAssert, ok := postTasks[sshAuthConfirmIdx]["ansible.builtin.assert"].(map[string]any)
+	sshAuthAssert, ok := readinessProbeTasks[sshAuthConfirmIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no assert task", postTasks[sshAuthConfirmIdx]["name"])
+		t.Fatalf("%s has no assert task", readinessProbeTasks[sshAuthConfirmIdx]["name"])
 	}
-	if failMsg := fmt.Sprint(sshAuthAssert["fail_msg"]); !strings.Contains(failMsg, "rejected the") || !strings.Contains(failMsg, "declared MAC/IP mapping") {
-		t.Fatalf("SSH auth failure must explain stale boot and mapping risk, got %v", sshAuthAssert["fail_msg"])
+	if failMsg := fmt.Sprint(sshAuthAssert["fail_msg"]); !strings.Contains(failMsg, "rejected the") || !strings.Contains(failMsg, "bootwright_ssh_ready_reject_hint") {
+		t.Fatalf("SSH auth failure must explain the key rejection and append the caller hint, got %v", sshAuthAssert["fail_msg"])
+	}
+	readinessVars, ok := postTasks[sshReadinessIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass SSH readiness vars", postTasks[sshReadinessIdx]["name"])
+	}
+	if hint := fmt.Sprint(readinessVars["bootwright_ssh_ready_reject_hint"]); !strings.Contains(hint, "declared MAC/IP mapping") {
+		t.Fatalf("SSH auth failure hint must explain stale boot and mapping risk, got %v", hint)
 	}
 	diskAssert, ok := postTasks[diskBootConfirmIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {

@@ -1,130 +1,24 @@
 ---
-- name: Resolve post-boot readiness behavior
-  ansible.builtin.set_fact:
-    bootwright_boot_readiness_type: "{{ (bootwright_component.boot.readiness | default({})).type | default('ssh') }}"
-  changed_when: false
-
-- name: Validate post-boot readiness behavior
-  ansible.builtin.assert:
-    that:
-      - bootwright_component.boot.readiness is not defined or bootwright_component.boot.readiness is mapping
-      - bootwright_boot_readiness_type in ['none', 'ssh']
-    fail_msg: "Unsupported boot readiness type {{ bootwright_boot_readiness_type }}"
-
-- name: Resolve node readiness probe address
-  ansible.builtin.set_fact:
-    bootwright_node_probe_address: "{{ bootwright_component.primaryIPAddress | default('') }}"
-    bootwright_node_ready_probe_port_effective: "{{ ((bootwright_component.boot.readiness | default({})).ssh | default({})).port | default(bootwright_node_ready_probe_port) }}"
-    bootwright_node_ready_ssh_user: "{{ ((bootwright_component.boot.readiness | default({})).ssh | default({})).user | default('core') }}"
-  changed_when: false
-  when: bootwright_boot_readiness_type == 'ssh'
-
-- name: Wait for node SSH to confirm live ISO boot complete
-  ansible.builtin.wait_for:
-    host: "{{ bootwright_node_probe_address }}"
-    port: "{{ bootwright_node_ready_probe_port_effective | int }}"
-    timeout: "{{ bootwright_node_ready_timeout_seconds | int }}"
-  when:
-    - bootwright_boot_readiness_type == 'ssh'
-    - (bootwright_node_probe_address | length) > 0
-
-- name: Resolve node SSH auth probe key path
-  ansible.builtin.set_fact:
-    bootwright_node_ready_ssh_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
-    bootwright_node_ready_known_hosts_path: >-
+- name: Wait for node SSH readiness
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ssh_readiness
+  vars:
+    bootwright_ssh_ready_readiness: "{{ bootwright_component.boot.readiness | default({}) }}"
+    bootwright_ssh_ready_node_name: "{{ bootwright_component.name }}"
+    bootwright_ssh_ready_address: "{{ bootwright_component.primaryIPAddress | default('') }}"
+    bootwright_ssh_ready_default_port: "{{ bootwright_node_ready_probe_port }}"
+    bootwright_ssh_ready_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
+    bootwright_ssh_ready_known_hosts_path: >-
       /tmp/bootwright-node-ready-{{ bootwright_current_cluster.name | default('cluster') }}-{{ bootwright_component.name | default('node') }}-known-hosts
-  changed_when: false
-  when: bootwright_boot_readiness_type == 'ssh'
-
-- name: Resolve node SSH auth probe key execution context
-  ansible.builtin.set_fact:
-    bootwright_node_ready_ssh_key_exec_user: >-
-      {{
-        ('#' ~ lookup('env', 'SUDO_UID'))
-        if ((lookup('env', 'BOOTWRIGHT_INTERNAL_LOCAL_ROOT') | default('', true)) == '1'
-            and ((lookup('env', 'SUDO_UID') | default('', true)) | length) > 0)
-        else ''
-      }}
-    bootwright_node_ready_ssh_key_command_prefix: []
-  changed_when: false
-  when: bootwright_boot_readiness_type == 'ssh'
-
-- name: Resolve node SSH auth probe key caller command prefix
-  ansible.builtin.set_fact:
-    bootwright_node_ready_ssh_key_command_prefix:
-      - sudo
-      - -n
-      - -u
-      - "{{ bootwright_node_ready_ssh_key_exec_user }}"
-      - --
-  changed_when: false
-  when:
-    - bootwright_boot_readiness_type == 'ssh'
-    - (bootwright_node_ready_ssh_key_exec_user | length) > 0
-
-- name: Check node SSH auth probe key
-  ansible.builtin.command:
-    argv: "{{ bootwright_node_ready_ssh_key_command_prefix + ['test', '-f', bootwright_node_ready_ssh_key_path] }}"
-  register: bootwright_node_ready_ssh_key_check
-  changed_when: false
-  failed_when: false
-  when:
-    - bootwright_boot_readiness_type == 'ssh'
-    - (bootwright_node_probe_address | length) > 0
-    - (bootwright_node_ready_ssh_key_path | length) > 0
-
-- name: Wait for node SSH to accept configured key
-  ansible.builtin.command:
-    argv: >-
-      {{
-        bootwright_node_ready_ssh_key_command_prefix
-        + [
-          'ssh',
-          '-i',
-          bootwright_node_ready_ssh_key_path,
-          '-o',
-          'BatchMode=yes',
-          '-o',
-          'StrictHostKeyChecking=accept-new',
-          '-o',
-          'UserKnownHostsFile=' ~ bootwright_node_ready_known_hosts_path,
-          '-o',
-          'ConnectTimeout=' ~ (bootwright_node_ready_ssh_connect_timeout_seconds | int),
-          '-o',
-          'ConnectionAttempts=1',
-          '-p',
-          bootwright_node_ready_probe_port_effective | string,
-          bootwright_node_ready_ssh_user ~ '@' ~ bootwright_node_probe_address,
-          'true'
-        ]
-      }}
-  register: bootwright_node_ready_ssh_auth
-  changed_when: false
-  failed_when: false
-  until: (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0
-  retries: "{{ bootwright_node_ready_ssh_auth_retries | int }}"
-  delay: "{{ bootwright_node_ready_ssh_auth_delay_seconds | int }}"
-  when:
-    - bootwright_boot_readiness_type == 'ssh'
-    - (bootwright_node_probe_address | length) > 0
-    - (bootwright_node_ready_ssh_key_check.rc | default(1) | int) == 0
-
-- name: Confirm node SSH accepted configured key
-  ansible.builtin.assert:
-    that:
-      - (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0
-    fail_msg: >-
-      Node {{ bootwright_component.name }} at {{ bootwright_node_probe_address }}
-      answered TCP/{{ bootwright_node_ready_probe_port_effective | int }} but rejected the
-      {{ bootwright_node_ready_ssh_user }} SSH key {{ bootwright_node_ready_ssh_key_path }}.
+    bootwright_ssh_ready_port_timeout_seconds: "{{ bootwright_node_ready_timeout_seconds }}"
+    bootwright_ssh_ready_connect_timeout_seconds: "{{ bootwright_node_ready_ssh_connect_timeout_seconds }}"
+    bootwright_ssh_ready_auth_retries: "{{ bootwright_node_ready_ssh_auth_retries }}"
+    bootwright_ssh_ready_auth_delay_seconds: "{{ bootwright_node_ready_ssh_auth_delay_seconds }}"
+    bootwright_ssh_ready_reject_hint: >-
       This usually means the IP is an old or wrong boot, the BMC booted disk
       instead of the generated agent ISO, or the declared MAC/IP mapping points
       at another host. Check Redfish virtual media, boot order, and
       InfraProvider baremetal.interfaces for {{ bootwright_component.name }}.
-  when:
-    - bootwright_boot_readiness_type == 'ssh'
-    - (bootwright_node_probe_address | length) > 0
-    - (bootwright_node_ready_ssh_key_check.rc | default(1) | int) == 0
 
 - name: Refresh Redfish system metadata before disk boot override
   ansible.builtin.uri:

@@ -18,4 +18,22 @@
       ansible.builtin.import_tasks: power.yml
 
     - name: Wait for vSphere node readiness
-      ansible.builtin.import_tasks: readiness.yml
+      ansible.builtin.include_role:
+        name: bootwright.core.support_ssh_readiness
+      vars:
+        bootwright_ssh_ready_readiness: "{{ bootwright_component.boot.readiness | default({}) }}"
+        bootwright_ssh_ready_node_name: "{{ bootwright_component.name }}"
+        bootwright_ssh_ready_address: "{{ bootwright_component.primaryIPAddress | default('') }}"
+        bootwright_ssh_ready_default_port: "{{ bootwright_vsphere_node_ready_probe_port }}"
+        bootwright_ssh_ready_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
+        bootwright_ssh_ready_known_hosts_path: >-
+          /tmp/bootwright-node-ready-{{ bootwright_current_cluster.name | default('cluster') }}-{{ bootwright_component.name | default('node') }}-known-hosts
+        bootwright_ssh_ready_port_timeout_seconds: "{{ bootwright_vsphere_node_ready_timeout_seconds }}"
+        bootwright_ssh_ready_connect_timeout_seconds: "{{ bootwright_vsphere_node_ready_ssh_connect_timeout_seconds }}"
+        bootwright_ssh_ready_auth_retries: "{{ bootwright_vsphere_node_ready_ssh_auth_retries }}"
+        bootwright_ssh_ready_auth_delay_seconds: "{{ bootwright_vsphere_node_ready_ssh_auth_delay_seconds }}"
+        bootwright_ssh_ready_reject_hint: >-
+          This usually means the VM booted something other than the generated
+          agent ISO or the declared MAC/IP mapping points at another host.
+          Check the attached datastore media, the VM boot order, and the
+          machine's static addressing.
