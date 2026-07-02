@@ -24,7 +24,7 @@ emulated Redfish BMC.
 `secret generate` only materializes the generated entries; you must set the
 context secrets (`openshift-pull-secret`, `bmc-credentials`) yourself. After each
 step, run `bootwright status` — it prints the suggested next command. See
-[getting started](../../docs/getting-started.md) for the full secret and
+[getting started](../../docs/getting-started/index.md) for the full secret and
 host-trust workflow.
 
 ```text

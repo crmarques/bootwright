@@ -23,7 +23,7 @@ provider services and directory resource selection.
 secrets this example declares (`openshift-pull-secret`, `bmc-credentials`)
 yourself first. `bastion-host-ssh` points at a local key file. After each step,
 run `bootwright status` for the suggested next command. See
-[getting started](../../docs/getting-started.md) for the full secret and
+[getting started](../../docs/getting-started/index.md) for the full secret and
 host-trust workflow.
 
 ```text

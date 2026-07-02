@@ -229,9 +229,9 @@ separate prerequisite command; its read-only dependency checks run under
 `--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
 and tears down the whole context for `destroy` (clusters then infra). Top-level
 groups are `validate`,
-`context`, `host`, `bastion`, `cluster`, `container-cluster`, `example`,
-`print-env`, `media`, `secret`, `preflight`, `status`, `plan`, `render`, `apply`,
-`destroy`, and `version`. The formal CLI contract lives in
+`context`, `host`, `bastion`, `cluster`, `example`,
+`print-env`, `media`, `secret`, `preflight`, `status`, `state-check`, `plan`,
+`render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use

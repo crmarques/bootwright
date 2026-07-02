@@ -187,6 +187,7 @@ type syntaxCheckReport struct {
 	MachineInstallProfiles   int                      `json:"machineInstallProfiles"`
 	NetworkConfigs           int                      `json:"networkConfigs"`
 	InfraProviders           int                      `json:"infraProviders"`
+	InfraComponents          int                      `json:"infraComponents"`
 	ContainerClusters        int                      `json:"containerClusters"`
 	StorageClusters          int                      `json:"storageClusters"`
 	StoragePlacementPolicies int                      `json:"storagePlacementPolicies"`
@@ -212,6 +213,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		MachineInstallProfiles:    len(state.MachineInstallProfiles),
 		NetworkConfigs:            len(state.NetworkConfigs),
 		InfraProviders:            len(state.InfraProviders),
+		InfraComponents:           len(state.InfraComponents),
 		ContainerClusters:         len(state.ContainerClusters),
 		StorageClusters:           len(state.StorageClusters),
 		StoragePlacementPolicies:  len(state.StoragePlacementPolicies),
@@ -268,6 +270,7 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "MachineInstallProfiles", Value: fmt.Sprint(len(state.MachineInstallProfiles))},
 		{Key: "NetworkConfigs", Value: fmt.Sprint(len(state.NetworkConfigs))},
 		{Key: "InfraProviders", Value: fmt.Sprint(len(state.InfraProviders))},
+		{Key: "InfraComponents", Value: fmt.Sprint(len(state.InfraComponents))},
 		{Key: "ContainerClusters", Value: fmt.Sprint(len(state.ContainerClusters))},
 		{Key: "StorageClusters", Value: fmt.Sprint(len(state.StorageClusters))},
 		{Key: "StoragePlacementPolicies", Value: fmt.Sprint(len(state.StoragePlacementPolicies))},

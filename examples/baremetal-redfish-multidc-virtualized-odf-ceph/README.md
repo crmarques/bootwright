@@ -35,7 +35,7 @@ secrets this example declares (`openshift-pull-secret`, `bmc-credentials`,
 `ceph-registry-credentials`, `redhat-org`, `redhat-activation-key`) yourself
 first. `bastion-host-ssh` points at a local key file. After each step, run
 `bootwright status` for the suggested next command. See
-[getting started](../../docs/getting-started.md) for the full secret and
+[getting started](../../docs/getting-started/index.md) for the full secret and
 host-trust workflow.
 
 ```text

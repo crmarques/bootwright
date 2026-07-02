@@ -27,9 +27,9 @@ var contextOverride string
 func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "bootwright",
-		Short: "Desired-state OpenShift fleet provisioning",
+		Short: "Desired-state OpenShift, OKD, and Ceph fleet provisioning",
 		Long: "Bootwright renders, validates, and converges versioned desired-state YAML\n" +
-			"to drive OpenShift cluster lifecycle.",
+			"to drive OpenShift, OKD, and Ceph cluster lifecycle.",
 		Example: `  bootwright example init --name lab --output-dir ./lab-input
   bootwright validate -f ./lab-input
   bootwright context init --name lab -f ./lab-input
