@@ -47,7 +47,7 @@ timezone UTC --utc
 {% set ssh_user = ks.sshUser | default('root', true) %}
 {% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}
 {% if ssh_user == 'root' and ssh_password_hash | length > 0 %}
-rootpw --iscrypted {{ ssh_password_hash }}
+rootpw --iscrypted --allow-ssh {{ ssh_password_hash }}
 {% else %}
 rootpw --lock
 {% endif %}
@@ -158,8 +158,26 @@ update-ca-trust extract
 echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/99-bootwright-wheel
 chmod 0440 /etc/sudoers.d/99-bootwright-wheel
 {% endif %}
+{% if ssh_user == 'root' and ssh_key | length > 0 %}
+install -d -m 0700 -o root -g root /root/.ssh
+cat > /root/.ssh/authorized_keys <<'BOOTWRIGHT_ROOT_AUTHORIZED_KEYS'
+{{ ssh_key | trim }}
+BOOTWRIGHT_ROOT_AUTHORIZED_KEYS
+chmod 0600 /root/.ssh/authorized_keys
+chown root:root /root/.ssh /root/.ssh/authorized_keys
+restorecon -R /root/.ssh >/dev/null 2>&1 || true
+{% endif %}
+{% if ssh_user == 'root' or not (ks.passwordAuthentication | default(false)) %}
+install -d -m 0755 /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf <<'BOOTWRIGHT_SSHD_CONFIG'
+{% if ssh_user == 'root' %}
+PermitRootLogin yes
+{% endif %}
 {% if not (ks.passwordAuthentication | default(false)) %}
-sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+PasswordAuthentication no
+{% endif %}
+BOOTWRIGHT_SSHD_CONFIG
+chmod 0644 /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf
 {% endif %}
 {% set marker = bootwright_component.osInstall.marker | default({}) %}
 {% if marker.path | default('') | length > 0 %}

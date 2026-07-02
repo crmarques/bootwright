@@ -543,7 +543,7 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% set ssh_user = ks.sshUser | default('root', true) %}",
 		"{% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}",
 		"{% if ssh_user == 'root' and ssh_password_hash | length > 0 %}",
-		"rootpw --iscrypted {{ ssh_password_hash }}",
+		"rootpw --iscrypted --allow-ssh {{ ssh_password_hash }}",
 		"%pre --erroronfail",
 		"cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT_SATELLITE_CA'",
 		"update-ca-trust extract",
@@ -574,6 +574,13 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% set marker = bootwright_component.osInstall.marker | default({}) %}",
 		"cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'",
 		"{{ marker | to_nice_json }}",
+		"install -d -m 0700 -o root -g root /root/.ssh",
+		"cat > /root/.ssh/authorized_keys <<'BOOTWRIGHT_ROOT_AUTHORIZED_KEYS'",
+		"restorecon -R /root/.ssh >/dev/null 2>&1 || true",
+		"install -d -m 0755 /etc/ssh/sshd_config.d",
+		"cat > /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf <<'BOOTWRIGHT_SSHD_CONFIG'",
+		"PermitRootLogin yes",
+		"PasswordAuthentication no",
 		// An omitted ssh.user is an empty (defined) string, which `default('root')`
 		// would NOT replace; the `, true` makes it fall back to root so the sshkey /
 		// user lines never render an empty username.
@@ -591,8 +598,10 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		t.Fatalf("Kickstart template must not force-enable sshd outside customizations.services.enabled")
 	}
 	for _, forbidden := range []string{
+		"rootpw --iscrypted {{ ssh_password_hash }}",
 		"sshkey --username={{ ks.sshUser | default('root', true) }}",
 		"user --name={{ ks.sshUser }} --groups=wheel --lock",
+		"sed -i 's/^#\\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config",
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("Kickstart template must render the normalized ssh_user and password hash, not %q", forbidden)
