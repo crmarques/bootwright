@@ -53,6 +53,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if proxyVars := managedOSInstallProxyVars(state, env, paths.SecretsDir); len(proxyVars) > 0 {
 		installer["proxy"] = proxyVars
 	}
+	sshUser := managedOSSSHUser(machine)
 	out := map[string]any{
 		"profileName": profile.Metadata.Name,
 		"os": map[string]any{
@@ -64,7 +65,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"image":     machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName),
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(state, machine),
-			"sshUser":                machine.Spec.Access.SSH.User,
+			"sshUser":                sshUser,
 			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
@@ -78,7 +79,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if machine.Spec.Access.SSH != nil {
 		ssh := map[string]any{
 			"address":        v1alpha1.MachineSSHAddress(machine),
-			"user":           machine.Spec.Access.SSH.User,
+			"user":           sshUser,
 			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 		}
 		// The managed trust store has no portable form: in placeholder mode these
@@ -95,6 +96,13 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
 	return out
+}
+
+func managedOSSSHUser(machine v1alpha1.Machine) string {
+	if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
+		return machine.Spec.Access.SSH.User
+	}
+	return "root"
 }
 
 // machineOSInstallImageVars renders the normalize-materialized mediaType

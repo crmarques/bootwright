@@ -126,6 +126,13 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if got := network["device"]; got != "52:54:00:0f:07:d2" {
 		t.Fatalf("kickstart network device = %v, want deterministic libvirt MAC", got)
 	}
+	ifaces := network["interfaces"].([]map[string]any)
+	if len(ifaces) != 1 {
+		t.Fatalf("kickstart network interfaces = %v, want one static ethernet stanza", ifaces)
+	}
+	if ifaces[0]["bootproto"] != "static" || ifaces[0]["device"] != "52:54:00:0f:07:d2" || ifaces[0]["hostname"] != true {
+		t.Fatalf("kickstart network ethernet stanza = %v", ifaces[0])
+	}
 	storage := ks["storage"].(map[string]any)
 	if storage["rootDisk"] != "vda" {
 		t.Fatalf("kickstart storage = %v", storage)
@@ -142,6 +149,25 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	redfish := boot["redfish"].(map[string]any)
 	if redfish["setBootSource"] != false {
 		t.Fatalf("managed OS libvirt Redfish setBootSource = %v, want false", redfish["setBootSource"])
+	}
+}
+
+func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Machines[0].Spec.Access.SSH.User = ""
+
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	osInstall := first["osInstall"].(map[string]any)
+	if got := osInstall["ssh"].(map[string]any)["user"]; got != "root" {
+		t.Fatalf("managed OS ssh.user = %v, want root for omitted Machine.spec.access.ssh.user", got)
+	}
+	if got := osInstall["kickstart"].(map[string]any)["sshUser"]; got != "root" {
+		t.Fatalf("managed OS kickstart.sshUser = %v, want root for omitted Machine.spec.access.ssh.user", got)
 	}
 }
 

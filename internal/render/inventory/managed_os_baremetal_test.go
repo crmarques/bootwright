@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
@@ -76,6 +77,28 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		}
 		if image["effectiveSourcePath"] != image["path"] {
 			t.Fatalf("component %v effectiveSourcePath = %v, want image.path %v", component["name"], image["effectiveSourcePath"], image["path"])
+		}
+		network := component["osInstall"].(map[string]any)["kickstart"].(map[string]any)["network"].(map[string]any)
+		stanzas, ok := network["interfaces"].([]map[string]any)
+		if !ok || len(stanzas) != 2 {
+			t.Fatalf("component %v kickstart network interfaces = %v, want bond plus VLAN stanzas", component["name"], network["interfaces"])
+		}
+		bond := stanzas[0]
+		if bond["device"] != "bond0" || bond["bootproto"] != "none" {
+			t.Fatalf("component %v bond stanza = %v", component["name"], bond)
+		}
+		if got := bond["bondSlaves"]; !reflect.DeepEqual(got, []string{"eno1", "eno2"}) {
+			t.Fatalf("component %v bondSlaves = %v, want eno1/eno2", component["name"], got)
+		}
+		if bond["bondOptions"] != "mode=active-backup,miimon=100" {
+			t.Fatalf("component %v bondOptions = %v", component["name"], bond["bondOptions"])
+		}
+		vlan := stanzas[1]
+		if vlan["device"] != "bond0.140" || vlan["interfaceName"] != "bond0.140" || vlan["vlanID"] != 140 {
+			t.Fatalf("component %v VLAN stanza = %v", component["name"], vlan)
+		}
+		if vlan["bootproto"] != "static" || vlan["netmask"] != "255.255.255.0" || vlan["hostname"] != true {
+			t.Fatalf("component %v static VLAN stanza = %v", component["name"], vlan)
 		}
 
 		// A bare-metal node mounts its managed-OS install ISO over the BMC, so
