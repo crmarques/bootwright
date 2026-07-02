@@ -1,4 +1,17 @@
 ---
+- name: Wait for previous managed OS SSH port to stop
+  ansible.builtin.wait_for:
+    host: "{{ bootwright_component.osInstall.ssh.address }}"
+    port: 22
+    state: stopped
+    timeout: 300
+  delegate_to: localhost
+  changed_when: false
+  when:
+    - bootwright_managed_os_boot_component is defined
+    - not (bootwright_os_pre_ssh_port.failed | default(true))
+    - not (bootwright_managed_os_already_ready | bool)
+
 - name: Wait for managed OS SSH port
   ansible.builtin.wait_for:
     host: "{{ bootwright_component.osInstall.ssh.address }}"

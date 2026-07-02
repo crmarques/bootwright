@@ -161,6 +161,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	readMarkerIdx := findAnsibleTask(t, topTasks, "Read managed OS install marker before install")
 	refuseMarkerIdx := findAnsibleTask(t, topTasks, "Refuse foreign or unmarked reachable managed OS")
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
+	waitOldSSHStopIdx := findAnsibleTask(t, topTasks, "Wait for previous managed OS SSH port to stop")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
 	baremetalEjectIdx := findAnsibleTask(t, topTasks, "Eject boot virtual media after SSH is ready")
@@ -183,11 +184,21 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !(readMarkerIdx < refuseMarkerIdx && refuseMarkerIdx < installBlockIdx) {
 		t.Fatalf("Anaconda role must check the managed OS marker before the install block")
 	}
-	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < baremetalEjectIdx && baremetalEjectIdx < recordHostKeyIdx) {
-		t.Fatalf("Anaconda role must let Kickstart reboot, wait for SSH, then clean media and eject Redfish virtual media before recording the host key")
+	if !(installBlockIdx < waitOldSSHStopIdx && waitOldSSHStopIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < baremetalEjectIdx && baremetalEjectIdx < recordHostKeyIdx) {
+		t.Fatalf("Anaconda role must let Kickstart reboot, wait for any previous SSH listener to stop, wait for SSH, then clean media and eject Redfish virtual media before recording the host key")
 	}
 	if !(recordHostKeyIdx < verifySSHIdx && verifySSHIdx < writeMarkerIdx) {
 		t.Fatalf("Anaconda role must write the managed OS marker after SSH verification")
+	}
+	waitOldSSHStop, ok := topTasks[waitOldSSHStopIdx]["ansible.builtin.wait_for"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a wait_for task", topTasks[waitOldSSHStopIdx]["name"])
+	}
+	if waitOldSSHStop["host"] != "{{ bootwright_component.osInstall.ssh.address }}" || waitOldSSHStop["port"] != 22 || waitOldSSHStop["state"] != "stopped" || waitOldSSHStop["timeout"] != 300 {
+		t.Fatalf("%s must wait for the previous SSH listener to stop, got %v", topTasks[waitOldSSHStopIdx]["name"], waitOldSSHStop)
+	}
+	if got := fmt.Sprint(topTasks[waitOldSSHStopIdx]["when"]); !strings.Contains(got, "bootwright_managed_os_boot_component is defined") || !strings.Contains(got, "bootwright_os_pre_ssh_port.failed") || !strings.Contains(got, "bootwright_managed_os_already_ready") {
+		t.Fatalf("%s must run only after an install boot when SSH was previously reachable, got when=%v", topTasks[waitOldSSHStopIdx]["name"], topTasks[waitOldSSHStopIdx]["when"])
 	}
 	assertIncludeRoleName(t, topTasks[cleanupMediaIdx], "{{ bootwright_component.mediaPrepareRole }}")
 	cleanupVars, ok := topTasks[cleanupMediaIdx]["vars"].(map[string]any)
