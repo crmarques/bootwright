@@ -1161,12 +1161,21 @@ Rules:
   an undefined VM, a deleted namespace) is not detected until the next apply
   refreshes the record. A root whose resources are all `missing` is reported as
   one absence; a present root reports only the resources that are not in sync.
-  Drift is reported per object: each selected apply task is one reported
-  resource, and a managed `StorageCluster`'s pools, filesystems, object
-  gateways, NFS exports, and exports are each classified independently against
-  their own recorded apply, so the report names the individual pool or export
+  Drift is reported per apply task: each selected apply task is one reported
+  resource. Classification granularity is per task, and how finely it isolates a
+  single desired-state edit depends on the task's recorded hash scope. Two scopes
+  classify at true object granularity: a managed `StorageCluster`'s pools,
+  filesystems, object gateways, NFS exports, and exports are each classified
+  against their own recorded apply (the report names the individual pool or export
   that drifted or is not yet applied — the same object granularity `apply` acts
-  on.
+  on), and each `infrastructure` host task hashes a host-scoped projection so an
+  unrelated edit does not flip it. Every other cluster-root task (agent ISO, node
+  boot, install wait, per-machine provisioning, add-on apply) hashes the
+  cluster-filtered desired state, so any change within a present cluster reports
+  every one of that cluster's tasks as drift, not only the task that consumes the
+  changed object; use `render effective` and diff, or `plan`, to see which object
+  changed. Narrowing these tasks to per-object projections (as storage sub-objects
+  and infrastructure hosts already do) is a planned refinement.
   A present `StorageCluster` lists its out-of-sync sub-objects under the cluster
   root, while a never-applied cluster still collapses to one absence. The
   `infrastructure` root aggregates the provider and infra-component host tasks.
