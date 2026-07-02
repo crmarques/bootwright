@@ -19,10 +19,10 @@ Like the smaller examples, the YAML is lean and relies on documented defaults; r
   shared service catalog entries.
 - `infra/`: provider hosts, bare-metal and KubeVirt providers, network
   attachments, artifact services, and network templates.
-- `clusters/container/*/cluster-machines.yaml`: VIPs, artifact endpoints, machine
-  selections, KubeVirt network bindings, and platform render mode.
-- `clusters/container/*/cluster.yaml`: OpenShift release, networking, and node
-  bindings for parent and child clusters.
+- `clusters/container/*/<machine>.yaml`: per-cluster node Machines — hardware,
+  addresses, and KubeVirt/network bindings, one object per file.
+- `clusters/container/*/cluster.yaml`: OpenShift release, VIP endpoints, artifact
+  access, networking, and node bindings for parent and child clusters.
 - `clusters/storage/ceph-storage/*.yaml`: Ceph topology, pools, filesystems,
   RGW, and exports.
 - `add-ons/*.yaml` and `clusters/container/*/add-on-binding.yaml`: bootstrap

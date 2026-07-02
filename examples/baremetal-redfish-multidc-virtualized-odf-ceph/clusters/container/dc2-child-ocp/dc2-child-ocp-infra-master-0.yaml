@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc2-child-ocp-infra-master-0
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-master
+
+  os:
+    provided: false
+
+  network:
+    config:
+      networkConfigRef: dc2-child-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.152.30

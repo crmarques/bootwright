@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc2-1
+spec:
+  capabilities:
+    - ceph-node
+
+  os:
+    provided: true
+
+  addresses:
+    - name: ssh
+      address: 192.168.142.31
+
+  access:
+    ssh:
+      user: root
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh

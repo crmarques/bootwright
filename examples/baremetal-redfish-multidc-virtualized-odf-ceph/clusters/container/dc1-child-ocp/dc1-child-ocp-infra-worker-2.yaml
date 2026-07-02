@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-worker-2
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: kubevirt-provider-dc1
+    profileRef: dc1-child-worker
+
+  os:
+    provided: false
+
+  network:
+    config:
+      networkConfigRef: dc1-child-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.151.42

@@ -48,7 +48,8 @@ across clusters.
 !!! note "One object per file"
     Each input YAML file holds exactly one object, and the filename matches
     `metadata.name`. A fleet is many small files organized by directory, not a
-    few multi-document files.
+    few multi-document files. This is the authoring layout `specs/state-model.md`
+    defines; every example and `bootwright example init` follow it.
 
 ## The single cluster-selection namespace
 

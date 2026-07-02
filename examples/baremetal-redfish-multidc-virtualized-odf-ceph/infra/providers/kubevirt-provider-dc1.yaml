@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: kubevirt-provider-dc1
+spec:
+  type: kubevirt
+
+  networkAttachments:
+
+  - name: dc1-child-net
+    kubevirt:
+      networkRef:
+        apiGroup: k8s.ovn.org
+        kind: ClusterUserDefinedNetwork
+        name: dc1-child-net
+        namespace: bootwright-dc1-child-ocp
+
+  kubevirt:
+    namespace: bootwright-dc1-child-ocp
+    storageClassRef: ocs-storagecluster-ceph-rbd
+    hostClusterRef: dc1-metal-ocp
+    machineProfiles:
+    - name: dc1-child-master
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+    - name: dc1-child-worker
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120

@@ -47,16 +47,25 @@ func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 		"environment.yaml", "infra/providers/provider.yaml", "infra/networkconfigs/networks.yaml",
 		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
 	}
-	namesWithArtifacts := []string{
+	baremetalNames := []string{
 		"environment.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
-		"infra/networkconfigs/networks.yaml", "infra/components/infra-component.yaml",
+		"infra/networkconfigs/networks.yaml", "infra/components/artifact-server.yaml",
+		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
+	}
+	emulatedNames := []string{
+		"environment.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
+		"infra/networkconfigs/networks.yaml", "infra/components/load-balancer.yaml",
+		"infra/components/name-resolution.yaml", "infra/components/ntp-server.yaml",
 		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
 	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
 			wantNames := defaultNames
-			if scaffold.Provider(p) == scaffold.ProviderBareMetal || scaffold.Provider(p) == scaffold.ProviderEmulatedBareMetal {
-				wantNames = namesWithArtifacts
+			switch scaffold.Provider(p) {
+			case scaffold.ProviderBareMetal:
+				wantNames = baremetalNames
+			case scaffold.ProviderEmulatedBareMetal:
+				wantNames = emulatedNames
 			}
 			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p))
 			if err != nil {

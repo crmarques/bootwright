@@ -110,6 +110,13 @@ Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
 inputs, fixtures, or scaffold output.
 
+Authored input keeps one object per file. Object files are named for their
+content — a cluster root as `cluster.yaml`, other objects by their
+`metadata.name` — and grouped into directories per the layout in
+`docs/advanced/fleets.md`. The loader still accepts multi-document files, but
+examples, e2e inputs, fixtures, and `bootwright example init` output keep one
+object per file so a name maps to exactly one file.
+
 ## Machine
 
 `Machine` is the single user-facing model for raw hardware, virtual machines,

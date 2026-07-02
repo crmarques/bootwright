@@ -36,7 +36,9 @@ my-sno-lab/
     networkconfigs/
       networks.yaml
     components/
-      infra-component.yaml
+      load-balancer.yaml
+      name-resolution.yaml
+      ntp-server.yaml
   clusters/
     container/
       my-sno-lab/
@@ -108,14 +110,14 @@ memory, disk), and the `networkAttachments` that name the libvirt bridge. The
 libvirt adapter drives the emulated Redfish BMC that boots the node from the agent
 ISO — the lab needs no separate bare-metal provider.
 
-### InfraComponent (`infra/components/infra-component.yaml`)
+### InfraComponent (`infra/components/`)
 
-Machine-bound shared services. Three are declared, all pinned to `bastion`:
+Machine-bound shared services, one object per file, all pinned to `bastion`:
 
-- `load-balancer` (`haproxy`): publishes the `control-plane` and `apps` virtual
-  IPs under `spec.loadBalancer.bindAddresses[]`.
-- `name-resolution` (`dnsmasq`): serves cluster DNS.
-- `ntp-server` (`chrony`): serves time.
+- `load-balancer.yaml` (`haproxy`): publishes the `control-plane` and `apps`
+  virtual IPs under `spec.loadBalancer.bindAddresses[]`.
+- `name-resolution.yaml` (`dnsmasq`): serves cluster DNS.
+- `ntp-server.yaml` (`chrony`): serves time.
 
 ### ContainerCluster (`clusters/container/my-sno-lab/cluster.yaml`)
 
@@ -147,7 +149,7 @@ Open the scaffold and adjust these for your host. The defaults form a working
 | `infra/providers/provider.yaml` | `spec.libvirt.uri` | The libvirt URI, usually `qemu:///system`. |
 | `infra/providers/provider.yaml` | `spec.libvirt.machineProfiles[]` | CPU, memory, and disk for the node VM (default `sno`: 8 vCPU / 22528 MiB / 120 GiB). |
 | `infra/providers/provider.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network. |
-| `infra/components/infra-component.yaml` | `InfraComponent/load-balancer` `spec.loadBalancer.bindAddresses[]` | The `control-plane` VIP (`192.168.130.10`) and `apps` VIP (`192.168.130.11`). |
+| `infra/components/load-balancer.yaml` | `InfraComponent/load-balancer` `spec.loadBalancer.bindAddresses[]` | The `control-plane` VIP (`192.168.130.10`) and `apps` VIP (`192.168.130.11`). |
 | `clusters/container/my-sno-lab/cluster.yaml` | `spec.distribution.release.version` | The OpenShift release to install (default `4.21.15`). |
 
 Leave `spec.secrets` as names only. Then validate the tree offline (no host

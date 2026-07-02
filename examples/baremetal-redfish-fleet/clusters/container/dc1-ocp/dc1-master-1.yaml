@@ -1,0 +1,45 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-master-1
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: baremetal-provider
+
+  os:
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef: dc1-net
+      attachmentRef: dc1-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: primary
+        interfaceName: primary
+
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:41:10:11
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-dc1-master-1.bootwright.test/redfish/v1/Systems/1
+        credentialsRef: bmc-credentials
+        tls:
+          verify: false
+    boot:
+      nicRef: primary
+
+  addresses:
+    - name: ip
+      address: 192.168.141.21

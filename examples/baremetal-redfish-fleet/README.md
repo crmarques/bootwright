@@ -12,10 +12,10 @@ provider services and directory resource selection.
   BMC credential reference.
 - `infra/networkconfigs/*.yaml`: per-site machine CIDRs, resolvers, routes, and
   NMState interfaces.
-- `clusters/container/*/cluster-machines.yaml`: per-cluster VIPs, artifact
-  endpoint, machine selections, and platform render mode.
-- `clusters/container/*/cluster.yaml`: release, cluster networking, and node
-  bindings.
+- `clusters/container/*/<machine>.yaml`: per-cluster node Machines — hardware,
+  addresses, and network config, one object per file.
+- `clusters/container/*/cluster.yaml`: release, VIP endpoints, artifact access,
+  cluster networking, and node bindings.
 
 ## Validate And Apply
 

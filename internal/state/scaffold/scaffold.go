@@ -80,9 +80,69 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		if t.optional && strings.TrimSpace(body) == "" {
 			continue
 		}
+		if t.perObject {
+			objects, err := splitObjectFiles(name, body)
+			if err != nil {
+				return nil, fmt.Errorf("split %s objects: %w", t.name, err)
+			}
+			files = append(files, objects...)
+			continue
+		}
 		files = append(files, File{Name: name, Body: body})
 	}
 	return files, nil
+}
+
+// splitObjectFiles emits one File per YAML document in body, named
+// dir+<metadata.name>.yaml, so scaffolded output keeps one object per file (the
+// authoring layout specs/state-model.md defines).
+func splitObjectFiles(dir, body string) ([]File, error) {
+	docs := splitYAMLDocuments(body)
+	files := make([]File, 0, len(docs))
+	for _, doc := range docs {
+		name := objectMetadataName(doc)
+		if name == "" {
+			return nil, fmt.Errorf("scaffold object in %s has no metadata.name:\n%s", dir, doc)
+		}
+		files = append(files, File{Name: dir + name + ".yaml", Body: strings.TrimRight(doc, "\n") + "\n"})
+	}
+	return files, nil
+}
+
+func splitYAMLDocuments(body string) []string {
+	var docs []string
+	var cur []string
+	flush := func() {
+		text := strings.Trim(strings.Join(cur, "\n"), "\n")
+		if strings.TrimSpace(text) != "" {
+			docs = append(docs, text)
+		}
+		cur = nil
+	}
+	for _, line := range strings.Split(body, "\n") {
+		if strings.TrimSpace(line) == "---" {
+			flush()
+			continue
+		}
+		cur = append(cur, line)
+	}
+	flush()
+	return docs
+}
+
+func objectMetadataName(doc string) string {
+	inMetadata := false
+	for _, line := range strings.Split(doc, "\n") {
+		switch {
+		case line == "metadata:":
+			inMetadata = true
+		case inMetadata && strings.HasPrefix(line, "  name:"):
+			return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "name:"))
+		case inMetadata && line != "" && !strings.HasPrefix(line, "  "):
+			inMetadata = false
+		}
+	}
+	return ""
 }
 
 func formatDesiredStateYAML(body string) string {
@@ -269,9 +329,13 @@ type templateData struct {
 }
 
 type namedTemplate struct {
-	name     string
-	tmpl     *template.Template
+	name string
+	tmpl *template.Template
+	// optional drops the file when its rendered body is empty.
 	optional bool
+	// perObject splits the rendered body into one file per YAML object under
+	// the directory named by `name`, keeping one object per file.
+	perObject bool
 }
 
 var allTemplates = []namedTemplate{
@@ -279,7 +343,7 @@ var allTemplates = []namedTemplate{
 	{name: "infra/providers/provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
 	{name: "infra/machines/bastion.yaml", tmpl: mustTmpl("bastion", bastionMachinesTmpl), optional: true},
 	{name: "infra/networkconfigs/networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
-	{name: "infra/components/infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
+	{name: "infra/components/", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true, perObject: true},
 	{name: "clusters/container/{{.Cluster}}/cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
 	{name: "clusters/container/{{.Cluster}}/cluster-machines.yaml", tmpl: mustTmpl("clustermachines", clusterMachinesTmpl)},
 }
