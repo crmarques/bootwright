@@ -50,8 +50,13 @@ the scope to install the parent; they fail before mutation unless the parent is
 selected too or local runtime records prove the parent install and KubeVirt
 add-on are ready.
 
-Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
-for machine-level work. Provider, InfraComponent, machine-infrastructure, and
+Bootwright is the cross-cluster DAG orchestrator. The executor split is:
+host and bastion mutations execute in Ansible; installed-cluster API
+operations execute in Go through the `oc` command boundary
+(`internal/addons/oc`); the `openshift-install` agent run stays in Ansible
+because it is entangled with bastion machine state (controller DNS and
+resolver stages). A new cluster-scoped executor follows this rule rather
+than re-deciding the split. Provider, InfraComponent, machine-infrastructure, and
 storage playbooks use Ansible-native parallelism, while Bootwright enforces
 resource locks before launching concurrent playbooks: one mutating task per
 provider or service machine until roles are classified more finely, and one
