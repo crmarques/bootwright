@@ -78,6 +78,16 @@ spec:
 explicit-image path and is the usual way to pin a release or install OKD without
 a channel feed.
 
+!!! warning "Release fields are install-time intent, not a day-2 upgrade"
+    `distribution.release.*` selects what bootwright installs. Editing it on an
+    already-installed cluster is classified as drift, and its only in-band
+    resolution is a reinstall — `apply --override` reinstalls the cluster, it does
+    not upgrade it. In-place cluster upgrades are a non-goal today: upgrade out of
+    band with `oc adm upgrade`, then be aware that the desired state still names
+    the old version, so `state-check` reports the cluster as drifted until a
+    future apply refreshes the record. Adopting an out-of-band upgrade into the
+    recorded desired state is an open design item.
+
 !!! note "Pull secret is required for OpenShift"
     An `openshift` distribution requires a pull secret. The normalize phase
     fills `install.pullSecretRef` from the `Environment` default, falling back

@@ -106,6 +106,15 @@ spec:
 | `ceph.services[]` | No | — | Raw cephadm service-spec passthrough for unmodeled service types; see [Passthrough services](#passthrough-services). |
 | `ceph.topology` | Yes | — | Hosts, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
 
+!!! warning "Release/image fields are install-time intent, not a day-2 upgrade"
+    `ceph.release` and `ceph.image` select what cephadm bootstraps. Changing them
+    on a live cluster is drift, and the only in-band resolution is a rebuild
+    (`apply --override` runs `cephadm rm-cluster --zap-osds` and re-bootstraps —
+    data-destroying). Upgrade a running cluster out of band with `cephadm`/`ceph
+    orch upgrade`; the desired state then names the old release, so `state-check`
+    reports drift until a future apply refreshes the record. Adopting an
+    out-of-band upgrade into the recorded desired state is an open design item.
+
 !!! note "Cross-field rules"
     - `ceph.config` **rejects** `public_network` and `cluster_network` keys in
       any section — they are owned by `ceph.networks` (`publicCIDRs` /

@@ -220,6 +220,23 @@ or local runtime records already prove the parent install and its `kubevirt`
 add-on are ready. Select both roots together when the parent is not yet
 installed.
 
+## Removing declared objects
+
+`apply` is additive: it never deletes or deprovisions a live resource whose
+declaration you removed from desired state (see
+[Troubleshooting](../troubleshooting.md#resources-no-longer-in-desired-state-orphans)).
+What a deletion means depends on the kind:
+
+| You delete… | What happens | Supported removal |
+| --- | --- | --- |
+| A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `state-check` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file — destroy is ownership-record driven and can reach a resource already gone from desired state. |
+| A `ContainerCluster.spec.hosts[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--override` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
+| A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
+| A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |
+
+Removal always crosses the destroy authorization boundary or goes out of band;
+`apply` alone never prunes.
+
 ## Managed-OS reinstall and owned-Ceph rebuild
 
 Two destructive rebuilds run through `apply --override` and are gated by
