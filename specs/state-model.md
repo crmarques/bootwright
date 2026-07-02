@@ -58,8 +58,13 @@ Rules:
   discriminators (such as `InfraComponent.spec.type`), so the
   who-runs-it axis is spelled `management` here, matching
   `StorageCluster.spec.management`.
-- `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
-  catalog entries by name. Omitted values default to `none`.
+- `proxyFor.bootwright`, `proxyFor.containerClusterInstall`, and
+  `proxyFor.machineOSInstall` select proxy catalog entries by name. Omitted
+  values default to `none`. `proxyFor.machineOSInstall` routes the managed-OS
+  (Anaconda) install fetch: a boot ISO carries no packages, so Anaconda reaches
+  the install tree or the Red Hat CDN over the network during install. Only an
+  external proxy entry applies here, because the node installs before any
+  managed proxy component could exist.
 - `secretStorage.mode`, when set, must be `source` (default) or `context`.
   `context` requires `bootwright secret generate` to copy `file:`-sourced
   material into the encrypted context store before workflows read it; `source`

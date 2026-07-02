@@ -104,9 +104,12 @@ place Bootwright disables TLS verification, and it is deliberately narrow:
 ## Proxy Boundaries
 
 `Environment.spec.infraComponents.proxies[]` declares proxy access entries.
-`Environment.spec.proxyFor.bootwright` and
-`Environment.spec.proxyFor.containerClusterInstall` select which proxy each
-consumer uses; omitted values and `none` disable proxy use.
+`Environment.spec.proxyFor.bootwright`,
+`Environment.spec.proxyFor.containerClusterInstall`, and
+`Environment.spec.proxyFor.machineOSInstall` select which proxy each consumer
+uses; omitted values and `none` disable proxy use. `machineOSInstall` routes the
+managed-OS (Anaconda) install fetch and takes effect only for an external proxy
+entry, since the node installs before any managed proxy exists.
 
 External proxy entries carry direct URLs and optional auth refs. Managed proxy
 entries reference an `InfraComponent` with `spec.proxy`, and the runtime URL is
