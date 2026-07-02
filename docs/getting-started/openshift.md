@@ -72,7 +72,7 @@ The scaffold declares four secrets:
 | `openshift-pull-secret` | OpenShift pull secret | You set it: `bootwright secret set` |
 | `my-sno-lab-cluster-admin-ssh-key` | Node (core user) SSH key pair | Generated for you: `bootwright secret generate` |
 | `bastion-host-ssh` | SSH private key to reach the bastion | `file:` reference to a key you create — see [Installation](installation.md#the-bastion-ssh-key) |
-| `bmc-credentials` | Credentials for the emulated Redfish BMC | You set it: `bootwright secret set` |
+| `bmc-credentials` | Credentials for the emulated Redfish BMC | Generated for you: `bootwright secret generate` (bootwright configures the emulator) |
 
 ### Machine (`infra/machines/bastion.yaml`, `clusters/container/my-sno-lab/cluster-machines.yaml`)
 
@@ -101,14 +101,12 @@ resolver, and the default route).
 
 ### InfraProvider (`infra/providers/provider.yaml`)
 
-The substrate facts. **Two** providers are declared — this is easy to miss:
-
-- `my-sno-lab-libvirt` (`type: libvirt`): the VM substrate. It owns the libvirt
-  `uri`, the emulated-BMC credential reference (`bmcEmulationDefaults`), the VM
-  sizing `machineProfiles` (the `sno` profile: CPU, memory, disk), and the
-  `networkAttachments` that name the libvirt bridge.
-- `my-sno-lab-hosts` (`type: baremetal`): the externally-booted arm the node uses
-  to receive the agent ISO over the emulated Redfish virtual media.
+The substrate facts, all on one `type: libvirt` provider (`my-sno-lab-libvirt`).
+It owns the libvirt `uri`, the emulated-BMC credential reference
+(`bmcEmulationDefaults`), the VM sizing `machineProfiles` (the `sno` profile: CPU,
+memory, disk), and the `networkAttachments` that name the libvirt bridge. The
+libvirt adapter drives the emulated Redfish BMC that boots the node from the agent
+ISO — the lab needs no separate bare-metal provider.
 
 ### InfraComponent (`infra/components/infra-component.yaml`)
 
@@ -173,12 +171,12 @@ bootwright context current
 bootwright status
 ```
 
-Load the secret bytes. The two operator-supplied entries you set yourself; the
-generated and `file:`-sourced entries are converged by `secret generate`:
+Load the secret bytes. Only the pull secret is operator-supplied; the generated
+(`bmc-credentials`, the node SSH key) and `file:`-sourced (`bastion-host-ssh`)
+entries are converged by `secret generate`:
 
 ```bash
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
-printf '%s\n' "${BMC_PASS}" | bootwright secret set --name bmc-credentials --username "${BMC_USER}" --password-stdin
 bootwright secret generate
 bootwright secret check
 bootwright secret list

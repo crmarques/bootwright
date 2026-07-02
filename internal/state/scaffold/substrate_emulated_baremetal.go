@@ -5,7 +5,10 @@ var emulatedBareMetalSubstrate = Substrate{
 	NetworkNameSuffix:  "bridge",
 	EnvExtraSecrets: `    - bastion-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - bmc-credentials
+    - bmc-credentials:
+        generated:
+          credentials:
+            username: bmc-admin
 `,
 	EnvArtifactServer: `  infraComponents:
     nameResolution:
@@ -72,16 +75,6 @@ spec:
 
 `,
 	ProviderCapabilities: `apiVersion: bootwright.io/v1alpha1
-kind: InfraProvider
-metadata:
-  name: {{.Cluster}}-hosts
-spec:
-  type: baremetal
-  baremetal:
-    boot:
-      method: external
----
-apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: {{.ProviderID}}
