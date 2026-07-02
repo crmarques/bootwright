@@ -140,6 +140,14 @@ A connected cluster pulls release and operator images from upstream registries. 
 disconnected cluster pulls everything from a mirror, so the `Environment` must
 also provide mirror trust material and a mirror to pull from.
 
+!!! warning "Set `mode: disconnected` on every cluster of a disconnected fleet"
+    `install.mode` is per-cluster and defaults to `connected` even when the
+    `Environment` declares `registries.mirror` and a managed registry. Bootwright
+    does not infer disconnectedness from the fleet, so a cluster that omits `mode`
+    validates as connected and then stalls at install trying to reach upstream
+    registries the network cannot. Set `mode: disconnected` explicitly on each
+    `ContainerCluster` in an air-gapped fleet.
+
 ### Mirror registry
 
 `Environment.spec.registries.mirror` points the disconnected install at one

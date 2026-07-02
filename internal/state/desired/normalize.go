@@ -179,11 +179,12 @@ func normalizeMachine(m *v1alpha1.Machine) {
 // Authored values always win; invalid ones are left for Validate to reject.
 func normalizeMachineImage(image *v1alpha1.MachineImage) {
 	spec := &image.Spec
+	// mediaType defaults to dvd unconditionally. A filename suffix must not select
+	// the install mode: deriving boot from a "boot.iso" URL let a pure rename flip
+	// dvd<->boot (and whether installSource is required). A netinstall image
+	// authors mediaType: boot explicitly.
 	if spec.MediaType == "" {
 		spec.MediaType = v1alpha1.MachineImageMediaTypeDVD
-		if strings.HasSuffix(strings.ToLower(spec.URL), "boot.iso") {
-			spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
-		}
 	}
 	source := &spec.InstallSource
 	if source.Type == "" {

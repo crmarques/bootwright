@@ -55,10 +55,9 @@ profile's `installer.anaconda.imageRef` names the image.
   `repo` entries instead of `cdrom`, and Anaconda fetches packages over the
   network during install.
 
-`mediaType` auto-derives from the URL filename — `*boot.iso` becomes `boot`,
-anything else `dvd` — but an authored value always wins, so a netinstall ISO not
-named `*boot.iso` needs an explicit `mediaType: boot`. The DVD form from the lab
-example:
+`mediaType` defaults to `dvd` when omitted; the filename does not select it, so a
+netinstall (boot) ISO always needs an explicit `mediaType: boot`. The DVD form
+from the lab example:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

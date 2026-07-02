@@ -675,12 +675,14 @@ func TestNormalizeMaterializesMachineImageMediaType(t *testing.T) {
 	if got := state.MachineImages[0].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
 		t.Fatalf("dvd-named image mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeDVD)
 	}
-	if got := state.MachineImages[1].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeBoot {
-		t.Fatalf("boot.iso-named image mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeBoot)
+	// A boot.iso filename no longer derives boot: mediaType defaults to dvd
+	// unconditionally so a rename cannot flip the install mode. Author
+	// mediaType: boot explicitly (image [3]) to get boot.
+	if got := state.MachineImages[1].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
+		t.Fatalf("boot.iso-named image mediaType = %q, want %q (filename must not select the mode)", got, v1alpha1.MachineImageMediaTypeDVD)
 	}
-	// A netinstall ISO whose filename does not end in boot.iso derives dvd;
-	// the derivation is unchanged but now visible in effective state instead
-	// of recomputed independently by validate and render.
+	// A netinstall ISO likewise defaults to dvd, now visible in effective state
+	// instead of recomputed independently by validate and render.
 	if got := state.MachineImages[2].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
 		t.Fatalf("netinstall-named image mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeDVD)
 	}

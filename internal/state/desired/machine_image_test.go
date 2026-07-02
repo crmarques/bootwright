@@ -187,7 +187,10 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 	}
 }
 
-func TestMachineImageBootISOInferredFromFilename(t *testing.T) {
+func TestMachineImageMediaTypeIgnoresFilename(t *testing.T) {
+	// A boot.iso filename no longer derives boot: mediaType defaults to dvd
+	// unconditionally so a rename cannot flip the install mode (and whether
+	// installSource is required). A boot image authors mediaType: boot explicitly.
 	state := v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
@@ -196,15 +199,12 @@ func TestMachineImageBootISOInferredFromFilename(t *testing.T) {
 		},
 	}}}
 	Normalize(&state)
-	if got := state.MachineImages[0].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeBoot {
-		t.Fatalf("materialized mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeBoot)
+	if got := state.MachineImages[0].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
+		t.Fatalf("materialized mediaType = %q, want %q (filename must not select the mode)", got, v1alpha1.MachineImageMediaTypeDVD)
 	}
-	errs := validateMachineImages(state)
-	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted inferred boot ISO without install source")
-	}
-	if !strings.Contains(errs[0], "installSource is required") {
-		t.Fatalf("error = %q", errs[0])
+	// As a dvd image it needs no installSource.
+	if errs := validateMachineImages(state); len(errs) != 0 {
+		t.Fatalf("dvd image without installSource should validate, got %v", errs)
 	}
 }
 

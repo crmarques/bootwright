@@ -256,11 +256,11 @@ spec:
 Rules:
 
 - `spec.type` currently accepts `iso`.
-- `spec.mediaType` accepts `dvd` or `boot`. When omitted, normalize derives
-  `boot` for `url` filenames ending in `boot.iso` and `dvd` otherwise;
-  `render effective` shows the materialized value. A netinstall ISO whose
-  filename does not end in `boot.iso` derives `dvd`, so author
-  `mediaType: boot` explicitly for it.
+- `spec.mediaType` accepts `dvd` or `boot`; when omitted it defaults to `dvd`
+  (materialized by `render effective`). The filename never selects the install
+  mode — deriving it from a `boot.iso` suffix would let a pure rename flip the
+  mode and whether `installSource` is required — so a netinstall (boot) image
+  must author `mediaType: boot` explicitly.
 - `spec.installSource` is required for `mediaType: boot`. It accepts
   `type: url` for a plain HTTP(S) install tree or `type: redhatCDN` for an
   RHSM-backed Red Hat CDN install. When `type` is omitted, normalize derives
@@ -852,8 +852,11 @@ platform.
 
 Rules:
 
-- `spec.type` is required and must be `dataFoundation` (the type value equals
-  the populated arm key).
+- `spec.type` must be `dataFoundation`. For an export of a managed
+  `StorageCluster` the populated `spec.dataFoundation` arm supplies it — normalize
+  materializes `type: dataFoundation` when omitted. For an export of an external
+  `StorageCluster` the `dataFoundation` arm must be empty, so there is no arm to
+  derive from and `spec.type: dataFoundation` must be authored explicitly.
 - `spec.storageClusterRef` is required.
 - For managed `StorageCluster`s, `spec.dataFoundation` is required;
   `dataFoundation.rbdPoolRef` and `filesystemRef` are required and must reference
