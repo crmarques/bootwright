@@ -35,9 +35,9 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 		Use:   "status [target]",
 		Short: "Report context state and the suggested next command",
 		Long: "Inspects the current context rendered-dir and secrets-dir, surfaces declared\n" +
-			"Environment/Provider/Infrastructure/ContainerCluster counts, reports which\n" +
-			"clusters have fresh, stale, missing, or unknown installer assets, and recommends the next\n" +
-			"command. Read-only.",
+			"Environment, Provider, Infrastructure, ContainerCluster, and StorageCluster\n" +
+			"counts, reports which clusters have fresh, stale, missing, or unknown installer\n" +
+			"assets, and recommends the next command. Read-only.",
 		Args: cobra.NoArgs,
 		Example: `  # Show current context state and next-step hints
   bootwright status

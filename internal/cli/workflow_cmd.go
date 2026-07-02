@@ -46,8 +46,12 @@ result JSON, use 'validate'.`,
 
 func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	return newScopeApplyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeApplyOptions{
-		use:           "apply",
-		short:         "Apply the provisioning graph",
+		use:   "apply",
+		short: "Apply the provisioning graph",
+		long: "Applies the provisioning graph, reconciling desired state idempotently. It\n" +
+			"fails closed on drift or foreign ownership before mutating; --override\n" +
+			"authorizes Bootwright-owned destructive rebuilds. Exit codes: 0 success, 2\n" +
+			"usage error, non-zero on run failure.",
 		stageSelector: true,
 		commandLabel:  "apply",
 		example: `  # Preview the full graph without readiness checks
@@ -69,8 +73,11 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 
 func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	return newScopeApplyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeApplyOptions{
-		use:           "plan",
-		short:         "Preview the provisioning graph",
+		use:   "plan",
+		short: "Preview the provisioning graph",
+		long: "Previews the provisioning task graph. Read-only: it contacts no hosts, BMCs,\n" +
+			"or clusters, writes no runtime records, and never prompts. Exit codes: 0\n" +
+			"success, 1 load error, 2 usage error.",
 		defaultPlan:   true,
 		hideDryRun:    true,
 		hideApproval:  true,
@@ -102,6 +109,10 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "render [target]",
 		Short: "Render generated artifacts",
+		Long: "Renders generated artifacts from desired state. It contacts no hosts, BMCs,\n" +
+			"or clusters. Writing secret-inlined installer files with --output-dir requires\n" +
+			"--sensitive; --input-dir renders context-free with secrets as\n" +
+			"{{ secret <name> }} placeholders.",
 		// render takes either a subcommand target or --output-dir; reject an
 		// unknown positional without a ValidArgs slice, which would otherwise
 		// duplicate every target in shell completion.
@@ -166,8 +177,12 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 
 func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := newScopeDestroyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeDestroyOptions{
-		use:           "destroy",
-		short:         "Tear down a previously applied target",
+		use:   "destroy",
+		short: "Tear down a previously applied target",
+		long: "Tears down a previously applied target using desired state and ownership\n" +
+			"records. Destructive: --yes skips the confirmation prompt only, never implies\n" +
+			"--override; protected contexts require --override. Exit codes: 0 success, 2\n" +
+			"usage error, non-zero on teardown failure.",
 		stageSelector: true,
 		commandLabel:  "destroy",
 		example: `  # Tear down the whole context: clusters first, then the infra they ran on

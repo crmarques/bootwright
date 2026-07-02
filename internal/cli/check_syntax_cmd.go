@@ -19,6 +19,10 @@ func newValidateCmd(stdout io.Writer) *cobra.Command {
 	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
 		use:   "validate",
 		short: "Validate desired-state YAML offline",
+		long: "Loads, normalizes, and validates the desired-state YAML offline: it never\n" +
+			"runs Ansible and contacts no hosts, BMCs, or clusters, and renders no installer\n" +
+			"files. Exit codes for automation: 0 valid, 1 load or validation error, 2 usage\n" +
+			"error.",
 		label: "validate",
 		rerun: "bootwright validate",
 		example: `  # Validate the current context
@@ -35,6 +39,7 @@ func newValidateCmd(stdout io.Writer) *cobra.Command {
 type syntaxValidationCommand struct {
 	use     string
 	short   string
+	long    string
 	label   string
 	rerun   string
 	example string
@@ -46,6 +51,7 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 	cmd := &cobra.Command{
 		Use:     spec.use,
 		Short:   spec.short,
+		Long:    spec.long,
 		Args:    cobra.NoArgs,
 		Example: spec.example,
 	}
@@ -66,7 +72,7 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 			}
 			p := outputpkg(stdout)
 			p.Command(spec.label)
-			checks := syntaxDiagnosticChecks(err, spec.rerun)
+			checks := syntaxDiagnosticChecks(err, spec.rerun, syntaxSourceLabel(files))
 			p.Checks(checks)
 			p.Summary(cliout.StatusFail, spec.label, checkSummary(len(checks), failedCheckCount(checks)))
 			return failf(1, "%s failed: %v", spec.label, err)
@@ -78,7 +84,7 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		p.Command(spec.label)
 		p.Section("Objects")
 		p.Fields(stateCountFields(state))
-		checks := []preflightCheck{okCheck("Desired state", "context input", "loads, normalizes, and validates")}
+		checks := []preflightCheck{okCheck("Desired state", syntaxSourceLabel(files), "loads, normalizes, and validates")}
 		checks = append(checks, contextSecretChecks(cf, files, state)...)
 		checks = append(checks, environmentSelectionChecks(exclusions)...)
 		checks = append(checks, storageAdvisoryChecks(state)...)
@@ -233,14 +239,23 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 	return cliout.JSON(stdout, report)
 }
 
-func syntaxDiagnosticChecks(err error, rerun string) []preflightCheck {
+// syntaxSourceLabel names what was validated so a `-f` run does not mislabel
+// its source as the context input it never read.
+func syntaxSourceLabel(files []string) string {
+	if len(files) > 0 {
+		return "input files"
+	}
+	return "context input"
+}
+
+func syntaxDiagnosticChecks(err error, rerun, source string) []preflightCheck {
 	diagnostics := diagnosticsFromError(err)
 	if len(diagnostics) == 0 {
-		return []preflightCheck{failCheck("Desired state", "context input", err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun "+rerun)}
+		return []preflightCheck{failCheck("Desired state", source, err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun "+rerun)}
 	}
 	checks := make([]preflightCheck, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
-		name := "context input"
+		name := source
 		if diagnostic.Field != "" {
 			name = diagnostic.Field
 		}

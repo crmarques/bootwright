@@ -21,6 +21,7 @@ import (
 type scopeDestroyOptions struct {
 	use           string
 	short         string
+	long          string
 	example       string
 	stageSelector bool
 	commandLabel  string
@@ -54,6 +55,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd := &cobra.Command{
 		Use:     use,
 		Short:   short,
+		Long:    options.long,
 		Args:    cobra.NoArgs,
 		Example: example,
 	}

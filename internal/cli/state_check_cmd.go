@@ -24,7 +24,12 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "state-check",
 		Short: "Report drift between selected desired state and the last recorded apply",
-		Args:  cobra.NoArgs,
+		Long: "Reports drift between the selected desired state and the last recorded apply.\n" +
+			"Read-only: it contacts no hosts, BMCs, or clusters and writes no records, and\n" +
+			"it rejects --override because it neither mutates nor suppresses its report.\n" +
+			"Exit codes for automation: 0 in sync, 3 out of sync (drift, foreign, or\n" +
+			"never-applied), 1 load error, 2 usage error.",
+		Args: cobra.NoArgs,
 		Example: `  # Check the whole context for drift from the last apply
   bootwright state-check
 

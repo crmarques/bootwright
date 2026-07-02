@@ -21,6 +21,7 @@ import (
 type scopeApplyOptions struct {
 	use           string
 	short         string
+	long          string
 	example       string
 	defaultPlan   bool
 	hideDryRun    bool
@@ -71,6 +72,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	cmd := &cobra.Command{
 		Use:     use,
 		Short:   short,
+		Long:    options.long,
 		Args:    cobra.NoArgs,
 		Example: example,
 	}
