@@ -1098,5 +1098,9 @@ Rules:
   the selected state is in sync, `3` when any selected resource is out of sync
   (drift, foreign, or never-applied), `1` on load error, and `2` on usage error.
   Once the context has a recorded apply, the `status` next-step spine surfaces
-  `state-check` ahead of `plan`/`apply`.
+  `state-check` ahead of `plan`/`apply`. When the last run failed, the spine's
+  next step is instead the exact scoped retry command (`apply` with the failed
+  run's `--stage`/`--clusters` selection) alongside the failed tasks' log paths
+  under `runs/history/<run-id>/`, so an interrupted apply resumes without an
+  operator reaching for `--override` or `destroy`.
 - Rendered effective state must not include secret bytes.

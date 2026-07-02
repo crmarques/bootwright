@@ -19,6 +19,13 @@ see [Operations and Recovery](advanced/operations.md).
     but the detailed tool output (Ansible, `openshift-install`, `cephadm`) is
     kept in those root-managed logs rather than streamed.
 
+!!! warning "Edits need `context update`"
+    Once you have run `context init`, the context holds a **copy** of your input
+    tree. Editing the source has no effect until you refresh it with
+    `bootwright context update --name <context> -f <dir>`, so run that after any
+    fix before you re-run `preflight`, `apply`, or `state-check`. `bootwright
+    validate -f <dir>` reads the source directly and needs no refresh.
+
 ## Strict decode failures
 
 Bootwright rejects unknown fields before normalization. If an abandoned field
@@ -135,6 +142,23 @@ context secret store or in operator files. Two common early-workflow blockers:
 !!! warning
     `secret set --generate` is a test-fixture path only. Generated material in
     real workflows comes from `secret generate`.
+
+## Apply failed partway
+
+When `apply` exits non-zero after the run has started, the work is resumable —
+objects that already converged are recorded and skip on the next run. Do **not**
+reach for `--override` or `destroy`; those are for drift and rebuilds, not a
+resumable interruption.
+
+Run `bootwright status`: on a failed run it prints the exact scoped retry command
+(for example `bootwright apply --clusters <name> --yes`) and the log path of each
+failed task under `/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/`.
+Read that log, fix the cause, then re-run the printed command — completed objects
+skip or re-run idempotently, and only the failed and pending work runs again.
+
+See [Ownership and Safety](advanced/ownership-and-safety.md) for why the rerun is
+safe, and [Operations and Recovery](advanced/operations.md) only for the drift
+and `--override` cases.
 
 ## Active apply run
 
