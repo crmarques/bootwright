@@ -56,11 +56,8 @@ func Ensure(path string, mode os.FileMode) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(clean, mode); err != nil {
-		return "", fmt.Errorf("create managed root %s: %w", clean, err)
-	}
-	if err := os.Chmod(clean, mode); err != nil {
-		return "", fmt.Errorf("chmod managed root %s: %w", clean, err)
+	if err := safefs.EnsureDir(clean, mode); err != nil {
+		return "", err
 	}
 	if err := writeMarker(clean); err != nil {
 		return "", err

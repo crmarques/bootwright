@@ -131,11 +131,18 @@ func TestMachineServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"env.example.test"}
 	state.InfraComponents[1].Spec.NameResolution.AdditionalIngressHosts = []string{"component.example.test"}
 
-	got := ResolveMachineServices(state).MergedStringField(MachineServiceIdentity{
+	id := MachineServiceIdentity{
 		Kind:         v1alpha1.ComponentSlotNameResolution,
 		ProviderName: v1alpha1.KindInfraComponent,
 		Name:         "name-resolution",
-	}, "additionalIngressHosts")
+	}
+	var got []string
+	for _, service := range ResolveMachineServices(state).Services {
+		if service.Identity == id {
+			got = append([]string(nil), service.MergedStringFields["additionalIngressHosts"]...)
+			break
+		}
+	}
 	want := []string{"component.example.test", "env.example.test"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("additionalIngressHosts = %v, want %v", got, want)

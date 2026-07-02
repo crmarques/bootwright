@@ -92,7 +92,9 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		} else {
 			record.LastObserved = applyFailureSummary(failedID)
 		}
-		_ = extensionrecords.SaveRecord(cfg.ClustersDir, record)
+		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
+			err = errors.Join(err, saveErr)
+		}
 		return TaskResult{}, err
 	}
 	record.Status = extensionrecords.RecordStatusWaiting
@@ -142,7 +144,9 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	record.LastObserved = last
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
-		_ = extensionrecords.SaveRecord(cfg.ClustersDir, record)
+		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
+			err = errors.Join(err, saveErr)
+		}
 		return TaskResult{}, err
 	}
 	record.Status = extensionrecords.RecordStatusReady

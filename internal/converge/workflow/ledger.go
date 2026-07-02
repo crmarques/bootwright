@@ -60,11 +60,16 @@ type RunLedger struct {
 }
 
 type RunLease struct {
-	RunID       string    `json:"runId"`
-	Hostname    string    `json:"hostname,omitempty"`
-	PID         int       `json:"pid"`
-	StartedAt   time.Time `json:"startedAt"`
-	HeartbeatAt time.Time `json:"heartbeatAt"`
+	RunID    string `json:"runId"`
+	Hostname string `json:"hostname,omitempty"`
+	PID      int    `json:"pid"`
+	// ProcessStart is a per-process identity token (the process start time) that,
+	// together with PID, distinguishes the lease's own process from an unrelated
+	// process that later reused the same PID. Empty when the platform cannot
+	// supply one; the alive check then falls back to the heartbeat-age rule.
+	ProcessStart string    `json:"processStart,omitempty"`
+	StartedAt    time.Time `json:"startedAt"`
+	HeartbeatAt  time.Time `json:"heartbeatAt"`
 }
 
 type RunActivityState string
@@ -162,12 +167,15 @@ func LoadRunLedger(runsDir string) (RunLedger, bool, error) {
 func NewRunLease(runID string, now time.Time) RunLease {
 	hostname, _ := os.Hostname()
 	now = now.UTC()
+	pid := os.Getpid()
+	startToken, _ := processStartToken(pid)
 	return RunLease{
-		RunID:       runID,
-		Hostname:    hostname,
-		PID:         os.Getpid(),
-		StartedAt:   now,
-		HeartbeatAt: now,
+		RunID:        runID,
+		Hostname:     hostname,
+		PID:          pid,
+		ProcessStart: startToken,
+		StartedAt:    now,
+		HeartbeatAt:  now,
 	}
 }
 
@@ -211,11 +219,63 @@ func RemoveRunLease(runsDir string) error {
 	return nil
 }
 
+// ErrLeaseNotOwned signals that the on-disk lease belongs to a different run than
+// the caller expected: it was taken over after this run stalled past the stale
+// window. It is a no-op signal, not a hard failure — callers must not touch the
+// new holder's lease and should stop refreshing/removing it.
+var ErrLeaseNotOwned = errors.New("apply lease is held by another run")
+
+func isLeaseNotOwned(err error) bool {
+	return errors.Is(err, ErrLeaseNotOwned)
+}
+
+// SaveRunLeaseIfOwner refreshes the lease only while the on-disk lease still
+// belongs to lease.RunID. A run that stalled past the stale window and was taken
+// over must not blindly overwrite the new holder's lease when its heartbeat
+// resumes; it returns ErrLeaseNotOwned instead so the caller stops. Used by the
+// heartbeat tick in place of the blind SaveRunLease overwrite.
+func SaveRunLeaseIfOwner(runsDir string, lease RunLease) error {
+	existing, found, err := LoadRunLease(runsDir)
+	if err != nil {
+		return err
+	}
+	if !found || existing.RunID != lease.RunID {
+		return ErrLeaseNotOwned
+	}
+	return SaveRunLease(runsDir, lease)
+}
+
+// RemoveRunLeaseIfOwner removes the lease only while it still belongs to runID. A
+// finishRun/cleanup path that resumes after a takeover must not delete the new
+// holder's lease; it returns ErrLeaseNotOwned instead. A missing lease is not an
+// error (nothing to remove).
+func RemoveRunLeaseIfOwner(runsDir, runID string) error {
+	existing, found, err := LoadRunLease(runsDir)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+	if existing.RunID != runID {
+		return ErrLeaseNotOwned
+	}
+	return RemoveRunLease(runsDir)
+}
+
 // leaseFresh reports whether an on-disk lease belongs to a run that is still
 // alive: a recent heartbeat and, when the lease was taken on this host, a live
 // process. It mirrors the freshness arms of AssessRunActivity but works from the
 // lease alone, so it can gate mutating runs that do not maintain a ledger.
 func leaseFresh(lease RunLease, now time.Time) bool {
+	// A lease held by a live local process is active regardless of heartbeat age:
+	// a long privileged step (an ansible task that outlasts the 2-minute heartbeat
+	// window) is still mutating hosts, so a stale heartbeat alone must not invite a
+	// takeover. Only a dead/absent local process, or a lease taken on another host
+	// (PID not checkable here), falls back to the heartbeat-age rule.
+	if localLeaseProcessAlive(lease) {
+		return true
+	}
 	if lease.HeartbeatAt.IsZero() {
 		return false
 	}
@@ -314,6 +374,14 @@ func AssessRunActivity(runsDir string, ledger RunLedger, now time.Time) (RunActi
 	if lease.RunID != ledger.RunID {
 		return RunActivity{State: RunActivityStale, Detail: fmt.Sprintf("apply lease belongs to %s", lease.RunID), Lease: &lease}, nil
 	}
+	// A live local process holds an active run even after its heartbeat ages out:
+	// a long privileged step outlasting the heartbeat window is still mutating
+	// hosts, so a stale heartbeat alone must not declare it dead and invite a
+	// takeover. Only a gone local process — or a remote-host lease, where the
+	// process is not checkable — falls back to the heartbeat-age rule below.
+	if localLeaseProcessAlive(lease) {
+		return RunActivity{State: RunActivityActive, Detail: "apply lease process is running", Lease: &lease}, nil
+	}
 	if lease.HeartbeatAt.IsZero() {
 		return RunActivity{State: RunActivityStale, Detail: "apply lease has no heartbeat", Lease: &lease}, nil
 	}
@@ -326,7 +394,10 @@ func AssessRunActivity(runsDir string, ledger RunLedger, now time.Time) (RunActi
 	return RunActivity{State: RunActivityActive, Detail: "apply lease heartbeat is fresh", Lease: &lease}, nil
 }
 
-var runLeaseProcessAlive = processAlive
+var (
+	runLeaseProcessAlive      = processAlive
+	runLeaseProcessStartToken = processStartToken
+)
 
 func localLeaseProcessMissing(lease RunLease) bool {
 	if lease.Hostname == "" {
@@ -337,6 +408,36 @@ func localLeaseProcessMissing(lease RunLease) bool {
 		return false
 	}
 	return lease.PID <= 0 || !runLeaseProcessAlive(lease.PID)
+}
+
+// localLeaseProcessAlive reports whether the lease was taken on this host and its
+// own process is verifiably still running. A remote-host lease (hostname differs,
+// or unset) is not checkable locally and returns false so the caller falls back
+// to the heartbeat-age rule; the hostname guard also ensures the local process
+// table is never probed for a foreign-host lease.
+//
+// A live PID alone is not trusted: PIDs are reused, so after a hard crash an
+// unrelated process could hold the lease's PID and wedge the lease forever. The
+// lease's ProcessStart identity token must also match the live PID's current
+// start-time token; a missing token (older lease or a platform without one) or a
+// mismatch means the process is not provably ours, so this returns false and the
+// heartbeat-age rule decides — restoring the stale self-heal for reused PIDs.
+func localLeaseProcessAlive(lease RunLease) bool {
+	if lease.Hostname == "" {
+		return false
+	}
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" || lease.Hostname != hostname {
+		return false
+	}
+	if lease.PID <= 0 || !runLeaseProcessAlive(lease.PID) {
+		return false
+	}
+	if lease.ProcessStart == "" {
+		return false
+	}
+	token, ok := runLeaseProcessStartToken(lease.PID)
+	return ok && token == lease.ProcessStart
 }
 
 func CancelRunLedger(runsDir string, ledger RunLedger, reason string, now time.Time) (RunLedger, error) {
@@ -353,7 +454,9 @@ func CancelRunLedger(runsDir string, ledger RunLedger, reason string, now time.T
 	if err := SaveRunLedger(runsDir, ledger); err != nil {
 		return ledger, err
 	}
-	if err := RemoveRunLease(runsDir); err != nil {
+	// Ownership-checked so cancelling a stale ledger whose lease was already taken
+	// over by a new run does not delete the new holder's lease.
+	if err := RemoveRunLeaseIfOwner(runsDir, ledger.RunID); err != nil && !isLeaseNotOwned(err) {
 		return ledger, err
 	}
 	return ledger, nil

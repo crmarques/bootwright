@@ -27,7 +27,14 @@ trap 'for tmp in "${tmp_files[@]}"; do
 done' EXIT
 
 if [ "$state_arg" = "--live" ]; then
-  domstate=$(virsh -c "$uri" domstate "$domain" 2>/dev/null || true)
+  domstate=$(virsh -c "$uri" domstate "$domain" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf 'domstate failed for %s domain: rc=%d\n%s\n' "$scope" "$rc" "$domstate" >&2
+    exit 2
+  fi
+  # Only a successful call that reports a non-running state is the clean skip;
+  # a connection/lookup failure above already exited 2 rather than masquerading
+  # as "not running, nothing to eject".
   if [ "$domstate" != "running" ]; then
     echo "changed=false"
     exit 0
@@ -36,7 +43,11 @@ fi
 
 read_targets() {
   local out rc
-  if out=$(virsh -c "$uri" domblklist "$domain" "${domblklist_args[@]}" --details 2>&1); then
+  # Capture rc at the command, not after the fi: a bare `if cmd; then ...; fi`
+  # whose condition is false leaves $? at the if-statement's own status (0), so
+  # `rc=$?` after the fi would mask a failed domblklist as success.
+  out=$(virsh -c "$uri" domblklist "$domain" "${domblklist_args[@]}" --details 2>&1); rc=$?
+  if [ "$rc" -eq 0 ]; then
     if [ "$mode" = "all" ]; then
       printf '%s\n' "$out" | awk '$2 == "cdrom" { print $3 }'
     else
@@ -44,7 +55,6 @@ read_targets() {
     fi
     return 0
   fi
-  rc=$?
   printf 'domblklist failed for %s domain: rc=%d\n%s\n' "$scope" "$rc" "$out" >&2
   return "$rc"
 }

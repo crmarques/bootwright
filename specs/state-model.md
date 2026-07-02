@@ -605,8 +605,12 @@ Rules:
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
   community repository on each node with cephadm. `spec.ceph.community.mirror`
-  overrides the `download.ceph.com` base URL. `spec.ceph.community` must be
-  empty for `redhat` and `ibm`.
+  overrides the `download.ceph.com` base URL. `spec.ceph.community.checksum`
+  optionally pins the fetched cephadm bootstrap binary as `sha256:<hex>`; the
+  binary is downloaded and executed as root, so the pin adds a content check on
+  top of the HTTPS transport, and when unset the binary is fetched with no
+  content pin (the default). `spec.ceph.community` must be empty for `redhat`
+  and `ibm`.
 - `distribution: redhat` requires `entitlementRef` to resolve to a Red
   Hat `ceph` entitlement. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph

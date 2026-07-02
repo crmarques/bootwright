@@ -46,7 +46,7 @@ jobs:
                   .head_commit.message?,
                   (.commits[]?.message?)
                 ] | .[] | select(. != null) | split("\n")[0]' "$GITHUB_EVENT_PATH" |
-                grep -Eq '^fix\(docs\): .+'; then
+                grep -Eq '^(fix\(docs\)|docs(\([^)]*\))?): .+'; then
                 should_publish=true
               fi
               ;;

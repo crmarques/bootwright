@@ -18,7 +18,7 @@ import (
 func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	const cluster = "sno-libvirt"
-	tasks := PlanApplyTasks(applyContainerClusterTarget(), state)
+	tasks := mustPlanApplyTasks(applyContainerClusterTarget(), state)
 	now := time.Now()
 
 	matchingHash := func(t *testing.T, secretsDir string) string {

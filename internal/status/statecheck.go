@@ -10,14 +10,21 @@ import (
 // StateCheck classifies drift between the selected desired state and the last
 // recorded apply, including Bootwright-owned resources that are no longer
 // declared.
-func StateCheck(state v1alpha1.State, clusterScope string, applyTarget workflow.ApplyTarget, runsDir, ownershipDir, contextName string) (workflow.StateCheckReport, error) {
+// stageTarget is the resolved scope/stage name (converge.Scope.Name, e.g. "all",
+// "infra", "add-ons", "through-base"), the same value scoped apply passes to
+// clusteraccess.Resolve. Threading it makes --clusters name validation identical
+// to apply's: a container-only stage (add-ons) rejects a StorageCluster name
+// exactly as apply does, instead of the literal "all" accepting every root.
+func StateCheck(state v1alpha1.State, clusterScope, stageTarget string, applyTarget workflow.ApplyTarget, runsDir, ownershipDir, contextName string) (workflow.StateCheckReport, error) {
 	// Orphan detection compares the ownership records against the FULL declared
 	// desired state, before --clusters scoping narrows it (otherwise a scoped check
 	// would report other clusters' resources as undeclared).
 	fullState := state
 	// Resolve through the shared selector so the scoped state matches scoped
-	// apply (same name validation, same ScopeStateForApply render set).
-	sel, err := clusteraccess.Resolve(state, "all", clusterScope)
+	// apply (same name validation, same ScopeStateForApply render set). Use the
+	// resolved stage target — not a hardcoded "all" — so selection acceptance
+	// matches apply for stage-scoped targets.
+	sel, err := clusteraccess.Resolve(state, stageTarget, clusterScope)
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}
@@ -50,6 +57,11 @@ func StateCheck(state v1alpha1.State, clusterScope string, applyTarget workflow.
 		for _, warning := range skipped {
 			report.LoadWarnings = append(report.LoadWarnings, warning.Error())
 		}
+	} else {
+		// A load failure would otherwise silently drop the whole orphan section —
+		// the exact report that exists to surface orphans. Surface the failure as a
+		// load warning instead of vanishing it.
+		report.LoadWarnings = append(report.LoadWarnings, lerr.Error())
 	}
 	return report, nil
 }

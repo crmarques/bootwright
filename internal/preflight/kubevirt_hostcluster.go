@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -53,7 +54,17 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 }
 
 func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
-	out, err := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "get", "crd", "virtualmachines.kubevirt.io", "-o", "name")
+	// Read the kubeconfig directly before shelling out. The probe runs as local
+	// root (like CommandOutputLocalRoot), so an os.Open failure is an unambiguous
+	// unreadable/missing kubeconfig we can classify here — keeping a genuine
+	// EACCES out of the "KubeVirt not ready → re-apply" bucket even when a given
+	// kubectl build words the error in a way kubeconfigUnreadable does not match.
+	f, ferr := os.Open(kubeconfigPath)
+	if ferr != nil {
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", ferr.Error(), "KubeVirt child clusters need a readable host cluster kubeconfig", "ensure "+kubeconfigPath+" is a readable, valid kubeconfig (bootwright manages it under the root-owned workspace)")
+	}
+	_ = f.Close()
+	out, err := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "crd", "virtualmachines.kubevirt.io", "-o", "name")
 	if err != nil {
 		evidence := strings.TrimSpace(string(out))
 		if evidence == "" {

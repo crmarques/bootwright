@@ -37,7 +37,7 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")
-	if err := os.MkdirAll(renderDir, 0o755); err != nil {
+	if err := os.MkdirAll(renderDir, 0o700); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	manifestPath := filepath.Join(renderDir, "node-config.yaml")

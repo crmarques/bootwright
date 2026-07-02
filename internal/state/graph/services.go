@@ -221,16 +221,6 @@ func (g MachineServiceGraph) ScopeConflicts(selected []string) []DestroyScopeCon
 	return conflicts
 }
 
-func (g MachineServiceGraph) MergedStringField(id MachineServiceIdentity, field string) []string {
-	for _, service := range g.Services {
-		if service.Identity != id {
-			continue
-		}
-		return append([]string(nil), service.MergedStringFields[field]...)
-	}
-	return nil
-}
-
 func SharedDestroyConflicts(state v1alpha1.State, selected []string) []DestroyScopeConflict {
 	return ResolveMachineServices(state).ScopeConflicts(selected)
 }
@@ -590,7 +580,7 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 	if env == nil {
 		return nil
 	}
-	entry, ok := selectedRegistry(env.Spec.InfraComponents.Registries)
+	entry, ok := stateview.SelectedRegistryEntry(env)
 	if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged {
 		return nil
 	}
@@ -610,18 +600,6 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		machineBoundConsumerFields(registry, entry.Name, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry),
 		nil,
 	)}
-}
-
-func selectedRegistry(entries []v1alpha1.EnvironmentRegistryComponent) (v1alpha1.EnvironmentRegistryComponent, bool) {
-	for _, entry := range entries {
-		if entry.Default {
-			return entry, true
-		}
-	}
-	if len(entries) == 1 {
-		return entries[0], true
-	}
-	return v1alpha1.EnvironmentRegistryComponent{}, false
 }
 
 func servicePort(kind, realisation string, configured int) int {

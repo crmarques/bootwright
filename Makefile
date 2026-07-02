@@ -2,6 +2,7 @@ GO ?= go
 PYTHON ?= python3
 DOCKER ?= docker
 STATICCHECK ?= $(shell command -v staticcheck 2>/dev/null)
+SHELLCHECK ?= $(shell command -v shellcheck 2>/dev/null)
 COMMA := ,
 BINARY ?= bootwright
 BIN_DIR ?= bin
@@ -40,9 +41,15 @@ COLLECTIONS_LOCK = $(ANSIBLE_SRC_DIR)/collections/requirements.lock.yml
 EMBED_COLLECTIONS_DIR = $(BUNDLE_WORK_DIR)/collections
 EMBED_COLLECTIONS_ABS_DIR = $(abspath $(EMBED_COLLECTIONS_DIR))
 COLLECTIONS_STAMP = $(EMBED_COLLECTIONS_DIR)/.stamp
+# Anchor Ansible temp dirs under the repo-local state dir instead of a fixed,
+# world-predictable path in shared /var/tmp. The shared path breaks multi-user
+# hosts (whoever creates it first owns it) and is squattable; the state dir is
+# per-checkout and cleaned by `make clean`. Behavior is identical for one user.
+ANSIBLE_LOCAL_TEMP_DIR = $(abspath $(STATE_DIR))/ansible-tmp/local
+ANSIBLE_REMOTE_TEMP_DIR = $(abspath $(STATE_DIR))/ansible-tmp/remote
 ANSIBLE_GALAXY_ENV = \
-	ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local \
-	ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote \
+	ANSIBLE_LOCAL_TEMP=$(ANSIBLE_LOCAL_TEMP_DIR) \
+	ANSIBLE_REMOTE_TEMP=$(ANSIBLE_REMOTE_TEMP_DIR) \
 	ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) \
 	ANSIBLE_COLLECTIONS_PATHS=$(EMBED_COLLECTIONS_ABS_DIR)
 GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
@@ -54,7 +61,7 @@ GO_TEST_CHECK_FLAGS ?= -vet=off
 GO_TEST_RACE_FLAGS ?= -vet=off -race -timeout 1800s
 BOOTWRIGHT_COLLECTIONS_DIR = $(abspath $(ANSIBLE_SRC_DIR)/collections)
 BOOTWRIGHT_COLLECTION_ROOT = $(ANSIBLE_SRC_DIR)/collections/ansible_collections/bootwright/core
-ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
+ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=$(ANSIBLE_LOCAL_TEMP_DIR) ANSIBLE_REMOTE_TEMP=$(ANSIBLE_REMOTE_TEMP_DIR) ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.check_become \
 	bootwright.core.check_preflight \
@@ -87,7 +94,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -212,7 +219,7 @@ check: check-fast
 # sync-bundle first so the embedded ansible bundle matches the source tree
 # before the go tests run; otherwise TestEmbeddedBundleMatchesSourceAnsible
 # fails (or skips) against a stale or absent gitignored bundle artifact.
-check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check check-e2e-deps
+check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check shellcheck-check check-e2e-deps
 	$(GO) test $(GO_TEST_PACKAGES)
 
 check-go-source-visibility:
@@ -255,15 +262,21 @@ staticcheck:
 	$(STATICCHECK) $(GO_TEST_PACKAGES)
 
 # Fail if `go mod tidy` would change go.mod/go.sum, so dependency metadata
-# stays minimal and complete. Runs tidy against copies and restores them,
-# leaving the working tree untouched whether or not the check passes.
+# stays minimal and complete. Backs up go.mod/go.sum, runs tidy in place, then
+# diffs against the backup. A trap restores the backup and removes the temp dir
+# on any exit (including an interrupt mid-recipe), so the working tree is left
+# untouched whether the check passes, fails, or is aborted. A tidy failure (for
+# example a proxy/network error) fails the target instead of yielding a false
+# green from an unchanged-but-unverified tree.
 go-mod-tidy-check:
-	@tmp=$$(mktemp -d); cp go.mod go.sum "$$tmp/"; \
-	$(GO) mod tidy; \
+	@tmp=$$(mktemp -d) || exit 1; \
+	cp go.mod go.sum "$$tmp/"; \
+	trap 'cp "$$tmp/go.mod" go.mod; cp "$$tmp/go.sum" go.sum; rm -rf "$$tmp"' EXIT; \
+	trap 'exit 130' INT; trap 'exit 143' TERM; \
+	$(GO) mod tidy || { printf '%s\n' 'go mod tidy failed (network/proxy error?); dependency tidiness not verified'; exit 1; }; \
 	rc=0; \
 	diff -u "$$tmp/go.mod" go.mod || rc=1; \
 	diff -u "$$tmp/go.sum" go.sum || rc=1; \
-	cp "$$tmp/go.mod" go.mod; cp "$$tmp/go.sum" go.sum; rm -rf "$$tmp"; \
 	if [ $$rc -ne 0 ]; then printf '%s\n' 'go.mod/go.sum are not tidy; run: go mod tidy'; fi; \
 	exit $$rc
 
@@ -295,9 +308,28 @@ ansible-lint-check: check-e2e-deps $(COLLECTIONS_STAMP)
 	$(YAMLLINT) -c $(CURDIR)/.yamllint $(ANSIBLE_SRC_DIR)
 	cd $(BOOTWRIGHT_COLLECTION_ROOT) && \
 		ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR) \
-		ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local \
-		ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote \
+		ANSIBLE_LOCAL_TEMP=$(ANSIBLE_LOCAL_TEMP_DIR) \
+		ANSIBLE_REMOTE_TEMP=$(ANSIBLE_REMOTE_TEMP_DIR) \
 		$(ANSIBLE_LINT) --offline -c $(CURDIR)/.ansible-lint
+
+# Static-check the repo's authored shell scripts. `shellcheck -x` follows
+# `source`d files so sourced fragments are analysed too. Discovery is by shebang
+# (not extension) over ansible/ and scripts/, excluding .git and .state (the
+# latter holds the build-time downloaded collections). Fails on any finding.
+# CI installs shellcheck so this always runs there; a local machine without
+# shellcheck gets a clear install hint rather than a silent pass or a confusing
+# error (a no-op-success when the tool is absent is deliberately not wanted).
+shellcheck-check:
+	@test -n "$(SHELLCHECK)" || { printf '%s\n' 'shellcheck not found in PATH; install shellcheck (dnf install ShellCheck / apt-get install shellcheck) or set SHELLCHECK=/path/to/shellcheck'; exit 1; }
+	@files=$$(find $(ANSIBLE_SRC_DIR) scripts -type f -not -path '*/.git/*' -not -path '*/$(STATE_DIR)/*' -print \
+		| while IFS= read -r f; do \
+			IFS= read -r first < "$$f" 2>/dev/null || continue; \
+			case "$$first" in \
+				'#!'*/sh|'#!'*/sh' '*|'#!'*/bash|'#!'*/bash' '*|'#!'*'env sh'*|'#!'*'env bash'*) printf '%s\n' "$$f";; \
+			esac; \
+		done); \
+	test -n "$$files" || { printf '%s\n' 'shellcheck-check: no authored shell scripts discovered under $(ANSIBLE_SRC_DIR)/ scripts/ (discovery filter broken?)'; exit 1; }; \
+	printf '%s\n' "$$files" | xargs $(SHELLCHECK) -x
 
 stale-term-check:
 	@if command -v rg >/dev/null 2>&1; then \

@@ -11,6 +11,13 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
+// inventoryWithLocalityPolicy builds an inventory with an explicit locality
+// policy and no ownership records — the shape these tests exercise — over the
+// canonical builder.
+func inventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localPolicy locality.Policy) map[string]any {
+	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, localPolicy, nil)
+}
+
 // TestInventoryStructure pins the Ansible inventory groups that the
 // layer playbooks select against (ansibleLimitForScope wires these into
 // the --limit flag). Renaming a group here is a breaking change.
@@ -20,7 +27,7 @@ func TestInventoryStructure(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	inv := InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
+	inv := inventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
 			return "controller", nil
 		},
@@ -93,7 +100,7 @@ func TestInventoryUsesLocalhostForControllerWork(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	inv := InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
+	inv := inventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
 			return "controller", nil
 		},
@@ -177,7 +184,7 @@ func TestInventoryUsesLocalConnectionForControllerHostnameHostRefs(t *testing.T)
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	inv := InventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
+	inv := inventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
 			return "bastion", nil
 		},
@@ -202,7 +209,7 @@ func TestInventoryUsesLocalConnectionForControllerAddressAliasHostRefs(t *testin
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	inv := InventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
+	inv := inventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
 			return "fedora", nil
 		},
@@ -240,7 +247,7 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 		}
 	}
 
-	inv := InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
+	inv := inventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
 			return "controller", nil
 		},
@@ -264,7 +271,7 @@ func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
 		},
 	}
 	secretsDir := t.TempDir()
-	inv := InventoryWithLocalityPolicy(state, secretsDir, locality.Policy{Deps: locality.Deps{
+	inv := inventoryWithLocalityPolicy(state, secretsDir, locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
 			return "controller", nil
 		},

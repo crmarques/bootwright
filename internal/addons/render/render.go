@@ -146,7 +146,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 		}
 	case v1alpha1.ClusterAddonTypeManifestSet:
 		for _, manifest := range extension.Spec.ManifestSet.Manifests {
-			path := filepath.Join(filepath.Dir(extension.SourcePath), filepath.Clean(manifest.Path))
+			path := ManifestPath(extension, manifest)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				return "", fmt.Errorf("read ClusterAddon/%s manifest %s: %w", extension.Metadata.Name, manifest.Path, err)

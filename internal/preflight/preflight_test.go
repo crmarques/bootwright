@@ -196,7 +196,15 @@ func TestKubeVirtHostClusterChecksRunAsLocalRoot(t *testing.T) {
 		return []byte(`error loading config file "/var/lib/bootwright/.../kubeconfig": permission denied`), errors.New("exit status 1")
 	}
 
-	api := kubeVirtAPIReadyCheck("metal-ocp", "/kc", Deps{
+	// The API check now os.Opens the kubeconfig (as local root) before shelling
+	// out, so give it a real readable file; the probe must then still resolve
+	// through CommandOutputLocalRoot, not the de-escalated CommandOutput.
+	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+
+	api := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
 		CommandOutput: callerDenied,
 		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
 			return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil

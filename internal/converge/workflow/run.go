@@ -222,15 +222,45 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	}
 	if opts.AcquireRunLease {
 		now := time.Now()
-		lease := NewRunLease(applyRunID(now), now)
+		// Destroy mutates outside the apply scheduler; label its lease destroy-…
+		// so the "a mutating run (…) is still running" message does not mislabel a
+		// destroy as an apply.
+		lease := NewRunLease(destroyRunID(now), now)
 		if err := AcquireRunLease(opts.RunsDir, lease, now); err != nil {
 			return RunResult{Render: result, Command: command}, err
 		}
-		stopLeaseHeartbeat, _ := startRunLeaseHeartbeat(ctx, opts.RunsDir, lease)
+		// Reclaim decrypted runtime-secret dirs left by prior mutating runs now that
+		// we hold the lease and know the live run id.
+		sweepStaleRuntimeSecrets(opts.RunsDir, lease.RunID)
+		leaseCtx, leaseCancel := context.WithCancel(ctx)
+		defer leaseCancel()
+		stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(leaseCtx, opts.RunsDir, lease)
 		defer func() {
 			stopLeaseHeartbeat()
-			_ = RemoveRunLease(opts.RunsDir)
+			// Ownership-checked: if this run stalled and was taken over, its cleanup
+			// must not delete the new holder's lease.
+			_ = RemoveRunLeaseIfOwner(opts.RunsDir, lease.RunID)
 		}()
+		if reporter != nil {
+			reporter.AnsibleStart(command[0])
+		}
+		// Run under leaseCtx and select on the heartbeat error channel alongside the
+		// runner completing. A heartbeat-save failure means we can no longer prove
+		// exclusive ownership, so cancel (reaping the ansible process tree) and fail
+		// the run, matching the scheduler's fail-closed handling.
+		runErr := make(chan error, 1)
+		go func() { runErr <- runner.Run(leaseCtx, spec) }()
+		select {
+		case err := <-runErr:
+			return RunResult{Render: result, Command: command}, err
+		case err := <-leaseErrors:
+			leaseCancel()
+			<-runErr
+			if err == nil {
+				err = errors.New("apply lease heartbeat stopped")
+			}
+			return RunResult{Render: result, Command: command}, err
+		}
 	}
 	if reporter != nil {
 		reporter.AnsibleStart(command[0])
@@ -256,6 +286,50 @@ func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {
 		return filepath.Join(artifactsRoot, "runtime")
 	}
 	return filepath.Join(filepath.Dir(renderDir), "runtime")
+}
+
+// sweepStaleRuntimeSecrets removes decrypted runtime-secret directories left in
+// run history by prior mutating runs. Run materializes plaintext BMC/SSH/pull
+// secrets under a per-run/task runtime/secrets dir and only defers their removal,
+// so a SIGKILL leaves the plaintext behind forever. The run lease is the single
+// point of mutual exclusion, so once liveRunID holds it every other history entry
+// belongs to a finished or killed run whose plaintext copies are safe to reclaim
+// (security.md: short-lived plaintext copies must be removed after execution).
+// The live run's own dirs are never touched. This targets the host-local,
+// root-managed runs directory; the unsupported cross-host shared-runsDir case,
+// where a remote holder's lease can go stale while its run is still live, is a
+// pre-existing split-brain concern this sweep does not attempt to solve.
+func sweepStaleRuntimeSecrets(runsDir, liveRunID string) {
+	historyRoot := filepath.Join(runsDir, "history")
+	entries, err := os.ReadDir(historyRoot)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == liveRunID {
+			continue
+		}
+		removeRuntimeSecretDirs(filepath.Join(historyRoot, entry.Name()))
+	}
+}
+
+// removeRuntimeSecretDirs removes every runtime/secrets directory found under
+// root, matching the path construction used to materialize them.
+func removeRuntimeSecretDirs(root string) {
+	var targets []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() && d.Name() == "secrets" && filepath.Base(filepath.Dir(path)) == "runtime" {
+			targets = append(targets, path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	for _, target := range targets {
+		_ = os.RemoveAll(target)
+	}
 }
 
 func effectiveContextName(name string) string {

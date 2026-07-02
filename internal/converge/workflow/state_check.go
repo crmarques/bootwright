@@ -35,10 +35,12 @@ type StateCheckReport struct {
 	// store but no longer present in desired state (orphans left by removing an object
 	// without destroying it). Reported, never mutated; a full `destroy` reclaims them.
 	Undeclared []UndeclaredResource `json:"undeclared,omitempty"`
-	// LoadWarnings carries per-record ownership skip reasons (a record that could
-	// not be read, decoded, or validated). The orphan loader drops such records
-	// silently; surfacing the skip here keeps an orphan whose record is corrupt from
-	// vanishing from the report that exists to find orphans.
+	// LoadWarnings carries per-record skip reasons for records that could not be
+	// read, decoded, or validated: both ownership records (whose orphan would
+	// otherwise silently vanish from the report that exists to find orphans) and
+	// convergence-safety records (a single corrupt file under runs/safety/ must not
+	// brick this read-only report — the resource is skipped and the file named here
+	// instead). Reported, never fatal; the apply-time gate stays fail-loud.
 	LoadWarnings []string `json:"loadWarnings,omitempty"`
 }
 
@@ -84,15 +86,20 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		}
 	}
 
+	var loadWarnings []string
 	for _, task := range tasks {
 		kind := task.Entry.ClusterKind
 		name := task.Entry.Cluster
 		if name == "" {
 			kind, name = "infrastructure", "infrastructure"
 		}
-		class, err := classifyApplyTaskState(task, runsDir)
+		class, warning, err := classifyApplyTaskStateLenient(task, runsDir)
 		if err != nil {
 			return StateCheckReport{}, err
+		}
+		if warning != "" {
+			loadWarnings = append(loadWarnings, warning)
+			continue
 		}
 		accumulate(rootFor(kind, name), class, stateCheckResource(task, class))
 	}
@@ -125,15 +132,19 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		}
 		acc := rootFor(ApplyClusterKindStorage, cluster.Metadata.Name)
 		for _, sub := range storageSubObjects(state, cluster.Metadata.Name) {
-			class, err := classifyStorageSubObject(state, sub, runsDir)
+			class, warning, err := classifyStorageSubObjectLenient(state, sub, runsDir)
 			if err != nil {
 				return StateCheckReport{}, err
+			}
+			if warning != "" {
+				loadWarnings = append(loadWarnings, warning)
+				continue
 			}
 			accumulate(acc, class, storageSubObjectResource(sub, class))
 		}
 	}
 
-	report := StateCheckReport{InSync: true}
+	report := StateCheckReport{InSync: true, LoadWarnings: loadWarnings}
 	for _, key := range order {
 		acc := roots[key]
 		root := StateCheckRoot{Kind: acc.kind, Name: acc.name, Total: acc.total, Matched: acc.matched}
@@ -154,6 +165,50 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		return report.Roots[i].Name < report.Roots[j].Name
 	})
 	return report, nil
+}
+
+// classifyApplyTaskStateLenient is the read-only state-check variant of
+// classifyApplyTaskState: a corrupt or unreadable converge-safety record for the
+// task is returned as a non-empty warning (naming the file) and the task is
+// skipped by the caller, instead of aborting the whole state-check report. The
+// strict classifyApplyTaskState stays fail-loud for apply's preflight gate.
+func classifyApplyTaskStateLenient(task ApplyTask, runsDir string) (ConvergeSafetyClassification, string, error) {
+	desiredHash, err := ApplyTaskDesiredHash(task)
+	if err != nil {
+		return "", "", err
+	}
+	record, found, warning, err := loadConvergeSafetyRecordLenient(runsDir, applyTaskSafetyResourceID(task))
+	if err != nil {
+		return "", "", err
+	}
+	if warning != "" {
+		return "", warning, nil
+	}
+	if !found {
+		return ConvergeSafetyMissing, "", nil
+	}
+	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), "", nil
+}
+
+// classifyStorageSubObjectLenient mirrors classifyApplyTaskStateLenient for a
+// StorageCluster sub-object, degrading a corrupt record to a warning rather than
+// bricking the read-only report.
+func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject, runsDir string) (ConvergeSafetyClassification, string, error) {
+	desiredHash, err := storageSubObjectDesiredHash(state, sub)
+	if err != nil {
+		return "", "", err
+	}
+	record, found, warning, err := loadConvergeSafetyRecordLenient(runsDir, sub.resourceID())
+	if err != nil {
+		return "", "", err
+	}
+	if warning != "" {
+		return "", warning, nil
+	}
+	if !found {
+		return ConvergeSafetyMissing, "", nil
+	}
+	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), "", nil
 }
 
 func classifyApplyTaskState(task ApplyTask, runsDir string) (ConvergeSafetyClassification, error) {

@@ -95,6 +95,10 @@ func TestAssessRunActivity(t *testing.T) {
 		t.Fatalf("fresh lease activity = %+v, want active with lease", active)
 	}
 
+	// Mark the lease as taken on another host so the heartbeat-age rule governs: a
+	// live local process now reads active regardless of heartbeat age, so an aged
+	// heartbeat only declares a run stale when its process is not checkable here.
+	lease.Hostname = "other-host"
 	lease.HeartbeatAt = now.Add(-ApplyLeaseStaleAfter - time.Second)
 	if err := SaveRunLease(dir, lease); err != nil {
 		t.Fatalf("SaveRunLease stale: %v", err)

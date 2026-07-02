@@ -3,9 +3,11 @@ package workspace
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/crmarques/bootwright/internal/host/safefs"
 )
@@ -54,11 +56,15 @@ func ResolveWorkspaceDir(path string) (string, error) {
 }
 
 // ReplaceInputDir rebuilds ctx.InputDir from sourceDir, copying the whole tree
-// so the context is self-contained. It is crash-safe: the new tree is built in
-// a sibling staging directory under BaseDir (same filesystem, so the swap is an
-// atomic rename) and installed only once fully populated. Symlinks are
-// rejected; VCS and dependency directories are skipped; copied directories are
-// 0700 and files 0600 under the root-managed 0700 tree.
+// so the context is self-contained. The new tree is built in a sibling staging
+// directory under BaseDir (same filesystem, so installs are renames) and swapped
+// in only once fully populated. The existing input tree is moved aside first and
+// removed only after the new tree is installed, so the destructive delete never
+// runs before a valid replacement exists: a crash leaves either the old tree or
+// the new tree present, and a rare interruption between the two renames is caught
+// by ValidateInputDir with a repopulate remediation. Symlinks are rejected; VCS
+// and dependency directories are skipped; copied directories are 0700 and files
+// 0600 under the root-managed 0700 tree.
 func ReplaceInputDir(ctx Context, sourceDir string) error {
 	if err := ValidateName(ctx.Name); err != nil {
 		return err
@@ -78,13 +84,32 @@ func ReplaceInputDir(ctx Context, sourceDir string) error {
 		_ = os.RemoveAll(staging)
 		return err
 	}
-	if err := os.RemoveAll(ctx.InputDir); err != nil {
+	// Move any existing input tree aside (same-filesystem rename) before the swap
+	// so the old tree is destroyed only after the new one is installed. rename(2)
+	// cannot replace a populated directory, so the aside move is what frees the
+	// target for the staging rename.
+	aside := staging + ".old"
+	oldMoved := false
+	if _, err := os.Lstat(ctx.InputDir); err == nil {
+		if err := os.Rename(ctx.InputDir, aside); err != nil {
+			_ = os.RemoveAll(staging)
+			return fmt.Errorf("move existing input directory %s aside: %w", ctx.InputDir, err)
+		}
+		oldMoved = true
+	} else if !errors.Is(err, os.ErrNotExist) {
 		_ = os.RemoveAll(staging)
-		return fmt.Errorf("reset input directory %s: %w", ctx.InputDir, err)
+		return fmt.Errorf("stat input directory %s: %w", ctx.InputDir, err)
 	}
 	if err := os.Rename(staging, ctx.InputDir); err != nil {
+		if oldMoved {
+			// Restore the old tree so the context is never left without an input dir.
+			_ = os.Rename(aside, ctx.InputDir)
+		}
 		_ = os.RemoveAll(staging)
 		return fmt.Errorf("install input directory %s: %w", ctx.InputDir, err)
+	}
+	if oldMoved {
+		_ = os.RemoveAll(aside)
 	}
 	return nil
 }
@@ -122,7 +147,17 @@ func copyInputTree(src, dst string) error {
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("input source %s is not a regular file", srcPath)
 		}
-		data, err := os.ReadFile(srcPath)
+		// Open with O_NOFOLLOW and read from the descriptor rather than
+		// re-resolving the path: this closes the TOCTOU window between the Lstat
+		// symlink check above and the read, so a final component swapped for a
+		// symlink after the check makes the open fail instead of being followed
+		// out of the source tree.
+		f, err := os.OpenFile(srcPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+		if err != nil {
+			return fmt.Errorf("open %s: %w", srcPath, err)
+		}
+		data, err := io.ReadAll(f)
+		_ = f.Close()
 		if err != nil {
 			return fmt.Errorf("read %s: %w", srcPath, err)
 		}

@@ -90,7 +90,7 @@ func storageSubObjectSpec(state v1alpha1.State, sub storageSubObject) any {
 	case storageSubObjectKindPool:
 		for _, pool := range state.StoragePools {
 			if pool.Spec.StorageClusterRef.Name == sub.Cluster && pool.Metadata.Name == sub.Name {
-				return pool.Spec
+				return storagePoolHashSpec(state, pool)
 			}
 		}
 	case storageSubObjectKindFilesystem:
@@ -119,6 +119,27 @@ func storageSubObjectSpec(state v1alpha1.State, sub storageSubObject) any {
 		}
 	}
 	return nil
+}
+
+// storagePoolHashSpec returns the pool's own spec, plus — when the pool references a
+// StoragePlacementPolicy — the resolved policy spec. The pool references its policy by
+// name, and the renderer folds the policy's replication and failure domain into the
+// live pool, so hashing only pool.Spec would hide an edit to the referenced policy
+// from state-check and the apply drift gate. An empty or unresolved placementPolicyRef
+// keeps the pool.Spec-only payload (current behavior).
+func storagePoolHashSpec(state v1alpha1.State, pool v1alpha1.StoragePool) any {
+	if pool.Spec.PlacementPolicyRef.Name == "" {
+		return pool.Spec
+	}
+	for _, policy := range state.StoragePlacementPolicies {
+		if policy.Metadata.Name == pool.Spec.PlacementPolicyRef.Name {
+			return struct {
+				Pool            v1alpha1.StoragePoolSpec            `json:"pool"`
+				PlacementPolicy v1alpha1.StoragePlacementPolicySpec `json:"placementPolicy"`
+			}{Pool: pool.Spec, PlacementPolicy: policy.Spec}
+		}
+	}
+	return pool.Spec
 }
 
 // storageSubObjectDesiredHash hashes the sub-object's own spec plus its identity, in

@@ -15,9 +15,18 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
+func planApplyTasks(t *testing.T, target workflow.ApplyTarget, state v1alpha1.State) []workflow.ApplyTask {
+	t.Helper()
+	tasks, err := workflow.PlanApplyTasksChecked(target, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	return tasks
+}
+
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := workflow.PlanApplyTasks(converge.AllScope.ApplyTarget(), state)
+	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
 	if len(tasks) != 8 {
 		t.Fatalf("planned %d tasks, want 8: %+v", len(tasks), tasks)
 	}
@@ -76,7 +85,7 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 
 func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := workflow.PlanApplyTasks(converge.ContainerClusterScope.ApplyTarget(), state)
+	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
@@ -102,7 +111,7 @@ func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := workflow.PlanApplyTasks(converge.ContainerClusterScope.ApplyTarget(), state)
+	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
@@ -133,7 +142,7 @@ func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 
 func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := workflow.PlanApplyTasks(converge.ContainerClusterScope.ApplyTarget(), state)
+	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
 	limits := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
 	if limits.Parallelism != len(tasks) {
 		t.Fatalf("global parallelism = %d, want %d", limits.Parallelism, len(tasks))

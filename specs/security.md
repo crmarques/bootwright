@@ -112,6 +112,16 @@ TLS trust. `InfraProvider.spec.baremetal.defaults.bmc` supplies fleet-wide
 defaults for both legs (a machine value wins; `credentialsRef` stays
 per-machine).
 
+The only other verification skips are narrowly-scoped reachability probes against
+Bootwright's own managed self-signed artifact server: the staged-ISO `HEAD` and
+byte-range fetch checks in `container_cluster_agent_install` and the
+artifact-server HTTP readiness wait. They confirm the endpoint is serving and
+read no response content, so no fetched bytes are ever consumed unverified.
+
+The libvirt lab substrate's emulated Redfish BMC is a cleartext basic-auth
+endpoint bound to all interfaces; it is a lab-only convenience that must stay on a
+trusted management segment.
+
 ## Proxy Boundaries
 
 `Environment.spec.infraComponents.proxies[]` declares proxy access entries.

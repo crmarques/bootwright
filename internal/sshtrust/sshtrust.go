@@ -154,11 +154,8 @@ func Save(dir string, store Store) error {
 		return err
 	}
 	sortStore(store)
-	if err := os.MkdirAll(dir, localDirMode); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
-	}
-	if err := os.Chmod(dir, localDirMode); err != nil {
-		return fmt.Errorf("chmod %s: %w", dir, err)
+	if err := safefs.EnsureDir(dir, localDirMode); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(store, "", "  ")
 	if err != nil {

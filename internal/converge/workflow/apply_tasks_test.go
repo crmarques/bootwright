@@ -596,7 +596,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 		ProviderStateDir:           filepath.Join(dir, "provider-state"),
 		BundleDir:                  filepath.Join(dir, "bundle"),
 		ClusterAvailabilityChecker: checker,
-	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", mustPlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -643,7 +643,7 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 		ManagedServicesDir: managedServicesDir,
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", mustPlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -699,7 +699,7 @@ func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
 				ManagedServicesDir: managedServicesDir,
 				ProviderStateDir:   filepath.Join(dir, "provider-state"),
 				BundleDir:          filepath.Join(dir, "bundle"),
-			}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+			}, applyContainerClusterTarget(), "", mustPlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 				calls++
 				return &fakeRunner{}
 			})
@@ -746,7 +746,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 		ManagedServicesDir: managedServicesDir,
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", mustPlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return runner
 	})
@@ -819,7 +819,7 @@ func TestClusterInstallRecordTracksNodeSafePoints(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", mustPlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
 	if err != nil {

@@ -184,6 +184,7 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.StoragePools) == 0 &&
 		len(state.StorageFilesystems) == 0 &&
 		len(state.StorageObjectGateways) == 0 &&
+		len(state.StorageNFSExports) == 0 &&
 		len(state.StorageExports) == 0 &&
 		len(state.ClusterAddons) == 0 &&
 		len(state.ClusterAddonProfiles) == 0 &&
@@ -564,6 +565,12 @@ func sortState(state *v1alpha1.State) {
 			return state.StorageObjectGateways[i].SourcePath < state.StorageObjectGateways[j].SourcePath
 		}
 		return state.StorageObjectGateways[i].Metadata.Name < state.StorageObjectGateways[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StorageNFSExports, sortByName(func(i, j int) bool {
+		if state.StorageNFSExports[i].Metadata.Name == state.StorageNFSExports[j].Metadata.Name {
+			return state.StorageNFSExports[i].SourcePath < state.StorageNFSExports[j].SourcePath
+		}
+		return state.StorageNFSExports[i].Metadata.Name < state.StorageNFSExports[j].Metadata.Name
 	}))
 	sort.SliceStable(state.StorageExports, sortByName(func(i, j int) bool {
 		if state.StorageExports[i].Metadata.Name == state.StorageExports[j].Metadata.Name {

@@ -70,7 +70,7 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		report, err := status.StateCheck(state, clusterScope, scope.ApplyTarget(), cf.ctx.RunsDir, cf.ctx.OwnershipDir, cf.ctx.Name)
+		report, err := status.StateCheck(state, clusterScope, scope.Name, scope.ApplyTarget(), cf.ctx.RunsDir, cf.ctx.OwnershipDir, cf.ctx.Name)
 		if err != nil {
 			return failErr(1, err)
 		}

@@ -71,6 +71,36 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
 
+# The disable PATCH tolerates the codes a BMC that keeps VerifyCertificate
+# read-only returns (Huawei/xFusion iBMC 501s this PATCH; others 400/405), so the
+# boot still proceeds on the manager HttpsTransferCertVerification path. A 401/403
+# is different: the credentials authenticated but the account's BMC role lacks the
+# privilege this write needs. Swallowing it hid the refusal, so re-surface it.
+# Only the status, resource path, and response body (never url_password) are
+# interpolated, so the credential stays redacted.
+- name: Confirm the virtual-media certificate verification disable was not refused for lack of privilege
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204, 400, 405, 501]
+    fail_msg: >-
+      The BMC refused to disable the VirtualMedia VerifyCertificate property at
+      {{ bootwright_redfish_vmedia_member }} with HTTP
+      {{ bootwright_redfish_vmedia_verify_certificate_patch.status | default('unknown') }}.
+      BMC response:
+      {{
+        bootwright_redfish_vmedia_verify_certificate_patch.json
+        | default(bootwright_redfish_vmedia_verify_certificate_patch.content
+                  | default(bootwright_redfish_vmedia_verify_certificate_patch.msg | default('<no response body>', true), true), true)
+      }}.
+      HTTP 401/403 means the credentials authenticated but the account's BMC role
+      lacks the "Security Configuration" right this write requires. On
+      Huawei/xFusion iBMC the fixed Operator and Common User roles do not hold this
+      right -- use an Administrator-role account, or grant a Custom Role the
+      "Security Configuration" right, then re-run with the same credentials. The
+      privilege-free path is to serve a BMC-trusted artifact server certificate so
+      no verification-disable is needed.
+  when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+
 - name: Build standard Redfish InsertMedia request body
   ansible.builtin.set_fact:
     bootwright_redfish_insert_media_body:

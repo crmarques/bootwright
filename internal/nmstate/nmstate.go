@@ -28,7 +28,18 @@ type InterfaceAddress struct {
 func EffectiveConfig(template, overrides map[string]any, addresses []InterfaceAddress) map[string]any {
 	out := Clone(template)
 	if len(overrides) > 0 {
-		Merge(out, Clone(overrides))
+		// Merge only errors when mergo's top-level contract is violated (a
+		// non-pointer dst or mismatched dst/src types); this package always feeds
+		// it a *map[string]any dst and a map[string]any src of identical type, so
+		// the error is unreachable for these inputs (nested scalar/map/slice
+		// conflicts overwrite under WithOverride without erroring). EffectiveConfig
+		// cannot surface an error through its signature — its render and validate
+		// callers pre-check via the validation phase and ShapeErrors — so treat a
+		// merge failure as a broken invariant and panic loudly rather than silently
+		// dropping the override merge this package exists to protect.
+		if err := Merge(out, Clone(overrides)); err != nil {
+			panic(fmt.Sprintf("nmstate: EffectiveConfig merge invariant violated: %v", err))
+		}
 	}
 	for _, address := range addresses {
 		SetInterfaceAddress(out, address)
@@ -74,12 +85,14 @@ func SetInterfaceAddress(config map[string]any, address InterfaceAddress) {
 // merge by name, all-map lists merge positionally, and the override value wins
 // on scalar conflict. List shapes the merge cannot apply are left untouched here
 // and reported by ShapeErrors at validation time.
-func Merge(base, patch map[string]any) {
+func Merge(base, patch map[string]any) error {
 	for key, patchValue := range patch {
 		baseMap, baseIsMap := base[key].(map[string]any)
 		patchMap, patchIsMap := patchValue.(map[string]any)
 		if baseIsMap && patchIsMap {
-			Merge(baseMap, patchMap)
+			if err := Merge(baseMap, patchMap); err != nil {
+				return err
+			}
 			continue
 		}
 		baseSlice, baseIsSlice := base[key].([]any)
@@ -87,30 +100,38 @@ func Merge(base, patch map[string]any) {
 		if !baseIsSlice || !patchIsSlice {
 			continue
 		}
-		merged, ok := mergeSequence(baseSlice, patchSlice)
+		merged, ok, err := mergeSequence(baseSlice, patchSlice)
+		if err != nil {
+			return err
+		}
 		if !ok {
 			continue
 		}
 		base[key] = merged
 		delete(patch, key)
 	}
-	_ = mergo.Merge(&base, patch, mergo.WithOverride)
+	// mergo folds the leftover scalar/unmergeable keys, override wins. This
+	// package exists to prevent silent merge drops, so propagate mergo's error
+	// instead of discarding it.
+	return mergo.Merge(&base, patch, mergo.WithOverride)
 }
 
-func mergeSequence(base, patch []any) ([]any, bool) {
+func mergeSequence(base, patch []any) ([]any, bool, error) {
 	if len(patch) == 0 {
-		return cloneValue(base).([]any), true
+		return cloneValue(base).([]any), true, nil
 	}
 	if sequenceUsesName(patch) {
-		return mergeNamedSequence(base, patch), true
+		merged, err := mergeNamedSequence(base, patch)
+		return merged, true, err
 	}
 	if sequenceUsesMaps(base) && sequenceUsesMaps(patch) {
-		return mergePositionalSequence(base, patch), true
+		merged, err := mergePositionalSequence(base, patch)
+		return merged, true, err
 	}
-	return nil, false
+	return nil, false, nil
 }
 
-func mergeNamedSequence(base, patch []any) []any {
+func mergeNamedSequence(base, patch []any) ([]any, error) {
 	out := cloneValue(base).([]any)
 	index := map[string]map[string]any{}
 	for _, item := range out {
@@ -126,27 +147,31 @@ func mergeNamedSequence(base, patch []any) []any {
 		entry := item.(map[string]any)
 		name := entry["name"].(string)
 		if baseEntry, ok := index[name]; ok {
-			Merge(baseEntry, entry)
+			if err := Merge(baseEntry, entry); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		out = append(out, Clone(entry))
 	}
-	return out
+	return out, nil
 }
 
-func mergePositionalSequence(base, patch []any) []any {
+func mergePositionalSequence(base, patch []any) ([]any, error) {
 	out := cloneValue(base).([]any)
 	for i, item := range patch {
 		entry := item.(map[string]any)
 		if i < len(out) {
 			if baseEntry, ok := out[i].(map[string]any); ok {
-				Merge(baseEntry, entry)
+				if err := Merge(baseEntry, entry); err != nil {
+					return nil, err
+				}
 				continue
 			}
 		}
 		out = append(out, Clone(entry))
 	}
-	return out
+	return out, nil
 }
 
 func sequenceUsesName(items []any) bool {

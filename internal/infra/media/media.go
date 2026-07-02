@@ -100,27 +100,6 @@ func ValidateISOReference(value string) error {
 	return err
 }
 
-func ResolveExisting(value string) (Resolved, error) {
-	resolved, err := Resolve(value)
-	if err != nil {
-		return Resolved{}, err
-	}
-	switch resolved.Kind {
-	case kindManaged, "file":
-		info, err := os.Lstat(resolved.Path)
-		if errors.Is(err, os.ErrNotExist) {
-			return Resolved{}, fmt.Errorf("ISO media %s not found", resolved.Path)
-		}
-		if err != nil {
-			return Resolved{}, fmt.Errorf("stat ISO media %s: %w", resolved.Path, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return Resolved{}, fmt.Errorf("ISO media %s must be a regular file", resolved.Path)
-		}
-	}
-	return resolved, nil
-}
-
 func Resolve(value string) (Resolved, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {

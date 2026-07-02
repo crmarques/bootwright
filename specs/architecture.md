@@ -140,10 +140,22 @@ cluster install records, add-on records, managed OS markers, provider metadata,
 and storage comparison results — decide whether a rerun can skip or must fail.
 
 Ownership evidence is a named cross-boundary contract: executing collection
-roles record per-host resource and package ownership through
-`bootwright.core.ownership_record` at mutation time, and Go reads those records
-for destroy scoping, host package removal gating, orphan reporting, and
-state-check. Run, install, and convergence-safety ledgers remain Go-written.
+roles write ownership through `bootwright.core.ownership_record` at mutation
+time; Go reads those records for destroy scoping, host package removal gating,
+orphan reporting, and state-check, and stamps destroy-status attributes. The one
+Go write is the partial-destroy path: after `--skip-unreachable` leaves a storage
+cluster only partly torn down, Go stamps `destroyStatus=partial` onto that
+StorageCluster's ownership record so it is not treated as fully gone. Run,
+install, and convergence-safety ledgers remain Go-written.
+
+State-check and orphan reporting are additive-first: they enumerate only the
+resources the loaded desired state currently declares, and orphan correlation is
+machine-, cluster-, component-, and provider-grained. An object removed from
+desired state after an apply is therefore neither drift nor orphan — it falls out
+of enumeration rather than being flagged — so out-of-band removal is an explicit
+`destroy` step, not a state-check outcome. A later same-name re-declaration can
+classify `match` against the stale pre-destroy evidence until it is re-applied.
+This is the documented additive-only posture, not a gap.
 
 Shared machine services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about

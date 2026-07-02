@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
@@ -13,7 +12,6 @@ import (
 
 const (
 	checkGroupInstallSource   = "Install source"
-	installSourceProbeTimeout = 15 * time.Second
 	installSourceRepoMetadata = "repodata/repomd.xml"
 )
 
@@ -90,7 +88,7 @@ func installSourceCheck(baseURL string, deps Deps) Check {
 			"Boot-ISO installs fetch packages from this repository during install",
 			"check the installSource URL "+baseURL)
 	}
-	resp, err := installSourceHTTPDo(deps, req)
+	resp, err := preflightHTTPDo(deps, req, false)
 	if err != nil {
 		return Check{
 			Group:       checkGroupInstallSource,
@@ -111,12 +109,4 @@ func installSourceCheck(baseURL string, deps Deps) Check {
 			"The server answered but serves no yum metadata at this path, so Anaconda cannot install from it",
 			"point installSource at the install-tree root that contains repodata/ (for example .../BaseOS/x86_64/os/)")
 	}
-}
-
-func installSourceHTTPDo(deps Deps, req *http.Request) (*http.Response, error) {
-	if deps.HTTPDo != nil {
-		return deps.HTTPDo(req, false)
-	}
-	client := &http.Client{Timeout: installSourceProbeTimeout}
-	return client.Do(req)
 }

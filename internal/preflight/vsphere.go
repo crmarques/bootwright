@@ -15,7 +15,10 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-const vsphereSessionProbeTimeout = 15 * time.Second
+// preflightHTTPProbeTimeout bounds every preflight endpoint probe (vCenter
+// session login, install-source reachability) so an unresponsive endpoint fails
+// the check instead of hanging the run.
+const preflightHTTPProbeTimeout = 15 * time.Second
 
 func stateNeedsVSphere(state v1alpha1.State) bool {
 	providers := map[string]v1alpha1.InfraProvider{}
@@ -102,7 +105,7 @@ func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, resolver secret.Resolver, d
 		return failCheck(checkGroupInstallerTools, name, err.Error(), "vSphere machine creation needs a reachable vCenter API", "check the declared vcenters[].server and port")
 	}
 	req.SetBasicAuth(creds.Username, creds.Password)
-	resp, err := vsphereHTTPDo(deps, req, vc.DisableCertificateVerification)
+	resp, err := preflightHTTPDo(deps, req, vc.DisableCertificateVerification)
 	if err != nil {
 		return failCheck(checkGroupInstallerTools, name, err.Error(), "vSphere machine creation needs a reachable vCenter API", "check network reachability, DNS, and TLS trust for "+vc.Server+" (disableCertificateVerification opts out of verification for self-signed labs)")
 	}
@@ -144,18 +147,24 @@ func releaseVSphereSession(deps Deps, url, sessionID string, insecureSkipVerify 
 		return
 	}
 	req.Header.Set("vmware-api-session-id", sessionID)
-	resp, err := vsphereHTTPDo(deps, req, insecureSkipVerify)
+	resp, err := preflightHTTPDo(deps, req, insecureSkipVerify)
 	if err != nil {
 		return
 	}
 	_ = resp.Body.Close()
 }
 
-func vsphereHTTPDo(deps Deps, req *http.Request, insecureSkipVerify bool) (*http.Response, error) {
+// preflightHTTPDo issues a preflight endpoint probe: it honors an injected
+// deps.HTTPDo, otherwise builds a real client bounded by preflightHTTPProbeTimeout.
+// insecureSkipVerify opts the built client out of TLS verification for
+// self-signed labs (vSphere sets it from disableCertificateVerification);
+// verifying probes (install source) pass false, so the single builder serves
+// both without duplicating the client wiring.
+func preflightHTTPDo(deps Deps, req *http.Request, insecureSkipVerify bool) (*http.Response, error) {
 	if deps.HTTPDo != nil {
 		return deps.HTTPDo(req, insecureSkipVerify)
 	}
-	client := &http.Client{Timeout: vsphereSessionProbeTimeout}
+	client := &http.Client{Timeout: preflightHTTPProbeTimeout}
 	if insecureSkipVerify {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}

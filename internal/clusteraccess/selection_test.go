@@ -35,9 +35,6 @@ func TestResolveEmptyScopeIsWholeTarget(t *testing.T) {
 	if len(sel.RenderState.ContainerClusters) != 1 || len(sel.RenderState.StorageClusters) != 1 {
 		t.Fatalf("empty scope must keep the full render state; got %+v", sel.RenderState)
 	}
-	if !sel.IsStorageWorkObject("ceph") {
-		t.Fatal("with no narrowing every storage cluster is a work object")
-	}
 }
 
 // TestResolveContainerOnlyExcludesStorageFromWorkSet is the selection-level
@@ -60,9 +57,6 @@ func TestResolveContainerOnlyExcludesStorageFromWorkSet(t *testing.T) {
 	if names == nil || len(names) != 0 {
 		t.Fatalf("container-only selection must yield a non-nil empty storage work set; got %v", names)
 	}
-	if sel.IsStorageWorkObject("ceph") {
-		t.Fatal("a storage cluster not named in --clusters must not be a work object")
-	}
 	if len(sel.AllRoots) != 1 || sel.AllRoots[0] != "ocp" {
 		t.Fatalf("AllRoots = %v, want [ocp]", sel.AllRoots)
 	}
@@ -77,9 +71,6 @@ func TestResolveStorageRootIsWorkObject(t *testing.T) {
 	}
 	if names := sel.StorageWorkNames(); len(names) != 1 || names[0] != "ceph" {
 		t.Fatalf("StorageWorkNames = %v, want [ceph]", names)
-	}
-	if !sel.IsStorageWorkObject("ceph") {
-		t.Fatal("a directly-named storage root must be a work object")
 	}
 }
 

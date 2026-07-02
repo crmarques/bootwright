@@ -2,7 +2,6 @@ package stateview
 
 import (
 	"net"
-	"reflect"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -65,13 +64,6 @@ func TestClusterInstallRelationships(t *testing.T) {
 		t.Fatal("ClusterInstallForContainerCluster returned false")
 	}
 
-	if got, ok := ClusterForInstall(state, infra); !ok || got.Metadata.Name != "cluster" {
-		t.Fatalf("ClusterForInstall failed: %v %+v", ok, got)
-	}
-	names := ClusterInstallNames(cluster)
-	if !reflect.DeepEqual(names, []string{"cluster"}) {
-		t.Fatalf("ClusterInstallNames = %v", names)
-	}
 	nodes := ClusterNodesForInstall(state, infra)
 	if len(nodes) != 2 || nodes["master-0"].Hostname != "master-0" || nodes["master-1"].Hostname != "master-1" {
 		t.Fatalf("ClusterNodesForInstall = %+v", nodes)

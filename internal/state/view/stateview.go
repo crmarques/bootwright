@@ -220,22 +220,6 @@ func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
 	return node
 }
 
-func ClusterInstallNames(cluster v1alpha1.ContainerCluster) []string {
-	if len(cluster.Spec.Hosts) == 0 {
-		return nil
-	}
-	return []string{cluster.Metadata.Name}
-}
-
-func ClusterForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) (v1alpha1.ContainerCluster, bool) {
-	for _, cluster := range state.ContainerClusters {
-		if cluster.Metadata.Name == infra.Metadata.Name {
-			return cluster, true
-		}
-	}
-	return v1alpha1.ContainerCluster{}, false
-}
-
 func ClusterNodesForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]v1alpha1.OCPHostSpec {
 	for _, cluster := range state.ContainerClusters {
 		if cluster.Metadata.Name != infra.Metadata.Name {

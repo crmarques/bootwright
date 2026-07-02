@@ -84,6 +84,29 @@ func LoadConvergeSafetyRecord(runsDir, resourceID string) (ConvergeSafetyRecord,
 	return record, true, nil
 }
 
+// loadConvergeSafetyRecordLenient is the read-only state-check variant of
+// LoadConvergeSafetyRecord: a per-file read or decode failure is returned as a
+// warning naming the file (and the record reported not-found) so the caller
+// skips just that record, instead of propagating an error that would brick the
+// whole read-only state-check report on a single corrupt file. LoadConvergeSafetyRecord
+// itself stays strict — apply's preflight gate must still fail loud on a corrupt
+// record rather than silently treat it as absent.
+func loadConvergeSafetyRecordLenient(runsDir, resourceID string) (ConvergeSafetyRecord, bool, string, error) {
+	path := ConvergeSafetyRecordPath(runsDir, resourceID)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return ConvergeSafetyRecord{}, false, "", nil
+	}
+	if err != nil {
+		return ConvergeSafetyRecord{}, false, fmt.Sprintf("read converge safety record %s: %v", path, err), nil
+	}
+	var record ConvergeSafetyRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return ConvergeSafetyRecord{}, false, fmt.Sprintf("decode converge safety record %s: %v", path, err), nil
+	}
+	return record, true, "", nil
+}
+
 func SaveConvergeSafetyRecord(runsDir string, record ConvergeSafetyRecord) error {
 	path := ConvergeSafetyRecordPath(runsDir, record.ResourceID)
 	data, err := json.MarshalIndent(record, "", "  ")

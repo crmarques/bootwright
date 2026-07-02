@@ -122,12 +122,12 @@ func TestOwnerAndReferenceContextScans(t *testing.T) {
 	if len(refs) != 2 || refs[0] != "spoke-a" || refs[1] != "spoke-b" {
 		t.Fatalf("want [spoke-a spoke-b] referrers, got %v", refs)
 	}
-	if owners, _ := OwnerContexts(stores, "hub", id); len(owners) != 0 {
+	if owners, _ := OtherContextsWithRole(stores, "hub", id, RoleOwner); len(owners) != 0 {
 		t.Fatalf("hub is the only owner; want no sibling owners, got %v", owners)
 	}
 
 	// From spoke-a's perspective (a referrer): hub is the single owner.
-	owners, _ := OwnerContexts(stores, "spoke-a", id)
+	owners, _ := OtherContextsWithRole(stores, "spoke-a", id, RoleOwner)
 	if len(owners) != 1 || owners[0] != "hub" {
 		t.Fatalf("want [hub] owner, got %v", owners)
 	}

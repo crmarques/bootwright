@@ -111,6 +111,10 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		_ = RemoveRunLease(runsDir)
 		return ledger, err
 	}
+	// Now that the lease is ours and the live run id is known, reclaim decrypted
+	// runtime-secret dirs left behind by prior mutating runs (a SIGKILL'd run only
+	// defers their removal, so nothing else ever cleans them up).
+	sweepStaleRuntimeSecrets(runsDir, runID)
 	stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)
 	finishRun := func(status RunStatus) error {
 		stopLeaseHeartbeat()
@@ -118,7 +122,12 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		if err := SaveRunLedger(runsDir, ledger); err != nil {
 			return err
 		}
-		return RemoveRunLease(runsDir)
+		// Ownership-checked: if this run stalled and was taken over, its cleanup
+		// must not delete the new holder's lease.
+		if err := RemoveRunLeaseIfOwner(runsDir, runID); err != nil && !isLeaseNotOwned(err) {
+			return err
+		}
+		return nil
 	}
 	logs, err := openApplyLogs(runsDir, ledger)
 	if err != nil {
@@ -307,7 +316,10 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 
 var (
 	applyLeaseHeartbeatInterval = ApplyLeaseHeartbeatInterval
-	saveRunLease                = SaveRunLease
+	// saveRunLease is ownership-checked so a heartbeat tick that resumes after a
+	// takeover becomes a no-op (ErrLeaseNotOwned) instead of clobbering the new
+	// holder's lease.
+	saveRunLease = SaveRunLeaseIfOwner
 )
 
 func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease) (func(), <-chan error) {
@@ -325,6 +337,11 @@ func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease)
 			case now := <-ticker.C:
 				lease.HeartbeatAt = now.UTC()
 				if err := saveRunLease(runsDir, lease); err != nil {
+					if isLeaseNotOwned(err) {
+						// Taken over by a newer holder; stop refreshing rather than
+						// clobber their lease. Not a run failure, so emit no error.
+						return
+					}
 					errors <- fmt.Errorf("refresh apply lease: %w", err)
 					return
 				}

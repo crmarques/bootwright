@@ -2,6 +2,7 @@ package ansible
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,11 +11,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/host/callerio"
 	"github.com/crmarques/bootwright/internal/host/localroot"
 	"github.com/crmarques/bootwright/internal/host/ptyexec"
 )
+
+// processGroupTerminationGrace bounds how long the runner waits after cancelling
+// the ansible process group with SIGTERM before Go force-kills the leader. The
+// group setup and SIGTERM-on-cancel below reap ssh/python children that would
+// otherwise keep mutating hosts after the run lease is released.
+const processGroupTerminationGrace = 5 * time.Second
 
 const OutputLogName = "ansible-output.log"
 
@@ -158,7 +167,29 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 		cmd.Stderr = teeWriter(r.Stderr, lockedOutputLog)
 		cmd.Stdin = os.Stdin
 		cmd.Env = env
+		// Run ansible-playbook in its own process group so cancellation reaps the
+		// whole tree (ssh/python children), not just ansible-playbook itself —
+		// otherwise those children keep mutating hosts after the run lease is
+		// released. On ctx cancel, SIGTERM the group; WaitDelay lets Go escalate to
+		// a force-kill if the group does not exit in time.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error {
+			if cmd.Process == nil {
+				return nil
+			}
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		}
+		cmd.WaitDelay = processGroupTerminationGrace
 		runErr = cmd.Run()
+		// If the playbook itself exited successfully but a lingering child (e.g. an
+		// ssh mux master) held the output pipe open past WaitDelay, Run reports
+		// ErrWaitDelay. The run succeeded — the output tail was already tee'd to the
+		// log — so do not turn a slow pipe drain into a spurious apply failure. A
+		// cancelled/force-killed process is not Success(), so real cancellations
+		// still surface.
+		if errors.Is(runErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+			runErr = nil
+		}
 	}
 	if runErr != nil {
 		// Close the log so the failure summary reads a flushed file.

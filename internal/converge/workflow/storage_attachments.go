@@ -87,6 +87,12 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 			return applyTaskResult{id: task.Entry.ID, err: err}
 		}
 	}
+	// The external cluster details manifest and the SSH exporter output both hold
+	// the Ceph external credentials in plaintext; now that oc apply has landed them
+	// in the cluster, reclaim them from run history (security.md: short-lived
+	// plaintext copies must be removed after execution).
+	_ = os.Remove(asset.ExternalClusterDetailsPath)
+	_ = os.RemoveAll(filepath.Join(taskRoot, "external-details-ssh"))
 	if err := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, time.Now()); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}

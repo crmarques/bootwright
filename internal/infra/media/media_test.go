@@ -195,14 +195,6 @@ func TestResolveISOReferences(t *testing.T) {
 	}
 }
 
-func TestResolveExistingRejectsMissingMedia(t *testing.T) {
-	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
-	_, err := ResolveExisting("local-media:rhel.iso")
-	if err == nil || !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("ResolveExisting missing media err = %v", err)
-	}
-}
-
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])

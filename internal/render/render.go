@@ -149,6 +149,9 @@ func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, sta
 // FileSystem so tests can assert mode invariants on the secret-inlined work-dir
 // writes without touching disk.
 func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	if err := checkResolvedNames(state); err != nil {
+		return Result{}, err
+	}
 	result := Result{InstallerAssets: InstallerAssets(clustersDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)

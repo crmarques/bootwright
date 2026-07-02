@@ -200,6 +200,13 @@ can be attached as virtual media exactly as on real hardware.
     effective values (after the `8000` / `port + 1` defaults) are also checked
     for collisions across all libvirt providers in the same context.
 
+!!! warning "Emulated BMC is a lab endpoint on an all-interfaces listener"
+    The `sushy-tools` endpoint serves Redfish over cleartext HTTP with mandatory
+    basic auth, binds `0.0.0.0` by default (`bindAddress`), and opens its Redfish
+    port in the host firewall. Credentials are required but transit in cleartext
+    on every interface, so keep the emulated BMC on a trusted management segment
+    and do not expose it beyond the lab.
+
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider

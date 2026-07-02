@@ -138,6 +138,9 @@ type Community struct {
 	Release string
 	Version string
 	Mirror  string
+	// Checksum is the normalized sha256 hex (no "sha256:" prefix) that pins the
+	// downloaded cephadm bootstrap binary, empty when the operator left it unset.
+	Checksum string
 }
 
 type Repository struct {
@@ -191,6 +194,10 @@ func communitySource(cluster v1alpha1.StorageCluster) Community {
 	}
 	if cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Community != nil {
 		out.Mirror = cluster.Spec.Ceph.Community.Mirror
+		// Validation (validate_storage_distribution.go) already rejected a
+		// malformed checksum; render only shapes it to the bare sha256 hex the
+		// community role re-prefixes into get_url's checksum.
+		out.Checksum = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(cluster.Spec.Ceph.Community.Checksum), "sha256:"))
 	}
 	return out
 }
@@ -317,6 +324,9 @@ func Vars(provider Provider) map[string]any {
 		}
 		if provider.Community.Mirror != "" {
 			community["mirror"] = provider.Community.Mirror
+		}
+		if provider.Community.Checksum != "" {
+			community["checksum"] = provider.Community.Checksum
 		}
 		out["community"] = community
 	}

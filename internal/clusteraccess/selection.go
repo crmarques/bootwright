@@ -145,13 +145,3 @@ func (s Selection) StorageWorkNames() []string {
 	sort.Strings(out)
 	return out
 }
-
-// IsStorageWorkObject reports whether a StorageCluster name is a genuine
-// provisioning/teardown target rather than a render reference. With no
-// --clusters selection every declared cluster is a work object.
-func (s Selection) IsStorageWorkObject(name string) bool {
-	if !s.Active {
-		return true
-	}
-	return s.WorkStorageClusters[name]
-}

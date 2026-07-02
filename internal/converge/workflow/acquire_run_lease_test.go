@@ -35,7 +35,13 @@ func TestAcquireRunLeaseFailsClosedOnFreshLease(t *testing.T) {
 func TestAcquireRunLeaseTakesOverStaleLease(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
-	// A heartbeat older than the stale window marks the prior run dead.
+	// A live local process now reads as active regardless of heartbeat age, so a
+	// backdated heartbeat alone no longer marks the prior run dead: force the
+	// process probe to report the holder gone so the heartbeat-age rule governs.
+	previous := runLeaseProcessAlive
+	runLeaseProcessAlive = func(int) bool { return false }
+	defer func() { runLeaseProcessAlive = previous }()
+	// A heartbeat older than the stale window marks the prior (dead) run stale.
 	if err := SaveRunLease(runsDir, NewRunLease("run-stale", now.Add(-10*time.Minute))); err != nil {
 		t.Fatalf("SaveRunLease: %v", err)
 	}

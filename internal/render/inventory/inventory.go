@@ -35,14 +35,6 @@ func InventoryWithPathOptions(state v1alpha1.State, paths PathOptions) map[strin
 	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, paths, locality.DefaultPolicy, nil)
 }
 
-func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localPolicy locality.Policy) map[string]any {
-	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, localPolicy, nil)
-}
-
-func InventoryWithOwnershipRecords(state v1alpha1.State, secretsDir string, records []ownership.ResourceRecord) map[string]any {
-	return InventoryWithOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, records)
-}
-
 func InventoryWithOwnershipRecordsAndPathOptions(state v1alpha1.State, paths PathOptions, records []ownership.ResourceRecord) map[string]any {
 	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, paths, locality.DefaultPolicy, records)
 }

@@ -39,7 +39,7 @@ func TestStateCheckSurfacesSkippedOwnershipRecords(t *testing.T) {
 		t.Fatalf("write malformed ownership record: %v", err)
 	}
 
-	report, err := StateCheck(v1alpha1.State{}, "", workflow.ApplyTarget{}, runsDir, ownershipDir, contextName)
+	report, err := StateCheck(v1alpha1.State{}, "", "all", workflow.ApplyTarget{}, runsDir, ownershipDir, contextName)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestStateCheckNoLoadWarningsWhenRecordsClean(t *testing.T) {
 		t.Fatalf("save valid ownership record: %v", err)
 	}
 
-	report, err := StateCheck(v1alpha1.State{}, "", workflow.ApplyTarget{}, runsDir, ownershipDir, contextName)
+	report, err := StateCheck(v1alpha1.State{}, "", "all", workflow.ApplyTarget{}, runsDir, ownershipDir, contextName)
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}

@@ -14,8 +14,39 @@
       CertificateType: PEM
     status_code: [200, 201, 202, 204]
   register: bootwright_redfish_artifact_cert_import_standard
+  # Don't let the uri module's status_code mismatch raise the bare
+  # "Status code was 403 ..." here: that message carries no BMC detail, and the
+  # task's no_log (which protects url_password) buries the response body that
+  # explains the refusal as "output has been hidden due to no_log". Tolerate any
+  # status, then surface the BMC message in a credential-safe assert below.
+  failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_import_standard.status | default(0) | int) in [200, 201, 202, 204]
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+
+# A non-2xx here is the BMC refusing the import, not a malformed request: the
+# reason lives in the response body the import task's no_log hides, so re-surface
+# it. Only status/json/content/msg and the resource path are interpolated -- none
+# of which carry url_password -- so the credential stays redacted.
+- name: Confirm the DMTF VirtualMedia certificate import was accepted
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_artifact_cert_import_standard.status | default(0) | int) in [200, 201, 202, 204]
+    fail_msg: >-
+      The BMC refused the DMTF VirtualMedia certificate import at
+      {{ bootwright_redfish_vmedia_certificates_url }} with HTTP
+      {{ bootwright_redfish_artifact_cert_import_standard.status | default('unknown') }}.
+      BMC response:
+      {{
+        bootwright_redfish_artifact_cert_import_standard.json
+        | default(bootwright_redfish_artifact_cert_import_standard.content
+                  | default(bootwright_redfish_artifact_cert_import_standard.msg | default('<no response body>', true), true), true)
+      }}.
+      HTTP 401/403 means the credentials authenticated but the account's BMC role
+      lacks the privilege this certificate import requires (on Huawei/xFusion iBMC
+      the "Security Configuration" right). Use an Administrator-role account, or
+      grant a Custom Role that right, then re-run with the same credentials. The
+      privilege-free path is to serve a BMC-trusted artifact server certificate
+      (CA-signed, or pre-loaded into the BMC trust store) so no import is needed.
 
 - name: Record DMTF imported certificate reference for cleanup
   ansible.builtin.set_fact:

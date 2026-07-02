@@ -32,7 +32,7 @@ func kubeVirtNetworkRefCheck(attachmentName string, ref v1alpha1.KubeVirtNetwork
 		ref.EffectiveKind(), ref.Name, ref.EffectiveAPIGroup(), ref.Namespace)
 	impact := "KubeVirt VMs attach to this network by NetworkAttachmentDefinition <namespace>/<name>; without it the child nodes have no network"
 
-	args := []string{"--kubeconfig", kubeconfigPath, "get", "networkattachmentdefinition.k8s.cni.cncf.io", ref.Name, "-o", "name"}
+	args := []string{"--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "networkattachmentdefinition.k8s.cni.cncf.io", ref.Name, "-o", "name"}
 	if ref.Namespace != "" {
 		args = append(args, "-n", ref.Namespace)
 	}

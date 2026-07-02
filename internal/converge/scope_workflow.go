@@ -46,7 +46,7 @@ func PrepareScopedWorkflowPlan(scopedState v1alpha1.State, scope Scope, phaseLis
 		Limit:           limit,
 		NoRemoteWork:    noRemoteWork,
 		AskBecomePass:   askBecomeForRun,
-		ExtraVarPairs:   resolvedOCPBinaryPairs(selected),
+		ExtraVarPairs:   nil,
 		TargetsClusters: SelectedTargetsClusters(selected),
 	}, nil
 }

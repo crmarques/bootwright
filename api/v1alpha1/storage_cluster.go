@@ -127,6 +127,12 @@ type StorageCephCommunitySpec struct {
 	// Mirror overrides the upstream package base URL (default
 	// https://download.ceph.com) for mirrored or disconnected environments.
 	Mirror string `yaml:"mirror,omitempty" json:"mirror,omitempty"`
+	// Checksum optionally pins the community cephadm bootstrap binary fetched
+	// from the mirror as "sha256:<hex>". The binary is downloaded and executed
+	// as root to configure the repository, so pinning it adds a content check
+	// on top of the HTTPS transport. Absent, the binary is fetched with no
+	// content pin (the default, matching the upstream install procedure).
+	Checksum string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
 }
 
 type StorageCephadmSpec struct {

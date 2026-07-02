@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/entitlements"
+	"github.com/crmarques/bootwright/internal/infra/media"
 )
 
 func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment) []string {
@@ -92,6 +93,9 @@ func validateStorageCephCommunity(prefix string, cluster v1alpha1.StorageCluster
 	var errs []string
 	if mirror := community.Mirror; mirror != "" && !isHTTPURL(mirror) {
 		errs = append(errs, fmt.Sprintf("%s.mirror %q must be an http or https URL", prefix, mirror))
+	}
+	if _, err := media.NormalizeSHA256(community.Checksum); err != nil {
+		errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
 	}
 	return errs
 }

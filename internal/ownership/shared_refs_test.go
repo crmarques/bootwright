@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestOtherContextReferrersMatchesSharedComponentAcrossContexts(t *testing.T) {
+func TestOtherContextsWithRoleMatchesSharedComponentAcrossContexts(t *testing.T) {
 	root := t.TempDir()
 	dirA := filepath.Join(root, "ctx-a", "ownership")
 	dirB := filepath.Join(root, "ctx-b", "ownership")
@@ -29,7 +29,7 @@ func TestOtherContextReferrersMatchesSharedComponentAcrossContexts(t *testing.T)
 		{Context: "ctx-c", Dir: dirC},
 	}
 	id := SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"}
-	referrers, skipped := OtherContextReferrers(stores, "ctx-a", id)
+	referrers, skipped := OtherContextsWithRole(stores, "ctx-a", id, RoleOwner)
 	if len(skipped) != 0 {
 		t.Fatalf("unexpected skipped: %v", skipped)
 	}
@@ -39,7 +39,7 @@ func TestOtherContextReferrersMatchesSharedComponentAcrossContexts(t *testing.T)
 	}
 }
 
-func TestOtherContextReferrersDiffersByHost(t *testing.T) {
+func TestOtherContextsWithRoleDiffersByHost(t *testing.T) {
 	root := t.TempDir()
 	dirA := filepath.Join(root, "ctx-a", "ownership")
 	dirB := filepath.Join(root, "ctx-b", "ownership")
@@ -48,19 +48,19 @@ func TestOtherContextReferrersDiffersByHost(t *testing.T) {
 		t.Fatalf("save B: %v", err)
 	}
 	stores := []ContextStore{{Context: "ctx-a", Dir: dirA}, {Context: "ctx-b", Dir: dirB}}
-	referrers, _ := OtherContextReferrers(stores, "ctx-a", SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"})
+	referrers, _ := OtherContextsWithRole(stores, "ctx-a", SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"}, RoleOwner)
 	if len(referrers) != 0 {
 		t.Fatalf("want none (different host), got %v", referrers)
 	}
 }
 
-func TestOtherContextReferrersToleratesEmptySiblingStore(t *testing.T) {
+func TestOtherContextsWithRoleToleratesEmptySiblingStore(t *testing.T) {
 	root := t.TempDir()
 	// ctx-b is a real context that has never recorded ownership (empty/absent store):
 	// LoadResources returns no records and no error, so it is simply not a referrer.
 	dirB := filepath.Join(root, "ctx-b", "ownership")
 	stores := []ContextStore{{Context: "ctx-b", Dir: dirB}}
-	referrers, skipped := OtherContextReferrers(stores, "ctx-a", SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"})
+	referrers, skipped := OtherContextsWithRole(stores, "ctx-a", SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"}, RoleOwner)
 	if len(referrers) != 0 || len(skipped) != 0 {
 		t.Fatalf("empty sibling store must yield no referrer and no skip, got referrers=%v skipped=%v", referrers, skipped)
 	}

@@ -34,10 +34,15 @@
       spec.ceph.community.mirror to an https:// URL (got
       {{ bootwright_ceph_community_mirror }}).
 
+# The renderer emits spec.ceph.community.checksum as bare sha256 hex under
+# provider.community.checksum; re-prefix it for get_url so the fetched-and-
+# executed bootstrap binary is content-verified. Unset resolves to omit, keeping
+# the HTTPS-only default the upstream install procedure documents.
 - name: Download cephadm utility to configure community Ceph repository
   ansible.builtin.get_url:
     url: "{{ bootwright_ceph_community_mirror }}/{{ bootwright_ceph_community_repo_path }}/el{{ ansible_distribution_major_version }}/noarch/cephadm"
     dest: "{{ bootwright_ceph_community_bootstrap_cephadm }}"
+    checksum: "{{ ('sha256:' ~ bootwright_ceph_provider.community.checksum) if (bootwright_ceph_provider.community.checksum | default('') | length) > 0 else omit }}"
     owner: root
     group: root
     mode: "0755"

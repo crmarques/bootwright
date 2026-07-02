@@ -10,11 +10,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
-	tasks, _ := PlanApplyTasksChecked(target, state)
-	return tasks
-}
-
 func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTask, error) {
 	phaseSet := map[string]bool{}
 	for _, phase := range target.PhaseNames {
@@ -319,11 +314,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						ClusterKind: ApplyClusterKindContainer,
 						Status:      TaskStatusPending,
 					},
-					Playbook:      applyHostVirtctlPlaybook,
-					Limit:         render.GroupOCPHosts,
-					Forks:         1,
-					ExtraVarPairs: extraVars,
-					State:         state,
+					Playbook:        applyHostVirtctlPlaybook,
+					Limit:           render.GroupOCPHosts,
+					Forks:           1,
+					ExtraVarPairs:   extraVars,
+					State:           state,
+					DesiredHashVars: virtctlDesiredHashVars(host, virtctlMirror),
 				},
 			}); err != nil {
 				return nil, err
@@ -453,6 +449,23 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		}
 	}
 	return graph.Lower()
+}
+
+// virtctlDesiredHashVars projects the desired-state inputs the per-host virtctl
+// provision actually depends on — the KubeVirt host cluster identity and the
+// optional virtctl mirror override — so the task's convergence hash is stable
+// regardless of the --clusters scope a run was planned with. The task still
+// carries the full planning State for execution, but that State is the
+// --clusters-filtered set on a scoped run; hashing it flipped an unscoped
+// state-check to drift after a scoped apply (and so fail-closed the next
+// reconcile). Mirrors the fabric/storage DesiredHashVars projection pattern; a
+// map[string]string marshals with sorted keys, so the hash input is
+// order-stable.
+func virtctlDesiredHashVars(host, mirror string) map[string]string {
+	return map[string]string{
+		"hostCluster":   host,
+		"virtctlMirror": mirror,
+	}
 }
 
 func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool) error {

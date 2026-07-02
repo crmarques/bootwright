@@ -322,11 +322,8 @@ func EnsureDirs(ctx Context) error {
 		ctx.ProviderStateDir,
 		ctx.OwnershipDir,
 	} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("create %s: %w", dir, err)
-		}
-		if err := os.Chmod(dir, 0o700); err != nil {
-			return fmt.Errorf("chmod %s: %w", dir, err)
+		if err := safefs.EnsureDir(dir, 0o700); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -344,18 +341,12 @@ func EnsureBaseDir(ctx Context) error {
 		return err
 	}
 	contextsDir := filepath.Join(root, "contexts")
-	if err := os.MkdirAll(contextsDir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", contextsDir, err)
-	}
-	if err := os.Chmod(contextsDir, 0o700); err != nil {
-		return fmt.Errorf("chmod %s: %w", contextsDir, err)
+	if err := safefs.EnsureDir(contextsDir, 0o700); err != nil {
+		return err
 	}
 	cacheDir := filepath.Join(root, CacheDirName)
-	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", cacheDir, err)
-	}
-	if err := os.Chmod(cacheDir, 0o700); err != nil {
-		return fmt.Errorf("chmod %s: %w", cacheDir, err)
+	if err := safefs.EnsureDir(cacheDir, 0o700); err != nil {
+		return err
 	}
 	_, err = managedroot.Ensure(ctx.BaseDir, 0o700)
 	return err

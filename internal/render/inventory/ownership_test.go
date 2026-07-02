@@ -16,7 +16,7 @@ func TestInventoryWithOwnershipRecordsAddsRecordedHost(t *testing.T) {
 			"ansible_connection": "local",
 		},
 	}}
-	inv := InventoryWithOwnershipRecords(v1alpha1.State{}, "", records)
+	inv := InventoryWithOwnershipRecordsAndPathOptions(v1alpha1.State{}, PathOptions{}, records)
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
 	host := hosts["provider-0"].(map[string]any)
