@@ -20,7 +20,9 @@ func TestExampleInitWritesValidWorkspace(t *testing.T) {
 		"infra/providers/provider.yaml",
 		"infra/machines/bastion.yaml",
 		"infra/networkconfigs/networks.yaml",
-		"infra/components/infra-component.yaml",
+		"infra/components/load-balancer.yaml",
+		"infra/components/name-resolution.yaml",
+		"infra/components/ntp-server.yaml",
 		"clusters/container/my-sno-lab/cluster.yaml",
 		"clusters/container/my-sno-lab/cluster-machines.yaml",
 	} {
