@@ -1012,6 +1012,26 @@ Rules:
   storage-infra work.
 - `apply --stage clusters` includes storage-cluster, container-cluster, and
   add-ons work.
+- The two `--stage` families decompose into five ordered sub-phases, and
+  `--stage`/`--through` accept a sub-phase name as well as a family name. The
+  `infra` family is `fabric` then `machines`; the `clusters` family is `deps`,
+  `base`, then `add-ons`:
+  - `fabric` converges provider hosts (BMC services) and machine-bound shared
+    services (proxy, registry, NTP, boot artifacts, DNS, load balancers).
+  - `machines` makes machines exist with an OS: per-cluster substrate,
+    instantiation, managed-OS install, machine networks, name resolution, VIPs.
+  - `deps` installs per-cluster prerequisites: cephadm on storage nodes; build
+    the `openshift-install` agent ISO.
+  - `base` brings control planes up: bootstrap Ceph and apply OSDs; boot nodes
+    and wait for `openshift-install`.
+  - `add-ons` applies declarative cluster add-ons and attaches storage.
+
+  `apply`, `plan`, and `state-check` accept sub-phase `--stage` values.
+  `destroy --stage` accepts only the two families (`infra`, `clusters`);
+  sub-phases are apply-only and rejected on `destroy`.
+- `--through <stage>`, on `apply`, `plan`, and `state-check`, runs every stage
+  from the beginning up to and including `<stage>`, cumulatively; `--stage` and
+  `--through` are mutually exclusive.
 - `destroy --stage infra` tears down infrastructure for the current context.
   It uses current desired state plus root-managed ownership records. Without
   `--clusters`, it must also remove all context-owned VMs that provider
@@ -1045,6 +1065,11 @@ Rules:
   authorized by it), does not relax the Ceph cluster or OSD-device ownership
   gates, never relaxes the device data-safety checks (a mounted, in-use, or
   unprobeable device still fails closed), and does not imply `--yes`.
+- `destroy --skip-unreachable` tolerates powered-off or unreachable nodes during
+  teardown: it skips them — their devices are NOT wiped and their local state
+  remains — and continues, leaving the cluster partially destroyed. It requires
+  `--override`. Storage teardown still fails closed when a cluster's Ceph seed
+  host is unreachable, so ownership stays proven before any device wipe.
 - `apply` reconciles by default: it creates missing objects, skips objects
   whose recorded desired state matches the current desired state, and fails
   closed on drift or foreign ownership before any mutation. `apply

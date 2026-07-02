@@ -178,6 +178,12 @@ Generated output boundaries are part of the safety contract:
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested secret-inlined tool inputs under `<dir>` with restrictive
   file modes. The command must fail without `--sensitive`.
+- `bootwright render --input-dir <dir>` renders context-free from an input
+  directory with no configured context. Because no context secret store is
+  available, every secret renders as a `{{ secret <name> }}` (or
+  `{{ secret <name>.<role> }}`) placeholder rather than its bytes, so the output
+  is safe to inspect and never inlines secret material; `--input-dir` is
+  therefore incompatible with `--sensitive`.
 
 ### Redaction escape hatch
 
