@@ -100,29 +100,12 @@ func ValidateScoped(scoped, full v1alpha1.State) error {
 // Environment count is reported by validateEnvironments.
 func duplicateNameFindings(state v1alpha1.State) []Finding {
 	var out []Finding
-	out = append(out, duplicateFindings(v1alpha1.KindMachine, objectNames(state.Machines, func(m v1alpha1.Machine) string { return m.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindMachineImage, objectNames(state.MachineImages, func(m v1alpha1.MachineImage) string { return m.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindMachineInstallProfile, objectNames(state.MachineInstallProfiles, func(p v1alpha1.MachineInstallProfile) string { return p.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindInfraProvider, objectNames(state.InfraProviders, func(p v1alpha1.InfraProvider) string { return p.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindInfraComponent, objectNames(state.InfraComponents, func(c v1alpha1.InfraComponent) string { return c.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindContainerCluster, objectNames(state.ContainerClusters, func(c v1alpha1.ContainerCluster) string { return c.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStorageCluster, objectNames(state.StorageClusters, func(c v1alpha1.StorageCluster) string { return c.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStoragePlacementPolicy, objectNames(state.StoragePlacementPolicies, func(p v1alpha1.StoragePlacementPolicy) string { return p.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStoragePool, objectNames(state.StoragePools, func(p v1alpha1.StoragePool) string { return p.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStorageFilesystem, objectNames(state.StorageFilesystems, func(f v1alpha1.StorageFilesystem) string { return f.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStorageObjectGateway, objectNames(state.StorageObjectGateways, func(g v1alpha1.StorageObjectGateway) string { return g.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStorageNFSExport, objectNames(state.StorageNFSExports, func(n v1alpha1.StorageNFSExport) string { return n.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindStorageExport, objectNames(state.StorageExports, func(e v1alpha1.StorageExport) string { return e.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindClusterAddon, objectNames(state.ClusterAddons, func(a v1alpha1.ClusterAddon) string { return a.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindClusterAddonProfile, objectNames(state.ClusterAddonProfiles, func(p v1alpha1.ClusterAddonProfile) string { return p.Metadata.Name }))...)
-	out = append(out, duplicateFindings(v1alpha1.KindClusterAddonBinding, objectNames(state.ClusterAddonBindings, func(b v1alpha1.ClusterAddonBinding) string { return b.Metadata.Name }))...)
-	return out
-}
-
-func objectNames[T any](items []T, name func(T) string) []string {
-	out := make([]string, len(items))
-	for i, item := range items {
-		out[i] = name(item)
+	for _, accessor := range v1alpha1.AuthoredKindAccessors() {
+		switch accessor.Kind {
+		case v1alpha1.KindEnvironment, v1alpha1.KindNetworkConfig:
+			continue
+		}
+		out = append(out, duplicateFindings(accessor.Kind, accessor.Names(state))...)
 	}
 	return out
 }

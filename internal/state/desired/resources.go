@@ -379,59 +379,10 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 
 func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	out := map[resourceKey]bool{}
-	for _, env := range state.Environments {
-		out[resourceKey{kind: v1alpha1.KindEnvironment, name: env.Metadata.Name}] = true
-	}
-	for _, machine := range state.Machines {
-		out[resourceKey{kind: v1alpha1.KindMachine, name: machine.Metadata.Name}] = true
-	}
-	for _, image := range state.MachineImages {
-		out[resourceKey{kind: v1alpha1.KindMachineImage, name: image.Metadata.Name}] = true
-	}
-	for _, profile := range state.MachineInstallProfiles {
-		out[resourceKey{kind: v1alpha1.KindMachineInstallProfile, name: profile.Metadata.Name}] = true
-	}
-	for _, n := range state.NetworkConfigs {
-		out[resourceKey{kind: v1alpha1.KindNetworkConfig, name: n.Metadata.Name}] = true
-	}
-	for _, p := range state.InfraProviders {
-		out[resourceKey{kind: v1alpha1.KindInfraProvider, name: p.Metadata.Name}] = true
-	}
-	for _, c := range state.InfraComponents {
-		out[resourceKey{kind: v1alpha1.KindInfraComponent, name: c.Metadata.Name}] = true
-	}
-	for _, ocp := range state.ContainerClusters {
-		out[resourceKey{kind: v1alpha1.KindContainerCluster, name: ocp.Metadata.Name}] = true
-	}
-	for _, item := range state.StorageClusters {
-		out[resourceKey{kind: v1alpha1.KindStorageCluster, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StoragePlacementPolicies {
-		out[resourceKey{kind: v1alpha1.KindStoragePlacementPolicy, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StoragePools {
-		out[resourceKey{kind: v1alpha1.KindStoragePool, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StorageFilesystems {
-		out[resourceKey{kind: v1alpha1.KindStorageFilesystem, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StorageObjectGateways {
-		out[resourceKey{kind: v1alpha1.KindStorageObjectGateway, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StorageNFSExports {
-		out[resourceKey{kind: v1alpha1.KindStorageNFSExport, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StorageExports {
-		out[resourceKey{kind: v1alpha1.KindStorageExport, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.ClusterAddons {
-		out[resourceKey{kind: v1alpha1.KindClusterAddon, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.ClusterAddonProfiles {
-		out[resourceKey{kind: v1alpha1.KindClusterAddonProfile, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.ClusterAddonBindings {
-		out[resourceKey{kind: v1alpha1.KindClusterAddonBinding, name: item.Metadata.Name}] = true
+	for _, accessor := range v1alpha1.AuthoredKindAccessors() {
+		for _, name := range accessor.Names(state) {
+			out[resourceKey{kind: accessor.Kind, name: name}] = true
+		}
 	}
 	return out
 }
