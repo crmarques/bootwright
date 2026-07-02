@@ -194,6 +194,54 @@ func TestContainerClusterNetworkingValidation(t *testing.T) {
 	}
 }
 
+func TestEnvironmentEmptyClusterSelectionRejected(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  baseDomain: bootwright.test\n", "  baseDomain: bootwright.test\n  containerClusters: []\n", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected empty containerClusters selection to be rejected, got nil")
+	}
+	if !strings.Contains(err.Error(), "spec.containerClusters is an empty list") {
+		t.Fatalf("error %q missing empty-selection diagnostic", err)
+	}
+}
+
+func TestReservedArtifactServerClusterNameRejected(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(newClusterYAML, "metadata: { name: sno }", "metadata: { name: artifact-server }", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected artifact-server cluster name to be rejected, got nil")
+	}
+	if !strings.Contains(err.Error(), `metadata.name "artifact-server" is reserved`) {
+		t.Fatalf("error %q missing reserved-name diagnostic", err)
+	}
+}
+
+func TestUnresolvedMachineRefSuppressesPlatformRequired(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	cluster := strings.Replace(newClusterYAML, "    platform:\n      type: baremetal\n      baremetal: { provisioningNetwork: disabled }\n", "", 1)
+	cluster = strings.Replace(cluster, "machineRef: srv1", "machineRef: ghost", 1)
+	files["cluster.yaml"] = cluster
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected dangling machineRef to fail validation, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `machineRef "ghost" does not match any Machine`) {
+		t.Fatalf("expected the dangling machineRef error, got %q", msg)
+	}
+	if strings.Contains(msg, "spec.install.platform.type is required") {
+		t.Fatalf("platform-required error should be suppressed when a machineRef is unresolved: %q", msg)
+	}
+}
+
 func TestMachineInstallIPOutsideNetworkRejected(t *testing.T) {
 	interfaceAddrConfig := `  network:
     config:

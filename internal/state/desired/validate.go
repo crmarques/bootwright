@@ -182,6 +182,7 @@ func validateName(kind, name string) string {
 func validateCrossLayer(state v1alpha1.State) []string {
 	var errs []string
 	errs = append(errs, validateClusterRootNameCollisions(state)...)
+	errs = append(errs, validateReservedClusterRootNames(state)...)
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedMachineServices(state)...)
@@ -211,6 +212,27 @@ func validateClusterRootNameCollisions(state v1alpha1.State) []string {
 		}
 		seen[name] = true
 		errs = append(errs, fmt.Sprintf("StorageCluster/%s metadata.name %q is already used by ContainerCluster/%s; ContainerCluster and StorageCluster names share one cluster selection namespace (--clusters, Environment cluster lists)", name, name, name))
+	}
+	return errs
+}
+
+// reservedClusterRootName is the literal `destroy --stage infra --clusters`
+// accepts to remove only the generated artifact publication service. A cluster
+// root of this name would make that destructive selection ambiguous, so it is
+// reserved out of the cluster-name namespace.
+const reservedClusterRootName = "artifact-server"
+
+func validateReservedClusterRootNames(state v1alpha1.State) []string {
+	var errs []string
+	for _, c := range state.ContainerClusters {
+		if c.Metadata.Name == reservedClusterRootName {
+			errs = append(errs, fmt.Sprintf("ContainerCluster/%s metadata.name %q is reserved: it collides with the `destroy --stage infra --clusters artifact-server` literal; rename the cluster", reservedClusterRootName, reservedClusterRootName))
+		}
+	}
+	for _, c := range state.StorageClusters {
+		if c.Metadata.Name == reservedClusterRootName {
+			errs = append(errs, fmt.Sprintf("StorageCluster/%s metadata.name %q is reserved: it collides with the `destroy --stage infra --clusters artifact-server` literal; rename the cluster", reservedClusterRootName, reservedClusterRootName))
+		}
 	}
 	return errs
 }

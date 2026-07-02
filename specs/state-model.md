@@ -36,7 +36,10 @@ Rules:
   fleet selection lists for render, apply, status, destroy, and check flows.
   Loaded clusters outside the selection are excluded before validation runs;
   `bootwright validate` warns about each excluded cluster so an unselected
-  cluster file never disappears silently.
+  cluster file never disappears silently. An omitted list selects every cluster.
+  An authored but empty list is rejected naming the field: it reads as "select
+  nothing" but would otherwise select the whole fleet, so an accidentally-emptied
+  (for example templated) list cannot silently widen apply/destroy scope.
 - `safety.destroyProtection`, when set, must be `allow` or
   `requiredOverride`. Empty means `allow`. Bootwright never infers protection
   from environment names, context names, labels, or cluster names.
@@ -496,7 +499,11 @@ Rules:
   `vsphere` providers derive `type: vsphere`; `kubevirt` providers derive
   `type: none`. `render effective` materializes the derived platform. When the bound machines span multiple provider types
   and the platform is omitted, validation rejects the cluster naming the
-  conflicting providers. An authored platform always wins.
+  conflicting providers. When a `spec.hosts[].machineRef` does not resolve to a
+  `Machine`, the derived-platform requirement is suppressed — the dangling
+  `machineRef` is the root cause and is reported at the host, so validation does
+  not additionally demand an authored `spec.install.platform.type`. An authored
+  platform always wins.
 - `spec.install.endpoints` keys are the closed slot vocabulary `api`,
   `api-int`, and `ingress`; any other key is rejected naming the accepted
   set. An omitted `api-int` slot defaults to a copy of the authored `api`
@@ -984,6 +991,11 @@ Rules:
   namespace: `--clusters` and the `Environment` cluster lists resolve bare
   names against both kinds, so a name is declared by at most one cluster root
   across the two kinds (in addition to the per-kind duplicate rules).
+- The name `artifact-server` is reserved: no `ContainerCluster` or
+  `StorageCluster` may use it, because `destroy --stage infra --clusters
+  artifact-server` accepts that literal to remove only the generated artifact
+  publication service, and a cluster of that name would make the destructive
+  selection ambiguous.
 - Container cluster endpoints must resolve to valid addresses or valid
   InfraComponent bind addresses. When the cluster selects a machine network, a
   resolved endpoint address — the direct `address` or the `infraComponent`

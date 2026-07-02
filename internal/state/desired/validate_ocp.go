@@ -57,12 +57,35 @@ func validateContainerClusters(state v1alpha1.State) []string {
 func validateClusterPlatformWithDerivation(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	owner := fmt.Sprintf("ContainerCluster/%s spec.install.platform", ocp.Metadata.Name)
 	if installPlatformOmitted(ocp.Spec.Install.Platform) && len(ocp.Spec.Hosts) > 0 {
+		// An unresolved machineRef is the root cause of a non-derivable platform.
+		// That machineRef error is already reported at the host level, so suppress
+		// the misleading "platform.type is required" that would otherwise steer the
+		// operator to author a platform they do not need.
+		if clusterHasUnresolvedMachineRef(state, ocp) {
+			return nil
+		}
 		if binding := clusterNodeProviderBinding(state, ocp); len(binding.types) > 1 {
 			return []string{fmt.Sprintf("%s cannot be derived: spec.hosts bind machines across multiple provider types (%s); set spec.install.platform.type explicitly",
 				owner, strings.Join(binding.providers, ", "))}
 		}
 	}
 	return validateClusterPlatform(owner, ocp.Spec.Install.Platform, len(ocp.Spec.Hosts) > 0)
+}
+
+// clusterHasUnresolvedMachineRef reports whether any host names a Machine that is
+// not in the loaded state; that dangling reference, not a missing platform, is the
+// real error to surface.
+func clusterHasUnresolvedMachineRef(state v1alpha1.State, ocp v1alpha1.ContainerCluster) bool {
+	present := make(map[string]bool, len(state.Machines))
+	for _, m := range state.Machines {
+		present[m.Metadata.Name] = true
+	}
+	for _, host := range ocp.Spec.Hosts {
+		if host.MachineRef.Name != "" && !present[host.MachineRef.Name] {
+			return true
+		}
+	}
+	return false
 }
 
 func validateClusterNetworking(ocp v1alpha1.ContainerCluster) []string {

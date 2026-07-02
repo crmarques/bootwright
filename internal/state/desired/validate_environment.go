@@ -94,6 +94,12 @@ func validateEnvironmentDefaults(env v1alpha1.Environment, components map[string
 
 func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alpha1.State) []string {
 	var errs []string
+	// An authored empty list (present but with no entries) is rejected: it reads
+	// as "select nothing" but is treated as "select all", silently widening
+	// apply/destroy scope to the whole fleet. Omit the field to select all.
+	if env.Spec.ContainerClusters != nil && len(env.Spec.ContainerClusters) == 0 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.containerClusters is an empty list; omit it to select all clusters, or list the clusters to select", env.Metadata.Name))
+	}
 	known := map[string]bool{}
 	for _, cluster := range state.ContainerClusters {
 		known[cluster.Metadata.Name] = true
@@ -119,6 +125,9 @@ func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alph
 
 func validateEnvironmentStorageClusters(env v1alpha1.Environment, state v1alpha1.State) []string {
 	var errs []string
+	if env.Spec.StorageClusters != nil && len(env.Spec.StorageClusters) == 0 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.storageClusters is an empty list; omit it to select all clusters, or list the clusters to select", env.Metadata.Name))
+	}
 	known := map[string]bool{}
 	for _, cluster := range state.StorageClusters {
 		known[cluster.Metadata.Name] = true
