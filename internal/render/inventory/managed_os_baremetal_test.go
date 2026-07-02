@@ -78,16 +78,22 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		if image["effectiveSourcePath"] != image["path"] {
 			t.Fatalf("component %v effectiveSourcePath = %v, want image.path %v", component["name"], image["effectiveSourcePath"], image["path"])
 		}
-		// One merged stanza in kickstart's documented VLAN-over-bond form:
-		// --device names the PARENT bond, anaconda derives bond0.140 itself
-		// (so no --interfacename for the default name), bond fields ride the
-		// same command, and the static IP settings apply to the VLAN device.
+		// Physical bond ports are activated first, then one merged stanza uses
+		// kickstart's documented VLAN-over-bond form: --device names the parent
+		// bond, bond fields ride the same command, and the static IP settings
+		// apply to the VLAN device.
 		network := component["osInstall"].(map[string]any)["kickstart"].(map[string]any)["network"].(map[string]any)
 		stanzas, ok := network["interfaces"].([]map[string]any)
-		if !ok || len(stanzas) != 1 {
-			t.Fatalf("component %v kickstart network interfaces = %v, want one merged bond+VLAN stanza", component["name"], network["interfaces"])
+		if !ok || len(stanzas) != 3 {
+			t.Fatalf("component %v kickstart network interfaces = %v, want two bond port stanzas plus one merged bond+VLAN stanza", component["name"], network["interfaces"])
 		}
-		vlan := stanzas[0]
+		for i, device := range []string{"eno1", "eno2"} {
+			port := stanzas[i]
+			if port["device"] != device || port["bootproto"] != "none" {
+				t.Fatalf("component %v bond port stanza %d = %v", component["name"], i, port)
+			}
+		}
+		vlan := stanzas[2]
 		if vlan["device"] != "bond0" || vlan["vlanID"] != 140 {
 			t.Fatalf("component %v VLAN stanza = %v, want --device=bond0 --vlanid=140", component["name"], vlan)
 		}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -60,6 +61,7 @@ func kickstartPrimaryInterface(config map[string]any) map[string]any {
 			"prefix":    prefix,
 			"netmask":   prefixNetmask(prefix),
 		}
+		addInterfaceMTU(out, entry)
 		if mac != "" {
 			out["device"] = mac
 		} else if name != "" {
@@ -70,14 +72,8 @@ func kickstartPrimaryInterface(config map[string]any) map[string]any {
 	return nil
 }
 
-// kickstartNetworkInterfaces renders the install-time network as kickstart
-// `network` stanza inputs. Anaconda only needs the routed interface during
-// install; day-2 configuration owns the rest of the nmstate document. A VLAN
-// primary renders as the single documented form (`network --device=<parent>
-// --bondslaves=... --vlanid=<id> --bootproto=static ...`): kickstart's
-// --device names the VLAN's PARENT, anaconda derives `<parent>.<id>` itself,
-// and the IP settings apply to the VLAN device. --interfacename is only
-// spelled when the nmstate name differs from that derived default.
+// kickstartNetworkInterfaces renders only the install-time path. Day-2
+// configuration owns the rest of the nmstate document.
 func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 	interfaces := networkConfigInterfacesByName(config)
 	primary := kickstartPrimaryInterfaceEntry(config)
@@ -89,6 +85,7 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 		return nil
 	}
 	stanza["hostname"] = true
+	var out []map[string]any
 	switch typ, _ := primary["type"].(string); typ {
 	case "vlan":
 		vlan, ok := primary["vlan"].(map[string]any)
@@ -106,7 +103,9 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 			stanza["interfaceName"] = name
 		}
 		if baseEntry := interfaces[base]; baseEntry != nil {
+			out = append(out, kickstartBondPortStanzas(interfaces, baseEntry)...)
 			addBondFields(stanza, baseEntry)
+			addInterfaceMTU(stanza, baseEntry)
 			// An ethernet parent keeps kickstart's MAC-based device binding
 			// when the NIC's MAC is known; a bond parent is a logical name.
 			if baseType, _ := baseEntry["type"].(string); baseType == "ethernet" {
@@ -116,9 +115,35 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 			}
 		}
 	case "bond":
+		out = append(out, kickstartBondPortStanzas(interfaces, primary)...)
 		addBondFields(stanza, primary)
 	}
-	return []map[string]any{stanza}
+	out = append(out, stanza)
+	return out
+}
+
+func kickstartBondPortStanzas(interfaces map[string]map[string]any, bond map[string]any) []map[string]any {
+	aggregation, ok := bond["link-aggregation"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var out []map[string]any
+	for _, port := range stringSliceFromYAML(aggregation["port"]) {
+		entry := interfaces[port]
+		if entry == nil {
+			continue
+		}
+		if typ, _ := entry["type"].(string); typ != "" && typ != "ethernet" {
+			continue
+		}
+		stanza := map[string]any{
+			"device":    port,
+			"bootproto": "none",
+		}
+		addInterfaceMTU(stanza, entry)
+		out = append(out, stanza)
+	}
+	return out
 }
 
 func kickstartStaticNetworkStanza(entry map[string]any) map[string]any {
@@ -134,6 +159,7 @@ func kickstartStaticNetworkStanza(entry map[string]any) map[string]any {
 		"prefix":    prefix,
 		"netmask":   prefixNetmask(prefix),
 	}
+	addInterfaceMTU(out, entry)
 	if mac != "" {
 		out["device"] = mac
 	} else if name != "" {
@@ -152,6 +178,15 @@ func addBondFields(out, entry map[string]any) {
 	}
 	if opts := kickstartBondOptions(aggregation); opts != "" {
 		out["bondOptions"] = opts
+	}
+}
+
+func addInterfaceMTU(out, entry map[string]any) {
+	if _, present := out["mtu"]; present {
+		return
+	}
+	if mtu := intFromYAML(entry["mtu"]); mtu > 0 {
+		out["mtu"] = mtu
 	}
 }
 
@@ -313,6 +348,9 @@ func intFromYAML(value any) int {
 		return int(v)
 	case float64:
 		return int(v)
+	case string:
+		out, _ := strconv.Atoi(v)
+		return out
 	}
 	return 0
 }

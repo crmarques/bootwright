@@ -65,6 +65,66 @@ func TestKickstartNetworkInterfacesPrefersDefaultRouteVLAN(t *testing.T) {
 	}
 }
 
+func TestKickstartNetworkInterfacesRenderBondPortsAndMTU(t *testing.T) {
+	config := map[string]any{
+		"interfaces": []any{
+			map[string]any{
+				"name": "ens1f0", "type": "ethernet", "mtu": 9000,
+			},
+			map[string]any{
+				"name": "ens1f1", "type": "ethernet", "mtu": 9000,
+			},
+			map[string]any{
+				"name": "bond0", "type": "bond", "mtu": 9000,
+				"link-aggregation": map[string]any{
+					"mode": "802.3ad",
+					"options": map[string]any{
+						"lacp_rate": "fast",
+						"miimon":    "100",
+					},
+					"port": []any{"ens1f0", "ens1f1"},
+				},
+			},
+			map[string]any{
+				"name": "bond0.743", "type": "vlan", "mtu": 9000,
+				"vlan": map[string]any{"base-iface": "bond0", "id": 743},
+				"ipv4": nmstateIPv4("10.7.7.129", 28),
+			},
+		},
+		"routes": map[string]any{
+			"config": []any{map[string]any{
+				"destination":        "0.0.0.0/0",
+				"next-hop-address":   "10.7.7.142",
+				"next-hop-interface": "bond0.743",
+			}},
+		},
+	}
+	stanzas := kickstartNetworkInterfaces(config)
+	if len(stanzas) != 3 {
+		t.Fatalf("stanzas = %v, want two bond port stanzas plus combined bond+VLAN stanza", stanzas)
+	}
+	for i, device := range []string{"ens1f0", "ens1f1"} {
+		if stanzas[i]["device"] != device || stanzas[i]["bootproto"] != "none" || stanzas[i]["mtu"] != 9000 {
+			t.Fatalf("port stanza %d = %v", i, stanzas[i])
+		}
+	}
+	want := map[string]any{
+		"device":      "bond0",
+		"vlanID":      743,
+		"mtu":         9000,
+		"bondSlaves":  []string{"ens1f0", "ens1f1"},
+		"bondOptions": "mode=802.3ad,lacp_rate=fast,miimon=100",
+		"bootproto":   "static",
+		"ip":          "10.7.7.129",
+		"prefix":      28,
+		"netmask":     "255.255.255.240",
+		"hostname":    true,
+	}
+	if !reflect.DeepEqual(stanzas[2], want) {
+		t.Fatalf("combined stanza = %v, want %v", stanzas[2], want)
+	}
+}
+
 // A dual-stack document lists ::/0 before 0.0.0.0/0: the IPv4-only kickstart
 // stanza must follow the IPv4 default route (and gateway), not the v6 one.
 func TestKickstartNetworkPrefersIPv4DefaultRoute(t *testing.T) {

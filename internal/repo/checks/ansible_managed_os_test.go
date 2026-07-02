@@ -554,6 +554,7 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"--bondopts={{ iface.bondOptions }}",
 		"--vlanid={{ iface.vlanID }}",
 		"--interfacename={{ iface.interfaceName }}",
+		"--mtu={{ iface.mtu }}",
 		"--noipv4 --noipv6",
 		"{{ hostname_flag }}",
 		"services{{ svc_opts }}",
