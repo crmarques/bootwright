@@ -8,8 +8,15 @@
 - name: Probe existing managed OS state
   ansible.builtin.import_tasks: probe_existing.yml
 
+# A dynamic include with the ready-gate on the include prints a single skipped
+# line when the node is already installed, instead of pushing the block-when
+# down onto all ~31 inner tasks (import_tasks) and skipping each individually.
+# The block inside install_media.yml keeps the same guard as defense-in-depth;
+# because the file only loads when the gate is already true, it adds no inner
+# skips on a fresh install.
 - name: Install managed OS media when needed
-  ansible.builtin.import_tasks: install_media.yml
+  ansible.builtin.include_tasks: install_media.yml
+  when: not (bootwright_managed_os_already_ready | default(false) | bool)
 
 - name: Wait for managed OS access
   ansible.builtin.import_tasks: wait.yml
