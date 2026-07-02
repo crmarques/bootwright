@@ -172,7 +172,24 @@ Rules:
 - `spec.os.provided: false` machines must declare `spec.substrate.providerRef`.
 - Bare-metal install machines declare physical inventory under
   `spec.hardware.nics`, boot NIC selection under `spec.hardware.boot.nicRef`,
-  and BMC access under `spec.hardware.management.bmc`.
+  and BMC access under `spec.hardware.management.bmc` (`address`, `protocol`,
+  `credentialsRef`).
+- `spec.hardware.management.bmc` governs two distinct TLS legs, each defaulting
+  to verify:
+  - `bmc.tls.verify` controls the connection Bootwright opens **to** the BMC
+    (the Redfish API leg, controller → BMC). It is tri-state; omitted means
+    verify. Set `false` only for a lab/self-signed BMC certificate.
+  - `bmc.virtualMedia.tls` controls how the BMC handles the **artifact server's**
+    certificate when it fetches the boot ISO (BMC → artifact server).
+    `verify` (tri-state, default verify) asks the BMC to skip verification
+    (best-effort; some firmware ignores it). `importServerCertificate: true`
+    uploads the artifact server certificate into the BMC trust store before the
+    fetch so a self-signed certificate is accepted, and
+    `removeServerCertificateAfterBoot: true` (requires `importServerCertificate`)
+    removes it once the ISO is mounted. This virtual-media leg is where
+    Bootwright reconciles the artifact server's typically self-signed
+    certificate; `security.md` describes the default fetch-window handling these
+    fields override.
 - Libvirt, vSphere, and KubeVirt install machines select VM shape through
   `spec.substrate.profileRef`.
 - `spec.os.installProfileRef` selects a `MachineInstallProfile` when Bootwright
@@ -355,6 +372,10 @@ Rules:
 - `spec.type` accepts `baremetal`, `libvirt`, `vsphere`, or `kubevirt`.
 - Bare-metal providers declare boot behavior. Physical machine inventory lives
   on `Machine.spec.hardware`.
+- `spec.baremetal.defaults.bmc` supplies fleet-wide BMC defaults inherited by
+  every bound `Machine` that omits them. `tls` and `virtualMedia` inherit (a
+  machine value wins over the default); `credentialsRef` stays per-machine and
+  is not defaulted here, so each `Machine` sets its own BMC credential.
 - Libvirt, vSphere, and KubeVirt providers declare `machineProfiles[]`.
   Machines select a profile through `Machine.spec.substrate.profileRef`.
 - Profile fields the selected provider's adapter does not consume are

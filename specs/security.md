@@ -80,26 +80,37 @@ either an external mirror URL or a managed registry component.
 
 ### BMC virtual-media certificate verification
 
-When a Machine boots from a Redfish BMC, the BMC itself fetches the agent ISO
-from the managed artifact server (or an operator-provided HTTPS URL). For an
-HTTPS fetch the `container_cluster_boot_redfish` role temporarily sets the BMC
-`SecurityService.HttpsTransferCertVerification` and the VirtualMedia
-`VerifyCertificate` to `false`, then restores the probed original values in an
-`always` cleanup (`media/restore_certificate_verification.yml`). This is the only
-place Bootwright disables TLS verification, and it is deliberately narrow:
+A Machine boots from a Redfish BMC over two distinct TLS legs, each with its own
+authored control (`state-model.md`, Machine section):
 
-- The managed artifact server presents a self-signed certificate that the BMC
-  has no way to trust without distributing a CA to every BMC, so the disable is
-  what makes the default bare-metal fetch work at all.
-- It applies only to the BMC's own fetch leg, only when the fetch URL is HTTPS,
-  and only when the BMC currently has verification enabled; the original value is
-  probed beforehand and restored afterward, scoping the disable to the fetch
-  window.
-- TLS encryption is retained — only server authentication is dropped — and the
-  fetch is further bounded by the unguessable per-run publish token in the ISO
-  URL.
-- The control-node-to-BMC leg is unaffected and remains operator-controlled
-  through `disableCertificateVerification`.
+- **Controller → BMC** (the Redfish API leg) is governed by
+  `spec.hardware.management.bmc.tls.verify`. It defaults to verify; set it
+  `false` only for a lab/self-signed BMC certificate.
+- **BMC → artifact server** (the virtual-media fetch of the agent ISO) is
+  governed by `spec.hardware.management.bmc.virtualMedia.tls`.
+
+The artifact server presents a self-signed certificate the BMC cannot trust
+without distributing a CA to every BMC, so the fetch leg needs deliberate
+handling:
+
+- By default (no authored `virtualMedia.tls`), for an HTTPS fetch the
+  `container_cluster_boot_redfish` role temporarily sets the BMC
+  `SecurityService.HttpsTransferCertVerification` and the VirtualMedia
+  `VerifyCertificate` to `false` for the fetch, then restores the probed
+  original values in an `always` cleanup
+  (`media/restore_certificate_verification.yml`). TLS encryption is retained —
+  only server authentication is dropped — and the fetch is further bounded by
+  the unguessable per-run publish token in the ISO URL.
+- `virtualMedia.tls.verify: false` asks the BMC to skip verification and does
+  not restore it afterward (best-effort; some firmware ignores it).
+- `virtualMedia.tls.importServerCertificate: true` is the trust path: it uploads
+  the artifact server certificate into the BMC trust store before the fetch, and
+  `removeServerCertificateAfterBoot: true` removes it once the ISO is mounted.
+
+This virtual-media fetch is the only place Bootwright relaxes artifact-server
+TLS trust. `InfraProvider.spec.baremetal.defaults.bmc` supplies fleet-wide
+defaults for both legs (a machine value wins; `credentialsRef` stays
+per-machine).
 
 ## Proxy Boundaries
 
