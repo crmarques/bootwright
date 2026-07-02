@@ -1,14 +1,13 @@
 package preflight
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/callerio"
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -375,12 +374,13 @@ func DefaultLookPath(name string, extraDirs []string) (string, error) {
 		if err == nil {
 			return path, nil
 		}
-		if !errors.Is(err, exec.ErrNotFound) {
+		if !execution.IsNotFound(err) {
 			return "", err
 		}
 	}
-	if path, err := exec.LookPath(name); err == nil {
-		return path, nil
+	path, err := execution.LookPath(name)
+	if err != nil {
+		return "", err
 	}
-	return "", exec.ErrNotFound
+	return path, nil
 }

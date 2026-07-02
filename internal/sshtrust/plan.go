@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 )
 
@@ -167,8 +167,10 @@ func ScanHostKeys(ctx context.Context, address string, timeout time.Duration) ([
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout+time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "ssh-keyscan", "-T", strconv.Itoa(seconds), "-t", "ed25519,ecdsa,rsa", address)
-	out, err := cmd.Output()
+	out, err := execution.OSRunner{}.Output(runCtx, execution.Command{
+		Name: "ssh-keyscan",
+		Args: []string{"-T", strconv.Itoa(seconds), "-t", "ed25519,ecdsa,rsa", address},
+	})
 	if err != nil {
 		return nil, err
 	}

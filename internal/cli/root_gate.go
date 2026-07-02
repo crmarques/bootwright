@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/internal/host/become"
@@ -17,14 +16,14 @@ type localRootGateDeps struct {
 	enabled        bool
 	geteuid        func() int
 	executable     func() (string, error)
-	commandContext func(context.Context, string, ...string) *exec.Cmd
+	commandContext become.CommandFactory
 }
 
 var localRootGate = localRootGateDeps{
 	enabled:        true,
 	geteuid:        os.Geteuid,
 	executable:     os.Executable,
-	commandContext: exec.CommandContext,
+	commandContext: become.DefaultCommandFactory,
 }
 
 func ensureLocalRootForArgs(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, bool, error) {

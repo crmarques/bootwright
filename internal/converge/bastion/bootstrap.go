@@ -1,11 +1,14 @@
 package bastion
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/host/execution"
 )
 
 // BootstrapStep is one labelled command in the controller bootstrap
@@ -23,9 +26,11 @@ type ProcessDeps struct {
 }
 
 var DefaultProcessDeps = ProcessDeps{
-	LookPath: exec.LookPath,
+	LookPath: execution.LookPath,
 	CommandOutput: func(name string, args ...string) ([]byte, error) {
-		return exec.Command(name, args...).CombinedOutput()
+		var combined bytes.Buffer
+		err := execution.OSRunner{}.Run(context.Background(), execution.Command{Name: name, Args: args, Stdout: &combined, Stderr: &combined})
+		return combined.Bytes(), err
 	},
 	UID: os.Getuid,
 }

@@ -5,16 +5,18 @@
 package preflight
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/host/callerio"
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -116,12 +118,16 @@ var DefaultDeps = Deps{
 		if out, ok, err := callerio.CommandOutput(name, args...); ok {
 			return out, err
 		}
-		return exec.Command(name, args...).CombinedOutput()
+		return localCombinedOutput(name, args...)
 	},
-	CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
-		return exec.Command(name, args...).CombinedOutput()
-	},
-	UID: os.Getuid,
+	CommandOutputLocalRoot: localCombinedOutput,
+	UID:                    os.Getuid,
+}
+
+func localCombinedOutput(name string, args ...string) ([]byte, error) {
+	var combined bytes.Buffer
+	err := execution.OSRunner{}.Run(context.Background(), execution.Command{Name: name, Args: args, Stdout: &combined, Stderr: &combined})
+	return combined.Bytes(), err
 }
 
 func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, error) {

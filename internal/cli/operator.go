@@ -3,11 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -17,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/host/callerio"
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/workspace"
 	"go.yaml.in/yaml/v3"
@@ -44,19 +43,21 @@ func controllerBootstrapLookPath(name string) (string, error) {
 			if err == nil {
 				return path, nil
 			}
-			if !errors.Is(err, exec.ErrNotFound) {
+			if !execution.IsNotFound(err) {
 				return "", err
 			}
 		}
 	}
-	return exec.LookPath(name)
+	return execution.LookPath(name)
 }
 
 func callerCommandOutput(name string, args ...string) ([]byte, error) {
 	if out, ok, err := callerio.CommandOutput(name, args...); ok {
 		return out, err
 	}
-	return exec.Command(name, args...).CombinedOutput()
+	var combined bytes.Buffer
+	err := execution.OSRunner{}.Run(context.Background(), execution.Command{Name: name, Args: args, Stdout: &combined, Stderr: &combined})
+	return combined.Bytes(), err
 }
 
 func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, plan []bastion.BootstrapStep, extraEnv map[string]string, becomePassword string, askBecomePass bool) error {
@@ -73,13 +74,16 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 				return failErr(1, fmt.Errorf("refresh sudo credentials for %q: %w", step.Label, err))
 			}
 		}
-		run := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 		var stepOutput bytes.Buffer
-		run.Stdout = &stepOutput
-		run.Stderr = &stepOutput
-		run.Stdin = stdin
-		run.Env = env
-		if err := run.Run(); err != nil {
+		run := execution.Command{
+			Name:   cmd[0],
+			Args:   cmd[1:],
+			Env:    env,
+			Stdin:  stdin,
+			Stdout: &stepOutput,
+			Stderr: &stepOutput,
+		}
+		if err := (execution.OSRunner{}).Run(ctx, run); err != nil {
 			if isPython312InstallStep(step) {
 				return failErr(1, fmt.Errorf("bootstrap step %q: Python 3.12+ was not found and %s install failed; enable or repair host package repositories, register the host if required, or install Python 3.12+ on PATH manually: %w%s", step.Label, bootstrapPythonInstallTool(step.Cmd), err, bootstrapStepOutputSuffix(stepOutput.String())))
 			}
@@ -143,11 +147,13 @@ func sudoWithNonInteractiveFlag(args []string) []string {
 }
 
 func refreshBootstrapSudo(ctx context.Context, stderr io.Writer, env []string, password string) error {
-	cmd := exec.CommandContext(ctx, "sudo", "-S", "-p", "", "-v")
-	cmd.Stdin = strings.NewReader(password + "\n")
-	cmd.Stderr = stderr
-	cmd.Env = env
-	return cmd.Run()
+	return execution.OSRunner{}.Run(ctx, execution.Command{
+		Name:   "sudo",
+		Args:   []string{"-S", "-p", "", "-v"},
+		Env:    env,
+		Stdin:  strings.NewReader(password + "\n"),
+		Stderr: stderr,
+	})
 }
 
 // planControllerCLIInstall is the CLI-side wrapper that supplies the

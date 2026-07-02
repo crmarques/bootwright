@@ -5,14 +5,17 @@ package cli
 import (
 	"context"
 	"io"
-	"os/exec"
+
+	"github.com/crmarques/bootwright/internal/host/execution"
 )
 
 func runCommandWithControllingTTY(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, env []string) error {
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Env = env
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	return cmd.Run()
+	return execution.OSRunner{}.Run(ctx, execution.Command{
+		Name:   args[0],
+		Args:   args[1:],
+		Env:    env,
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	})
 }

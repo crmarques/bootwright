@@ -34,7 +34,7 @@ type CLIInstallSpec struct {
 // PlannedCommand returns the ansible-playbook invocation the CLI will
 // run to materialise the controller-side OpenShift CLIs. The returned
 // argv is fully resolved (absolute paths against BundleDir) so callers
-// can echo it on dry-run and pass it straight to exec.Command.
+// can echo it on dry-run and pass it straight to the process runner.
 func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
 	return []string{
 		s.Executable,

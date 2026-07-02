@@ -32,15 +32,25 @@ const (
 	AuthPrompted       = "prompted"
 )
 
+// CommandFactory builds the sudo probe and keep-alive commands a Session runs.
+// Callers outside internal/host pass DefaultCommandFactory so they never touch
+// os/exec themselves.
+type CommandFactory = func(context.Context, string, ...string) *exec.Cmd
+
+// DefaultCommandFactory is the os/exec-backed CommandFactory.
+func DefaultCommandFactory(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, name, args...)
+}
+
 type Session struct {
 	password       string
 	authMethod     string
 	stderr         io.Writer
 	keepAliveEvery time.Duration
-	commandContext func(context.Context, string, ...string) *exec.Cmd
+	commandContext CommandFactory
 }
 
-func NewSession(ctx context.Context, readPassword func() (string, error), stderr io.Writer, commandContext func(context.Context, string, ...string) *exec.Cmd) (*Session, error) {
+func NewSession(ctx context.Context, readPassword func() (string, error), stderr io.Writer, commandContext CommandFactory) (*Session, error) {
 	session := &Session{
 		stderr:         stderr,
 		commandContext: commandContext,

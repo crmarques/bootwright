@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 )
 
@@ -23,6 +23,8 @@ type CommandRunner struct {
 	LogPath string
 	Stdout  io.Writer
 	Stderr  io.Writer
+	// Runner substitutes the local process launcher in tests; nil runs on the OS.
+	Runner execution.Runner
 }
 
 func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string, input []byte) ([]byte, error) {
@@ -30,11 +32,11 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	if name == "" {
 		name = "oc"
 	}
-	if _, err := exec.LookPath(name); err != nil {
+	if _, err := execution.LookPath(name); err != nil {
 		return nil, fmt.Errorf("required command %q is unavailable on PATH: %w", name, err)
 	}
 	command := append([]string{"--kubeconfig", kubeconfig}, args...)
-	cmd := exec.CommandContext(ctx, name, command...)
+	cmd := execution.Command{Name: name, Args: command}
 	if len(input) > 0 {
 		cmd.Stdin = bytes.NewReader(input)
 	}
@@ -46,7 +48,7 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	// without losing the log file or error diagnostics.
 	cmd.Stdout = tee(&stdout, r.Stdout)
 	cmd.Stderr = tee(&stderr, r.Stderr)
-	err := cmd.Run()
+	err := r.runner().Run(ctx, cmd)
 	out := append(stdout.Bytes(), stderr.Bytes()...)
 	var logErr error
 	if r.LogPath != "" {
@@ -66,6 +68,13 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	// unmarshal, so the success path yields stdout only. stderr stays in the log
 	// and in the failure-path error above.
 	return stdout.Bytes(), nil
+}
+
+func (r CommandRunner) runner() execution.Runner {
+	if r.Runner != nil {
+		return r.Runner
+	}
+	return execution.OSRunner{}
 }
 
 // tee returns a writer that always captures into buf and additionally streams

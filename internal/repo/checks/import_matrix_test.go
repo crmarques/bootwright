@@ -39,7 +39,7 @@ var allowedImports = map[string][]string{
 	"internal/roles":     {"api/v1alpha1"},
 	"internal/workspace": {"internal/host/localroot", "internal/host/managedroot", "internal/host/safefs"},
 	"internal/secrets":   {"api/v1alpha1", "internal/host/callerio", "internal/host/localroot", "internal/host/safefs", "internal/state/view", "internal/storage/topology", "internal/workspace"},
-	"internal/sshtrust":  {"api/v1alpha1", "internal/host/safefs", "internal/infra/locality", "internal/secrets"},
+	"internal/sshtrust":  {"api/v1alpha1", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/secrets"},
 	"internal/ownership": {"internal/host/safefs"},
 
 	// Infra resolvers over state.
@@ -72,9 +72,9 @@ var allowedImports = map[string][]string{
 	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/workspace"},
 	"internal/converge/ansible":           {"internal/host/callerio", "internal/host/localroot", "internal/host/ptyexec"},
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
-	"internal/converge/bastion":           {"api/v1alpha1", "internal/render", "internal/roles"},
+	"internal/converge/bastion":           {"api/v1alpha1", "internal/host/execution", "internal/render", "internal/roles"},
 	"internal/converge/bundle":            {},
-	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
 
 	// Storage and addons.
 	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view", "internal/storage/datafoundation"},
@@ -83,14 +83,14 @@ var allowedImports = map[string][]string{
 	"internal/storage/topology":       {"api/v1alpha1", "internal/state/view"},
 	"internal/addons":                 {},
 	"internal/addons/inputs":          {"api/v1alpha1"},
-	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/shellquote"},
+	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
 	"internal/addons/plan":            {"api/v1alpha1", "internal/addons", "internal/addons/render"},
 	"internal/addons/records":         {"internal/host/safefs"},
 	"internal/addons/render":          {"api/v1alpha1", "internal/addons"},
 
 	// Operator-facing application services. They return plain data; cli
 	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).
-	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology", "internal/workspace"},
+	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology", "internal/workspace"},
 	"internal/status":        {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/clusteraccess", "internal/converge/workflow", "internal/ownership", "internal/render", "internal/state/graph", "internal/state/view"},
 	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/host/shellquote", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 }

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,13 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/render"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
@@ -73,6 +74,8 @@ type ClusterAvailabilityChecker interface {
 
 type OCClusterAvailabilityChecker struct {
 	Command string
+	// Runner substitutes the local process launcher in tests; nil runs on the OS.
+	Runner execution.Runner
 }
 
 func (c OCClusterAvailabilityChecker) Available(ctx context.Context, kubeconfigPath string) (bool, error) {
@@ -86,12 +89,23 @@ func (c OCClusterAvailabilityChecker) Available(ctx context.Context, kubeconfigP
 	if name == "" {
 		name = "oc"
 	}
-	out, err := exec.CommandContext(ctx, name,
-		"--kubeconfig", kubeconfigPath,
-		"--request-timeout=5s",
-		"get", "clusterversion", "version",
-		"-o", `jsonpath={.status.conditions[?(@.type=="Available")].status}`,
-	).CombinedOutput()
+	runner := c.Runner
+	if runner == nil {
+		runner = execution.OSRunner{}
+	}
+	var combined bytes.Buffer
+	err := runner.Run(ctx, execution.Command{
+		Name: name,
+		Args: []string{
+			"--kubeconfig", kubeconfigPath,
+			"--request-timeout=5s",
+			"get", "clusterversion", "version",
+			"-o", `jsonpath={.status.conditions[?(@.type=="Available")].status}`,
+		},
+		Stdout: &combined,
+		Stderr: &combined,
+	})
+	out := combined.Bytes()
 	if err != nil {
 		return false, fmt.Errorf("probe cluster availability with %s: %w: %s", name, err, strings.TrimSpace(string(out)))
 	}

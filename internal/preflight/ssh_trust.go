@@ -1,11 +1,10 @@
 package preflight
 
 import (
-	"errors"
 	"fmt"
-	"os/exec"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 )
@@ -133,7 +132,7 @@ func sshKeyscanCheck(deps Deps) Check {
 	path, err := deps.LookPath("ssh-keyscan", nil)
 	if err != nil {
 		remediation := "install OpenSSH clients or run bootwright bastion setup"
-		if errors.Is(err, exec.ErrNotFound) {
+		if execution.IsNotFound(err) {
 			return failCheck(checkGroupHostTrust, "ssh-keyscan", "not found", "Bootwright needs ssh-keyscan to record SSH host trust", remediation)
 		}
 		return failCheck(checkGroupHostTrust, "ssh-keyscan", err.Error(), "Bootwright needs ssh-keyscan to record SSH host trust", remediation)
