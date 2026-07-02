@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -156,87 +155,9 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	}
 }
 
-func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) {
-	base := t.TempDir()
-	runsDir := filepath.Join(base, "runs")
-	clustersDir := filepath.Join(base, "clusters")
-	now := time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC)
-	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "infra.cluster-a", Kind: workflow.ApplyTaskKindClusterInstall, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
-		{ID: "iso.cluster-a", Kind: workflow.ApplyTaskKindClusterISO, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
-		{ID: "boot.cluster-a", Kind: workflow.ApplyTaskKindNodeBoot, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
-		{ID: "wait.cluster-a", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending},
-		{ID: "storageinfra.ceph-a", Kind: workflow.ApplyTaskKindStorageInfra, Cluster: "ceph-a", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "storage.ceph-a", Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph-a", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "storageattachment.cluster-a.openshift-data-foundation.external-storage.apply", Kind: workflow.ApplyTaskKindStorageAttachmentApply, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
-	}, now)
-
-	lines := applyClusterPhaseLines(runsDir, clustersDir, ledger)
-	byName := map[string]output.ClusterPhaseLine{}
-	for _, line := range lines {
-		byName[line.Name] = line
-	}
-	container := byName["cluster-a"]
-	if container.Kind != "ContainerCluster" {
-		t.Fatalf("cluster-a kind = %q, want ContainerCluster", container.Kind)
-	}
-	requireApplyPhase(t, container, "Infrastructure", output.StatusOK)
-	requireApplyPhase(t, container, "Prepare", output.StatusRunning)
-	requireApplyPhase(t, container, "Install", output.StatusPending)
-	requireApplyPhase(t, container, "Post-install", output.StatusBlocked)
-	storage := byName["ceph-a"]
-	if storage.Kind != "StorageCluster" {
-		t.Fatalf("ceph-a kind = %q, want StorageCluster", storage.Kind)
-	}
-	requireApplyPhase(t, storage, "Infrastructure", output.StatusOK)
-	requireApplyPhase(t, storage, "Provision", output.StatusOK)
-	requireApplyPhase(t, storage, "Publish", output.StatusBlocked)
-	if phasePresent(storage, "Prepare") {
-		t.Fatalf("storage cluster should not expose a duplicate Prepare phase: %+v", storage.Phases)
-	}
-}
-
-func TestApplyPhaseStatusTerminalStates(t *testing.T) {
-	cases := []struct {
-		name   string
-		tasks  []workflow.TaskLedgerEntry
-		status output.Status
-	}{
-		{name: "failed", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusOK}, {Status: workflow.TaskStatusFailed}}, status: output.StatusFailed},
-		{name: "blocked", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusBlocked}, {Status: workflow.TaskStatusPending}}, status: output.StatusBlocked},
-		{name: "cancelled", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusOK}, {Status: workflow.TaskStatusCancelled}}, status: output.StatusCancel},
-		{name: "skipped", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusSkipped}, {Status: workflow.TaskStatusSkipped}}, status: output.StatusSkipped},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := applyPhaseStatus(tc.tasks, output.StatusPending); got != tc.status {
-				t.Fatalf("status = %s, want %s", got, tc.status)
-			}
-		})
-	}
-}
-
-func requireApplyPhase(t *testing.T, line output.ClusterPhaseLine, label string, status output.Status) {
-	t.Helper()
-	for _, phase := range line.Phases {
-		if phase.Label == label {
-			if phase.Status != status {
-				t.Fatalf("%s phase %s = %s, want %s", line.Name, label, phase.Status, status)
-			}
-			return
-		}
-	}
-	t.Fatalf("%s missing phase %s in %+v", line.Name, label, line.Phases)
-}
-
-func phasePresent(line output.ClusterPhaseLine, label string) bool {
-	for _, phase := range line.Phases {
-		if phase.Label == label {
-			return true
-		}
-	}
-	return false
-}
+// The apply phase aggregation itself (cluster kinds, phase grouping, terminal
+// states) is owned and tested by internal/status (applyrun_test.go); the CLI
+// only maps those phases to display statuses.
 
 func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 	base := t.TempDir()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 // destroyReporter drives the live destroy progress surface, the teardown
@@ -64,7 +65,7 @@ func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 	}
 	return output.RunFrame{
 		BarLabel: "Teardown",
-		Done:     applyProgressDone(ledger),
+		Done:     status.ApplyProgressDone(ledger),
 		Total:    len(ledger.Tasks),
 		Counts:   applyProgressFields(ledger),
 		Groups:   []output.StepGroup{{Steps: steps}},
@@ -101,17 +102,17 @@ func printDestroyRunStart(stdout io.Writer, runsDir string, ledger workflow.RunL
 func printDestroyRunSummary(stdout io.Writer, runsDir string, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	p.Section("Summary")
-	status := output.StatusOK
+	summaryStatus := output.StatusOK
 	detail := "complete"
 	switch ledger.Status {
 	case workflow.RunStatusFailed:
-		status = output.StatusFailed
+		summaryStatus = output.StatusFailed
 		detail = "failed"
 	case workflow.RunStatusCancelled:
-		status = output.StatusCancel
+		summaryStatus = output.StatusCancel
 		detail = "cancelled"
 	}
-	p.Status(status, ledger.Target, detail)
+	p.Status(summaryStatus, ledger.Target, detail)
 	p.Fields([]output.Field{{Key: "Run log", Value: workflow.ApplyRunLogPath(runsDir, ledger.RunID)}})
 	for _, task := range ledger.FailedTasks() {
 		fields := []output.Field{
@@ -120,7 +121,7 @@ func printDestroyRunSummary(stdout io.Writer, runsDir string, ledger workflow.Ru
 		if covered := strings.Join(task.ResourceKeys, ", "); covered != "" {
 			fields = append(fields, output.Field{Key: "clusters", Value: covered})
 		}
-		fields = append(fields, output.Field{Key: "reason", Value: applyFailureReason(task.Failure)})
+		fields = append(fields, output.Field{Key: "reason", Value: status.ApplyFailureReason(task.Failure)})
 		if task.LogPath != "" {
 			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
 		}

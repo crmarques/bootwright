@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 // applyReporter drives the live apply progress surface. It owns a single
@@ -125,7 +126,7 @@ func applyClusterLogFields(runsDir string, clustersDir string, ledger workflow.R
 	for _, cluster := range orderClusterNames(ledger.ClusterNames(), nil) {
 		tasks := ledger.TasksForCluster(cluster)
 		fields = append(fields, output.Field{Key: cluster + " log", Value: workflow.ApplyClusterLogPath(runsDir, ledger.RunID, cluster)})
-		if applyClusterKind(tasks) == "ContainerCluster" && !applyClusterFullyDone(tasks) {
+		if status.ApplyClusterKind(tasks) == "ContainerCluster" && !applyClusterFullyDone(tasks) {
 			fields = append(fields, output.Field{Key: cluster + " installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, cluster)})
 		}
 	}
@@ -152,8 +153,8 @@ func printApplyFailureDetails(stdout io.Writer, runsDir string, clustersDir stri
 	for _, task := range ledger.FailedTasks() {
 		fields := []output.Field{
 			{Key: "failed task", Value: applyTaskDisplayLabel(task.Label)},
-			{Key: "phase", Value: applyFailedPhase(ledger, task)},
-			{Key: "reason", Value: applyFailureReason(task.Failure)},
+			{Key: "phase", Value: status.ApplyFailedPhase(ledger, task)},
+			{Key: "reason", Value: status.ApplyFailureReason(task.Failure)},
 		}
 		if task.LogPath != "" {
 			fields = append(fields, output.Field{Key: "task log", Value: task.LogPath})
@@ -169,7 +170,7 @@ func printApplyFailureDetails(stdout io.Writer, runsDir string, clustersDir stri
 	for _, task := range ledger.BlockedTasks() {
 		fields := []output.Field{
 			{Key: "blocked task", Value: applyTaskDisplayLabel(task.Label)},
-			{Key: "phase", Value: applyFailedPhase(ledger, task)},
+			{Key: "phase", Value: status.ApplyFailedPhase(ledger, task)},
 			{Key: "reason", Value: applyBlockedReason(ledger, task)},
 		}
 		if task.ClusterLogPath != "" {

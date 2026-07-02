@@ -2,146 +2,41 @@ package cli
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
-func applyClusterPhaseLines(runsDir string, clustersDir string, ledger workflow.RunLedger) []output.ClusterPhaseLine {
-	names := ledger.ClusterNames()
-	lines := make([]output.ClusterPhaseLine, 0, len(names))
-	for _, name := range names {
-		tasks := ledger.TasksForCluster(name)
-		kind := applyClusterKind(tasks)
-		fields := []output.Field{{Key: "Bootwright log", Value: workflow.ApplyClusterLogPath(runsDir, ledger.RunID, name)}}
-		if kind == "ContainerCluster" {
-			fields = append(fields, output.Field{Key: "Installation log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, name)})
-		}
-		lines = append(lines, output.ClusterPhaseLine{
-			Name:   name,
-			Kind:   kind,
-			Fields: fields,
-			Phases: applyClusterPhases(ledger, name, kind, tasks),
-		})
-	}
-	return lines
-}
-
 func applyClusterLifecycleSummary(ledger workflow.RunLedger, cluster string) (output.Status, string) {
-	tasks := ledger.TasksForCluster(cluster)
-	kind := applyClusterKind(tasks)
-	phases := applyClusterPhases(ledger, cluster, kind, tasks)
+	phases := status.ApplyClusterPhases(ledger, cluster)
 	if len(phases) == 0 {
 		return output.StatusOK, ""
 	}
-	status := output.StatusOK
+	worst := output.StatusOK
 	parts := make([]string, 0, len(phases))
 	for _, phase := range phases {
-		status = applyOutputStatus(status, phase.Status)
-		parts = append(parts, phase.Label+" "+string(phase.Status))
+		phaseStatus := applyPhaseOutputStatus(phase.Status)
+		worst = applyOutputStatus(worst, phaseStatus)
+		parts = append(parts, phase.Label+" "+string(phaseStatus))
 	}
-	return status, strings.Join(parts, ", ")
+	return worst, strings.Join(parts, ", ")
 }
 
-func applyClusterKind(tasks []workflow.TaskLedgerEntry) string {
-	kind := ""
-	for _, task := range tasks {
-		switch task.ClusterKind {
-		case workflow.ApplyClusterKindContainer:
-			return "ContainerCluster"
-		case workflow.ApplyClusterKindStorage:
-			kind = "StorageCluster"
-		}
-	}
-	if kind != "" {
-		return kind
-	}
-	return "Cluster"
-}
-
-func applyClusterPhases(ledger workflow.RunLedger, cluster string, kind string, tasks []workflow.TaskLedgerEntry) []output.PhaseStatus {
-	switch kind {
-	case "StorageCluster":
-		storageTasks := filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster)
-		// One "Infrastructure" phase covers host standup and storage prep. The
-		// previous "Prepare" phase was computed from the identical task filter, so
-		// it could never differ — drop it rather than show two columns that always
-		// move in lockstep.
-		return []output.PhaseStatus{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra), output.StatusPending)},
-			{Label: "Provision", Status: applyPhaseStatus(storageTasks, output.StatusPending)},
-			{Label: "Publish", Status: applyPhaseStatus(applyStoragePublishTasks(ledger, cluster), output.StatusPending)},
-		}
-	case "ContainerCluster":
-		return []output.PhaseStatus{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindMachineInfraFinalize), output.StatusPending)},
-			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot), output.StatusPending)},
-			{Label: "Install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindInstallWait), output.StatusPending)},
-			{Label: "Post-install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindStorageAttachmentApply, workflow.ApplyTaskKindNodeConfigApply), output.StatusPending)},
-		}
-	default:
-		return []output.PhaseStatus{{Label: "Work", Status: applyPhaseStatus(tasks, output.StatusPending)}}
-	}
-}
-
-func filterApplyTasksByKind(tasks []workflow.TaskLedgerEntry, kinds ...string) []workflow.TaskLedgerEntry {
-	kindSet := map[string]bool{}
-	for _, kind := range kinds {
-		kindSet[kind] = true
-	}
-	var out []workflow.TaskLedgerEntry
-	for _, task := range tasks {
-		if kindSet[task.Kind] {
-			out = append(out, task)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
-}
-
-func applyStoragePublishTasks(ledger workflow.RunLedger, cluster string) []workflow.TaskLedgerEntry {
-	dependency := "storage." + cluster
-	var out []workflow.TaskLedgerEntry
-	for _, task := range ledger.Tasks {
-		if task.Kind != workflow.ApplyTaskKindStorageAttachmentApply {
-			continue
-		}
-		for _, dep := range task.Dependencies {
-			if dep == dependency {
-				out = append(out, task)
-				break
-			}
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
-}
-
-func applyPhaseStatus(tasks []workflow.TaskLedgerEntry, defaultStatus output.Status) output.Status {
-	if len(tasks) == 0 {
-		return defaultStatus
-	}
-	counts := map[workflow.TaskStatus]int{}
-	for _, task := range tasks {
-		counts[task.Status]++
-	}
-	switch {
-	case counts[workflow.TaskStatusFailed] > 0:
+func applyPhaseOutputStatus(taskStatus workflow.TaskStatus) output.Status {
+	switch taskStatus {
+	case workflow.TaskStatusFailed:
 		return output.StatusFailed
-	case counts[workflow.TaskStatusBlocked] > 0:
+	case workflow.TaskStatusBlocked:
 		return output.StatusBlocked
-	case counts[workflow.TaskStatusCancelled] > 0:
+	case workflow.TaskStatusCancelled:
 		return output.StatusCancel
-	case counts[workflow.TaskStatusRunning]+counts[workflow.TaskStatusReady] > 0:
+	case workflow.TaskStatusRunning, workflow.TaskStatusReady:
 		return output.StatusRunning
-	case counts[workflow.TaskStatusPending] > 0:
-		if counts[workflow.TaskStatusOK]+counts[workflow.TaskStatusSkipped] > 0 {
-			return output.StatusRunning
-		}
+	case workflow.TaskStatusPending:
 		return output.StatusPending
-	case counts[workflow.TaskStatusSkipped] == len(tasks):
+	case workflow.TaskStatusSkipped:
 		return output.StatusSkipped
 	default:
 		return output.StatusOK
@@ -174,17 +69,6 @@ func applyOutputStatusPriority(status output.Status) int {
 	}
 }
 
-func applyProgressDone(ledger workflow.RunLedger) int {
-	done := 0
-	for _, task := range ledger.Tasks {
-		switch task.Status {
-		case workflow.TaskStatusOK, workflow.TaskStatusSkipped, workflow.TaskStatusFailed, workflow.TaskStatusBlocked, workflow.TaskStatusCancelled:
-			done++
-		}
-	}
-	return done
-}
-
 func applyProgressFields(ledger workflow.RunLedger) []output.ProgressField {
 	fields := make([]output.ProgressField, 0, len(ledger.ProgressCounts()))
 	for _, count := range ledger.ProgressCounts() {
@@ -193,48 +77,13 @@ func applyProgressFields(ledger workflow.RunLedger) []output.ProgressField {
 	return fields
 }
 
-func applyFailureReason(failure string) string {
-	lines := strings.Split(failure, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "failure:") {
-			return trimApplyDetail(strings.TrimSpace(strings.TrimPrefix(line, "failure:")))
-		}
-	}
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "last ") && !strings.HasPrefix(line, "underlying error:") {
-			return trimApplyDetail(line)
-		}
-	}
-	return "task failed"
-}
-
-func trimApplyDetail(value string) string {
-	const limit = 180
-	value = strings.TrimSpace(value)
-	if len(value) <= limit {
-		return value
-	}
-	return value[:limit-3] + "..."
-}
-
-func applyFailedPhase(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
-	for _, phase := range applyClusterPhases(ledger, task.Cluster, applyClusterKind(ledger.TasksForCluster(task.Cluster)), ledger.TasksForCluster(task.Cluster)) {
-		if phase.Status == output.StatusFailed || phase.Status == output.StatusBlocked || phase.Status == output.StatusCancel {
-			return phase.Label
-		}
-	}
-	return "Work"
-}
-
 // applyBlockedReason explains why a task is blocked in fleet terms. It walks the
 // dependency chain to the actual failed root and, when that root lives in
 // another cluster (the KubeVirt host parent), names that cluster — so a blocked
 // child reads "host cluster dc1-metal-ocp not ready" instead of leaking a raw
 // internal task ID or blaming a sibling task one hop up.
 func applyBlockedReason(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
-	if dep, ok := applyBlockingRoot(ledger, task); ok {
+	if dep, ok := status.ApplyBlockingRoot(ledger, task); ok {
 		label := applyTaskDisplayLabel(dep.Label)
 		if dep.Cluster != "" && dep.Cluster != task.Cluster {
 			return fmt.Sprintf("host cluster %s not ready (blocked by %s)", dep.Cluster, label)
@@ -245,38 +94,4 @@ func applyBlockedReason(ledger workflow.RunLedger, task workflow.TaskLedgerEntry
 		return task.SkippedReason
 	}
 	return fmt.Sprintf("%s %s", task.Kind, task.Status)
-}
-
-// applyBlockingRoot walks a blocked task's dependencies breadth-first to the
-// first failed ancestor (the true root cause), falling back to the nearest
-// blocked/cancelled ancestor. This lets a transitively-blocked child task point
-// at the host parent's failed install rather than at its own sibling.
-func applyBlockingRoot(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) (workflow.TaskLedgerEntry, bool) {
-	visited := map[string]bool{}
-	queue := append([]string(nil), task.Dependencies...)
-	var fallback workflow.TaskLedgerEntry
-	haveFallback := false
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
-		if visited[id] {
-			continue
-		}
-		visited[id] = true
-		dep, ok := ledger.Task(id)
-		if !ok {
-			continue
-		}
-		switch dep.Status {
-		case workflow.TaskStatusFailed:
-			return dep, true
-		case workflow.TaskStatusBlocked, workflow.TaskStatusCancelled:
-			if !haveFallback {
-				fallback = dep
-				haveFallback = true
-			}
-			queue = append(queue, dep.Dependencies...)
-		}
-	}
-	return fallback, haveFallback
 }

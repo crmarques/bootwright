@@ -3,6 +3,7 @@ package cli
 import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 // applyRunFrame projects a run ledger into a progress frame: a header progress
@@ -23,12 +24,12 @@ func applyRunFrame(ledger workflow.RunLedger, displays map[string]clusterDisplay
 	}
 	for _, name := range orderClusterNames(ledger.ClusterNames(), displays) {
 		tasks := ledger.TasksForCluster(name)
-		title := clusterGroupTitle(name, displays, applyClusterKind(tasks))
+		title := clusterGroupTitle(name, displays, status.ApplyClusterKind(tasks))
 		groups = append(groups, output.StepGroup{Title: title, Steps: applyStepsForTasks(tasks, ledger)})
 	}
 	return output.RunFrame{
 		BarLabel: "Provisioning Progress",
-		Done:     applyProgressDone(ledger),
+		Done:     status.ApplyProgressDone(ledger),
 		Total:    len(ledger.Tasks),
 		Counts:   applyProgressFields(ledger),
 		Groups:   groups,
@@ -131,7 +132,7 @@ func applyStepStatus(status workflow.TaskStatus) output.Status {
 func applyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger) string {
 	switch task.Status {
 	case workflow.TaskStatusFailed:
-		return applyFailureReason(task.Failure)
+		return status.ApplyFailureReason(task.Failure)
 	case workflow.TaskStatusBlocked:
 		return applyBlockedReason(ledger, task)
 	case workflow.TaskStatusSkipped:

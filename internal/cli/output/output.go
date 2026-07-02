@@ -71,18 +71,6 @@ type TaskLine struct {
 	Detail string
 }
 
-type PhaseStatus struct {
-	Label  string
-	Status Status
-}
-
-type ClusterPhaseLine struct {
-	Name   string
-	Kind   string
-	Fields []Field
-	Phases []PhaseStatus
-}
-
 type Printer struct {
 	w     io.Writer
 	color bool
@@ -228,34 +216,6 @@ func (p *Printer) Tasks(items []TaskLine) {
 			continue
 		}
 		fmt.Fprintf(p.w, "  %s %s: %s\n", p.statusLabel(item.Status), item.Label, item.Detail)
-	}
-	p.wrote = true
-}
-
-func (p *Printer) ClusterPhases(items []ClusterPhaseLine) {
-	if p == nil || p.w == nil || len(items) == 0 {
-		return
-	}
-	for i, item := range items {
-		if i > 0 || p.wrote {
-			fmt.Fprintln(p.w)
-		}
-		heading := item.Name
-		if item.Kind != "" {
-			heading += " (" + item.Kind + ")"
-		}
-		fmt.Fprintln(p.w, p.style(heading, color.Bold))
-		for _, field := range item.Fields {
-			fmt.Fprintf(p.w, "  %s: %s\n", field.Key, field.Value)
-		}
-		if len(item.Phases) == 0 {
-			continue
-		}
-		parts := make([]string, 0, len(item.Phases))
-		for _, phase := range item.Phases {
-			parts = append(parts, p.statusLabel(phase.Status)+" "+phase.Label)
-		}
-		fmt.Fprintf(p.w, "  %s\n", strings.Join(parts, "   "))
 	}
 	p.wrote = true
 }
