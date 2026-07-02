@@ -1118,6 +1118,26 @@ Rules:
   already exists. `--expect-new` and `--override` are mutually exclusive.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `state-check`.
+- `apply` is additive for every kind: it never removes, deprovisions, or
+  unconfigures a live resource whose declaration was deleted from desired state.
+  Deletion is not a plannable apply action; removal crosses the destroy
+  authorization boundary (`destroy`) or is performed out of band. The storage
+  additive-only rules above are the Ceph instance of this product-wide rule.
+- Convergence-safety records are written per object when its apply task completes
+  successfully; a failed or interrupted task writes no new record. So an object
+  with no prior successful apply is `missing` — meaning "no completed apply is
+  recorded", not "nothing exists on the substrate" (a half-provisioned VM whose
+  install task failed still reports `missing`) — and a bare `apply` re-runs it,
+  while an object with a prior successful record keeps classifying against that
+  record.
+- A bare `apply` resumes a partially-completed container install from its
+  recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
+  `iso-created` skips the ISO and resumes from node boot; `nodes-booted` and
+  `waiting` skip the ISO and boot and resume the install wait; `complete` is a
+  no-op. The `booting` phase fails closed — node-boot completion is uncertain, so
+  Bootwright refuses to reboot without `--override` (which recreates the agent
+  ISO and reboots the nodes; no completed cluster is destroyed). An unrecognized
+  phase also fails closed.
 - `apply --override` is command-scoped. It may continue past Bootwright-owned
   unsafe mismatch checks that have an explicit override path: it bypasses the
   skip-if-already-complete install check, reinstalls a managed-OS machine (the
@@ -1153,9 +1173,17 @@ Rules:
   mutates state, writes convergence records, or runs playbooks, and it accepts
   `--stage`, `--clusters`, and `--output` like the other selection commands. It
   classifies each selected resource against the durable convergence-safety
-  evidence recorded by the last apply: `missing` (never applied), `match`
-  (applied with the current desired state), `drift` (desired state changed since
-  it was applied), or `foreign` (a non-Bootwright owner). It compares desired
+  evidence recorded by the last apply: `missing` (no completed apply recorded),
+  `match` (applied with the current desired state), `drift` (desired state
+  changed since it was applied), or `foreign` (a non-Bootwright owner). It
+  additionally reports `undeclared` ("Owned but no longer declared") resources:
+  Bootwright ownership records — at `Machine`, cluster, `InfraProvider`, and
+  `InfraComponent` granularity — that correlate to no object in the FULL desired
+  state (never the `--clusters`-scoped subset), i.e. objects deleted from desired
+  state without being destroyed. `undeclared` is report-only: it does not affect
+  the exit code, which gates on selected-state sync only; reclaim an orphan with
+  `destroy` (see the removal lifecycle in `docs/advanced/operations.md`). It
+  compares desired
   state against that recorded evidence only; it does not probe live hosts, BMCs,
   or clusters, so a change made out of band after a matching apply (a wiped disk,
   an undefined VM, a deleted namespace) is not detected until the next apply

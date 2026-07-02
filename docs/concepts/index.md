@@ -259,10 +259,11 @@ state is foreign or unsafe to resume.
 
 Use `bootwright state-check` to compare selected desired state with the last
 recorded apply. It is read-only and reports `missing`, `match`, `drift`, and
-`foreign` without contacting hosts; it sees recorded evidence, not live state.
-For the full four-outcome classifier — including why classification is **not**
-itself an apply-time skip gate — see
-[Architecture](../contributing/architecture.md).
+`foreign` without contacting hosts; it sees recorded evidence, not live state. It
+also lists `undeclared` resources — objects owned by Bootwright but no longer in
+desired state — which are report-only and do not affect the exit code. For the
+classifier — including why classification is **not** itself an apply-time skip
+gate — see [Architecture](../contributing/architecture.md).
 
 ## Destroy
 
