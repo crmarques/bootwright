@@ -98,7 +98,12 @@ WORKFLOW_FILE_LINE_LIMIT ?= 1000
 # internal/state/desired holds the per-kind validators. They run longer than
 # thin CLI handlers but must not become god files, so the largest is split by
 # kind to stay under this. Keep it sub-1000 so genuine growth is caught.
+# internal/state/graph shares the same budget (largest today: services.go ~811).
 VALIDATOR_FILE_LINE_LIMIT ?= 900
+# api/v1alpha1 holds the public API type declarations, split per kind. The
+# largest today (types.go ~588) is the floor; a file crossing this means a
+# kind's types should split into their own storage_<kind>.go-style file.
+API_FILE_LINE_LIMIT ?= 600
 
 all: build
 
@@ -309,7 +314,8 @@ stale-term-check:
 # Reject CLI / render files that have grown past the thin-handler
 # threshold. Excludes test files so the lint targets production code
 # only. Scope includes CLI, render and its families, converge orchestration,
-# the extracted service components, and the internal/state/desired validators —
+# the extracted service components, the internal/state/desired and
+# internal/state/graph validators, and the api/v1alpha1 type files —
 # the packages where god-files previously accumulated.
 cli-file-size-check:
 	@over=$$(find internal/cli internal/render internal/render/installer internal/render/inventory internal/render/ceph internal/state/scaffold internal/converge internal/converge/bastion internal/secrets internal/sshtrust internal/preflight internal/status internal/clusteraccess internal/infra/proxy internal/host/become -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
@@ -330,13 +336,22 @@ cli-file-size-check:
 		printf '%s\n' "workflow files over $(WORKFLOW_FILE_LINE_LIMIT) lines (split planning, scheduling, resources, logs, and ledger responsibilities):" "$$over"; \
 		exit 1; \
 	fi
-	@over=$$(find internal/state/desired -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+	@over=$$(find internal/state/desired internal/state/graph -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
 		| while read -r f; do \
 			n=$$(wc -l <"$$f"); \
 			if [ "$$n" -gt $(VALIDATOR_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
 		done); \
 	if [ -n "$$over" ]; then \
 		printf '%s\n' "validator files over $(VALIDATOR_FILE_LINE_LIMIT) lines (split by kind, e.g. validate_storage_pools.go / validate_storage_exports.go / validate_storage_stretch.go):" "$$over"; \
+		exit 1; \
+	fi
+	@over=$$(find api/v1alpha1 -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+		| while read -r f; do \
+			n=$$(wc -l <"$$f"); \
+			if [ "$$n" -gt $(API_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
+		done); \
+	if [ -n "$$over" ]; then \
+		printf '%s\n' "API type files over $(API_FILE_LINE_LIMIT) lines (split per kind, e.g. storage_cluster.go / storage_pool.go / storage_filesystem.go):" "$$over"; \
 		exit 1; \
 	fi
 
