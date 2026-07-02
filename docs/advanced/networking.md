@@ -64,10 +64,6 @@ spec:
             dhcp: false
           ipv6:
             enabled: false
-      dns-resolver:
-        config:
-          server:
-            - 192.168.133.1
       routes:
         config:
           - destination: 0.0.0.0/0
@@ -75,6 +71,10 @@ spec:
             next-hop-interface: bond0
             table-id: 254
 ```
+
+The resolver is not repeated in the template: `nameResolutionRefs: [default]`
+already injects the managed resolver's address into the rendered
+`dns-resolver.config.server` list.
 
 The template is shared by every machine that references it. It carries no
 per-node address — `bond0` declares `ipv4.enabled: true` with `dhcp: false`
@@ -296,18 +296,22 @@ fits the broader storage spine.
 ## Name resolution
 
 `NetworkConfig.spec.nameResolutionRefs[]` selects entries from
-`Environment.spec.infraComponents.nameResolution[]`. Static resolver servers
-may still come from the `NetworkConfig` NMState template; resolved DNS refs are
-appended to the rendered `dns-resolver.config.server` list. Keep
-`nameResolutionRefs` outside `template.networkConfig`; that map is raw NMState.
+`Environment.spec.infraComponents.nameResolution[]`; the resolved addresses are
+injected into the rendered `dns-resolver.config.server` list. A `NetworkConfig`
+that selects a resolver must therefore not also hardcode that resolver's address
+in its `template.networkConfig.dns-resolver` — reserve static template resolver
+servers for resolvers not declared in the environment (operator-external ones).
+Keep `nameResolutionRefs` outside `template.networkConfig`; that map is raw
+NMState.
 
 Managed name-resolution services render records for `api`, `api-int`, and the
-cluster apps wildcard for each consuming cluster. Use `additionalIngressHosts[]`
-on the environment entry or the managed `InfraComponent.spec.nameResolution`
-when specific ingress hostnames, such as console or OAuth routes, must resolve
-before the cluster DNS operator is ready. Those hostnames point at the consuming
-cluster's ingress VIP, and values from the environment entry and component merge
-for shared services.
+cluster `*.apps.<cluster>.<baseDomain>` wildcard for each consuming cluster.
+Console, OAuth, and other `*.apps` routes are already covered by that wildcard —
+do not re-author them. Use `additionalIngressHosts[]` (on the environment entry
+or the managed `InfraComponent.spec.nameResolution`) only for hostnames the
+wildcard cannot cover. Entries render verbatim as host records pointing at the
+consuming cluster's ingress VIP, so author fully-qualified names; values from the
+environment entry and component merge for shared services.
 
 A managed `nameResolution` `InfraComponent` also accepts `forwarders[]`: the
 list of upstream DNS servers the managed resolver forwards queries it cannot
@@ -326,9 +330,10 @@ spec:
     machineRef: bastion
     forwarders:
       - 192.168.133.1
+    # Only for names the *.apps wildcard cannot cover; rendered verbatim as
+    # host records at the cluster ingress VIP, so use fully-qualified names.
     additionalIngressHosts:
-      - console-openshift-console
-      - oauth-openshift
+      - vanity.example.test
 ```
 
 ## NTP sources

@@ -50,6 +50,14 @@ node-to-machine binding. Storage clusters own Ceph intent and reference
 machines by node. Providers own substrate-level capabilities and network
 attachments. Infra components own shared service placement and endpoints.
 
+References point downward: consumer intent (`ContainerCluster`, `StorageCluster`,
+add-on bindings) references machines, providers, components, and networks by
+name, and lower-layer kinds never name the consumers that select them — a
+`Machine`, `InfraProvider`, `InfraComponent`, or `NetworkConfig` carries no
+cluster name or cluster-derived hostname. The one exception is
+`InfraProvider.spec.kubevirt.hostClusterRef`, where a Bootwright cluster is
+itself the substrate (ADR 0004).
+
 Post-install components do not live under `ContainerCluster.spec.install`; they
 are separate desired-state resources selected by `Environment` and bound to
 clusters after provisioning completes. External storage also stays outside

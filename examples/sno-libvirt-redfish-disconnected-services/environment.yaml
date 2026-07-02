@@ -72,9 +72,6 @@ spec:
       - name: default
         management: external
         address: 192.168.132.1
-        additionalIngressHosts:
-          - console-openshift-console.apps.sno-disconnected.bootwright.test
-          - oauth-openshift.apps.sno-disconnected.bootwright.test
     registries:
       - name: default
         management: managed
