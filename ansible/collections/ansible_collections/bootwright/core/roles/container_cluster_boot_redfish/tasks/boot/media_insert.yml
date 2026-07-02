@@ -126,6 +126,24 @@
     - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool
     - bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool
 
+- name: Require the security-configuration privilege for the verification opt-out
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_security_service_https_transfer_patch.status | default(0) | int) not in [401, 403]
+    fail_msg: >-
+      The BMC rejected the HttpsTransferCertVerification opt-out with HTTP
+      {{ bootwright_redfish_security_service_https_transfer_patch.status | default('unknown') }}.
+      The configured BMC account lacks the vendor's security-configuration
+      right (for example the iBMC "Security Configuration" privilege), so
+      certificate verification would silently stay enabled and the
+      virtual-media fetch would fail afterwards. Grant that right to the BMC
+      account, or set bmc.virtualMedia.tls.importServerCertificate so the BMC
+      trusts the artifact server certificate instead.
+  when:
+    - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool
+    - bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool
+
 - name: Capture Redfish HTTPS transfer certificate verification status
   ansible.builtin.set_fact:
     bootwright_redfish_security_service_status:
