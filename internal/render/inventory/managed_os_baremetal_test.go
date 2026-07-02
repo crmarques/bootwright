@@ -78,24 +78,27 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		if image["effectiveSourcePath"] != image["path"] {
 			t.Fatalf("component %v effectiveSourcePath = %v, want image.path %v", component["name"], image["effectiveSourcePath"], image["path"])
 		}
+		// One merged stanza in kickstart's documented VLAN-over-bond form:
+		// --device names the PARENT bond, anaconda derives bond0.140 itself
+		// (so no --interfacename for the default name), bond fields ride the
+		// same command, and the static IP settings apply to the VLAN device.
 		network := component["osInstall"].(map[string]any)["kickstart"].(map[string]any)["network"].(map[string]any)
 		stanzas, ok := network["interfaces"].([]map[string]any)
-		if !ok || len(stanzas) != 2 {
-			t.Fatalf("component %v kickstart network interfaces = %v, want bond plus VLAN stanzas", component["name"], network["interfaces"])
+		if !ok || len(stanzas) != 1 {
+			t.Fatalf("component %v kickstart network interfaces = %v, want one merged bond+VLAN stanza", component["name"], network["interfaces"])
 		}
-		bond := stanzas[0]
-		if bond["device"] != "bond0" || bond["bootproto"] != "none" {
-			t.Fatalf("component %v bond stanza = %v", component["name"], bond)
+		vlan := stanzas[0]
+		if vlan["device"] != "bond0" || vlan["vlanID"] != 140 {
+			t.Fatalf("component %v VLAN stanza = %v, want --device=bond0 --vlanid=140", component["name"], vlan)
 		}
-		if got := bond["bondSlaves"]; !reflect.DeepEqual(got, []string{"eno1", "eno2"}) {
+		if _, present := vlan["interfaceName"]; present {
+			t.Fatalf("component %v VLAN stanza = %v, want no interfaceName for the derived default bond0.140", component["name"], vlan)
+		}
+		if got := vlan["bondSlaves"]; !reflect.DeepEqual(got, []string{"eno1", "eno2"}) {
 			t.Fatalf("component %v bondSlaves = %v, want eno1/eno2", component["name"], got)
 		}
-		if bond["bondOptions"] != "mode=active-backup,miimon=100" {
-			t.Fatalf("component %v bondOptions = %v", component["name"], bond["bondOptions"])
-		}
-		vlan := stanzas[1]
-		if vlan["device"] != "bond0.140" || vlan["interfaceName"] != "bond0.140" || vlan["vlanID"] != 140 {
-			t.Fatalf("component %v VLAN stanza = %v", component["name"], vlan)
+		if vlan["bondOptions"] != "mode=active-backup,miimon=100" {
+			t.Fatalf("component %v bondOptions = %v", component["name"], vlan["bondOptions"])
 		}
 		if vlan["bootproto"] != "static" || vlan["netmask"] != "255.255.255.0" || vlan["hostname"] != true {
 			t.Fatalf("component %v static VLAN stanza = %v", component["name"], vlan)

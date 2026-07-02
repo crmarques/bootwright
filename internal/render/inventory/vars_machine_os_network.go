@@ -70,6 +70,14 @@ func kickstartPrimaryInterface(config map[string]any) map[string]any {
 	return nil
 }
 
+// kickstartNetworkInterfaces renders the install-time network as kickstart
+// `network` stanza inputs. Anaconda only needs the routed interface during
+// install; day-2 configuration owns the rest of the nmstate document. A VLAN
+// primary renders as the single documented form (`network --device=<parent>
+// --bondslaves=... --vlanid=<id> --bootproto=static ...`): kickstart's
+// --device names the VLAN's PARENT, anaconda derives `<parent>.<id>` itself,
+// and the IP settings apply to the VLAN device. --interfacename is only
+// spelled when the nmstate name differs from that derived default.
 func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 	interfaces := networkConfigInterfacesByName(config)
 	primary := kickstartPrimaryInterfaceEntry(config)
@@ -81,44 +89,36 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 		return nil
 	}
 	stanza["hostname"] = true
-	var out []map[string]any
-	if typ, _ := primary["type"].(string); typ == "vlan" {
-		if vlan, ok := primary["vlan"].(map[string]any); ok {
-			base, _ := vlan["base-iface"].(string)
-			if id := intFromYAML(vlan["id"]); id > 0 {
-				stanza["vlanID"] = id
-			}
-			if name, _ := primary["name"].(string); name != "" {
-				stanza["interfaceName"] = name
-			}
-			if baseEntry := interfaces[base]; baseEntry != nil {
-				if baseStanza := kickstartInterfaceDependencyStanza(baseEntry); len(baseStanza) > 0 {
-					out = append(out, baseStanza)
+	switch typ, _ := primary["type"].(string); typ {
+	case "vlan":
+		vlan, ok := primary["vlan"].(map[string]any)
+		if !ok {
+			break
+		}
+		base, _ := vlan["base-iface"].(string)
+		id := intFromYAML(vlan["id"])
+		if base == "" || id <= 0 {
+			break
+		}
+		stanza["vlanID"] = id
+		stanza["device"] = base
+		if name, _ := primary["name"].(string); name != "" && name != fmt.Sprintf("%s.%d", base, id) {
+			stanza["interfaceName"] = name
+		}
+		if baseEntry := interfaces[base]; baseEntry != nil {
+			addBondFields(stanza, baseEntry)
+			// An ethernet parent keeps kickstart's MAC-based device binding
+			// when the NIC's MAC is known; a bond parent is a logical name.
+			if baseType, _ := baseEntry["type"].(string); baseType == "ethernet" {
+				if mac, _ := baseEntry["mac-address"].(string); mac != "" {
+					stanza["device"] = mac
 				}
 			}
 		}
-	} else if typ == "bond" {
+	case "bond":
 		addBondFields(stanza, primary)
 	}
-	out = append(out, stanza)
-	return out
-}
-
-func kickstartInterfaceDependencyStanza(entry map[string]any) map[string]any {
-	typ, _ := entry["type"].(string)
-	if typ != "bond" {
-		return nil
-	}
-	name, _ := entry["name"].(string)
-	if name == "" {
-		return nil
-	}
-	out := map[string]any{
-		"device":    name,
-		"bootproto": "none",
-	}
-	addBondFields(out, entry)
-	return out
+	return []map[string]any{stanza}
 }
 
 func kickstartStaticNetworkStanza(entry map[string]any) map[string]any {
@@ -175,22 +175,62 @@ func kickstartBondOptions(aggregation map[string]any) string {
 	return strings.Join(parts, ",")
 }
 
+// kickstartPrimaryInterfaceEntry picks the interface the installer brings up:
+// the one carrying the default route when the nmstate document declares one
+// (a Ceph node's cluster VLAN also holds a static IP, but only the routed
+// public VLAN can reach the install source), else the first with an IPv4.
 func kickstartPrimaryInterfaceEntry(config map[string]any) map[string]any {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {
 		return nil
 	}
+	routed := networkConfigDefaultRouteInterface(config)
+	var first map[string]any
 	for _, item := range raw {
 		entry, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
 		ip, _ := networkConfigFamilyIPPrefix(entry, "ipv4")
-		if ip != "" {
+		if ip == "" {
+			continue
+		}
+		if name, _ := entry["name"].(string); routed != "" && name == routed {
 			return entry
 		}
+		if first == nil {
+			first = entry
+		}
 	}
-	return nil
+	return first
+}
+
+// networkConfigDefaultRouteInterface only honors the IPv4 default route: the
+// kickstart stanza is built from the ipv4 family, so a dual-stack document's
+// ::/0 route must not steer interface selection toward a v6-only path.
+func networkConfigDefaultRouteInterface(config map[string]any) string {
+	routes, ok := config["routes"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	rawConfig, ok := routes["config"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, item := range rawConfig {
+		route, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if destination, _ := route["destination"].(string); destination != "0.0.0.0/0" {
+			continue
+		}
+		iface, _ := route["next-hop-interface"].(string)
+		if iface != "" {
+			return iface
+		}
+	}
+	return ""
 }
 
 func networkConfigInterfacesByName(config map[string]any) map[string]map[string]any {
@@ -249,8 +289,10 @@ func networkConfigGatewayFromMap(config map[string]any) string {
 		if !ok {
 			continue
 		}
-		destination, _ := route["destination"].(string)
-		if destination != "0.0.0.0/0" && destination != "::/0" {
+		// kickstart's --gateway rides a --bootproto=static --ip=<v4> line, so
+		// only the IPv4 default route may supply it; a dual-stack document's
+		// ::/0 next-hop would put an IPv6 gateway on the v4 family.
+		if destination, _ := route["destination"].(string); destination != "0.0.0.0/0" {
 			continue
 		}
 		nextHop, _ := route["next-hop-address"].(string)
