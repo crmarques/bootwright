@@ -4,15 +4,16 @@ Single-node OpenShift on real bare metal through Redfish virtual media.
 
 ## Edit First
 
-- `environment.yaml`: base domain, secret names, and artifact server catalog.
+- `environment.yaml`: base domain, secret names, artifact server catalog, and
+  the default artifact access every bare-metal cluster inherits.
 - `service-machine.yaml`: service host addresses and SSH key reference.
-- `provider.yaml`: server MACs, BMC Redfish URL, root device hints, and BMC
-  credential reference.
+- `provider.yaml`: the bare-metal boot method and network attachments (physical
+  inventory lives on the `Machine`, not here).
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
-- `cluster-machines.yaml`: API/app VIPs, Redfish artifact endpoint, per-machine
-  IP, and platform render mode.
-- `cluster.yaml`: OpenShift release, install endpoints, networking, and node
-  binding.
+- `cluster-machines.yaml`: the node `Machine` — server MACs, BMC Redfish URL and
+  credential reference, root device hints, per-machine IP, and network config.
+- `cluster.yaml`: OpenShift release, API/ingress endpoint VIPs, networking, and
+  node binding.
 
 ## Validate And Apply
 

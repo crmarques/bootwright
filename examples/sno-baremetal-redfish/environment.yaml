@@ -5,6 +5,12 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
+  defaults:
+    artifactAccess:
+      serverRef: default
+      redfishVirtualMedia:
+        endpointRef: bmc
+
   secrets:
     - openshift-pull-secret
     - sno-baremetal-cluster-admin-ssh-key:

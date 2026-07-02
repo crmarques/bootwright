@@ -17,10 +17,6 @@ spec:
         address: 192.168.150.11
         source:
           type: external
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: bmc
     nodeSSH:
       keyPairRef: metal-ocp-cluster-admin-ssh-key
 

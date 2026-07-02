@@ -19,10 +19,6 @@ spec:
         address: 192.168.160.11
         source:
           type: external
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: bmc
 
   hosts:
 
