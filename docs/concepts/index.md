@@ -40,7 +40,7 @@ retired `v1alpha1` shapes — a retired field is rejected, not translated.
 
 ## Object ownership
 
-Each of the seventeen authored kinds owns one slice of operational fact. The
+Each of the eighteen authored kinds owns one slice of operational fact. The
 links point to the domain page where each kind is documented in full.
 
 | Kind | Owns |
@@ -58,6 +58,7 @@ links point to the domain page where each kind is documented in full.
 | [`StoragePool`](storage.md) | Ceph pool role, protection type, placement, replication, and application. |
 | [`StorageFilesystem`](storage.md) | CephFS filesystem and metadata/data pool mapping. |
 | [`StorageObjectGateway`](storage.md) | RGW public endpoint and cephadm ingress VIP placement. |
+| [`StorageNFSExport`](storage.md) | NFS-Ganesha service, its CephFS or RGW exports, and ingress VIP placement. |
 | [`StorageExport`](storage.md) | Storage services exported for downstream consumers such as Data Foundation. |
 | [`ClusterAddon`](add-ons.md) | A reusable post-install component applied to an installed cluster. |
 | [`ClusterAddonProfile`](add-ons.md) | An ordered reusable add-on set. |

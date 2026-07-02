@@ -1,7 +1,7 @@
 # Desired-State Model
 
 Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and
-seventeen user-authored kinds. The schema intentionally tracks the inputs
+eighteen user-authored kinds. The schema intentionally tracks the inputs
 consumed by `openshift-install` for agent installs, Bootwright-managed machine
 OS installation, and cephadm for external Ceph storage.
 
@@ -10,7 +10,7 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Kinds
 
-The seventeen kinds and the fact each owns are listed in `domain.md` (Operating
+The eighteen kinds and the fact each owns are listed in `domain.md` (Operating
 Model). This document specifies each kind's fields, validation, and the CLI
 contract.
 
@@ -496,6 +496,10 @@ Rules:
 - `spec.distribution.type` accepts `openshift` (default, materialized by
   `render effective`) or `okd`; `openshift` clusters require a pull secret via
   `spec.install.pullSecretRef` or the `Environment` default.
+- `spec.install.nodeSSH` (and the `Environment` `defaults.install.nodeSSH` that
+  fills it when omitted) sets `keyPairRef`, or `publicKeyRef` with an optional
+  `privateKeyRef`. `keyPairRef` is mutually exclusive with the other two, and
+  an authored `nodeSSH` without `keyPairRef` requires `publicKeyRef`.
 - `spec.networking.clusterNetwork` defaults to one entry
   `{cidr: 10.128.0.0/14, hostPrefix: 23}` and `spec.networking.serviceNetwork`
   defaults to `[172.30.0.0/16]` (the stock openshift-install networks) when
@@ -631,6 +635,10 @@ Rules:
   `dataAllocateFraction`, the top-level `unmanaged`, and a `serviceOverrides`
   escape hatch (`extraContainerArgs`/`extraEntrypointArgs`/`networks`/
   `customConfigs`)), mutually exclusive with `devices`.
+  Within an `osd` object, `dataDevices` is required; `filterLogic` accepts
+  `AND` or `OR`; `tpm2: true` requires `encrypted: true`; `osdsPerDevice`,
+  `dbSlots`, and `walSlots` must be non-negative; and `dataAllocateFraction`,
+  when set, must be in `(0, 1]`.
   Both require the `osd` role, and every osd-role host must author one of
   them — or be covered by a fleet `spec.ceph.topology.osdDrivegroups[]` entry:
   OSD device consumption is explicit opt-in, so consuming all available
@@ -1071,9 +1079,10 @@ Rules:
   one absence; a present root reports only the resources that are not in sync.
   Drift is reported per object: each selected apply task is one reported
   resource, and a managed `StorageCluster`'s pools, filesystems, object
-  gateways, and exports are each classified independently against their own
-  recorded apply, so the report names the individual pool or export that
-  drifted or is not yet applied — the same object granularity `apply` acts on.
+  gateways, NFS exports, and exports are each classified independently against
+  their own recorded apply, so the report names the individual pool or export
+  that drifted or is not yet applied — the same object granularity `apply` acts
+  on.
   A present `StorageCluster` lists its out-of-sync sub-objects under the cluster
   root, while a never-applied cluster still collapses to one absence. The
   `infrastructure` root aggregates the provider and infra-component host tasks.

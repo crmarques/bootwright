@@ -19,7 +19,7 @@ publication of fleet content is out of scope for this repository.
 
 ## Operating Model
 
-Operators author desired state as seventeen YAML kinds:
+Operators author desired state as eighteen YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
@@ -36,6 +36,7 @@ Operators author desired state as seventeen YAML kinds:
 | `StoragePool` | Which Ceph pools should exist and what role should each serve? |
 | `StorageFilesystem` | Which CephFS filesystems should exist, and which pools hold metadata and data? |
 | `StorageObjectGateway` | Which RGW service and endpoint refs should serve public and cephadm ingress traffic? |
+| `StorageNFSExport` | Which NFS-Ganesha service and exports should serve CephFS or RGW data? |
 | `StorageExport` | Which storage services should be exported for a downstream platform? |
 | `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |

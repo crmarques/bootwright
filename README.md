@@ -135,7 +135,7 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and eighteen kinds:
 
 | Kind | Owns |
 | --- | --- |
@@ -152,6 +152,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds
 | `StoragePool` | Ceph pool desired state, role, placement policy, and replication settings |
 | `StorageFilesystem` | CephFS desired state, including distinct metadata and data pools plus MDS placement |
 | `StorageObjectGateway` | RGW desired state, public endpoint, and cephadm ingress VIP placement |
+| `StorageNFSExport` | NFS-Ganesha service desired state: CephFS or RGW exports and cephadm ingress VIP placement |
 | `StorageExport` | Exported storage surface prepared for downstream consumers such as Data Foundation external mode |
 | `ClusterAddon` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
 | `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
@@ -272,6 +273,7 @@ api/        Versioned desired-state types
 cmd/        CLI entrypoints
 internal/   Private implementation packages
 ansible/    Embedded `bootwright.core` Ansible collection and dependency lock
+scripts/    Ansible bundle packing and verification tooling
 test/       Test fixtures and end-to-end cases
 ```
 
