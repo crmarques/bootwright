@@ -38,11 +38,20 @@ how managed-OS installs work in general, see
 
 ## Get The Input Tree
 
-There is no `example init` provider for Ceph, so copy the ready-made example tree
-into a working directory:
+There is no `example init` provider for Ceph, so start from the ready-made
+example tree in the bootwright source repository. If you installed only the
+release binary, get the source first — clone the repo (or download and unpack a
+source tarball from
+[GitHub Releases](https://github.com/crmarques/bootwright/releases)):
 
 ```bash
-cp -r examples/ceph-ibm-libvirt-lab ./my-ceph-lab
+git clone https://github.com/crmarques/bootwright.git
+```
+
+Then copy the example into a working directory and enter it:
+
+```bash
+cp -r bootwright/examples/ceph-ibm-libvirt-lab ./my-ceph-lab
 cd ./my-ceph-lab
 ```
 

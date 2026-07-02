@@ -71,7 +71,7 @@ The scaffold declares four secrets:
 | --- | --- | --- |
 | `openshift-pull-secret` | OpenShift pull secret | You set it: `bootwright secret set` |
 | `my-sno-lab-cluster-admin-ssh-key` | Node (core user) SSH key pair | Generated for you: `bootwright secret generate` |
-| `bastion-host-ssh` | SSH private key to reach the bastion | `file:` reference to a key you own |
+| `bastion-host-ssh` | SSH private key to reach the bastion | `file:` reference to a key you create — see [Installation](installation.md#the-bastion-ssh-key) |
 | `bmc-credentials` | Credentials for the emulated Redfish BMC | You set it: `bootwright secret set` |
 
 ### Machine (`infra/machines/bastion.yaml`, `clusters/container/my-sno-lab/cluster-machines.yaml`)
@@ -142,6 +142,7 @@ Open the scaffold and adjust these for your host. The defaults form a working
 | File | Field | Set it to |
 | --- | --- | --- |
 | `environment.yaml` | `spec.baseDomain` | A DNS base domain you control or route in the lab (default `example.test`). |
+| `environment.yaml` | `spec.secrets` `bastion-host-ssh` (`file:`) | Path to the SSH key that reaches the bastion (default `~/.ssh/bootwright-ssh-key`); create it first — see [Installation](installation.md#the-bastion-ssh-key). |
 | `infra/machines/bastion.yaml` | `Machine/bastion` `spec.addresses` (`ssh`) | The address bootwright uses to SSH to the bastion (default `192.168.10.11`). |
 | `clusters/container/my-sno-lab/cluster-machines.yaml` | `Machine/my-sno-lab-master-0` `spec.addresses` (`ip`) | The node's static IP on the machine network (default `192.168.130.20`). |
 | `infra/networkconfigs/networks.yaml` | `spec.machineNetwork[].cidr` | The cluster machine network CIDR (default `192.168.130.0/24`). |

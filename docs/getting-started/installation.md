@@ -32,7 +32,9 @@ Every command below runs as your normal user. Bootwright re-executes through
   under `/var/lib/bootwright`.
 - Libvirt with `qemu:///system` available on the bastion (the labs treat the
   bastion as the libvirt host).
-- An SSH key pair the bastion can use to reach the libvirt/service host.
+- An SSH key pair the bastion uses to reach the libvirt/service host. The lab
+  trees declare it as `bastion-host-ssh` at `~/.ssh/bootwright-ssh-key`; the
+  [Setup Mechanics](#the-bastion-ssh-key) below create and authorize it.
 - An OpenShift pull secret file (for the OpenShift lab) stored **outside** the
   input tree. The Ceph lab needs different credentials, listed in its guide.
 - A free machine network on the libvirt host with room for the node IP(s) and the
@@ -71,6 +73,23 @@ it. Those steps are explained once here; the guides simply run them.
 
 After any command, `bootwright status` reports readiness and prints the suggested
 next command — lean on it as you work.
+
+### The bastion SSH key
+
+Bootwright drives the libvirt/service host over SSH from the bastion. The lab
+trees declare that connection as a `file:`-sourced secret named `bastion-host-ssh`
+pointing at `~/.ssh/bootwright-ssh-key`. Create that key pair and authorize it on
+the host bootwright reaches — in the single-host labs the bastion reaches
+**itself**, so authorize it for `localhost`:
+
+```bash
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/bootwright-ssh-key
+ssh-copy-id -i ~/.ssh/bootwright-ssh-key.pub localhost
+```
+
+The key must exist before `secret generate` (which imports it) and before any
+command that connects. To keep the key elsewhere, point the `bastion-host-ssh`
+entry in `environment.yaml` at your path instead.
 
 ### Contexts
 
