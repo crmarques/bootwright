@@ -19,7 +19,7 @@ authors.
 | `bootwright_infra_component_services` | InfraComponent service instances with rendered role names |
 | `bootwright_provider_machine_setups` | provider-machine setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
-| `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses rendered to installer input |
+| `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses; consumed by the libvirt substrate network template for DHCP NTP options |
 
 ## Environment Shape
 
