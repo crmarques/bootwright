@@ -118,6 +118,7 @@
     bootwright_redfish_power_state_expected: "Off"
     bootwright_redfish_power_state_wait_label: Redfish boot ForceOff
     bootwright_redfish_power_state_reached: false
+    bootwright_redfish_power_state_attempt: 1
     bootwright_redfish_power_state_status:
       expected: "Off"
       systemID: "{{ bootwright_redfish_system_id }}"
@@ -127,15 +128,18 @@
       retries: "{{ bootwright_redfish_power_state_retries | int }}"
   changed_when: false
 
+# A looped include enqueues every probe iteration up front, so a power state
+# that settles in one or two probes still prints power_state_probe.yml as
+# skipped for every remaining iteration. Enter the tail-recursive wrapper
+# instead: it re-checks the reached fact only after each probe, so settled
+# waits never enqueue spare iterations. The probe stays a censored uri GET with
+# a sanitized capture+debug+assert (never `until`, which force-fails a no_log'd
+# task with a censored result on exhaustion).
 - name: Wait for BMC to report PowerState=Off
-  ansible.builtin.include_tasks:
-    file: power_state_probe.yml
-    apply:
-      when: not (bootwright_redfish_power_state_reached | bool)
-  loop: "{{ range(1, (bootwright_redfish_power_state_retries | int) + 1) | list }}"
-  loop_control:
-    loop_var: bootwright_redfish_power_state_attempt
-  when: not (bootwright_redfish_power_state_reached | bool)
+  ansible.builtin.include_tasks: power_state_wait.yml
+  when:
+    - not (bootwright_redfish_power_state_reached | bool)
+    - (bootwright_redfish_power_state_retries | int) >= 1
 
 - name: Confirm BMC reports PowerState=Off before power on
   ansible.builtin.assert:
@@ -185,6 +189,7 @@
     bootwright_redfish_power_state_expected: "On"
     bootwright_redfish_power_state_wait_label: Redfish boot power-on
     bootwright_redfish_power_state_reached: false
+    bootwright_redfish_power_state_attempt: 1
     bootwright_redfish_power_state_status:
       expected: "On"
       systemID: "{{ bootwright_redfish_system_id }}"
@@ -195,14 +200,10 @@
   changed_when: false
 
 - name: Wait for BMC to report PowerState=On
-  ansible.builtin.include_tasks:
-    file: power_state_probe.yml
-    apply:
-      when: not (bootwright_redfish_power_state_reached | bool)
-  loop: "{{ range(1, (bootwright_redfish_power_state_retries | int) + 1) | list }}"
-  loop_control:
-    loop_var: bootwright_redfish_power_state_attempt
-  when: not (bootwright_redfish_power_state_reached | bool)
+  ansible.builtin.include_tasks: power_state_wait.yml
+  when:
+    - not (bootwright_redfish_power_state_reached | bool)
+    - (bootwright_redfish_power_state_retries | int) >= 1
 
 - name: Confirm BMC reports PowerState=On
   ansible.builtin.assert:

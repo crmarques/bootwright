@@ -532,14 +532,33 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject.yml")
 	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "../media/insert_until_attached.yml")
 	for _, idx := range []int{waitPowerOffIdx, waitPowerOnIdx} {
-		assertIncludeTasksFile(t, powerTasks[idx], "power_state_probe.yml")
-		assertIncludeTasksApplyWhen(t, powerTasks[idx], "not (bootwright_redfish_power_state_reached | bool)")
-		if got := powerTasks[idx]["when"]; got != "not (bootwright_redfish_power_state_reached | bool)" {
-			t.Fatalf("%s must stop once the expected power state is reached, got when=%v", powerTasks[idx]["name"], got)
+		assertIncludeTasksFile(t, powerTasks[idx], "power_state_wait.yml")
+		if got := powerTasks[idx]["when"]; !stringListContains(got, "not (bootwright_redfish_power_state_reached | bool)") || !stringListContains(got, "(bootwright_redfish_power_state_retries | int) >= 1") {
+			t.Fatalf("%s must stop once reached and honor the configured retries, got when=%v", powerTasks[idx]["name"], got)
 		}
-		if got, ok := powerTasks[idx]["loop"].(string); !ok || !strings.Contains(got, "bootwright_redfish_power_state_retries") {
-			t.Fatalf("%s must use configured power-state retries, got loop=%v", powerTasks[idx]["name"], powerTasks[idx]["loop"])
+		if _, ok := powerTasks[idx]["loop"]; ok {
+			t.Fatalf("%s must not enqueue spare probe iterations, got loop=%v", powerTasks[idx]["name"], powerTasks[idx]["loop"])
 		}
+	}
+	// The power waits are tail-recursive: the probe body (power_state_probe.yml)
+	// stays a censored GET with a sanitized capture/report/assert -- never `until`,
+	// which would force-fail a no_log'd task with a censored result on retry
+	// exhaustion. The wrapper advances the seeded attempt and recurses only while
+	// unreached and within the retry budget, so a settled wait enqueues nothing.
+	powerWaitTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_wait.yml")
+	runProbeIdx := findAnsibleTask(t, powerWaitTasks, "Run Redfish power state probe")
+	advanceProbeIdx := findAnsibleTask(t, powerWaitTasks, "Advance Redfish power state probe attempt")
+	recurseProbeIdx := findAnsibleTask(t, powerWaitTasks, "Retry Redfish power state probe until reached")
+	if !(runProbeIdx < advanceProbeIdx && advanceProbeIdx < recurseProbeIdx) {
+		t.Fatalf("power state wait wrapper must run a probe, advance the attempt, then recurse")
+	}
+	assertIncludeTasksFile(t, powerWaitTasks[runProbeIdx], "power_state_probe.yml")
+	if got := powerWaitTasks[advanceProbeIdx]["when"]; got != "not (bootwright_redfish_power_state_reached | bool)" {
+		t.Fatalf("%s must only advance while unreached, got when=%v", powerWaitTasks[advanceProbeIdx]["name"], got)
+	}
+	assertIncludeTasksFile(t, powerWaitTasks[recurseProbeIdx], "power_state_wait.yml")
+	if got := powerWaitTasks[recurseProbeIdx]["when"]; !stringListContains(got, "not (bootwright_redfish_power_state_reached | bool)") || !stringListContains(got, "(bootwright_redfish_power_state_attempt | int) <= (bootwright_redfish_power_state_retries | int)") {
+		t.Fatalf("power state wait must recurse only while unreached and within the retry budget, got when=%v", got)
 	}
 	if got := powerTasks[retryInsertIdx]["when"]; !stringListContains(got, "not (bootwright_redfish_vmedia_attached | bool)") {
 		t.Fatalf("virtual media retry must stop once attached, got when=%v", got)
