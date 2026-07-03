@@ -17,7 +17,7 @@ spec:
       publicCIDRs:
         - 192.168.140.0/24
       clusterCIDRs:
-        - 192.168.140.0/24
+        - 192.168.141.0/24
     topology:
       hosts:
         - machineRef: ceph-0

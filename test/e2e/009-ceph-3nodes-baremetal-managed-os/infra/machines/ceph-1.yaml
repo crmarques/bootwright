@@ -24,6 +24,9 @@ spec:
         - interface: bond0.140
           addressRef: ssh
           prefixLength: 24
+        - interface: bond0.141
+          addressRef: cluster
+          prefixLength: 24
     interfaceBinding:
       - nicRef: eno1
         interfaceName: eno1
@@ -49,6 +52,8 @@ spec:
   addresses:
     - name: ssh
       address: 192.168.140.21
+    - name: cluster
+      address: 192.168.141.21
 
   access:
     ssh:

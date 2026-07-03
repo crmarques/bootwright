@@ -5,6 +5,7 @@ metadata:
 spec:
   machineNetwork:
     - cidr: 192.168.140.0/24
+    - cidr: 192.168.141.0/24
 
   template:
     networkConfig:
@@ -12,6 +13,7 @@ spec:
         - name: eno1
           type: ethernet
           state: up
+          mtu: 9000
           ipv4:
             enabled: false
           ipv6:
@@ -19,6 +21,7 @@ spec:
         - name: eno2
           type: ethernet
           state: up
+          mtu: 9000
           ipv4:
             enabled: false
           ipv6:
@@ -26,6 +29,7 @@ spec:
         - name: bond0
           type: bond
           state: up
+          mtu: 9000
           link-aggregation:
             mode: active-backup
             options:
@@ -40,9 +44,22 @@ spec:
         - name: bond0.140
           type: vlan
           state: up
+          mtu: 9000
           vlan:
             base-iface: bond0
             id: 140
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+        - name: bond0.141
+          type: vlan
+          state: up
+          mtu: 9000
+          vlan:
+            base-iface: bond0
+            id: 141
           ipv4:
             enabled: true
             dhcp: false

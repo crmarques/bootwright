@@ -1,8 +1,10 @@
 package inventory
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
@@ -109,15 +111,34 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 			t.Fatalf("component %v static VLAN stanza = %v", component["name"], vlan)
 		}
 
-		// The full nmstate is exposed for the post-install network task: the whole
-		// document (bond, slaves, VLAN, MTU) that nmstate applies after install,
-		// realizing the MTU and secondary interfaces the minimal kickstart omits.
+		// The full nmstate is exposed for the post-install network task, and it carries
+		// exactly what the minimal kickstart drops: BOTH VLANs (routed bond0.140 plus
+		// the secondary cluster bond0.141 that never reaches the kickstart), MTU 9000
+		// on every layer, and the cluster-network IP. This is the multi-VLAN + jumbo
+		// golden the gitignored nprd fixture cannot pin.
 		desiredState, ok := component["osInstall"].(map[string]any)["network"].(map[string]any)["desiredState"].(map[string]any)
 		if !ok {
 			t.Fatalf("component %v missing osInstall.network.desiredState for the post-install nmstate apply", component["name"])
 		}
-		if ifaces, _ := desiredState["interfaces"].([]any); len(ifaces) == 0 {
-			t.Fatalf("component %v osInstall.network.desiredState has no interfaces", component["name"])
+		byName := map[string]map[string]any{}
+		ifaces, _ := desiredState["interfaces"].([]any)
+		for _, raw := range ifaces {
+			if iface, ok := raw.(map[string]any); ok {
+				name, _ := iface["name"].(string)
+				byName[name] = iface
+			}
+		}
+		for _, name := range []string{"eno1", "eno2", "bond0", "bond0.140", "bond0.141"} {
+			iface, ok := byName[name]
+			if !ok {
+				t.Fatalf("component %v desiredState missing interface %q; the post-install apply needs the whole document", component["name"], name)
+			}
+			if got := fmt.Sprint(iface["mtu"]); got != "9000" {
+				t.Fatalf("component %v desiredState interface %q mtu = %v, want 9000 (nmstate sets the MTU the kickstart cannot)", component["name"], name, iface["mtu"])
+			}
+		}
+		if got := firstDesiredStateIPv4(byName["bond0.141"]); !strings.HasPrefix(got, "192.168.141.") {
+			t.Fatalf("component %v desiredState cluster VLAN bond0.141 IP = %q, want a 192.168.141.x cluster address", component["name"], got)
 		}
 
 		// A bare-metal node mounts its managed-OS install ISO over the BMC, so
@@ -140,4 +161,23 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 			}
 		}
 	}
+}
+
+// firstDesiredStateIPv4 returns the first IPv4 address of a rendered nmstate
+// interface, or "" if it carries none.
+func firstDesiredStateIPv4(iface map[string]any) string {
+	v4, ok := iface["ipv4"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	addrs, ok := v4["address"].([]any)
+	if !ok || len(addrs) == 0 {
+		return ""
+	}
+	addr, ok := addrs[0].(map[string]any)
+	if !ok {
+		return ""
+	}
+	ip, _ := addr["ip"].(string)
+	return ip
 }
