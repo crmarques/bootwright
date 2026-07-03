@@ -142,7 +142,8 @@
   ansible.builtin.set_fact:
     bootwright_ceph_owned_osd_devices: >-
       {{ bootwright_ceph_osd_marker_doc.devices | default([])
-         if (bootwright_ceph_osd_marker_doc.cluster | default('') == bootwright_selected_storage_cluster.name
+         if (bootwright_ceph_osd_marker_doc.manager | default('') == 'bootwright'
+             and bootwright_ceph_osd_marker_doc.cluster | default('') == bootwright_selected_storage_cluster.name
              and bootwright_ceph_osd_marker_doc.node | default('') == bootwright_current_storage_host.hostname)
          else [] }}
   vars:

@@ -528,9 +528,29 @@ func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_recorded_osd_devices") {
 		t.Fatalf("OSD device guard must require declared devices to be in the recorded set, got %v", refuse["that"])
 	}
-	// Marker-gated so a cluster provisioned before this guard still destroys.
-	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "content is defined") {
-		t.Fatalf("OSD device guard must fall back when no marker exists, got %v", tasks[refuseIdx]["when"])
+	// Gated on marker validity so a cluster provisioned before this guard still
+	// destroys (validity defaults false when no marker exists → fall back to the
+	// shape/mount checks).
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_osd_marker_valid") {
+		t.Fatalf("OSD device guard must be gated on marker validity so it falls back when no marker exists, got %v", tasks[refuseIdx]["when"])
+	}
+	// Validity requires a Bootwright marker for THIS cluster and node, mirroring the
+	// install gate: a stale/foreign marker must not seed the wipe-allowlist.
+	resolve := tasks[findAnsibleTask(t, tasks, "Resolve recorded Bootwright OSD devices")]
+	facts, ok := resolve["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("recorded-device resolution must be a set_fact, got %v", resolve)
+	}
+	valid := fmt.Sprint(facts["bootwright_ceph_osd_marker_valid"])
+	for _, want := range []string{"manager", "'bootwright'", "bootwright_selected_storage_cluster.name", "bootwright_current_storage_host.hostname"} {
+		if !strings.Contains(valid, want) {
+			t.Fatalf("marker validity must require %s (manager+cluster+node), got %v", want, facts["bootwright_ceph_osd_marker_valid"])
+		}
+	}
+	// The validity fact is only computed when a marker is present, so no marker
+	// leaves it unset → default false → the guard falls back rather than refusing.
+	if got := fmt.Sprint(resolve["when"]); !strings.Contains(got, "content is defined") {
+		t.Fatalf("recorded-device resolution must be gated on a present marker, got %v", resolve["when"])
 	}
 }
 
