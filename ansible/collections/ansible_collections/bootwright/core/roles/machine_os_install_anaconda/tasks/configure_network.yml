@@ -6,12 +6,18 @@
 # bond+VLAN line cannot set. nmstate is present because the renderer injects it
 # into the install packages whenever a desired state exists.
 #
-# The apply is rollback-guarded. `nmstatectl apply --no-commit --timeout` stages
-# the new state behind a NetworkManager checkpoint that auto-reverts if it is not
-# committed within the window; the commit is a SEPARATE controller->node SSH call,
-# so if the reconfigure severs our control path the commit never lands and the node
-# rolls back to the working network on its own. This runs every converge (fresh
-# install or already-owned node) and reconciles drift idempotently.
+# The apply is rollback-guarded. `nmstatectl apply --no-commit --timeout` stages the
+# new state behind a NetworkManager checkpoint that auto-reverts if it is not
+# committed within the window. The checkpoint is owned by the NM daemon (not the
+# nmstatectl process or its D-Bus/SSH connection - NM has no rollback-on-disconnect),
+# so it survives session #1 closing and a SEPARATE controller->node SSH commits it:
+# if the reconfigure severs our control path the commit never lands and the node
+# rolls back on its own. nmstate also verifies the applied state (including MTU on
+# every layer) and self-rolls-back on verification failure, so a bad apply fails
+# here rather than landing a wrong network. nmstate rejects overlapping checkpoints,
+# so we roll back any stale checkpoint from an interrupted prior run before staging.
+# This runs every converge (fresh install or already-owned node) and reconciles
+# drift idempotently. Requires root + the NetworkManager backend (never --kernel).
 
 - name: Stage managed OS desired network state on the controller
   ansible.builtin.copy:
@@ -40,7 +46,7 @@
       )
       scp "${ssh_common[@]}" "$src" "$dest":/root/bootwright-nmstate.yml || exit 1
       exec ssh "${ssh_common[@]}" "$dest" \
-        'command -v nmstatectl >/dev/null 2>&1 || { echo "nmstatectl (nmstate package) is required on the managed OS" >&2; exit 2; }; nmstatectl apply --no-commit --timeout {{ bootwright_managed_os_nmstate_timeout | default(120) | int }} /root/bootwright-nmstate.yml'
+        'command -v nmstatectl >/dev/null 2>&1 || { echo "nmstatectl (nmstate package) is required on the managed OS" >&2; exit 2; }; nmstatectl rollback >/dev/null 2>&1 || true; nmstatectl apply --no-commit --timeout {{ bootwright_managed_os_nmstate_timeout | default(120) | int }} /root/bootwright-nmstate.yml'
   delegate_to: localhost
   register: bootwright_os_nmstate_apply
   changed_when: false
