@@ -140,6 +140,12 @@
         mode: "0644"
       register: bootwright_os_source_identity
 
+    # The source ISO is shared across every machine in the OS group, so only
+    # re-hash it when this run actually (re)staged it: get_url already verified
+    # the checksum on download and copy verified src==dest by hash, so re-hashing
+    # an unchanged multi-GB shared ISO once per machine adds no integrity, only
+    # minutes of serialized controller I/O. The rebuild-needed logic below keys
+    # off the same changed flags, so this stays consistent with it.
     - name: Verify managed ISO checksum
       ansible.builtin.command:
         argv:
@@ -147,14 +153,20 @@
           - "{{ bootwright_os_source_iso_effective }}"
       register: bootwright_os_source_sha256
       changed_when: false
-      when: (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+      when:
+        - (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+        - bootwright_os_source_copy.changed | default(false)
+          or bootwright_os_source_download.changed | default(false)
+          or bootwright_os_source_identity.changed | default(false)
 
     - name: Assert managed ISO checksum
       ansible.builtin.assert:
         that:
           - (bootwright_os_source_sha256.stdout.split()[0] | lower) == (bootwright_component.osInstall.image.checksum | lower | regex_replace('^sha256:', ''))
         fail_msg: "managed ISO checksum mismatch for {{ bootwright_component.osInstall.image.original }}"
-      when: (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+      when:
+        - (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+        - not (bootwright_os_source_sha256.skipped | default(false) | bool)
 
     - name: Render managed OS Kickstart
       ansible.builtin.template:
