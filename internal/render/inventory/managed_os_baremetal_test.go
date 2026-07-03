@@ -141,6 +141,28 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 			t.Fatalf("component %v desiredState cluster VLAN bond0.141 IP = %q, want a 192.168.141.x cluster address", component["name"], got)
 		}
 
+		// Each ethernet port carries the machine's authored (permanent) MAC and is
+		// marked identifier: mac-address. Applied to the already-running OS, every
+		// bond member's running MAC is the shared bond MAC, so verifying an authored
+		// permanent MAC by kernel name always fails and rolls the apply back; MAC
+		// identity makes nmstate match on the permanent MAC and verify the in-config
+		// value instead. The bond and VLAN layers own no MAC, so they must NOT be
+		// marked - identifier: mac-address requires a mac-address match key.
+		for _, name := range []string{"eno1", "eno2"} {
+			iface := byName[name]
+			if got, _ := iface["mac-address"].(string); got == "" {
+				t.Fatalf("component %v desiredState ethernet %q missing mac-address; identifier: mac-address needs it as the match key", component["name"], name)
+			}
+			if got := iface["identifier"]; got != "mac-address" {
+				t.Fatalf("component %v desiredState ethernet %q identifier = %v, want mac-address so a bonded port verifies against its permanent MAC not the bond MAC", component["name"], name, got)
+			}
+		}
+		for _, name := range []string{"bond0", "bond0.140", "bond0.141"} {
+			if got, present := byName[name]["identifier"]; present {
+				t.Fatalf("component %v desiredState %q identifier = %v, want none (no mac-address to match on)", component["name"], name, got)
+			}
+		}
+
 		// A bare-metal node mounts its managed-OS install ISO over the BMC, so
 		// the install ISO is published through the artifact server for Redfish
 		// virtual media. A StorageCluster cannot author spec.install.artifactAccess,

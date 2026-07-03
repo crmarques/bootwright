@@ -45,7 +45,49 @@ func machineInstallNetworkVars(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 // every interface, VLAN, route, and MTU the desired state declares is realized -
 // nmstate sets the bond MTU the kickstart's merged bond+VLAN line cannot.
 func machineInstallDesiredNetwork(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
-	return installer.AgentNetworkConfig(state, ci, m, clusterName)
+	config := installer.AgentNetworkConfig(state, ci, m, clusterName)
+	markEthernetMACIdentity(config)
+	return config
+}
+
+// markEthernetMACIdentity sets `identifier: mac-address` on every ethernet
+// interface that carries a mac-address, so the post-install `nmstatectl apply`
+// binds those ports to their permanent MAC instead of by kernel name.
+//
+// AgentNetworkConfig stamps each ethernet port with the machine's authored
+// (permanent) hardware MAC. Under nmstate's default name-based identity that MAC
+// is a desired property nmstate verifies against the port's *running* MAC after
+// apply. But every port enslaved into an active-backup bond has its running MAC
+// overwritten to the bond's shared MAC at enslavement, so the running MAC of each
+// member (the bond MAC) never equals its authored permanent MAC and the verify
+// step fails - `nmstatectl apply --no-commit` rolls the whole document back.
+// `identifier: mac-address` matches the port by its permanent MAC (stable and
+// what the machine authored) and, per nmstate's bond-attach fix, verifies against
+// the in-config MAC rather than the bond-overwritten running one, so the bonded
+// case converges. It does not rename the kernel interface (the name becomes the
+// NM profile id), so it introduces no link flap on the already-running OS.
+//
+// This is scoped to the managed-OS document: the OCP agent-config path consumes
+// AgentNetworkConfig directly and the map here is a fresh per-call clone, so the
+// added field never reaches agent-config.yaml.
+func markEthernetMACIdentity(config map[string]any) {
+	interfaces, ok := config["interfaces"].([]any)
+	if !ok {
+		return
+	}
+	for _, item := range interfaces {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if typ, _ := entry["type"].(string); typ != "ethernet" {
+			continue
+		}
+		if mac, _ := entry["mac-address"].(string); mac == "" {
+			continue
+		}
+		entry["identifier"] = "mac-address"
+	}
 }
 
 func kickstartPrimaryInterface(config map[string]any) map[string]any {
