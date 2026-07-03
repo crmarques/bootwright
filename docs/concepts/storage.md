@@ -272,6 +272,22 @@ cephadm drivegroup device filter:
     - Address fleet disks by `model`/`vendor` rather than `/dev` paths, which can
       reorder across boots.
 
+!!! warning "Stable device addressing"
+    Kernel `/dev/sdX` / `/dev/vdX` names are **not stable** — they can reorder
+    across boots, so a name recorded on one boot may point at a different disk on
+    the next. Bootwright's OSD ownership marker and the empty-device / destroy
+    gates key on the **literal** path string, so an unstable name can make them
+    reason about the wrong disk. For explicitly-addressed OSDs prefer a stable
+    path — `/dev/disk/by-id/...`, `/dev/disk/by-path/...`, or a `wwn-...` link —
+    which is accepted anywhere a path is (`devices[]`, `dataDevices.paths`,
+    `pathSpecs[].path`). For homogeneous fleets, a `model`/`vendor`/`size`/
+    `rotational` filter avoids per-disk paths entirely.
+
+    There is deliberately **no `wwn`/`serial` filter field** — the selector
+    filters mirror cephadm exactly (`model`, `vendor`, `rotational`, `size`,
+    `limit`). Per-disk stable selection is expressed as a `/dev/disk/by-id` or
+    `wwn` **path** in `paths`/`pathSpecs`, not as a filter.
+
 #### Stretch mode
 
 Authoring the `stretch` block is the enablement signal — its presence turns on
