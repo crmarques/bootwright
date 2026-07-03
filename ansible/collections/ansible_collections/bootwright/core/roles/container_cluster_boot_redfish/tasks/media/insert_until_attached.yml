@@ -1,0 +1,29 @@
+---
+# Tail-recursive retry wrapper for the Redfish virtual-media InsertMedia
+# transaction. media_insert.yml seeds bootwright_redfish_insert_media_attempt
+# to 1 and includes this file once. Each attempt is the multi-step transaction
+# in insert_attempt.yml (eject/sleep only when attempt > 1, fresh If-Match
+# re-GET every attempt, capture-once VerifyCertificate, canonical InsertMedia
+# body) -- left byte-identical here. Recursing re-checks the retry condition
+# only after an attempt completes, so a first-attempt success enqueues nothing
+# further and prints just this file's advance/recurse lines instead of a full
+# spare copy of insert_attempt.yml per unused loop iteration.
+#
+# Attempt accounting mirrors the previous range(1, retries + 1) loop: attempt
+# starts at 1, advances after a failed attempt, and recursion stops once the
+# advanced attempt exceeds insert_media_retries -- exactly insert_media_retries
+# total attempts.
+- name: Run Redfish virtual media insertion attempt
+  ansible.builtin.include_tasks: insert_attempt.yml
+
+- name: Advance Redfish virtual media insert attempt
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_media_attempt: "{{ (bootwright_redfish_insert_media_attempt | int) + 1 }}"
+  changed_when: false
+  when: not (bootwright_redfish_vmedia_attached | bool)
+
+- name: Retry Redfish virtual media insertion when not attached
+  ansible.builtin.include_tasks: insert_until_attached.yml
+  when:
+    - not (bootwright_redfish_vmedia_attached | bool)
+    - (bootwright_redfish_insert_media_attempt | int) <= (bootwright_redfish_insert_media_retries | int)

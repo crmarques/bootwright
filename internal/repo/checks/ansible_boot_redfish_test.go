@@ -530,8 +530,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 		t.Fatalf("%s must only run for boot actions, got when=%v", mediaTasks[insertDirectMediaIdx]["name"], got)
 	}
 	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject.yml")
-	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "../media/insert_attempt.yml")
-	assertIncludeTasksApplyWhen(t, powerTasks[retryInsertIdx], "not (bootwright_redfish_vmedia_attached | bool)")
+	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "../media/insert_until_attached.yml")
 	for _, idx := range []int{waitPowerOffIdx, waitPowerOnIdx} {
 		assertIncludeTasksFile(t, powerTasks[idx], "power_state_probe.yml")
 		assertIncludeTasksApplyWhen(t, powerTasks[idx], "not (bootwright_redfish_power_state_reached | bool)")
@@ -542,8 +541,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("%s must use configured power-state retries, got loop=%v", powerTasks[idx]["name"], powerTasks[idx]["loop"])
 		}
 	}
-	if got := powerTasks[retryInsertIdx]["when"]; got != "not (bootwright_redfish_vmedia_attached | bool)" {
-		t.Fatalf("virtual media retry loop must stop once attached, got when=%v", got)
+	if got := powerTasks[retryInsertIdx]["when"]; !stringListContains(got, "not (bootwright_redfish_vmedia_attached | bool)") {
+		t.Fatalf("virtual media retry must stop once attached, got when=%v", got)
 	}
 	initInsertFacts, ok := powerTasks[initInsertIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -559,8 +558,45 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("%s must honor direct backend attachment, missing %q in %v", powerTasks[initInsertIdx]["name"], want, initInsertFacts)
 		}
 	}
-	if got, ok := powerTasks[retryInsertIdx]["loop"].(string); !ok || !strings.Contains(got, "bootwright_redfish_insert_media_retries") {
-		t.Fatalf("virtual media retry loop must use configured retry count, got loop=%v", powerTasks[retryInsertIdx]["loop"])
+	if got := powerTasks[retryInsertIdx]["when"]; !stringListContains(got, "(bootwright_redfish_insert_media_retries | int) >= 1") {
+		t.Fatalf("virtual media retry must honor the configured retry count, got when=%v", powerTasks[retryInsertIdx]["when"])
+	}
+	if _, ok := powerTasks[retryInsertIdx]["loop"]; ok {
+		t.Fatalf("virtual media retry must not enqueue spare loop iterations, got loop=%v", powerTasks[retryInsertIdx]["loop"])
+	}
+	// The retry is tail-recursive: seed the attempt counter, then the wrapper
+	// re-includes itself only while unattached and within the retry budget, so a
+	// first-attempt success never enqueues (and prints as skipped) a spare copy of
+	// the insert_attempt transaction.
+	seedInsertIdx := findAnsibleTask(t, powerTasks, "Initialize Redfish virtual media insert attempt")
+	if seedInsertIdx > retryInsertIdx {
+		t.Fatalf("virtual media insert attempt counter must be seeded before the retry wrapper")
+	}
+	seedInsertFacts, ok := powerTasks[seedInsertIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || fmt.Sprint(seedInsertFacts["bootwright_redfish_insert_media_attempt"]) != "1" {
+		t.Fatalf("%s must seed bootwright_redfish_insert_media_attempt to 1, got %v", powerTasks[seedInsertIdx]["name"], powerTasks[seedInsertIdx]["ansible.builtin.set_fact"])
+	}
+	insertRetryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_until_attached.yml")
+	runAttemptIdx := findAnsibleTask(t, insertRetryTasks, "Run Redfish virtual media insertion attempt")
+	advanceAttemptIdx := findAnsibleTask(t, insertRetryTasks, "Advance Redfish virtual media insert attempt")
+	recurseAttemptIdx := findAnsibleTask(t, insertRetryTasks, "Retry Redfish virtual media insertion when not attached")
+	if !(runAttemptIdx < advanceAttemptIdx && advanceAttemptIdx < recurseAttemptIdx) {
+		t.Fatalf("insert retry wrapper must run an attempt, advance the counter, then recurse")
+	}
+	assertIncludeTasksFile(t, insertRetryTasks[runAttemptIdx], "insert_attempt.yml")
+	if _, ok := insertRetryTasks[runAttemptIdx]["when"]; ok {
+		t.Fatalf("insert retry wrapper must run each attempt unconditionally (the wrapper when gates recursion)")
+	}
+	advanceFacts, ok := insertRetryTasks[advanceAttemptIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(advanceFacts["bootwright_redfish_insert_media_attempt"]), "| int) + 1") {
+		t.Fatalf("%s must advance the attempt counter, got %v", insertRetryTasks[advanceAttemptIdx]["name"], insertRetryTasks[advanceAttemptIdx]["ansible.builtin.set_fact"])
+	}
+	if got := insertRetryTasks[advanceAttemptIdx]["when"]; got != "not (bootwright_redfish_vmedia_attached | bool)" {
+		t.Fatalf("%s must only advance while unattached, got when=%v", insertRetryTasks[advanceAttemptIdx]["name"], got)
+	}
+	assertIncludeTasksFile(t, insertRetryTasks[recurseAttemptIdx], "insert_until_attached.yml")
+	if got := insertRetryTasks[recurseAttemptIdx]["when"]; !stringListContains(got, "not (bootwright_redfish_vmedia_attached | bool)") || !stringListContains(got, "(bootwright_redfish_insert_media_attempt | int) <= (bootwright_redfish_insert_media_retries | int)") {
+		t.Fatalf("insert retry wrapper must recurse only while unattached and within the retry budget, got when=%v", got)
 	}
 	assertSleepCommand(t, insertAttemptTasks[retryDelayIdx], "{{ bootwright_redfish_insert_media_retry_delay_seconds }}")
 	assertSleepCommand(t, powerStateTasks[powerStateDelayIdx], "{{ bootwright_redfish_power_state_delay_seconds }}")

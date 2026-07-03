@@ -189,15 +189,23 @@
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
     - bootwright_component.boot.redfish.artifactCertificate.import | default(false) | bool
 
+# A looped include enqueues every iteration up front, so a first-attempt
+# success still prints all of insert_attempt.yml's tasks as skipped for each
+# spare loop item. Seed the attempt counter and enter the tail-recursive
+# wrapper instead: it re-evaluates the retry condition only after each attempt
+# finishes, so spare attempts are never enqueued. The retries >= 1 guard keeps
+# the current behavior for insert_media_retries: 0 (range(1, 1) ran zero
+# attempts and failed the assert below).
+- name: Initialize Redfish virtual media insert attempt
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_media_attempt: 1
+  changed_when: false
+
 - name: Retry Redfish virtual media insertion until attached
-  ansible.builtin.include_tasks:
-    file: ../media/insert_attempt.yml
-    apply:
-      when: not (bootwright_redfish_vmedia_attached | bool)
-  loop: "{{ range(1, (bootwright_redfish_insert_media_retries | int) + 1) | list }}"
-  loop_control:
-    loop_var: bootwright_redfish_insert_media_attempt
-  when: not (bootwright_redfish_vmedia_attached | bool)
+  ansible.builtin.include_tasks: ../media/insert_until_attached.yml
+  when:
+    - not (bootwright_redfish_vmedia_attached | bool)
+    - (bootwright_redfish_insert_media_retries | int) >= 1
 
 - name: Confirm agent ISO is attached as virtual media
   ansible.builtin.assert:
