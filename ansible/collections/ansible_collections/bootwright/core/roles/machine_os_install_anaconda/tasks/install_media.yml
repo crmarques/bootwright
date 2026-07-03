@@ -235,12 +235,24 @@
     # The source ISO is shared, but Kickstart, TMPDIR, and output ISO are
     # per-machine, so these builds can fan out under the task's Ansible forks.
     # Each active build still needs roughly one source ISO of scratch space.
+    # --rm-args rd.live.check strips the ISO media-check from every boot menu
+    # entry. RHEL's stock default entry is "Test this media & install", which
+    # runs rd.live.check: a full re-read + checksum of the whole ISO before
+    # Anaconda starts. Over BMC virtual media that adds many minutes for no real
+    # gain here -- the source ISO is already SHA-256 verified above (when a
+    # checksum is set) and every RPM is GPG-verified during the install, whereas
+    # rd.live.check only re-confirms the just-built ISO was read off the virtual
+    # CD without corruption (integrity, not authenticity; mkksiso re-implants its
+    # own md5 regardless). Dropping it lets the unattended kickstart install
+    # proceed promptly whichever menu entry the firmware auto-selects.
     - name: Build managed OS install ISO
       ansible.builtin.command:
         argv:
           - mkksiso
           - --ks
           - "{{ bootwright_os_kickstart_path }}"
+          - --rm-args
+          - rd.live.check
           - "{{ bootwright_os_source_iso_effective }}"
           - "{{ bootwright_os_install_iso }}"
       environment:
@@ -252,6 +264,8 @@
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
 
+    # See the media-check note on the no-cmdline build above: --rm-args
+    # rd.live.check drops the slow ISO media-check from every boot menu entry.
     - name: Build managed OS install ISO with kernel command line
       ansible.builtin.command:
         argv:
@@ -260,6 +274,8 @@
           - "{{ bootwright_os_kickstart_path }}"
           - --cmdline
           - "{{ bootwright_component.osInstall.installer.kernelArgs | join(' ') }}"
+          - --rm-args
+          - rd.live.check
           - "{{ bootwright_os_source_iso_effective }}"
           - "{{ bootwright_os_install_iso }}"
       environment:

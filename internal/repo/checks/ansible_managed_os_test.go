@@ -409,6 +409,14 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if stringListContains(buildCommand["argv"], "--cmdline") {
 		t.Fatalf("%s must not pass --cmdline for empty kernel args, got argv=%v", tasks[buildISOIdx]["name"], buildCommand["argv"])
 	}
+	// The media-check (rd.live.check) is stripped from every boot entry so the
+	// unattended install never runs the slow full-ISO checksum over BMC virtual
+	// media; the source ISO is already SHA-256 verified and RPMs are GPG-checked.
+	for _, want := range []string{"--rm-args", "rd.live.check"} {
+		if !stringListContains(buildCommand["argv"], want) {
+			t.Fatalf("%s must strip the ISO media-check via mkksiso --rm-args rd.live.check, missing %q: %v", tasks[buildISOIdx]["name"], want, buildCommand["argv"])
+		}
+	}
 	buildEnv, ok := tasks[buildISOIdx]["environment"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s must set mkksiso temp environment", tasks[buildISOIdx]["name"])
@@ -428,7 +436,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a command task", tasks[buildISOWithCmdlineIdx]["name"])
 	}
-	for _, want := range []string{"mkksiso", "--ks", "--cmdline", "bootwright_component.osInstall.installer.kernelArgs | join(' ')", "bootwright_os_source_iso_effective", "bootwright_os_install_iso"} {
+	for _, want := range []string{"mkksiso", "--ks", "--cmdline", "bootwright_component.osInstall.installer.kernelArgs | join(' ')", "--rm-args", "rd.live.check", "bootwright_os_source_iso_effective", "bootwright_os_install_iso"} {
 		if !strings.Contains(fmt.Sprint(buildWithCmdlineCommand["argv"]), want) {
 			t.Fatalf("%s argv missing %q: %v", tasks[buildISOWithCmdlineIdx]["name"], want, buildWithCmdlineCommand["argv"])
 		}
