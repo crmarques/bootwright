@@ -97,7 +97,7 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if packages["environment"] != "minimal" || packages["installWeakDeps"] != false || packages["excludeDocs"] != true {
 		t.Fatalf("kickstart package options = %v", packages)
 	}
-	if got := packages["install"].([]string); !reflect.DeepEqual(got, []string{"podman", "lvm2", "chrony", "firewalld"}) {
+	if got := packages["install"].([]string); !reflect.DeepEqual(got, []string{"podman", "lvm2", "chrony", "firewalld", "nmstate"}) {
 		t.Fatalf("kickstart packages.install = %v", got)
 	}
 	if got := packages["languages"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {

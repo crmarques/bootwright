@@ -677,6 +677,7 @@ func managedOSAnacondaTasks(t *testing.T) []map[string]any {
 		base+"probe_existing.yml",
 		base+"install_media.yml",
 		base+"wait.yml",
+		base+"configure_network.yml",
 		base+"marker.yml",
 		base+"ownership.yml",
 	)

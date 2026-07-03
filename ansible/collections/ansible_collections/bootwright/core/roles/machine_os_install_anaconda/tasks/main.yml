@@ -21,6 +21,14 @@
 - name: Wait for managed OS access
   ansible.builtin.import_tasks: wait.yml
 
+# The kickstart configures only the routed interface; apply the full desired-state
+# nmstate now that the node is up and SSH-verified. A dynamic include with the gate
+# on the include prints one skipped line for nodes with no desired network state
+# instead of pushing the guard onto every inner task.
+- name: Configure managed OS network
+  ansible.builtin.include_tasks: configure_network.yml
+  when: (bootwright_component.osInstall.network.desiredState | default({}) | length) > 0
+
 - name: Write managed OS marker
   ansible.builtin.import_tasks: marker.yml
   when: bootwright_managed_os_stamp_owned | default(true) | bool

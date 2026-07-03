@@ -102,15 +102,44 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		}
 		out["ssh"] = ssh
 	}
+	desiredNetwork := machineInstallDesiredNetwork(state, ci, m, clusterName)
+	// The post-install network task applies the desired state with nmstatectl, so
+	// the tool must be on the installed system. Inject it into the install package
+	// set before the marker is computed: adding a package is an install-content
+	// change, so it belongs in the marker (enabling post-install networking on an
+	// owned node re-triggers the install that lays nmstate down).
+	if len(desiredNetwork) > 0 {
+		ensureKickstartPackage(out, "nmstate")
+	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
-	// The post-install network is applied idempotently every run and is deliberately
-	// NOT part of the install marker: a network change re-applies nmstate as a day-2
-	// operation and must never force a destructive OS reinstall. Add it after the
-	// marker so it stays out of the marker hash.
-	if desired := machineInstallDesiredNetwork(state, ci, m, clusterName); len(desired) > 0 {
-		out["network"] = map[string]any{"desiredState": desired}
+	// The desired network state itself is applied idempotently every run and is
+	// deliberately NOT part of the install marker: a network change re-applies
+	// nmstate as a day-2 operation and must never force a destructive OS reinstall.
+	if len(desiredNetwork) > 0 {
+		out["network"] = map[string]any{"desiredState": desiredNetwork}
 	}
 	return out
+}
+
+// ensureKickstartPackage adds pkg to the kickstart install package list when not
+// already present, so a feature that needs a tool on the installed system can
+// require it without every MachineInstallProfile having to list it.
+func ensureKickstartPackage(osInstall map[string]any, pkg string) {
+	kickstart, ok := osInstall["kickstart"].(map[string]any)
+	if !ok {
+		return
+	}
+	packages, ok := kickstart["packages"].(map[string]any)
+	if !ok {
+		return
+	}
+	install, _ := packages["install"].([]string)
+	for _, existing := range install {
+		if existing == pkg {
+			return
+		}
+	}
+	packages["install"] = append(install, pkg)
 }
 
 func managedOSSSHUser(machine v1alpha1.Machine) string {

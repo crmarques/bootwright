@@ -1,0 +1,72 @@
+---
+# The install-time kickstart brought up only the routed interface - enough for
+# Anaconda to install and for the node to be reachable over SSH. Apply the full
+# desired-state nmstate now so nmstate realizes every interface, VLAN, route, and
+# MTU the desired state declares, including the bond MTU the kickstart's merged
+# bond+VLAN line cannot set. nmstate is present because the renderer injects it
+# into the install packages whenever a desired state exists.
+#
+# The apply is rollback-guarded. `nmstatectl apply --no-commit --timeout` stages
+# the new state behind a NetworkManager checkpoint that auto-reverts if it is not
+# committed within the window; the commit is a SEPARATE controller->node SSH call,
+# so if the reconfigure severs our control path the commit never lands and the node
+# rolls back to the working network on its own. This runs every converge (fresh
+# install or already-owned node) and reconciles drift idempotently.
+
+- name: Stage managed OS desired network state on the controller
+  ansible.builtin.copy:
+    dest: "{{ bootwright_os_install_root }}/nmstate.yml"
+    content: "{{ bootwright_component.osInstall.network.desiredState | to_nice_yaml }}"
+    owner: root
+    group: root
+    mode: "0600"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Apply managed OS network with nmstate under a rollback checkpoint
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
+      dest={{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }}
+      src={{ (bootwright_os_install_root ~ '/nmstate.yml') | quote }}
+      ssh_common=(
+        -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }}
+        -o BatchMode=yes
+        -o ConnectTimeout=10
+        -o StrictHostKeyChecking=yes
+        -o UserKnownHostsFile="$kh"
+      )
+      scp "${ssh_common[@]}" "$src" "$dest":/root/bootwright-nmstate.yml || exit 1
+      exec ssh "${ssh_common[@]}" "$dest" \
+        'command -v nmstatectl >/dev/null 2>&1 || { echo "nmstatectl (nmstate package) is required on the managed OS" >&2; exit 2; }; nmstatectl apply --no-commit --timeout {{ bootwright_managed_os_nmstate_timeout | default(120) | int }} /root/bootwright-nmstate.yml'
+  delegate_to: localhost
+  register: bootwright_os_nmstate_apply
+  changed_when: false
+  failed_when: bootwright_os_nmstate_apply.rc != 0
+
+# A fresh controller->node SSH: if the apply severed connectivity this fails fast
+# (ConnectTimeout) and the staged checkpoint auto-reverts, so the play fails loudly
+# instead of leaving the node on an unreachable network.
+- name: Commit managed OS network once connectivity is confirmed
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=10
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - "UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}"
+      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - nmstatectl
+      - commit
+  delegate_to: localhost
+  register: bootwright_os_nmstate_commit
+  changed_when: bootwright_os_nmstate_commit.rc == 0
+  failed_when: bootwright_os_nmstate_commit.rc != 0
