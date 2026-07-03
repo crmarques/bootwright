@@ -76,7 +76,37 @@
     fail_msg: "Storage node {{ bootwright_host_name }} needs at least 10 GiB free for /var/lib/containers or /var/lib."
   when: bootwright_host_storage_nodes | length > 0
 
-- name: Check declared storage OSD devices are empty
+# Mirror the apply-path device gate's ownership allowlist so preflight stops
+# false-failing a healthy Bootwright-owned cluster: after a successful apply the
+# OSD disks carry ceph-volume LVM, and this gate — the exact pre-apply check the
+# apply dry-run recommends — used to abort on that signature even though the very
+# next apply proceeds. Slurp the OSD-device ownership marker this host stamped;
+# trust its device list only when it is a Bootwright marker for one of this host's
+# declared storage nodes (a foreign or wrong-node marker is ignored, so we stay
+# fail-closed on genuinely foreign data). A machine is node-bound to one cluster,
+# so a marker whose node matches was written by that cluster.
+- name: Read Bootwright OSD device ownership marker for preflight
+  ansible.builtin.slurp:
+    src: /etc/bootwright/ceph-osd-devices.json
+  register: bootwright_preflight_osd_marker
+  become: true
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Resolve devices recorded as Bootwright OSDs on this host
+  ansible.builtin.set_fact:
+    bootwright_preflight_owned_osd_devices: >-
+      {{ bootwright_preflight_marker_doc.devices | default([])
+         if (bootwright_preflight_marker_doc.manager | default('') == 'bootwright'
+             and bootwright_preflight_marker_doc.node | default('')
+                 in (bootwright_host_storage_nodes | map(attribute='hostname') | list))
+         else [] }}
+  vars:
+    bootwright_preflight_marker_doc: "{{ bootwright_preflight_osd_marker.content | b64decode | from_json }}"
+  when: (bootwright_preflight_osd_marker | default({})).content is defined
+
+- name: Probe declared storage OSD devices for signatures
   ansible.builtin.command:
     argv:
       - wipefs
@@ -89,8 +119,33 @@
   become: true
   register: bootwright_preflight_storage_device
   changed_when: false
-  failed_when: bootwright_preflight_storage_device.rc != 0 or (bootwright_preflight_storage_device.stdout | trim | length > 0)
+  # Only a probe failure is fatal here; the empty-or-owned decision is the assert
+  # below, which distinguishes a missing device from a foreign-signed one.
+  failed_when: false
   loop: "{{ bootwright_host_storage_nodes | subelements('devices', skip_missing=True) }}"
   loop_control:
-    label: "{{ item.0.name }} {{ item.1 }}"
+    label: "{{ item.0.hostname }} {{ item.1 }}"
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Assert declared storage OSD devices are present, empty, or Bootwright-owned
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - (item.stdout | trim | length == 0) or (item.item.1 in (bootwright_preflight_owned_osd_devices | default([])))
+    fail_msg: >-
+      {{
+        ('Declared OSD device ' ~ item.item.1 ~ ' on ' ~ item.item.0.hostname
+         ~ ' could not be probed (wipefs rc=' ~ item.rc ~ '): '
+         ~ (item.stderr | default('') | trim)
+         ~ '. It may not exist on this host or the storage SSH user lacks privilege.')
+        if item.rc != 0
+        else
+        ('Declared OSD device ' ~ item.item.1 ~ ' on ' ~ item.item.0.hostname
+         ~ ' carries data signatures (' ~ (item.stdout | trim) ~ ') and is not recorded as a'
+         ~ ' Bootwright OSD device, so it holds foreign data. Wipe it, correct the declared'
+         ~ ' devices, or destroy the owning cluster before apply.')
+      }}
+  loop: "{{ bootwright_preflight_storage_device.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.0.hostname }} {{ item.item.1 }}"
   when: bootwright_host_storage_nodes | length > 0
