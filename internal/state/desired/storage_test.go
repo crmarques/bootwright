@@ -826,6 +826,74 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 	}
 }
 
+// TestStorageCephDevicePathValidation pins the per-entry OSD device-path checks:
+// each path must be a non-empty absolute /dev path and must not repeat, across
+// both the devices shorthand and the drivegroup dataDevices.paths/pathSpecs, so a
+// typo fails at the validate gate rather than at wipefs / ceph orch apply.
+func TestStorageCephDevicePathValidation(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.State)
+		want string
+	}{
+		{
+			name: "empty-shorthand-path",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{""}
+			},
+			want: `spec.ceph.topology.hosts[2].devices[0] must not be empty`,
+		},
+		{
+			name: "relative-shorthand-path",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{"sdb"}
+			},
+			want: `must be an absolute /dev path`,
+		},
+		{
+			name: "duplicate-shorthand-path",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{"/dev/sdb", "/dev/sdb"}
+			},
+			want: `is listed more than once`,
+		},
+		{
+			name: "duplicate-datadevices-path",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/sdb", "/dev/sdb"}},
+				}
+			},
+			want: `spec.ceph.topology.hosts[2].osd.dataDevices.paths[1] "/dev/sdb" is listed more than once`,
+		},
+		{
+			name: "by-id-path-passes",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{"/dev/disk/by-id/wwn-0x5000c500a"}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storageValidationState()
+			tc.edit(&state)
+			errs := validateStorage(state)
+			if tc.want == "" {
+				if len(errs) != 0 {
+					t.Fatalf("validateStorage returned errors: %v", errs)
+				}
+				return
+			}
+			got := strings.Join(errs, "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("validateStorage errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestStoragePoolTuningValidation covers the per-pool autoscaler / quota /
 // compression intents: enum and bounds checks against the native ceph vocabulary.
 func TestStoragePoolTuningValidation(t *testing.T) {

@@ -23,6 +23,7 @@ func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost, fle
 	if len(node.Devices) > 0 && !hasOSDRole {
 		errs = append(errs, fmt.Sprintf("%s.devices requires the %q role", owner, v1alpha1.StorageCephRoleOSD))
 	}
+	errs = append(errs, validateStorageDevicePaths(owner+".devices", node.Devices)...)
 	// A fleet drivegroup that covers this host owns its devices; the host then
 	// authors no per-host selection (and must not — see overlap detection).
 	if fleetCovered && (len(node.Devices) > 0 || node.OSD != nil) {
@@ -168,11 +169,16 @@ func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.Storag
 	if pathForms > 1 {
 		errs = append(errs, owner+" must set only one of paths or pathSpecs")
 	}
+	errs = append(errs, validateStorageDevicePaths(owner+".paths", selection.Paths)...)
+	pathSpecPaths := make([]string, 0, len(selection.PathSpecs))
 	for i, p := range selection.PathSpecs {
 		if p.Path == "" {
 			errs = append(errs, fmt.Sprintf("%s.pathSpecs[%d].path is required", owner, i))
+			continue
 		}
+		pathSpecPaths = append(pathSpecPaths, p.Path)
 	}
+	errs = append(errs, validateStorageDevicePaths(owner+".pathSpecs", pathSpecPaths)...)
 	selectsSomething := pathForms > 0 || selection.All || selection.Model != "" ||
 		selection.Vendor != "" || selection.Rotational != nil || selection.Size != "" || selection.Limit != 0
 	if !selectsSomething {
@@ -181,6 +187,34 @@ func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.Storag
 	errs = append(errs, validateStorageCephDeviceSize(owner+".size", selection.Size)...)
 	if selection.Limit < 0 {
 		errs = append(errs, owner+".limit must be non-negative")
+	}
+	return errs
+}
+
+// validateStorageDevicePaths checks each authored OSD block-device path so a
+// typo fails at the validate gate instead of much later at wipefs or `ceph orch
+// apply` with an opaque error: every entry must be a non-empty absolute /dev
+// path (permissive of /dev/disk/by-id, /dev/disk/by-path, /dev/mapper, and bare
+// kernel names alike), and no path may repeat within the list — the ownership
+// marker and the device-empty gates key on these strings, so a duplicate would
+// double-count and a relative/empty path would silently mismatch.
+func validateStorageDevicePaths(owner string, paths []string) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, path := range paths {
+		trimmed := strings.TrimSpace(path)
+		switch {
+		case trimmed == "":
+			errs = append(errs, fmt.Sprintf("%s[%d] must not be empty", owner, i))
+			continue
+		case !strings.HasPrefix(trimmed, "/dev/"):
+			errs = append(errs, fmt.Sprintf("%s[%d] %q must be an absolute /dev path (e.g. /dev/sdb or /dev/disk/by-id/...)", owner, i, path))
+			continue
+		}
+		if seen[trimmed] {
+			errs = append(errs, fmt.Sprintf("%s[%d] %q is listed more than once", owner, i, path))
+		}
+		seen[trimmed] = true
 	}
 	return errs
 }
