@@ -88,9 +88,13 @@
     bootwright_redfish_vmedia_member_urls: []
   changed_when: false
 
+# BMC dialects that expose the same VirtualMedia resources under both
+# /Systems/<id>/VirtualMedia and /Managers/<id>/VirtualMedia (iDRAC-style)
+# otherwise get every member probed twice; unique on the resolved URL string
+# drops those duplicate GETs. iBMC 404s the system view, so it is unaffected.
 - name: Collect Redfish VirtualMedia member URLs
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_member_urls: "{{ bootwright_redfish_vmedia_member_urls + [(item['@odata.id'] | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl))] }}"
+    bootwright_redfish_vmedia_member_urls: "{{ (bootwright_redfish_vmedia_member_urls + [item['@odata.id'] | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)]) | unique }}"
   loop: "{{ bootwright_redfish_vmedia_member_refs }}"
   changed_when: false
 
