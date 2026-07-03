@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"encoding/json"
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -76,6 +77,40 @@ func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.S
 	s.StorageNFSExports = nil
 	s.StorageExports = nil
 	return s
+}
+
+// storageClusterStructuralHashVars projects the DESTRUCTIVE-IDENTITY subset of a
+// StorageCluster's desired state: the full desired-hash projection with the OSD
+// device selection (hosts[].devices, hosts[].osd, and topology.osdDrivegroups)
+// cleared. When the full desired hash drifts but this structural hash is
+// unchanged, the only change is the OSD device selection — which cephadm
+// reconciles additively via `ceph orch apply` — so apply proceeds in place and
+// --override does not wipe. A change to cluster/bootstrap identity, host set,
+// roles, or networks moves this hash and stays a destructive rebuild. The device
+// fields are cleared on a JSON deep copy so the shared render state is never
+// mutated.
+func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha1.State {
+	base := storageClusterDesiredHashVars(state, name)
+	var clone v1alpha1.State
+	data, err := json.Marshal(base)
+	if err != nil {
+		return base
+	}
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return base
+	}
+	for i := range clone.StorageClusters {
+		ceph := clone.StorageClusters[i].Spec.Ceph
+		if ceph == nil {
+			continue
+		}
+		for j := range ceph.Topology.Hosts {
+			ceph.Topology.Hosts[j].Devices = nil
+			ceph.Topology.Hosts[j].OSD = nil
+		}
+		ceph.Topology.OSDDrivegroups = nil
+	}
+	return clone
 }
 
 func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {

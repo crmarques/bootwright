@@ -60,7 +60,15 @@ type ConvergeSafetyRecord struct {
 	TaskID       string                      `json:"taskID"`
 	TaskKind     string                      `json:"taskKind"`
 	DesiredHash  string                      `json:"desiredHash"`
-	Owner        ConvergeSafetyOwnerIdentity `json:"owner"`
+	// StructuralHash, when set, hashes only the destructive-identity portion of the
+	// desired state (for a StorageCluster: everything except the OSD device
+	// selection). When the full DesiredHash drifts but StructuralHash still matches,
+	// the drift is reconcilable in place (a device add) rather than a destructive
+	// rebuild, so apply proceeds and --override does not wipe. Empty on records
+	// written before this field existed and on tasks that set no structural
+	// projection — both fall back to treating any drift as structural (fail-safe).
+	StructuralHash string                      `json:"structuralHash,omitempty"`
+	Owner          ConvergeSafetyOwnerIdentity `json:"owner"`
 	Observation  ConvergeSafetyObservation   `json:"observation"`
 	Status       ConvergeSafetyStatus        `json:"status"`
 	RunID        string                      `json:"runID,omitempty"`
@@ -177,14 +185,19 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 	if err != nil {
 		return err
 	}
+	structuralHash, err := ApplyTaskStructuralHash(task)
+	if err != nil {
+		return err
+	}
 	resourceID := applyTaskSafetyResourceID(task)
 	record := ConvergeSafetyRecord{
-		APIVersion:   ConvergeSafetyAPIVersion,
-		ResourceID:   resourceID,
-		ResourceKind: task.Entry.Kind,
-		TaskID:       task.Entry.ID,
-		TaskKind:     task.Entry.Kind,
-		DesiredHash:  desiredHash,
+		APIVersion:     ConvergeSafetyAPIVersion,
+		ResourceID:     resourceID,
+		ResourceKind:   task.Entry.Kind,
+		TaskID:         task.Entry.ID,
+		TaskKind:       task.Entry.Kind,
+		DesiredHash:    desiredHash,
+		StructuralHash: structuralHash,
 		Owner: ConvergeSafetyOwnerIdentity{
 			Manager: ConvergeSafetyOwner,
 			Context: effectiveContextName(contextName),
@@ -244,6 +257,50 @@ func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	}
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// ApplyTaskStructuralHash hashes the task's structural desired-state projection —
+// the destructive-identity subset that, when unchanged, makes a DesiredHash drift
+// reconcilable in place rather than a rebuild. Returns "" when the task sets no
+// structural projection (every non-storage task today), so such tasks never
+// classify as reconcilable drift.
+func ApplyTaskStructuralHash(task ApplyTask) (string, error) {
+	if task.StructuralHashVars == nil {
+		return "", nil
+	}
+	payload := struct {
+		APIVersion     string `json:"apiVersion"`
+		TaskID         string `json:"taskID"`
+		TaskKind       string `json:"taskKind"`
+		StructuralVars any    `json:"structuralVars"`
+	}{
+		APIVersion:     v1alpha1.APIVersion,
+		TaskID:         task.Entry.ID,
+		TaskKind:       task.Entry.Kind,
+		StructuralVars: task.StructuralHashVars,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encode apply task structural hash input: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// IsReconcilableDrift reports whether a drifted record's drift is reconcilable in
+// place: the full desired hash changed but the structural hash is unchanged (a
+// StorageCluster OSD-device add, not a cluster rebuild). An empty structural hash
+// on either side — a task with no structural projection, or a record written
+// before the field existed — is never reconcilable, so the drift falls back to
+// structural (fail-safe: apply still refuses, --override still rebuilds).
+func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHash string) bool {
+	if record.DesiredHash == desiredHash {
+		return false
+	}
+	if strings.TrimSpace(structuralHash) == "" || strings.TrimSpace(record.StructuralHash) == "" {
+		return false
+	}
+	return record.StructuralHash == structuralHash
 }
 
 func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManager string) ConvergeSafetyClassification {

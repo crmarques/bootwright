@@ -111,9 +111,15 @@ type ApplyTask struct {
 	// set it to the host's rendered fabric vars so state-check does not report
 	// drift when an unrelated part of the fleet changes. Other tasks leave it nil
 	// and continue to hash State.
-	DesiredHashVars   any
-	Extension         *extensionplan.ExtensionPlan
-	StorageAttachment *StorageAttachmentPlan
+	DesiredHashVars any
+	// StructuralHashVars, when set, is the destructive-identity subset of the
+	// desired state (for a StorageCluster: everything except the OSD device
+	// selection). ApplyTaskStructuralHash hashes it into the record's StructuralHash
+	// so a DesiredHash drift whose structural hash is unchanged classifies as
+	// reconcilable-in-place (a device add) rather than a destructive rebuild.
+	StructuralHashVars any
+	Extension          *extensionplan.ExtensionPlan
+	StorageAttachment  *StorageAttachmentPlan
 }
 
 type applyTaskResult struct {

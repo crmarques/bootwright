@@ -18,9 +18,18 @@ type ObjectClassification struct {
 	// Class is the single most actionable classification for display, chosen with
 	// precedence foreign > drift > missing > match. The aggregate decisions the
 	// preflight makes use the predicate methods below, not this label.
-	Class   ConvergeSafetyClassification         `json:"class"`
-	counts  map[ConvergeSafetyClassification]int `json:"-"`
-	TaskIDs []string                             `json:"taskIDs,omitempty"`
+	Class ConvergeSafetyClassification         `json:"class"`
+	counts map[ConvergeSafetyClassification]int `json:"-"`
+	// reconcilable counts the drifted backing tasks whose drift is reconcilable in
+	// place (a StorageCluster OSD-device add: full hash changed, structural hash
+	// unchanged) rather than a destructive rebuild. HasStructuralDrift subtracts
+	// these so continue-mode proceeds and --override does not wipe on a device add.
+	reconcilable int
+	// Reconcilable is the JSON view of whether all drift on this object is
+	// reconcilable in place — surfaced so plan/state-check can distinguish an
+	// in-place OSD reconcile from a destructive rebuild.
+	Reconcilable bool     `json:"reconcilable,omitempty"`
+	TaskIDs      []string `json:"taskIDs,omitempty"`
 }
 
 // Recorded reports whether any backing task carries a converge-safety record
@@ -32,6 +41,18 @@ func (o ObjectClassification) Recorded() bool {
 
 // HasDrift reports whether any backing task drifted from its recorded desired state.
 func (o ObjectClassification) HasDrift() bool { return o.counts[ConvergeSafetyDrift] > 0 }
+
+// HasStructuralDrift reports whether any drift is a destructive-identity change
+// (not a reconcilable-in-place OSD-device edit). It drives the continue-mode
+// refusal and the --override rebuild: a device-only drift is neither refused nor
+// wiped. Reconcilable drift with no structural component is excluded.
+func (o ObjectClassification) HasStructuralDrift() bool {
+	return o.counts[ConvergeSafetyDrift]-o.reconcilable > 0
+}
+
+// HasReconcilableDrift reports whether any drift is reconcilable in place — a
+// StorageCluster OSD-device add that `ceph orch apply` converges without a rebuild.
+func (o ObjectClassification) HasReconcilableDrift() bool { return o.reconcilable > 0 }
 
 // HasForeign reports whether any backing task was recorded by another manager.
 func (o ObjectClassification) HasForeign() bool { return o.counts[ConvergeSafetyForeign] > 0 }
@@ -68,7 +89,7 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassification, error) {
 	order := make([]string, 0, len(tasks))
 	objs := map[string]*ObjectClassification{}
-	add := func(kind, key, label string, class ConvergeSafetyClassification, taskID string) {
+	add := func(kind, key, label string, class ConvergeSafetyClassification, reconcilable bool, taskID string) {
 		o := objs[key]
 		if o == nil {
 			o = &ObjectClassification{ObjectKey: key, Kind: kind, Label: label, counts: map[ConvergeSafetyClassification]int{}}
@@ -76,6 +97,9 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 			order = append(order, key)
 		}
 		o.counts[class]++
+		if reconcilable {
+			o.reconcilable++
+		}
 		if taskID != "" {
 			o.TaskIDs = append(o.TaskIDs, taskID)
 		}
@@ -87,7 +111,11 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		if err != nil {
 			return nil, err
 		}
-		add(kind, key, label, class, task.Entry.ID)
+		reconcilable, err := applyTaskReconcilableDrift(task, runsDir)
+		if err != nil {
+			return nil, err
+		}
+		add(kind, key, label, class, reconcilable, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
 			expandedStorage[task.Entry.Cluster] = true
 			for _, sub := range storageSubObjects(task.State, task.Entry.Cluster) {
@@ -95,7 +123,7 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 				if err != nil {
 					return nil, err
 				}
-				add(sub.Kind, sub.resourceID(), sub.resourceID(), subClass, "")
+				add(sub.Kind, sub.resourceID(), sub.resourceID(), subClass, false, "")
 			}
 		}
 	}
@@ -103,9 +131,34 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 	for _, key := range order {
 		o := objs[key]
 		o.Class = objectDisplayClass(o.counts)
+		o.Reconcilable = o.HasReconcilableDrift() && !o.HasStructuralDrift()
 		out = append(out, *o)
 	}
 	return out, nil
+}
+
+// applyTaskReconcilableDrift reports whether a task's drift (if any) is
+// reconcilable in place — the full desired hash changed but the structural hash
+// is unchanged (a StorageCluster OSD-device add). A missing, foreign, matching,
+// or structural-hash-less task is never reconcilable. Kept separate from
+// classifyApplyTaskState so that primitive's signature (and its callers) stay put.
+func applyTaskReconcilableDrift(task ApplyTask, runsDir string) (bool, error) {
+	structuralHash, err := ApplyTaskStructuralHash(task)
+	if err != nil {
+		return false, err
+	}
+	if structuralHash == "" {
+		return false, nil
+	}
+	desiredHash, err := ApplyTaskDesiredHash(task)
+	if err != nil {
+		return false, err
+	}
+	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+	if err != nil || !found {
+		return false, err
+	}
+	return IsReconcilableDrift(record, desiredHash, structuralHash), nil
 }
 
 // objectDisplayClass picks the most actionable label for an object aggregated from

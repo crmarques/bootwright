@@ -33,13 +33,17 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 	case ApplyModeContinue:
 		var differ []ObjectClassification
 		for _, o := range objects {
-			if o.HasForeign() || o.HasDrift() {
+			// Reconcilable drift (a StorageCluster OSD-device add) is NOT refused:
+			// `ceph orch apply` converges it in place on this same run, so continue
+			// proceeds. Only foreign ownership or a destructive-identity (structural)
+			// drift blocks continue.
+			if o.HasForeign() || o.HasStructuralDrift() {
 				differ = append(differ, o)
 			}
 		}
 		if len(differ) > 0 {
 			msg := fmt.Sprintf("apply refuses to mutate objects that differ from their recorded desired state: %s; align the desired state, or run `bootwright apply --override` to rebuild drifted objects (foreign objects are never rebuilt)", summarizeApplyObjects(differ))
-			if driftsStorageCluster(differ) {
+			if driftsStorageClusterStructurally(differ) {
 				msg += ". Note: --override on a drifted StorageCluster runs `cephadm rm-cluster --zap-osds` and DESTROYS all OSD data before re-bootstrapping — it is a wipe-and-rebuild, not an in-place edit"
 			}
 			return fmt.Errorf("%s", msg)
@@ -58,13 +62,14 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 	return nil
 }
 
-// driftsStorageCluster reports whether any differing object is a StorageCluster,
-// so the continue-mode refusal can warn that its --override rebuild is a
-// data-destroying wipe rather than the in-place edit "rebuild drifted objects"
-// implies for a fabric or add-on object.
-func driftsStorageCluster(objs []ObjectClassification) bool {
+// driftsStorageClusterStructurally reports whether any differing object is a
+// StorageCluster with destructive (structural) drift, so the continue-mode
+// refusal can warn that its --override rebuild is a data-destroying wipe rather
+// than the in-place edit "rebuild drifted objects" implies for a fabric or add-on
+// object. A device-only (reconcilable) drift never reaches this refusal.
+func driftsStorageClusterStructurally(objs []ObjectClassification) bool {
 	for _, o := range objs {
-		if o.Kind == ApplyTaskKindStorageCluster && o.HasDrift() {
+		if o.Kind == ApplyTaskKindStorageCluster && o.HasStructuralDrift() {
 			return true
 		}
 	}
@@ -97,16 +102,18 @@ var overrideReconfigureOnlyKinds = map[string]bool{
 }
 
 // OverrideDestructiveDriftedObjects returns the labels of the selected objects
-// whose --override rebuild would be destructive: drifted (recorded and changed,
-// so override rebuilds rather than creates) and of a kind that is not
-// reconfigure-only. The destroy-protection gate keys on this so a scoped apply
-// --override whose only drift is a reconfigure-only service does not need to cross
-// the destroy boundary, while one that would reinstall a VM or wipe a cluster
-// still does. Missing (greenfield) objects are never destructive and are excluded.
+// whose --override rebuild would be destructive: structurally drifted (recorded
+// and changed in its destructive identity, so override rebuilds rather than
+// creates) and of a kind that is not reconfigure-only. The destroy-protection
+// gate keys on this so a scoped apply --override whose only drift is a
+// reconfigure-only service, or a reconcilable-in-place StorageCluster OSD-device
+// add, does not need to cross the destroy boundary, while one that would reinstall
+// a VM or wipe a cluster still does. Missing (greenfield) objects are never
+// destructive and are excluded.
 func OverrideDestructiveDriftedObjects(objects []ObjectClassification) []string {
 	var labels []string
 	for _, o := range objects {
-		if !o.HasDrift() || overrideReconfigureOnlyKinds[o.Kind] {
+		if !o.HasStructuralDrift() || overrideReconfigureOnlyKinds[o.Kind] {
 			continue
 		}
 		labels = append(labels, o.Label)
