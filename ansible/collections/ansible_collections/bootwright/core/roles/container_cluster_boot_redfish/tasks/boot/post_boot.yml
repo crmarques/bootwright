@@ -20,6 +20,30 @@
       at another host. Check Redfish virtual media, boot order, and
       InfraProvider baremetal.interfaces for {{ bootwright_component.name }}.
 
+- name: Resolve subsequent disk boot override need
+  ansible.builtin.set_fact:
+    bootwright_redfish_disk_boot_override_enabled: >-
+      {{
+        (bootwright_component.boot.redfish.setBootSource | default(true) | bool)
+        and (((bootwright_component.boot.readiness | default({})).type | default('ssh')) == 'ssh')
+      }}
+  changed_when: false
+
+# Forcing Continuous/Hdd is only safe once the live ISO has positively booted:
+# the BMC reports PowerState=On the instant chassis power applies, minutes
+# before UEFI reads the one-time Once/Cd override during POST. On the agent-ISO
+# path (readiness.type=ssh) the SSH probe above blocks until the live ISO's sshd
+# answers, so Once/Cd is long consumed before this PATCH lands. The managed-OS
+# (Anaconda) path renders readiness.type=none because the installer environment
+# has no reachable sshd, so the probe is a no-op and this PATCH would otherwise
+# fire ~1-2s after power-on. An iBMC that reads BootSourceOverride live during
+# POST then overwrites the pending Once/Cd with Hdd -> the node boots its
+# existing disk, Anaconda never runs, and the foreign OS answers SSH later at the
+# auth check. So skip the disk override when there was no readiness gate to prove
+# the ISO booted: Once/Cd self-clears after the single install boot, the fresh
+# install's own UEFI boot entry takes precedence, and wait.yml ejects the media.
+# Also honor setBootSource: when boot source is externally managed we never set
+# Once/Cd, so we must not force Hdd either.
 - name: Refresh Redfish system metadata before disk boot override
   ansible.builtin.uri:
     url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
@@ -30,6 +54,7 @@
   failed_when: false
   changed_when: false
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+  when: bootwright_redfish_disk_boot_override_enabled | bool
 
 - name: Resolve Redfish system PATCH precondition
   ansible.builtin.set_fact:
@@ -41,6 +66,7 @@
         | default('*', true)
       }}
   changed_when: false
+  when: bootwright_redfish_disk_boot_override_enabled | bool
 
 - name: Set subsequent boots to disk after live ISO boot
   ansible.builtin.uri:
@@ -58,6 +84,7 @@
   failed_when: false
   changed_when: (bootwright_redfish_disk_boot_patch.status | default(0) | int) in [200, 202, 204]
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+  when: bootwright_redfish_disk_boot_override_enabled | bool
 
 - name: Confirm subsequent disk boot override was accepted
   ansible.builtin.assert:
@@ -72,3 +99,4 @@
     success_msg: >-
       Redfish subsequent disk boot override accepted for system
       {{ bootwright_redfish_system_id }}.
+  when: bootwright_redfish_disk_boot_override_enabled | bool

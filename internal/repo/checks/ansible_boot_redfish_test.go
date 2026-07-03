@@ -471,6 +471,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	waitSSHIdx := findAnsibleTask(t, readinessProbeTasks, "Wait for node SSH to confirm live ISO boot complete")
 	sshAuthIdx := findAnsibleTask(t, readinessProbeTasks, "Wait for node SSH to accept configured key")
 	sshAuthConfirmIdx := findAnsibleTask(t, readinessProbeTasks, "Confirm node SSH accepted configured key")
+	diskBootGateIdx := findAnsibleTask(t, postTasks, "Resolve subsequent disk boot override need")
 	diskBootRefreshIdx := findAnsibleTask(t, postTasks, "Refresh Redfish system metadata before disk boot override")
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")
@@ -515,10 +516,38 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(waitSSHIdx < sshAuthIdx && sshAuthIdx < sshAuthConfirmIdx) {
 		t.Fatalf("support_ssh_readiness must wait for the SSH port, probe auth, then confirm the key")
 	}
-	if !(sshReadinessIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
-		t.Fatalf("boot_redfish must verify SSH auth before switching subsequent boots back to disk")
+	if !(sshReadinessIdx < diskBootGateIdx && diskBootGateIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
+		t.Fatalf("boot_redfish must resolve the disk boot override gate after SSH readiness and before switching subsequent boots back to disk")
 	}
 	assertIncludeRoleName(t, postTasks[sshReadinessIdx], "bootwright.core.support_ssh_readiness")
+
+	// The subsequent-disk-boot override (Continuous/Hdd) must not fire on the
+	// managed-OS (Anaconda) path: it renders readiness.type=none, so the SSH
+	// probe above is a no-op and this PATCH would land ~1-2s after power-on --
+	// before UEFI consumes the one-time Once/Cd override -- clobbering it back to
+	// disk on an iBMC that reads BootSourceOverride live during POST, so Anaconda
+	// never boots. Gate every disk-override task on a fact that requires the SSH
+	// readiness gate (readiness.type=ssh) that proves the live ISO booted, and on
+	// setBootSource so externally-managed boot order is never forced to Hdd.
+	gateFacts, ok := postTasks[diskBootGateIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", postTasks[diskBootGateIdx]["name"])
+	}
+	gateExpr := fmt.Sprint(gateFacts["bootwright_redfish_disk_boot_override_enabled"])
+	for _, want := range []string{
+		"bootwright_component.boot.redfish.setBootSource | default(true) | bool",
+		"bootwright_component.boot.readiness | default({})",
+		"| default('ssh')) == 'ssh'",
+	} {
+		if !strings.Contains(gateExpr, want) {
+			t.Fatalf("disk boot override gate must derive from setBootSource and readiness type, missing %q: %s", want, gateExpr)
+		}
+	}
+	for _, idx := range []int{diskBootRefreshIdx, diskBootPreconditionIdx, diskBootIdx, diskBootConfirmIdx} {
+		if got := postTasks[idx]["when"]; got != "bootwright_redfish_disk_boot_override_enabled | bool" {
+			t.Fatalf("%s must be gated on bootwright_redfish_disk_boot_override_enabled, got when=%v", postTasks[idx]["name"], got)
+		}
+	}
 	if !(restoreVMediaRefreshIdx < restoreVMediaPreconditionIdx && restoreVMediaPreconditionIdx < restoreVMediaIdx && restoreVMediaIdx < restoreSecurityRefreshIdx && restoreSecurityRefreshIdx < restoreSecurityPreconditionIdx && restoreSecurityPreconditionIdx < restoreSecurityIdx) {
 		t.Fatalf("boot_redfish restore tasks must restore virtual media then SecurityService certificate verification")
 	}
