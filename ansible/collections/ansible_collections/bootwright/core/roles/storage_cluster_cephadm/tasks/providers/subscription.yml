@@ -59,6 +59,58 @@
     disable_gpg_check: true
   when: bootwright_ceph_rhsm_satellite_hostname | length > 0
 
+# Point subscription-manager at the egress proxy through /etc/rhsm/rhsm.conf, not
+# just the http(s)_proxy task environment. subscription-manager and the RHSM dnf
+# plugin drive the certificate-based RHEL repos in /etc/yum.repos.d/redhat.repo
+# from rhsm.conf's [server] proxy settings, ignoring the environment proxy that
+# carries every other dnf repo: with no proxy in rhsm.conf the plugin stamps
+# `proxy = _none_` into each RHEL repo, so on a proxied estate dnf tries the Red
+# Hat CDN directly and fails (baseos/appstream repomd.xml unreachable) while a
+# third-party vendor .repo still succeeds over the environment proxy. Writing the
+# proxy here fixes both registration and RHEL content fetches; the subsequent
+# refresh regenerates redhat.repo so the proxy takes effect before the vendor
+# license package pulls RHEL dependencies. noProxy hosts (an internal Satellite)
+# are honoured via server.no_proxy. Credentials land in root-owned rhsm.conf,
+# tightened to 0600 so the proxy password is not world-readable.
+#
+# The task always runs and converges the [server] proxy to its desired state:
+# the effective proxy when one is declared, blanked otherwise. Blanking a
+# now-absent proxy matters — a stale proxy left in rhsm.conf would force a
+# now-direct node through a dead proxy — and a change either way triggers the
+# refresh below so redhat.repo is regenerated to match.
+- name: Configure subscription-manager egress proxy
+  community.general.ini_file:
+    path: /etc/rhsm/rhsm.conf
+    section: server
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: root
+    group: root
+    mode: "{{ '0600' if (bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url) else '0644' }}"
+  loop: "{{ bootwright_ceph_rhsm_proxy_options }}"
+  loop_control:
+    label: "{{ item.option }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url }}"
+  register: bootwright_ceph_rhsm_proxy
+  vars:
+    bootwright_ceph_rhsm_proxy_on: "{{ bootwright_proxy_enabled | default(false) | bool }}"
+    bootwright_ceph_rhsm_proxy_creds: "{{ bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url }}"
+    bootwright_ceph_rhsm_proxy_url: >-
+      {{ bootwright_proxy_https if (bootwright_proxy_https | length) > 0 else bootwright_proxy_http }}
+    bootwright_ceph_rhsm_proxy_options:
+      - option: proxy_scheme
+        value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('scheme')) if bootwright_ceph_rhsm_proxy_on else '' }}"
+      - option: proxy_hostname
+        value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('hostname')) if bootwright_ceph_rhsm_proxy_on else '' }}"
+      - option: proxy_port
+        value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('port')) if bootwright_ceph_rhsm_proxy_on else '' }}"
+      - option: no_proxy
+        value: "{{ bootwright_proxy_no if bootwright_ceph_rhsm_proxy_on else '' }}"
+      - option: proxy_user
+        value: "{{ bootwright_proxy_credentials.username if bootwright_ceph_rhsm_proxy_creds else '' }}"
+      - option: proxy_password
+        value: "{{ bootwright_proxy_credentials.password if bootwright_ceph_rhsm_proxy_creds else '' }}"
+
 - name: Register storage node with RHSM
   # redhat_subscription checks the node's registration identity and only registers
   # when needed, instead of re-registering with --force on every apply (which
@@ -71,13 +123,17 @@
   register: bootwright_ceph_rhsm_register
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
+# Refresh after a fresh registration or a proxy change: refresh regenerates
+# redhat.repo, stamping the rhsm.conf proxy into the RHEL repos so the vendor
+# license install below (and every later RHEL dependency pull) reaches the CDN
+# through the proxy rather than the `_none_` direct path.
 - name: Refresh RHSM subscription metadata
   ansible.builtin.command:
     argv:
       - subscription-manager
       - refresh
-  changed_when: bootwright_ceph_rhsm_register is changed
-  when: bootwright_ceph_rhsm_register is changed
+  changed_when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed
+  when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed
 
 # subscription-manager register does not connect Red Hat Insights on its own;
 # honor the entitlement's connectToInsights intent explicitly when set, matching
