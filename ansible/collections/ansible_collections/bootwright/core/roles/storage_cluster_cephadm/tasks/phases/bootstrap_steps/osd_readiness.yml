@@ -1,0 +1,112 @@
+---
+# `ceph orch apply` registers the OSD drivegroups with the cephadm mgr and returns
+# immediately; cephadm then creates OSDs asynchronously through ceph-volume. Without
+# this poll a cluster that ends up with zero or fewer OSDs than declared — a busy,
+# undersized, or foreign-signed device, a ceph-volume refusal, an OSD image-pull or
+# SELinux failure — would report a green apply, and because the desired hash is
+# unchanged it would read 'match' on every later re-apply. Poll until the OSDs the
+# managed drivegroups should create are 'in', then fail closed with an actionable
+# message. Runs before topology_operations so pools/CRUSH/EC never land on a
+# zero-OSD cluster. Gates on num_in_osds (created and part of the cluster), not
+# num_up_osds, so a transiently-down OSD on a benign re-apply is not a false fail.
+#
+# The expectation is rendered from the declared OSD topology (osdReadiness):
+#   exact      — every managed OSD selection names explicit devices; expectedCount
+#                is the exact number of OSDs to expect.
+#   atLeastOne — a filter/all selection makes the count host-resolved; only '>0' is
+#                assertable.
+#   skip       — no managed OSD service creates OSDs (no osd host, or all unmanaged).
+- name: Resolve OSD readiness expectation
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_readiness_mode: >-
+      {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).mode | default('atLeastOne') }}
+    bootwright_ceph_osd_expected_count: >-
+      {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).expectedCount | default(0) | int }}
+
+- name: Report skipped OSD readiness check
+  ansible.builtin.debug:
+    msg: >-
+      Skipping OSD readiness check for {{ bootwright_selected_storage_cluster.name }}:
+      no managed OSD service actively creates OSDs (no osd-role host, or every OSD
+      service is unmanaged).
+  when: bootwright_ceph_osd_readiness_mode == 'skip'
+
+# Bounded, non-fatal poll (failed_when:false so exhausting the retries does not abort
+# here with a bare until-timeout message — the assert below owns the failure and
+# names the cluster, expected, and observed counts).
+- name: Wait for declared Ceph OSDs to be created and in
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - osd
+      - stat
+      - --format
+      - json
+  register: bootwright_ceph_osd_stat
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_osd_readiness_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
+  until: >-
+    bootwright_ceph_osd_stat.rc == 0
+    and (
+      (bootwright_ceph_osd_readiness_mode == 'exact'
+       and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+           >= (bootwright_ceph_osd_expected_count | int))
+      or
+      (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
+       and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int) >= 1)
+    )
+  when: bootwright_ceph_osd_readiness_mode != 'skip'
+
+- name: Assert declared Ceph OSDs were created
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_osd_stat.rc | default(1) == 0
+      - >-
+        (bootwright_ceph_osd_readiness_mode == 'exact'
+         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+             >= (bootwright_ceph_osd_expected_count | int))
+        or
+        (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
+         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int) >= 1)
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not create the
+      declared OSDs: expected
+      {{ 'exactly ' ~ bootwright_ceph_osd_expected_count if bootwright_ceph_osd_readiness_mode == 'exact' else 'at least 1' }}
+      OSD(s) 'in', observed
+      {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default('unknown') }}
+      after {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts. cephadm
+      accepted the OSD spec but ceph-volume did not consume the declared devices —
+      check the devices are empty and large enough, `cephadm ls`/`ceph orch device ls`
+      on the OSD hosts, and the OSD daemon logs. This apply is failing closed rather
+      than reporting success against a short or zero-OSD cluster.
+  when: bootwright_ceph_osd_readiness_mode != 'skip'
+
+# Capture the observed OSD counts + health so result_and_ownership.yml can persist
+# them and the controller can classify a silently-degraded cluster as drift instead
+# of a blind hash match.
+- name: Capture observed Ceph health for the storage result
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - health
+      - --format
+      - json
+  register: bootwright_ceph_health_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_osd_readiness_mode != 'skip'
+
+- name: Record observed OSD readiness for the storage result
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_observed:
+      mode: "{{ bootwright_ceph_osd_readiness_mode }}"
+      expected: "{{ bootwright_ceph_osd_expected_count | int }}"
+      inOSDs: >-
+        {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int }}
+      upOSDs: >-
+        {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_up_osds | default(0) | int }}
+      health: >-
+        {{ (bootwright_ceph_health_probe.stdout | default('{}') | from_json).status | default('UNKNOWN') }}
+  when: bootwright_ceph_osd_readiness_mode != 'skip'

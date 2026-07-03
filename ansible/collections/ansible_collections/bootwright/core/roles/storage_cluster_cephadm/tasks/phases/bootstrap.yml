@@ -28,6 +28,9 @@
     - name: Capture base Data Foundation secrets
       ansible.builtin.include_tasks: bootstrap_steps/data_foundation_base.yml
 
+    - name: Wait for declared Ceph OSDs to be created
+      ansible.builtin.include_tasks: bootstrap_steps/osd_readiness.yml
+
     - name: Run Ceph topology and storage operations
       ansible.builtin.include_tasks: bootstrap_steps/topology_operations.yml
 
