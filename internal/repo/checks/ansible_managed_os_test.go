@@ -65,6 +65,10 @@ func TestManagedOSPlaybookUsesLinearTaskGrouping(t *testing.T) {
 
 func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/ssh_trust.yml")
+	// The trust directory must exist before ssh writes the known_hosts entry into it.
+	if findAnsibleTask(t, tasks, "Ensure managed OS SSH trust directory") >= findAnsibleTask(t, tasks, "Scan managed OS SSH host key") {
+		t.Fatalf("the trust directory must be ensured before the host-key scan writes into it")
+	}
 	scan := tasks[findAnsibleTask(t, tasks, "Scan managed OS SSH host key")]
 	if _, ok := scan["retries"]; !ok {
 		t.Fatalf("%s must retry because port 22 can open before sshd returns host keys", scan["name"])
@@ -72,45 +76,37 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	if _, ok := scan["delay"]; !ok {
 		t.Fatalf("%s must set retry delay", scan["name"])
 	}
+	if scan["delegate_to"] != "localhost" {
+		t.Fatalf("%s must run on the controller, got delegate_to=%v", scan["name"], scan["delegate_to"])
+	}
 	until := fmt.Sprint(scan["until"])
-	for _, want := range []string{
-		"bootwright_os_ssh_keyscan_required",
-		"stdout_lines",
-		"reject('match', '^#')",
-	} {
+	for _, want := range []string{"bootwright_os_ssh_keyscan_required", "rc"} {
 		if !strings.Contains(until, want) {
 			t.Fatalf("%s until missing %q: %s", scan["name"], want, until)
 		}
 	}
-	failedWhen := fmt.Sprint(scan["failed_when"])
-	if !strings.Contains(failedWhen, "not in [0, 1]") {
-		t.Fatalf("%s must tolerate ssh-keyscan rc=1 while waiting for keys, got %s", scan["name"], failedWhen)
-	}
-	record := tasks[findAnsibleTask(t, tasks, "Record managed OS SSH known_hosts entries")]
-	knownHosts, ok := record["ansible.builtin.known_hosts"].(map[string]any)
+	// ssh-keyscan ignores the controller's crypto policy and dies on a FIPS controller
+	// ("Key exchange type c25519 is not allowed in FIPS mode"), so the host key must be
+	// captured with `ssh` (which honors the policy) via StrictHostKeyChecking=accept-new.
+	// A stale pin is dropped first (ssh-keygen -R) so a reinstalled node's rotated key is
+	// re-learned, and success is gated on the key actually being pinned (ssh-keygen -F).
+	shell, ok := scan["ansible.builtin.shell"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s must use known_hosts, got %v", record["name"], record)
+		t.Fatalf("%s must be a shell task using ssh, got %v", scan["name"], scan)
 	}
-	if knownHosts["path"] != "{{ bootwright_component.osInstall.ssh.knownHostsPath }}" {
-		t.Fatalf("%s path = %v", record["name"], knownHosts["path"])
+	cmd := fmt.Sprint(shell["cmd"])
+	if strings.Contains(cmd, "ssh-keyscan") {
+		t.Fatalf("%s must NOT use ssh-keyscan (it ignores the FIPS crypto policy): %s", scan["name"], cmd)
 	}
-	if knownHosts["name"] != "{{ bootwright_component.osInstall.ssh.address }}" {
-		t.Fatalf("%s name = %v", record["name"], knownHosts["name"])
-	}
-	if knownHosts["key"] != "{{ item }}" {
-		t.Fatalf("%s key = %v, want loop item", record["name"], knownHosts["key"])
-	}
-	loop := fmt.Sprint(record["loop"])
-	for _, want := range []string{"stdout_lines", "reject('match', '^#')", "list"} {
-		if !strings.Contains(loop, want) {
-			t.Fatalf("%s loop missing %q: %s", record["name"], want, loop)
+	for _, want := range []string{
+		"StrictHostKeyChecking=accept-new",
+		"UserKnownHostsFile=",
+		"ssh-keygen -R",
+		"ssh-keygen -F",
+	} {
+		if !strings.Contains(cmd, want) {
+			t.Fatalf("%s cmd missing %q: %s", scan["name"], want, cmd)
 		}
-	}
-	if strings.Contains(loop, "first") {
-		t.Fatalf("%s must record every scanned key, got loop %s", record["name"], loop)
-	}
-	if record["delegate_to"] != "localhost" {
-		t.Fatalf("%s must write controller-local trust, got delegate_to=%v", record["name"], record["delegate_to"])
 	}
 	restrict := tasks[findAnsibleTask(t, tasks, "Restrict managed OS SSH known_hosts file")]
 	fileTask, ok := restrict["ansible.builtin.file"].(map[string]any)
