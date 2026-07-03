@@ -48,6 +48,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		redfish         int
 		stage           string
 		through         string
+		reclaimDevices  string
 	)
 	use := "apply"
 	if options.use != "" {
@@ -98,6 +99,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	if usesAnsible {
 		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
+		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster and is not mounted or a system disk — irreversible data loss")
 	}
 	if options.stageSelector {
 		if usesAnsible {
@@ -270,6 +272,22 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				// reconciled in place by the seed role, not wiped: pass its name so the
 				// override apply-mode gate suppresses rm-cluster --zap-osds for it.
 				converge.ApplyReconcilableOnlyStorageExtraVar(&plan, converge.ReconcilableOnlyStorageClusters(objects))
+			}
+			// --reclaim-devices wipes the named OSD disks in-band before the apply's
+			// empty-device gate, to recover owned OSD disks whose on-node marker a
+			// managed-OS reinstall erased. It is gated in Ansible on the device being a
+			// declared OSD device of a controller-owned cluster and not mounted or a
+			// system disk; here it emits the irreversible-data-loss warning and threads
+			// the owned-cluster allowlist so a foreign/greenfield cluster's disks are
+			// never reclaimed.
+			if reclaimDevices != "" {
+				owned := converge.OwnedStorageClusters(objects)
+				if len(owned) == 0 {
+					cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned; no device will be reclaimed (reclaim only wipes disks of an owned cluster).")
+				} else {
+					cliout.NewContinuation(stdout).Warning("reclaim", "will WIPE device(s) "+reclaimDevices+" on the owned Ceph cluster(s) "+strings.Join(owned, ", ")+" before apply — IRREVERSIBLE data loss. Only a named device that is a declared OSD device and is not mounted or a system disk is wiped.")
+				}
+				converge.ApplyReclaimDevicesExtraVars(&plan, reclaimDevices, owned)
 			}
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)

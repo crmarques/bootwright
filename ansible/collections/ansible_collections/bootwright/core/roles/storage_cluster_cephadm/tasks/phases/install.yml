@@ -150,6 +150,89 @@
     bootwright_ceph_osd_marker_doc: "{{ bootwright_ceph_osd_marker_probe.content | b64decode | from_json }}"
   when: (bootwright_ceph_osd_marker_probe | default({})).content is defined
 
+# --reclaim-devices recovers owned OSD disks whose on-node marker a managed-OS
+# reinstall erased: the data disks still carry this cluster's ceph LVM but the
+# empty-device gate below would refuse them (the marker that would exempt them is
+# gone). Wipe exactly the operator-named devices in-band — gated on the device being
+# a declared OSD device of a controller-owned cluster and not mounted or in use — so
+# the gate then sees them empty and cephadm re-creates the OSDs. Wiping is
+# irreversible; the controller emitted the data-loss warning before this ran.
+- name: Resolve OSD devices to reclaim on this host
+  ansible.builtin.set_fact:
+    bootwright_ceph_reclaim_here: >-
+      {{ (bootwright_current_storage_host.devices | default([]))
+         | intersect(bootwright_ceph_reclaim_devices | default('') | split(',')
+                     | map('trim') | reject('equalto', '') | list) }}
+  when:
+    - bootwright_current_storage_host.devices | default([]) | length > 0
+    - >-
+      bootwright_selected_storage_cluster.name
+      in (bootwright_ceph_owned_clusters | default('') | split(',') | map('trim') | list)
+
+- name: Probe reclaim devices for active mounts
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - MOUNTPOINT
+      - "{{ item }}"
+  register: bootwright_ceph_reclaim_mounts
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_reclaim_here | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to reclaim a mounted or in-use device
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - (item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | length) == 0
+    fail_msg: >-
+      Refusing to reclaim {{ item.item }} on {{ bootwright_current_storage_host.hostname }}:
+      it could not be probed or is mounted/in use
+      ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}),
+      so it is not a wipeable OSD data disk. --reclaim-devices only wipes an unmounted,
+      non-system disk.
+    quiet: true
+  loop: "{{ bootwright_ceph_reclaim_mounts.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
+- name: Ensure gdisk for the reclaim device zap
+  ansible.builtin.package:
+    name: gdisk
+    state: present
+  when: bootwright_ceph_reclaim_here | default([]) | length > 0
+
+- name: Reclaim named OSD devices by wiping signatures
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --all
+      - --force
+      - "{{ item }}"
+  register: bootwright_ceph_reclaim_wipe
+  changed_when: true
+  failed_when: bootwright_ceph_reclaim_wipe.rc != 0
+  loop: "{{ bootwright_ceph_reclaim_here | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Zap partition tables of reclaimed OSD devices
+  ansible.builtin.command:
+    argv:
+      - sgdisk
+      - --zap-all
+      - "{{ item }}"
+  register: bootwright_ceph_reclaim_zap
+  changed_when: true
+  failed_when: bootwright_ceph_reclaim_zap.rc != 0
+  loop: "{{ bootwright_ceph_reclaim_here | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
 - name: Check declared OSD devices are empty or Bootwright-owned
   ansible.builtin.command:
     argv:

@@ -61,3 +61,32 @@ func ApplyReconcilableOnlyStorageExtraVar(plan *WorkflowPlan, names []string) {
 	}
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_reconcilable_only_clusters="+strings.Join(names, ","))
 }
+
+// OwnedStorageClusters returns the bare names of StorageClusters the controller
+// records as Bootwright-owned (recorded and not foreign). --reclaim-devices keys on
+// this so an in-band device wipe is only ever authorized for a cluster Bootwright
+// provisioned — a managed-OS reinstall wipes the on-node ownership markers but the
+// controller-side record survives and proves ownership.
+func OwnedStorageClusters(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if o.Kind == workflow.ApplyTaskKindStorageCluster && o.Recorded() && !o.HasForeign() {
+			out = append(out, strings.TrimPrefix(o.Label, "StorageCluster/"))
+		}
+	}
+	return out
+}
+
+// ApplyReclaimDevicesExtraVars threads the operator's --reclaim-devices list and
+// the controller-owned StorageCluster names to the seed role so it wipes exactly
+// the named devices in-band, gated on the device being a declared OSD device of an
+// owned cluster and not mounted or a system disk. An empty device list appends
+// nothing (reclaim off).
+func ApplyReclaimDevicesExtraVars(plan *WorkflowPlan, devices string, ownedClusters []string) {
+	if strings.TrimSpace(devices) == "" {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs,
+		"bootwright_ceph_reclaim_devices="+devices,
+		"bootwright_ceph_owned_clusters="+strings.Join(ownedClusters, ","))
+}
