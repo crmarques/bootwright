@@ -65,7 +65,12 @@ func TestKickstartNetworkInterfacesPrefersDefaultRouteVLAN(t *testing.T) {
 	}
 }
 
-func TestKickstartNetworkInterfacesRenderBondPortsAndMTU(t *testing.T) {
+// The install-time kickstart stays minimal: one merged bond+VLAN stanza for the
+// routed interface, no MTU and no separate per-slave stanzas. --bondslaves builds
+// the bond and its port connections, and MTU (which the merged kickstart line
+// cannot set on the bond) is left to the post-install nmstate apply. The nmstate
+// here still carries mtu 9000 on every layer; the kickstart deliberately drops it.
+func TestKickstartNetworkInterfacesMinimalBondVLANPrimaryOnly(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
 			map[string]any{
@@ -100,18 +105,12 @@ func TestKickstartNetworkInterfacesRenderBondPortsAndMTU(t *testing.T) {
 		},
 	}
 	stanzas := kickstartNetworkInterfaces(config)
-	if len(stanzas) != 3 {
-		t.Fatalf("stanzas = %v, want two bond port stanzas plus combined bond+VLAN stanza", stanzas)
-	}
-	for i, device := range []string{"ens1f0", "ens1f1"} {
-		if stanzas[i]["device"] != device || stanzas[i]["bootproto"] != "none" || stanzas[i]["mtu"] != 9000 {
-			t.Fatalf("port stanza %d = %v", i, stanzas[i])
-		}
+	if len(stanzas) != 1 {
+		t.Fatalf("stanzas = %v, want a single merged bond+VLAN stanza (no per-slave lines)", stanzas)
 	}
 	want := map[string]any{
 		"device":      "bond0",
 		"vlanID":      743,
-		"mtu":         9000,
 		"bondSlaves":  []string{"ens1f0", "ens1f1"},
 		"bondOptions": "mode=802.3ad,lacp_rate=fast,miimon=100",
 		"bootproto":   "static",
@@ -120,8 +119,11 @@ func TestKickstartNetworkInterfacesRenderBondPortsAndMTU(t *testing.T) {
 		"netmask":     "255.255.255.240",
 		"hostname":    true,
 	}
-	if !reflect.DeepEqual(stanzas[2], want) {
-		t.Fatalf("combined stanza = %v, want %v", stanzas[2], want)
+	if !reflect.DeepEqual(stanzas[0], want) {
+		t.Fatalf("merged stanza = %v, want %v (no mtu key)", stanzas[0], want)
+	}
+	if _, present := stanzas[0]["mtu"]; present {
+		t.Fatalf("merged stanza carries mtu %v; kickstart must omit MTU (post-install nmstate owns it)", stanzas[0]["mtu"])
 	}
 }
 

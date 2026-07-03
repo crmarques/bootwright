@@ -78,27 +78,26 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		if image["effectiveSourcePath"] != image["path"] {
 			t.Fatalf("component %v effectiveSourcePath = %v, want image.path %v", component["name"], image["effectiveSourcePath"], image["path"])
 		}
-		// Physical bond ports are activated first, then one merged stanza uses
-		// kickstart's documented VLAN-over-bond form: --device names the parent
-		// bond, bond fields ride the same command, and the static IP settings
-		// apply to the VLAN device.
+		// The install-time kickstart stays minimal: one merged bond+VLAN stanza for
+		// the routed interface. --bondslaves builds the bond and its port
+		// connections (no separate per-slave stanzas), --device names the parent
+		// bond, and the static IP settings apply to the VLAN device. MTU and every
+		// other interface are configured post-install from osInstall.network.
+		// desiredState, so they never appear here.
 		network := component["osInstall"].(map[string]any)["kickstart"].(map[string]any)["network"].(map[string]any)
 		stanzas, ok := network["interfaces"].([]map[string]any)
-		if !ok || len(stanzas) != 3 {
-			t.Fatalf("component %v kickstart network interfaces = %v, want two bond port stanzas plus one merged bond+VLAN stanza", component["name"], network["interfaces"])
+		if !ok || len(stanzas) != 1 {
+			t.Fatalf("component %v kickstart network interfaces = %v, want a single merged bond+VLAN stanza", component["name"], network["interfaces"])
 		}
-		for i, device := range []string{"eno1", "eno2"} {
-			port := stanzas[i]
-			if port["device"] != device || port["bootproto"] != "none" {
-				t.Fatalf("component %v bond port stanza %d = %v", component["name"], i, port)
-			}
-		}
-		vlan := stanzas[2]
+		vlan := stanzas[0]
 		if vlan["device"] != "bond0" || vlan["vlanID"] != 140 {
 			t.Fatalf("component %v VLAN stanza = %v, want --device=bond0 --vlanid=140", component["name"], vlan)
 		}
 		if _, present := vlan["interfaceName"]; present {
 			t.Fatalf("component %v VLAN stanza = %v, want no interfaceName for the derived default bond0.140", component["name"], vlan)
+		}
+		if _, present := vlan["mtu"]; present {
+			t.Fatalf("component %v VLAN stanza = %v, want no MTU in the kickstart (post-install nmstate owns it)", component["name"], vlan)
 		}
 		if got := vlan["bondSlaves"]; !reflect.DeepEqual(got, []string{"eno1", "eno2"}) {
 			t.Fatalf("component %v bondSlaves = %v, want eno1/eno2", component["name"], got)
@@ -108,6 +107,17 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 		}
 		if vlan["bootproto"] != "static" || vlan["netmask"] != "255.255.255.0" || vlan["hostname"] != true {
 			t.Fatalf("component %v static VLAN stanza = %v", component["name"], vlan)
+		}
+
+		// The full nmstate is exposed for the post-install network task: the whole
+		// document (bond, slaves, VLAN, MTU) that nmstate applies after install,
+		// realizing the MTU and secondary interfaces the minimal kickstart omits.
+		desiredState, ok := component["osInstall"].(map[string]any)["network"].(map[string]any)["desiredState"].(map[string]any)
+		if !ok {
+			t.Fatalf("component %v missing osInstall.network.desiredState for the post-install nmstate apply", component["name"])
+		}
+		if ifaces, _ := desiredState["interfaces"].([]any); len(ifaces) == 0 {
+			t.Fatalf("component %v osInstall.network.desiredState has no interfaces", component["name"])
 		}
 
 		// A bare-metal node mounts its managed-OS install ISO over the BMC, so

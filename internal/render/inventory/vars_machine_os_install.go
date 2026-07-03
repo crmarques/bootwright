@@ -103,6 +103,13 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		out["ssh"] = ssh
 	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
+	// The post-install network is applied idempotently every run and is deliberately
+	// NOT part of the install marker: a network change re-applies nmstate as a day-2
+	// operation and must never force a destructive OS reinstall. Add it after the
+	// marker so it stays out of the marker hash.
+	if desired := machineInstallDesiredNetwork(state, ci, m, clusterName); len(desired) > 0 {
+		out["network"] = map[string]any{"desiredState": desired}
+	}
 	return out
 }
 

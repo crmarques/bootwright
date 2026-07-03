@@ -39,6 +39,15 @@ func machineInstallNetworkVars(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	return network
 }
 
+// machineInstallDesiredNetwork returns the node's full resolved nmstate. The
+// kickstart brings up only the routed interface (enough to install and be
+// reachable); the managed-OS network task applies this document post-install so
+// every interface, VLAN, route, and MTU the desired state declares is realized -
+// nmstate sets the bond MTU the kickstart's merged bond+VLAN line cannot.
+func machineInstallDesiredNetwork(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
+	return installer.AgentNetworkConfig(state, ci, m, clusterName)
+}
+
 func kickstartPrimaryInterface(config map[string]any) map[string]any {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {
@@ -61,7 +70,6 @@ func kickstartPrimaryInterface(config map[string]any) map[string]any {
 			"prefix":    prefix,
 			"netmask":   prefixNetmask(prefix),
 		}
-		addInterfaceMTU(out, entry)
 		if mac != "" {
 			out["device"] = mac
 		} else if name != "" {
@@ -72,8 +80,13 @@ func kickstartPrimaryInterface(config map[string]any) map[string]any {
 	return nil
 }
 
-// kickstartNetworkInterfaces renders only the install-time path. Day-2
-// configuration owns the rest of the nmstate document.
+// kickstartNetworkInterfaces renders the minimal install-time network: only the
+// primary routed interface, enough for Anaconda to reach the install source and
+// for the node to be reachable over SSH after reboot. MTU, secondary interfaces,
+// and the rest of the nmstate document are applied post-install from
+// osInstall.network.desiredState - the kickstart's merged bond+VLAN line cannot
+// set the bond MTU anyway. --bondslaves creates the bond and its port
+// connections, so no separate per-slave stanzas are emitted.
 func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 	interfaces := networkConfigInterfacesByName(config)
 	primary := kickstartPrimaryInterfaceEntry(config)
@@ -85,7 +98,6 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 		return nil
 	}
 	stanza["hostname"] = true
-	var out []map[string]any
 	switch typ, _ := primary["type"].(string); typ {
 	case "vlan":
 		vlan, ok := primary["vlan"].(map[string]any)
@@ -103,9 +115,7 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 			stanza["interfaceName"] = name
 		}
 		if baseEntry := interfaces[base]; baseEntry != nil {
-			out = append(out, kickstartBondPortStanzas(interfaces, baseEntry)...)
 			addBondFields(stanza, baseEntry)
-			addInterfaceMTU(stanza, baseEntry)
 			// An ethernet parent keeps kickstart's MAC-based device binding
 			// when the NIC's MAC is known; a bond parent is a logical name.
 			if baseType, _ := baseEntry["type"].(string); baseType == "ethernet" {
@@ -115,35 +125,9 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 			}
 		}
 	case "bond":
-		out = append(out, kickstartBondPortStanzas(interfaces, primary)...)
 		addBondFields(stanza, primary)
 	}
-	out = append(out, stanza)
-	return out
-}
-
-func kickstartBondPortStanzas(interfaces map[string]map[string]any, bond map[string]any) []map[string]any {
-	aggregation, ok := bond["link-aggregation"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	var out []map[string]any
-	for _, port := range stringSliceFromYAML(aggregation["port"]) {
-		entry := interfaces[port]
-		if entry == nil {
-			continue
-		}
-		if typ, _ := entry["type"].(string); typ != "" && typ != "ethernet" {
-			continue
-		}
-		stanza := map[string]any{
-			"device":    port,
-			"bootproto": "none",
-		}
-		addInterfaceMTU(stanza, entry)
-		out = append(out, stanza)
-	}
-	return out
+	return []map[string]any{stanza}
 }
 
 func kickstartStaticNetworkStanza(entry map[string]any) map[string]any {
@@ -159,7 +143,6 @@ func kickstartStaticNetworkStanza(entry map[string]any) map[string]any {
 		"prefix":    prefix,
 		"netmask":   prefixNetmask(prefix),
 	}
-	addInterfaceMTU(out, entry)
 	if mac != "" {
 		out["device"] = mac
 	} else if name != "" {
@@ -178,15 +161,6 @@ func addBondFields(out, entry map[string]any) {
 	}
 	if opts := kickstartBondOptions(aggregation); opts != "" {
 		out["bondOptions"] = opts
-	}
-}
-
-func addInterfaceMTU(out, entry map[string]any) {
-	if _, present := out["mtu"]; present {
-		return
-	}
-	if mtu := intFromYAML(entry["mtu"]); mtu > 0 {
-		out["mtu"] = mtu
 	}
 }
 
