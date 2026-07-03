@@ -2,16 +2,31 @@ package secret
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+const (
+	rsaSSHKeyBits = 4096
+
+	sshPublicKeyTypeEd25519   = "ssh-ed25519"
+	sshPublicKeyTypeRSA       = "ssh-rsa"
+	sshPublicKeyTypeECDSAP256 = "ecdsa-sha2-nistp256"
+	sshPublicKeyTypeECDSAP384 = "ecdsa-sha2-nistp384"
+	sshPublicKeyTypeECDSAP521 = "ecdsa-sha2-nistp521"
 )
 
 func SSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec) (privateKeyPEM, publicKey []byte, err error) {
@@ -19,24 +34,71 @@ func SSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec) (privateKeyPEM, publ
 	if keyType == "" {
 		keyType = v1alpha1.SSHKeyPairTypeEd25519
 	}
-	if keyType != v1alpha1.SSHKeyPairTypeEd25519 {
+	switch keyType {
+	case v1alpha1.SSHKeyPairTypeEd25519:
+		return ed25519SSHKeyPairPEM(source)
+	case v1alpha1.SSHKeyPairTypeRSA:
+		return rsaSSHKeyPairPEM(source)
+	case v1alpha1.SSHKeyPairTypeECDSAP256:
+		return ecdsaSSHKeyPairPEM(source, elliptic.P256(), sshPublicKeyTypeECDSAP256, "nistp256")
+	case v1alpha1.SSHKeyPairTypeECDSAP384:
+		return ecdsaSSHKeyPairPEM(source, elliptic.P384(), sshPublicKeyTypeECDSAP384, "nistp384")
+	case v1alpha1.SSHKeyPairTypeECDSAP521:
+		return ecdsaSSHKeyPairPEM(source, elliptic.P521(), sshPublicKeyTypeECDSAP521, "nistp521")
+	default:
 		return nil, nil, fmt.Errorf("unsupported SSH key pair type %q", keyType)
 	}
+}
+
+func ed25519SSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec) (privateKeyPEM, publicKey []byte, err error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate SSH key pair: %w", err)
 	}
-	publicBlob := sshMarshalStrings([]byte("ssh-ed25519"), pub)
-	publicLine := "ssh-ed25519 " + base64.StdEncoding.EncodeToString(publicBlob)
-	if source.Comment != "" {
-		publicLine += " " + source.Comment
-	}
-	publicLine += "\n"
+	publicBlob := sshMarshalStrings([]byte(sshPublicKeyTypeEd25519), pub)
+	publicLine := sshPublicKeyLine(sshPublicKeyTypeEd25519, publicBlob, source.Comment)
 	privatePEM, err := opensshPrivateKeyPEM(pub, priv, source.Comment, publicBlob)
 	if err != nil {
 		return nil, nil, err
 	}
-	return privatePEM, []byte(publicLine), nil
+	return privatePEM, publicLine, nil
+}
+
+func rsaSSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec) (privateKeyPEM, publicKey []byte, err error) {
+	key, err := rsa.GenerateKey(rand.Reader, rsaSSHKeyBits)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate SSH key pair: %w", err)
+	}
+	if err := key.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("validate generated SSH key pair: %w", err)
+	}
+	publicBlob := sshMarshalString(nil, []byte(sshPublicKeyTypeRSA))
+	publicBlob = sshMarshalMPInt(publicBlob, big.NewInt(int64(key.PublicKey.E)))
+	publicBlob = sshMarshalMPInt(publicBlob, key.PublicKey.N)
+	privateDER := x509.MarshalPKCS1PrivateKey(key)
+	var out bytes.Buffer
+	if err := pem.Encode(&out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateDER}); err != nil {
+		return nil, nil, fmt.Errorf("encode SSH private key: %w", err)
+	}
+	return out.Bytes(), sshPublicKeyLine(sshPublicKeyTypeRSA, publicBlob, source.Comment), nil
+}
+
+func ecdsaSSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec, curve elliptic.Curve, publicType, curveName string) (privateKeyPEM, publicKey []byte, err error) {
+	key, err := ecdsa.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate SSH key pair: %w", err)
+	}
+	point := elliptic.Marshal(curve, key.PublicKey.X, key.PublicKey.Y)
+	publicBlob := sshMarshalStrings([]byte(publicType), []byte(curveName), point)
+	privateDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode SSH private key: %w", err)
+	}
+	var out bytes.Buffer
+	if err := pem.Encode(&out, &pem.Block{Type: "EC PRIVATE KEY", Bytes: privateDER}); err != nil {
+		return nil, nil, fmt.Errorf("encode SSH private key: %w", err)
+	}
+	return out.Bytes(), sshPublicKeyLine(publicType, publicBlob, source.Comment), nil
 }
 
 func VerifySSHKeyPairPublicBytesMatchRequest(data []byte, source v1alpha1.GeneratedSSHKeyPairSpec) error {
@@ -44,8 +106,12 @@ func VerifySSHKeyPairPublicBytesMatchRequest(data []byte, source v1alpha1.Genera
 	if len(fields) < 2 {
 		return errors.New("SSH public key must use authorized_keys format")
 	}
-	if fields[0] != "ssh-ed25519" {
-		return fmt.Errorf("SSH key type drift: got %q, want %q", fields[0], "ssh-ed25519")
+	wantType, err := sshPublicKeyType(source.Type)
+	if err != nil {
+		return err
+	}
+	if fields[0] != wantType {
+		return fmt.Errorf("SSH key type drift: got %q, want %q", fields[0], wantType)
 	}
 	if source.Comment != "" {
 		if len(fields) < 3 {
@@ -57,6 +123,34 @@ func VerifySSHKeyPairPublicBytesMatchRequest(data []byte, source v1alpha1.Genera
 		}
 	}
 	return nil
+}
+
+func sshPublicKeyLine(publicType string, publicBlob []byte, comment string) []byte {
+	publicLine := publicType + " " + base64.StdEncoding.EncodeToString(publicBlob)
+	if comment != "" {
+		publicLine += " " + comment
+	}
+	return []byte(publicLine + "\n")
+}
+
+func sshPublicKeyType(keyType string) (string, error) {
+	if keyType == "" {
+		keyType = v1alpha1.SSHKeyPairTypeEd25519
+	}
+	switch keyType {
+	case v1alpha1.SSHKeyPairTypeEd25519:
+		return sshPublicKeyTypeEd25519, nil
+	case v1alpha1.SSHKeyPairTypeRSA:
+		return sshPublicKeyTypeRSA, nil
+	case v1alpha1.SSHKeyPairTypeECDSAP256:
+		return sshPublicKeyTypeECDSAP256, nil
+	case v1alpha1.SSHKeyPairTypeECDSAP384:
+		return sshPublicKeyTypeECDSAP384, nil
+	case v1alpha1.SSHKeyPairTypeECDSAP521:
+		return sshPublicKeyTypeECDSAP521, nil
+	default:
+		return "", fmt.Errorf("unsupported SSH key pair type %q", keyType)
+	}
 }
 
 func opensshPrivateKeyPEM(pub ed25519.PublicKey, priv ed25519.PrivateKey, comment string, publicBlob []byte) ([]byte, error) {
@@ -99,6 +193,17 @@ func sshMarshalStrings(values ...[]byte) []byte {
 func sshMarshalString(out, value []byte) []byte {
 	out = sshMarshalUint32(out, uint32(len(value)))
 	return append(out, value...)
+}
+
+func sshMarshalMPInt(out []byte, value *big.Int) []byte {
+	if value.Sign() == 0 {
+		return sshMarshalString(out, nil)
+	}
+	bytes := value.Bytes()
+	if bytes[0]&0x80 != 0 {
+		bytes = append([]byte{0}, bytes...)
+	}
+	return sshMarshalString(out, bytes)
 }
 
 func sshMarshalUint32(out []byte, value uint32) []byte {

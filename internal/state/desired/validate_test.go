@@ -909,8 +909,8 @@ spec:
 			name: "generated-ssh-key-type-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-				"    - sno-cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: rsa", 1)},
-			wantSubstring: `spec.secrets[sno-cluster-admin-ssh-key].generated.sshKeyPair.type "rsa" must be "ed25519"`,
+				"    - sno-cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: dsa", 1)},
+			wantSubstring: `spec.secrets[sno-cluster-admin-ssh-key].generated.sshKeyPair.type "dsa" must be one of {ed25519, rsa, ecdsa-p256, ecdsa-p384, ecdsa-p521}`,
 		},
 		{
 			name: "generated-secret-multiple-kinds-rejected",
@@ -1014,6 +1014,29 @@ spec:
 			}
 			if !strings.Contains(err.Error(), tc.wantSubstring) {
 				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestGeneratedSSHKeyPairTypesValidate(t *testing.T) {
+	cases := []string{
+		v1alpha1.SSHKeyPairTypeRSA,
+		v1alpha1.SSHKeyPairTypeECDSAP256,
+		v1alpha1.SSHKeyPairTypeECDSAP384,
+		v1alpha1.SSHKeyPairTypeECDSAP521,
+	}
+	for _, keyType := range cases {
+		t.Run(keyType, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
+				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+				"    - sno-cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: "+keyType, 1)
+			writeFiles(t, dir, files)
+
+			if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
 			}
 		})
 	}

@@ -160,7 +160,11 @@ const (
 	SecretStorageModeSource  = "source"
 	SecretStorageModeContext = "context"
 
-	SSHKeyPairTypeEd25519 = "ed25519"
+	SSHKeyPairTypeEd25519   = "ed25519"
+	SSHKeyPairTypeRSA       = "rsa"
+	SSHKeyPairTypeECDSAP256 = "ecdsa-p256"
+	SSHKeyPairTypeECDSAP384 = "ecdsa-p384"
+	SSHKeyPairTypeECDSAP521 = "ecdsa-p521"
 
 	EntitlementProviderCommunity = "community"
 	EntitlementProviderRedHat    = "redhat"

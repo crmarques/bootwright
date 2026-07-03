@@ -82,7 +82,7 @@ spec:
 | `generated.selfSignedCertificate.dnsNames[]` | No | — | DNS SANs. |
 | `generated.selfSignedCertificate.ipAddresses[]` | No | — | IP SANs. |
 | `generated.selfSignedCertificate.validityDays` | No | — | Validity period; must not be negative. |
-| `generated.sshKeyPair.type` | No | `ed25519` | Key type; currently only `ed25519`. |
+| `generated.sshKeyPair.type` | No | `ed25519` | Key type: `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. Use `rsa` or ECDSA on FIPS-enforced control nodes. |
 | `generated.sshKeyPair.comment` | No | — | Public key comment (no leading/trailing whitespace or newlines). |
 
 !!! note "`secret set --generate` is for test fixtures only"

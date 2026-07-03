@@ -93,8 +93,8 @@ func validateGeneratedSecret(envName, secretName string, gen *v1alpha1.Environme
 		}
 	case gen.SSHKeyPair != nil:
 		keyType := gen.SSHKeyPair.Type
-		if keyType != "" && keyType != v1alpha1.SSHKeyPairTypeEd25519 {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.type %q must be %q", envName, secretName, keyType, v1alpha1.SSHKeyPairTypeEd25519))
+		if !validSSHKeyPairType(keyType) {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.type %q must be one of {%s}", envName, secretName, keyType, strings.Join(allowedSSHKeyPairTypes(), ", ")))
 		}
 		if strings.TrimSpace(gen.SSHKeyPair.Comment) != gen.SSHKeyPair.Comment {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.comment must not contain leading or trailing whitespace", envName, secretName))
@@ -104,4 +104,26 @@ func validateGeneratedSecret(envName, secretName string, gen *v1alpha1.Environme
 		}
 	}
 	return errs
+}
+
+func validSSHKeyPairType(keyType string) bool {
+	if keyType == "" {
+		return true
+	}
+	for _, allowed := range allowedSSHKeyPairTypes() {
+		if keyType == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func allowedSSHKeyPairTypes() []string {
+	return []string{
+		v1alpha1.SSHKeyPairTypeEd25519,
+		v1alpha1.SSHKeyPairTypeRSA,
+		v1alpha1.SSHKeyPairTypeECDSAP256,
+		v1alpha1.SSHKeyPairTypeECDSAP384,
+		v1alpha1.SSHKeyPairTypeECDSAP521,
+	}
 }

@@ -96,7 +96,9 @@ Rules:
   ...}`. A `generated` value sets exactly one of `credentials` (optional
   `username`), `selfSignedCertificate` (required `commonName`; optional
   `dnsNames[]`, `ipAddresses[]`, `validityDays`), or `sshKeyPair` (optional
-  `type: ed25519`, `comment`). `file` and `generated` are mutually exclusive.
+  `type`, default `ed25519`, accepted values `ed25519`, `rsa`, `ecdsa-p256`,
+  `ecdsa-p384`, `ecdsa-p521`; optional `comment`). `file` and `generated` are
+  mutually exclusive.
   Any other shape is rejected naming `Environment.spec.secrets`.
 - `entitlements[]` declares named subscription, registry entitlement, and
   license references for products that need vendor-controlled access. Each entry

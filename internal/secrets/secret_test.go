@@ -195,19 +195,90 @@ func TestGenerateBMCPasswordIsUrlSafe(t *testing.T) {
 }
 
 func TestSSHKeyPairPEM(t *testing.T) {
-	privateKey, publicKey, err := SSHKeyPairPEM(v1alpha1.GeneratedSSHKeyPairSpec{
-		Type:    v1alpha1.SSHKeyPairTypeEd25519,
-		Comment: "bootwright-cluster-admin",
-	})
-	if err != nil {
-		t.Fatalf("SSHKeyPairPEM: %v", err)
+	cases := []struct {
+		name          string
+		keyType       string
+		publicPrefix  string
+		privateHeader string
+		curveName     string
+	}{
+		{
+			name:          "ed25519",
+			keyType:       v1alpha1.SSHKeyPairTypeEd25519,
+			publicPrefix:  "ssh-ed25519 ",
+			privateHeader: "OPENSSH PRIVATE KEY",
+		},
+		{
+			name:          "rsa",
+			keyType:       v1alpha1.SSHKeyPairTypeRSA,
+			publicPrefix:  "ssh-rsa ",
+			privateHeader: "RSA PRIVATE KEY",
+		},
+		{
+			name:          "ecdsa-p256",
+			keyType:       v1alpha1.SSHKeyPairTypeECDSAP256,
+			publicPrefix:  "ecdsa-sha2-nistp256 ",
+			privateHeader: "EC PRIVATE KEY",
+			curveName:     "P-256",
+		},
+		{
+			name:          "ecdsa-p384",
+			keyType:       v1alpha1.SSHKeyPairTypeECDSAP384,
+			publicPrefix:  "ecdsa-sha2-nistp384 ",
+			privateHeader: "EC PRIVATE KEY",
+			curveName:     "P-384",
+		},
+		{
+			name:          "ecdsa-p521",
+			keyType:       v1alpha1.SSHKeyPairTypeECDSAP521,
+			publicPrefix:  "ecdsa-sha2-nistp521 ",
+			privateHeader: "EC PRIVATE KEY",
+			curveName:     "P-521",
+		},
 	}
-	if !strings.Contains(string(privateKey), "OPENSSH PRIVATE KEY") {
-		t.Fatalf("private key missing OpenSSH header:\n%s", privateKey)
-	}
-	public := string(publicKey)
-	if !strings.HasPrefix(public, "ssh-ed25519 ") || !strings.HasSuffix(public, " bootwright-cluster-admin\n") {
-		t.Fatalf("public key = %q", public)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := v1alpha1.GeneratedSSHKeyPairSpec{
+				Type:    tc.keyType,
+				Comment: "bootwright-cluster-admin",
+			}
+			privateKey, publicKey, err := SSHKeyPairPEM(spec)
+			if err != nil {
+				t.Fatalf("SSHKeyPairPEM: %v", err)
+			}
+			block, _ := pem.Decode(privateKey)
+			if block == nil {
+				t.Fatalf("private key is not PEM:\n%s", privateKey)
+			}
+			if block.Type != tc.privateHeader {
+				t.Fatalf("private key header = %q, want %q", block.Type, tc.privateHeader)
+			}
+			switch tc.privateHeader {
+			case "RSA PRIVATE KEY":
+				key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+				if err != nil {
+					t.Fatalf("parse RSA private key: %v", err)
+				}
+				if got := key.N.BitLen(); got != rsaSSHKeyBits {
+					t.Fatalf("RSA key bits = %d, want %d", got, rsaSSHKeyBits)
+				}
+			case "EC PRIVATE KEY":
+				key, err := x509.ParseECPrivateKey(block.Bytes)
+				if err != nil {
+					t.Fatalf("parse EC private key: %v", err)
+				}
+				if got := key.Curve.Params().Name; got != tc.curveName {
+					t.Fatalf("EC curve = %q, want %q", got, tc.curveName)
+				}
+			}
+			public := string(publicKey)
+			if !strings.HasPrefix(public, tc.publicPrefix) || !strings.HasSuffix(public, " bootwright-cluster-admin\n") {
+				t.Fatalf("public key = %q", public)
+			}
+			if err := VerifySSHKeyPairPublicBytesMatchRequest(publicKey, spec); err != nil {
+				t.Fatalf("VerifySSHKeyPairPublicBytesMatchRequest: %v", err)
+			}
+		})
 	}
 }
 
