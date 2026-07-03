@@ -38,7 +38,11 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			}
 		}
 		if len(differ) > 0 {
-			return fmt.Errorf("apply refuses to mutate objects that differ from their recorded desired state: %s; align the desired state, or run `bootwright apply --override` to rebuild drifted objects (foreign objects are never rebuilt)", summarizeApplyObjects(differ))
+			msg := fmt.Sprintf("apply refuses to mutate objects that differ from their recorded desired state: %s; align the desired state, or run `bootwright apply --override` to rebuild drifted objects (foreign objects are never rebuilt)", summarizeApplyObjects(differ))
+			if driftsStorageCluster(differ) {
+				msg += ". Note: --override on a drifted StorageCluster runs `cephadm rm-cluster --zap-osds` and DESTROYS all OSD data before re-bootstrapping — it is a wipe-and-rebuild, not an in-place edit"
+			}
+			return fmt.Errorf("%s", msg)
 		}
 	case ApplyModeOverride:
 		var foreign []ObjectClassification
@@ -52,6 +56,19 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 		}
 	}
 	return nil
+}
+
+// driftsStorageCluster reports whether any differing object is a StorageCluster,
+// so the continue-mode refusal can warn that its --override rebuild is a
+// data-destroying wipe rather than the in-place edit "rebuild drifted objects"
+// implies for a fabric or add-on object.
+func driftsStorageCluster(objs []ObjectClassification) bool {
+	for _, o := range objs {
+		if o.Kind == ApplyTaskKindStorageCluster && o.HasDrift() {
+			return true
+		}
+	}
+	return false
 }
 
 func summarizeApplyObjects(objs []ObjectClassification) string {
