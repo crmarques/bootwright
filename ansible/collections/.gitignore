@@ -5,3 +5,8 @@ ansible_collections/*
 ansible_collections/bootwright/*
 !ansible_collections/bootwright/core/
 !ansible_collections/bootwright/core/**
+
+# ...but never the transient Python bytecode cache the core/** re-include would
+# otherwise sweep in (e.g. created by `make ansible-lint-check` loading the filter
+# plugins). Re-exclude it so `git add -A` cannot track it.
+ansible_collections/bootwright/core/**/__pycache__/
