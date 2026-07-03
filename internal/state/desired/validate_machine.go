@@ -568,9 +568,29 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		if source := customizations.Storage.RootDevice.Source; source != "" && source != v1alpha1.MachineInstallRootDeviceMachine {
 			errs = append(errs, fmt.Sprintf("%s.customizations.storage.rootDevice.source %q must be %q", prefix, source, v1alpha1.MachineInstallRootDeviceMachine))
 		}
+		errs = append(errs, validateMachineInstallLocalization(prefix+".customizations.localization", customizations.Localization)...)
 		errs = append(errs, validateMachineInstallPackages(prefix+".customizations.packages", customizations.Packages)...)
 		errs = append(errs, validateMachineInstallServices(prefix+".customizations.services", customizations.Services)...)
 		errs = append(errs, validateMachineInstallSecurity(prefix+".customizations.security", profile, customizations)...)
+	}
+	return errs
+}
+
+// validateMachineInstallLocalization rejects whitespace in any localization
+// field. Each renders as a bare token on a kickstart lang/keyboard/timezone
+// line (or an LC_* assignment in %post), so an embedded space would inject a
+// stray argument or corrupt the directive rather than fail loudly at install.
+func validateMachineInstallLocalization(prefix string, loc v1alpha1.MachineInstallLocalization) []string {
+	var errs []string
+	for _, field := range []struct{ name, value string }{
+		{"language", loc.Language},
+		{"formats", loc.Formats},
+		{"keyboard", loc.Keyboard},
+		{"timezone", loc.Timezone},
+	} {
+		if strings.ContainsAny(field.value, " \t") {
+			errs = append(errs, fmt.Sprintf("%s.%s %q must not contain whitespace", prefix, field.name, field.value))
+		}
 	}
 	return errs
 }

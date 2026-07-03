@@ -40,10 +40,15 @@ url --url={{ installer.sourceURL }}{{ proxy_flag }}
 {% else %}
 cdrom
 {% endif %}
-lang en_US.UTF-8
-keyboard us
-timezone UTC --utc
 {% set ks = bootwright_component.osInstall.kickstart %}
+{% set localization = ks.localization | default({}) %}
+{# formats splits regional LC_* formatting from the message language: --addsupport
+   installs the extra locale data at install time so the %post locale.conf below can
+   activate it. Empty formats leaves formatting following lang. #}
+{% set loc_addsupport = (' --addsupport=' ~ localization.formats) if (localization.formats | default('') | length > 0) else '' %}
+lang {{ localization.language | default('en_US.UTF-8', true) }}{{ loc_addsupport }}
+keyboard {{ localization.keyboard | default('us', true) }}
+timezone {{ localization.timezone | default('UTC', true) }} --utc
 {% set ssh_user = ks.sshUser | default('root', true) %}
 {% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}
 {% if ssh_user == 'root' and ssh_password_hash | length > 0 %}
@@ -145,6 +150,25 @@ update-ca-trust extract
 %end
 
 %post --log=/root/bootwright-ks-post.log
+{% if localization.formats | default('') | length > 0 %}
+# Keep system messages in {{ localization.language | default('en_US.UTF-8', true) }} while regional
+# formatting (dates, numbers, currency, paper) follows {{ localization.formats }}. LANG drives
+# messages/sorting; the explicit LC_* override only the formatting categories. The lang
+# --addsupport above installed the {{ localization.formats }} locale data this needs.
+cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_CONF'
+LANG={{ localization.language | default('en_US.UTF-8', true) }}
+LC_TIME={{ localization.formats }}
+LC_NUMERIC={{ localization.formats }}
+LC_MONETARY={{ localization.formats }}
+LC_PAPER={{ localization.formats }}
+LC_MEASUREMENT={{ localization.formats }}
+LC_ADDRESS={{ localization.formats }}
+LC_TELEPHONE={{ localization.formats }}
+LC_NAME={{ localization.formats }}
+LC_IDENTIFICATION={{ localization.formats }}
+BOOTWRIGHT_LOCALE_CONF
+chmod 0644 /etc/locale.conf
+{% endif %}
 {% if sat_enabled and sat_ca %}
 # Trust the corporate Satellite CA on the installed system so first-boot and
 # day-2 subscription-manager / dnf calls validate the Satellite certificate.

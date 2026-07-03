@@ -103,6 +103,13 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if got := packages["languages"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
 		t.Fatalf("kickstart packages.languages = %v", got)
 	}
+	localization := ks["localization"].(map[string]any)
+	if localization["language"] != "en_US.UTF-8" || localization["keyboard"] != "us" || localization["timezone"] != "UTC" {
+		t.Fatalf("kickstart localization = %v, want the baseline for a profile with no localization group", localization)
+	}
+	if _, ok := localization["formats"]; ok {
+		t.Fatalf("kickstart localization.formats = %v, want omitted when the profile sets no formats", localization["formats"])
+	}
 	services := ks["services"].(map[string]any)
 	if got := services["enabled"].([]string); !reflect.DeepEqual(got, []string{"sshd", "chronyd", "firewalld"}) {
 		t.Fatalf("kickstart services.enabled = %v", got)
@@ -575,4 +582,31 @@ func firstManagedOSMarkerHash(t *testing.T, vars map[string]any) string {
 	osInstall := first["osInstall"].(map[string]any)
 	marker := osInstall["marker"].(map[string]any)
 	return marker["desiredHash"].(string)
+}
+
+func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
+	// An absent group falls back to the pre-field baseline and omits formats, so
+	// the kickstart renders exactly as it did before localization existed.
+	base := machineInstallLocalizationVars(v1alpha1.MachineInstallLocalization{})
+	if base["language"] != "en_US.UTF-8" || base["keyboard"] != "us" || base["timezone"] != "UTC" {
+		t.Fatalf("default localization = %v", base)
+	}
+	if _, ok := base["formats"]; ok {
+		t.Fatalf("default localization must omit formats, got %v", base["formats"])
+	}
+	// English messages with Brazilian regional formatting: language stays the
+	// message locale while formats carries the regional locale through for the
+	// lang --addsupport and %post locale.conf split.
+	split := machineInstallLocalizationVars(v1alpha1.MachineInstallLocalization{
+		Language: "en_US.UTF-8",
+		Formats:  "pt_BR.UTF-8",
+		Keyboard: "br-abnt2",
+		Timezone: "America/Sao_Paulo",
+	})
+	if split["language"] != "en_US.UTF-8" || split["formats"] != "pt_BR.UTF-8" {
+		t.Fatalf("split localization language/formats = %v", split)
+	}
+	if split["keyboard"] != "br-abnt2" || split["timezone"] != "America/Sao_Paulo" {
+		t.Fatalf("split localization keyboard/timezone = %v", split)
+	}
 }

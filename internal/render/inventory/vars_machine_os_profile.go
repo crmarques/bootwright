@@ -20,6 +20,32 @@ func machineInstallPackagesVars(packages v1alpha1.MachineInstallPackages) map[st
 	return out
 }
 
+func machineInstallLocalizationVars(loc v1alpha1.MachineInstallLocalization) map[string]any {
+	language := loc.Language
+	if language == "" {
+		language = v1alpha1.MachineInstallDefaultLanguage
+	}
+	keyboard := loc.Keyboard
+	if keyboard == "" {
+		keyboard = v1alpha1.MachineInstallDefaultKeyboard
+	}
+	timezone := loc.Timezone
+	if timezone == "" {
+		timezone = v1alpha1.MachineInstallDefaultTimezone
+	}
+	out := map[string]any{
+		"language": language,
+		"keyboard": keyboard,
+		"timezone": timezone,
+	}
+	// Only emit formats when the profile splits regional formatting from the
+	// message language; an empty value leaves formatting following language.
+	if loc.Formats != "" {
+		out["formats"] = loc.Formats
+	}
+	return out
+}
+
 func machineInstallServicesVars(services v1alpha1.MachineInstallServices) map[string]any {
 	return map[string]any{
 		"enabled":  append([]string(nil), services.Enabled...),

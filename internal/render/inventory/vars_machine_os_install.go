@@ -76,6 +76,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
+			"localization":           machineInstallLocalizationVars(profile.Spec.Customizations.Localization),
 			"packages":               machineInstallPackagesVars(profile.Spec.Customizations.Packages),
 			"services":               machineInstallServicesVars(profile.Spec.Customizations.Services),
 			"security":               machineInstallSecurityVars(profile.Spec.Customizations.Security),

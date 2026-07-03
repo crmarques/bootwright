@@ -265,16 +265,35 @@ type MachineInstallRepository struct {
 }
 
 type MachineInstallCustomizations struct {
-	Hostname MachineInstallHostname `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-	SSH      MachineInstallSSH      `yaml:"ssh,omitempty" json:"ssh,omitempty"`
-	Storage  MachineInstallStorage  `yaml:"storage,omitempty" json:"storage,omitempty"`
-	Packages MachineInstallPackages `yaml:"packages,omitempty" json:"packages,omitempty"`
-	Services MachineInstallServices `yaml:"services,omitempty" json:"services,omitempty"`
-	Security MachineInstallSecurity `yaml:"security,omitempty" json:"security,omitempty"`
+	Hostname     MachineInstallHostname     `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	Localization MachineInstallLocalization `yaml:"localization,omitempty" json:"localization,omitempty"`
+	SSH          MachineInstallSSH          `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	Storage      MachineInstallStorage      `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Packages     MachineInstallPackages     `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Services     MachineInstallServices     `yaml:"services,omitempty" json:"services,omitempty"`
+	Security     MachineInstallSecurity     `yaml:"security,omitempty" json:"security,omitempty"`
 }
 
 type MachineInstallHostname struct {
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+}
+
+// MachineInstallLocalization sets the installed system's language, keyboard
+// layout, and timezone. Every field is optional and defaults to the Bootwright
+// baseline when omitted (language en_US.UTF-8, keyboard us, timezone UTC), so an
+// absent group renders exactly as before.
+//
+// Formats splits regional formatting (dates, numbers, currency, paper size)
+// from the message Language: leave Language as the message locale (e.g.
+// en_US.UTF-8) and set Formats to the regional locale (e.g. pt_BR.UTF-8) to keep
+// English system messages while dates and numbers follow Brazilian conventions.
+// When Formats is empty, formatting follows Language. Timezone always keeps the
+// hardware clock in UTC.
+type MachineInstallLocalization struct {
+	Language string `yaml:"language,omitempty" json:"language,omitempty"`
+	Formats  string `yaml:"formats,omitempty" json:"formats,omitempty"`
+	Keyboard string `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 }
 
 type MachineInstallSSH struct {

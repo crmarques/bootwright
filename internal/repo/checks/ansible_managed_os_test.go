@@ -547,6 +547,18 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 	}
 	for _, want := range []string{
 		"reboot",
+		// Localization renders from customizations.localization, defaulting each
+		// field to the pre-field baseline so an absent group is a no-op. formats
+		// splits regional LC_* from the message language via --addsupport + a
+		// %post locale.conf.
+		"{% set localization = ks.localization | default({}) %}",
+		"{% set loc_addsupport = (' --addsupport=' ~ localization.formats) if (localization.formats | default('') | length > 0) else '' %}",
+		"lang {{ localization.language | default('en_US.UTF-8', true) }}{{ loc_addsupport }}",
+		"keyboard {{ localization.keyboard | default('us', true) }}",
+		"timezone {{ localization.timezone | default('UTC', true) }} --utc",
+		"{% if localization.formats | default('') | length > 0 %}",
+		"cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_CONF'",
+		"LC_TIME={{ localization.formats }}",
 		"{% set rhsm = installer.rhsm | default({}) %}",
 		"{% if rhsm.enabled | default(false) %}",
 		"rhsm --organization=\"{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}\" --activation-key=\"{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}\"{{ sat_flag }}{{ proxy_flag }}{{ insights_flag }}",

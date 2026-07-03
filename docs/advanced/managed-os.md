@@ -161,6 +161,11 @@ spec:
     anaconda:
       imageRef: rhel-9-x86-64-dvd
   customizations:
+    localization:
+      language: en_US.UTF-8       # system messages
+      formats: pt_BR.UTF-8        # dates, numbers, currency (optional)
+      keyboard: br-abnt2
+      timezone: America/Sao_Paulo
     ssh:
       authorizeMachineSSHKey: true
       passwordAuthentication: false
@@ -200,6 +205,13 @@ The customization arms, by area:
 
 - **hostname** — `customizations.hostname.source`. The default sets each node's
   OS hostname to its FQDN; set `source: machineName` to keep the bare node name.
+- **localization** — `language`, `keyboard`, and `timezone` (each defaults to
+  `en_US.UTF-8` / `us` / `UTC`, so an omitted group installs exactly as before).
+  `formats` optionally splits regional formatting (dates, numbers, currency,
+  paper size) from `language`: leave `language` as the message locale and set
+  `formats` to the regional locale to keep English system messages while dates
+  and numbers follow, for example, Brazilian conventions. The hardware clock is
+  always kept in UTC.
 - **ssh** — `authorizeMachineSSHKey` authorizes the machine SSH key during
   install; `passwordAuthentication` enables or disables password SSH auth.
 - **storage** — `rootDevice.source: machineRootDeviceHints` consumes the

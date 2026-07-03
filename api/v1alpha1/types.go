@@ -64,9 +64,18 @@ const (
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 	MachineInstallPackageEnvMinimal   = "minimal"
-	MachineInstallSELinuxEnforcing    = "enforcing"
-	MachineInstallSELinuxPermissive   = "permissive"
-	MachineInstallSELinuxDisabled     = "disabled"
+
+	// Localization baselines applied when a MachineInstallProfile leaves the
+	// corresponding customizations.localization field unset. They match the
+	// values the kickstart template rendered before the field existed, so an
+	// absent group is a no-op.
+	MachineInstallDefaultLanguage = "en_US.UTF-8"
+	MachineInstallDefaultKeyboard = "us"
+	MachineInstallDefaultTimezone = "UTC"
+
+	MachineInstallSELinuxEnforcing  = "enforcing"
+	MachineInstallSELinuxPermissive = "permissive"
+	MachineInstallSELinuxDisabled   = "disabled"
 
 	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"

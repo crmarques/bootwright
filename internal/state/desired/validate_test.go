@@ -1220,6 +1220,16 @@ spec:
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.security.fips.enabled is only supported for RHEL install profiles`,
 		},
 		{
+			name: "machine-install-localization-whitespace",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    localization:
+      timezone: America/Sao Paulo
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.localization.timezone "America/Sao Paulo" must not contain whitespace`,
+		},
+		{
 			name: "machine-install-repository-base-url-scheme",
 			mutate: func(files map[string]string) {
 				files["machine-install.yaml"] = strings.Replace(machineInstallProfileYAML("rhel", `
