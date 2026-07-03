@@ -122,3 +122,25 @@
   register: bootwright_ceph_conf_check
   changed_when: false
   failed_when: false
+
+# The apply-mode gate above has cleared: any pre-existing cluster on this seed is
+# Bootwright-owned (a foreign one was refused before reaching here). Record
+# ownership NOW — before the non-idempotent `cephadm bootstrap` — so a crash that
+# writes /etc/ceph/ceph.conf but aborts before ownership_marker.yml still leaves
+# the controller-side ownership record. That keeps the half-converged cluster
+# classified owned and recoverable by re-running `apply` instead of deadlocked:
+# continue, --override, and destroy all key on this record, so without it the only
+# escape from a mid-bootstrap crash is a manual /etc/ceph removal. The
+# post-bootstrap writes (ownership_marker.yml, result_and_ownership.yml) refresh it
+# with the fsid marker and the enriched paths/labels/attributes.
+- name: Pre-record storage cluster ownership before bootstrap
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: storage-cluster
+    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+    bootwright_ownership_fields:
+      cluster: "{{ bootwright_selected_storage_cluster.name }}"
+      attributes:
+        seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
