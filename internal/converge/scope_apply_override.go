@@ -16,3 +16,18 @@ func OverrideDriftedStorageSubObjects(objects []workflow.ObjectClassification) [
 	}
 	return out
 }
+
+// OverrideDestructiveStorageClusters returns the labels of drifted StorageClusters
+// that --override would wipe and rebuild (cephadm rm-cluster --zap-osds), so the
+// pre-confirm data-loss warning names the full-cluster OSD wipe even when the drift
+// is in the cluster's own topology (seedHost/monIP/network or OSD device selection)
+// and no pool/filesystem sub-object drifted — the case the sub-object warning misses.
+func OverrideDestructiveStorageClusters(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if o.Kind == workflow.ApplyTaskKindStorageCluster && o.HasDrift() {
+			out = append(out, o.Label)
+		}
+	}
+	return out
+}

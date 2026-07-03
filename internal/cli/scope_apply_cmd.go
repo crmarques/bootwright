@@ -201,6 +201,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
+		// The marker-aware device-empty gate for managed Ceph runs in the deps
+		// phase, while the destructive `cephadm rm-cluster --zap-osds` rebuild runs
+		// in the base phase; `--stage base` plans only the base seed task, so the
+		// device gate never executes before the wipe-and-rebuild. Refuse
+		// `--override --stage base` for a scope carrying a managed StorageCluster and
+		// point at `--through base`, which includes the deps-phase gate.
+		if mode == workflow.ApplyModeOverride && stage == converge.PhaseBase && len(sel.StorageWorkNames()) > 0 {
+			return failErr(2, errors.New("--override --stage base skips the deps-phase device-empty gate that must precede a Ceph wipe-and-rebuild; use --override --through base (runs the gate then the rebuild) or the full graph"))
+		}
 		plan, err := prepareScopedApplyWorkflow(sel.RenderState, runScope, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
@@ -251,6 +260,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			// data-destroying. Warn before the confirm prompt so the operator sees
 			// which pools/filesystems are at risk.
 			if mode == workflow.ApplyModeOverride {
+				if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
+					cliout.NewContinuation(stdout).Warning("override", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. Any drift in the cluster's own topology (seedHost/monIP/network or the OSD device selection) triggers this, not only pool/filesystem changes.")
+				}
 				if rebuilt := converge.OverrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
 					cliout.NewContinuation(stdout).Warning("override", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type/erasure profile, or a CephFS metadata or default data pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
 				}
