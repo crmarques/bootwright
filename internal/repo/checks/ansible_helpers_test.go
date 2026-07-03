@@ -239,25 +239,6 @@ func assertIncludeTasksFile(t *testing.T, task map[string]any, want string) {
 	}
 }
 
-func assertIncludeTasksApplyWhen(t *testing.T, task map[string]any, want string) {
-	t.Helper()
-	include, ok := task["ansible.builtin.include_tasks"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s include_tasks has no apply block", task["name"])
-	}
-	apply, ok := include["apply"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s include_tasks has no apply block", task["name"])
-	}
-	when, ok := apply["when"].(string)
-	if !ok {
-		t.Fatalf("%s include_tasks apply block has no when", task["name"])
-	}
-	if got := strings.TrimSpace(when); got != want {
-		t.Fatalf("%s include_tasks apply.when got %q, want %q", task["name"], got, want)
-	}
-}
-
 func assertIncludeRoleName(t *testing.T, task map[string]any, want string) {
 	t.Helper()
 	include, ok := task["ansible.builtin.include_role"].(map[string]any)
