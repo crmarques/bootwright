@@ -167,6 +167,51 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+# A device this node previously provisioned as an OSD (recorded in the marker) that
+# is no longer in the declared devices list is a REMOVAL. cephadm never auto-removes
+# an OSD — dropping it from the drivegroup spec would silently orphan a running OSD —
+# so removing an OSD device is not an in-place reconcile. Refuse when the device is
+# still present AND still carries data (its OSD is still there), directing the
+# operator to drain it first. A removed device that is absent or already wiped
+# (drained out of band) passes: the new marker below simply stops recording it.
+- name: Resolve declared-removed Bootwright OSD devices
+  ansible.builtin.set_fact:
+    bootwright_ceph_removed_osd_devices: >-
+      {{ (bootwright_ceph_owned_osd_devices | default([]))
+         | difference(bootwright_current_storage_host.devices | default([])) }}
+  when: bootwright_current_storage_host.devices | default([]) | length > 0
+
+- name: Probe declared-removed OSD devices for a still-present OSD
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --no-act
+      - --noheadings
+      - "{{ item }}"
+  register: bootwright_ceph_removed_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_removed_osd_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to drop an OSD device that still hosts an OSD
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0 or (item.stdout | trim | length == 0)
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }}: device {{ item.item }}
+      was provisioned as a Bootwright OSD but is no longer in the declared devices
+      list, and it still hosts an OSD (data signatures present). cephadm does not
+      auto-remove an OSD, so dropping the device from the spec would orphan a running
+      OSD. Drain and remove it first — find its id with `cephadm shell -- ceph osd tree`,
+      then `cephadm shell -- ceph orch osd rm <id>` (this rebalances data off it) —
+      and re-apply once it is gone, or re-add the device to keep it.
+    quiet: true
+  loop: "{{ bootwright_ceph_removed_check.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
 # Record the empty devices Bootwright is claiming as OSDs on this node so destroy
 # can refuse to wipe a device later added to the declared list out of band. Stamped
 # on every apply so it tracks legitimate device additions, and removed by the
