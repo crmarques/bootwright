@@ -100,15 +100,21 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if got := packages["install"].([]string); !reflect.DeepEqual(got, []string{"podman", "lvm2", "chrony", "firewalld", "nmstate"}) {
 		t.Fatalf("kickstart packages.install = %v", got)
 	}
-	if got := packages["languages"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
-		t.Fatalf("kickstart packages.languages = %v", got)
+	if _, ok := packages["languages"]; ok {
+		t.Fatalf("kickstart packages.languages = %v, want removed (folded into localization)", packages["languages"])
 	}
+	// The 006 profile keeps English messages (language defaults to en_US.UTF-8)
+	// with Brazilian formatting/keyboard/timezone. instLangs unions language and
+	// formats so the pt_BR locale data is installed and can never be pruned.
 	localization := ks["localization"].(map[string]any)
-	if localization["language"] != "en_US.UTF-8" || localization["keyboard"] != "us" || localization["timezone"] != "UTC" {
-		t.Fatalf("kickstart localization = %v, want the baseline for a profile with no localization group", localization)
+	if localization["language"] != "en_US.UTF-8" || localization["keyboard"] != "br-abnt2" || localization["timezone"] != "America/Sao_Paulo" {
+		t.Fatalf("kickstart localization = %v", localization)
 	}
-	if _, ok := localization["formats"]; ok {
-		t.Fatalf("kickstart localization.formats = %v, want omitted when the profile sets no formats", localization["formats"])
+	if localization["formats"] != "pt_BR.UTF-8" {
+		t.Fatalf("kickstart localization.formats = %v, want pt_BR.UTF-8", localization["formats"])
+	}
+	if got := localization["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8", "pt_BR.UTF-8"}) {
+		t.Fatalf("kickstart localization.instLangs = %v, want [en_US.UTF-8 pt_BR.UTF-8]", got)
 	}
 	services := ks["services"].(map[string]any)
 	if got := services["enabled"].([]string); !reflect.DeepEqual(got, []string{"sshd", "chronyd", "firewalld"}) {
@@ -585,8 +591,8 @@ func firstManagedOSMarkerHash(t *testing.T, vars map[string]any) string {
 }
 
 func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
-	// An absent group falls back to the pre-field baseline and omits formats, so
-	// the kickstart renders exactly as it did before localization existed.
+	// An absent group falls back to the pre-field baseline, omits formats, and
+	// still installs the active locale's data via instLangs (=language).
 	base := machineInstallLocalizationVars(v1alpha1.MachineInstallLocalization{})
 	if base["language"] != "en_US.UTF-8" || base["keyboard"] != "us" || base["timezone"] != "UTC" {
 		t.Fatalf("default localization = %v", base)
@@ -594,19 +600,27 @@ func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
 	if _, ok := base["formats"]; ok {
 		t.Fatalf("default localization must omit formats, got %v", base["formats"])
 	}
+	if got := base["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
+		t.Fatalf("default localization instLangs = %v, want [en_US.UTF-8]", got)
+	}
 	// English messages with Brazilian regional formatting: language stays the
-	// message locale while formats carries the regional locale through for the
-	// lang --addsupport and %post locale.conf split.
+	// message locale, formats carries the regional locale, and instLangs unions
+	// language + formats + additionalLocales (deduped, language first) so no
+	// active locale's data can be pruned by --inst-langs.
 	split := machineInstallLocalizationVars(v1alpha1.MachineInstallLocalization{
-		Language: "en_US.UTF-8",
-		Formats:  "pt_BR.UTF-8",
-		Keyboard: "br-abnt2",
-		Timezone: "America/Sao_Paulo",
+		Language:          "en_US.UTF-8",
+		Formats:           "pt_BR.UTF-8",
+		Keyboard:          "br-abnt2",
+		Timezone:          "America/Sao_Paulo",
+		AdditionalLocales: []string{"es_ES.UTF-8", "pt_BR.UTF-8"},
 	})
 	if split["language"] != "en_US.UTF-8" || split["formats"] != "pt_BR.UTF-8" {
 		t.Fatalf("split localization language/formats = %v", split)
 	}
 	if split["keyboard"] != "br-abnt2" || split["timezone"] != "America/Sao_Paulo" {
 		t.Fatalf("split localization keyboard/timezone = %v", split)
+	}
+	if got := split["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8", "pt_BR.UTF-8", "es_ES.UTF-8"}) {
+		t.Fatalf("split localization instLangs = %v, want [en_US.UTF-8 pt_BR.UTF-8 es_ES.UTF-8] (deduped, language first)", got)
 	}
 }

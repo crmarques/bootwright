@@ -27,8 +27,6 @@ spec:
       environment: minimal
       installWeakDeps: false
       excludeDocs: true
-      languages:
-        - en_US.UTF-8
       install:
         # cephadm is not on the RHEL install media; the storage_cluster_cephadm
         # role installs it post-provision after configuring the Ceph repo.

@@ -578,8 +578,9 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 
 // validateMachineInstallLocalization rejects whitespace in any localization
 // field. Each renders as a bare token on a kickstart lang/keyboard/timezone
-// line (or an LC_* assignment in %post), so an embedded space would inject a
-// stray argument or corrupt the directive rather than fail loudly at install.
+// line, an --inst-langs entry, or an LC_* assignment in %post, so an embedded
+// space would inject a stray argument or corrupt the directive rather than fail
+// loudly at install.
 func validateMachineInstallLocalization(prefix string, loc v1alpha1.MachineInstallLocalization) []string {
 	var errs []string
 	for _, field := range []struct{ name, value string }{
@@ -592,6 +593,18 @@ func validateMachineInstallLocalization(prefix string, loc v1alpha1.MachineInsta
 			errs = append(errs, fmt.Sprintf("%s.%s %q must not contain whitespace", prefix, field.name, field.value))
 		}
 	}
+	seen := map[string]bool{}
+	for i, locale := range loc.AdditionalLocales {
+		switch {
+		case locale == "":
+			errs = append(errs, fmt.Sprintf("%s.additionalLocales[%d] must not be empty", prefix, i))
+		case strings.ContainsAny(locale, " \t"):
+			errs = append(errs, fmt.Sprintf("%s.additionalLocales[%d] %q must not contain whitespace", prefix, i, locale))
+		case seen[locale]:
+			errs = append(errs, fmt.Sprintf("%s.additionalLocales[%d] %q is duplicated", prefix, i, locale))
+		}
+		seen[locale] = true
+	}
 	return errs
 }
 
@@ -603,7 +616,6 @@ func validateMachineInstallPackages(prefix string, packages v1alpha1.MachineInst
 		errs = append(errs, fmt.Sprintf("%s.environment %q must be %q", prefix, packages.Environment, v1alpha1.MachineInstallPackageEnvMinimal))
 	}
 	errs = append(errs, validateMachineInstallStringList(prefix+".install", packages.Install)...)
-	errs = append(errs, validateMachineInstallStringList(prefix+".languages", packages.Languages)...)
 	return errs
 }
 

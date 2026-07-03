@@ -549,16 +549,16 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"reboot",
 		// Localization renders from customizations.localization, defaulting each
 		// field to the pre-field baseline so an absent group is a no-op. formats
-		// splits regional LC_* from the message language via --addsupport + a
-		// %post locale.conf.
+		// splits regional LC_* from the message language via a %post locale.conf;
+		// instLangs (language + formats + additionalLocales) drives --inst-langs.
 		"{% set localization = ks.localization | default({}) %}",
-		"{% set loc_addsupport = (' --addsupport=' ~ localization.formats) if (localization.formats | default('') | length > 0) else '' %}",
-		"lang {{ localization.language | default('en_US.UTF-8', true) }}{{ loc_addsupport }}",
+		"lang {{ localization.language | default('en_US.UTF-8', true) }}",
 		"keyboard {{ localization.keyboard | default('us', true) }}",
 		"timezone {{ localization.timezone | default('UTC', true) }} --utc",
 		"{% if localization.formats | default('') | length > 0 %}",
 		"cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_CONF'",
 		"LC_TIME={{ localization.formats }}",
+		"{% if localization.instLangs | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (localization.instLangs | join(',')) %}{% endif %}",
 		"{% set rhsm = installer.rhsm | default({}) %}",
 		"{% if rhsm.enabled | default(false) %}",
 		"rhsm --organization=\"{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}\" --activation-key=\"{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}\"{{ sat_flag }}{{ proxy_flag }}{{ insights_flag }}",
@@ -598,7 +598,6 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% if ssh_user != 'root' and ssh_password_hash | length > 0 %}",
 		"user --name={{ ssh_user }} --groups=wheel --password={{ ssh_password_hash }} --iscrypted",
 		"%packages{{ pkg_opts }}",
-		"{% if packages.languages | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (packages.languages | join(',')) %}{% endif %}",
 		"@^{{ packages.environment | default('minimal') }}-environment",
 		"{% set marker = bootwright_component.osInstall.marker | default({}) %}",
 		"cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'",

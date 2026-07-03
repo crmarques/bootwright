@@ -279,9 +279,9 @@ type MachineInstallHostname struct {
 }
 
 // MachineInstallLocalization sets the installed system's language, keyboard
-// layout, and timezone. Every field is optional and defaults to the Bootwright
-// baseline when omitted (language en_US.UTF-8, keyboard us, timezone UTC), so an
-// absent group renders exactly as before.
+// layout, timezone, and installed locale data. Every field is optional and
+// defaults to the Bootwright baseline when omitted (language en_US.UTF-8,
+// keyboard us, timezone UTC), so an absent group renders exactly as before.
 //
 // Formats splits regional formatting (dates, numbers, currency, paper size)
 // from the message Language: leave Language as the message locale (e.g.
@@ -289,11 +289,18 @@ type MachineInstallHostname struct {
 // English system messages while dates and numbers follow Brazilian conventions.
 // When Formats is empty, formatting follows Language. Timezone always keeps the
 // hardware clock in UTC.
+//
+// This group is also the single home for which locales exist on the installed
+// system: Language, Formats, and AdditionalLocales are unioned into the kickstart
+// %packages --inst-langs list, which is authoritative over which locales survive
+// in `locale -a`. The active locale therefore can never be pruned. Set
+// AdditionalLocales only for extra locales beyond Language/Formats.
 type MachineInstallLocalization struct {
-	Language string `yaml:"language,omitempty" json:"language,omitempty"`
-	Formats  string `yaml:"formats,omitempty" json:"formats,omitempty"`
-	Keyboard string `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
-	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+	Language          string   `yaml:"language,omitempty" json:"language,omitempty"`
+	Formats           string   `yaml:"formats,omitempty" json:"formats,omitempty"`
+	Keyboard          string   `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
+	Timezone          string   `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+	AdditionalLocales []string `yaml:"additionalLocales,omitempty" json:"additionalLocales,omitempty"`
 }
 
 type MachineInstallSSH struct {
@@ -315,7 +322,6 @@ type MachineInstallPackages struct {
 	Install         []string `yaml:"install,omitempty" json:"install,omitempty"`
 	ExcludeDocs     bool     `yaml:"excludeDocs,omitempty" json:"excludeDocs,omitempty"`
 	InstallWeakDeps *bool    `yaml:"installWeakDeps,omitempty" json:"installWeakDeps,omitempty"`
-	Languages       []string `yaml:"languages,omitempty" json:"languages,omitempty"`
 }
 
 type MachineInstallServices struct {

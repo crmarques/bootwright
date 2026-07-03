@@ -42,11 +42,7 @@ cdrom
 {% endif %}
 {% set ks = bootwright_component.osInstall.kickstart %}
 {% set localization = ks.localization | default({}) %}
-{# formats splits regional LC_* formatting from the message language: --addsupport
-   installs the extra locale data at install time so the %post locale.conf below can
-   activate it. Empty formats leaves formatting following lang. #}
-{% set loc_addsupport = (' --addsupport=' ~ localization.formats) if (localization.formats | default('') | length > 0) else '' %}
-lang {{ localization.language | default('en_US.UTF-8', true) }}{{ loc_addsupport }}
+lang {{ localization.language | default('en_US.UTF-8', true) }}
 keyboard {{ localization.keyboard | default('us', true) }}
 timezone {{ localization.timezone | default('UTC', true) }} --utc
 {% set ssh_user = ks.sshUser | default('root', true) %}
@@ -141,7 +137,7 @@ update-ca-trust extract
 {% set pkg_opts = '' %}
 {% if packages.excludeDocs | default(false) %}{% set pkg_opts = pkg_opts ~ ' --excludedocs' %}{% endif %}
 {% if not (packages.installWeakDeps | default(true)) %}{% set pkg_opts = pkg_opts ~ ' --exclude-weakdeps' %}{% endif %}
-{% if packages.languages | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (packages.languages | join(',')) %}{% endif %}
+{% if localization.instLangs | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (localization.instLangs | join(',')) %}{% endif %}
 %packages{{ pkg_opts }}
 @^{{ packages.environment | default('minimal') }}-environment
 {% for package in packages.install | default([]) %}
@@ -153,8 +149,8 @@ update-ca-trust extract
 {% if localization.formats | default('') | length > 0 %}
 # Keep system messages in {{ localization.language | default('en_US.UTF-8', true) }} while regional
 # formatting (dates, numbers, currency, paper) follows {{ localization.formats }}. LANG drives
-# messages/sorting; the explicit LC_* override only the formatting categories. The lang
-# --addsupport above installed the {{ localization.formats }} locale data this needs.
+# messages/sorting; the explicit LC_* override only the formatting categories. The %packages
+# --inst-langs above installed the {{ localization.formats }} locale data this needs.
 cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_CONF'
 LANG={{ localization.language | default('en_US.UTF-8', true) }}
 LC_TIME={{ localization.formats }}

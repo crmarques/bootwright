@@ -177,8 +177,6 @@ spec:
       environment: minimal
       installWeakDeps: false
       excludeDocs: true
-      languages:
-        - en_US.UTF-8
       install:
         - podman
         - lvm2
@@ -211,12 +209,16 @@ The customization arms, by area:
   paper size) from `language`: leave `language` as the message locale and set
   `formats` to the regional locale to keep English system messages while dates
   and numbers follow, for example, Brazilian conventions. The hardware clock is
-  always kept in UTC.
+  always kept in UTC. This group is also the single home for which locales exist
+  on the system: `language`, `formats`, and any `additionalLocales[]` are unioned
+  into the `%packages --inst-langs` list (authoritative over `locale -a`), so the
+  active locale can never be pruned. Set `additionalLocales[]` only for extra
+  locales beyond `language`/`formats`.
 - **ssh** — `authorizeMachineSSHKey` authorizes the machine SSH key during
   install; `passwordAuthentication` enables or disables password SSH auth.
 - **storage** — `rootDevice.source: machineRootDeviceHints` consumes the
   machine's root device hints (see below); `wipe` wipes the root device first.
-- **packages** — `environment` (for example `minimal`), `install[]`, `languages[]`,
+- **packages** — `environment` (for example `minimal`), `install[]`,
   `excludeDocs`, and the tri-state `installWeakDeps`.
 - **services** — `enabled[]` and `disabled[]`.
 - **security** — `selinux.mode` (`enforcing`/`permissive`/`disabled`),

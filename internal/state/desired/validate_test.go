@@ -1230,6 +1230,18 @@ spec:
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.localization.timezone "America/Sao Paulo" must not contain whitespace`,
 		},
 		{
+			name: "machine-install-localization-additional-locales-duplicate",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    localization:
+      additionalLocales:
+        - pt_BR.UTF-8
+        - pt_BR.UTF-8
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.localization.additionalLocales[1] "pt_BR.UTF-8" is duplicated`,
+		},
+		{
 			name: "machine-install-repository-base-url-scheme",
 			mutate: func(files map[string]string) {
 				files["machine-install.yaml"] = strings.Replace(machineInstallProfileYAML("rhel", `

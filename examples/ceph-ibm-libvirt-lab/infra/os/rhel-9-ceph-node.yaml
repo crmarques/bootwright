@@ -35,8 +35,6 @@ spec:
       environment: minimal
       installWeakDeps: false
       excludeDocs: true
-      languages:
-        - en_US.UTF-8
       install:
         - podman
         - lvm2
