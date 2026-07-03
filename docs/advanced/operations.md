@@ -40,6 +40,16 @@ mutually exclusive:
     `--override` authorizes rebuilding objects that already exist. They express
     opposite intents.
 
+!!! tip "Growing a Ceph cluster's OSDs is a plain `apply`, not `--override`"
+    Adding an OSD device to a `spec.ceph.topology` host reconciles **in place**:
+    a bare `apply` classifies an OSD-device-only change as reconcilable (not
+    destructive) drift, so `ceph orch apply` adds the new OSD without a
+    wipe-and-rebuild. `--override` is only for a change to cluster identity
+    (seedHost/monIP/network), which is a genuine rebuild. Because cephadm never
+    auto-removes an OSD (removal must drain data first), **removing** a device
+    that still hosts an OSD is refused with guidance to drain it —
+    `cephadm shell -- ceph orch osd rm <id>` — before removing it from the spec.
+
 ### The fail-closed `--override` contract
 
 `apply --override` authorizes Bootwright-owned destructive *rebuilds* — drifted
@@ -264,6 +274,37 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     recreate). Remove undeclared Ceph objects on the cluster out of band.
     See [Ceph storage topologies](ceph-topologies.md#convergence-is-additive-only)
     for the full convergence contract.
+
+!!! warning "Reclaiming OSD disks after a managed-OS reinstall"
+    Bootwright records which disks it provisioned as OSDs in an on-node marker.
+    A managed-OS reinstall wipes the OS disk (and that marker) while the separate
+    OSD **data** disks keep their ceph LVM, so a plain re-apply would refuse those
+    now-unrecognized signed disks. When the controller still records the cluster as
+    Bootwright-owned, authorize an in-band wipe of the specific disks:
+
+    ```
+    bootwright apply --clusters ceph-storage --reclaim-devices /dev/disk/by-id/wwn-0x...,/dev/disk/by-id/wwn-0x...
+    ```
+
+    Only a named device that is a declared OSD device of an owned cluster and is
+    **not mounted or a system disk** is wiped (irreversible); everything else fails
+    closed. This re-provisions the disks from scratch — it does not preserve the
+    old OSD data.
+
+### Checking live OSD health
+
+`state-check` is offline by default (it compares desired state to the last
+recorded apply and contacts no clusters). To additionally verify a managed Ceph
+cluster is *live-healthy*, add `--probe`: it runs a read-only OSD-health check on
+each seed and reports a cluster that came up with fewer OSDs than declared, or
+`HEALTH_ERR`, as drift (exit code 3).
+
+```
+bootwright state-check --clusters ceph-storage --probe
+```
+
+An apply already fails closed when OSDs do not materialize; `--probe` is for
+catching an OSD that failed *after* a healthy apply, without re-running apply.
 
 ## Force-destroying renamed or unmarked machines
 
