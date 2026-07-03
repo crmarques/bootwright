@@ -1,4 +1,8 @@
 ---
+# On an override rebuild the old OS is still up (already_ready) when this run
+# power-cycles it into the installer, so gate on install_required, not
+# not-already-ready: otherwise the next "port started" wait would match the old
+# OS's SSH immediately and race ahead of the reinstall.
 - name: Wait for previous managed OS SSH port to stop
   ansible.builtin.wait_for:
     host: "{{ bootwright_component.osInstall.ssh.address }}"
@@ -10,7 +14,7 @@
   when:
     - bootwright_managed_os_boot_component is defined
     - not (bootwright_os_pre_ssh_port.failed | default(true))
-    - not (bootwright_managed_os_already_ready | bool)
+    - bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | bool)) | bool
 
 - name: Wait for managed OS SSH port
   ansible.builtin.wait_for:
@@ -77,7 +81,7 @@
       set -uo pipefail
       kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
       addr={{ bootwright_component.osInstall.ssh.address | quote }}
-      if {{ (not (bootwright_managed_os_already_ready | default(false) | bool)) | ternary('true', 'false') }}; then
+      if {{ (bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool) | ternary('true', 'false') }}; then
         command -v flock >/dev/null 2>&1 || { echo 'flock (util-linux) is required on the provider host' >&2; exit 1; }
         command -v ssh-keyscan >/dev/null 2>&1 || { echo 'ssh-keyscan (openssh-clients) is required on the provider host' >&2; exit 1; }
         (

@@ -148,3 +148,35 @@
         or (bootwright_os_pre_marker_owned | default(false) | bool)
       }}
   changed_when: false
+
+# A reachable, Bootwright-owned host whose marker drifted is refused by default
+# (fail above) and authorized for a destructive rebuild under --override. The
+# refusal only *suppresses the fail*; this fact drives the actual reinstall so an
+# override-rebuild is carried out instead of the host being silently skipped as
+# "already ready" (which also re-stamped its marker to the new desired hash
+# without the OS ever changing). Mirror-image of the refuse-drifted predicate:
+# owned+drifted+reachable is EITHER refused (no override) OR rebuilt (override).
+- name: Resolve whether an owned drifted managed OS must be override-rebuilt
+  ansible.builtin.set_fact:
+    bootwright_managed_os_force_rebuild: >-
+      {{
+        (bootwright_managed_os_already_ready | bool)
+        and (bootwright_os_pre_marker_owned | default(false) | bool)
+        and (not (bootwright_os_pre_marker_matches | default(false) | bool))
+        and ((bootwright_apply_mode | default('continue')) == 'override')
+      }}
+  changed_when: false
+
+# The install runs when the node was not reachable/authenticated before this run
+# (fresh, wiped, or lost node) OR when --override forces a rebuild of an owned host
+# that drifted. A reachable owned host already matching desired is left untouched.
+# Every downstream "did this run (re)install?" gate keys off this, not off
+# not-already-ready, so a forced rebuild is treated exactly like a fresh install.
+- name: Resolve whether managed OS install must run
+  ansible.builtin.set_fact:
+    bootwright_managed_os_install_required: >-
+      {{
+        (not (bootwright_managed_os_already_ready | bool))
+        or (bootwright_managed_os_force_rebuild | bool)
+      }}
+  changed_when: false

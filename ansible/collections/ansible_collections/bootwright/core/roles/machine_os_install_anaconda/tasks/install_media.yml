@@ -1,6 +1,6 @@
 ---
 - name: Install managed OS from virtual media
-  when: not (bootwright_managed_os_already_ready | bool)
+  when: bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | bool)) | bool
   block:
     - name: Create managed OS install work directory
       ansible.builtin.file:

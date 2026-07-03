@@ -16,7 +16,7 @@
 # skips on a fresh install.
 - name: Install managed OS media when needed
   ansible.builtin.include_tasks: install_media.yml
-  when: not (bootwright_managed_os_already_ready | default(false) | bool)
+  when: bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool
 
 - name: Wait for managed OS access
   ansible.builtin.import_tasks: wait.yml
