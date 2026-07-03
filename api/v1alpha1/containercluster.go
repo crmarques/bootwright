@@ -29,12 +29,32 @@ type ContainerClusterDefaultedRefs struct {
 }
 
 type ContainerClusterSpec struct {
-	Distribution DistributionSpec   `yaml:"distribution,omitempty" json:"distribution,omitempty"`
-	Install      OCPInstallSpec     `yaml:"install,omitempty" json:"install,omitempty"`
-	ControlPlane *MachinePoolSpec   `yaml:"controlPlane,omitempty" json:"controlPlane,omitempty"`
-	Compute      []MachinePoolSpec  `yaml:"compute,omitempty" json:"compute,omitempty"`
-	Networking   *OCPNetworkingSpec `yaml:"networking,omitempty" json:"networking,omitempty"`
-	Hosts        []OCPHostSpec      `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+	Distribution DistributionSpec         `yaml:"distribution,omitempty" json:"distribution,omitempty"`
+	Install      OCPInstallSpec           `yaml:"install,omitempty" json:"install,omitempty"`
+	Security     ContainerClusterSecurity `yaml:"security,omitempty" json:"security,omitempty"`
+	ControlPlane *MachinePoolSpec         `yaml:"controlPlane,omitempty" json:"controlPlane,omitempty"`
+	Compute      []MachinePoolSpec        `yaml:"compute,omitempty" json:"compute,omitempty"`
+	Networking   *OCPNetworkingSpec       `yaml:"networking,omitempty" json:"networking,omitempty"`
+	Hosts        []OCPHostSpec            `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+}
+
+// ContainerClusterSecurity declares the cluster's security posture. FIPS, when
+// enabled, renders fips: true into the OpenShift install-config so the agent
+// installer lays down RHCOS in FIPS mode across every control-plane and compute
+// node. It requires the openshift distribution (OKD's community SCOS is not
+// FIPS-validated) — the parallel of the Ceph redhat/ibm gate. Unlike Ceph,
+// there is no separate node OS gate: OCP nodes are RHCOS installed by this same
+// install-config, so the fips field is self-contained rather than a
+// cross-object consistency check against each node's MachineInstallProfile.
+type ContainerClusterSecurity struct {
+	FIPS ContainerClusterFIPS `yaml:"fips,omitempty" json:"fips,omitempty"`
+}
+
+// ContainerClusterFIPS.Enabled is a plain bool because false and unset mean the
+// same thing — matching StorageCephFIPS and MachineInstallFIPS. Only
+// enabled: true renders FIPS configuration.
+type ContainerClusterFIPS struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 type OCPInstallSpec struct {

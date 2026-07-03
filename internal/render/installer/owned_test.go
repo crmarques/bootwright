@@ -33,6 +33,7 @@ var alwaysOwnedInstallConfigKeys = []string{
 var conditionalInstallConfigKeys = map[string]string{
 	"additionalTrustBundle":       "set only when ContainerCluster.spec.install.mode=disconnected",
 	"additionalTrustBundlePolicy": "set only when additionalTrustBundle is set",
+	"fips":                        "set only when ContainerCluster.spec.security.fips.enabled is true",
 	"imageDigestSources":          "set only when Environment.spec.registries.mirror is declared (disconnected mode)",
 	"proxy":                       "set only when Environment.spec.proxyFor.containerClusterInstall selects an external or managed proxy",
 }

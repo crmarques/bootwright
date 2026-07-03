@@ -60,6 +60,7 @@ spec:
 | --- | --- | --- | --- |
 | `spec.distribution` | No | `type: openshift` | OpenShift or OKD release selection. |
 | `spec.install` | No | — | Install method, mode, platform, endpoints, artifact access, trust, serving certificates, and node SSH. |
+| `spec.security` | No | — | Cluster security posture. Today: FIPS mode. See [Security](#security). |
 | `spec.controlPlane.replicas` | No | — | Control-plane replica count; when set, must equal the master host count. |
 | `spec.compute[].replicas` | No | — | Worker replica count per pool; their sum must equal the worker+infra host count when any compute pool is declared (infra hosts install as workers). |
 | `spec.networking` | No | Defaulted networks (see [Networking](#networking)) | Cluster and service networks and the OpenShift network type. |
@@ -156,6 +157,34 @@ together with `additionalTrustBundleRefs` — see
     entry needs both a `secretRef` and at least one `names` value. If you author
     `ingress` you must supply `defaultCertificateRef`. Named-certificate `names`
     must not name the internal `api-int.<cluster>.<baseDomain>` endpoint.
+
+## Security
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `security.fips.enabled` | No | `false` | Install and run the cluster in FIPS mode. |
+
+`security.fips.enabled: true` renders `fips: true` into the generated
+`install-config.yaml`, so the agent installer lays down RHCOS in FIPS mode
+across every control-plane and compute node. `false` and unset are equivalent —
+only `enabled: true` renders FIPS.
+
+Unlike the [managed Ceph FIPS gate](../advanced/ceph-topologies.md#fips), OCP
+needs no matching flag on each node's OS: an OpenShift node's OS is RHCOS,
+installed by this same `install-config.yaml`, so the one field is the whole
+mechanism. There is no separate `MachineInstallProfile` to keep consistent.
+
+!!! warning "FIPS requires OpenShift, not OKD"
+    `security.fips.enabled` is rejected for `distribution.type: okd`: OKD ships
+    community SCOS, which is not FIPS-validated. This mirrors the Ceph gate,
+    which rejects the community `oss` distribution. FIPS validation is a Red Hat
+    OpenShift feature.
+
+!!! note "FIPS is install-time intent, not a day-2 toggle"
+    Like `distribution.release.*`, `security.fips.enabled` selects what
+    bootwright installs. Flipping it on an already-installed cluster is drift
+    whose only in-band resolution is a reinstall — OpenShift does not support
+    turning FIPS on or off after install.
 
 ## Platform
 

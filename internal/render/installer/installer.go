@@ -114,6 +114,9 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 		"pullSecret": secrets.PullSecret,
 		"sshKey":     secrets.SSHKey,
 	}
+	if ocp.Spec.Security.FIPS.Enabled {
+		base["fips"] = true
+	}
 	if secrets.TrustBundle != "" {
 		base["additionalTrustBundle"] = secrets.TrustBundle
 		base["additionalTrustBundlePolicy"] = "Always"

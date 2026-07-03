@@ -33,6 +33,7 @@ func OwnedFields() OwnedInstallerFields {
 			"sshKey",
 			"additionalTrustBundle",
 			"additionalTrustBundlePolicy",
+			"fips",
 			"controlPlane",
 			"compute",
 			"imageDigestSources",

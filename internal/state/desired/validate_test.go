@@ -3928,6 +3928,55 @@ func TestValidateStorageCephFIPSGate(t *testing.T) {
 	}
 }
 
+func TestValidateContainerClusterFIPSGate(t *testing.T) {
+	cluster := func(distribution string, fips bool) v1alpha1.ContainerCluster {
+		return v1alpha1.ContainerCluster{
+			Metadata: v1alpha1.Metadata{Name: "ocp"},
+			Spec: v1alpha1.ContainerClusterSpec{
+				Distribution: v1alpha1.DistributionSpec{
+					Type:    distribution,
+					Release: v1alpha1.ReleaseSpec{Version: "4.17.0"},
+				},
+				Security: v1alpha1.ContainerClusterSecurity{FIPS: v1alpha1.ContainerClusterFIPS{Enabled: fips}},
+			},
+		}
+	}
+
+	cases := []struct {
+		name          string
+		cluster       v1alpha1.ContainerCluster
+		wantSubstring string // empty means expect no errors
+	}{
+		{
+			name:    "openshift-fips-ok",
+			cluster: cluster(v1alpha1.DistributionOpenShift, true),
+		},
+		{
+			name:    "fips-off-gate-disabled",
+			cluster: cluster(v1alpha1.DistributionOKD, false),
+		},
+		{
+			name:          "okd-fips-rejected",
+			cluster:       cluster(v1alpha1.DistributionOKD, true),
+			wantSubstring: "spec.security.fips.enabled requires distribution openshift; okd (community SCOS) is not FIPS-validated",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateContainerClusterFIPS(tc.cluster)
+			if tc.wantSubstring == "" {
+				if len(errs) != 0 {
+					t.Fatalf("expected no errors, got %v", errs)
+				}
+				return
+			}
+			if !strings.Contains(strings.Join(errs, "\n"), tc.wantSubstring) {
+				t.Fatalf("errors %v do not contain %q", errs, tc.wantSubstring)
+			}
+		})
+	}
+}
+
 func writeFiles(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	for name, content := range files {

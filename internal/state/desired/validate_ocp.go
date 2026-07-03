@@ -28,6 +28,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 				ocp.Metadata.Name, ocp.Spec.Install.Mode, v1alpha1.InstallModeConnected, v1alpha1.InstallModeDisconnected))
 		}
 		errs = append(errs, validateDistribution(ocp)...)
+		errs = append(errs, validateContainerClusterFIPS(ocp)...)
 		errs = append(errs, validateClusterNetworking(ocp)...)
 		if ocp.Spec.Install.Method != "" && ocp.Spec.Install.Method != v1alpha1.OCPInstallMethodAgent {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.method %q must be %q",
@@ -161,6 +162,22 @@ func validateDistribution(ocp v1alpha1.ContainerCluster) []string {
 			ocp.Metadata.Name, ocp.Spec.Distribution.Type, v1alpha1.DistributionOpenShift, v1alpha1.DistributionOKD))
 	}
 	return errs
+}
+
+// validateContainerClusterFIPS gates a FIPS-declared cluster. FIPS renders
+// fips: true into the install-config, which lays down RHCOS in FIPS mode; it is
+// a Red Hat OpenShift feature, so the community okd distribution (SCOS) is
+// rejected — the parallel of the Ceph oss gate. No node OS gate is needed: OCP
+// nodes are RHCOS installed by the same install-config, not a separately
+// declared MachineInstallProfile.
+func validateContainerClusterFIPS(ocp v1alpha1.ContainerCluster) []string {
+	if !ocp.Spec.Security.FIPS.Enabled {
+		return nil
+	}
+	if v1alpha1.DistributionType(ocp) != v1alpha1.DistributionOpenShift {
+		return []string{fmt.Sprintf("ContainerCluster/%s spec.security.fips.enabled requires distribution openshift; okd (community SCOS) is not FIPS-validated", ocp.Metadata.Name)}
+	}
+	return nil
 }
 
 func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.Machine) []string {
