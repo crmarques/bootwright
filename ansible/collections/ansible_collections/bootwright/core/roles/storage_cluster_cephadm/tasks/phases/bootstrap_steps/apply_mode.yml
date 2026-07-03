@@ -80,6 +80,18 @@
     bootwright_gate_exists: "{{ (bootwright_ceph_override_conf | default({})).content is defined }}"
     bootwright_gate_owned: "{{ bootwright_ceph_override_owned | default(false) | bool }}"
 
+# The controller classifies a StorageCluster whose only drift is an OSD-device add
+# as reconcilable in place and passes its name in
+# bootwright_ceph_reconcilable_only_clusters. For such a cluster --override must NOT
+# wipe: `ceph orch apply` in the service-spec step adds the new OSD additively. An
+# absent/empty var leaves this false, so a structural rebuild (or a cluster the
+# controller did not mark reconcilable) keeps the existing zap-and-rebuild behavior.
+- name: Decide whether this cluster's override drift is reconcilable in place
+  ansible.builtin.set_fact:
+    bootwright_ceph_reconcilable_only: >-
+      {{ bootwright_selected_storage_cluster.name
+         in (bootwright_ceph_reconcilable_only_clusters | default('') | split(',')) }}
+
 - name: Remove existing cephadm cluster for override rebuild
   ansible.builtin.command:
     argv:
@@ -98,6 +110,7 @@
     - (bootwright_apply_mode | default('continue')) == 'override'
     - bootwright_ceph_override_owned | default(false) | bool
     - bootwright_ceph_override_fsid | default('') | length > 0
+    - not (bootwright_ceph_reconcilable_only | default(false) | bool)
 
 - name: Clear residual Ceph configuration for override rebuild
   ansible.builtin.file:
@@ -112,6 +125,7 @@
     - (bootwright_apply_mode | default('continue')) == 'override'
     - bootwright_ceph_override_owned | default(false) | bool
     - (bootwright_ceph_override_conf | default({})).content is defined
+    - not (bootwright_ceph_reconcilable_only | default(false) | bool)
 
 - name: Check existing Ceph configuration
   ansible.builtin.command:

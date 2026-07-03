@@ -1,6 +1,8 @@
 package converge
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
@@ -31,4 +33,31 @@ func OverrideDestructiveStorageClusters(objects []workflow.ObjectClassification)
 		}
 	}
 	return out
+}
+
+// ReconcilableOnlyStorageClusters returns the bare names of StorageClusters whose
+// only drift is a reconcilable-in-place OSD-device edit (no structural/identity
+// drift). Under --override the seed role reconciles these via `ceph orch apply`
+// instead of wiping them with rm-cluster --zap-osds; the name list is passed to
+// Ansible so the zap is suppressed for exactly these clusters.
+func ReconcilableOnlyStorageClusters(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if o.Kind == workflow.ApplyTaskKindStorageCluster && o.Reconcilable {
+			out = append(out, strings.TrimPrefix(o.Label, "StorageCluster/"))
+		}
+	}
+	return out
+}
+
+// ApplyReconcilableOnlyStorageExtraVar threads the reconcilable-only StorageCluster
+// names to the seed role so its --override apply-mode gate reconciles those
+// clusters in place instead of running the destructive rm-cluster --zap-osds. An
+// empty list appends nothing, so a cluster with structural drift (or none) keeps
+// the existing override rebuild behavior.
+func ApplyReconcilableOnlyStorageExtraVar(plan *WorkflowPlan, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_reconcilable_only_clusters="+strings.Join(names, ","))
 }

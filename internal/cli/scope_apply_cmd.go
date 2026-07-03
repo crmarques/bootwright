@@ -261,11 +261,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			// which pools/filesystems are at risk.
 			if mode == workflow.ApplyModeOverride {
 				if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
-					cliout.NewContinuation(stdout).Warning("override", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. Any drift in the cluster's own topology (seedHost/monIP/network or the OSD device selection) triggers this, not only pool/filesystem changes.")
+					cliout.NewContinuation(stdout).Warning("override", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. A change to cluster identity (seedHost/monIP/network) triggers this; an OSD-device add reconciles in place and does NOT wipe.")
 				}
 				if rebuilt := converge.OverrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
 					cliout.NewContinuation(stdout).Warning("override", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type/erasure profile, or a CephFS metadata or default data pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
 				}
+				// A StorageCluster whose only drift is a reconcilable OSD-device add is
+				// reconciled in place by the seed role, not wiped: pass its name so the
+				// override apply-mode gate suppresses rm-cluster --zap-osds for it.
+				converge.ApplyReconcilableOnlyStorageExtraVar(&plan, converge.ReconcilableOnlyStorageClusters(objects))
 			}
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
