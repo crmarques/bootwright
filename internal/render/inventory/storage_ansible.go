@@ -68,6 +68,20 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 	return StorageNodeHostName(cluster.Metadata.Name, nodeName)
 }
 
+// storageOSDReadinessVars renders what the seed's post-apply readiness poll can
+// assert about OSD creation: an exact expected OSD count when every managed OSD
+// selection names explicit devices, an "at least one" floor when a filter/all
+// selection makes the count host-resolved, or skip when no managed OSD service
+// creates OSDs. It converts a fire-and-forget `ceph orch apply` into a checked
+// step so a zero/short-OSD cluster fails the apply instead of reporting success.
+func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
+	mode, count := cephrender.OSDReadinessExpectation(cluster)
+	return map[string]any{
+		"mode":          mode,
+		"expectedCount": count,
+	}
+}
+
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	// The Ansible inventory identifies nodes by machine name (stable, and the
 	// token the bootstrap seedHost is authored with); cephadm's fully-qualified
@@ -115,6 +129,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 				"operationsPath":       asset.OperationsPath,
 			},
 			"dataFoundationBindings": storageDataFoundationBindingsVars(state, cluster.Metadata.Name),
+			"osdReadiness":           storageOSDReadinessVars(cluster),
 		}
 		if !cephrender.MonitoringEnabled(cluster) {
 			entry["skipMonitoringStack"] = true
@@ -243,7 +258,13 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			"hostname":      node.MachineRef.Name,
 			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
 			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
-			"devices":       append([]string(nil), node.Devices...),
+			// devices carries every explicit OSD block-device path — the devices
+			// shorthand AND the drivegroup osd: form's data/db/wal paths (and any
+			// covering fleet osdDrivegroup) — so the device-empty gate, the OSD
+			// ownership marker, and the destroy wipe cover the drivegroup form too,
+			// not only the shorthand. It is gate/marker-only; the rendered OSD spec
+			// reads node.Devices/node.OSD directly.
+			"devices": cephrender.OSDGateDevicePaths(cluster, node),
 		})
 	}
 	return out

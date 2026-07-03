@@ -5,6 +5,144 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
+// osdSelectionStaticPaths returns the explicit block-device paths a device
+// selection names (its paths and pathSpecs[].path). It is nil when the selection
+// carries no explicit paths (a filter/all selection, resolved on-host by
+// ceph-volume, not statically).
+func osdSelectionStaticPaths(sel *v1alpha1.StorageCephDeviceSelection) []string {
+	if sel == nil {
+		return nil
+	}
+	var paths []string
+	paths = append(paths, sel.Paths...)
+	for _, p := range sel.PathSpecs {
+		if p.Path != "" {
+			paths = append(paths, p.Path)
+		}
+	}
+	return paths
+}
+
+// osdSelectionIsStatic reports whether a selection consumes only explicitly
+// named devices — no all/model/vendor/rotational/size/limit filter — so its OSD
+// device set (and count) is known at render time.
+func osdSelectionIsStatic(sel *v1alpha1.StorageCephDeviceSelection) bool {
+	if sel == nil {
+		return false
+	}
+	if sel.All || sel.Model != "" || sel.Vendor != "" || sel.Rotational != nil ||
+		sel.Size != "" || sel.Limit != 0 {
+		return false
+	}
+	return len(sel.Paths) > 0 || len(sel.PathSpecs) > 0
+}
+
+// osdHostSpecStaticPaths returns every explicit data/db/wal device path a
+// drivegroup-shaped OSD spec names — the block devices Bootwright hands to
+// ceph-volume, which the device-safety gates and ownership marker must cover.
+func osdHostSpecStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
+	if osd == nil {
+		return nil
+	}
+	var paths []string
+	paths = append(paths, osdSelectionStaticPaths(osd.DataDevices)...)
+	paths = append(paths, osdSelectionStaticPaths(osd.DBDevices)...)
+	paths = append(paths, osdSelectionStaticPaths(osd.WALDevices)...)
+	return paths
+}
+
+// OSDGateDevicePaths returns the explicit block-device paths on this node that
+// the apply/preflight device-empty gates, the OSD ownership marker, and the
+// destroy wipe must all cover: the devices shorthand, the per-host drivegroup's
+// explicit data/db/wal paths, and any covering fleet osdDrivegroup's explicit
+// paths — deduplicated, shorthand first. Filter/all selections are not
+// statically enumerable and are omitted (only ceph-volume's own refusal backs
+// those); a drivegroup host authored purely by filter still gets no gate, which
+// the storage docs call out.
+func OSDGateDevicePaths(cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(paths []string) {
+		for _, p := range paths {
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	add(node.Devices)
+	add(osdHostSpecStaticPaths(node.OSD))
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		for _, host := range topology.ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
+			if host == node.Hostname {
+				add(osdHostSpecStaticPaths(&cluster.Spec.Ceph.Topology.OSDDrivegroups[i].OSD))
+				break
+			}
+		}
+	}
+	return out
+}
+
+// OSDReadinessExpectation summarizes what a post-apply readiness poll can assert
+// about OSD creation for a cluster, so a fire-and-forget `ceph orch apply` can no
+// longer report success against zero OSDs:
+//
+//	"exact"      — every managed OSD selection names explicit devices, so count is
+//	               the exact number of OSD daemons to expect up and in.
+//	"atLeastOne" — at least one managed OSD selection is filter/all-based (count is
+//	               resolved on-host), so only "> 0 OSDs" is assertable.
+//	"skip"       — no managed OSD service actively creates OSDs (no osd host, or
+//	               every OSD service is unmanaged); the poll makes no assertion.
+//
+// osdsPerDevice multiplies the exact count; an unmanaged service contributes no
+// new OSDs and is excluded.
+func OSDReadinessExpectation(cluster v1alpha1.StorageCluster) (mode string, count int) {
+	managed := false
+	exact := true
+	total := 0
+	consider := func(osd *v1alpha1.StorageCephHostOSD, hosts int) {
+		if osd == nil || osd.Unmanaged {
+			return
+		}
+		managed = true
+		if !osdSelectionIsStatic(osd.DataDevices) {
+			exact = false
+			return
+		}
+		per := osd.OSDsPerDevice
+		if per < 1 {
+			per = 1
+		}
+		total += hosts * len(osdSelectionStaticPaths(osd.DataDevices)) * per
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) {
+			continue
+		}
+		if len(node.Devices) > 0 {
+			managed = true
+			total += len(node.Devices)
+			continue
+		}
+		consider(node.OSD, 1)
+	}
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		hosts := len(topology.ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD))
+		consider(&cluster.Spec.Ceph.Topology.OSDDrivegroups[i].OSD, hosts)
+	}
+	switch {
+	case !managed:
+		return "skip", 0
+	case exact:
+		return "exact", total
+	default:
+		return "atLeastOne", 0
+	}
+}
+
 // cephadmOSDServices renders one per-host OSD service for every osd-role
 // host. Validation guarantees each osd-role host authors devices or osd, so
 // device consumption is always explicit — consuming all available devices is
