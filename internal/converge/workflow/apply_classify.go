@@ -18,7 +18,7 @@ type ObjectClassification struct {
 	// Class is the single most actionable classification for display, chosen with
 	// precedence foreign > drift > missing > match. The aggregate decisions the
 	// preflight makes use the predicate methods below, not this label.
-	Class ConvergeSafetyClassification         `json:"class"`
+	Class  ConvergeSafetyClassification         `json:"class"`
 	counts map[ConvergeSafetyClassification]int `json:"-"`
 	// reconcilable counts the drifted backing tasks whose drift is reconcilable in
 	// place (a StorageCluster OSD-device add: full hash changed, structural hash

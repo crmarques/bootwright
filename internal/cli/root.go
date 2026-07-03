@@ -74,7 +74,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newSecretCmd(stdin, stdout, stderr),
 		newPreflightCmd(stdin, stdout, stderr),
 		newStatusCmd(stdout),
-		newStateCheckCmd(stdout),
+		newStateCheckCmd(stdout, stderr),
 		newPlanCmd(stdin, stdout, stderr),
 		newRenderCmd(stdout, stderr),
 		newApplyCmd(stdin, stdout, stderr),

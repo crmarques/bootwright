@@ -8,27 +8,34 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	cephrender "github.com/crmarques/bootwright/internal/render/ceph"
 	"github.com/crmarques/bootwright/internal/status"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func newStateCheckCmd(stdout io.Writer) *cobra.Command {
+func newStateCheckCmd(stdout, stderr io.Writer) *cobra.Command {
 	var (
 		stage        string
 		through      string
 		clusterScope string
 		output       string
+		probe        bool
 	)
+	executable := workspace.ResolveAnsiblePlaybook()
 	cmd := &cobra.Command{
 		Use:   "state-check",
 		Short: "Report drift between selected desired state and the last recorded apply",
 		Long: "Reports drift between the selected desired state and the last recorded apply.\n" +
-			"Read-only: it contacts no hosts, BMCs, or clusters and writes no records, and\n" +
-			"it rejects --override because it neither mutates nor suppresses its report.\n" +
-			"Exit codes for automation: 0 in sync, 3 out of sync (drift, foreign, or\n" +
-			"never-applied), 1 load error, 2 usage error.",
+			"Read-only: by default it contacts no hosts, BMCs, or clusters and writes no\n" +
+			"records, and it rejects --override because it neither mutates nor suppresses its\n" +
+			"report. --probe additionally runs a read-only live OSD-health check on each\n" +
+			"managed Ceph seed, flagging a cluster that came up with fewer OSDs than declared\n" +
+			"(or HEALTH_ERR) as drift. Exit codes for automation: 0 in sync, 3 out of sync\n" +
+			"(drift, foreign, degraded, or never-applied), 1 load error, 2 usage error.",
 		Args: cobra.NoArgs,
 		Example: `  # Check the whole context for drift from the last apply
   bootwright state-check
@@ -51,6 +58,7 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
+	cmd.Flags().BoolVar(&probe, "probe", false, "additionally run a read-only live OSD-health check on each managed Ceph seed; a cluster with fewer OSDs in than declared (or HEALTH_ERR) is reported as drift")
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -74,6 +82,23 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
+		if probe {
+			// The live OSD-health probe runs read-only ansible against the managed Ceph
+			// seeds; route its bundle/progress noise to stderr so stdout stays clean for
+			// the report (text) or the JSON document. It overlays degraded clusters onto
+			// the offline report as drift; it never rewrites a convergence record.
+			clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
+			reporter := newWorkflowReporter(stderr)
+			bundle, err := prepareWorkflowBundle(false)
+			if err != nil {
+				return failErr(1, err)
+			}
+			obs, err := converge.RunStorageHealthProbe(c.Context(), stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, false, reporter)
+			if err != nil {
+				return failErr(1, err)
+			}
+			converge.OverlayStorageHealthProbe(&report, obs, storageOSDExpectations(state))
+		}
 		if output == outputJSON {
 			if err := cliout.JSON(stdout, report); err != nil {
 				return failErr(1, err)
@@ -91,6 +116,18 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		return nil
 	}
 	return cmd
+}
+
+// storageOSDExpectations resolves each managed StorageCluster's declared OSD-count
+// expectation (via the render layer the CLI owns) so the live health overlay can
+// judge degradation without internal/converge depending on internal/render.
+func storageOSDExpectations(state v1alpha1.State) map[string]converge.StorageOSDExpectation {
+	out := map[string]converge.StorageOSDExpectation{}
+	for _, cluster := range state.StorageClusters {
+		mode, count := cephrender.OSDReadinessExpectation(cluster)
+		out[cluster.Metadata.Name] = converge.StorageOSDExpectation{Mode: mode, Count: count}
+	}
+	return out
 }
 
 func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {

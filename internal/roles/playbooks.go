@@ -14,6 +14,7 @@ const (
 	PlaybookWorkflowAllApply                     = "bootwright.core.workflow_all_apply"
 	PlaybookWorkflowBastionApplyTools            = "bootwright.core.workflow_bastion_apply_tools"
 	PlaybookCheckPreflight                       = "bootwright.core.check_preflight"
+	PlaybookCheckStorageHealth                   = "bootwright.core.check_storage_health"
 	PlaybookTaskProviderServicesApply            = "bootwright.core.task_provider_services_apply"
 	PlaybookTaskInfraComponentServicesApply      = "bootwright.core.task_infra_component_services_apply"
 	PlaybookTaskMachineInfraPrepare              = "bootwright.core.task_machine_infra_prepare"

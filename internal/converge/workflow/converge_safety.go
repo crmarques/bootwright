@@ -54,12 +54,12 @@ type ConvergeSafetyObservation struct {
 }
 
 type ConvergeSafetyRecord struct {
-	APIVersion   string                      `json:"apiVersion"`
-	ResourceID   string                      `json:"resourceID"`
-	ResourceKind string                      `json:"resourceKind"`
-	TaskID       string                      `json:"taskID"`
-	TaskKind     string                      `json:"taskKind"`
-	DesiredHash  string                      `json:"desiredHash"`
+	APIVersion   string `json:"apiVersion"`
+	ResourceID   string `json:"resourceID"`
+	ResourceKind string `json:"resourceKind"`
+	TaskID       string `json:"taskID"`
+	TaskKind     string `json:"taskKind"`
+	DesiredHash  string `json:"desiredHash"`
 	// StructuralHash, when set, hashes only the destructive-identity portion of the
 	// desired state (for a StorageCluster: everything except the OSD device
 	// selection). When the full DesiredHash drifts but StructuralHash still matches,
@@ -69,11 +69,11 @@ type ConvergeSafetyRecord struct {
 	// projection — both fall back to treating any drift as structural (fail-safe).
 	StructuralHash string                      `json:"structuralHash,omitempty"`
 	Owner          ConvergeSafetyOwnerIdentity `json:"owner"`
-	Observation  ConvergeSafetyObservation   `json:"observation"`
-	Status       ConvergeSafetyStatus        `json:"status"`
-	RunID        string                      `json:"runID,omitempty"`
-	ResourceKeys []string                    `json:"resourceKeys,omitempty"`
-	UpdatedAt    time.Time                   `json:"updatedAt"`
+	Observation    ConvergeSafetyObservation   `json:"observation"`
+	Status         ConvergeSafetyStatus        `json:"status"`
+	RunID          string                      `json:"runID,omitempty"`
+	ResourceKeys   []string                    `json:"resourceKeys,omitempty"`
+	UpdatedAt      time.Time                   `json:"updatedAt"`
 }
 
 func LoadConvergeSafetyRecord(runsDir, resourceID string) (ConvergeSafetyRecord, bool, error) {

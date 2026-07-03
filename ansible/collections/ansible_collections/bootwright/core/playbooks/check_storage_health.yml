@@ -1,0 +1,66 @@
+---
+# Read-only live OSD-health probe for `state-check --probe`. On each managed Ceph
+# seed it reads `ceph osd stat` and `ceph health` and writes a per-cluster result to
+# a controller-side directory; the controller compares the observed OSD count to the
+# declared expectation and reclassifies a degraded cluster (fewer OSDs 'in' than
+# declared, or HEALTH_ERR) as drift. It contacts only the seed and mutates nothing —
+# state-check stays read-only; --probe only adds this live read.
+- name: Probe managed Ceph OSD health
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  tasks:
+    - name: End non-seed storage hosts
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_seed_host_name | default('') != inventory_hostname
+
+    - name: Probe Ceph OSD stat
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - osd
+          - stat
+          - --format
+          - json
+      register: bootwright_ceph_health_osd_stat
+      changed_when: false
+      failed_when: false
+
+    - name: Probe Ceph cluster health
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - health
+          - --format
+          - json
+      register: bootwright_ceph_health_status
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure controller-side health result directory
+      ansible.builtin.file:
+        path: "{{ bootwright_storage_health_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Write Ceph health probe result
+      ansible.builtin.copy:
+        dest: "{{ bootwright_storage_health_dir }}/{{ bootwright_storage_cluster_name }}.json"
+        content: >-
+          {{
+            {
+              'cluster': bootwright_storage_cluster_name,
+              'probed': (bootwright_ceph_health_osd_stat.rc | default(1)) == 0,
+              'numInOSDs': ((bootwright_ceph_health_osd_stat.stdout | default('{}') | from_json).num_in_osds
+                            | default(0) | int) if (bootwright_ceph_health_osd_stat.rc | default(1)) == 0 else 0,
+              'numUpOSDs': ((bootwright_ceph_health_osd_stat.stdout | default('{}') | from_json).num_up_osds
+                            | default(0) | int) if (bootwright_ceph_health_osd_stat.rc | default(1)) == 0 else 0,
+              'health': (bootwright_ceph_health_status.stdout | default('{}') | from_json).status | default('UNKNOWN')
+            } | to_nice_json
+          }}
+        mode: "0600"
+      delegate_to: localhost
+      become: false
