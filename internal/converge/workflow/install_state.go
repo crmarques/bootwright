@@ -212,8 +212,22 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			return out, err
 		}
 		if mode == ApplyModeOverride {
-			// Override authorizes a clean rebuild: skip the install-state reconcile so
-			// the cluster install tasks run from scratch.
+			// Override authorizes a clean rebuild of a DRIFTED or unhealthy owned
+			// cluster — but must not wipe a cluster that is already installed, in sync,
+			// and Available. A scoped `apply --override` run (to rebuild some OTHER
+			// drifted object in scope) would otherwise reinstall every healthy cluster
+			// in that scope from scratch. So skip the install tasks for a
+			// match+installed+Available cluster exactly as continue would; let a
+			// drifted, not-installed, or unreachable cluster rebuild from scratch.
+			if found && record.DesiredHash == hash && record.Status == ClusterInstallStatusInstalled {
+				available, err := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
+				if err != nil {
+					return out, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w", name, err)
+				}
+				if available {
+					out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --override rebuilds only drifted objects, not a healthy in-sync cluster", now)
+				}
+			}
 			continue
 		}
 		hashMatches := !found || record.DesiredHash == hash
