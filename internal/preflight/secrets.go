@@ -102,14 +102,23 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			}
 		}
 		for _, entry := range env.Spec.InfraComponents.Proxies {
-			if entry.Connection == nil || entry.Connection.Auth == nil || entry.Connection.Auth.ProxyAuthRef.Name == "" {
+			if entry.Connection == nil {
 				continue
 			}
-			out = append(out, secretRefRequirement{
-				refName: entry.Connection.Auth.ProxyAuthRef.Name,
-				label:   fmt.Sprintf("proxy %s proxyAuthRef", entry.Name),
-				phases:  []string{"fabric", "machines"},
-			})
+			if entry.Connection.Auth != nil && entry.Connection.Auth.ProxyAuthRef.Name != "" {
+				out = append(out, secretRefRequirement{
+					refName: entry.Connection.Auth.ProxyAuthRef.Name,
+					label:   fmt.Sprintf("proxy %s proxyAuthRef", entry.Name),
+					phases:  []string{"fabric", "machines"},
+				})
+			}
+			if entry.Connection.TrustBundleRef.Name != "" {
+				out = append(out, secretRefRequirement{
+					refName: entry.Connection.TrustBundleRef.Name,
+					label:   fmt.Sprintf("proxy %s trustBundleRef", entry.Name),
+					phases:  []string{"fabric", "machines"},
+				})
+			}
 		}
 		if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil && registries.Mirror.CredentialsRef.Name != "" {
 			out = append(out, secretRefRequirement{

@@ -108,6 +108,42 @@ so a config `proxy=` would force every repository — including the `noProxy`
 hosts — through the proxy. Driving the proxy from the environment instead lets
 the package manager honour the `noProxy` exceptions.
 
+Red Hat subscription content is the exception. The certificate-based RHEL repos
+in `/etc/yum.repos.d/redhat.repo` take their proxy from `/etc/rhsm/rhsm.conf`,
+not the `http_proxy` environment — so on a managed Ceph node Bootwright writes
+the effective proxy (host, port, credentials, and `noProxy`) into rhsm.conf's
+`[server]` section before registering, and `subscription-manager` stamps it into
+each RHEL repo. Without this the RHSM plugin marks those repos `proxy = _none_`
+and dnf reaches the Red Hat CDN directly, which fails on a proxied estate.
+
+### TLS-inspecting proxies
+
+A proxy that terminates and re-signs HTTPS (SSL-bump / TLS inspection) presents
+its own CA on every upstream — including `cdn.redhat.com` — instead of tunnelling
+the origin's real certificate. Managed hosts egressing through it must trust that
+CA, or every HTTPS fetch fails certificate verification (`unable to get local
+issuer certificate`) even though the proxy tunnel itself is reachable. Declare
+the proxy's signing CA as a PEM secret and reference it from the proxy
+connection:
+
+```yaml
+spec:
+  infraComponents:
+    proxies:
+      - name: default
+        management: external
+        connection:
+          httpProxy: http://proxy.example.test:3128
+          auth:
+            proxyAuthRef: proxy-credentials
+          trustBundleRef: corporate-proxy-ca   # the proxy's SSL-bump CA (PEM)
+```
+
+Bootwright installs the bundle into the trust store
+(`/etc/pki/ca-trust/source/anchors/`, then `update-ca-trust`) of managed hosts
+that egress through the proxy, before their package work runs. Leave it unset for
+a plain CONNECT-tunnelling proxy that presents the origin's real certificate.
+
 ## Auth handling
 
 When a proxy entry carries `auth.proxyAuthRef`, the referenced credentials are

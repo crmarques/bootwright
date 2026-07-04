@@ -13,10 +13,11 @@ import (
 )
 
 type Effective struct {
-	HTTP    string
-	HTTPS   string
-	NoProxy []string
-	Auth    v1alpha1.SecretRef
+	HTTP        string
+	HTTPS       string
+	NoProxy     []string
+	Auth        v1alpha1.SecretRef
+	TrustBundle v1alpha1.SecretRef
 }
 
 func IsManaged(state v1alpha1.State) bool {
@@ -51,6 +52,7 @@ func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *E
 	if entry.Connection.Auth != nil {
 		eff.Auth = entry.Connection.Auth.ProxyAuthRef
 	}
+	eff.TrustBundle = entry.Connection.TrustBundleRef
 	if eff.HTTP == "" && eff.HTTPS == "" && len(eff.NoProxy) == 0 {
 		return nil
 	}

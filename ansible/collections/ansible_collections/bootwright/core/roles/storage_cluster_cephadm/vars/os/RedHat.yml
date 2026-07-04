@@ -20,6 +20,10 @@ bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwrigh
 # Distinct anchor for the corporate Satellite CA so it never collides with the
 # cephadm-registry CA above. Matches the managed-OS Kickstart anchor filename.
 bootwright_ceph_rhsm_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem
+# Distinct anchor for the egress proxy's TLS-inspection CA (proxy
+# connection.trustBundleRef), so a proxied node trusts the certificates the
+# proxy re-signs when dnf reaches the Red Hat CDN through it.
+bootwright_ceph_proxy_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.pem
 bootwright_ceph_ca_trust_update_argv:
   - update-ca-trust
 bootwright_ceph_community_default_mirror: https://download.ceph.com

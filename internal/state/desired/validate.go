@@ -550,6 +550,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		if entry.Connection != nil && entry.Connection.Auth != nil {
 			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].connection.auth.proxyAuthRef", env.Metadata.Name, i), entry.Connection.Auth.ProxyAuthRef)
 		}
+		if entry.Connection != nil && entry.Connection.TrustBundleRef.Name != "" {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].connection.trustBundleRef", env.Metadata.Name, i), entry.Connection.TrustBundleRef)
+		}
 	}
 	if env.Spec.InstallTrust != nil {
 		for i, ref := range env.Spec.InstallTrust.CABundleRefs {

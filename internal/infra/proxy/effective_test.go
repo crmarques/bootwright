@@ -28,6 +28,7 @@ func envWithExternalProxy() *v1alpha1.Environment {
 						Auth: &v1alpha1.EnvironmentProxyAuthSpec{
 							ProxyAuthRef: v1alpha1.SecretRef{Name: "proxy-auth"},
 						},
+						TrustBundleRef: v1alpha1.SecretRef{Name: "proxy-ca"},
 					},
 				}},
 			},
@@ -115,6 +116,9 @@ func TestResolveExternalCopiesEnvProxy(t *testing.T) {
 	}
 	if got.Auth.Name != "proxy-auth" {
 		t.Errorf("Auth.Name = %q, want %q", got.Auth.Name, "proxy-auth")
+	}
+	if got.TrustBundle.Name != "proxy-ca" {
+		t.Errorf("TrustBundle.Name = %q, want %q", got.TrustBundle.Name, "proxy-ca")
 	}
 }
 

@@ -11,3 +11,8 @@ bootwright_proxy_credentials_name: "{{ ((bootwright_proxy | default({})).auth | 
 # Resolved file path of the proxy credential, when set. Roles slurp
 # this from localhost; the file must exist with mode 0600.
 bootwright_proxy_credentials_ref: "{{ (bootwright_secrets_dir ~ '/' ~ bootwright_proxy_credentials_name) if (bootwright_proxy_credentials_name | length) > 0 else '' }}"
+# CA bundle a TLS-inspecting proxy re-signs HTTPS with, when the proxy
+# declares connection.trustBundleRef. Consuming roles copy this controller-side
+# PEM into the host trust store so egress through the proxy validates.
+bootwright_proxy_trust_bundle_name: "{{ (bootwright_proxy | default({})).trustBundleRef | default('') }}"
+bootwright_proxy_trust_bundle_ref: "{{ (bootwright_secrets_dir ~ '/' ~ bootwright_proxy_trust_bundle_name) if (bootwright_proxy_trust_bundle_name | length) > 0 else '' }}"

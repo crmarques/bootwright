@@ -32,6 +32,28 @@
 - name: Load Ceph storage node OS variables
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
+# Trust the egress proxy's TLS-inspection CA before any package work. A proxy
+# that re-signs HTTPS (SSL-bump) presents its own CA on cdn.redhat.com and every
+# other origin, so without this the RHEL CDN fetch fails certificate verification
+# ("unable to get local issuer certificate") even though the proxy tunnel itself
+# is reachable. Runs before both the community and subscription repository stages
+# so every subsequent dnf/get_url/podman pull through the proxy validates.
+- name: Trust corporate proxy CA on storage node
+  ansible.builtin.copy:
+    src: "{{ bootwright_proxy_trust_bundle_ref }}"
+    dest: "{{ bootwright_ceph_proxy_ca_anchor_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_ceph_proxy_ca
+  when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
+
+- name: Update storage node trust store for corporate proxy CA
+  ansible.builtin.command:
+    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
+  changed_when: bootwright_ceph_proxy_ca.changed | default(false)
+  when: bootwright_ceph_proxy_ca.changed | default(false)
+
 - name: Configure community Ceph package repository
   ansible.builtin.include_tasks: ../providers/community.yml
   when: bootwright_ceph_provider.community is defined

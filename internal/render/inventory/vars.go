@@ -261,6 +261,9 @@ func effectiveProxyVars(eff *proxy.Effective) map[string]any {
 	if eff.Auth.Name != "" {
 		out["auth"] = map[string]any{"proxyAuthRef": eff.Auth.Name}
 	}
+	if eff.TrustBundle.Name != "" {
+		out["trustBundleRef"] = eff.TrustBundle.Name
+	}
 	return out
 }
 

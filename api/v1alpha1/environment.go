@@ -461,6 +461,13 @@ type EnvironmentProxyConnection struct {
 	HTTPSProxy string                    `yaml:"httpsProxy,omitempty" json:"httpsProxy,omitempty"`
 	NoProxy    []string                  `yaml:"noProxy,omitempty" json:"noProxy,omitempty"`
 	Auth       *EnvironmentProxyAuthSpec `yaml:"auth,omitempty" json:"auth,omitempty"`
+	// TrustBundleRef names a spec.secrets PEM CA bundle for the CA a
+	// TLS-inspecting proxy re-signs HTTPS with. Bootwright installs it into the
+	// trust store of managed hosts that egress through this proxy so their
+	// package managers and downloads can verify the intercepted certificates.
+	// Leave unset for a plain (CONNECT-tunnelling) proxy that presents the
+	// origin's real certificate.
+	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
 }
 
 type EnvironmentProxyAuthSpec struct {

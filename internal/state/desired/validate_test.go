@@ -1840,6 +1840,46 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 	}
 }
 
+// A proxy that TLS-inspects egress declares its signing CA as
+// connection.trustBundleRef; like every other secret ref it must resolve to a
+// declared Environment secret, else apply would try to copy a missing PEM onto
+// the storage nodes.
+func TestEnvironmentProxyTrustBundleRefMustBeDeclared(t *testing.T) {
+	proxyYAML := `    proxies:
+      - name: default
+        management: external
+        connection:
+          httpProxy: http://proxy.bootwright.test:3128
+          trustBundleRef: corporate-proxy-ca
+`
+	inject := func(files map[string]string) {
+		files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", proxyYAML+"    artifactServers:\n", 1)
+	}
+
+	t.Run("undeclared-rejected", func(t *testing.T) {
+		dir := t.TempDir()
+		files := newBaselineFiles()
+		inject(files)
+		writeFiles(t, dir, files)
+		_, err := LoadNormalizeValidate([]string{dir})
+		want := `spec.infraComponents.proxies[0].connection.trustBundleRef "corporate-proxy-ca" is not declared in Environment/env spec.secrets`
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %v does not contain %q", err, want)
+		}
+	})
+
+	t.Run("declared-accepted", func(t *testing.T) {
+		dir := t.TempDir()
+		files := newBaselineFiles()
+		inject(files)
+		files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  secrets:\n", "  secrets:\n    - corporate-proxy-ca\n", 1)
+		writeFiles(t, dir, files)
+		if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+			t.Fatalf("LoadNormalizeValidate: %v", err)
+		}
+	})
+}
+
 func TestUnknownFieldRejectedAcrossAllKinds(t *testing.T) {
 	kinds := []string{
 		v1alpha1.KindEnvironment,

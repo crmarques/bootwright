@@ -91,6 +91,7 @@ managed-only are rejected on external entries and vice versa.
 | `proxies[].connection.httpsProxy` | No | Bare proxy URL. |
 | `proxies[].connection.noProxy[]` | No | No-proxy hosts. |
 | `proxies[].connection.auth.proxyAuthRef` | No | Secret with proxy credentials; URLs must not embed credentials. |
+| `proxies[].connection.trustBundleRef` | No | Secret (PEM) with the CA a TLS-inspecting proxy re-signs HTTPS with; installed into the trust store of managed hosts that egress through the proxy. See [Disconnected & proxied installs](../advanced/disconnected-proxy.md#tls-inspecting-proxies). |
 | `nameResolution[].name` | Yes | DNS-label entry name (not `none`). |
 | `nameResolution[].management` | Yes | `external` or `managed`. |
 | `nameResolution[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.nameResolution`. |
