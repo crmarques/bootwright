@@ -68,6 +68,35 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	}
 }
 
+// TestCheckApplyOverrideDestroyProtectionGranularKinds locks in the per-kind
+// tightening: on an allow-default environment, a destructive rebuild is blocked only
+// when its kind is in spec.safety.protectedKinds — so a protected StorageCluster is
+// gated while an unprotected ContainerCluster rebuild proceeds.
+func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
+	storage := driftedObjects(t, workflow.ApplyTaskKindStorageCluster, "storage.ceph", "ceph")
+	protect := func(kinds ...string) v1alpha1.State {
+		return v1alpha1.State{Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "nprd"},
+			Spec:     v1alpha1.EnvironmentSpec{Safety: v1alpha1.EnvironmentSafetySpec{ProtectedKinds: kinds}},
+		}}}
+	}
+
+	// StorageCluster protected on an allow-default env: blocked with guidance.
+	err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), storage)
+	if err == nil {
+		t.Fatal("protected StorageCluster kind must fail closed even on an allow-default env")
+	}
+	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "destroy --override"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("granular gate error must contain %q: %v", want, err)
+		}
+	}
+	// Only ContainerCluster protected: a StorageCluster rebuild proceeds.
+	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), storage); err != nil {
+		t.Fatalf("a StorageCluster rebuild must proceed when only ContainerCluster is protected: %v", err)
+	}
+}
+
 // TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy locks in the fix
 // for the destroy/re-apply loop: a blocked managed-OS machine (torn down only by
 // the infra stage) must be pointed at `destroy --stage infra --clusters <name>`,

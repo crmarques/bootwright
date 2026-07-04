@@ -42,7 +42,16 @@ type EnvironmentSpec struct {
 }
 
 type EnvironmentSafetySpec struct {
+	// DestroyProtection is the fleet-wide default: allow (destroy/destructive
+	// --override proceed) or requiredOverride (they must cross the --override
+	// authorization boundary).
 	DestroyProtection string `yaml:"destroyProtection,omitempty" json:"destroyProtection,omitempty"`
+	// ProtectedKinds requires --override to destroy — or destructively rebuild via
+	// apply --override — an object of these kinds even when DestroyProtection is
+	// allow (or unset). It is the granular tightening: a fleet can protect its
+	// StorageClusters and Machines without blanket friction on scratch
+	// ContainerClusters. Valid kinds: ContainerCluster, StorageCluster, Machine.
+	ProtectedKinds []string `yaml:"protectedKinds,omitempty" json:"protectedKinds,omitempty"`
 }
 
 type EnvironmentDefaultsSpec struct {

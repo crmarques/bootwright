@@ -53,7 +53,7 @@ func TestClassifyApplyTransitions(t *testing.T) {
 	})
 	check(ApplyModeOverride, map[string]ApplyTransitionAction{
 		"addon.drift":   ApplyTransitionReconcile,
-		"addon.foreign": ApplyTransitionRefuse, // foreign never rebuilt
+		"addon.foreign": ApplyTransitionRefuse,  // foreign never rebuilt
 		"os.demo":       ApplyTransitionRebuild, // destructive rebuild authorized
 		"addon.new":     ApplyTransitionCreate,
 		"addon.match":   ApplyTransitionUnchanged,

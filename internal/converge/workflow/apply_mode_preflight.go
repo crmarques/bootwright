@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 // EvaluateApplyModePreflight is the Go-side gate that enforces the apply mode
@@ -167,6 +169,40 @@ func OverrideDestructiveDriftedObjects(objects []ObjectClassification) []string 
 			continue
 		}
 		labels = append(labels, o.Label)
+	}
+	sort.Strings(labels)
+	return labels
+}
+
+// objectProtectedKind maps a classified object to the spec.safety.protectedKinds
+// category it belongs to — a container or storage cluster, or any machine-substrate
+// task (managed-OS install / machine-infra step) to Machine — or "" for an object no
+// protectedKind covers.
+func objectProtectedKind(o ObjectClassification) string {
+	switch {
+	case o.Kind == ObjectKindStorageCluster:
+		return v1alpha1.KindStorageCluster
+	case o.Kind == ObjectKindContainerCluster:
+		return v1alpha1.KindContainerCluster
+	case machineSubstrateKinds[o.Kind]:
+		return v1alpha1.KindMachine
+	}
+	return ""
+}
+
+// OverrideDestructiveKindProtected returns the labels of the destructive-drifted
+// objects whose kind is in the protected set — the granular destroy-protection gate
+// for an environment whose fleet-wide destroyProtection is allow. A reconfigure-only
+// or reconcilable object is never destructive, so it never trips this.
+func OverrideDestructiveKindProtected(objects []ObjectClassification, protected map[string]bool) []string {
+	var labels []string
+	for _, o := range objects {
+		if !isOverrideDestructive(o) {
+			continue
+		}
+		if kind := objectProtectedKind(o); kind != "" && protected[kind] {
+			labels = append(labels, o.Label)
+		}
 	}
 	sort.Strings(labels)
 	return labels

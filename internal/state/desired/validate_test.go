@@ -906,6 +906,13 @@ spec:
 			wantSubstring: `spec.safety.destroyProtection "production" must be one of {allow, requiredOverride}`,
 		},
 		{
+			name: "protected-kind-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  baseDomain: bootwright.test\n",
+				"  baseDomain: bootwright.test\n  safety:\n    protectedKinds: [StoragePool]\n", 1)},
+			wantSubstring: `spec.safety.protectedKinds "StoragePool" must be one of {ContainerCluster, StorageCluster, Machine}`,
+		},
+		{
 			name: "generated-ssh-key-type-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",

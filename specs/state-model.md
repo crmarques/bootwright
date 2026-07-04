@@ -43,6 +43,12 @@ Rules:
 - `safety.destroyProtection`, when set, must be `allow` or
   `requiredOverride`. Empty means `allow`. Bootwright never infers protection
   from environment names, context names, labels, or cluster names.
+- `safety.protectedKinds`, when set, lists object kinds — `ContainerCluster`,
+  `StorageCluster`, or `Machine` — that require `--override` to destroy or to
+  destructively rebuild via `apply --override` even when `destroyProtection` is
+  `allow`. It is the granular tightening: protect the fleet's Ceph and machines
+  without blanket friction on scratch container clusters. An unknown kind fails
+  validation naming the object and the allowed set.
 - `defaults.install.pullSecretRef` and `defaults.install.nodeSSH` fill omitted
   cluster install values only.
 - `defaults.artifactAccess`, when set, is copied into selected
@@ -1190,7 +1196,10 @@ input hash only — it never observes node reality.
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
 - `destroy --stage infra|clusters --override` is required when selected state
-  contains `Environment.spec.safety.destroyProtection: requiredOverride`.
+  contains `Environment.spec.safety.destroyProtection: requiredOverride`, or when
+  the scope-filtered teardown covers an object of a kind listed in
+  `Environment.spec.safety.protectedKinds` (the granular gate — a protected kind
+  absent from the scope does not require `--override`).
   `--yes` only skips the confirmation prompt and never implies `--override`.
 - `destroy --force-unowned` relaxes the machine-substrate teardown ownership
   gates only: it tears down a libvirt domain, KubeVirt VirtualMachine, or vSphere
@@ -1266,8 +1275,10 @@ input hash only — it never observes node reality.
   than rebuilding protected resources: that destruction must cross the destroy
   authorization boundary, so the operator runs `destroy --override` for the
   affected scope and then re-applies. Drift confined to reconfigure-only kinds is
-  an in-place re-apply and does not trip the protection gate. Dry-run/plan still
-  previews the override plan.
+  an in-place re-apply and does not trip the protection gate. `protectedKinds`
+  narrows this to specific kinds: on an `allow`-default environment, a destructive
+  `apply --override` rebuild of a protected kind still fails closed the same way,
+  while an unprotected kind rebuilds. Dry-run/plan still previews the override plan.
 - Independent of `destroyProtection`, a destructive `apply --override` rebuild (a
   managed-OS or substrate machine reinstall with disks wiped, or a container/Ceph
   cluster wipe-and-rebuild) requires an explicit data-loss acknowledgment even on an

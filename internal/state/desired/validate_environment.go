@@ -53,16 +53,26 @@ func validateEnvironments(state v1alpha1.State) []string {
 }
 
 func validateEnvironmentSafety(env v1alpha1.Environment) []string {
+	var errs []string
 	switch env.Spec.Safety.DestroyProtection {
 	case "", v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionRequiredOverride:
-		return nil
 	default:
-		return []string{fmt.Sprintf("Environment/%s spec.safety.destroyProtection %q must be one of {%s, %s}",
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.safety.destroyProtection %q must be one of {%s, %s}",
 			env.Metadata.Name,
 			env.Spec.Safety.DestroyProtection,
 			v1alpha1.EnvironmentDestroyProtectionAllow,
-			v1alpha1.EnvironmentDestroyProtectionRequiredOverride)}
+			v1alpha1.EnvironmentDestroyProtectionRequiredOverride))
 	}
+	for _, kind := range env.Spec.Safety.ProtectedKinds {
+		switch kind {
+		case v1alpha1.KindContainerCluster, v1alpha1.KindStorageCluster, v1alpha1.KindMachine:
+		default:
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.safety.protectedKinds %q must be one of {%s, %s, %s}",
+				env.Metadata.Name, kind,
+				v1alpha1.KindContainerCluster, v1alpha1.KindStorageCluster, v1alpha1.KindMachine))
+		}
+	}
+	return errs
 }
 
 func validateEnvironmentDefaults(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {

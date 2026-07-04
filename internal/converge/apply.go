@@ -38,19 +38,26 @@ import (
 // managed-OS machine at `destroy --override` for the clusters scope would loop
 // forever. The remedy routes machine substrate at `destroy --stage infra` instead.
 func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification) error {
-	protected := workflow.ProtectedEnvironments(state)
-	if len(protected) == 0 {
-		return nil
-	}
 	destructive := workflow.OverrideDestructiveDriftedObjects(objects)
 	if len(destructive) == 0 {
 		return nil
 	}
-	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
-	hasMachine := len(machineLabels) > 0
-	hasCluster := len(destructive) > len(machineLabels)
-	remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters)
-	return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
+	// Fleet-wide requiredOverride blocks EVERY destructive rebuild in scope.
+	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
+		machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
+		hasMachine := len(machineLabels) > 0
+		hasCluster := len(destructive) > len(machineLabels)
+		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters)
+		return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
+	}
+	// Granular protectedKinds blocks only destructive rebuilds of a protected kind,
+	// even when the fleet default is allow — so a scratch ContainerCluster rebuilds
+	// freely while a protected StorageCluster or Machine must cross the destroy boundary.
+	blocked := workflow.OverrideDestructiveKindProtected(objects, workflow.ProtectedKindSet(state))
+	if len(blocked) == 0 {
+		return nil
+	}
+	return fmt.Errorf("apply --override would destructively rebuild %s, protected by spec.safety.protectedKinds; run `bootwright destroy --override` for that scope first, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "))
 }
 
 // overrideDestroyRemedy builds the "run destroy first" clause, routing each
