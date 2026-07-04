@@ -54,6 +54,92 @@ func mustSubHash(t *testing.T, state v1alpha1.State, sub storageSubObject) strin
 	return h
 }
 
+// A pool whose only change is a reconcilable-in-place field (replica size) drifts but
+// classifies as RECONCILABLE, so continue proceeds and --override does not wipe. A
+// change to the pool's immutable identity (type) stays STRUCTURAL. A record written
+// before the structural hash existed falls back to structural (fail-safe).
+func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	cluster := v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "demo"}}
+	stateWith := func(pool v1alpha1.StoragePool) v1alpha1.State {
+		return v1alpha1.State{
+			StorageClusters: []v1alpha1.StorageCluster{cluster},
+			StoragePools:    []v1alpha1.StoragePool{pool},
+		}
+	}
+	clusterTask := func(state v1alpha1.State) ApplyTask {
+		return ApplyTask{
+			Entry:           TaskLedgerEntry{ID: "storage.demo", Kind: ApplyTaskKindStorageCluster, Cluster: "demo"},
+			State:           state,
+			DesiredHashVars: storageClusterDesiredHashVars(state, "demo"),
+		}
+	}
+	classifyPool := func(t *testing.T, runsDir string, state v1alpha1.State) ObjectClassification {
+		t.Helper()
+		objs, err := ClassifyApplyObjects([]ApplyTask{clusterTask(state)}, runsDir)
+		if err != nil {
+			t.Fatalf("classify: %v", err)
+		}
+		for _, o := range objs {
+			if o.ObjectKey == "StoragePool/demo.p1" {
+				return o
+			}
+		}
+		t.Fatalf("pool object not classified")
+		return ObjectClassification{}
+	}
+
+	// Baseline: replicated pool, size 3, recorded (writes desired + structural hash).
+	base := stateWith(storageSubObjectTestPool("p1", 3))
+	runsDir := t.TempDir()
+	if err := MarkStorageSubObjectsConvergeSafety(runsDir, "", "", base, "demo", ConvergeSafetyStatusReconciled, now); err != nil {
+		t.Fatalf("mark sub-objects: %v", err)
+	}
+
+	// Size 3 -> 2: reconcilable drift (structural hash unchanged).
+	sized := classifyPool(t, runsDir, stateWith(storageSubObjectTestPool("p1", 2)))
+	if sized.Class != ConvergeSafetyDrift {
+		t.Fatalf("size change should DISPLAY as drift, got %q", sized.Class)
+	}
+	if !sized.HasReconcilableDrift() || sized.HasStructuralDrift() {
+		t.Fatalf("pool size change must be reconcilable, not structural: reconcilable=%v structural=%v", sized.HasReconcilableDrift(), sized.HasStructuralDrift())
+	}
+	if !sized.Reconcilable {
+		t.Fatalf("Reconcilable flag must be set for a size-only pool edit")
+	}
+
+	// Type replicated -> erasure: structural (immutable identity).
+	ecPool := storageSubObjectTestPool("p1", 3)
+	ecPool.Spec.Ceph.Type = v1alpha1.StoragePoolTypeErasureCode
+	ecPool.Spec.Ceph.ErasureCoded = &v1alpha1.StoragePoolErasureCode{DataChunks: 2, CodingChunks: 1}
+	typed := classifyPool(t, runsDir, stateWith(ecPool))
+	if !typed.HasStructuralDrift() || typed.HasReconcilableDrift() {
+		t.Fatalf("pool type change must be structural: structural=%v reconcilable=%v", typed.HasStructuralDrift(), typed.HasReconcilableDrift())
+	}
+
+	// Legacy record (no structural hash): a size edit falls back to structural.
+	legacyDir := t.TempDir()
+	desired, err := storageSubObjectDesiredHash(base, storageSubObject{storageSubObjectKindPool, "demo", "p1"})
+	if err != nil {
+		t.Fatalf("desired hash: %v", err)
+	}
+	legacy := ConvergeSafetyRecord{
+		APIVersion:  ConvergeSafetyAPIVersion,
+		ResourceID:  "StoragePool/demo.p1",
+		DesiredHash: desired, // no StructuralHash
+		Owner:       ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
+		Status:      ConvergeSafetyStatusReconciled,
+		UpdatedAt:   now.UTC(),
+	}
+	if err := SaveConvergeSafetyRecord(legacyDir, legacy); err != nil {
+		t.Fatalf("save legacy record: %v", err)
+	}
+	legacySized := classifyPool(t, legacyDir, stateWith(storageSubObjectTestPool("p1", 2)))
+	if !legacySized.HasStructuralDrift() || legacySized.HasReconcilableDrift() {
+		t.Fatalf("legacy record must fall back to structural drift: structural=%v reconcilable=%v", legacySized.HasStructuralDrift(), legacySized.HasReconcilableDrift())
+	}
+}
+
 // The user's worked example: a converged 4-pool cluster gains a 5th pool. The cluster
 // and pools 1-4 stay match (so bootstrap and those pools are skipped); only pool 5
 // reads missing (and is created). The cluster does not inherit the new pool's absence.

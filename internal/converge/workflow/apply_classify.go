@@ -128,7 +128,11 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 				if err != nil {
 					return nil, err
 				}
-				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, false, "")
+				subReconcilable, err := storageSubObjectReconcilableDrift(task.State, sub, runsDir)
+				if err != nil {
+					return nil, err
+				}
+				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, subReconcilable, "")
 			}
 		}
 	}

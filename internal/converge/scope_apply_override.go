@@ -7,12 +7,16 @@ import (
 )
 
 // OverrideDriftedStorageSubObjects returns the labels of storage sub-objects that
-// --override would rebuild (those that drifted from their recorded desired state), in
-// the classifier's stable order. It drives the data-loss warning before the confirm.
+// --override would DESTRUCTIVELY rebuild — those with structural (immutable-identity)
+// drift: a pool type / EC profile, or a CephFS metadata / default-data pool. A
+// sub-object whose only drift is reconcilable in place (pool size/quota/compression/
+// crush, MDS placement, an added data pool) is excluded, because the ceph set-* / add
+// operations reconcile it without data loss. It drives the data-loss warning before
+// the confirm.
 func OverrideDriftedStorageSubObjects(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {
-		if workflow.IsStorageSubObjectKind(o.Kind) && o.HasDrift() {
+		if workflow.IsStorageSubObjectKind(o.Kind) && o.HasStructuralDrift() {
 			out = append(out, o.Label)
 		}
 	}

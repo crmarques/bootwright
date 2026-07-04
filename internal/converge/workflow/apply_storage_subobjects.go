@@ -168,6 +168,116 @@ func storageSubObjectDesiredHash(state v1alpha1.State, sub storageSubObject) (st
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+// storageSubObjectStructuralSpec projects the DESTRUCTIVE-IDENTITY subset of a
+// sub-object's desired state — the fields Ceph cannot change in place, so a drift in
+// them is a data-destroying rebuild rather than an in-place `ceph ... set` reconcile.
+// When the full desired hash drifts but this structural hash is unchanged, the edit is
+// reconcilable in place (pool size/quota/compression/crush/application, extra data
+// pools, MDS placement) and neither refused by continue nor wiped by --override. The
+// mapping mirrors the schema's own per-field annotations and the Ansible
+// override_rebuild.yml, which rebuilds ONLY on pool type / EC profile / CephFS
+// metadata+default-data-pool. A kind with no known-immutable identity (RGW gateway,
+// NFS export, StorageExport) returns nil, so any drift on it stays structural
+// (fail-safe: unchanged behaviour).
+func storageSubObjectStructuralSpec(state v1alpha1.State, sub storageSubObject) any {
+	switch sub.Kind {
+	case storageSubObjectKindPool:
+		for _, pool := range state.StoragePools {
+			if pool.Spec.StorageClusterRef.Name == sub.Cluster && pool.Metadata.Name == sub.Name {
+				// Type (replicated<->erasure) and the whole immutable EC profile are the
+				// only pool identity Ceph cannot change in place. Replicas, crush rule,
+				// application, autoscale, quota, compression, mirroring all reconcile via
+				// `ceph osd pool set`, so they are excluded here.
+				return struct {
+					Type    string                           `json:"type,omitempty"`
+					Erasure *v1alpha1.StoragePoolErasureCode `json:"erasure,omitempty"`
+				}{Type: pool.Spec.Ceph.Type, Erasure: pool.Spec.Ceph.ErasureCoded}
+			}
+		}
+	case storageSubObjectKindFilesystem:
+		for _, fs := range state.StorageFilesystems {
+			if fs.Spec.StorageClusterRef.Name == sub.Cluster && fs.Metadata.Name == sub.Name {
+				// The metadata pool and the DEFAULT data pool are immutable CephFS
+				// identity; MDS placement, subvolume groups, and ADDED (non-default) data
+				// pools reconcile in place / additively.
+				return struct {
+					MetadataPool    string `json:"metadataPool"`
+					DefaultDataPool string `json:"defaultDataPool"`
+				}{
+					MetadataPool:    fs.Spec.CephFS.MetadataPoolRef.Name,
+					DefaultDataPool: cephFSDefaultDataPool(fs.Spec.CephFS),
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// cephFSDefaultDataPool resolves the filesystem's default (first) data pool — the
+// entry explicitly marked default, else the sole/first entry — mirroring the renderer
+// and the live `ceph fs get` mdsmap.data_pools[0] the Ansible override rebuild reads.
+func cephFSDefaultDataPool(spec v1alpha1.StorageCephFSSpec) string {
+	for _, ref := range spec.DataPoolRefs {
+		if ref.Default {
+			return ref.Name
+		}
+	}
+	if len(spec.DataPoolRefs) > 0 {
+		return spec.DataPoolRefs[0].Name
+	}
+	return ""
+}
+
+// storageSubObjectStructuralHash hashes storageSubObjectStructuralSpec into the same
+// "sha256:<hex>" form as ApplyTaskStructuralHash, or returns "" when the sub-object
+// declares no structural projection (so it can never classify as reconcilable — any
+// drift stays structural). Both the record written after apply and the reconcilable
+// check before the next apply use this one function.
+func storageSubObjectStructuralHash(state v1alpha1.State, sub storageSubObject) (string, error) {
+	structural := storageSubObjectStructuralSpec(state, sub)
+	if structural == nil {
+		return "", nil
+	}
+	payload := struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
+		Cluster    string `json:"cluster"`
+		Name       string `json:"name"`
+		Structural any    `json:"structural"`
+	}{
+		APIVersion: v1alpha1.APIVersion,
+		Kind:       sub.Kind,
+		Cluster:    sub.Cluster,
+		Name:       sub.Name,
+		Structural: structural,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encode storage sub-object structural hash input: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// storageSubObjectReconcilableDrift reports whether a sub-object's drift (if any) is
+// reconcilable in place: the full desired hash moved but the structural hash is
+// unchanged. Mirrors applyTaskReconcilableDrift for objects with no backing apply task.
+func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObject, runsDir string) (bool, error) {
+	structuralHash, err := storageSubObjectStructuralHash(state, sub)
+	if err != nil || structuralHash == "" {
+		return false, err
+	}
+	desiredHash, err := storageSubObjectDesiredHash(state, sub)
+	if err != nil {
+		return false, err
+	}
+	record, found, err := LoadConvergeSafetyRecord(runsDir, sub.resourceID())
+	if err != nil || !found {
+		return false, err
+	}
+	return IsReconcilableDrift(record, desiredHash, structuralHash), nil
+}
+
 // classifyStorageSubObject classifies one sub-object against its durable
 // converge-safety record, mirroring classifyApplyTaskState for objects with no
 // backing apply task.
@@ -202,13 +312,18 @@ func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, sta
 		if err != nil {
 			return err
 		}
+		structuralHash, err := storageSubObjectStructuralHash(state, sub)
+		if err != nil {
+			return err
+		}
 		record := ConvergeSafetyRecord{
-			APIVersion:   ConvergeSafetyAPIVersion,
-			ResourceID:   sub.resourceID(),
-			ResourceKind: sub.Kind,
-			TaskID:       "storage." + cluster,
-			TaskKind:     ApplyTaskKindStorageCluster,
-			DesiredHash:  desiredHash,
+			APIVersion:     ConvergeSafetyAPIVersion,
+			ResourceID:     sub.resourceID(),
+			ResourceKind:   sub.Kind,
+			TaskID:         "storage." + cluster,
+			TaskKind:       ApplyTaskKindStorageCluster,
+			DesiredHash:    desiredHash,
+			StructuralHash: structuralHash,
 			Owner: ConvergeSafetyOwnerIdentity{
 				Manager: ConvergeSafetyOwner,
 				Context: effectiveContextName(contextName),
