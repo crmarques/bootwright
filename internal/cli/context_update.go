@@ -81,7 +81,11 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 		if err := workspace.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
-		if err := workspace.ReplaceInputDir(ctx, source); err != nil {
+		// Route through the centralized input-mutation component so the current
+		// input is snapshotted into history before it is discarded, exactly as
+		// `diff --adopt` does — the operator can recover the pre-update state.
+		snapshot, err := workspace.ReplaceInput(ctx, source, "context update")
+		if err != nil {
 			return failErr(1, err)
 		}
 		p := output.New(stdout)
@@ -90,6 +94,9 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 		p.Status(output.StatusOK, ctx.Name, "input replaced")
 		p.Status(output.StatusOK, "input", "copied from "+source)
 		p.Status(output.StatusOK, "input dir", ctx.InputDir)
+		if snapshot != "" {
+			p.Status(output.StatusOK, "previous input", "saved to history: "+snapshot)
+		}
 		p.Status(output.StatusOK, "state", "preserved (secrets, runs, rendered, clusters, ownership)")
 		p.Summary(output.StatusOK, "context "+ctx.Name, "input replaced from "+source)
 		printNextStatusHint(stdout)

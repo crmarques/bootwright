@@ -1861,6 +1861,37 @@ func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 	}
 }
 
+func TestContextUpdateSnapshotsPreviousInput(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	if _, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", source); code != 0 {
+		t.Fatalf("context init exited %d, stderr=%q", code, stderr)
+	}
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := copyFixtureYAML(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", replacement, "--yes")
+	if code != 0 {
+		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "saved to history") {
+		t.Fatalf("context update did not report a history snapshot:\n%s", stdout)
+	}
+	// The pre-update input is recoverable from the context's input history.
+	entries, err := os.ReadDir(workspace.InputHistoryDir(ctx))
+	if err != nil {
+		t.Fatalf("read input history: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one history entry after one update, got %d", len(entries))
+	}
+	if !strings.HasPrefix(entries[0].Name(), "0001-") {
+		t.Fatalf("first history entry = %q, want a 0001- prefix", entries[0].Name())
+	}
+}
+
 func TestContextUpdateRequiresSingleSourceDirectory(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	_, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
