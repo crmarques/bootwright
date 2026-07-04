@@ -253,6 +253,41 @@ func TestSummarizeFailureExtractsTaskAndReason(t *testing.T) {
 	}
 }
 
+// TestSummarizeFailureExtractsAnsibleMessage locks in the descriptive-reason fix:
+// the `failure:` line must carry the human-readable `msg` of the failing task —
+// including the actionable tail — not the raw JSON fatal blob, across the classic
+// callback line, an ansible-core enriched banner, and a color-coded line.
+func TestSummarizeFailureExtractsAnsibleMessage(t *testing.T) {
+	const overrideMsg = "managed OS at 10.7.7.129 is Bootwright-owned but /etc/bootwright/install-marker.json does not match desired hash sha256:d04dffb4; rerun with --override to rebuild it."
+	cases := map[string]string{
+		"classic fatal json": "TASK [Refuse drifted Bootwright-owned managed OS without override] *\n" +
+			"fatal: [srv4200]: FAILED! => {\"changed\": false, \"msg\": \"" + overrideMsg + "\"}\n" +
+			"PLAY RECAP *",
+		"ansible-core enriched banner": "TASK [Refuse drifted Bootwright-owned managed OS without override] *\n" +
+			"[ERROR]: Task failed: Action failed: " + overrideMsg + "\n" +
+			"Origin: /roles/machine_os_install_anaconda/tasks/probe_existing.yml:126:3",
+		"color-coded fatal": "TASK [Refuse drifted Bootwright-owned managed OS without override] *\n" +
+			"\x1b[0;31mfatal: [srv4200]: FAILED! => {\"changed\": false, \"msg\": \"" + overrideMsg + "\"}\x1b[0m\n" +
+			"PLAY RECAP *",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "out.log")
+			if err := os.WriteFile(logPath, []byte(body+"\n"), 0o600); err != nil {
+				t.Fatalf("write log: %v", err)
+			}
+			got := summarizeFailure(logPath, 50)
+			if !strings.Contains(got, "  failure: "+overrideMsg) {
+				t.Fatalf("summary must carry the actionable msg on the failure line:\n%s", got)
+			}
+			// The actionable tail is what makes it useful.
+			if !strings.Contains(got, "rerun with --override to rebuild it.") {
+				t.Fatalf("summary must preserve the --override hint:\n%s", got)
+			}
+		})
+	}
+}
+
 func TestSummarizeFailureMissingFileReportsReadError(t *testing.T) {
 	got := summarizeFailure("/nonexistent/path/out.log", 50)
 	if got == "" {

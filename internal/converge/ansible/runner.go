@@ -2,12 +2,14 @@ package ansible
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -233,15 +235,13 @@ func summarizeFailure(logPath string, tailLines int) string {
 		return fmt.Sprintf("  (output log %s is empty)", logPath)
 	}
 	failingTask := ""
-	failureReason := ""
 	for _, line := range lines {
-		if strings.HasPrefix(line, "TASK [") {
-			failingTask = line
-		}
-		if strings.HasPrefix(line, "fatal:") && failureReason == "" {
-			failureReason = line
+		clean := strings.TrimSpace(stripANSI(line))
+		if strings.HasPrefix(clean, "TASK [") {
+			failingTask = clean
 		}
 	}
+	failureReason := ansibleFailureReason(lines)
 	start := len(lines) - tailLines
 	if start < 0 {
 		start = 0
@@ -261,6 +261,73 @@ func summarizeFailure(logPath string, tailLines int) string {
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// ansiEscape matches the SGR color sequences Ansible emits when it force-colors
+// output (which can land in a non-TTY log). Stripping them lets the fatal/[ERROR]
+// line-prefix matching below work regardless of colorization.
+var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func stripANSI(s string) string { return ansiEscape.ReplaceAllString(s, "") }
+
+// ansibleFailureReason distills the operator-facing reason from an Ansible run's
+// output lines. It prefers the human-readable `msg` of the first failing task (the
+// classic `fatal: [host]: FAILED! => {json}` line), falls back to the ansible-core
+// 2.19+ enriched banner (`[ERROR]: Task failed: Action failed: <msg>`), and finally
+// to the raw fatal line. It tolerates leading whitespace and SGR color codes so a
+// colorized or enriched log still yields an actionable reason instead of the
+// generic "ansible-playbook exited with error". Empty when the output carries no
+// recognizable failure marker, so summarizeFailure omits the `failure:` line rather
+// than inventing one.
+func ansibleFailureReason(lines []string) string {
+	rawFatal := ""
+	enriched := ""
+	for _, raw := range lines {
+		line := strings.TrimSpace(stripANSI(raw))
+		switch {
+		case strings.HasPrefix(line, "fatal:"):
+			if rawFatal == "" {
+				rawFatal = line
+			}
+			if msg := ansibleResultMessage(line); msg != "" {
+				return msg
+			}
+		case enriched == "" && strings.HasPrefix(line, "[ERROR]:"):
+			enriched = ansibleEnrichedMessage(line)
+		}
+	}
+	// A parsed `msg` is best; a clean enriched banner beats a raw JSON fatal line.
+	if enriched != "" {
+		return enriched
+	}
+	return rawFatal
+}
+
+// ansibleResultMessage returns the `msg` field of an Ansible per-host result line
+// (`... => {json}`) — the human-readable failure text — collapsed to one line.
+// Empty when the line carries no JSON object or no string msg.
+func ansibleResultMessage(line string) string {
+	idx := strings.Index(line, "=> ")
+	if idx < 0 {
+		return ""
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(line[idx+len("=> "):]), &result); err != nil {
+		return ""
+	}
+	msg, _ := result["msg"].(string)
+	return strings.Join(strings.Fields(msg), " ")
+}
+
+// ansibleEnrichedMessage peels the "[ERROR]: Task failed: Action failed:" wrappers
+// ansible-core 2.19+ layers onto a task-failure banner, leaving the actionable text
+// collapsed to one line.
+func ansibleEnrichedMessage(line string) string {
+	msg := strings.TrimSpace(strings.TrimPrefix(line, "[ERROR]:"))
+	for _, prefix := range []string{"Task failed:", "Action failed:"} {
+		msg = strings.TrimSpace(strings.TrimPrefix(msg, prefix))
+	}
+	return strings.Join(strings.Fields(msg), " ")
 }
 
 func sudoUserSitePackages() string {

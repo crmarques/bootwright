@@ -44,10 +44,22 @@ func conciseApplyTaskFailure(message string) string {
 }
 
 func trimApplyTaskFailure(value string) string {
-	const limit = 180
-	value = strings.TrimSpace(value)
-	if len(value) <= limit {
+	return middleEllipsis(strings.TrimSpace(value), 180)
+}
+
+// middleEllipsis shortens an over-long single-line reason to limit runes by eliding
+// the MIDDLE, so a trailing actionable clause (e.g. "rerun with --override to
+// rebuild it") survives next to the leading description instead of being cut off by
+// tail truncation. Rune-based so a multibyte character is never split.
+func middleEllipsis(value string, limit int) string {
+	r := []rune(value)
+	if len(r) <= limit {
 		return value
 	}
-	return value[:limit-3] + "..."
+	const tail = 44
+	head := limit - tail - 1 // room for the ellipsis rune
+	if head < 1 {
+		return string(r[:limit])
+	}
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }

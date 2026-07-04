@@ -347,7 +347,7 @@ exit 2
 			t.Fatalf("concise failure output leaked raw tail:\n%s", text)
 		}
 	}
-	for _, want := range []string{"failed task: Provider services", "reason: fatal: [node-0]: FAILED!", "ansible-output.log"} {
+	for _, want := range []string{"failed task: Provider services", "reason: Redfish boot media action failed", "ansible-output.log"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("failure summary missing %q:\n%s", want, stdout.String())
 		}

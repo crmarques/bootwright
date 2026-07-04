@@ -206,10 +206,22 @@ func applyPhaseStatus(tasks []workflow.TaskLedgerEntry) workflow.TaskStatus {
 }
 
 func trimApplyDetail(value string) string {
-	const limit = 180
-	value = strings.TrimSpace(value)
-	if len(value) <= limit {
+	return middleEllipsisDetail(strings.TrimSpace(value), 180)
+}
+
+// middleEllipsisDetail shortens an over-long single-line detail to limit runes by
+// eliding the MIDDLE, so a trailing actionable clause (e.g. "rerun with --override
+// to rebuild it") survives next to the leading description instead of being cut off
+// by tail truncation. Rune-based so a multibyte character is never split.
+func middleEllipsisDetail(value string, limit int) string {
+	r := []rune(value)
+	if len(r) <= limit {
 		return value
 	}
-	return value[:limit-3] + "..."
+	const tail = 44
+	head := limit - tail - 1 // room for the ellipsis rune
+	if head < 1 {
+		return string(r[:limit])
+	}
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }
