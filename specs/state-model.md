@@ -1324,8 +1324,11 @@ input hash only — it never observes node reality.
   A present `StorageCluster` lists its out-of-sync sub-objects under the cluster
   root, while a never-applied cluster still collapses to one absence. The
   `infrastructure` root aggregates the provider and infra-component host tasks.
-  The report names which resource drifted, not which field; run `render
-  effective` and diff, or `plan`, to see the exact change. It
+  The report names which resource drifted, not which field, and annotates each
+  drifted resource with whether its drift reconciles in place (a day-2 reconfigure,
+  a storage `set-*` edit, an OSD-device add) or needs a destructive rebuild, so a
+  safe reconcile is never mistaken for a wipe; run `render effective` and diff, or
+  `plan`, to see the exact change. It
   is distinct from `status` (context setup checks, local readiness,
   and next-step spine), `preflight` (Ansible preflight), and `plan`/`apply
   --dry-run` (the intended task graph). `--override` is rejected because

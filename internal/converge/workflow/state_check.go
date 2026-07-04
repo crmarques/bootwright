@@ -13,6 +13,12 @@ type StateCheckResource struct {
 	Kind           string                       `json:"kind"`
 	Label          string                       `json:"label"`
 	Classification ConvergeSafetyClassification `json:"classification"`
+	// Reconcilable is true for a drifted resource whose drift converges in place
+	// (an OSD-device add, a storage set-* edit, a ContainerCluster day-2 edit, any
+	// reconfigure-only re-apply) rather than a destructive rebuild. It is false for a
+	// match/missing/foreign resource and for structural (rebuild) drift, so a reader
+	// tells a safe reconcile from a wipe-and-rebuild without running apply.
+	Reconcilable bool `json:"reconcilable,omitempty"`
 }
 
 // StateCheckRoot summarizes one selected root (a ContainerCluster, a
@@ -101,7 +107,11 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 			loadWarnings = append(loadWarnings, warning)
 			continue
 		}
-		accumulate(rootFor(kind, name), class, stateCheckResource(task, class))
+		reconcilable, err := taskDriftReconcilable(task, runsDir, class)
+		if err != nil {
+			return StateCheckReport{}, err
+		}
+		accumulate(rootFor(kind, name), class, stateCheckResource(task, class, reconcilable))
 	}
 
 	// Expand each StorageCluster's sub-objects against their own durable records
@@ -140,7 +150,11 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 				loadWarnings = append(loadWarnings, warning)
 				continue
 			}
-			accumulate(acc, class, storageSubObjectResource(sub, class))
+			reconcilable, err := storageSubObjectReconcilableDrift(state, sub, runsDir)
+			if err != nil {
+				return StateCheckReport{}, err
+			}
+			accumulate(acc, class, storageSubObjectResource(sub, class, reconcilable))
 		}
 	}
 
@@ -226,20 +240,22 @@ func classifyApplyTaskState(task ApplyTask, runsDir string) (ConvergeSafetyClass
 	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), nil
 }
 
-func stateCheckResource(task ApplyTask, class ConvergeSafetyClassification) StateCheckResource {
+func stateCheckResource(task ApplyTask, class ConvergeSafetyClassification, reconcilable bool) StateCheckResource {
 	return StateCheckResource{
 		ResourceID:     applyTaskSafetyResourceID(task),
 		Kind:           task.Entry.Kind,
 		Label:          task.Entry.Label,
 		Classification: class,
+		Reconcilable:   reconcilable,
 	}
 }
 
-func storageSubObjectResource(sub storageSubObject, class ConvergeSafetyClassification) StateCheckResource {
+func storageSubObjectResource(sub storageSubObject, class ConvergeSafetyClassification, reconcilable bool) StateCheckResource {
 	return StateCheckResource{
 		ResourceID:     sub.resourceID(),
 		Kind:           sub.Kind,
 		Label:          sub.resourceID(),
 		Classification: class,
+		Reconcilable:   reconcilable,
 	}
 }

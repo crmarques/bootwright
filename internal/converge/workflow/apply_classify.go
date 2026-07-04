@@ -116,17 +116,9 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		if err != nil {
 			return nil, err
 		}
-		reconcilable, err := applyTaskReconcilableDrift(task, runsDir)
+		reconcilable, err := taskDriftReconcilable(task, runsDir, class)
 		if err != nil {
 			return nil, err
-		}
-		// Reconfigure-only kinds (fabric services, node-config, add-ons, virtctl,
-		// storage attachment) have no destructive identity: their --override is an
-		// idempotent re-apply, so ANY drift on them is reconcilable in place. Continue
-		// re-applies a day-2 edit (a changed add-on, node label/taint, DNS/LB record)
-		// instead of refusing and forcing --override. A destructive kind is unaffected.
-		if class == ConvergeSafetyDrift && overrideReconfigureOnlyKinds[task.Entry.Kind] {
-			reconcilable = true
 		}
 		add(kind, key, label, task.Entry.Cluster, class, reconcilable, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
@@ -152,6 +144,23 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		out = append(out, *o)
 	}
 	return out, nil
+}
+
+// taskDriftReconcilable reports whether a DRIFTED task's drift converges in place
+// rather than a destructive rebuild: the task is a reconfigure-only kind (whose
+// re-apply is idempotent and non-destructive — fabric services, node-config, add-ons,
+// virtctl, storage attachment), or its structural hash is unchanged (a StorageCluster
+// OSD-device add, a ContainerCluster day-2 edit). A non-drift task is never
+// reconcilable. It is the single source both ClassifyApplyObjects (the apply preflight)
+// and StateCheck (the read-only report) use, so the two never disagree.
+func taskDriftReconcilable(task ApplyTask, runsDir string, class ConvergeSafetyClassification) (bool, error) {
+	if class != ConvergeSafetyDrift {
+		return false, nil
+	}
+	if overrideReconfigureOnlyKinds[task.Entry.Kind] {
+		return true, nil
+	}
+	return applyTaskReconcilableDrift(task, runsDir)
 }
 
 // applyTaskReconcilableDrift reports whether a task's drift (if any) is

@@ -150,7 +150,7 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 			default:
 				p.Status(cliout.StatusWarn, label, stateCheckRootSummary(root))
 				for _, resource := range root.Resources {
-					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, string(resource.Classification))
+					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, stateCheckResourceDetail(resource))
 				}
 			}
 		}
@@ -226,6 +226,19 @@ func printStateCheckOrphans(p *cliout.Printer, orphans []workflow.UndeclaredReso
 		p.Status(cliout.StatusWarn, o.Kind+"/"+o.Name, detail)
 	}
 	p.Status(cliout.StatusWarn, "remedy", "re-declare these objects, or run `bootwright destroy` to reclaim them")
+}
+
+// stateCheckResourceDetail annotates a drifted resource with whether its drift
+// reconciles in place or needs a destructive rebuild, so a reader tells a safe day-2
+// reconcile from a wipe-and-rebuild. Non-drift classes render as their bare class.
+func stateCheckResourceDetail(resource workflow.StateCheckResource) string {
+	if resource.Classification != workflow.ConvergeSafetyDrift {
+		return string(resource.Classification)
+	}
+	if resource.Reconcilable {
+		return "drift · reconciles in place"
+	}
+	return "drift · needs rebuild (destructive)"
 }
 
 func stateCheckResourceStatus(class workflow.ConvergeSafetyClassification) cliout.Status {
