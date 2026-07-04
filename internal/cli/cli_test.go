@@ -2511,9 +2511,15 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"bastion"}, want: false},
 		{args: []string{"bastion", "setup"}, want: true},
 		// Bare `machine` only prints help; `machine trust` writes the root-owned
-		// context trust store, so it stays rootful.
+		// context trust store and `machine list` reads the root-owned state and
+		// ownership records, so they stay rootful.
 		{args: []string{"machine"}, want: false},
 		{args: []string{"machine", "trust"}, want: true},
+		{args: []string{"machine", "list"}, want: true},
+		// `machine ssh` execs the client as root to read the root-owned key, but a
+		// missing --name is a malformed invocation cobra rejects rootlessly.
+		{args: []string{"machine", "ssh", "--name", "ceph-0"}, want: true},
+		{args: []string{"machine", "ssh"}, want: false},
 		{args: []string{"example", "init", "--name", "lab", "--output-dir", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},

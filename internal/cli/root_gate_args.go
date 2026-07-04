@@ -41,6 +41,16 @@ func argsNeedLocalRoot(args []string) bool {
 		if len(args) == 1 {
 			return false
 		}
+		switch args[1] {
+		case "ssh":
+			// machine ssh execs the client as root to read the root-owned SSH
+			// key, but a missing --name is a malformed invocation cobra should
+			// reject as the caller, not after a doomed sudo prompt. Mirrors
+			// secret delete / media add.
+			return argsHaveNameValue(args[2:])
+		}
+		// machine list and machine trust both read the root-owned context
+		// (desired state, ownership records, the trust store), so they escalate.
 		return true
 	case "context":
 		if len(args) < 2 {

@@ -25,7 +25,11 @@ func newMachineCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		Use:   "machine <command>",
 		Short: "Manage declared Machines",
 	}
-	cmd.AddCommand(newHostTrustCmd(stdin, stdout, stderr))
+	cmd.AddCommand(
+		newMachineListCmd(stdout),
+		newMachineSSHCmd(stdin, stdout, stderr),
+		newHostTrustCmd(stdin, stdout, stderr),
+	)
 	requireSubcommand(cmd)
 	return cmd
 }
