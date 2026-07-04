@@ -1268,6 +1268,15 @@ input hash only — it never observes node reality.
   affected scope and then re-applies. Drift confined to reconfigure-only kinds is
   an in-place re-apply and does not trip the protection gate. Dry-run/plan still
   previews the override plan.
+- Independent of `destroyProtection`, a destructive `apply --override` rebuild (a
+  managed-OS or substrate machine reinstall with disks wiped, or a container/Ceph
+  cluster wipe-and-rebuild) requires an explicit data-loss acknowledgment even on an
+  unprotected environment, so a mis-scoped `--override` never silently destroys. An
+  interactive run confirms it at a distinct data-loss prompt naming the objects; a
+  non-interactive run must pass `--allow-destroy`. `--yes` skips the routine apply
+  confirmation but never authorizes data loss (mirroring how `--yes` never implies
+  `--override`). A reconfigure-only or reconcilable-in-place override touches nothing
+  destructive and reaches neither gate.
 - `bootwright host trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
   runs never record trust on first use, so pipelines record it with `host

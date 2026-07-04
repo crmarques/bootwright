@@ -40,6 +40,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		yes             bool
 		strictSecrets   bool
 		override        bool
+		allowDestroy    bool
 		expectNew       bool
 		trustOnFirstUse bool
 		verbose         bool
@@ -94,6 +95,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
 	if converge.ScopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
+		cmd.Flags().BoolVar(&allowDestroy, "allow-destroy", false, "authorize a destructive --override rebuild (machine reinstall with disks wiped, Ceph OSD zap) — required alongside --yes for such a rebuild, and pre-accepts the interactive data-loss prompt; --yes alone never authorizes data loss")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
 	if usesAnsible {
@@ -239,6 +241,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
+		var destructiveOverride []string
 		if !dryRun {
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
@@ -254,6 +257,18 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			// not blocked. Dry-run/plan still previews the override plan.
 			if override {
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects); err != nil {
+					return failErr(1, err)
+				}
+				// Data-loss seatbelt, independent of destroyProtection: a destructive
+				// --override rebuild (managed-OS/substrate machine reinstall with disks
+				// wiped, container/Ceph cluster wipe-and-rebuild) requires an explicit
+				// acknowledgment even on an UNPROTECTED environment, so a mis-scoped
+				// --override never silently destroys. --yes skips the routine confirm but
+				// does NOT authorize data loss; --allow-destroy does. A protected
+				// environment already failed closed above, so this only gates the
+				// unprotected case; a reconfigure-only override reaches neither gate.
+				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
+				if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 					return failErr(1, err)
 				}
 			}
@@ -314,7 +329,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		printApplySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		if !dryRun && !yes && !plan.NoRemoteWork {
-			if !confirm(stdin, stdout, "Continue with apply? [y/N] (default: no): ") {
+			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(stdout, destructiveOverride, allowDestroy)) {
 				return failErr(1, errors.New("apply aborted"))
 			}
 		}
