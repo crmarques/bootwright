@@ -134,7 +134,7 @@ func ConvergeSafetyRecordPath(runsDir, resourceID string) string {
 
 // HasConvergeSafetyRecords reports whether the context has any convergence-safety
 // record on disk — i.e. Bootwright has applied at least one object. It is the cheap
-// gate the status next-step spine uses to start suggesting `state-check` (the
+// gate the status next-step spine uses to start suggesting `diff` (the
 // read-only drift verb) only once there is a recorded apply to compare against; it
 // never reads or classifies the records.
 func HasConvergeSafetyRecords(runsDir string) bool {

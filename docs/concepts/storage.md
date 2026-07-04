@@ -111,7 +111,7 @@ spec:
     on a live cluster is drift, and the only in-band resolution is a rebuild
     (`apply --override` runs `cephadm rm-cluster --zap-osds` and re-bootstraps —
     data-destroying). Upgrade a running cluster out of band with `cephadm`/`ceph
-    orch upgrade`; the desired state then names the old release, so `state-check`
+    orch upgrade`; the desired state then names the old release, so `diff`
     reports drift until a future apply refreshes the record. Adopting an
     out-of-band upgrade into the recorded desired state is an open design item.
 

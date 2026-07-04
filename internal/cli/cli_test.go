@@ -274,14 +274,14 @@ func TestApplyThroughBaseDryRunReportsTrailingOmissionsWithoutPriorWarning(t *te
 	}
 }
 
-func TestStateCheckHelpDocumentsThrough(t *testing.T) {
-	stdout, stderr, code := runCLI(t, "state-check", "--help")
+func TestDiffHelpDocumentsThrough(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "diff", "--help")
 	if code != 0 {
-		t.Fatalf("state-check --help exited %d, stderr=%q", code, stderr)
+		t.Fatalf("diff --help exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{"--stage", "--through", "infra|clusters"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("state-check help missing %q:\n%s", want, stdout)
+			t.Fatalf("diff help missing %q:\n%s", want, stdout)
 		}
 	}
 }
@@ -710,8 +710,8 @@ func TestFailedCheckOutputIsActionable(t *testing.T) {
 			t.Fatalf("stdout does not separate %q with an empty line:\n%s", heading, stdout)
 		}
 	}
-	if !strings.Contains(stderr, "host check failed") {
-		t.Fatalf("stderr missing host check failure:\n%s", stderr)
+	if !strings.Contains(stderr, "machine check failed") {
+		t.Fatalf("stderr missing machine check failure:\n%s", stderr)
 	}
 }
 
@@ -2510,6 +2510,10 @@ func TestLocalRootGateArgs(t *testing.T) {
 		// preflight bastion.
 		{args: []string{"bastion"}, want: false},
 		{args: []string{"bastion", "setup"}, want: true},
+		// Bare `machine` only prints help; `machine trust` writes the root-owned
+		// context trust store, so it stays rootful.
+		{args: []string{"machine"}, want: false},
+		{args: []string{"machine", "trust"}, want: true},
 		{args: []string{"example", "init", "--name", "lab", "--output-dir", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
@@ -3333,94 +3337,6 @@ func TestLocalRootGateSudoPromptHelperProcess(t *testing.T) {
 		os.Exit(0)
 	default:
 		os.Exit(2)
-	}
-}
-
-func TestContextPrintEnvRequiresSensitiveForProxyCredentials(t *testing.T) {
-	initTestContext(t, "002-sno-emul-baremetal")
-	_, stderr, code := runCLI(t, "print-env")
-	if code == 0 {
-		t.Fatal("print-env unexpectedly printed proxy credentials without --sensitive")
-	}
-	if !strings.Contains(stderr, "--sensitive") {
-		t.Fatalf("stderr = %q, want --sensitive hint", stderr)
-	}
-	_, stderr, code = runCLIWithInput(t, "secret\n", "secret", "set", "--name", "proxy-credentials", "--username", "proxy", "--password-stdin")
-	if code != 0 {
-		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
-	}
-	stdout, stderr, code := runCLI(t, "print-env", "--sensitive")
-	if code != 0 {
-		t.Fatalf("print-env --sensitive exited %d, stderr=%q", code, stderr)
-	}
-	for _, want := range []string{
-		"export BOOTWRIGHT_CONTEXT=test\n",
-		"export HTTP_PROXY=http://proxy:secret@192.168.132.1:3128\n",
-	} {
-		if !strings.Contains(stdout, want) {
-			t.Fatalf("stdout missing %q:\n%s", want, stdout)
-		}
-	}
-}
-
-func TestContextPrintEnvProxyWithoutAuth(t *testing.T) {
-	initTestContext(t, "002-sno-emul-baremetal")
-	ctx, err := workspace.CurrentContext()
-	if err != nil {
-		t.Fatal(err)
-	}
-	replaceInFile(t, filepath.Join(ctx.InputDir, "environment.yaml"), `          auth:
-            proxyAuthRef: proxy-credentials
-`, "")
-
-	stdout, stderr, code := runCLI(t, "print-env")
-	if code != 0 {
-		t.Fatalf("print-env exited %d, stderr=%q", code, stderr)
-	}
-	for _, want := range []string{
-		"export HTTP_PROXY=http://192.168.132.1:3128\n",
-		"export HTTPS_PROXY=http://192.168.132.1:3128\n",
-	} {
-		if !strings.Contains(stdout, want) {
-			t.Fatalf("stdout missing %q:\n%s", want, stdout)
-		}
-	}
-}
-
-func TestContextPrintEnvSuppressesManagedProxy(t *testing.T) {
-	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "print-env")
-	if code != 0 {
-		t.Fatalf("print-env exited %d, stderr=%q", code, stderr)
-	}
-	if strings.Contains(stdout, "HTTP_PROXY") || strings.Contains(stdout, "HTTPS_PROXY") {
-		t.Fatalf("managed proxy should not be exported:\n%s", stdout)
-	}
-}
-
-func TestContextPrintEnvNoProxy(t *testing.T) {
-	ctx := initTestContext(t, "001-sno-libvirt")
-
-	stdout, stderr, code := runCLI(t, "print-env")
-	if code != 0 {
-		t.Fatalf("print-env exited %d, stderr=%q", code, stderr)
-	}
-	if !strings.Contains(stdout, "export BOOTWRIGHT_CONTEXT="+ctx.Name+"\n") {
-		t.Fatalf("stdout missing context export:\n%s", stdout)
-	}
-	for _, reject := range []string{
-		"BOOTWRIGHT_BASE_DIR",
-		"BOOTWRIGHT_INPUT_DIR",
-		"BOOTWRIGHT_STATE_DIR",
-		"BOOTWRIGHT_RUNTIME_DIR",
-		"BOOTWRIGHT_SECRETS_DIR",
-	} {
-		if strings.Contains(stdout, reject) {
-			t.Fatalf("stdout unexpectedly contains %s export:\n%s", reject, stdout)
-		}
-	}
-	if strings.Contains(stdout, "HTTP_PROXY") {
-		t.Fatalf("stdout unexpectedly contains proxy export:\n%s", stdout)
 	}
 }
 

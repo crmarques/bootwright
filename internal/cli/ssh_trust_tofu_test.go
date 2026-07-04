@@ -91,7 +91,7 @@ func TestOfferTrustOnFirstUseDeclineWritesNothing(t *testing.T) {
 			if err := offerTrustOnFirstUse(context.Background(), strings.NewReader(input), &stdout, contextDir, hostTrustTestState(), hostTrustScanDeps(map[string]string{"provider-01.example.test": hostTrustKeyA}), nil); err != nil {
 				t.Fatalf("offerTrustOnFirstUse: %v", err)
 			}
-			if !strings.Contains(stdout.String(), "not trusted; run bootwright host trust to record it later") {
+			if !strings.Contains(stdout.String(), "not trusted; run bootwright machine trust to record it later") {
 				t.Fatalf("output missing decline status:\n%s", stdout.String())
 			}
 			if _, err := os.Stat(sshtrust.StorePathForContext(contextDir)); !errors.Is(err, os.ErrNotExist) {
@@ -239,7 +239,7 @@ func TestPreflightJSONAndDryRunNeverPrompt(t *testing.T) {
 	if strings.Contains(stdout, "[y/N]") || strings.Contains(stdout, "SSH host trust (first use)") {
 		t.Fatalf("dry-run preflight reached the trust prompt:\n%s", stdout)
 	}
-	if !strings.Contains(stdout+stderr, "bootwright host trust") {
-		t.Fatalf("dry-run preflight did not fail closed with the host trust remediation:\nstdout=%s\nstderr=%s", stdout, stderr)
+	if !strings.Contains(stdout+stderr, "bootwright machine trust") {
+		t.Fatalf("dry-run preflight did not fail closed with the machine trust remediation:\nstdout=%s\nstderr=%s", stdout, stderr)
 	}
 }

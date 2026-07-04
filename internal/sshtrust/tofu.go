@@ -25,11 +25,11 @@ type FirstUseInteraction struct {
 // recorded host key yet, scan the host, show the operator the key fingerprint,
 // and record the key only after an explicit per-host yes. Machines with an
 // existing record are never touched here — a changed key keeps failing closed
-// with the `bootwright host trust --replace` ceremony, because a changed key is
+// with the `bootwright machine trust --replace` ceremony, because a changed key is
 // the man-in-the-middle signal that deserves a deliberate step. Callers gate
 // this on interactive text runs; non-interactive runs keep failing closed
 // without recording anything. A declined or unreachable host is left for the
-// host check that follows, which fails with the `bootwright host trust`
+// host check that follows, which fails with the `bootwright machine trust`
 // remediation.
 func OfferTrustOnFirstUse(ctx context.Context, contextDir string, state v1alpha1.State, policy locality.Policy, deps Deps, interact FirstUseInteraction, scope map[string]bool) error {
 	machines := MachinesInScope(ManagedTrustMachines(state, policy), scope)
@@ -69,7 +69,7 @@ func OfferTrustOnFirstUse(ctx context.Context, contextDir string, state v1alpha1
 			continue
 		}
 		if !interact.Confirm(record) {
-			interact.Skip("Machine/"+machine.Metadata.Name, "not trusted; run bootwright host trust to record it later")
+			interact.Skip("Machine/"+machine.Metadata.Name, "not trusted; run bootwright machine trust to record it later")
 			continue
 		}
 		store.Upsert(record)

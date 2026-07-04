@@ -38,7 +38,7 @@ bootwright context init --name lab -f ./lab-input
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret check
-bootwright host trust
+bootwright machine trust
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright render effective
@@ -55,8 +55,8 @@ Where `--stage X` runs only that stage, `--through X` runs every phase from the
 beginning up to and including `X` (a cumulative prefix), e.g. `apply --through
 base`; the two are mutually exclusive. A family endpoint means through its last
 phase, so `--through infra` equals `--through machines` and `--through clusters`
-is the full graph. `--through` is available on `apply`, `plan`, and `state-check`.
-(`host trust` pre-records SSH host-key trust; scripted runs like `apply --yes`
+is the full graph. `--through` is available on `apply`, `plan`, and `diff`.
+(`machine trust` pre-records SSH host-key trust; scripted runs like `apply --yes`
 require it, while interactive `preflight`/`apply` runs can instead confirm
 each unknown host's fingerprint on first use.)
 Use `--clusters <name>[,<name>...]` to converge or recover isolated
@@ -195,9 +195,8 @@ bootwright secret list
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret check
-bootwright host trust
+bootwright machine trust
 bootwright secret list
-bootwright print-env [--sensitive]
 bootwright validate
 bootwright bastion setup --yes
 bootwright preflight all
@@ -223,20 +222,20 @@ bootwright destroy --stage infra --yes
 bootwright destroy --stage infra --clusters artifact-server --yes
 ```
 
-The CLI is organized around workflow command groups. `bastion setup` remains a
+The CLI is organized into domain command groups (Setup, Resource, Inspect,
+Lifecycle, General). `bastion setup` remains a
 separate prerequisite command; its read-only dependency checks run under
 `preflight bastion`. Graph apply and destroy use
 `--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
 and tears down the whole context for `destroy` (clusters then infra). Top-level
 groups are `validate`,
-`context`, `host`, `bastion`, `cluster`, `example`,
-`print-env`, `media`, `secret`, `preflight`, `status`, `state-check`, `plan`,
+`context`, `machine`, `bastion`, `cluster`, `example`,
+`media`, `secret`, `preflight`, `status`, `diff`, `plan`,
 `render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
-`--output json` where available for automation. `bootwright print-env`
-intentionally prints raw shell exports. `bootwright cluster access` prints
+`--output json` where available for automation. `bootwright cluster access` prints
 URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs

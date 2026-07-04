@@ -147,18 +147,11 @@ a plain CONNECT-tunnelling proxy that presents the origin's real certificate.
 ## Auth handling
 
 When a proxy entry carries `auth.proxyAuthRef`, the referenced credentials are
-secret bytes. Read-only commands that would print credential bytes fail closed by
-default. `bootwright print-env` emits shell exports for the current context,
-including proxy variables, and refuses to print a credential-bearing proxy export
-unless you pass `--sensitive`:
-
-```bash
-eval "$(bootwright print-env --sensitive)"
-```
-
-Bootwright does not write the credential-bearing exports to the world-readable
-`/etc/environment`, so an operator running `dnf` by hand under a credentialed
-proxy must load the exports for the current context first with the same command.
+secret bytes. Bootwright loads them into its own Ansible, `dnf`, and subscription
+runs automatically, and does not write them to the world-readable
+`/etc/environment`. An operator running `dnf` by hand under a credentialed proxy
+must set the proxy environment variables (`HTTP_PROXY`/`HTTPS_PROXY`, including
+the credentials) in their own shell first.
 
 ## Disconnected install
 
@@ -322,9 +315,9 @@ pipeline never records SSH server-key trust on first use, so pre-record trust
 before the first `preflight`/`apply` rather than relying on trust-on-first-use:
 
 ```bash
-bootwright host trust
+bootwright machine trust
 ```
 
 See [Operations & recovery](operations.md) and the
-`sno-libvirt-redfish-disconnected-services` example, which layers a `host trust`
+`sno-libvirt-redfish-disconnected-services` example, which layers a `machine trust`
 step into its disconnected walkthrough.

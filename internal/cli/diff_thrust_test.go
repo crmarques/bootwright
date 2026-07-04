@@ -10,7 +10,7 @@ import (
 // P20: a present root's summary must break out its out-of-sync resources by class so
 // a foreign-owned resource (resolve the foreign owner) is never reported as "drifted"
 // (re-apply) — the two need opposite remediations.
-func TestStateCheckRootSummarySplitsForeignFromDrift(t *testing.T) {
+func TestDiffRootSummarySplitsForeignFromDrift(t *testing.T) {
 	root := workflow.StateCheckRoot{
 		Kind:  "infrastructure",
 		Name:  "infrastructure",
@@ -33,7 +33,7 @@ func TestStateCheckRootSummarySplitsForeignFromDrift(t *testing.T) {
 }
 
 // A drift-only root must name only drift, not the empty foreign/never-applied classes.
-func TestStateCheckRootSummaryOmitsEmptyClasses(t *testing.T) {
+func TestDiffRootSummaryOmitsEmptyClasses(t *testing.T) {
 	root := workflow.StateCheckRoot{
 		Total: 4,
 		Resources: []workflow.StateCheckResource{
@@ -50,23 +50,23 @@ func TestStateCheckRootSummaryOmitsEmptyClasses(t *testing.T) {
 	}
 }
 
-// P19: state-check must exit non-zero (3) when the selected state is out of sync, so
+// P19: diff must exit non-zero (3) when the selected state is out of sync, so
 // automation can gate on drift, while still printing the report. A never-applied
 // context is out of sync (every root absent).
-func TestStateCheckExitsThreeWhenOutOfSync(t *testing.T) {
+func TestDiffExitsThreeWhenOutOfSync(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
-	stdout, stderr, code := runCLI(t, "state-check")
+	stdout, stderr, code := runCLI(t, "diff")
 	if code != 3 {
-		t.Fatalf("state-check on a never-applied context exit = %d, want 3 (stdout=%q stderr=%q)", code, stdout, stderr)
+		t.Fatalf("diff on a never-applied context exit = %d, want 3 (stdout=%q stderr=%q)", code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "absent") {
-		t.Fatalf("state-check must still print the report (the absence), stdout=%q", stdout)
+		t.Fatalf("diff must still print the report (the absence), stdout=%q", stdout)
 	}
 
-	jsonOut, jstderr, jcode := runCLI(t, "state-check", "--output", "json")
+	jsonOut, jstderr, jcode := runCLI(t, "diff", "--output", "json")
 	if jcode != 3 {
-		t.Fatalf("state-check --output json exit = %d, want 3 (stderr=%q)", jcode, jstderr)
+		t.Fatalf("diff --output json exit = %d, want 3 (stderr=%q)", jcode, jstderr)
 	}
 	if !strings.Contains(jsonOut, "\"inSync\": false") && !strings.Contains(jsonOut, "\"inSync\":false") {
 		t.Fatalf("json report should mark inSync false, stdout=%q", jsonOut)

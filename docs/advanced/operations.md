@@ -1,6 +1,6 @@
 ---
 title: Operations and Recovery
-description: The three apply modes including break-glass --override and greenfield --expect-new, destroy stages and the no-selector full-teardown default, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, state-check drift, and --force-unowned / --skip-unreachable.
+description: The three apply modes including break-glass --override and greenfield --expect-new, destroy stages and the no-selector full-teardown default, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, and --force-unowned / --skip-unreachable.
 ---
 
 # Operations and recovery
@@ -212,13 +212,13 @@ maintenance.
   and `clusters` families; `destroy` does not accept them.
 
 !!! note "Check before you rebuild"
-    `bootwright state-check` reports which roots are `missing`, `match`,
+    `bootwright diff` reports which roots are `missing`, `match`,
     `drift`, or `foreign` against the last recorded apply, without contacting
     hosts. `bootwright plan` (or `apply --dry-run`) shows the task graph a
     selection would run. Use them to confirm the scope before applying. Note
-    that `state-check` compares against *recorded* evidence only — an out-of-band
+    that `diff` compares against *recorded* evidence only — an out-of-band
     change (a wiped disk, an undefined VM, a deleted namespace) is not detected
-    until the next apply refreshes the record. `state-check --override` is
+    until the next apply refreshes the record. `diff --override` is
     rejected.
 
 ### KubeVirt child clusters do not auto-include their parent
@@ -239,7 +239,7 @@ What a deletion means depends on the kind:
 
 | You delete… | What happens | Supported removal |
 | --- | --- | --- |
-| A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `state-check` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file — destroy is ownership-record driven and can reach a resource already gone from desired state. |
+| A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `diff` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file — destroy is ownership-record driven and can reach a resource already gone from desired state. |
 | A `ContainerCluster.spec.hosts[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--override` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
 | A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
 | A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |
@@ -293,14 +293,14 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
 
 ### Checking live OSD health
 
-`state-check` is offline by default (it compares desired state to the last
+`diff` is offline by default (it compares desired state to the last
 recorded apply and contacts no clusters). To additionally verify a managed Ceph
 cluster is *live-healthy*, add `--probe`: it runs a read-only OSD-health check on
 each seed and reports a cluster that came up with fewer OSDs than declared, or
 `HEALTH_ERR`, as drift (exit code 3).
 
 ```
-bootwright state-check --clusters ceph-storage --probe
+bootwright diff --clusters ceph-storage --probe
 ```
 
 An apply already fails closed when OSDs do not materialize; `--probe` is for
@@ -395,7 +395,7 @@ there.
 | `runs/history/<run-id>/bootwright-<cluster>.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
 | `runs/history/<run-id>/input/` | The forensic snapshot of the input YAML an `apply` loaded, written at the start of the mutating run. |
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
-| `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `state-check` classifies against. |
+| `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `diff` classifies against. |
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |
 | `clusters/<cluster>/runtime/install-record.json` | Per-cluster install record with the non-secret desired-input fingerprint that install reconcile reads. |
 

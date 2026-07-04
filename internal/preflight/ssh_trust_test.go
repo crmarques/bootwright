@@ -23,7 +23,7 @@ func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
 			return nil, os.ErrNotExist
 		},
 	}, nil)
-	if !hasCheck(checks, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
+	if !hasCheck(checks, checkGroupHostTrust, "Machine/provider-01", "bootwright machine trust") {
 		t.Fatalf("checks missing host trust failure: %+v", checks)
 	}
 }
@@ -127,7 +127,7 @@ func TestManagedHostTrustChecksScopeExcludesOutOfScopeMachine(t *testing.T) {
 	}
 	// Nil scope flags the provided-OS machine (and the missing known_hosts file).
 	full := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, nil)
-	if !hasCheck(full, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
+	if !hasCheck(full, checkGroupHostTrust, "Machine/provider-01", "bootwright machine trust") {
 		t.Fatalf("nil scope should flag provider-01: %+v", full)
 	}
 	// A scope that excludes the machine drops both its check and the now-moot
@@ -139,7 +139,7 @@ func TestManagedHostTrustChecksScopeExcludesOutOfScopeMachine(t *testing.T) {
 	}
 	// A scope that includes the machine still flags it.
 	inScope := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, map[string]bool{"provider-01": true})
-	if !hasCheck(inScope, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
+	if !hasCheck(inScope, checkGroupHostTrust, "Machine/provider-01", "bootwright machine trust") {
 		t.Fatalf("in-scope machine should be flagged: %+v", inScope)
 	}
 }

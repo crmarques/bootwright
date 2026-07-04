@@ -38,7 +38,7 @@ YAML desired state
   -> apply substrate, machine OS, storage, cluster, and add-on phases
 ```
 
-`status`, `state-check`, `render`, `plan`, and `validate` are read-only verbs,
+`status`, `diff`, `render`, `plan`, and `validate` are read-only verbs,
 not pipeline stages: they observe the same model without mutating it. See
 [Operations and Recovery](../advanced/operations.md) for the operator-facing
 verb model.
@@ -151,13 +151,13 @@ outcomes:
 | `drift` | The recorded desired hash differs from the current one. |
 | `foreign` | The record carries a non-Bootwright owner. |
 
-This is exactly what `state-check` reports against recorded evidence — never live
+This is exactly what `diff` reports against recorded evidence — never live
 hosts. See
 [The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift)
 for the user-facing summary.
 
 !!! warning "Classification is NOT an apply-time skip gate"
-    The four-outcome classification is what `state-check` reports; it is **not**
+    The four-outcome classification is what `diff` reports; it is **not**
     itself an apply-time skip gate. Most provider-service and infra-component
     config tasks have no reliable external probe, so they **re-run and rely on
     idempotent execution**, and their record is marked `unknown` (recorded but
@@ -291,7 +291,7 @@ mutation time, and Go reads those records for:
   prove Bootwright installed it and no remaining record on that host still
   requires it);
 - orphan reporting;
-- `state-check` classification.
+- `diff` classification.
 
 Run, install, and convergence-safety ledgers remain Go-written. This split keeps
 a single source of truth for "what Bootwright owns on each host" while letting Go

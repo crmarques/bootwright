@@ -17,7 +17,7 @@ func renderOutputDirRequiresSensitiveError(outputDir string) error {
 func newPreflightCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "preflight <target>",
-		Short: "Run read-only preflight checks on hosts and prerequisites",
+		Short: "Check hosts and prerequisites are ready to apply (live, read-only)",
 		Long: `Run read-only preflight checks on hosts and prerequisites.
 
 A live preflight (without --dry-run) runs an Ansible preflight whose result is
@@ -74,7 +74,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	return newScopeApplyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeApplyOptions{
 		use:   "plan",
-		short: "Preview the provisioning graph",
+		short: "Preview what apply would change (contacts nothing)",
 		long: "Previews the provisioning task graph. Read-only: it contacts no hosts, BMCs,\n" +
 			"or clusters, writes no runtime records, and never prompts. Exit codes: 0\n" +
 			"success, 1 load error, 2 usage error.",

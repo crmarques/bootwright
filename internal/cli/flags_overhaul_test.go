@@ -70,7 +70,7 @@ func TestRenamedFlagsRejectOldSpellings(t *testing.T) {
 	}{
 		{"cluster kubeconfig --cluster", []string{"cluster", "kubeconfig", "--cluster", "managed-01"}, "--cluster"},
 		{"cluster access --cluster", []string{"cluster", "access", "--cluster", "managed-01"}, "--cluster"},
-		{"host trust --hosts", []string{"host", "trust", "--hosts", "provider-01"}, "--hosts"},
+		{"machine trust --hosts", []string{"machine", "trust", "--hosts", "provider-01"}, "--hosts"},
 		{"example init --output", []string{"example", "init", "--name", "lab", "--output", t.TempDir()}, "--output"},
 	}
 	for _, tc := range cases {

@@ -23,7 +23,7 @@ see [Operations and Recovery](advanced/operations.md).
     Once you have run `context init`, the context holds a **copy** of your input
     tree. Editing the source has no effect until you refresh it with
     `bootwright context update --name <context> -f <dir>`, so run that after any
-    fix before you re-run `preflight`, `apply`, or `state-check`. `bootwright
+    fix before you re-run `preflight`, `apply`, or `diff`. `bootwright
     validate -f <dir>` reads the source directly and needs no refresh.
 
 ## Strict decode failures
@@ -132,12 +132,10 @@ context secret store or in operator files. Two common early-workflow blockers:
   remains absent**, so resolve the reported gaps before retrying a workflow that
   reads them.
 
-- **Read-only commands that would print credentials fail closed.** Commands
-  that would surface secret material refuse to do so without `--sensitive`:
-  `bootwright print-env` fails closed when proxy credentials would be exported,
-  and `bootwright render --output-dir <dir>` requires `--sensitive` because it
-  writes secret-inlined installer files. Pass `--sensitive` only when you
-  intend to materialize credentials, and keep the output local and unversioned.
+- **Commands that would write credentials fail closed.** `bootwright render
+  --output-dir <dir>` requires `--sensitive` because it writes secret-inlined
+  installer files. Pass `--sensitive` only when you intend to materialize
+  credentials, and keep the output local and unversioned.
 
 !!! warning
     `secret set --generate` is a test-fixture path only. Generated material in
@@ -185,13 +183,13 @@ retrying. A machine used over SSH must declare `access.ssh.addressRef`,
 `keyRef`, and a matching address.
 
 If the host check fails with a missing SSH host-trust record (`fix: bootwright
-host trust`), either run `bootwright host trust`, or rerun `preflight`/`apply`
+machine trust`), either run `bootwright machine trust`, or rerun `preflight`/`apply`
 interactively: they show each unknown host's key fingerprint and ask before
 recording it (disable the prompt with `--trust-on-first-use=false`).
 Non-interactive runs (`--yes`, `--output json`) never prompt and keep failing
 closed until trust is pre-recorded; a `--dry-run` is read-only and never
 records trust at all. A *changed* host key is never accepted at the prompt —
-verify the new fingerprint and run `bootwright host trust --replace <machine>`.
+verify the new fingerprint and run `bootwright machine trust --replace <machine>`.
 
 Real BMCs must also reach the generated artifact HTTPS endpoint used for the
 agent ISO. If Redfish virtual media insert fails after the bastion can download
@@ -230,7 +228,7 @@ cluster, …) from desired state *without* destroying it first, the live resourc
 keeps running. It is not lost — Bootwright still owns it through its ownership
 records.
 
-To find such orphans, run `bootwright state-check`: resources owned by
+To find such orphans, run `bootwright diff`: resources owned by
 Bootwright but no longer declared are listed under **"Owned but no longer
 declared"** (and as `undeclared` in `--output json`). `bootwright destroy
 --dry-run` shows the same set.

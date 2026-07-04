@@ -11,10 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-const (
-	bootwrightContextEnv = "BOOTWRIGHT_CONTEXT"
-)
-
 func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "context <command>",

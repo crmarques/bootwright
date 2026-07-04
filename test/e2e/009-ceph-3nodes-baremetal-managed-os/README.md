@@ -61,7 +61,7 @@ bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel.is
 bootwright context init --name 009-ceph-3nodes-baremetal-managed-os \
   -f test/e2e/009-ceph-3nodes-baremetal-managed-os --yes
 bootwright secret generate
-bootwright host trust --hosts bastion --yes
+bootwright machine trust --machines bastion --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-baremetal --yes
 bootwright apply --stage clusters --clusters ceph-baremetal --yes

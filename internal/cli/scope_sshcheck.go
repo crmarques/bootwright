@@ -22,7 +22,7 @@ func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State,
 
 func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) error {
 	checks := preflight.CollectChecks(state, preflightPhases(selected), true, contextName, secretsDir, clustersDir, preflight.DefaultDeps, hostTrustScope, secretScope)
-	return renderCheckResults(stdout, "host check", preflightChecksToOutput(checks))
+	return renderCheckResults(stdout, "machine check", preflightChecksToOutput(checks))
 }
 
 func renderCheckResults(stdout io.Writer, label string, checks []preflightCheck) error {

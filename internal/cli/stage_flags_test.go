@@ -8,7 +8,7 @@ import (
 )
 
 func TestStageFlagCompletionOffersCanonicalValues(t *testing.T) {
-	// apply/plan/state-check complete the full vocabulary; destroy completes the
+	// apply/plan/diff complete the full vocabulary; destroy completes the
 	// families only. Driving completion from the converge accessors keeps it in
 	// lockstep with validation and help.
 	applyOut, _, code := runCLI(t, "__complete", "apply", "--stage", "")

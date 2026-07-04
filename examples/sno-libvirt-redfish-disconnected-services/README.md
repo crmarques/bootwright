@@ -23,7 +23,7 @@ managed NTP, trust material, and installer artifact publication.
 bootwright validate -f <input-dir>
 bootwright context init --name lab -f <input-dir>
 bootwright secret generate
-bootwright host trust
+bootwright machine trust
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright plan

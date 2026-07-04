@@ -92,7 +92,7 @@ func ManagedHostTrustChecks(state v1alpha1.State, secretsDir string, deps Deps, 
 // NeedsHostTrust reports whether the loaded desired state declares
 // machines that require Bootwright-managed SSH host trust whose trust records
 // are absent or stale. The status next-step spine uses it to suggest
-// `bootwright host trust` before the workflow reaches a strict SSH check, so
+// `bootwright machine trust` before the workflow reaches a strict SSH check, so
 // the spine stops silently skipping a mandatory step on remote-host layouts.
 func NeedsHostTrust(state v1alpha1.State, secretsDir string) bool {
 	checks := ManagedHostTrustChecks(state, secretsDir, DefaultDeps, locality.DefaultPolicy, StatusFail, nil)
@@ -106,7 +106,7 @@ func hostTrustCheck(status Status, name, evidence, impact string) Check {
 		Status:      outputStatusValue(status),
 		Evidence:    evidence,
 		Impact:      impact,
-		Remediation: "bootwright host trust",
+		Remediation: "bootwright machine trust",
 	}
 }
 

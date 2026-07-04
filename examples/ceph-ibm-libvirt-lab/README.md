@@ -204,7 +204,7 @@ printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
 bootwright secret generate
 
 # Record SSH host-key trust for the libvirt host, then re-check.
-bootwright host trust
+bootwright machine trust
 bootwright secret list
 bootwright validate
 ```

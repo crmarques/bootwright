@@ -131,7 +131,7 @@ not in the command. Human-readable output goes through `internal/cli/output`.
 ### Decide whether the verb is read-only
 
 Before shipping a verb, decide whether it mutates anything. The read-only verbs
-are `status`, `state-check`, `render`, `plan`, `apply --dry-run`, `validate`,
+are `status`, `diff`, `render`, `plan`, `apply --dry-run`, `validate`,
 help, and discovery. A read-only verb must not:
 
 - write runtime records (convergence-safety, install, ownership, or ledger),
@@ -181,7 +181,7 @@ Two more rules apply to any new render path:
 ## The ownership-record contract
 
 Anything your roles create or configure on a host must be recorded so that
-`destroy`, host package-removal gating, orphan reporting, and `state-check` can
+`destroy`, host package-removal gating, orphan reporting, and `diff` can
 reason about it. Ownership evidence is a named cross-boundary contract: executing
 collection roles record per-host resource and package ownership through
 `bootwright.core.ownership_record` at mutation time, and Go reads those records.

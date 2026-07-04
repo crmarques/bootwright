@@ -173,7 +173,7 @@ printf '%s\n' 'YOUR_PROXY_PASSWORD' | bootwright secret set --name proxy-credent
 bootwright secret generate
 
 # Record SSH host-key trust for the bastion, then re-check.
-bootwright host trust
+bootwright machine trust
 bootwright secret list
 bootwright validate
 ```

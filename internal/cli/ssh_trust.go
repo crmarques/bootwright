@@ -20,10 +20,10 @@ var defaultHostTrustDeps = sshtrust.Deps{
 	LookPath: preflight.DefaultLookPath,
 }
 
-func newHostCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newMachineCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "host <command>",
-		Short: "Manage declared durable hosts",
+		Use:   "machine <command>",
+		Short: "Manage declared Machines",
 	}
 	cmd.AddCommand(newHostTrustCmd(stdin, stdout, stderr))
 	requireSubcommand(cmd)
@@ -42,11 +42,11 @@ func newHostTrustCmd(stdin io.Reader, stdout io.Writer, _ io.Writer) *cobra.Comm
 		Use:   "trust",
 		Short: "Record SSH host-key trust for declared Machines",
 		Args:  cobra.NoArgs,
-		Example: `  bootwright host trust
-  bootwright host trust --machines provider-01,ceph-dc1-0
-  bootwright host trust --replace provider-01
-  bootwright host trust --dry-run
-  bootwright host trust --output json --dry-run`,
+		Example: `  bootwright machine trust
+  bootwright machine trust --machines provider-01,ceph-dc1-0
+  bootwright machine trust --replace provider-01
+  bootwright machine trust --dry-run
+  bootwright machine trust --output json --dry-run`,
 	}
 	cmd.Flags().StringVar(&machines, "machines", "", "comma-separated Machine names to trust (default: all declared)")
 	cmd.Flags().StringVar(&replace, "replace", "", "comma-separated Machine names whose changed host key may be re-trusted")
@@ -129,7 +129,7 @@ func runHostTrust(ctx context.Context, stdin io.Reader, stdout io.Writer, contex
 	}
 	report.Hosts = plan.Reports
 	if opts.Output == outputJSON && !opts.DryRun && !opts.Yes && plan.PendingWrites > 0 {
-		return report, errors.New("host trust has pending changes; rerun with --yes or use --dry-run with --output json")
+		return report, errors.New("machine trust has pending changes; rerun with --yes or use --dry-run with --output json")
 	}
 	if opts.Output == outputText {
 		printHostTrustPlan(stdout, report)
@@ -138,7 +138,7 @@ func runHostTrust(ctx context.Context, stdin io.Reader, stdout io.Writer, contex
 		return report, nil
 	}
 	if plan.PendingWrites > 0 && !opts.Yes && !confirm(stdin, stdout, fmt.Sprintf("Trust %d SSH host key change(s)? [y/N] (default: no): ", plan.PendingWrites)) {
-		return report, errors.New("host trust aborted")
+		return report, errors.New("machine trust aborted")
 	}
 	for _, record := range plan.Records {
 		store.Upsert(record)
@@ -149,7 +149,7 @@ func runHostTrust(ctx context.Context, stdin io.Reader, stdout io.Writer, contex
 		}
 	}
 	if opts.Output == outputText {
-		output.NewContinuation(stdout).Summary(output.StatusOK, "host trust", fmt.Sprintf("%d host(s) checked", len(report.Hosts)))
+		output.NewContinuation(stdout).Summary(output.StatusOK, "machine trust", fmt.Sprintf("%d machine(s) checked", len(report.Hosts)))
 		printNextStatusHint(stdout)
 	}
 	return report, nil
@@ -157,16 +157,16 @@ func runHostTrust(ctx context.Context, stdin io.Reader, stdout io.Writer, contex
 
 func printHostTrustPlan(stdout io.Writer, report sshtrust.Report) {
 	p := output.New(stdout)
-	p.Command("host trust")
+	p.Command("machine trust")
 	p.Section("Trust store")
 	p.Fields([]output.Field{
 		{Key: "context", Value: report.Context},
 		{Key: "known-hosts", Value: report.KnownHostsPath},
 		{Key: "store", Value: report.StorePath},
 	})
-	p.Section("Hosts")
+	p.Section("Machines")
 	if len(report.Hosts) == 0 {
-		p.Status(output.StatusSkip, "hosts", "no managed SSH trust targets")
+		p.Status(output.StatusSkip, "machines", "no managed SSH trust targets")
 		return
 	}
 	for _, host := range report.Hosts {

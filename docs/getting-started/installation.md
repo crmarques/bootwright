@@ -21,7 +21,7 @@ Every command below runs as your normal user. Bootwright re-executes through
     `sudo`. When `sudo` is not already authorized, bootwright prompts you once and
     reuses that for the rest of the run — including the BECOME password Ansible
     needs for privileged steps on remote hosts. Read-only commands (`plan`,
-    `status`, `cluster`, `state-check`, `print-env`) still need `sudo` to read the
+    `status`, `cluster`, `diff`) still need `sudo` to read the
     context, but they change nothing. To avoid the prompt, run as root or
     pre-authorize once with `sudo -v`.
 
@@ -143,13 +143,13 @@ Bootwright uses strict SSH host-key checking for non-local durable machines.
 Record trust for the declared hosts before you run anything that connects:
 
 ```bash
-bootwright host trust
+bootwright machine trust
 bootwright status
 ```
 
 Interactive `preflight` and `apply` can prompt to record a host key on first use,
 but never under `--yes`, `--dry-run`, or JSON output, and a *changed* key is
-never accepted automatically. Running `bootwright host trust` first keeps later
+never accepted automatically. Running `bootwright machine trust` first keeps later
 runs unattended and fail-closed-safe.
 
 ### Bastion prep and read-only checks
@@ -181,4 +181,4 @@ With the CLI installed, follow one of the cluster guides:
 - [Provisioning a Ceph cluster](ceph.md)
 
 If a step fails, see [Troubleshooting](../troubleshooting.md) for validation, SSH
-trust, artifact fetch, and apply state-check issues.
+trust, artifact fetch, and apply diff issues.

@@ -107,7 +107,7 @@ spec:
 bootwright context init --name 006-ceph-3nodes-libvirt-managed-os \
   -f test/e2e/006-ceph-3nodes-libvirt-managed-os --yes
 bootwright secret generate
-bootwright host trust --hosts bastion --yes
+bootwright machine trust --machines bastion --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-libvirt --yes
 bootwright apply --stage clusters --clusters ceph-libvirt --yes

@@ -33,7 +33,7 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 	watchInterval := 5 * time.Second
 	cmd := &cobra.Command{
 		Use:   "status [target]",
-		Short: "Report context state and the suggested next command",
+		Short: "Show where the context stands and the next command",
 		Long: "Inspects the current context rendered-dir and secrets-dir, surfaces declared\n" +
 			"Environment, Provider, Infrastructure, ContainerCluster, and StorageCluster\n" +
 			"counts, reports which clusters have fresh, stale, missing, or unknown installer\n" +

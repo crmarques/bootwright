@@ -110,7 +110,7 @@ spec:
 bootwright context init --name 008-ceph-3nodes-vsphere-managed-os \
   -f test/e2e/008-ceph-3nodes-vsphere-managed-os --yes
 bootwright secret generate
-bootwright host trust --hosts bastion --yes
+bootwright machine trust --machines bastion --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-vsphere --yes
 bootwright apply --stage clusters --clusters ceph-vsphere --yes

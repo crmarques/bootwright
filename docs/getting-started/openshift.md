@@ -187,7 +187,7 @@ bootwright secret list
 Record host trust, prepare the bastion, and run the read-only checks:
 
 ```bash
-bootwright host trust
+bootwright machine trust
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright render effective

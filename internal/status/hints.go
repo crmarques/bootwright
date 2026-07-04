@@ -19,16 +19,16 @@ func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 		hints := []string{"bootwright secret list"}
 		hints = append(hints, secretHints...)
 		if needsHostTrust {
-			hints = append(hints, "bootwright host trust")
+			hints = append(hints, "bootwright machine trust")
 		}
 		hints = append(hints, "bootwright bastion setup --yes", "bootwright preflight all", "bootwright render effective")
-		// Once Bootwright has applied at least once, state-check is the read-only
+		// Once Bootwright has applied at least once, diff is the read-only
 		// "did anything drift since my last apply?" verb for the steady-state loop;
 		// surface it before plan/apply so it is not discovered only after a
 		// surprising apply. Before the first apply there is nothing recorded to
 		// compare against, so it stays off the spine.
 		if applied {
-			hints = append(hints, "bootwright state-check")
+			hints = append(hints, "bootwright diff")
 		}
 		needsInstaller := ClustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {

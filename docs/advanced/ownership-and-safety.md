@@ -31,7 +31,7 @@ mutates a host it writes durable **ownership evidence** so later runs — and
 
 | Record | What it proves | Used for |
 | --- | --- | --- |
-| Per-host ownership records | The exact resources and packages Bootwright created or configured on a host | Destroy scoping, package-removal gating, orphan reporting, `state-check` |
+| Per-host ownership records | The exact resources and packages Bootwright created or configured on a host | Destroy scoping, package-removal gating, orphan reporting, `diff` |
 | Convergence-safety records | A non-secret desired hash plus a Bootwright owner identity for a mutated resource | Drift and foreign-ownership classification |
 | Per-cluster install records | A non-secret fingerprint of the install inputs and the phase reached | Skipping completed installs and resuming only from known-safe phases |
 | Provider VM markers | That a substrate VM is one Bootwright created | Bounded teardown — never touching co-resident VMs |
@@ -50,7 +50,7 @@ skip, resume, and teardown decision. They never contain secret bytes.
 ## What makes re-running apply safe
 
 Re-running `apply` compares recorded evidence against current desired state and
-classifies each resource into one of four outcomes. `bootwright state-check`
+classifies each resource into one of four outcomes. `bootwright diff`
 reports exactly this, read-only, against recorded evidence — it never contacts
 hosts:
 
@@ -100,7 +100,7 @@ run *before* any mutation if its precondition is not met:
 2. **Host trust.** Bootwright uses strict SSH host-key checking for non-local
    durable machines. A *changed* key is never accepted automatically, and trust
    is never recorded under `--yes`, `--dry-run`, or JSON output. Record it up
-   front with `bootwright host trust`.
+   front with `bootwright machine trust`.
 3. **Run lease.** A short-lived lease admits one mutating run at a time, so two
    applies cannot race the same context.
 4. **Foreign-ownership refusal.** Drift and foreign outcomes fail closed; a
@@ -145,7 +145,7 @@ A few habits keep operators on the safe side of these guardrails:
 - **Re-running `apply` is safe — lean on it.** It never silently destroys. Only
   `apply --override` and `destroy` mutate destructively, and both are gated.
 - **Preview first.** Run `bootwright plan` (or `apply --dry-run`) and read the
-  graph before any override or teardown. `state-check` shows drift without
+  graph before any override or teardown. `diff` shows drift without
   touching hosts.
 - **Limit blast radius with scope.** `--clusters <names>` and `--stage` narrow a
   run to specific clusters or to the `infra`/`clusters` family. Scope an override
@@ -181,9 +181,9 @@ A few habits keep operators on the safe side of these guardrails:
 | Question | Command |
 | --- | --- |
 | What will this run do? | `bootwright plan` / `bootwright apply --dry-run` |
-| Has anything drifted from the last apply? | `bootwright state-check` |
+| Has anything drifted from the last apply? | `bootwright diff` |
 | What is the current run doing? | `bootwright status` / `status --watch` |
-| What does Bootwright own here, and what is orphaned? | `bootwright state-check` and the orphan reporting in [Operations, recovery & teardown](operations.md) |
+| What does Bootwright own here, and what is orphaned? | `bootwright diff` and the orphan reporting in [Operations, recovery & teardown](operations.md) |
 
-`state-check` and `status` read recorded evidence and the run ledger without
+`diff` and `status` read recorded evidence and the run ledger without
 contacting provider hosts, BMCs, or clusters, so they are always safe to run.

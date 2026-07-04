@@ -257,7 +257,7 @@ mutates resources. Re-running `apply` creates what is missing, skips completed
 matching work when a concrete probe supports it, and fails closed when recorded
 state is foreign or unsafe to resume.
 
-Use `bootwright state-check` to compare selected desired state with the last
+Use `bootwright diff` to compare selected desired state with the last
 recorded apply. It is read-only and reports `missing`, `match`, `drift`, and
 `foreign` without contacting hosts; it sees recorded evidence, not live state. It
 also lists `undeclared` resources — objects owned by Bootwright but no longer in

@@ -343,7 +343,7 @@ data-destroying `ceph fs rm` recreate, not an in-place reconcile. See
 for the owned-Ceph wipe-and-rebuild path.
 
 !!! note "Storage sub-objects are not orphan-tracked"
-    `bootwright state-check` correlates whole clusters, machines, and providers,
+    `bootwright diff` correlates whole clusters, machines, and providers,
     so a deleted pool, filesystem, gateway, or passthrough service inside a
     still-declared `StorageCluster` does not appear under **"Owned but no longer
     declared"**.

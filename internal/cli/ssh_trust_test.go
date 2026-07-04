@@ -24,7 +24,7 @@ func TestHostTrustAddsAndReusesManagedHost(t *testing.T) {
 	ctx := initHostTrustTestContext(t)
 	setHostTrustTestDeps(t, map[string]string{"provider-01.example.test": hostTrustKeyA})
 
-	stdout, stderr, code := runCLI(t, "host", "trust", "--yes")
+	stdout, stderr, code := runCLI(t, "machine", "trust", "--yes")
 	if code != 0 {
 		t.Fatalf("host trust exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -35,7 +35,7 @@ func TestHostTrustAddsAndReusesManagedHost(t *testing.T) {
 		t.Fatalf("known_hosts = %q", got)
 	}
 
-	stdout, stderr, code = runCLI(t, "host", "trust", "--dry-run", "--output", "json")
+	stdout, stderr, code = runCLI(t, "machine", "trust", "--dry-run", "--output", "json")
 	if code != 0 {
 		t.Fatalf("host trust dry-run json exited %d, stderr=%q", code, stderr)
 	}
@@ -51,12 +51,12 @@ func TestHostTrustAddsAndReusesManagedHost(t *testing.T) {
 func TestHostTrustRequiresReplaceForChangedKey(t *testing.T) {
 	ctx := initHostTrustTestContext(t)
 	setHostTrustTestDeps(t, map[string]string{"provider-01.example.test": hostTrustKeyA})
-	if _, stderr, code := runCLI(t, "host", "trust", "--yes"); code != 0 {
+	if _, stderr, code := runCLI(t, "machine", "trust", "--yes"); code != 0 {
 		t.Fatalf("initial host trust failed: %s", stderr)
 	}
 
 	setHostTrustTestDeps(t, map[string]string{"provider-01.example.test": hostTrustKeyB})
-	_, stderr, code := runCLI(t, "host", "trust", "--yes")
+	_, stderr, code := runCLI(t, "machine", "trust", "--yes")
 	if code == 0 {
 		t.Fatal("host trust accepted changed key without --replace")
 	}
@@ -64,7 +64,7 @@ func TestHostTrustRequiresReplaceForChangedKey(t *testing.T) {
 		t.Fatalf("stderr missing changed trust message: %q", stderr)
 	}
 
-	stdout, stderr, code := runCLI(t, "host", "trust", "--replace", "provider-01", "--yes")
+	stdout, stderr, code := runCLI(t, "machine", "trust", "--replace", "provider-01", "--yes")
 	if code != 0 {
 		t.Fatalf("host trust replace exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -85,7 +85,7 @@ func TestHostTrustFiltersSelectedHosts(t *testing.T) {
 	initHostTrustTestContext(t)
 	setHostTrustTestDeps(t, map[string]string{"provider-01.example.test": hostTrustKeyA})
 
-	stdout, stderr, code := runCLI(t, "host", "trust", "--machines", "provider-01", "--dry-run", "--output", "json")
+	stdout, stderr, code := runCLI(t, "machine", "trust", "--machines", "provider-01", "--dry-run", "--output", "json")
 	if code != 0 {
 		t.Fatalf("host trust selected dry-run exited %d, stderr=%q", code, stderr)
 	}

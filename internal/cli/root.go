@@ -10,12 +10,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// preserves AddCommand order in --help so workflow commands render in usage order
+// preserves AddCommand order in --help so commands render in usage order within
+// their group, not alphabetically
 func init() { cobra.EnableCommandSorting = false }
 
+// Top-level commands are grouped by domain in --help. Groups render in the order
+// they are added via AddGroup; commands within a group render in AddCommand order.
 const (
-	groupWorkflow = "workflow"
-	groupGeneral  = "general"
+	groupSetup     = "setup"
+	groupResource  = "resource"
+	groupInspect   = "inspect"
+	groupLifecycle = "lifecycle"
+	groupGeneral   = "general"
 )
 
 // contextOverride holds the value of the global --context flag. It is a
@@ -35,7 +41,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright context init --name lab -f ./lab-input
   bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
   bootwright secret generate
-  bootwright host trust
+  bootwright machine trust
   bootwright bastion setup --yes
   bootwright preflight all
   bootwright render effective
@@ -56,37 +62,47 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	registerContextNameCompletion(root, "context")
 
 	root.AddGroup(
-		&cobra.Group{ID: groupWorkflow, Title: "Workflow Commands:"},
+		&cobra.Group{ID: groupSetup, Title: "Setup Commands:"},
+		&cobra.Group{ID: groupInspect, Title: "Inspect Commands:"},
+		&cobra.Group{ID: groupLifecycle, Title: "Lifecycle Commands:"},
+		&cobra.Group{ID: groupResource, Title: "Resource Commands:"},
 		&cobra.Group{ID: groupGeneral, Title: "General Commands:"},
 	)
 	root.SetHelpCommandGroupID(groupGeneral)
 	root.SetCompletionCommandGroupID(groupGeneral)
 
-	addWorkflow(root,
-		newValidateCmd(stdout),
+	addGroup(root, groupSetup,
 		newContextCmd(stdin, stdout, stderr),
-		newHostCmd(stdin, stdout, stderr),
-		newBastionCmd(stdin, stdout, stderr),
-		newClusterCmd(stdout),
 		newExampleCmd(stdout),
-		newPrintEnvCmd(stdout),
-		newMediaCmd(stdin, stdout),
 		newSecretCmd(stdin, stdout, stderr),
+		newMediaCmd(stdin, stdout),
+	)
+	addGroup(root, groupInspect,
+		newValidateCmd(stdout),
 		newPreflightCmd(stdin, stdout, stderr),
-		newStatusCmd(stdout),
-		newStateCheckCmd(stdout, stderr),
 		newPlanCmd(stdin, stdout, stderr),
+		newDiffCmd(stdout, stderr),
+		newStatusCmd(stdout),
 		newRenderCmd(stdout, stderr),
+	)
+	addGroup(root, groupLifecycle,
 		newApplyCmd(stdin, stdout, stderr),
 		newDestroyCmd(stdin, stdout, stderr),
+	)
+	addGroup(root, groupResource,
+		newMachineCmd(stdin, stdout, stderr),
+		newBastionCmd(stdin, stdout, stderr),
+		newClusterCmd(stdout),
+	)
+	addGroup(root, groupGeneral,
 		newVersionCmd(stdout),
 	)
 	return root
 }
 
-func addWorkflow(parent *cobra.Command, cmds ...*cobra.Command) {
+func addGroup(parent *cobra.Command, group string, cmds ...*cobra.Command) {
 	for _, c := range cmds {
-		c.GroupID = groupWorkflow
+		c.GroupID = group
 		parent.AddCommand(c)
 	}
 }

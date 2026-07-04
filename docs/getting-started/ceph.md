@@ -287,7 +287,7 @@ checks:
 bootwright validate -f .
 bootwright context init --name ceph-ibm-lab -f .
 bootwright context current
-bootwright host trust
+bootwright machine trust
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright plan

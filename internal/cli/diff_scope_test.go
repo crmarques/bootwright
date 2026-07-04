@@ -9,26 +9,26 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// TestStateCheckClustersScopeExcludesRenderReferenceStorage is the state-check
+// TestStateCheckClustersScopeExcludesRenderReferenceStorage is the diff
 // mirror of the scoped-apply/destroy storage work-set rule: a
-// `state-check --clusters <container-cluster>` whose data-foundation attachment
+// `diff --clusters <container-cluster>` whose data-foundation attachment
 // pulls a managed StorageCluster into the render-inclusive state must NOT report
 // that StorageCluster (or its pools/exports) as absent or drifted, because
-// scoped apply would never provision it (ADR-0004). Before the fix state-check
+// scoped apply would never provision it (ADR-0004). Before the fix diff
 // enumerated every StorageCluster in the scoped RenderState into the apply
 // target, so the render-reference ceph-storage and its sub-objects showed up as
 // drift and forced exit 3.
-func TestStateCheckClustersScopeExcludesRenderReferenceStorage(t *testing.T) {
+func TestDiffClustersScopeExcludesRenderReferenceStorage(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
 	if _, stderr, code := runCLI(t, "context", "init", "--name", "sc-scope", "-f", example); code != 0 {
 		t.Fatalf("context init exited %d, stderr=%q", code, stderr)
 	}
 
-	report := stateCheckJSON(t, "dc1-metal-ocp")
+	report := diffJSON(t, "dc1-metal-ocp")
 	for _, root := range report.Roots {
 		if root.Kind == workflow.ApplyClusterKindStorage && root.Name == "ceph-storage" {
-			t.Fatalf("render-reference StorageCluster ceph-storage must not be a state-check root for a container-only scope; roots=%+v", report.Roots)
+			t.Fatalf("render-reference StorageCluster ceph-storage must not be a diff root for a container-only scope; roots=%+v", report.Roots)
 		}
 		for _, res := range root.Resources {
 			if strings.HasPrefix(res.ResourceID, "StoragePool/ceph-storage.") ||
@@ -42,14 +42,14 @@ func TestStateCheckClustersScopeExcludesRenderReferenceStorage(t *testing.T) {
 // TestStateCheckStorageScopeReportsNamedStorageRoot is the symmetric positive
 // case: naming the storage root directly makes it (and its sub-objects) part of
 // the checked set, exactly as scoped apply provisions it.
-func TestStateCheckStorageScopeReportsNamedStorageRoot(t *testing.T) {
+func TestDiffStorageScopeReportsNamedStorageRoot(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
 	if _, stderr, code := runCLI(t, "context", "init", "--name", "sc-scope", "-f", example); code != 0 {
 		t.Fatalf("context init exited %d, stderr=%q", code, stderr)
 	}
 
-	report := stateCheckJSON(t, "ceph-storage")
+	report := diffJSON(t, "ceph-storage")
 	found := false
 	for _, root := range report.Roots {
 		if root.Kind == workflow.ApplyClusterKindStorage && root.Name == "ceph-storage" {
@@ -57,21 +57,21 @@ func TestStateCheckStorageScopeReportsNamedStorageRoot(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("a directly-named storage root must be a state-check root; roots=%+v", report.Roots)
+		t.Fatalf("a directly-named storage root must be a diff root; roots=%+v", report.Roots)
 	}
 }
 
-func stateCheckJSON(t *testing.T, clusters string) workflow.StateCheckReport {
+func diffJSON(t *testing.T, clusters string) workflow.StateCheckReport {
 	t.Helper()
-	stdout, stderr, code := runCLI(t, "state-check", "--clusters", clusters, "--output", "json")
-	// state-check exits 3 on drift (never-applied scope) and 0 in sync; both carry
+	stdout, stderr, code := runCLI(t, "diff", "--clusters", clusters, "--output", "json")
+	// diff exits 3 on drift (never-applied scope) and 0 in sync; both carry
 	// a parsable JSON report. A load/usage error (1/2) is a test failure.
 	if code == 1 || code == 2 {
-		t.Fatalf("state-check --clusters %s exited %d, stderr=%q\n%s", clusters, code, stderr, stdout)
+		t.Fatalf("diff --clusters %s exited %d, stderr=%q\n%s", clusters, code, stderr, stdout)
 	}
 	var report workflow.StateCheckReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
-		t.Fatalf("decode state-check json: %v\n%s", err, stdout)
+		t.Fatalf("decode diff json: %v\n%s", err, stdout)
 	}
 	return report
 }

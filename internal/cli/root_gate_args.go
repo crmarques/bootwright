@@ -37,7 +37,7 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		return true
-	case "host":
+	case "machine":
 		if len(args) == 1 {
 			return false
 		}

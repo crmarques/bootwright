@@ -17,7 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func newStateCheckCmd(stdout, stderr io.Writer) *cobra.Command {
+func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 	var (
 		stage        string
 		through      string
@@ -27,8 +27,8 @@ func newStateCheckCmd(stdout, stderr io.Writer) *cobra.Command {
 	)
 	executable := workspace.ResolveAnsiblePlaybook()
 	cmd := &cobra.Command{
-		Use:   "state-check",
-		Short: "Report drift between selected desired state and the last recorded apply",
+		Use:   "diff",
+		Short: "Compare desired state against the last applied state and report drift",
 		Long: "Reports drift between the selected desired state and the last recorded apply.\n" +
 			"Read-only: by default it contacts no hosts, BMCs, or clusters and writes no\n" +
 			"records, and it rejects --override because it neither mutates nor suppresses its\n" +
@@ -38,19 +38,19 @@ func newStateCheckCmd(stdout, stderr io.Writer) *cobra.Command {
 			"(drift, foreign, degraded, or never-applied), 1 load error, 2 usage error.",
 		Args: cobra.NoArgs,
 		Example: `  # Check the whole context for drift from the last apply
-  bootwright state-check
+  bootwright diff
 
   # Check only selected cluster roots
-  bootwright state-check --clusters dc1-ocp,ceph-storage
+  bootwright diff --clusters dc1-ocp,ceph-storage
 
   # Limit to the infrastructure stage
-  bootwright state-check --stage infra
+  bootwright diff --stage infra
 
   # Check everything up to and including the clusters stage
-  bootwright state-check --through clusters
+  bootwright diff --through clusters
 
   # Machine-readable drift report
-  bootwright state-check --output json`,
+  bootwright diff --output json`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("limit to a stage: %s (or sub-phase %s)", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
@@ -132,7 +132,7 @@ func storageOSDExpectations(state v1alpha1.State) map[string]converge.StorageOSD
 
 func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 	p := cliout.New(stdout)
-	p.Command("state-check")
+	p.Command("diff")
 	p.Section("Desired vs recorded reality")
 	switch {
 	case len(report.Roots) == 0:

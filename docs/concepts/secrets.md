@@ -137,7 +137,7 @@ key to `<name>` and the public key to `<name>.pub`.
 ### SSH host trust
 
 Durable SSH targets normally use context-managed host trust recorded by
-`bootwright host trust`; `Machine.spec.access.ssh.knownHostsRef` is available
+`bootwright machine trust`; `Machine.spec.access.ssh.knownHostsRef` is available
 when an operator needs to point at explicit known_hosts material. Bootwright
 records each non-local Machine server key under
 `/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses that known_hosts
@@ -147,11 +147,11 @@ For interactive runs, recording trust up front is optional: `preflight` and
 `apply` show each unknown host's key fingerprint and ask before recording it,
 for hosts with no existing record only (opt out with
 `--trust-on-first-use=false`). Automation must still pre-record trust by running
-`bootwright host trust` after importing or updating a context — non-interactive
+`bootwright machine trust` after importing or updating a context — non-interactive
 runs (`--yes`, `--output json`, `--dry-run`) never prompt and fail closed on
 missing trust. Verify the displayed fingerprints out of band before accepting
 first-use trust; a *changed* server key is never accepted interactively and
-requires `bootwright host trust --replace` after you verify the new fingerprint.
+requires `bootwright machine trust --replace` after you verify the new fingerprint.
 
 ## Storage modes and encryption at rest
 

@@ -18,7 +18,7 @@ import (
 func newValidateCmd(stdout io.Writer) *cobra.Command {
 	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
 		use:   "validate",
-		short: "Validate desired-state YAML offline",
+		short: "Validate desired-state YAML (offline; contacts nothing)",
 		long: "Loads, normalizes, and validates the desired-state YAML offline: it never\n" +
 			"runs Ansible and contacts no hosts, BMCs, or clusters, and renders no installer\n" +
 			"files. Exit codes for automation: 0 valid, 1 load or validation error, 2 usage\n" +
