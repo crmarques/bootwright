@@ -10,7 +10,7 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Kinds
 
-The eighteen kinds and the fact each owns are listed in `domain.md` (Operating
+The nineteen kinds and the fact each owns are listed in `domain.md` (Operating
 Model). This document specifies each kind's fields, validation, and the CLI
 contract.
 
@@ -955,6 +955,80 @@ Rules:
 - Input values for `refKind` schema properties must name a loaded object of
   that kind; values for `secret` properties must be declared in
   `Environment` `spec.secrets`.
+
+## ProvisioningPlaybook
+
+`ProvisioningPlaybook` owns one operator-supplied Ansible playbook run against
+machines at a chosen provisioning stage. It is the imperative escape hatch
+sibling of `ClusterAddon`: where an add-on applies declarative Kubernetes objects
+into an installed cluster, a `ProvisioningPlaybook` injects an operator playbook
+(and optional vendored roles/collections) into the provisioning DAG at any of the
+five sub-phases, before or after that phase's built-in work.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ProvisioningPlaybook
+metadata:
+  name: harden-storage-nodes
+spec:
+  stage: machines          # fabric | machines | deps | base | add-ons
+  timing: after            # before | after (default after)
+  target:
+    clusters: [nprd-ceph]
+  playbook: playbooks/harden.yml
+  rolesPath: roles
+  collectionsPath: collections
+  extraVars:
+    tuned_profile: throughput-performance
+  secretRefs: [vault-token]
+  run: onChange            # onChange (default) | always
+  failureMode: fail        # fail (default) | continue
+```
+
+Rules:
+
+- `spec.stage` is one of the five sub-phase names (`fabric`, `machines`, `deps`,
+  `base`, `add-ons`) — the same vocabulary as `--stage`. `spec.timing` is
+  `before` or `after` (default `after`).
+- `spec.playbook` is required, a `.yml`/`.yaml` file path relative to the
+  `ProvisioningPlaybook` file, contained within its directory (no absolute paths,
+  `..`, or symlinks) — the `ClusterAddon` `manifestSet.path` rules. `rolesPath`
+  and `collectionsPath` are optional relative directories under the same rules.
+- Operator Ansible content lives under `playbooks/`, `roles/`, and `collections/`
+  directories; the loader skips those subtrees (they are Ansible content, not
+  authored Bootwright objects) while `context init` still copies them so
+  `ansible-playbook` resolves them at run time. Vendored collections are the
+  air-gap-safe delivery; a Galaxy `requirements.yml` install is not supported.
+- `spec.target` selects the inventory hosts and must set at least one of
+  `clusters` (a `ContainerCluster` → its agent-node group, a `StorageCluster` →
+  its storage group), `machines` (a `Machine` → its node inventory host(s)), or
+  `hostGroups` (raw inventory group names). These are selection lists, not
+  references. A target may not name the bootwright controller / localhost
+  (`localhost`, `bootwright_ocp_hosts`, `bootwright_controller_hosts`): a
+  controller-targeted playbook would run operator code as root over every
+  context's secrets.
+- `spec.provides`/`spec.requires` order playbooks within the same
+  `(stage, timing)` bucket: every `requires` must be met by another enabled
+  playbook's `provides` in the same bucket, `provides` are unique, and the graph
+  is acyclic. `spec.order` tie-breaks within a bucket.
+- `spec.secretRefs` must be declared in `Environment` `spec.secrets`; the playbook
+  reads them from `{{ bootwright_secrets_dir }}/<name>` (never the argv).
+- `spec.run` selects re-run behaviour: `onChange` (default) skips a run whose
+  declared inputs — spec plus a content digest of the playbook and vendored trees
+  — are unchanged since the last reconcile; `always` re-runs every apply.
+- `spec.failureMode` is `fail` (default: a failed playbook blocks the anchor
+  phase) or `continue` (the failure is recorded and the phase proceeds).
+- `spec.enabled` defaults true; `enabled: false` keeps the object but skips it.
+
+A playbook is planned only when its `stage` is in the run's phase set (the
+`--stage` filter) and its target resolves to at least one in-scope host (the
+`--clusters` filter). An `after` playbook waits for the anchor stage's core tasks
+in scope; a `before` playbook gates every anchor-stage core task in scope and
+itself lands after the previous stage. Playbooks flow through `apply`, `plan`,
+`validate`, and `state-check` on the existing `--stage`/`--clusters` axes; there
+is no dedicated CLI verb. Because a playbook is opaque, `state-check` reports it
+as `match` (declared inputs unchanged) or `drift` (changed, will re-run) from the
+input hash only — it never observes node reality.
 
 ## Rendering Contract
 

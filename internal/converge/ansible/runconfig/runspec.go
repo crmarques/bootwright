@@ -6,6 +6,7 @@ package runconfig
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -31,6 +32,11 @@ type RunSpecConfig struct {
 	ArtifactsDir       string
 	OutputLogPath      string
 	ExtraVarPairs      []string
+	// RolesPath and CollectionsPath are optional operator-supplied vendored
+	// directories (from a ProvisioningPlaybook), appended after the bundle
+	// collections so bootwright.core stays resolvable. Empty for core tasks.
+	RolesPath          string
+	CollectionsPath    string
 	Check              bool
 	AskBecomePass      bool
 	BecomePasswordFile string
@@ -85,10 +91,17 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		"bootwright_ansible_artifacts_dir=" + artifactsDirAbs,
 	}
 	pairs = append(pairs, cfg.ExtraVarPairs...)
+	collectionsPath := filepath.Join(cfg.BundleDir, bundle.CollectionsRelPath)
+	if strings.TrimSpace(cfg.CollectionsPath) != "" {
+		// Bundle collections first so bootwright.core resolves; operator
+		// collections append (a distinct namespace, no conflict).
+		collectionsPath = collectionsPath + string(os.PathListSeparator) + cfg.CollectionsPath
+	}
 	return ansible.RunSpec{
 		Executable:         cfg.Executable,
 		AnsibleCfg:         filepath.Join(cfg.BundleDir, bundle.AnsibleCfgRelPath),
-		CollectionsPath:    filepath.Join(cfg.BundleDir, bundle.CollectionsRelPath),
+		RolesPath:          cfg.RolesPath,
+		CollectionsPath:    collectionsPath,
 		Inventory:          cfg.InventoryPath,
 		Playbook:           bundlePlaybook(cfg.BundleDir, cfg.Playbook),
 		Limit:              cfg.Limit,
@@ -105,6 +118,11 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 }
 
 func bundlePlaybook(bundleDir, playbook string) string {
+	// An absolute path is an operator-supplied ProvisioningPlaybook already
+	// rooted under the context input dir — pass it through unjoined.
+	if filepath.IsAbs(playbook) {
+		return playbook
+	}
 	if strings.HasSuffix(playbook, ".yml") || strings.HasSuffix(playbook, ".yaml") || strings.Contains(playbook, string(filepath.Separator)) {
 		return filepath.Join(bundleDir, playbook)
 	}

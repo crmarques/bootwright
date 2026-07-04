@@ -26,6 +26,7 @@ const (
 	ApplyTaskKindStorageAttachmentApply = "storageAttachmentApply"
 	ApplyTaskKindClusterAddon           = "clusterAddon"
 	ApplyTaskKindNodeConfigApply        = "nodeConfigApply"
+	ApplyTaskKindProvisioningPlaybook   = "provisioningPlaybook"
 
 	ApplyClusterKindContainer = "container"
 	ApplyClusterKindStorage   = "storage"
@@ -105,7 +106,17 @@ type ApplyTask struct {
 	HostSlotKey   string
 	HostSlotCount int
 	ExtraVarPairs []string
-	State         v1alpha1.State
+	// RolesPath and CollectionsPath are absolute operator-supplied vendored
+	// directories (a ProvisioningPlaybook), added to the run's ANSIBLE_ROLES_PATH /
+	// ANSIBLE_COLLECTIONS_PATH. Empty for built-in bootwright.core tasks.
+	RolesPath       string
+	CollectionsPath string
+	// SkipWhenConverged, set by a ProvisioningPlaybook with run: onChange, makes
+	// the executor skip the ansible run when the task's DesiredHash matches the
+	// last reconciled converge-safety record (declared inputs unchanged since the
+	// last apply).
+	SkipWhenConverged bool
+	State             v1alpha1.State
 	// DesiredHashVars, when set, is the desired-state input ApplyTaskDesiredHash
 	// hashes instead of the full State. Fabric (provider/infra-component) tasks
 	// set it to the host's rendered fabric vars so state-check does not report

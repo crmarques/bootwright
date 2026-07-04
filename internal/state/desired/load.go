@@ -188,7 +188,8 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.StorageExports) == 0 &&
 		len(state.ClusterAddons) == 0 &&
 		len(state.ClusterAddonProfiles) == 0 &&
-		len(state.ClusterAddonBindings) == 0 {
+		len(state.ClusterAddonBindings) == 0 &&
+		len(state.ProvisioningPlaybooks) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
 	}
 	sortState(&state)
@@ -204,6 +205,19 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 var nonWorkspaceDirs = map[string]struct{}{
 	"node_modules": {},
 	"vendor":       {},
+}
+
+// ansibleContentDirs names directories that hold operator-supplied Ansible
+// content (a ProvisioningPlaybook's playbook / rolesPath / collectionsPath), not
+// authored Bootwright objects. Their YAML is frequently a top-level sequence (a
+// playbook) or role vars with no apiVersion, so the strict loader skips the whole
+// subtree — the content is referenced by path from the ProvisioningPlaybook,
+// never loaded as a document. context init's input-tree copy still carries it to
+// the context so ansible-playbook resolves it at run time.
+var ansibleContentDirs = map[string]struct{}{
+	"playbooks":   {},
+	"roles":       {},
+	"collections": {},
 }
 
 func discoverFiles(paths []string) ([]string, error) {
@@ -246,6 +260,9 @@ func discoverFiles(paths []string) ([]string, error) {
 						return filepath.SkipDir
 					}
 					if _, skip := nonWorkspaceDirs[base]; skip {
+						return filepath.SkipDir
+					}
+					if _, skip := ansibleContentDirs[base]; skip {
 						return filepath.SkipDir
 					}
 				}
@@ -442,6 +459,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.ClusterAddonBindings = append(state.ClusterAddonBindings, item)
+		case v1alpha1.KindProvisioningPlaybook:
+			var item v1alpha1.ProvisioningPlaybook
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.ProvisioningPlaybooks = append(state.ProvisioningPlaybooks, item)
 		case "":
 			return fmt.Errorf("decode %s document %d: kind is required", path, index)
 		default:
@@ -595,6 +619,12 @@ func sortState(state *v1alpha1.State) {
 			return state.ClusterAddonBindings[i].SourcePath < state.ClusterAddonBindings[j].SourcePath
 		}
 		return state.ClusterAddonBindings[i].Metadata.Name < state.ClusterAddonBindings[j].Metadata.Name
+	}))
+	sort.SliceStable(state.ProvisioningPlaybooks, sortByName(func(i, j int) bool {
+		if state.ProvisioningPlaybooks[i].Metadata.Name == state.ProvisioningPlaybooks[j].Metadata.Name {
+			return state.ProvisioningPlaybooks[i].SourcePath < state.ProvisioningPlaybooks[j].SourcePath
+		}
+		return state.ProvisioningPlaybooks[i].Metadata.Name < state.ProvisioningPlaybooks[j].Metadata.Name
 	}))
 }
 

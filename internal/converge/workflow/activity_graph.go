@@ -67,6 +67,44 @@ func (g *ActivityGraph) Add(activity Activity) error {
 	return nil
 }
 
+// AddDependency appends dependsOn to an already-added activity's hard explicit
+// dependencies. The ProvisioningPlaybook planner uses it to gate a core phase
+// task on a before-timing playbook after every core activity is in the graph.
+func (g *ActivityGraph) AddDependency(id, dependsOn string) error {
+	activity, ok := g.activities[id]
+	if !ok {
+		return fmt.Errorf("cannot add dependency to unknown activity %s", id)
+	}
+	activity.ExplicitDependencies = appendUniqueString(activity.ExplicitDependencies, dependsOn)
+	g.activities[id] = activity
+	return nil
+}
+
+// AddOrderingDependency appends dependsOn to an already-added activity's soft
+// ordering dependencies (wait-until-terminal, run regardless). Used to gate a
+// core phase task on a before-timing playbook whose failureMode is continue, so
+// the phase proceeds even if the playbook fails.
+func (g *ActivityGraph) AddOrderingDependency(id, dependsOn string) error {
+	activity, ok := g.activities[id]
+	if !ok {
+		return fmt.Errorf("cannot add ordering dependency to unknown activity %s", id)
+	}
+	activity.Task.Entry.OrderingDependencies = appendUniqueString(activity.Task.Entry.OrderingDependencies, dependsOn)
+	g.activities[id] = activity
+	return nil
+}
+
+// ActivitySnapshot returns the activities added so far, in insertion order. The
+// ProvisioningPlaybook planner reads it to bucket core tasks by phase without
+// threading a phase index through every planner call site.
+func (g *ActivityGraph) ActivitySnapshot() []Activity {
+	out := make([]Activity, 0, len(g.order))
+	for _, id := range g.order {
+		out = append(out, g.activities[id])
+	}
+	return out
+}
+
 func (g *ActivityGraph) Lower() ([]ApplyTask, error) {
 	depsByID := map[string][]string{}
 	for _, id := range g.order {

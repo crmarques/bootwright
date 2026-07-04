@@ -41,6 +41,23 @@ var systemTempEnv = []struct {
 	{key: "ANSIBLE_REMOTE_TMP", value: SystemTempDir},
 }
 
+// cleanPathList cleans each element of an os.PathListSeparator-joined path list
+// and rejoins them, dropping empties. ANSIBLE_ROLES_PATH / ANSIBLE_COLLECTIONS_PATH
+// may carry the bundle path plus operator-supplied vendored dirs (from a
+// ProvisioningPlaybook), so the whole value cannot be filepath.Clean'd as one
+// string. A single path passes through unchanged.
+func cleanPathList(list string) string {
+	parts := strings.Split(list, string(os.PathListSeparator))
+	out := parts[:0]
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		out = append(out, filepath.Clean(p))
+	}
+	return strings.Join(out, string(os.PathListSeparator))
+}
+
 // SystemTempEnv returns Ansible temp overrides that avoid controller and
 // provider-host home directories.
 func SystemTempEnv() map[string]string {
@@ -146,10 +163,10 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 		env = append(env, "ANSIBLE_CONFIG="+spec.AnsibleCfg)
 	}
 	if spec.RolesPath != "" {
-		env = append(env, "ANSIBLE_ROLES_PATH="+filepath.Clean(spec.RolesPath))
+		env = append(env, "ANSIBLE_ROLES_PATH="+cleanPathList(spec.RolesPath))
 	}
 	if spec.CollectionsPath != "" {
-		env = append(env, "ANSIBLE_COLLECTIONS_PATH="+filepath.Clean(spec.CollectionsPath))
+		env = append(env, "ANSIBLE_COLLECTIONS_PATH="+cleanPathList(spec.CollectionsPath))
 	}
 	if spec.FilterPluginsPath != "" {
 		env = append(env, "ANSIBLE_FILTER_PLUGINS="+filepath.Clean(spec.FilterPluginsPath))

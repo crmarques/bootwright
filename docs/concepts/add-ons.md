@@ -12,6 +12,11 @@ provider-owned resources; add-ons are desired-state objects the
 [`Environment`](environment.md) selects, binds to clusters, and applies *after*
 the target cluster is installed and reachable.
 
+Add-ons apply *declarative Kubernetes objects* and only after the cluster is
+installed. To run *imperative Ansible* against machines — at any stage, before or
+after the built-in work — use a [provisioning playbook](provisioning-playbooks.md)
+instead.
+
 Add-ons model the initial post-install bootstrap applied *inside* an installed
 OpenShift or OKD cluster. They render into apply plans, not installer input, and
 they are not a replacement for long-term day-2 GitOps reconciliation. You can

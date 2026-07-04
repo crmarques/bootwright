@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ProvisioningPlaybook
+metadata:
+  name: register-nodes
+spec:
+  # Run after the cluster has finished installing ("after installing clusters").
+  stage: base
+
+  timing: after
+
+  target:
+    clusters:
+      - metal-ocp
+
+  playbook: playbooks/register-nodes.yml
+
+  extraVars:
+    cmdb_url: https://cmdb.example.internal
+
+  run: onChange
+
+  failureMode: fail

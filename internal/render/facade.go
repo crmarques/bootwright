@@ -100,6 +100,10 @@ func MachineInfraHostName(clusterName, machineName string) string {
 	return inventory.MachineInfraHostName(clusterName, machineName)
 }
 
+func MachineInventoryHosts(state v1alpha1.State, machineName string) []string {
+	return inventory.MachineInventoryHosts(state, machineName)
+}
+
 func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
 	return inventory.StorageSeedHostName(cluster)
 }

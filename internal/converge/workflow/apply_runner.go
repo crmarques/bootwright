@@ -34,6 +34,11 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if task.Entry.Kind == ApplyTaskKindNodeConfigApply {
 		return runOneNodeConfigTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
+	if skipped, reason, err := provisioningPlaybookConvergeSkip(runsDir, opts.ContextName, runID, task); err != nil {
+		return applyTaskResult{id: task.Entry.ID, err: err}
+	} else if skipped {
+		return applyTaskResult{id: task.Entry.ID, skipped: true, skippedReason: reason}
+	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")
 	taskOpts := opts
@@ -41,6 +46,8 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	taskOpts.RenderDir = renderDir
 	taskOpts.Playbook = task.Playbook
 	taskOpts.Limit = task.Limit
+	taskOpts.RolesPath = task.RolesPath
+	taskOpts.CollectionsPath = task.CollectionsPath
 	taskOpts.ExtraVarPairs = append(append([]string(nil), opts.ExtraVarPairs...), task.ExtraVarPairs...)
 	taskOpts.ArtifactsBaseName = ""
 	taskOpts.ResolveInstaller = false
@@ -96,4 +103,32 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+}
+
+// provisioningPlaybookConvergeSkip implements a ProvisioningPlaybook's run:
+// onChange gate. It returns skipped=true when the task's declared inputs (hashed
+// into DesiredHash, including a content digest of the playbook and vendored
+// trees) match the last reconciled/skipped converge-safety record, so an
+// unchanged operator playbook is not re-run every apply. A missing or corrupt
+// record, or any hash mismatch, runs the playbook (fail-open). It also re-stamps
+// the record as skipped so the record (and its hash) persist across the run.
+func provisioningPlaybookConvergeSkip(runsDir, contextName, runID string, task ApplyTask) (bool, string, error) {
+	if !task.SkipWhenConverged || strings.TrimSpace(runsDir) == "" {
+		return false, "", nil
+	}
+	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+	if err != nil || !found {
+		return false, "", nil // fail-open: run on a missing/corrupt record
+	}
+	if record.Status != ConvergeSafetyStatusReconciled && record.Status != ConvergeSafetyStatusSkipped {
+		return false, "", nil
+	}
+	desiredHash, err := ApplyTaskDesiredHash(task)
+	if err != nil || record.DesiredHash != desiredHash {
+		return false, "", nil
+	}
+	if err := MarkApplyTaskConvergeSafety(runsDir, contextName, runID, task, ConvergeSafetyStatusSkipped, time.Now()); err != nil {
+		return false, "", err
+	}
+	return true, "inputs unchanged since last run (run: onChange)", nil
 }

@@ -83,6 +83,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"docs/concepts/container-clusters.md",
 		"docs/concepts/storage.md",
 		"docs/concepts/add-ons.md",
+		"docs/concepts/provisioning-playbooks.md",
 		"docs/concepts/secrets.md",
 		"docs/advanced/index.md",
 		"docs/advanced/fleets.md",
@@ -439,7 +440,12 @@ func desiredStateYAMLPaths(t *testing.T, roots ...string) []string {
 
 func isExtensionPayloadManifest(path string) bool {
 	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		if part == "manifests" {
+		// manifests/ holds ClusterAddon Kubernetes payloads; playbooks/, roles/,
+		// and collections/ hold a ProvisioningPlaybook's operator Ansible content.
+		// None are authored Bootwright objects, so they are exempt from the
+		// desired-state YAML style checks.
+		switch part {
+		case "manifests", "playbooks", "roles", "collections":
 			return true
 		}
 	}

@@ -75,6 +75,9 @@ func AuthoredKindAccessors() []KindAccessor {
 		{KindClusterAddonBinding, "ClusterAddonBindings", func(s State) []string {
 			return metadataNames(s.ClusterAddonBindings, func(o ClusterAddonBinding) Metadata { return o.Metadata })
 		}},
+		{KindProvisioningPlaybook, "ProvisioningPlaybooks", func(s State) []string {
+			return metadataNames(s.ProvisioningPlaybooks, func(o ProvisioningPlaybook) Metadata { return o.Metadata })
+		}},
 	}
 }
 

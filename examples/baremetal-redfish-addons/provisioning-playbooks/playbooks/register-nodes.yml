@@ -1,0 +1,13 @@
+---
+# Operator-supplied example playbook. bootwright runs it against the cluster's
+# nodes after the cluster finishes installing (stage: base, timing: after).
+# extraVars from the ProvisioningPlaybook arrive as a single JSON -e value, and
+# secrets (if any secretRefs were declared) are read from
+# {{ bootwright_secrets_dir }}/<name>. This example is intentionally a no-op.
+- name: Register nodes with the CMDB
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Announce the registration target
+      ansible.builtin.debug:
+        msg: "would register {{ inventory_hostname }} with {{ cmdb_url | default('the CMDB') }}"

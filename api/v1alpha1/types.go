@@ -32,6 +32,7 @@ const (
 	KindClusterAddon           = "ClusterAddon"
 	KindClusterAddonProfile    = "ClusterAddonProfile"
 	KindClusterAddonBinding    = "ClusterAddonBinding"
+	KindProvisioningPlaybook   = "ProvisioningPlaybook"
 
 	// Provisioner kinds (machine production).
 	ProvisionerLibvirt   = "libvirt"
@@ -325,6 +326,31 @@ const (
 	// StorageExport union: type value == populated arm key.
 	StorageExportTypeDataFoundation                              = "dataFoundation"
 	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
+
+	// ProvisioningPlaybook stage vocabulary — the five provisioning sub-phases a
+	// ProvisioningPlaybook may anchor to, matching the --stage sub-phase names.
+	// ProvisioningStages() is the ordered accessor; internal/converge pins its
+	// SubPhaseStageNames() to it via a guard test.
+	ProvisioningStageFabric   = "fabric"
+	ProvisioningStageMachines = "machines"
+	ProvisioningStageDeps     = "deps"
+	ProvisioningStageBase     = "base"
+	ProvisioningStageAddOns   = "add-ons"
+
+	// ProvisioningPlaybook timing: before or after the anchor stage's built-in
+	// work (default after).
+	ProvisioningPlaybookTimingBefore = "before"
+	ProvisioningPlaybookTimingAfter  = "after"
+
+	// ProvisioningPlaybook run mode: onChange (default) skips an unchanged run,
+	// always re-runs every apply.
+	ProvisioningPlaybookRunOnChange = "onChange"
+	ProvisioningPlaybookRunAlways   = "always"
+
+	// ProvisioningPlaybook failure mode: fail (default) blocks the anchor phase,
+	// continue records the failure and lets the phase proceed.
+	ProvisioningPlaybookFailureFail     = "fail"
+	ProvisioningPlaybookFailureContinue = "continue"
 )
 
 // StorageCephRoles is the complete spec.ceph.topology.hosts[].roles
@@ -392,6 +418,7 @@ type State struct {
 	ClusterAddons            []ClusterAddon           `yaml:"clusterAddons,omitempty" json:"clusterAddons,omitempty"`
 	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`
 	ClusterAddonBindings     []ClusterAddonBinding    `yaml:"clusterAddonBindings,omitempty" json:"clusterAddonBindings,omitempty"`
+	ProvisioningPlaybooks    []ProvisioningPlaybook   `yaml:"provisioningPlaybooks,omitempty" json:"provisioningPlaybooks,omitempty"`
 }
 
 type TypeMeta struct {

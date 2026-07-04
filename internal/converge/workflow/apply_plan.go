@@ -450,6 +450,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return nil, err
 		}
 	}
+	// ProvisioningPlaybooks anchor to any of the five phases, so they plan after
+	// every core activity is added — the phase index they wire against reads the
+	// completed graph snapshot.
+	if err := planProvisioningPlaybookActivities(graph, state, phaseSet, target); err != nil {
+		return nil, err
+	}
 	return graph.Lower()
 }
 

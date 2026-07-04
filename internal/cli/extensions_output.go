@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
@@ -28,6 +29,29 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	}
 	p := cliout.NewContinuation(stdout)
 	p.Section("Add-ons")
+	p.Tasks(lines)
+}
+
+// printProvisioningPlaybookDryRun lists the operator-supplied playbooks the plan
+// will run, in a curated "Playbooks" section (the tasks also appear in the
+// generic per-task plan lines).
+func printProvisioningPlaybookDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
+	var lines []cliout.TaskLine
+	for _, task := range tasks {
+		if task.Entry.Kind != workflow.ApplyTaskKindProvisioningPlaybook {
+			continue
+		}
+		lines = append(lines, cliout.TaskLine{
+			Status: cliout.StatusPending,
+			Label:  task.Entry.Label,
+			Detail: fmt.Sprintf("limit %s · playbook %s", task.Limit, filepath.Base(task.Playbook)),
+		})
+	}
+	if len(lines) == 0 {
+		return
+	}
+	p := cliout.NewContinuation(stdout)
+	p.Section("Playbooks")
 	p.Tasks(lines)
 }
 

@@ -53,8 +53,12 @@ type RunOptions struct {
 	Limit              string
 	Forks              int
 	ExtraVarPairs      []string
-	ArtifactsRoot      string
-	OutputLogPath      string
+	// RolesPath and CollectionsPath are optional operator-supplied vendored
+	// directories (from a ProvisioningPlaybook), passed through to the runspec.
+	RolesPath       string
+	CollectionsPath string
+	ArtifactsRoot   string
+	OutputLogPath   string
 	// ArtifactsBaseName names the per-run subdirectory under the render
 	// artifacts root, e.g. "preflight-infra" or "infra-destroy".
 	ArtifactsBaseName  string
@@ -189,6 +193,8 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		Limit:              opts.Limit,
 		Forks:              opts.Forks,
 		ExtraVarPairs:      opts.ExtraVarPairs,
+		RolesPath:          opts.RolesPath,
+		CollectionsPath:    opts.CollectionsPath,
 		ArtifactsDir:       filepath.Join(artifactsRoot, opts.ArtifactsBaseName),
 		OutputLogPath:      opts.OutputLogPath,
 		Check:              opts.Check,

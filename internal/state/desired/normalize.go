@@ -54,6 +54,28 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageExports {
 		normalizeStorageExport(&state.StorageExports[i], storageClusters)
 	}
+	for i := range state.ProvisioningPlaybooks {
+		normalizeProvisioningPlaybook(&state.ProvisioningPlaybooks[i])
+	}
+}
+
+// normalizeProvisioningPlaybook materializes the optional-with-default fields so
+// every downstream consumer (validation, planner, dry-run) reads one value
+// rather than re-deriving the default.
+func normalizeProvisioningPlaybook(p *v1alpha1.ProvisioningPlaybook) {
+	if p.Spec.Timing == "" {
+		p.Spec.Timing = v1alpha1.ProvisioningPlaybookTimingAfter
+	}
+	if p.Spec.Run == "" {
+		p.Spec.Run = v1alpha1.ProvisioningPlaybookRunOnChange
+	}
+	if p.Spec.FailureMode == "" {
+		p.Spec.FailureMode = v1alpha1.ProvisioningPlaybookFailureFail
+	}
+	if p.Spec.Enabled == nil {
+		enabled := true
+		p.Spec.Enabled = &enabled
+	}
 }
 
 // applyBareMetalBMCDefaults lets a bare-metal InfraProvider set BMC TLS behavior

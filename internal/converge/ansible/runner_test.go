@@ -163,6 +163,41 @@ printf 'remote_tmp=%s\n' "$ANSIBLE_REMOTE_TMP"
 	}
 }
 
+func TestCommandRunnerJoinsRolesAndCollectionsPathLists(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "fake-ansible-playbook")
+	if err := os.WriteFile(executable, []byte(`#!/bin/sh
+printf 'roles=%s\n' "$ANSIBLE_ROLES_PATH"
+printf 'collections=%s\n' "$ANSIBLE_COLLECTIONS_PATH"
+`), 0o755); err != nil {
+		t.Fatalf("write fake ansible-playbook: %v", err)
+	}
+	sep := string(os.PathListSeparator)
+	var stdout bytes.Buffer
+	if err := (CommandRunner{Stdout: &stdout}).Run(context.Background(), RunSpec{
+		Executable:      executable,
+		Inventory:       "inventory.yaml",
+		Playbook:        "playbook.yml",
+		ExtraVars:       "vars.yml",
+		RolesPath:       "/opt/hook/roles",
+		CollectionsPath: "/bundle/collections" + sep + "/opt/hook/collections",
+		ArtifactsDir:    filepath.Join(dir, "artifacts"),
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, want := range []string{
+		"roles=/opt/hook/roles\n",
+		"collections=/bundle/collections" + sep + "/opt/hook/collections\n",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
 func TestCommandRunnerControllingTTYSatisfiesNestedRequireTTY(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("pseudo-terminal runner is Linux-specific")

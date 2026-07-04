@@ -1,10 +1,11 @@
 // Package v1alpha1 defines Bootwright public desired-state API structs.
 //
 // References. Reference fields carry the Ref/Refs suffix and are authored as
-// plain name strings (see LocalObjectReference). One deliberate exception:
+// plain name strings (see LocalObjectReference). Two deliberate exceptions:
 // Environment spec.containerClusters and spec.storageClusters are fleet
 // selection lists, not references, so they stay plain strings without the
-// Ref suffix.
+// Ref suffix; likewise ProvisioningPlaybook spec.target.{clusters,machines,
+// hostGroups} are inventory selection lists, not references.
 //
 // Unions. The API has exactly two union grammars. A discriminated union
 // carries a type field whose value is byte-identical to the populated arm
