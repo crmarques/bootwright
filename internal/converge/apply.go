@@ -30,6 +30,13 @@ import (
 // drifted shared service can be reconciled in place without a destroy detour;
 // likewise a greenfield (missing) object is created, not destroyed. Dry-run/plan
 // still previews the override plan.
+//
+// The remedy it prints names the destroy scope that actually clears the blocked
+// resource. A cluster (storage/container) rebuild is cleared by the clusters-stage
+// destroy, but MACHINE SUBSTRATE (a managed-OS install) is torn down only by the
+// infra stage — a clusters-stage destroy leaves it in place, so pointing a blocked
+// managed-OS machine at `destroy --override` for the clusters scope would loop
+// forever. The remedy routes machine substrate at `destroy --stage infra` instead.
 func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification) error {
 	protected := workflow.ProtectedEnvironments(state)
 	if len(protected) == 0 {
@@ -39,7 +46,34 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	if len(destructive) == 0 {
 		return nil
 	}
-	return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; run `bootwright destroy --override` for that scope first, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "))
+	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
+	hasMachine := len(machineLabels) > 0
+	hasCluster := len(destructive) > len(machineLabels)
+	remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters)
+	return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
+}
+
+// overrideDestroyRemedy builds the "run destroy first" clause, routing each
+// blocked resource at the destroy scope that clears it: cluster (storage/
+// container) rebuilds at the clusters-stage destroy, and machine substrate
+// (managed-OS installs, torn down only by the infra stage) at `destroy --stage
+// infra`, scoped to the affected clusters when they are known. hasMachine reports
+// whether any blocked object is machine substrate; hasCluster whether any blocked
+// object is cleared by the clusters-stage destroy; machineClusters is the affected
+// clusters (empty when no machine substrate is blocked or its cluster is unknown).
+func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters []string) string {
+	infra := "bootwright destroy --stage infra --override"
+	if len(machineClusters) > 0 {
+		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --override"
+	}
+	switch {
+	case hasMachine && !hasCluster:
+		return "machine substrate is torn down by the infra stage, not the clusters stage, so run `" + infra + "` first"
+	case hasMachine && hasCluster:
+		return "run `bootwright destroy --override` for the cluster scope AND `" + infra + "` for the machine substrate (torn down only by the infra stage) first"
+	default:
+		return "run `bootwright destroy --override` for that scope first"
+	}
 }
 
 // PlanScopedApply stamps the apply safety mode onto the plan's extra vars,

@@ -67,3 +67,27 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy locks in the fix
+// for the destroy/re-apply loop: a blocked managed-OS machine (torn down only by
+// the infra stage) must be pointed at `destroy --stage infra --clusters <name>`,
+// NOT the clusters-stage `destroy --override` that can never clear its records —
+// following which would loop forever.
+func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T) {
+	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph-nprd", "ceph-nprd")
+
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), machine)
+	if err == nil {
+		t.Fatal("protected env with a drifted managed-OS machine must fail closed")
+	}
+	// The remedy must name the infra-stage destroy scoped to the affected cluster.
+	if want := "bootwright destroy --stage infra --clusters ceph-nprd --override"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("machine-substrate remedy must direct to %q: %v", want, err)
+	}
+	// It must NOT emit the old dead-end guidance that the clusters-stage destroy
+	// clears the block ("... for that scope first"), which never touches machine
+	// substrate and reproduces the loop.
+	if strings.Contains(err.Error(), "for that scope") {
+		t.Fatalf("machine-substrate remedy must not point at the clusters-scope destroy that cannot clear it: %v", err)
+	}
+}

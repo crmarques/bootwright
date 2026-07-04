@@ -147,6 +147,30 @@ func TestOverrideDestructiveDriftedObjects(t *testing.T) {
 	}
 }
 
+// TestOverrideDestructiveMachineSubstrate verifies the machine-substrate split the
+// destroy-protection remedy routes on: a drifted managed-OS install is machine
+// substrate (cleared only by the infra stage) and reports its cluster; a drifted
+// StorageCluster is a cluster rebuild and is NOT machine substrate.
+func TestOverrideDestructiveMachineSubstrate(t *testing.T) {
+	runsDir := t.TempDir()
+	managedOS := classifyTask("osinstall.ceph", ApplyTaskKindManagedMachineOS, "ceph")
+	storage := classifyTask("storage.ceph", ApplyTaskKindStorageCluster, "ceph")
+	saveStateCheckRecord(t, runsDir, managedOS, "sha256:stale", ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, storage, "sha256:stale", ConvergeSafetyOwner)
+
+	objs, err := ClassifyApplyObjects([]ApplyTask{managedOS, storage}, runsDir)
+	if err != nil {
+		t.Fatalf("ClassifyApplyObjects: %v", err)
+	}
+	labels, clusters := OverrideDestructiveMachineSubstrate(objs)
+	if len(labels) != 1 || labels[0] != "osinstall.ceph" {
+		t.Fatalf("machine-substrate labels = %v, want only the managed-OS install (StorageCluster is a cluster rebuild)", labels)
+	}
+	if len(clusters) != 1 || clusters[0] != "ceph" {
+		t.Fatalf("machine-substrate clusters = %v, want [ceph]", clusters)
+	}
+}
+
 func TestEvaluateApplyModePreflightOverrideOnlyFailsForeign(t *testing.T) {
 	objs := preflightObjects(t, t.TempDir())
 	err := EvaluateApplyModePreflight(ApplyModeOverride, objs)

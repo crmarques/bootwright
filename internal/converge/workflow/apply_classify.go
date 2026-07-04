@@ -15,6 +15,11 @@ type ObjectClassification struct {
 	ObjectKey string `json:"objectKey"`
 	Kind      string `json:"kind"`
 	Label     string `json:"label"`
+	// Cluster is the StorageCluster/ContainerCluster the object belongs to (empty
+	// for a shared, cluster-less object like a provider or infra-component). The
+	// destroy-protection remedy uses it to scope the `destroy --stage infra
+	// --clusters ...` command it points a blocked machine-substrate object at.
+	Cluster string `json:"cluster,omitempty"`
 	// Class is the single most actionable classification for display, chosen with
 	// precedence foreign > drift > missing > match. The aggregate decisions the
 	// preflight makes use the predicate methods below, not this label.
@@ -89,10 +94,10 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassification, error) {
 	order := make([]string, 0, len(tasks))
 	objs := map[string]*ObjectClassification{}
-	add := func(kind, key, label string, class ConvergeSafetyClassification, reconcilable bool, taskID string) {
+	add := func(kind, key, label, cluster string, class ConvergeSafetyClassification, reconcilable bool, taskID string) {
 		o := objs[key]
 		if o == nil {
-			o = &ObjectClassification{ObjectKey: key, Kind: kind, Label: label, counts: map[ConvergeSafetyClassification]int{}}
+			o = &ObjectClassification{ObjectKey: key, Kind: kind, Label: label, Cluster: cluster, counts: map[ConvergeSafetyClassification]int{}}
 			objs[key] = o
 			order = append(order, key)
 		}
@@ -115,7 +120,7 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		if err != nil {
 			return nil, err
 		}
-		add(kind, key, label, class, reconcilable, task.Entry.ID)
+		add(kind, key, label, task.Entry.Cluster, class, reconcilable, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
 			expandedStorage[task.Entry.Cluster] = true
 			for _, sub := range storageSubObjects(task.State, task.Entry.Cluster) {
@@ -123,7 +128,7 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 				if err != nil {
 					return nil, err
 				}
-				add(sub.Kind, sub.resourceID(), sub.resourceID(), subClass, false, "")
+				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, false, "")
 			}
 		}
 	}

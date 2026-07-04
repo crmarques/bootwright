@@ -101,23 +101,66 @@ var overrideReconfigureOnlyKinds = map[string]bool{
 	ApplyTaskKindStorageAttachmentApply: true,
 }
 
+// machineSubstrateKinds are the destructive apply-task kinds whose teardown lives
+// in the infra (fabric/machines) stage rather than the clusters stage — a
+// managed-OS install or a per-host machine-infra step. A clusters-stage destroy
+// deliberately leaves machine substrate in place ("machine substrate cleanup is
+// handled by destroy --stage infra"), so its convergence records survive it and a
+// re-apply keeps seeing the same destructive drift. The destroy-protection remedy
+// keys on this to route a blocked object of these kinds at `destroy --stage infra`
+// instead of the clusters destroy that can never clear it.
+var machineSubstrateKinds = map[string]bool{
+	ApplyTaskKindManagedMachineOS:     true,
+	ApplyTaskKindMachineInfraPrepare:  true,
+	ApplyTaskKindMachineInfraFinalize: true,
+}
+
+// isOverrideDestructive reports whether an object's --override rebuild would be
+// destructive: structurally drifted (recorded and changed in its destructive
+// identity, so override rebuilds rather than creates) and of a kind that is not
+// reconfigure-only. A reconfigure-only service, a reconcilable-in-place
+// StorageCluster OSD-device add, and a missing (greenfield) object are all
+// non-destructive and excluded.
+func isOverrideDestructive(o ObjectClassification) bool {
+	return o.HasStructuralDrift() && !overrideReconfigureOnlyKinds[o.Kind]
+}
+
 // OverrideDestructiveDriftedObjects returns the labels of the selected objects
-// whose --override rebuild would be destructive: structurally drifted (recorded
-// and changed in its destructive identity, so override rebuilds rather than
-// creates) and of a kind that is not reconfigure-only. The destroy-protection
-// gate keys on this so a scoped apply --override whose only drift is a
-// reconfigure-only service, or a reconcilable-in-place StorageCluster OSD-device
-// add, does not need to cross the destroy boundary, while one that would reinstall
-// a VM or wipe a cluster still does. Missing (greenfield) objects are never
-// destructive and are excluded.
+// whose --override rebuild would be destructive. The destroy-protection gate keys
+// on this so a scoped apply --override whose only drift is a reconfigure-only
+// service, or a reconcilable-in-place StorageCluster OSD-device add, does not need
+// to cross the destroy boundary, while one that would reinstall a VM or wipe a
+// cluster still does.
 func OverrideDestructiveDriftedObjects(objects []ObjectClassification) []string {
 	var labels []string
 	for _, o := range objects {
-		if !o.HasStructuralDrift() || overrideReconfigureOnlyKinds[o.Kind] {
+		if !isOverrideDestructive(o) {
 			continue
 		}
 		labels = append(labels, o.Label)
 	}
 	sort.Strings(labels)
 	return labels
+}
+
+// OverrideDestructiveMachineSubstrate returns the labels of the blocked
+// (destructive-drifted) objects that are machine substrate, and the distinct
+// clusters they belong to. The destroy-protection remedy uses these to direct the
+// operator at the infra-stage destroy that actually clears them — a clusters-stage
+// destroy leaves machine substrate in place, so pointing there would loop.
+func OverrideDestructiveMachineSubstrate(objects []ObjectClassification) (labels, clusters []string) {
+	seen := map[string]bool{}
+	for _, o := range objects {
+		if !isOverrideDestructive(o) || !machineSubstrateKinds[o.Kind] {
+			continue
+		}
+		labels = append(labels, o.Label)
+		if o.Cluster != "" && !seen[o.Cluster] {
+			seen[o.Cluster] = true
+			clusters = append(clusters, o.Cluster)
+		}
+	}
+	sort.Strings(labels)
+	sort.Strings(clusters)
+	return labels, clusters
 }
