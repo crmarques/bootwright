@@ -34,10 +34,13 @@
 
 # Trust the egress proxy's TLS-inspection CA before any package work. A proxy
 # that re-signs HTTPS (SSL-bump) presents its own CA on cdn.redhat.com and every
-# other origin, so without this the RHEL CDN fetch fails certificate verification
-# ("unable to get local issuer certificate") even though the proxy tunnel itself
-# is reachable. Runs before both the community and subscription repository stages
-# so every subsequent dnf/get_url/podman pull through the proxy validates.
+# other origin, so without this general HTTPS fails certificate verification
+# ("unable to get local issuer certificate"). This installs the CA into the SYSTEM
+# trust store, which covers get_url, podman, and third-party .repo fetches (whose
+# sslcacert defaults to the system bundle). The RHSM CDN repos are a separate case
+# — they pin sslcacert=redhat-uep.pem, so subscription.yml additionally points
+# repo_ca_cert at the system bundle this rebuilds. Runs before both the community
+# and subscription repository stages so the merged bundle exists first.
 - name: Trust corporate proxy CA on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_proxy_trust_bundle_ref }}"

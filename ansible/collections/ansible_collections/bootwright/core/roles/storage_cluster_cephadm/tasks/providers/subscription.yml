@@ -111,6 +111,29 @@
       - option: proxy_password
         value: "{{ bootwright_proxy_credentials.password if bootwright_ceph_rhsm_proxy_creds else '' }}"
 
+# A TLS-inspecting (SSL-bump) proxy re-signs cdn.redhat.com with the corporate CA,
+# but subscription-manager stamps every redhat.repo entry with
+# sslcacert=/etc/rhsm/ca/redhat-uep.pem, which libcurl uses as CURLOPT_CAINFO --
+# REPLACING the system trust store, not augmenting it. So the proxy CA installed
+# into the system anchors (phases/repository.yml) makes get_url/podman/the vendor
+# .repo validate, but NOT the RHSM CDN repos: dnf still verifies cdn.redhat.com
+# against redhat-uep.pem alone, which lacks the proxy CA -> "unable to get local
+# issuer certificate". Point repo_ca_cert at the system bundle that update-ca-trust
+# has already merged the proxy CA into, so redhat.repo's sslcacert trusts the
+# re-signed certificate. Converges both ways: the stock RHSM CA is restored when no
+# inspecting proxy declares a trustBundleRef, and a change triggers the refresh
+# below so redhat.repo regenerates with the new sslcacert.
+- name: Point RHSM content CA at the proxy-aware trust store
+  community.general.ini_file:
+    path: /etc/rhsm/rhsm.conf
+    section: rhsm
+    option: repo_ca_cert
+    value: "{{ bootwright_ceph_system_ca_bundle_path if (bootwright_proxy_trust_bundle_ref | default('') | length > 0) else bootwright_ceph_rhsm_default_repo_ca }}"
+    owner: root
+    group: root
+    mode: "{{ '0600' if bootwright_proxy_credentialed_url | default(false) | bool else '0644' }}"
+  register: bootwright_ceph_rhsm_repo_ca
+
 - name: Register storage node with RHSM
   # redhat_subscription checks the node's registration identity and only registers
   # when needed, instead of re-registering with --force on every apply (which
@@ -123,17 +146,17 @@
   register: bootwright_ceph_rhsm_register
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# Refresh after a fresh registration or a proxy change: refresh regenerates
-# redhat.repo, stamping the rhsm.conf proxy into the RHEL repos so the vendor
-# license install below (and every later RHEL dependency pull) reaches the CDN
-# through the proxy rather than the `_none_` direct path.
+# Refresh after a fresh registration, a proxy change, or a repo-CA change: refresh
+# regenerates redhat.repo, stamping the rhsm.conf proxy AND sslcacert into the RHEL
+# repos so the vendor license install below (and every later RHEL dependency pull)
+# reaches the CDN through the proxy and validates its re-signed certificate.
 - name: Refresh RHSM subscription metadata
   ansible.builtin.command:
     argv:
       - subscription-manager
       - refresh
-  changed_when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed
-  when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed
+  changed_when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed or bootwright_ceph_rhsm_repo_ca is changed
+  when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed or bootwright_ceph_rhsm_repo_ca is changed
 
 # subscription-manager register does not connect Red Hat Insights on its own;
 # honor the entitlement's connectToInsights intent explicitly when set, matching

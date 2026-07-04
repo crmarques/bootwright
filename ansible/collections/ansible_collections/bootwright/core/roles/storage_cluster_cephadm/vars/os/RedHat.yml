@@ -22,8 +22,16 @@ bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwrigh
 bootwright_ceph_rhsm_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem
 # Distinct anchor for the egress proxy's TLS-inspection CA (proxy
 # connection.trustBundleRef), so a proxied node trusts the certificates the
-# proxy re-signs when dnf reaches the Red Hat CDN through it.
+# proxy re-signs for general HTTPS (get_url, podman, the vendor .repo).
 bootwright_ceph_proxy_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.pem
+# System-extracted CA bundle that update-ca-trust rebuilds from the anchors above,
+# so it carries the public roots AND the corporate proxy CA. RHSM CDN repos are
+# pointed here (rhsm.conf [rhsm] repo_ca_cert) when a TLS-inspecting proxy is set,
+# because their sslcacert REPLACES the system store rather than augmenting it.
+bootwright_ceph_system_ca_bundle_path: /etc/pki/tls/certs/ca-bundle.crt
+# subscription-manager's stock repo CA (the default sslcacert stamped into
+# redhat.repo); restored when no TLS-inspecting proxy declares a trustBundleRef.
+bootwright_ceph_rhsm_default_repo_ca: /etc/rhsm/ca/redhat-uep.pem
 bootwright_ceph_ca_trust_update_argv:
   - update-ca-trust
 bootwright_ceph_community_default_mirror: https://download.ceph.com
