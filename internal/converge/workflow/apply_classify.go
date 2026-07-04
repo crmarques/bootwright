@@ -62,6 +62,17 @@ func (o ObjectClassification) HasReconcilableDrift() bool { return o.reconcilabl
 // HasForeign reports whether any backing task was recorded by another manager.
 func (o ObjectClassification) HasForeign() bool { return o.counts[ConvergeSafetyForeign] > 0 }
 
+// Object kinds for the aggregated install/storage objects (distinct from the
+// lowercase task-kind constants in apply_tasks.go). ClassifyApplyObjects stamps these
+// as ObjectClassification.Kind, so any predicate that keys on the object kind — the
+// storage override data-loss warning, the reconcilable-only zap suppression, the
+// reclaim-devices ownership gate, the refusal consequence text — must compare against
+// these, never the task-kind constant.
+const (
+	ObjectKindContainerCluster = "ContainerCluster"
+	ObjectKindStorageCluster   = "StorageCluster"
+)
+
 // objectIdentity maps an apply task to the desired-state object it belongs to.
 // The multi-task install/storage flows collapse to one object (a ContainerCluster
 // spans clusterISO+nodeBoot+installWait; a StorageCluster spans storageInfra +
@@ -70,11 +81,11 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 	e := task.Entry
 	switch e.Kind {
 	case ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindInstallWait, ApplyTaskKindClusterInstall:
-		k := "ContainerCluster/" + e.Cluster
-		return "ContainerCluster", k, k
+		k := ObjectKindContainerCluster + "/" + e.Cluster
+		return ObjectKindContainerCluster, k, k
 	case ApplyTaskKindStorageInfra, ApplyTaskKindStorageCluster:
-		k := "StorageCluster/" + e.Cluster
-		return "StorageCluster", k, k
+		k := ObjectKindStorageCluster + "/" + e.Cluster
+		return ObjectKindStorageCluster, k, k
 	default:
 		lbl := e.Label
 		if lbl == "" {

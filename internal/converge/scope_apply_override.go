@@ -32,7 +32,7 @@ func OverrideDriftedStorageSubObjects(objects []workflow.ObjectClassification) [
 func OverrideDestructiveStorageClusters(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {
-		if o.Kind == workflow.ApplyTaskKindStorageCluster && o.HasStructuralDrift() {
+		if o.Kind == workflow.ObjectKindStorageCluster && o.HasStructuralDrift() {
 			out = append(out, o.Label)
 		}
 	}
@@ -47,7 +47,7 @@ func OverrideDestructiveStorageClusters(objects []workflow.ObjectClassification)
 func ReconcilableOnlyStorageClusters(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {
-		if o.Kind == workflow.ApplyTaskKindStorageCluster && o.Reconcilable {
+		if o.Kind == workflow.ObjectKindStorageCluster && o.Reconcilable {
 			out = append(out, strings.TrimPrefix(o.Label, "StorageCluster/"))
 		}
 	}
@@ -74,7 +74,7 @@ func ApplyReconcilableOnlyStorageExtraVar(plan *WorkflowPlan, names []string) {
 func OwnedStorageClusters(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {
-		if o.Kind == workflow.ApplyTaskKindStorageCluster && o.Recorded() && !o.HasForeign() {
+		if o.Kind == workflow.ObjectKindStorageCluster && o.Recorded() && !o.HasForeign() {
 			out = append(out, strings.TrimPrefix(o.Label, "StorageCluster/"))
 		}
 	}
