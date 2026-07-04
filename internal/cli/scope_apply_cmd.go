@@ -367,6 +367,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				printStageScopeNotices(stdout, runScope)
 			}
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
+			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode)
 			printExtensionDryRun(stdout, dryRunTasks)
 			printProvisioningPlaybookDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
