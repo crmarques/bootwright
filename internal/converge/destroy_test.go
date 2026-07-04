@@ -45,7 +45,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("classify before reset: %v", err)
 	}
-	if err := workflow.EvaluateApplyModePreflight(workflow.ApplyModeContinue, objects); err == nil || !strings.Contains(err.Error(), "StorageCluster/ceph-ibm (drift)") {
+	if err := workflow.EvaluateApplyModePreflight(workflow.ApplyModeContinue, objects); err == nil || !strings.Contains(err.Error(), "StorageCluster/ceph-ibm") {
 		t.Fatalf("precondition: expected storage drift, got %v", err)
 	}
 

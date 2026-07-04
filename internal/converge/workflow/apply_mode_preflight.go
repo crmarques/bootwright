@@ -31,22 +31,23 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			return fmt.Errorf("apply --expect-new requires a greenfield environment and these objects already exist: %s; drop --expect-new to reconcile them, or run `bootwright apply --override` to rebuild drifted objects", summarizeApplyObjects(existing))
 		}
 	case ApplyModeContinue:
-		var differ []ObjectClassification
+		var drifted, foreign []ObjectClassification
 		for _, o := range objects {
-			// Reconcilable drift (a StorageCluster OSD-device add) is NOT refused:
-			// `ceph orch apply` converges it in place on this same run, so continue
-			// proceeds. Only foreign ownership or a destructive-identity (structural)
-			// drift blocks continue.
-			if o.HasForeign() || o.HasStructuralDrift() {
-				differ = append(differ, o)
+			// Reconcilable drift (a StorageCluster OSD-device add, a storage set-* edit,
+			// a ContainerCluster day-2 edit, any reconfigure-only re-apply) is NOT
+			// refused: it converges in place on this same run, so continue proceeds.
+			// Only foreign ownership or a destructive-identity (structural) change —
+			// including any change bootwright cannot map to a safe in-place reconcile —
+			// blocks continue and fails closed here.
+			switch {
+			case o.HasForeign():
+				foreign = append(foreign, o)
+			case o.HasStructuralDrift():
+				drifted = append(drifted, o)
 			}
 		}
-		if len(differ) > 0 {
-			msg := fmt.Sprintf("apply refuses to mutate objects that differ from their recorded desired state: %s; align the desired state, or run `bootwright apply --override` to rebuild drifted objects (foreign objects are never rebuilt)", summarizeApplyObjects(differ))
-			if driftsStorageClusterStructurally(differ) {
-				msg += ". Note: --override on a drifted StorageCluster runs `cephadm rm-cluster --zap-osds` and DESTROYS all OSD data before re-bootstrapping — it is a wipe-and-rebuild, not an in-place edit"
-			}
-			return fmt.Errorf("%s", msg)
+		if len(drifted)+len(foreign) > 0 {
+			return continueDriftRefusal(drifted, foreign)
 		}
 	case ApplyModeOverride:
 		var foreign []ObjectClassification
@@ -62,18 +63,46 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 	return nil
 }
 
-// driftsStorageClusterStructurally reports whether any differing object is a
-// StorageCluster with destructive (structural) drift, so the continue-mode
-// refusal can warn that its --override rebuild is a data-destroying wipe rather
-// than the in-place edit "rebuild drifted objects" implies for a fabric or add-on
-// object. A device-only (reconcilable) drift never reaches this refusal.
-func driftsStorageClusterStructurally(objs []ObjectClassification) bool {
-	for _, o := range objs {
-		if o.Kind == ApplyTaskKindStorageCluster && o.HasStructuralDrift() {
-			return true
+// continueDriftRefusal builds the fail-closed continue-mode refusal in the "unmapped
+// change = unsupported, stop with guidance" contract: for the owned objects whose
+// change is not a safe in-place reconcile, it names the object AND the worst-case
+// consequence of rebuilding it, then the exact remedy (revert, or the override path a
+// destructive rebuild needs); foreign objects get their own ownership remedy. A change
+// bootwright cannot map to a reconcilable transition lands here by default (structural
+// is the fail-safe classification), so an untaught edit is refused with this guidance
+// rather than silently rebuilt.
+func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
+	var parts []string
+	if len(drifted) > 0 {
+		items := make([]string, 0, len(drifted))
+		for _, o := range drifted {
+			items = append(items, fmt.Sprintf("%s (would %s)", o.Label, structuralRebuildConsequence(o)))
 		}
+		sort.Strings(items)
+		parts = append(parts, fmt.Sprintf("apply refuses this change to %s: it is not a safe in-place reconcile. To proceed, revert the change to match the recorded desired state, or — if you intend the rebuild — re-run with `bootwright apply --override` (a destructive rebuild additionally needs `--allow-destroy`, or on a protected environment a `bootwright destroy` for that scope first)", strings.Join(items, ", ")))
 	}
-	return false
+	if len(foreign) > 0 {
+		parts = append(parts, fmt.Sprintf("apply never modifies objects recorded by another manager: %s; resolve ownership before retrying (foreign objects are never rebuilt)", summarizeApplyObjects(foreign)))
+	}
+	return fmt.Errorf("%s", strings.Join(parts, ". "))
+}
+
+// structuralRebuildConsequence is the kind-specific worst-case of an --override rebuild
+// of a structurally-drifted object, so the refusal states what would be destroyed
+// rather than a generic "rebuild".
+func structuralRebuildConsequence(o ObjectClassification) string {
+	switch {
+	case o.Kind == ObjectKindStorageCluster:
+		return "wipe all Ceph OSD data (cephadm rm-cluster --zap-osds) and re-bootstrap"
+	case IsStorageSubObjectKind(o.Kind):
+		return "destroy the data in that pool/filesystem and recreate it"
+	case o.Kind == ObjectKindContainerCluster:
+		return "reinstall the cluster — its nodes re-imaged"
+	case machineSubstrateKinds[o.Kind]:
+		return "reinstall the machine — its disks wiped"
+	default:
+		return "rebuild the resource"
+	}
 }
 
 func summarizeApplyObjects(objs []ObjectClassification) string {
