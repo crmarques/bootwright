@@ -120,6 +120,14 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		if err != nil {
 			return nil, err
 		}
+		// Reconfigure-only kinds (fabric services, node-config, add-ons, virtctl,
+		// storage attachment) have no destructive identity: their --override is an
+		// idempotent re-apply, so ANY drift on them is reconcilable in place. Continue
+		// re-applies a day-2 edit (a changed add-on, node label/taint, DNS/LB record)
+		// instead of refusing and forcing --override. A destructive kind is unaffected.
+		if class == ConvergeSafetyDrift && overrideReconfigureOnlyKinds[task.Entry.Kind] {
+			reconcilable = true
+		}
 		add(kind, key, label, task.Entry.Cluster, class, reconcilable, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
 			expandedStorage[task.Entry.Cluster] = true

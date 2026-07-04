@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"encoding/json"
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -228,13 +229,14 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 							HostSlotCount: 1,
 							Status:        TaskStatusPending,
 						},
-						Playbook:      applyClusterInstallPlaybook,
-						Limit:         render.MachineInfraHostName(name, machineName),
-						ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_name=" + machineName},
-						Forks:         1,
-						State:         clusterState,
-						HostSlotKey:   hostSlotKey,
-						HostSlotCount: 1,
+						Playbook:           applyClusterInstallPlaybook,
+						Limit:              render.MachineInfraHostName(name, machineName),
+						ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_name=" + machineName},
+						Forks:              1,
+						State:              clusterState,
+						StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
+						HostSlotKey:        hostSlotKey,
+						HostSlotCount:      1,
 					},
 				}); err != nil {
 					return nil, err
@@ -348,11 +350,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						ClusterKind: ApplyClusterKindContainer,
 						Status:      TaskStatusPending,
 					},
-					Playbook:      applyCreateISOPlaybook,
-					Limit:         render.GroupOCPHosts,
-					Forks:         1,
-					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-					State:         clusterState,
+					Playbook:           applyCreateISOPlaybook,
+					Limit:              render.GroupOCPHosts,
+					Forks:              1,
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name},
+					State:              clusterState,
+					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 				},
 			}); err != nil {
 				return nil, err
@@ -394,12 +397,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 							ResourceKeys: applyNodeBootResourceKeys(state, name, machineNames),
 							Status:       TaskStatusPending,
 						},
-						Playbook:      applyBootMachinePlaybook,
-						Limit:         render.AgentNodeGroupName(name),
-						ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-						State:         clusterState,
-						Forks:         len(machineNames),
-						RedfishSlots:  len(machineNames),
+						Playbook:           applyBootMachinePlaybook,
+						Limit:              render.AgentNodeGroupName(name),
+						ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name},
+						State:              clusterState,
+						StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
+						Forks:              len(machineNames),
+						RedfishSlots:       len(machineNames),
 					},
 				}); err != nil {
 					return nil, err
@@ -428,11 +432,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						ClusterKind: ApplyClusterKindContainer,
 						Status:      TaskStatusPending,
 					},
-					Playbook:      applyWaitInstallPlaybook,
-					Limit:         render.GroupOCPHosts,
-					Forks:         1,
-					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-					State:         clusterState,
+					Playbook:           applyWaitInstallPlaybook,
+					Limit:              render.GroupOCPHosts,
+					Forks:              1,
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name},
+					State:              clusterState,
+					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 				},
 			}); err != nil {
 				return nil, err
@@ -771,4 +776,38 @@ func hostMutationResource(host string) string {
 		return ""
 	}
 	return "host:" + host + ":mutating"
+}
+
+// containerClusterInstallStructuralHashVars projects the DESTRUCTIVE-IDENTITY subset of
+// a ContainerCluster's install intent: the cluster-filtered state with the day-2-owned
+// intent cleared. Cluster add-ons and per-node labels/taints are applied AFTER install
+// by the add-on and node-config tasks (their own reconfigure-only, non-destructive
+// re-apply), so editing them must not flip the install object to a destructive reinstall.
+// When the full desired hash drifts but this structural hash is unchanged, the only
+// change is day-2 intent — reconcilable in place, so continue proceeds and --override
+// does not reinstall. A change to install-config / agent-config identity (networks,
+// platform, release, endpoints, host machineRefs, roles, FIPS) moves this hash and stays
+// a destructive rebuild; the install-state reconcile gate (clusterInstallDesiredHashForContext)
+// is the precise second backstop that still refuses regenerating install inputs for an
+// installed cluster. The day-2 fields are cleared on a JSON deep copy so the shared
+// render state is never mutated. Mirrors storageClusterStructuralHashVars.
+func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1alpha1.State {
+	var clone v1alpha1.State
+	data, err := json.Marshal(clusterState)
+	if err != nil {
+		return clusterState
+	}
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return clusterState
+	}
+	clone.ClusterAddons = nil
+	clone.ClusterAddonBindings = nil
+	clone.ClusterAddonProfiles = nil
+	for i := range clone.ContainerClusters {
+		for j := range clone.ContainerClusters[i].Spec.Hosts {
+			clone.ContainerClusters[i].Spec.Hosts[j].Labels = nil
+			clone.ContainerClusters[i].Spec.Hosts[j].Taints = nil
+		}
+	}
+	return clone
 }

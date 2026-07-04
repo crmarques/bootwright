@@ -1207,9 +1207,18 @@ input hash only — it never observes node reality.
   `--override`. Storage teardown still fails closed when a cluster's Ceph seed
   host is unreachable, so ownership stays proven before any device wipe.
 - `apply` reconciles by default: it creates missing objects, skips objects
-  whose recorded desired state matches the current desired state, and fails
-  closed on drift or foreign ownership before any mutation. `apply
-  --expect-new` additionally refuses to proceed when any selected object
+  whose recorded desired state matches the current desired state, converges
+  drift that is reconcilable in place, and fails closed on structural
+  (destructive-identity) drift or foreign ownership before any mutation.
+  Reconcilable-in-place drift is drift that converges without a destructive
+  rebuild: a StorageCluster OSD-device add; a storage sub-object edit confined
+  to `ceph ... set`-reconcilable fields (pool replicas/quota/compression/crush,
+  MDS placement, an added data pool) rather than an immutable identity (pool
+  type / EC profile, CephFS metadata or default-data pool); a ContainerCluster
+  edit confined to day-2-owned intent (node labels/taints, cluster add-ons)
+  rather than install-config/agent-config identity; and any drift on a
+  reconfigure-only kind (whose re-apply is idempotent and non-destructive).
+  `apply --expect-new` additionally refuses to proceed when any selected object
   already exists. `--expect-new` and `--override` are mutually exclusive.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `state-check`.
@@ -1292,13 +1301,17 @@ input hash only — it never observes node reality.
   against their own recorded apply (the report names the individual pool or export
   that drifted or is not yet applied — the same object granularity `apply` acts
   on), and each `infrastructure` host task hashes a host-scoped projection so an
-  unrelated edit does not flip it. Every other cluster-root task (agent ISO, node
-  boot, install wait, per-machine provisioning, add-on apply) hashes the
-  cluster-filtered desired state, so any change within a present cluster reports
-  every one of that cluster's tasks as drift, not only the task that consumes the
-  changed object; use `render effective` and diff, or `plan`, to see which object
-  changed. Narrowing these tasks to per-object projections (as storage sub-objects
-  and infrastructure hosts already do) is a planned refinement.
+  unrelated edit does not flip it. The ContainerCluster install tasks (agent ISO,
+  node boot, install wait, per-machine provisioning) hash the cluster-filtered
+  desired state for their full-drift signal but also carry a structural projection
+  that excludes day-2-owned intent (cluster add-ons, node labels/taints), so an
+  edit confined to that intent is reconcilable-in-place drift on the install object
+  rather than a destructive reinstall; a change to install-config/agent-config
+  identity still moves the structural hash and stays a rebuild. Any change within a
+  present cluster still reports every one of that cluster's install tasks as drift
+  (the display class), not only the task that consumes the changed object; use
+  `render effective` and diff, or `plan`, to see which object changed, and the
+  reconcilable/structural split to tell a day-2 reconcile from a reinstall.
   A present `StorageCluster` lists its out-of-sync sub-objects under the cluster
   root, while a never-applied cluster still collapses to one absence. The
   `infrastructure` root aggregates the provider and infra-component host tasks.

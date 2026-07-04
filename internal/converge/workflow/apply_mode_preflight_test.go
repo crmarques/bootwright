@@ -77,19 +77,50 @@ func TestEvaluateApplyModePreflightCreateGreenfieldOnly(t *testing.T) {
 	}
 }
 
-func TestEvaluateApplyModePreflightContinueFailsDriftAndForeign(t *testing.T) {
-	objs := preflightObjects(t, t.TempDir())
-	err := EvaluateApplyModePreflight(ApplyModeContinue, objs)
-	if err == nil {
-		t.Fatal("continue must refuse drift/foreign")
+func TestEvaluateApplyModePreflightContinueFailsStructuralDriftAndForeign(t *testing.T) {
+	runsDir := t.TempDir()
+	// Foreign ownership and a destructive-kind (managed-OS reinstall) structural
+	// drift still fail closed. A drifted reconfigure-only kind (clusterAddon) is
+	// reconcilable in place, so continue reconciles it instead of refusing.
+	addonDrift := classifyTask("addon.demo.drift", ApplyTaskKindClusterAddon, "demo")
+	foreign := classifyTask("addon.demo.foreign", ApplyTaskKindClusterAddon, "demo")
+	osDrift := classifyTask("os.demo", ApplyTaskKindManagedMachineOS, "demo")
+	saveStateCheckRecord(t, runsDir, addonDrift, "sha256:stale", ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
+	saveStateCheckRecord(t, runsDir, osDrift, "sha256:stale", ConvergeSafetyOwner)
+	objs, err := ClassifyApplyObjects([]ApplyTask{addonDrift, foreign, osDrift}, runsDir)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
 	}
-	for _, want := range []string{"addon.demo.drift", "addon.demo.foreign"} {
+	err = EvaluateApplyModePreflight(ApplyModeContinue, objs)
+	if err == nil {
+		t.Fatal("continue must refuse foreign and destructive structural drift")
+	}
+	for _, want := range []string{"os.demo", "addon.demo.foreign"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("continue error must name the offending object %q: %v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "addon.demo.missing") || strings.Contains(err.Error(), "addon.demo.match") {
-		t.Fatalf("continue must not block missing/match objects: %v", err)
+	if strings.Contains(err.Error(), "addon.demo.drift") {
+		t.Fatalf("continue must reconcile a reconfigure-only drift in place, not refuse it: %v", err)
+	}
+}
+
+// A run whose only drift is a reconfigure-only day-2 re-apply (a changed add-on,
+// node label/taint, DNS/LB record) is reconcilable in place: continue proceeds and
+// converges it, rather than refusing and forcing --override.
+func TestEvaluateApplyModePreflightContinueReconcilesReconfigureOnlyDrift(t *testing.T) {
+	runsDir := t.TempDir()
+	addonDrift := classifyTask("addon.demo.drift", ApplyTaskKindClusterAddon, "demo")
+	nodeCfgDrift := classifyTask("nodeconfig.demo", ApplyTaskKindNodeConfigApply, "demo")
+	saveStateCheckRecord(t, runsDir, addonDrift, "sha256:stale", ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, nodeCfgDrift, "sha256:stale", ConvergeSafetyOwner)
+	objs, err := ClassifyApplyObjects([]ApplyTask{addonDrift, nodeCfgDrift}, runsDir)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+	if err := EvaluateApplyModePreflight(ApplyModeContinue, objs); err != nil {
+		t.Fatalf("continue over reconfigure-only drift must reconcile in place, got %v", err)
 	}
 }
 
