@@ -1,0 +1,107 @@
+---
+# Read-only live Ceph state discovery for `bootwright diff` (live mode). On each
+# managed Ceph seed it runs a battery of `ceph ... --format json` reads and
+# copies each successful result to a controller-side per-cluster directory, plus
+# a discovery marker. The controller compares the observed state against desired
+# state and renders the differences. It contacts only the seed (the one host
+# with the /etc/ceph admin keyring) and mutates nothing — every read is
+# changed_when:false, failed_when:false, so a partially-down or unreachable
+# cluster still returns whatever it can rather than failing the play. Mirrors
+# check_storage_health.yml; the only difference is the breadth of reads.
+- name: Discover managed Ceph cluster state
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  vars:
+    # Each entry is one read: a stable name (the result filename) and the argv
+    # of a read-only ceph command. Extend this list to widen discovery; the
+    # controller ignores reads it does not yet model.
+    bootwright_ceph_discovery_reads:
+      - name: status
+        argv: [ceph, -s, --format, json]
+      - name: health
+        argv: [ceph, health, detail, --format, json]
+      - name: osd_stat
+        argv: [ceph, osd, stat, --format, json]
+      - name: versions
+        argv: [ceph, versions, --format, json]
+      - name: orch_ls
+        argv: [ceph, orch, ls, --format, json]
+      - name: orch_host_ls
+        argv: [ceph, orch, host, ls, --format, json]
+      - name: orch_device_ls
+        argv: [ceph, orch, device, ls, --format, json]
+      - name: osd_tree
+        argv: [ceph, osd, tree, --format, json]
+      - name: osd_df
+        argv: [ceph, osd, df, tree, --format, json]
+      - name: crush_dump
+        argv: [ceph, osd, crush, dump, --format, json]
+      - name: crush_rule_dump
+        argv: [ceph, osd, crush, rule, dump, --format, json]
+      - name: pool_ls_detail
+        argv: [ceph, osd, pool, ls, detail, --format, json]
+      - name: ec_profile_ls
+        argv: [ceph, osd, erasure-code-profile, ls, --format, json]
+      - name: config_dump
+        argv: [ceph, config, dump, --format, json]
+      - name: mgr_module_ls
+        argv: [ceph, mgr, module, ls, --format, json]
+      - name: fs_dump
+        argv: [ceph, fs, dump, --format, json]
+      - name: nfs_cluster_ls
+        argv: [ceph, nfs, cluster, ls, --format, json]
+      - name: mon_dump
+        argv: [ceph, mon, dump, --format, json]
+  tasks:
+    - name: End non-seed storage hosts
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_seed_host_name | default('') != inventory_hostname
+
+    - name: Ensure controller-side discovery directory for this cluster
+      ansible.builtin.file:
+        path: "{{ bootwright_storage_discovery_dir }}/{{ bootwright_storage_cluster_name }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Run read-only Ceph state reads
+      ansible.builtin.command:
+        argv: "{{ item.argv }}"
+      loop: "{{ bootwright_ceph_discovery_reads }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: bootwright_ceph_discovery_results
+      changed_when: false
+      failed_when: false
+
+    - name: Write successful reads to the controller
+      ansible.builtin.copy:
+        dest: "{{ bootwright_storage_discovery_dir }}/{{ bootwright_storage_cluster_name }}/{{ item.item.name }}.json"
+        content: "{{ item.stdout }}"
+        mode: "0600"
+      loop: "{{ bootwright_ceph_discovery_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: item.rc == 0 and (item.stdout | default('') | trim) != ''
+      delegate_to: localhost
+      become: false
+
+    - name: Write discovery marker
+      ansible.builtin.copy:
+        dest: "{{ bootwright_storage_discovery_dir }}/{{ bootwright_storage_cluster_name }}/discovery.json"
+        content: >-
+          {{
+            {
+              'cluster': bootwright_storage_cluster_name,
+              'probed': ((bootwright_ceph_discovery_results.results
+                          | selectattr('rc', 'equalto', 0) | list | length) > 0),
+              'reads': (bootwright_ceph_discovery_results.results
+                        | selectattr('rc', 'equalto', 0) | map(attribute='item.name') | list)
+            } | to_nice_json
+          }}
+        mode: "0600"
+      delegate_to: localhost
+      become: false
