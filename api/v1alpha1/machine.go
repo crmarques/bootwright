@@ -189,10 +189,12 @@ type MachineImage struct {
 type MachineImageSpec struct {
 	// Type currently accepts "iso".
 	Type string `yaml:"type" json:"type"`
-	// MediaType accepts "dvd" or "boot". When omitted, normalize derives
-	// "boot" for url filenames ending in "boot.iso" and "dvd" otherwise; an
-	// authored value always wins (netinstall ISOs not named *boot.iso need
-	// an explicit "boot").
+	// MediaType accepts "dvd" or "boot". When omitted, normalize defaults it
+	// to "dvd" unconditionally: a filename suffix must not silently select the
+	// install mode (a rename could flip dvd<->boot and whether installSource is
+	// required), so a boot/netinstall ISO must author mediaType: boot
+	// explicitly. "dvd" bakes packages into a full per-node install ISO; "boot"
+	// keeps the booted media small and fetches packages from installSource.
 	MediaType string `yaml:"mediaType,omitempty" json:"mediaType,omitempty"`
 	// URL locates the ISO: "local-media:<filename.iso>" for the managed
 	// media store, a "file://" absolute path, or "http(s)://".
@@ -211,12 +213,17 @@ type MachineImageSpec struct {
 }
 
 // MachineImageInstallSource declares the package source for install media
-// that carries no packages.
+// that carries no packages (mediaType: boot). The three types trade off who
+// hosts the packages: "url" points the installer at a tree you already serve,
+// "redhatCDN" installs from Red Hat's CDN over an RHSM entitlement, and
+// "hostedTree" has bootwright itself extract a DVD once and serve it from the
+// cluster's artifact server (the air-gapped, no-mirror case).
 type MachineImageInstallSource struct {
-	// Type accepts "url" (plain HTTP(S) install tree) or "redhatCDN"
-	// (RHSM-backed Red Hat CDN install). When omitted, normalize derives it
-	// from the fields present: entitlementRef means "redhatCDN", url or
-	// repositories mean "url".
+	// Type accepts "url" (plain HTTP(S) install tree you host), "redhatCDN"
+	// (RHSM-backed Red Hat CDN install), or "hostedTree" (bootwright extracts
+	// fromMedia and serves it from the cluster artifact server). When omitted,
+	// normalize derives it from the fields present: entitlementRef means
+	// "redhatCDN", fromMedia means "hostedTree", url or repositories mean "url".
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 	// URL is the primary Anaconda install tree for type "url".
 	URL string `yaml:"url,omitempty" json:"url,omitempty"`
@@ -227,6 +234,16 @@ type MachineImageInstallSource struct {
 	// EntitlementRef names the Environment.spec.entitlements[] entry (a Red
 	// Hat "rhel" entitlement) backing a "redhatCDN" install.
 	EntitlementRef LocalObjectReference `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
+	// FromMedia references the full DVD ISO (same grammar as spec.url:
+	// "local-media:<file.iso>", "file://", or "http(s)://") that bootwright
+	// extracts once into the cluster artifact server's document root and serves
+	// as an installation tree over the machineBoot endpoint. Required for, and
+	// only valid with, type "hostedTree". The installing node then fetches
+	// GPG-signed packages from that tree, so the DVD payload lands on disk once
+	// per (cluster, image) instead of inside every per-node ISO. Packages stay
+	// Red Hat-signed end to end; serve the machineBoot endpoint over HTTP (the
+	// installer verifies TLS and would reject a self-signed artifact cert).
+	FromMedia string `yaml:"fromMedia,omitempty" json:"fromMedia,omitempty"`
 }
 
 type MachineInstallProfile struct {

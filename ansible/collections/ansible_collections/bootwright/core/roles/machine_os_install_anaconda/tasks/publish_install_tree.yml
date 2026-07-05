@@ -1,0 +1,220 @@
+---
+# Extract the hosted install tree (installSource.type: hostedTree) from its DVD
+# into the artifact server document root, once per (cluster, image). The trust
+# model matches a per-node install ISO: the DVD is sha256-verified, extracted
+# faithfully (Red Hat's documented copy of the whole tree, preserving
+# .treeinfo), content-addressed by the DVD identity, and published atomically
+# read-only so an in-flight install never observes a partial or mutated tree.
+# The installing node then fetches GPG-signed packages from it (dnf enforces
+# gpgcheck), so a tampered tree cannot install a malicious package. Included
+# with run_once, so it builds a single shared tree for the whole OS group.
+- name: Resolve hosted install tree paths
+  ansible.builtin.set_fact:
+    bootwright_tree: "{{ bootwright_component.osInstall.image.installTree }}"
+    bootwright_tree_publish: "{{ bootwright_component.osInstall.image.installTree.publishPath }}"
+    bootwright_tree_building: "{{ bootwright_component.osInstall.image.installTree.publishPath }}.building"
+    bootwright_tree_mount: "{{ bootwright_os_install_root }}/tree-mnt"
+    bootwright_tree_identity_path: "{{ bootwright_component.osInstall.image.installTree.publishPath }}/.bootwright-tree.identity"
+  changed_when: false
+
+# The DVD is read in place from the media store (local-media) or an absolute
+# file path. hostedTree rejects a url fromMedia in validation so the DVD is
+# always a media-store entry `bootwright media add` already sha256-verified,
+# never an unpinned ad-hoc download.
+- name: Resolve hosted install tree DVD source path
+  ansible.builtin.set_fact:
+    bootwright_tree_dvd_path: "{{ bootwright_tree.fromMedia.path }}"
+  changed_when: false
+
+- name: Create hosted install tree publish root
+  ansible.builtin.file:
+    path: "{{ bootwright_tree_publish | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Stat hosted install tree DVD
+  ansible.builtin.stat:
+    path: "{{ bootwright_tree_dvd_path }}"
+    get_checksum: false
+  register: bootwright_tree_dvd_stat
+
+- name: Assert hosted install tree DVD is present
+  ansible.builtin.assert:
+    that:
+      - bootwright_tree_dvd_stat.stat.exists | default(false) | bool
+    fail_msg: >-
+      hosted install tree DVD {{ bootwright_tree.fromMedia.original }} is not
+      present at {{ bootwright_tree_dvd_path }}. Stage it with
+      `bootwright media add {{ bootwright_tree.fromMedia.key | default(bootwright_tree.fromMedia.original) }} --from-file <dvd.iso>`,
+      then re-run apply.
+
+- name: Stat published hosted install tree
+  ansible.builtin.stat:
+    path: "{{ bootwright_tree_publish }}/.treeinfo"
+    get_checksum: false
+  register: bootwright_tree_treeinfo_stat
+
+- name: Read published hosted install tree identity
+  ansible.builtin.slurp:
+    src: "{{ bootwright_tree_identity_path }}"
+  register: bootwright_tree_identity_raw
+  failed_when: false
+
+# Skip the multi-GB extraction when the tree is already published from the same
+# DVD. Identity is the DVD size+mtime (mirroring the boot-source identity check
+# in install_media.yml), so a re-apply is a cheap no-op instead of re-hashing
+# and re-copying the whole DVD; a changed DVD (new bytes) flips identity and
+# forces a verified rebuild.
+- name: Resolve hosted install tree rebuild state
+  ansible.builtin.set_fact:
+    bootwright_tree_identity: "{{ bootwright_tree_dvd_stat.stat.size }}:{{ bootwright_tree_dvd_stat.stat.mtime }}"
+    bootwright_tree_marker_identity: "{{ (bootwright_tree_identity_raw.content | default('') | b64decode | trim) if (bootwright_tree_identity_raw.content is defined) else '' }}"
+  changed_when: false
+
+- name: Resolve hosted install tree rebuild needed
+  ansible.builtin.set_fact:
+    bootwright_tree_rebuild: "{{ (not (bootwright_tree_treeinfo_stat.stat.exists | default(false))) or (bootwright_tree_identity != bootwright_tree_marker_identity) }}"
+  changed_when: false
+
+- name: Build and publish hosted install tree
+  when: bootwright_tree_rebuild | bool
+  block:
+    # Verify the DVD before trusting its contents. This is the origin-authenticity
+    # anchor a sealed per-node ISO also relies on (media add sha256-verified it);
+    # recorded in the identity marker and asserted against an optional pin.
+    - name: Verify hosted install tree DVD checksum
+      ansible.builtin.command:
+        argv:
+          - sha256sum
+          - "{{ bootwright_tree_dvd_path }}"
+      register: bootwright_tree_dvd_sha
+      changed_when: false
+
+    - name: Assert hosted install tree DVD checksum matches pin
+      ansible.builtin.assert:
+        that:
+          - (bootwright_tree_dvd_sha.stdout.split()[0] | lower) == (bootwright_tree.fromMedia.checksum | lower | regex_replace('^sha256:', ''))
+        fail_msg: "hosted install tree DVD checksum mismatch for {{ bootwright_tree.fromMedia.original }}"
+      when: (bootwright_tree.fromMedia.checksum | default('') | length) > 0
+
+    - name: Reset hosted install tree staging directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ bootwright_tree_building }}"
+        - "{{ bootwright_tree_mount }}"
+
+    - name: Create hosted install tree staging directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ bootwright_tree_building }}"
+        - "{{ bootwright_tree_mount }}"
+
+    - name: Extract and publish hosted install tree
+      block:
+        - name: Mount hosted install tree DVD read-only
+          ansible.posix.mount:
+            path: "{{ bootwright_tree_mount }}"
+            src: "{{ bootwright_tree_dvd_path }}"
+            fstype: iso9660
+            opts: ro,loop
+            state: ephemeral
+
+        - name: Assert DVD is a valid installation tree
+          ansible.builtin.stat:
+            path: "{{ bootwright_tree_mount }}/.treeinfo"
+            get_checksum: false
+          register: bootwright_tree_src_treeinfo
+          failed_when: not (bootwright_tree_src_treeinfo.stat.exists | default(false))
+
+        # Faithful full copy per Red Hat's documented method: copy the entire
+        # tree (the "/." keeps dotfiles) so .treeinfo/.discinfo and both the
+        # BaseOS and AppStream repodata survive; a partial copy that skips
+        # .treeinfo breaks the source.
+        - name: Copy DVD contents into the building tree
+          ansible.builtin.command:
+            argv:
+              - cp
+              - -a
+              - "{{ bootwright_tree_mount }}/."
+              - "{{ bootwright_tree_building }}/"
+          changed_when: true
+
+        - name: Assert built tree has treeinfo and both repositories
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            get_checksum: false
+          loop:
+            - "{{ bootwright_tree_building }}/.treeinfo"
+            - "{{ bootwright_tree_building }}/BaseOS/repodata/repomd.xml"
+            - "{{ bootwright_tree_building }}/AppStream/repodata/repomd.xml"
+          register: bootwright_tree_built_check
+          failed_when: not (bootwright_tree_built_check.stat.exists | default(false))
+
+        - name: Write hosted install tree diagnostics marker
+          ansible.builtin.copy:
+            dest: "{{ bootwright_tree_building }}/.bootwright-tree.id"
+            content: |
+              sourceId={{ bootwright_tree.sourceId }}
+              original={{ bootwright_tree.fromMedia.original }}
+              sha256={{ bootwright_tree_dvd_sha.stdout.split()[0] }}
+              identity={{ bootwright_tree_identity }}
+            owner: root
+            group: root
+            mode: "0444"
+
+        # The identity file is written LAST inside the building tree and is what
+        # the skip check reads, so a partially built tree never carries a
+        # matching identity: an interrupted run rebuilds cleanly next apply.
+        - name: Write hosted install tree identity
+          ansible.builtin.copy:
+            dest: "{{ bootwright_tree_building }}/.bootwright-tree.identity"
+            content: "{{ bootwright_tree_identity }}"
+            owner: root
+            group: root
+            mode: "0444"
+
+        - name: Remove previously published hosted install tree
+          ansible.builtin.file:
+            path: "{{ bootwright_tree_publish }}"
+            state: absent
+
+        # Atomic swap on the same filesystem (both under .../public/trees), so a
+        # concurrently-fetching installer only ever sees a complete tree.
+        - name: Publish hosted install tree atomically
+          ansible.builtin.command:
+            argv:
+              - mv
+              - "{{ bootwright_tree_building }}"
+              - "{{ bootwright_tree_publish }}"
+          changed_when: true
+      always:
+        - name: Unmount hosted install tree DVD
+          ansible.posix.mount:
+            path: "{{ bootwright_tree_mount }}"
+            state: absent
+
+    # Align the tree's SELinux label with the artifact docroot (container_file_t
+    # via the :Z bind mount) so the nginx container_t process can read it;
+    # restorecon would reset it to var_lib_t and the read would AVC-deny (nginx
+    # 404 -> the node's package fetch fails). Same rationale as the managed-OS
+    # ISO label alignment in install_media.yml.
+    - name: Align hosted install tree SELinux label with the artifact docroot
+      ansible.builtin.command:
+        argv:
+          - chcon
+          - -R
+          - "--reference={{ bootwright_tree_publish | dirname | dirname }}"
+          - "{{ bootwright_tree_publish }}"
+      register: bootwright_tree_label
+      failed_when: false
+      changed_when: false
+      when: ansible_selinux.status | default('disabled') == 'enabled'

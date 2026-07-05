@@ -460,6 +460,12 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 					prefix))
 			}
 		}
+		if clusterInstallUsesHostedTree(state, ci) {
+			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerMachineBoot); !ok {
+				errs = append(errs, fmt.Sprintf("%s installs a node from a hostedTree MachineImage, so the installer fetches packages from the artifact server; set spec.install.artifactAccess.machineBoot.endpointRef to a resolvable endpoint (serve it over http so the installer does not reject a self-signed certificate)",
+					prefix))
+			}
+		}
 	}
 	// A StorageCluster cannot author spec.install.artifactAccess, so a bare-metal
 	// node whose managed OS installs over the BMC draws its Redfish virtual-media
@@ -483,8 +489,34 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 		if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
 			errs = append(errs, fmt.Sprintf("%s bare-metal managed-OS install requires Environment.spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef to resolve on artifact server %q", prefix, ci.ArtifactAccess.ServerRef.Name))
 		}
+		if clusterInstallUsesHostedTree(state, ci) {
+			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerMachineBoot); !ok {
+				errs = append(errs, fmt.Sprintf("%s installs a node from a hostedTree MachineImage; set Environment.spec.defaults.artifactAccess.machineBoot.endpointRef so the installer can fetch packages from artifact server %q (serve it over http)", prefix, ci.ArtifactAccess.ServerRef.Name))
+			}
+		}
 	}
 	return errs
+}
+
+// clusterInstallUsesHostedTree reports whether any machine in ci installs from a
+// MachineImage whose installSource.type is hostedTree, so validation can require
+// the node-reachable machineBoot artifact endpoint the installer fetches the
+// tree from.
+func clusterInstallUsesHostedTree(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
+	for _, m := range ci.Machines {
+		profile, ok := stateview.MachineInstallProfile(state, m.Source.ProfileRef.Name)
+		if !ok || profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		image, ok := stateview.MachineImage(state, profile.Spec.Installer.Anaconda.ImageRef.Name)
+		if !ok {
+			continue
+		}
+		if image.Spec.InstallSource.Type == v1alpha1.MachineImageInstallSourceTypeHostedTree {
+			return true
+		}
+	}
+	return false
 }
 
 // validateSecretReferences walks every SecretRef in the loaded state

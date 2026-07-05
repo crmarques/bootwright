@@ -234,7 +234,7 @@ what rendering consumes.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.type` | Yes | None | Currently `iso`. |
-| `spec.mediaType` | No | `boot` for a URL filename ending `boot.iso`, otherwise `dvd` | `dvd` or `boot`. An authored value always wins; netinstall ISOs not named `*boot.iso` need an explicit `boot`. |
+| `spec.mediaType` | No | `dvd` | `dvd` or `boot`. Defaults to `dvd` unconditionally — a filename suffix must not silently flip the install mode — so a boot/netinstall ISO must author `mediaType: boot` explicitly. |
 | `spec.url` | Yes | None | `local-media:<filename.iso>`, a `file://` absolute path, `http://`, or `https://`. |
 | `spec.installSource` | Required when `mediaType: boot` | None | Package source for media that carries no packages. |
 | `spec.checksum` | No | None | Optional `sha256:<hex>` content pin. |
@@ -244,16 +244,17 @@ what rendering consumes.
 ### Install source
 
 `installSource` is a presence union: its `type` is derived from the fields
-present when omitted (`entitlementRef` means `redhatCDN`; `url` or `repositories`
-mean `url`).
+present when omitted (`entitlementRef` means `redhatCDN`; `fromMedia` means
+`hostedTree`; `url` or `repositories` mean `url`).
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `installSource.type` | No | Derived from present fields | `url` or `redhatCDN`. |
-| `installSource.url` | One of `url` or `repositories` for `type: url` | None | Primary Anaconda install tree; must be `http(s)`. Must be empty for `type: redhatCDN`. |
+| `installSource.type` | No | Derived from present fields | `url` (a tree you host), `redhatCDN` (Red Hat's CDN over RHSM), or `hostedTree` (Bootwright extracts `fromMedia` and serves it from the cluster artifact server). |
+| `installSource.url` | One of `url` or `repositories` for `type: url` | None | Primary Anaconda install tree; must be `http(s)`. Must be empty for `redhatCDN` and `hostedTree`. |
 | `installSource.repositories[].id` | Yes (per entry) | None | Additional Kickstart repository ID. |
 | `installSource.repositories[].baseURL` | Yes (per entry) | None | Repository base URL; must be `http(s)`. |
-| `installSource.entitlementRef` | Required for `type: redhatCDN` | None | `Environment.spec.entitlements[]` `rhel` entitlement. Must be empty for `type: url`. |
+| `installSource.entitlementRef` | Required for `type: redhatCDN` | None | `Environment.spec.entitlements[]` `rhel` entitlement. Must be empty for `url` and `hostedTree`. |
+| `installSource.fromMedia` | Required for `type: hostedTree` | None | The full DVD to extract and serve, as a `local-media:` or `file://` reference (not a URL — the DVD is staged and checksum-verified via `bootwright media add`). Must differ from `spec.url` (the boot ISO). Valid only for `hostedTree`. |
 
 !!! note "Registering against a corporate Satellite"
     A `redhatCDN` install registers against the public Red Hat CDN unless the
@@ -266,7 +267,10 @@ mean `url`).
     For `type: url`, `entitlementRef` must be empty and at least one of `url` or
     `repositories` is required. When `url` is omitted, normalize promotes
     `repositories[0].baseURL` to the primary install tree. For `type: redhatCDN`,
-    `url` and `repositories` must be empty and `entitlementRef` is required.
+    `url` and `repositories` must be empty and `entitlementRef` is required. For
+    `type: hostedTree`, `mediaType` must be `boot`, `fromMedia` is required, and
+    `url`, `repositories`, and `entitlementRef` must be empty (Bootwright derives
+    the tree URL from the cluster artifact server's `machineBoot` endpoint).
 
 ### Boot ISO vs DVD
 
@@ -275,9 +279,8 @@ repositories, so Anaconda installs offline with a Kickstart `cdrom` source and
 needs no `installSource`. A boot ISO (~1 GB) carries only the installer, so it
 **requires** an `installSource`: Bootwright renders a `url --url=` (or RHSM)
 install source plus `repo` entries instead of `cdrom`, and Anaconda fetches
-packages over the network during install. A `*boot.iso` filename auto-derives
-`mediaType: boot`; a netinstall ISO named otherwise needs an explicit
-`mediaType: boot`.
+packages over the network during install. `mediaType` defaults to `dvd`, so a
+boot or netinstall ISO always needs an explicit `mediaType: boot`.
 
 A boot ISO sourced from a package mirror (`type: url`) points `installSource.url`
 at a BaseOS install tree and adds the AppStream repository — a RHEL install needs
@@ -319,6 +322,42 @@ spec:
     entitlementRef: rhel
 ```
 
+A boot ISO with a **self-hosted install tree** (`type: hostedTree`) is the
+air-gapped, no-mirror case: Bootwright extracts the DVD named by `fromMedia`
+once into the cluster artifact server's document root and the installing node
+fetches GPG-signed packages from it, so the ~10&nbsp;GB payload lands on disk
+once per `(cluster, image)` instead of inside every per-node ISO. Stage both
+the small boot ISO (`spec.url`) and the DVD (`fromMedia`) with
+`bootwright media add` — the DVD is checksum-verified there — and bind the
+cluster's `machineBoot` artifact endpoint to an **http**
+listener (Anaconda verifies TLS and would reject a self-signed artifact
+certificate; the DVD's own `.treeinfo` advertises BaseOS and AppStream, so no
+`repositories` are needed):
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-boot-tree
+spec:
+  type: iso
+  mediaType: boot
+  url: local-media:rhel-9.7-x86_64-boot.iso
+  installSource:
+    type: hostedTree
+    fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
+```
+
+!!! note "Trust: as safe as a per-node ISO"
+    A `hostedTree` matches the trust of a sealed per-node ISO. The DVD is
+    sha256-verified (by `media add`), extracted faithfully (Red Hat's documented
+    full copy, preserving `.treeinfo`), content-addressed and published
+    atomically read-only, so the served tree provably equals the verified DVD.
+    Packages stay Red&nbsp;Hat-signed end to end and `dnf` enforces `gpgcheck`
+    during install, so a tampered tree cannot install a malicious package. The
+    per-node boot ISO is still fetched by the BMC exactly as before (over HTTPS
+    where the BMC requires it); only the package fetch moves to the node.
+
 !!! tip "Disk footprint scales with media size × node count"
     Bootwright bakes each machine's Kickstart into its **own** install ISO
     (Redfish virtual-media boot cannot pass kernel arguments), so every node in a
@@ -327,7 +366,9 @@ spec:
     installs, copied at most once on a remote provider host — but the per-machine
     output ISOs are unavoidable. An N-node group therefore costs about
     `N ×` media size of customized media, which is the main reason to prefer a
-    `mediaType: boot` source (~1&nbsp;GB) over a full `dvd` (~10&nbsp;GB).
+    `mediaType: boot` source (~1&nbsp;GB) over a full `dvd` (~10&nbsp;GB). To
+    also keep the package payload off every node, a `hostedTree` install source
+    serves the DVD's packages once from the artifact server (see above).
 
 The boot-ISO reachability preflight, early networking, and proxy details are
 covered in [Managed OS installs](../advanced/managed-os.md). When the install

@@ -193,12 +193,12 @@ func normalizeMachine(m *v1alpha1.Machine) {
 }
 
 // normalizeMachineImage materializes the install-media derivations so they
-// land in effective state: an omitted mediaType derives from the url filename
-// (boot.iso means boot media, anything else dvd), an omitted installSource.type
-// derives from which fields are present, and a url install source without a
-// url promotes repositories[0].baseURL to the primary install tree. Validators
-// and renderers read the materialized values instead of recomputing them.
-// Authored values always win; invalid ones are left for Validate to reject.
+// land in effective state: mediaType defaults to dvd, an omitted
+// installSource.type derives from which fields are present, and a url install
+// source without a url promotes repositories[0].baseURL to the primary install
+// tree. Validators and renderers read the materialized values instead of
+// recomputing them. Authored values always win; invalid ones are left for
+// Validate to reject.
 func normalizeMachineImage(image *v1alpha1.MachineImage) {
 	spec := &image.Spec
 	// mediaType defaults to dvd unconditionally. A filename suffix must not select
@@ -213,6 +213,8 @@ func normalizeMachineImage(image *v1alpha1.MachineImage) {
 		switch {
 		case source.EntitlementRef.Name != "":
 			source.Type = v1alpha1.MachineImageInstallSourceTypeRHSM
+		case source.FromMedia != "":
+			source.Type = v1alpha1.MachineImageInstallSourceTypeHostedTree
 		case source.URL != "" || len(source.Repositories) > 0:
 			source.Type = v1alpha1.MachineImageInstallSourceTypeURL
 		}

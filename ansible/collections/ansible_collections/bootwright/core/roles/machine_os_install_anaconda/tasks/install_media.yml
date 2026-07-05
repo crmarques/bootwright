@@ -168,6 +168,17 @@
         - (bootwright_component.osInstall.image.checksum | default('') | length) > 0
         - not (bootwright_os_source_sha256.skipped | default(false) | bool)
 
+    # Hosted install tree (installSource.type: hostedTree): extract the DVD
+    # (image.installTree.fromMedia) once into the artifact server document root
+    # so every node in the group fetches GPG-signed packages from one shared
+    # read-only tree instead of carrying the DVD payload inside its own ISO.
+    # Runs before the per-node boot ISO is built and booted so the tree is
+    # already serving when the installer reaches its `url --url=` package fetch.
+    - name: Publish hosted install tree
+      ansible.builtin.include_tasks: publish_install_tree.yml
+      when: bootwright_component.osInstall.image.installTree is defined
+      run_once: true
+
     - name: Render managed OS Kickstart
       ansible.builtin.template:
         src: ks.cfg.j2

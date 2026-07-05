@@ -42,6 +42,18 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	env := stateview.Environment(state)
 	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.InstallSource, env, paths.SecretsDir)
+	// hostedTree overrides the package source: bootwright extracts fromMedia (a
+	// DVD) into the cluster artifact server and the installing node fetches
+	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
+	// .treeinfo already advertises BaseOS + AppStream, so one tree URL replaces
+	// any authored repositories. An unresolvable tree leaves sourceURL empty so
+	// the boot ISO install fails loudly (cdrom on a package-less ISO) instead of
+	// mis-installing; the cluster-install validator rejects that up front.
+	var hostedTree map[string]any
+	if image.Spec.InstallSource.Type == v1alpha1.MachineImageInstallSourceTypeHostedTree {
+		treeURL, tree, _ := machineOSHostedTreeVars(state, ci, image)
+		sourceURL, imageRepositories, hostedTree = treeURL, nil, tree
+	}
 	profileRepositories := machineInstallRepositoryVars(profile.Spec.Installer.Anaconda.Repositories)
 	installer := map[string]any{
 		"type":         profile.Spec.Installer.Type,
@@ -60,6 +72,10 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		installer["proxy"] = proxyVars
 	}
 	sshUser := managedOSSSHUser(machine)
+	imageVars := machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName)
+	if hostedTree != nil {
+		imageVars["installTree"] = hostedTree
+	}
 	out := map[string]any{
 		"profileName": profile.Metadata.Name,
 		"os": map[string]any{
@@ -68,7 +84,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"architecture": profile.Spec.OS.Architecture,
 		},
 		"installer": installer,
-		"image":     machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName),
+		"image":     imageVars,
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(state, machine),
 			"sshUser":                sshUser,
