@@ -96,11 +96,11 @@ func buildMachineSSHInvocation(state v1alpha1.State, ctx workspace.Context, name
 		return sshInvocation{}, fmt.Errorf("unknown Machine %q", name)
 	}
 	if machine.Spec.Access.SSH == nil {
-		return sshInvocation{}, fmt.Errorf("Machine %q declares no SSH access (spec.access.ssh)", name)
+		return sshInvocation{}, fmt.Errorf("machine %q declares no SSH access (spec.access.ssh)", name)
 	}
 	address := v1alpha1.MachineSSHAddress(machine)
 	if address == "" {
-		return sshInvocation{}, fmt.Errorf("Machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
+		return sshInvocation{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
 	}
 	env := stateview.Environment(state)
 	args := []string{"ssh"}
