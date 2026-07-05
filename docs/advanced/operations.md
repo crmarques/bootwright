@@ -376,6 +376,35 @@ wipe them manually, before reusing the hardware.
     `--skip-unreachable` does not relax any device data-safety check, and like
     `--force-unowned` it does not imply `--yes`.
 
+### Never-provisioned clusters tear down automatically
+
+A cluster that was **never provisioned** — for example a nested KubeVirt cluster
+whose host cluster never came up — has no per-machine ownership record, because
+Bootwright writes that record only after the substrate is actually created. Its
+substrate teardown is a clean no-op that consults the local record set and never
+contacts the (possibly nonexistent) host, so a plain `destroy` completes it
+without `--skip-unreachable` and without requiring the host to be reachable.
+
+`--skip-unreachable` is therefore only needed for a substrate Bootwright **did**
+record but now cannot reach — a powered-off node, or a recorded guest whose host
+cluster is temporarily down.
+
+### Managed bare-metal is torn down locally, wiped on reinstall
+
+Bare-metal machines are operator-owned hardware, so Bootwright never deletes a
+physical machine at destroy time. For a managed-OS bare-metal node, the substrate
+teardown is **local state cleanup**: it drops the managed-OS install record and
+provider state so the next apply performs a fresh install, whose kickstart
+`clearpart --all` reclaims the OS disk on reinstall. Destroy never fails closed
+here and never contacts the node — so `destroy --stage infra` completes and a
+re-apply from scratch is unblocked.
+
+Because the OS disk is reclaimed on reinstall rather than at destroy time, a node
+that is destroyed but **not** re-applied keeps its old OS on disk. If you are
+decommissioning the hardware rather than rebuilding it, erase the disks out of
+band. The data-bearing Ceph **OSD** disks are a separate concern, wiped by the
+storage-cluster teardown under its own ownership and device-safety gates (above).
+
 ## Surfacing redacted output with `--verbose`
 
 `apply` and `destroy` redact credential-handling task output by default: secret

@@ -1,10 +1,69 @@
 ---
-- name: Fail unsupported managed bare-metal machine wipe
-  ansible.builtin.fail:
+# Bare-metal machines are operator-owned hardware: Bootwright never deletes a
+# physical machine, so substrate teardown here is LOCAL state cleanup only. It
+# makes no call to the host and never fails closed, so a full or infra-stage
+# destroy always completes and a later apply is unblocked. (The old behavior
+# was an unconditional "cannot wipe managed bare-metal machine" fail on any
+# osManaged node, which deadlocked destroy against the `apply --override` remedy
+# that routes back into `destroy --stage infra` — the operator could never clear
+# state to re-apply, and --skip-unreachable did not help because this role
+# ignored it.)
+#
+# For a managed-OS node, dropping the recorded install state (the
+# managed-os-install ownership record and its staged install paths, plus the
+# local provider-state file) makes the next apply do a FRESH managed-OS install,
+# whose kickstart `clearpart --all` reclaims the OS disk on reinstall. Bootwright
+# does not wipe operator hardware in place at destroy time; erase the disks out
+# of band first if an immediate wipe is required (decommission rather than
+# rebuild). The data-bearing Ceph OSD disks are wiped by the storage-cluster
+# teardown under its own ownership + device-safety gates, not here.
+- name: Resolve managed bare-metal install record
+  ansible.builtin.set_fact:
+    # The managed-os-install ownership record is written only after the OS
+    # install completes (see machine_os_install_anaconda). Its presence (in scope
+    # as global extra-vars, keyed <cluster>-<machine>) distinguishes a machine we
+    # actually installed from one that was never provisioned, so the note below
+    # is accurate without contacting the host.
+    bootwright_baremetal_os_recorded: >-
+      {{
+        (bootwright_ownership_records_by_kind | default({})).get('managed-os-install', [])
+        | selectattr('name', 'equalto', bootwright_current_cluster.name ~ '-' ~ bootwright_component.name)
+        | list | length > 0
+      }}
+  changed_when: false
+  when: bootwright_component.osManaged | default(false) | bool
+
+- name: Note managed bare-metal substrate teardown
+  ansible.builtin.debug:
     msg: >-
-      Cannot wipe managed bare-metal machine {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}:
-      no provider-owned disk deletion or reachable managed-OS SSH wipe capability is available.
-      Declare a provider with owned disk cleanup or destroy the declared OS/storage devices manually.
+      substrate_baremetal teardown for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}:
+      {{
+        'clearing local install state; the OS disk is reclaimed by the next apply reinstall (kickstart clearpart). Bootwright never wipes operator hardware in place — erase out of band first to decommission.'
+        if (bootwright_baremetal_os_recorded | default(false) | bool)
+        else 'no recorded install (never provisioned); nothing to tear down.'
+      }}
+  changed_when: false
+  when: bootwright_component.osManaged | default(false) | bool
+
+# Reclaim the recorded managed-OS install artifacts and drop the ownership
+# record so a later apply treats the machine as fresh (mirrors the managed-OS
+# teardown the libvirt substrate role performs). destroy_resource.yml removes the
+# recorded paths and the record file idempotently, so an absent record — a
+# never-provisioned node — is a clean no-op.
+- name: Remove managed OS install artifacts
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_resource.yml
+  vars:
+    bootwright_ownership_record:
+      kind: managed-os-install
+      name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+        # Shared per-cluster source-ISO cache (staged once for the whole group).
+        # Cleared with the cluster so the source DVD is never left orphaned.
+        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
+      attributes: {}
   when: bootwright_component.osManaged | default(false) | bool
 
 - name: No bare-metal substrate teardown required

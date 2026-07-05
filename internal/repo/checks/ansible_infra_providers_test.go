@@ -630,13 +630,30 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	// already-absent. The reachability probe and assert run before the teardown,
 	// which is gated on the host being reachable.
 	probeIdx := findAnsibleTask(t, topTasks, "Probe KubeVirt host cluster reachability")
+	recordIdx := findAnsibleTask(t, topTasks, "Resolve KubeVirt machine ownership record presence")
 	gateIdx := findAnsibleTask(t, topTasks, "Require the KubeVirt host cluster to be reachable")
 	blockIdx := findAnsibleTask(t, topTasks, "Tear down KubeVirt guest on the reachable host cluster")
-	if !(probeIdx < gateIdx && gateIdx < blockIdx) {
-		t.Fatalf("kubevirt destroy must probe and gate host reachability before the teardown (probe=%d gate=%d block=%d)", probeIdx, gateIdx, blockIdx)
+	if !(probeIdx < recordIdx && recordIdx < gateIdx && gateIdx < blockIdx) {
+		t.Fatalf("kubevirt destroy must probe, resolve the ownership record, then gate reachability before the teardown (probe=%d record=%d gate=%d block=%d)", probeIdx, recordIdx, gateIdx, blockIdx)
 	}
-	if got := fmt.Sprint(topTasks[gateIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_skip_unreachable") {
+	// A never-provisioned guest has no kubevirt-machine record, so it must no-op
+	// without a reachable host and without --skip-unreachable: the record presence
+	// is resolved from the in-scope ownership records, not by probing the host.
+	recordDecide, ok := topTasks[recordIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt destroy record presence must be a set_fact, got %v", topTasks[recordIdx])
+	}
+	if got := fmt.Sprint(recordDecide["bootwright_kubevirt_machine_recorded"]); !strings.Contains(got, "kubevirt-machine") || !strings.Contains(got, "bootwright_ownership_records_by_kind") {
+		t.Fatalf("kubevirt destroy must resolve record presence from the in-scope kubevirt-machine ownership records, got %v", recordDecide["bootwright_kubevirt_machine_recorded"])
+	}
+	gateWhen := fmt.Sprint(topTasks[gateIdx]["when"])
+	if !strings.Contains(gateWhen, "not (bootwright_destroy_skip_unreachable") {
 		t.Fatalf("host-reachability gate must fail closed unless --skip-unreachable, got when=%v", topTasks[gateIdx]["when"])
+	}
+	// The gate must only fire for a RECORDED guest, so a never-provisioned guest
+	// on an unreachable/never-provisioned host cluster tears down to a clean no-op.
+	if !strings.Contains(gateWhen, "bootwright_kubevirt_machine_recorded") {
+		t.Fatalf("host-reachability gate must only fail closed for a recorded guest, got when=%v", topTasks[gateIdx]["when"])
 	}
 	if _, ok := topTasks[gateIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("host-reachability gate must be a hard assert, got %v", topTasks[gateIdx])
@@ -713,6 +730,61 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	}
 	if !stringListContains(label["argv"], "bootwright.io/managed-by=bootwright") {
 		t.Fatalf("agent-ISO label task must stamp bootwright.io/managed-by=bootwright, got %v", label["argv"])
+	}
+}
+
+// TestBaremetalSubstrateDestroyNoUnconditionalFail locks the fix for the destroy
+// deadlock: managed-OS bare-metal substrate teardown must NOT hard-fail. Bare
+// metal is operator hardware Bootwright never deletes, so destroy is local state
+// cleanup only (drop the managed-os-install record + provider-state so a later
+// apply reinstalls, whose kickstart clearpart reclaims the OS disk). An
+// unconditional fail here deadlocked destroy against the apply --override remedy
+// that routes back into `destroy --stage infra`.
+func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_baremetal/tasks/destroy.yml")
+
+	// No task may abort the teardown: an ansible.builtin.fail (or a shell/command
+	// that would connect to the host) reintroduces the deadlock.
+	for _, task := range tasks {
+		if _, ok := task["ansible.builtin.fail"]; ok {
+			t.Fatalf("bare-metal substrate destroy must not fail closed, found fail task %q", task["name"])
+		}
+		if _, ok := task["ansible.builtin.command"]; ok {
+			t.Fatalf("bare-metal substrate destroy must not contact the host, found command task %q", task["name"])
+		}
+		if _, ok := task["ansible.builtin.shell"]; ok {
+			t.Fatalf("bare-metal substrate destroy must not contact the host, found shell task %q", task["name"])
+		}
+	}
+
+	// The managed-OS install record is reclaimed (so a later apply treats the
+	// machine as fresh), gated on osManaged, via the ownership destroy_resource.
+	reclaimIdx := findAnsibleTask(t, tasks, "Remove managed OS install artifacts")
+	reclaim := tasks[reclaimIdx]
+	inc, ok := reclaim["ansible.builtin.include_role"].(map[string]any)
+	if !ok || fmt.Sprint(inc["name"]) != "bootwright.core.ownership_record" {
+		t.Fatalf("reclaim task must include the ownership_record role, got %v", reclaim["ansible.builtin.include_role"])
+	}
+	if got := fmt.Sprint(inc["tasks_from"]); got != "destroy_resource.yml" {
+		t.Fatalf("reclaim task must run destroy_resource.yml (idempotent, no-op on a never-provisioned node), got %q", got)
+	}
+	recordVars, ok := reclaim["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("reclaim task must set the ownership record vars, got %v", reclaim["vars"])
+	}
+	record, ok := recordVars["bootwright_ownership_record"].(map[string]any)
+	if !ok || fmt.Sprint(record["kind"]) != "managed-os-install" {
+		t.Fatalf("reclaim task must target the managed-os-install record, got %v", recordVars["bootwright_ownership_record"])
+	}
+	if got := fmt.Sprint(reclaim["when"]); !strings.Contains(got, "bootwright_component.osManaged") {
+		t.Fatalf("reclaim task must be gated on osManaged, got when=%v", reclaim["when"])
+	}
+
+	// The local provider-state file is still removed unconditionally.
+	stateIdx := findAnsibleTask(t, tasks, "Remove cluster baremetal state directory (idempotent)")
+	fileTask, ok := tasks[stateIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok || fmt.Sprint(fileTask["state"]) != "absent" {
+		t.Fatalf("bare-metal substrate destroy must remove the local provider-state file, got %v", tasks[stateIdx])
 	}
 }
 

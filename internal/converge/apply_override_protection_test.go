@@ -119,4 +119,10 @@ func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T)
 	if strings.Contains(err.Error(), "for that scope") {
 		t.Fatalf("machine-substrate remedy must not point at the clusters-scope destroy that cannot clear it: %v", err)
 	}
+	// It must surface --skip-unreachable so a machine whose host substrate was
+	// never provisioned or is powered off (e.g. a nested cluster on a host cluster
+	// that never came up) does not fail closed at the infra-stage destroy.
+	if !strings.Contains(err.Error(), "--skip-unreachable") {
+		t.Fatalf("machine-substrate remedy must hint --skip-unreachable for never-provisioned/powered-off host substrate: %v", err)
+	}
 }

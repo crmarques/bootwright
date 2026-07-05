@@ -73,11 +73,17 @@ func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters []string
 	if len(machineClusters) > 0 {
 		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --override"
 	}
+	// Managed-OS substrate whose host was never provisioned or is powered off
+	// (e.g. a nested cluster on a host cluster that never came up) needs
+	// --skip-unreachable for the infra-stage destroy to skip the unreachable
+	// target instead of failing closed; surface it so the operator does not have
+	// to rediscover the flag.
+	skipHint := " (add --skip-unreachable if a machine's host substrate was never provisioned or is powered off)"
 	switch {
 	case hasMachine && !hasCluster:
-		return "machine substrate is torn down by the infra stage, not the clusters stage, so run `" + infra + "` first"
+		return "machine substrate is torn down by the infra stage, not the clusters stage, so run `" + infra + "` first" + skipHint
 	case hasMachine && hasCluster:
-		return "run `bootwright destroy --override` for the cluster scope AND `" + infra + "` for the machine substrate (torn down only by the infra stage) first"
+		return "run `bootwright destroy --override` for the cluster scope AND `" + infra + "` for the machine substrate (torn down only by the infra stage) first" + skipHint
 	default:
 		return "run `bootwright destroy --override` for that scope first"
 	}
