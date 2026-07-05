@@ -10,6 +10,25 @@
   failed_when: false
   changed_when: false
 
+# Fail closed on the one combination that would otherwise wipe a host blind: the
+# SSH port is REACHABLE but no knownHostsPath is configured, so the ownership probe
+# below is skipped, readiness defaults to false, and the install proceeds to wipe an
+# occupied host that could be foreign or lost-record Bootwright production. A truly
+# greenfield host is unreachable (port closed) and never trips this, so intentional
+# fresh installs are unaffected; only a reachable-but-unverifiable host is refused.
+- name: Refuse to wipe a reachable managed OS with no host-key trust to verify it
+  ansible.builtin.fail:
+    msg: >-
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} is reachable on
+      SSH but osInstall.ssh.knownHostsPath is not set, so bootwright cannot
+      authenticate the host to check whether it already runs an OS it does not own
+      before wiping it. Set osInstall.ssh.knownHostsPath (or establish machine trust)
+      so the pre-install ownership probe can run, then re-apply; if the host is truly
+      unused, power it off before the first apply so it is not seen as occupied.
+  when:
+    - not (bootwright_os_pre_ssh_port.failed | default(false))
+    - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) == 0
+
 - name: Record managed OS SSH host key before install when reachable
   ansible.builtin.include_tasks: ssh_trust.yml
   vars:

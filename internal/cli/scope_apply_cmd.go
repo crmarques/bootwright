@@ -310,6 +310,16 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				}
 				converge.ApplyReclaimDevicesExtraVars(&plan, reclaimDevices, owned)
 			}
+			// Irreversible-disk-wipe warning for a first bare-metal install. The OCP
+			// agent-install path has no pre-boot occupancy probe (a deferred,
+			// hardware-dependent driver), so a first apply onto a mis-pointed BMC — or
+			// a re-apply after the controller records were lost — would silently
+			// re-image a physical host that may be running production. Name the hosts
+			// before the confirm so the operator can abort; an owned/recorded cluster
+			// is excluded (its install-state healthy-skip already protects it).
+			if firstBoot := workflow.BareMetalFirstInstallClusters(objects, tasks); len(firstBoot) > 0 {
+				cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. bootwright does not probe whether these hosts are already in use — confirm the BMC addresses point at unused/authorized machines before continuing.")
+			}
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
