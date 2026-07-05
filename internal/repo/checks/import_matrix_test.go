@@ -69,7 +69,7 @@ var allowedImports = map[string][]string{
 	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/datafoundation", "internal/storage/topology"},
 
 	// Convergence: root orchestrates; subpackages never import the root.
-	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/workspace"},
+	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/storage/cephstate", "internal/workspace"},
 	"internal/converge/ansible":           {"internal/host/callerio", "internal/host/localroot", "internal/host/ptyexec"},
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
 	"internal/converge/bastion":           {"api/v1alpha1", "internal/host/execution", "internal/render", "internal/roles"},
