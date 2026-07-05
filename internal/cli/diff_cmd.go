@@ -8,11 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	cephrender "github.com/crmarques/bootwright/internal/render/ceph"
 	"github.com/crmarques/bootwright/internal/status"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -23,33 +21,35 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		through      string
 		clusterScope string
 		output       string
-		probe        bool
+		recorded     bool
 	)
 	executable := workspace.ResolveAnsiblePlaybook()
 	cmd := &cobra.Command{
 		Use:   "diff",
-		Short: "Compare desired state against the last applied state and report drift",
-		Long: "Reports drift between the selected desired state and the last recorded apply.\n" +
-			"Read-only: by default it contacts no hosts, BMCs, or clusters and writes no\n" +
-			"records, and it rejects --override because it neither mutates nor suppresses its\n" +
-			"report. --probe additionally runs a read-only live OSD-health check on each\n" +
-			"managed Ceph seed, flagging a cluster that came up with fewer OSDs than declared\n" +
-			"(or HEALTH_ERR) as drift. Exit codes for automation: 0 in sync, 3 out of sync\n" +
-			"(drift, foreign, degraded, or never-applied), 1 load error, 2 usage error.",
+		Short: "Compare desired state against the live clusters and report the differences",
+		Long: "Compares the selected desired state against the real state of the clusters and\n" +
+			"prints the differences as a git-style diff (\"-\" desired, \"+\" real). For each\n" +
+			"managed Ceph StorageCluster it discovers live state read-only on the seed\n" +
+			"(hosts, services and placements, OSDs, CRUSH rules, pools and replication,\n" +
+			"config, mgr modules, health) and diffs it field by field; for each\n" +
+			"ContainerCluster it runs a shallow reachability/ClusterVersion check. It is\n" +
+			"read-only: it runs only read commands and writes no records (use --adopt on a\n" +
+			"future run to fold real state back into desired state).\n\n" +
+			"--recorded skips all cluster contact and instead reports drift between desired\n" +
+			"state and the last recorded apply (match/drift/foreign/missing), the fast\n" +
+			"offline check for automation. Exit codes: 0 in sync, 3 out of sync (a live\n" +
+			"difference, degraded, or never-applied), 1 load error, 2 usage error.",
 		Args: cobra.NoArgs,
-		Example: `  # Check the whole context for drift from the last apply
+		Example: `  # Diff the whole context against the live clusters
   bootwright diff
 
-  # Check only selected cluster roots
+  # Diff only selected cluster roots
   bootwright diff --clusters dc1-ocp,ceph-storage
 
-  # Limit to the infrastructure stage
-  bootwright diff --stage infra
+  # Fast offline check: desired state vs the last recorded apply
+  bootwright diff --recorded
 
-  # Check everything up to and including the clusters stage
-  bootwright diff --through clusters
-
-  # Machine-readable drift report
+  # Machine-readable diff
   bootwright diff --output json`,
 	}
 	cf := addCommonFlags()
@@ -58,7 +58,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
-	cmd.Flags().BoolVar(&probe, "probe", false, "additionally run a read-only live OSD-health check on each managed Ceph seed; a cluster with fewer OSDs in than declared (or HEALTH_ERR) is reported as drift")
+	cmd.Flags().BoolVar(&recorded, "recorded", false, "skip cluster contact; report drift against the last recorded apply instead of live state")
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -82,52 +82,37 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		if probe {
-			// The live OSD-health probe runs read-only ansible against the managed Ceph
-			// seeds; route its bundle/progress noise to stderr so stdout stays clean for
-			// the report (text) or the JSON document. It overlays degraded clusters onto
-			// the offline report as drift; it never rewrites a convergence record.
-			clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
-			reporter := newWorkflowReporter(stderr)
-			bundle, err := prepareWorkflowBundle(false)
-			if err != nil {
-				return failErr(1, err)
+		if recorded {
+			if output == outputJSON {
+				if err := cliout.JSON(stdout, report); err != nil {
+					return failErr(1, err)
+				}
+			} else {
+				printStateCheckReport(stdout, report)
 			}
-			obs, err := converge.RunStorageHealthProbe(c.Context(), stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, false, reporter)
-			if err != nil {
-				return failErr(1, err)
+			if !report.InSync {
+				return silentExit(3)
 			}
-			converge.OverlayStorageHealthProbe(&report, obs, storageOSDExpectations(state))
+			return nil
 		}
+		// Live mode (default): overlay a real-state comparison on top of the
+		// offline report's structural skeleton (which roots exist, which are
+		// never-applied, and the orphans). Discovery noise is routed to stderr so
+		// stdout stays clean for the report or the JSON document.
+		live := buildLiveDiff(c.Context(), cf, executable, state, report, false, stderr)
 		if output == outputJSON {
-			if err := cliout.JSON(stdout, report); err != nil {
+			if err := cliout.JSON(stdout, live); err != nil {
 				return failErr(1, err)
 			}
 		} else {
-			printStateCheckReport(stdout, report)
+			printLiveDiff(stdout, live)
 		}
-		if !report.InSync {
-			// Exit non-zero so automation can gate on "no drift" without parsing the
-			// report. 1 and 2 are already this command's load and usage codes, so
-			// out-of-sync (drift, foreign, or never-applied) gets its own code (3);
-			// the printed report stays the output.
+		if !live.InSync {
 			return silentExit(3)
 		}
 		return nil
 	}
 	return cmd
-}
-
-// storageOSDExpectations resolves each managed StorageCluster's declared OSD-count
-// expectation (via the render layer the CLI owns) so the live health overlay can
-// judge degradation without internal/converge depending on internal/render.
-func storageOSDExpectations(state v1alpha1.State) map[string]converge.StorageOSDExpectation {
-	out := map[string]converge.StorageOSDExpectation{}
-	for _, cluster := range state.StorageClusters {
-		mode, count := cephrender.OSDReadinessExpectation(cluster)
-		out[cluster.Metadata.Name] = converge.StorageOSDExpectation{Mode: mode, Count: count}
-	}
-	return out
 }
 
 func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
@@ -150,7 +135,7 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 			default:
 				p.Status(cliout.StatusWarn, label, stateCheckRootSummary(root))
 				for _, resource := range root.Resources {
-					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, stateCheckResourceDetail(resource))
+					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, string(resource.Classification))
 				}
 			}
 		}
@@ -226,19 +211,6 @@ func printStateCheckOrphans(p *cliout.Printer, orphans []workflow.UndeclaredReso
 		p.Status(cliout.StatusWarn, o.Kind+"/"+o.Name, detail)
 	}
 	p.Status(cliout.StatusWarn, "remedy", "re-declare these objects, or run `bootwright destroy` to reclaim them")
-}
-
-// stateCheckResourceDetail annotates a drifted resource with whether its drift
-// reconciles in place or needs a destructive rebuild, so a reader tells a safe day-2
-// reconcile from a wipe-and-rebuild. Non-drift classes render as their bare class.
-func stateCheckResourceDetail(resource workflow.StateCheckResource) string {
-	if resource.Classification != workflow.ConvergeSafetyDrift {
-		return string(resource.Classification)
-	}
-	if resource.Reconcilable {
-		return "drift · reconciles in place"
-	}
-	return "drift · needs rebuild (destructive)"
 }
 
 func stateCheckResourceStatus(class workflow.ConvergeSafetyClassification) cliout.Status {

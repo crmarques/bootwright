@@ -63,7 +63,10 @@ func TestDiffStorageScopeReportsNamedStorageRoot(t *testing.T) {
 
 func diffJSON(t *testing.T, clusters string) workflow.StateCheckReport {
 	t.Helper()
-	stdout, stderr, code := runCLI(t, "diff", "--clusters", clusters, "--output", "json")
+	// --recorded is the offline desired-vs-record report these scope tests assert
+	// on (the StateCheckReport shape); live mode would contact the seeds and emit
+	// the live-diff document instead.
+	stdout, stderr, code := runCLI(t, "diff", "--recorded", "--clusters", clusters, "--output", "json")
 	// diff exits 3 on drift (never-applied scope) and 0 in sync; both carry
 	// a parsable JSON report. A load/usage error (1/2) is a test failure.
 	if code == 1 || code == 2 {
