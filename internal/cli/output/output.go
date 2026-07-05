@@ -327,6 +327,82 @@ func (p *Printer) CommandLine(label string, args []string) {
 	p.wrote = true
 }
 
+// DiffLineKind classifies one line of a git-diff-style rendering.
+type DiffLineKind int
+
+const (
+	// DiffContext is an unchanged line (rendered plain, space-prefixed).
+	DiffContext DiffLineKind = iota
+	// DiffAdd is a line present in real state but not desired (green, "+").
+	DiffAdd
+	// DiffDel is a line present in desired state but not real (red, "-").
+	DiffDel
+)
+
+// DiffLine is one rendered diff line: its kind and its text (without the
+// +/-/space prefix, which the renderer adds).
+type DiffLine struct {
+	Kind DiffLineKind
+	Text string
+}
+
+// DiffObjectHeader opens a per-object diff section, git's "diff --git a/… b/…"
+// analogue: a bold title naming the resource, optionally with a one-line note
+// (e.g. "drifted", "only on cluster"). It writes the "--- desired" / "+++ real
+// (cluster)" file markers so the block reads as a unified diff.
+func (p *Printer) DiffObjectHeader(title, note string) {
+	if p == nil || p.w == nil {
+		return
+	}
+	if p.wrote {
+		fmt.Fprintln(p.w)
+	}
+	heading := title
+	if note != "" {
+		heading += "  (" + note + ")"
+	}
+	fmt.Fprintln(p.w, p.style(heading, color.Bold))
+	fmt.Fprintln(p.w, p.style("--- desired", color.Bold))
+	fmt.Fprintln(p.w, p.style("+++ real (cluster)", color.Bold))
+	p.wrote = true
+}
+
+// DiffHunk writes a hunk header ("@@ <label> @@" in cyan, git's hunk-header
+// color) grouping the lines that follow under one facet, e.g. a pool or the OSD
+// device selection.
+func (p *Printer) DiffHunk(label string) {
+	if p == nil || p.w == nil {
+		return
+	}
+	fmt.Fprintln(p.w, p.style("@@ "+label+" @@", color.FgCyan))
+	p.wrote = true
+}
+
+// DiffLines writes a run of diff lines, coloring add lines green and delete
+// lines red through the same style gate as every other output (so NO_COLOR /
+// TERM=dumb / non-TTY / piped output strip color and yield a plain unified diff
+// consumable by review tooling).
+func (p *Printer) DiffLines(lines []DiffLine) {
+	if p == nil || p.w == nil || len(lines) == 0 {
+		return
+	}
+	for _, line := range lines {
+		fmt.Fprintln(p.w, p.diffLine(line))
+	}
+	p.wrote = true
+}
+
+func (p *Printer) diffLine(line DiffLine) string {
+	switch line.Kind {
+	case DiffAdd:
+		return p.style("+"+line.Text, color.FgGreen)
+	case DiffDel:
+		return p.style("-"+line.Text, color.FgRed)
+	default:
+		return " " + line.Text
+	}
+}
+
 func (p *Printer) statusLabel(status Status) string {
 	label := "[" + string(status) + "]"
 	switch status {
