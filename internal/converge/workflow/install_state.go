@@ -49,14 +49,24 @@ const (
 )
 
 type ClusterInstallRecord struct {
-	Cluster     string               `json:"cluster"`
-	DesiredHash string               `json:"desiredHash"`
-	Status      ClusterInstallStatus `json:"status"`
-	Phase       ClusterInstallPhase  `json:"phase"`
-	RunID       string               `json:"runId,omitempty"`
-	StartedAt   time.Time            `json:"startedAt,omitempty"`
-	UpdatedAt   time.Time            `json:"updatedAt"`
-	InstalledAt *time.Time           `json:"installedAt,omitempty"`
+	Cluster     string `json:"cluster"`
+	DesiredHash string `json:"desiredHash"`
+	// StructuralHash is the desired install-input hash with the day-2-owned intent
+	// (cluster add-ons, per-node labels/taints) projected out — the same projection
+	// the apply preflight's structural hash uses. The install-state gate compares on
+	// it when present so a day-2-only edit (adding an add-on, a node label) reconciles
+	// in place under a plain apply instead of the gate refusing and steering the
+	// operator to --override, which would reinstall a healthy cluster. It is additive
+	// and migration-safe: a legacy record (empty StructuralHash) falls back to the
+	// full DesiredHash comparison, so upgrading bootwright never turns an installed
+	// cluster into drift. DesiredHash is left byte-stable for the same reason.
+	StructuralHash string               `json:"structuralHash,omitempty"`
+	Status         ClusterInstallStatus `json:"status"`
+	Phase          ClusterInstallPhase  `json:"phase"`
+	RunID          string               `json:"runId,omitempty"`
+	StartedAt      time.Time            `json:"startedAt,omitempty"`
+	UpdatedAt      time.Time            `json:"updatedAt"`
+	InstalledAt    *time.Time           `json:"installedAt,omitempty"`
 }
 
 type ClusterConnectionRecord struct {
@@ -207,6 +217,10 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if err != nil {
 			return out, err
 		}
+		structuralHash, err := clusterInstallStructuralHashForContext(contextName, state, name, secretsDir)
+		if err != nil {
+			return out, err
+		}
 		record, found, err := LoadClusterInstallRecord(clustersDir, name)
 		if err != nil {
 			return out, err
@@ -219,7 +233,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			// in that scope from scratch. So skip the install tasks for a
 			// match+installed+Available cluster exactly as continue would; let a
 			// drifted, not-installed, or unreachable cluster rebuild from scratch.
-			if found && record.DesiredHash == hash && record.Status == ClusterInstallStatusInstalled {
+			// A day-2-only edit (add-on, node label) reads as a match here too, so
+			// override does not reinstall a cluster whose install inputs are unchanged.
+			if found && installInputsMatch(record, hash, structuralHash) && record.Status == ClusterInstallStatusInstalled {
 				available, err := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
 				if err != nil {
 					return out, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w", name, err)
@@ -230,13 +246,13 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			}
 			continue
 		}
-		hashMatches := !found || record.DesiredHash == hash
+		hashMatches := !found || installInputsMatch(record, hash, structuralHash)
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
 			return out, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --override --yes after resetting target machines", name, name, name)
 		}
 		kubeconfigPath := clusterKubeconfigPath(clustersDir, name)
 		if !found {
-			adopted, err := adoptAvailableClusterRecord(ctx, clustersDir, name, hash, runID, kubeconfigPath, state.Environments, checker, now)
+			adopted, err := adoptAvailableClusterRecord(ctx, clustersDir, name, hash, structuralHash, runID, kubeconfigPath, state.Environments, checker, now)
 			if err != nil {
 				return out, err
 			}
@@ -269,7 +285,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 	return out, nil
 }
 
-func adoptAvailableClusterRecord(ctx context.Context, clustersDir, name, hash, runID, kubeconfigPath string, environments []v1alpha1.Environment, checker ClusterAvailabilityChecker, now time.Time) (bool, error) {
+func adoptAvailableClusterRecord(ctx context.Context, clustersDir, name, hash, structuralHash, runID, kubeconfigPath string, environments []v1alpha1.Environment, checker ClusterAvailabilityChecker, now time.Time) (bool, error) {
 	if _, err := os.Stat(kubeconfigPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
@@ -285,14 +301,15 @@ func adoptAvailableClusterRecord(ctx context.Context, clustersDir, name, hash, r
 	}
 	t := now.UTC()
 	record := ClusterInstallRecord{
-		Cluster:     name,
-		DesiredHash: hash,
-		Status:      ClusterInstallStatusInstalled,
-		Phase:       ClusterInstallPhaseComplete,
-		RunID:       runID,
-		StartedAt:   t,
-		UpdatedAt:   t,
-		InstalledAt: &t,
+		Cluster:        name,
+		DesiredHash:    hash,
+		StructuralHash: structuralHash,
+		Status:         ClusterInstallStatusInstalled,
+		Phase:          ClusterInstallPhaseComplete,
+		RunID:          runID,
+		StartedAt:      t,
+		UpdatedAt:      t,
+		InstalledAt:    &t,
 	}
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		return false, err
@@ -328,7 +345,7 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
 		return nil
 	}
-	hash, err := clusterInstallDesiredHashForContext(contextName, task.State, task.Entry.Cluster, secretsDir)
+	hash, structuralHash, err := clusterInstallHashes(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
 	}
@@ -340,6 +357,7 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
 	record.DesiredHash = hash
+	record.StructuralHash = structuralHash
 	record.Status = ClusterInstallStatusInstalling
 	record.Phase = phase
 	record.RunID = runID
@@ -369,11 +387,12 @@ func MarkClusterInstallTaskSucceeded(clustersDir, contextName, secretsDir, runID
 	if !found {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
-	hash, err := clusterInstallDesiredHashForContext(contextName, task.State, task.Entry.Cluster, secretsDir)
+	hash, structuralHash, err := clusterInstallHashes(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
 	}
 	record.DesiredHash = hash
+	record.StructuralHash = structuralHash
 	record.RunID = runID
 	record.Phase = phase
 	record.UpdatedAt = now.UTC()
@@ -408,11 +427,12 @@ func MarkClusterInstallTaskFailed(clustersDir, contextName, secretsDir, runID st
 	if !found {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
-	hash, err := clusterInstallDesiredHashForContext(contextName, task.State, task.Entry.Cluster, secretsDir)
+	hash, structuralHash, err := clusterInstallHashes(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
 	}
 	record.DesiredHash = hash
+	record.StructuralHash = structuralHash
 	record.Status = ClusterInstallStatusFailed
 	record.Phase = phase
 	record.RunID = runID
@@ -456,6 +476,21 @@ func clusterInstallPhaseMayHaveBooted(phase ClusterInstallPhase) bool {
 }
 
 func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
+	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, false)
+}
+
+// clusterInstallStructuralHashForContext hashes the DESTRUCTIVE-IDENTITY subset of a
+// cluster's install inputs: the same payload as the desired hash, but with the
+// day-2-owned intent (add-ons, per-node labels/taints) projected out of the embedded
+// state. The installer/agent config and manifests are still rendered from the FULL
+// state, so the structural hash only stays stable when the ONLY change is day-2
+// intent that does not alter the install config — a conservative, false-negative-safe
+// definition of "reconcilable in place".
+func clusterInstallStructuralHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
+	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, true)
+}
+
+func clusterInstallHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string, projectDay2 bool) (string, error) {
 	contextName = effectiveContextName(contextName)
 	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
 	if len(clusterState.ContainerClusters) != 1 {
@@ -474,6 +509,13 @@ func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.Stat
 	if err != nil {
 		return "", err
 	}
+	// The embedded state carries the day-2 intent unless this is the structural
+	// hash, which projects it out so an add-on / node-label edit does not move the
+	// hash the install-state gate compares on.
+	embedState := clusterState
+	if projectDay2 {
+		embedState = containerClusterInstallStructuralHashVars(clusterState)
+	}
 	payload := struct {
 		APIVersion    string                            `json:"apiVersion"`
 		Cluster       string                            `json:"cluster"`
@@ -485,7 +527,7 @@ func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.Stat
 	}{
 		APIVersion:    v1alpha1.APIVersion,
 		Cluster:       clusterName,
-		State:         clusterState,
+		State:         embedState,
 		InstallConfig: installConfig,
 		AgentConfig:   agentConfig,
 		Manifests:     render.InstallerManifests(ocp, render.PlaceholderInstallerSecrets(clusterState, ocp)),
@@ -497,6 +539,35 @@ func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.Stat
 	}
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// installInputsMatch reports whether the recorded install inputs still match the
+// desired inputs for the purpose of the healthy-skip / no-regenerate gate. It
+// prefers the day-2-projected structural hash so an add-on or node-label edit reads
+// as a match (reconciled in place by the add-on/node-config tasks) rather than a
+// changed install input. A legacy record with no structural hash, or a caller that
+// could not compute one, falls back to the full desired-hash comparison — the
+// pre-existing behavior — so the gate never loosens on missing data.
+func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
+	if record.StructuralHash != "" && structuralHash != "" {
+		return record.StructuralHash == structuralHash
+	}
+	return record.DesiredHash == desiredHash
+}
+
+// clusterInstallHashes computes both the full desired install-input hash and its
+// day-2-projected structural hash, so every record write stamps both. Kept together
+// so a caller can never persist one without the other.
+func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, err error) {
+	hash, err = clusterInstallDesiredHashForContext(contextName, state, clusterName, secretsDir)
+	if err != nil {
+		return "", "", err
+	}
+	structuralHash, err = clusterInstallStructuralHashForContext(contextName, state, clusterName, secretsDir)
+	if err != nil {
+		return "", "", err
+	}
+	return hash, structuralHash, nil
 }
 
 func clusterKubeconfigPath(clustersDir, clusterName string) string {
