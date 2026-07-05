@@ -287,6 +287,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				// reconciled in place by the seed role, not wiped: pass its name so the
 				// override apply-mode gate suppresses rm-cluster --zap-osds for it.
 				converge.ApplyReconcilableOnlyStorageExtraVar(&plan, converge.ReconcilableOnlyStorageClusters(objects))
+				// Positive rebuild-authorization token — the last line of defense.
+				// The seed role's rm-cluster --zap-osds runs ONLY for a cluster named
+				// here, which is exactly the structurally drifted set warned about
+				// above. A healthy owned cluster (a no-drift match) is in neither, so
+				// --override reconciles it idempotently in place instead of zapping it.
+				converge.ApplyRebuildAuthorizedStorageExtraVar(&plan, converge.RebuildAuthorizedStorageClusters(objects))
 			}
 			// --reclaim-devices wipes the named OSD disks in-band before the apply's
 			// empty-device gate, to recover owned OSD disks whose on-node marker a

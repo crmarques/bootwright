@@ -39,6 +39,43 @@ func OverrideDestructiveStorageClusters(objects []workflow.ObjectClassification)
 	return out
 }
 
+// RebuildAuthorizedStorageClusters returns the bare names of the StorageClusters
+// whose --override rebuild the controller POSITIVELY authorizes to run the
+// destructive cephadm rm-cluster --zap-osds — exactly the structurally drifted
+// owned clusters of OverrideDestructiveStorageClusters, with the label prefix
+// stripped. It is the single source of truth shared by the pre-confirm data-loss
+// warning (which lists the same clusters) and the Ansible zap gate (which requires
+// the cluster be named here before it wipes), so the operator can never be warned
+// about one set and wiped on another.
+//
+// The list is a POSITIVE authorization token, not an opt-out: the seed role's zap
+// runs only for a cluster named here, so a healthy match (no drift) and a
+// reconcilable-only OSD-device add — neither of which appears in this list — are
+// never wiped under --override, they reconcile idempotently in place. An absent or
+// empty token therefore fails safe: no cluster is authorized, so a stale bundle or
+// a Go layer that forgot to thread it can only under-authorize (skip a rebuild),
+// never over-authorize (wipe a cluster that should have been left alone).
+func RebuildAuthorizedStorageClusters(objects []workflow.ObjectClassification) []string {
+	labels := OverrideDestructiveStorageClusters(objects)
+	names := make([]string, 0, len(labels))
+	for _, label := range labels {
+		names = append(names, strings.TrimPrefix(label, "StorageCluster/"))
+	}
+	return names
+}
+
+// ApplyRebuildAuthorizedStorageExtraVar threads the positive rebuild-authorization
+// token to the seed role so its --override apply-mode gate wipes ONLY the named
+// structurally drifted clusters. An empty list appends nothing; because the gate
+// requires membership in this list, an absent var authorizes no wipe at all — the
+// fail-safe default that makes a healthy owned cluster the untouched case.
+func ApplyRebuildAuthorizedStorageExtraVar(plan *WorkflowPlan, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_rebuild_authorized_clusters="+strings.Join(names, ","))
+}
+
 // ReconcilableOnlyStorageClusters returns the bare names of StorageClusters whose
 // only drift is a reconcilable-in-place OSD-device edit (no structural/identity
 // drift). Under --override the seed role reconciles these via `ceph orch apply`
