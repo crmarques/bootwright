@@ -35,6 +35,7 @@ const (
 	StatusOK   Status = "OK"
 	StatusFail Status = "FAIL"
 	StatusWarn Status = "WARN"
+	StatusInfo Status = "INFO"
 )
 
 type Check struct {
@@ -337,6 +338,15 @@ func okCheck(group, name, evidence string) Check {
 		Group:    group,
 		Name:     name,
 		Status:   StatusOK,
+		Evidence: evidence,
+	}
+}
+
+func infoCheck(group, name, evidence string) Check {
+	return Check{
+		Group:    group,
+		Name:     name,
+		Status:   StatusInfo,
 		Evidence: evidence,
 	}
 }

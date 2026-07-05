@@ -12,6 +12,22 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
 		return nil
 	}
+	// A KubeVirt host cluster that is itself a ContainerCluster this run installs
+	// has its kubeconfig produced during the run: the apply scheduler orders the
+	// host cluster's install ahead of the dependent child clusters' node boot via
+	// the clusterInstalled capability (see workflow.kubeVirtHostClusterReadiness),
+	// so a missing kubeconfig is expected, not a gate. Mirror that scheduler
+	// signal — the host is a ContainerCluster present in the scoped plan state,
+	// with the kubeconfig-producing base phase in scope — and report INFO instead
+	// of FAIL. A host that is external/pre-existing (not a ContainerCluster in the
+	// plan state) or a run that does not install it (base out of scope) stays
+	// gated: its kubeconfig must already be on disk.
+	provisionedThisRun := map[string]bool{}
+	if phaseInScope("base", selected, true) {
+		for _, cluster := range state.ContainerClusters {
+			provisionedThisRun[cluster.Metadata.Name] = true
+		}
+	}
 	seen := map[string]bool{}
 	usable := map[string]string{}
 	var checks []Check
@@ -27,6 +43,8 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 		path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
 		info, err := deps.StatPath(path)
 		switch {
+		case err != nil && provisionedThisRun[name]:
+			checks = append(checks, infoCheck(checkGroupInstallerTools, name+" kubeconfig", "will be provisioned this run: "+name+" installs in the base phase before its dependent KubeVirt child clusters boot"))
 		case err != nil:
 			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
 		case info.IsDir():

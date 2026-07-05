@@ -159,6 +159,85 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	}
 }
 
+// TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig pins the
+// self-substrate fix: when the KubeVirt host cluster is itself a ContainerCluster
+// this run installs (present in the plan state, base phase in scope), a
+// not-yet-produced kubeconfig is expected — the scheduler installs the host before
+// the child boots — so the check is INFO, not a FAIL that blocks a full apply.
+func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T) {
+	clustersDir := t.TempDir() // no kubeconfig on disk: host not installed yet
+	state := v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "metal-ocp"},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "child-provider"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+					HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+					Namespace:      "bootwright-child-ocp",
+				},
+			},
+		}},
+	}
+	deps := Deps{StatPath: os.Stat}
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, deps)
+	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "INFO")
+	for _, check := range checks {
+		if check.Name == "metal-ocp KubeVirt API" {
+			t.Fatalf("KubeVirt API must not be probed for a not-yet-provisioned host: %+v", check)
+		}
+	}
+}
+
+// TestKubeVirtHostClusterExternalStillRequiresKubeconfig pins the other side of
+// the gate: a host cluster that is NOT a ContainerCluster this run installs
+// (external/pre-existing, or a base-out-of-scope run) must still have its
+// kubeconfig on disk, so a missing one stays a FAIL.
+func TestKubeVirtHostClusterExternalStillRequiresKubeconfig(t *testing.T) {
+	clustersDir := t.TempDir()
+	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
+		Metadata: v1alpha1.Metadata{Name: "child-provider"},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerKubeVirt,
+			KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+				HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+				Namespace:      "bootwright-child-ocp",
+			},
+		},
+	}}}
+	deps := Deps{StatPath: os.Stat}
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, deps)
+	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
+}
+
+// TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig pins
+// that the deferral is tied to the kubeconfig-producing base phase: a machines-only
+// run does not install the host cluster, so its missing kubeconfig stays a FAIL
+// even though the host is a ContainerCluster in state.
+func TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig(t *testing.T) {
+	clustersDir := t.TempDir()
+	state := v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "metal-ocp"},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "child-provider"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+					HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+					Namespace:      "bootwright-child-ocp",
+				},
+			},
+		}},
+	}
+	deps := Deps{StatPath: os.Stat}
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, deps)
+	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
+}
+
 func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
 	ref := v1alpha1.KubeVirtNetworkRef{
 		Kind:      v1alpha1.KubeVirtNetworkKindCUDN,
