@@ -3,6 +3,7 @@ package desiredstate
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -42,7 +43,41 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateStorage(state))...)
 	errs = append(errs, notes(validateCrossLayer(state))...)
 	errs = append(errs, notes(validateSecretReferences(state))...)
+	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
+	return errs
+}
+
+// validateUniqueBMCAddresses fails closed when two different Machines declare the
+// same BMC (Redfish) endpoint. A BMC address identifies one physical host's
+// management controller, so a shared address is a copy-paste error that points two
+// logical Machines at a single physical host — and bootwright's boot/install path
+// would drive the SAME host for both, disk-wiping the wrong machine. Catching it at
+// validation, before any apply, is the cheapest guard against that fat-finger; VM
+// substrates (KubeVirt/vSphere) declare no BMC address and are unaffected.
+func validateUniqueBMCAddresses(state v1alpha1.State) []string {
+	byAddress := map[string][]string{}
+	for _, machine := range state.Machines {
+		address := strings.TrimSpace(machine.Spec.Hardware.Management.BMC.Address)
+		if address == "" {
+			continue
+		}
+		byAddress[address] = append(byAddress[address], machine.Metadata.Name)
+	}
+	addresses := make([]string, 0, len(byAddress))
+	for address := range byAddress {
+		addresses = append(addresses, address)
+	}
+	sort.Strings(addresses)
+	var errs []string
+	for _, address := range addresses {
+		names := byAddress[address]
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		errs = append(errs, fmt.Sprintf("BMC address %q is declared by more than one Machine (%s); a BMC endpoint identifies one physical host, so a shared address would drive — and could disk-wipe — the wrong machine. Give each Machine a unique hardware.management.bmc.address", address, strings.Join(names, ", ")))
+	}
 	return errs
 }
 
