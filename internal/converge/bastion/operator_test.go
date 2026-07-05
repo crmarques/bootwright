@@ -184,6 +184,57 @@ func TestCLIInstallSpecPlannedCommand(t *testing.T) {
 	}
 }
 
+func TestCLIInstallSpecPlannedCommandSignalsFIPS(t *testing.T) {
+	spec := CLIInstallSpec{
+		OCPReleaseVersion: "4.21.12",
+		InstallDir:        "/usr/local/bin",
+		BundleDir:         "/bundle",
+		Executable:        "/venv/bin/ansible-playbook",
+		ClisReleaseURL:    "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.12",
+		FIPSRequired:      true,
+	}
+	got := spec.PlannedCommand("inv.ini")
+	if !slices.Contains(got, "bootwright_clis_fips_required=true") {
+		t.Fatalf("FIPS spec must pass bootwright_clis_fips_required=true, got %v", got)
+	}
+	// The non-FIPS default must stay silent so ordinary environments keep the
+	// stock argv and skip the extra RHEL9 installer download.
+	if slices.Contains((CLIInstallSpec{}).PlannedCommand("inv.ini"), "bootwright_clis_fips_required=true") {
+		t.Fatal("non-FIPS spec must not emit bootwright_clis_fips_required")
+	}
+}
+
+func TestStateRequiresFIPSInstaller(t *testing.T) {
+	fips := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{
+		Distribution: v1alpha1.DistributionSpec{Type: v1alpha1.DistributionOpenShift},
+		Security:     v1alpha1.ContainerClusterSecurity{FIPS: v1alpha1.ContainerClusterFIPS{Enabled: true}},
+	}}
+	plain := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{
+		Distribution: v1alpha1.DistributionSpec{Type: v1alpha1.DistributionOpenShift},
+	}}
+	okdFIPS := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{
+		Distribution: v1alpha1.DistributionSpec{Type: v1alpha1.DistributionOKD},
+		Security:     v1alpha1.ContainerClusterSecurity{FIPS: v1alpha1.ContainerClusterFIPS{Enabled: true}},
+	}}
+	cases := []struct {
+		name     string
+		clusters []v1alpha1.ContainerCluster
+		want     bool
+	}{
+		{"empty", nil, false},
+		{"plain openshift", []v1alpha1.ContainerCluster{plain}, false},
+		{"fips openshift", []v1alpha1.ContainerCluster{plain, fips}, true},
+		{"okd fips ignored", []v1alpha1.ContainerCluster{okdFIPS}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := StateRequiresFIPSInstaller(v1alpha1.State{ContainerClusters: tc.clusters}); got != tc.want {
+				t.Fatalf("StateRequiresFIPSInstaller = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestComponentPinnedVersion(t *testing.T) {
 	cases := []struct {
 		name string

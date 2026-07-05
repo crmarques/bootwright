@@ -60,6 +60,12 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)
 		}
+		// FIPS clusters render fips: true into install-config; the agent
+		// install role reads this to pick openshift-install-fips over the
+		// stock binary, which refuses to build a FIPS-mode agent ISO.
+		if ocp.Spec.Security.FIPS.Enabled {
+			entry["fips"] = true
+		}
 		clusters = append(clusters, entry)
 	}
 	out := map[string]any{

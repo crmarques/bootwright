@@ -29,6 +29,12 @@ type CLIInstallSpec struct {
 	BundleDir         string
 	Executable        string
 	ClisReleaseURL    string
+	// FIPSRequired is true when any OpenShift cluster in state enables
+	// FIPS. The stock openshift-install refuses to build a FIPS-mode
+	// agent ISO ("use the FIPS-capable installer binary for RHEL 9"), so
+	// the controller must additionally fetch openshift-install-fips from
+	// the RHEL9 client archive. See StateRequiresFIPSInstaller.
+	FIPSRequired bool
 }
 
 // PlannedCommand returns the ansible-playbook invocation the CLI will
@@ -36,7 +42,7 @@ type CLIInstallSpec struct {
 // argv is fully resolved (absolute paths against BundleDir) so callers
 // can echo it on dry-run and pass it straight to the process runner.
 func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
-	return []string{
+	argv := []string{
 		s.Executable,
 		"-i", filepath.Join(s.BundleDir, localInventoryName),
 		roles.PlaybookWorkflowBastionApplyTools,
@@ -44,6 +50,13 @@ func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
 		"-e", "bootwright_clis_install_dir=" + s.InstallDir,
 		"-e", "bootwright_clis_release_url=" + s.ClisReleaseURL,
 	}
+	// Only signal the FIPS installer when a cluster needs it — the role
+	// defaults the flag to false, so non-FIPS environments keep the
+	// stock argv (and download only the standard openshift-install).
+	if s.FIPSRequired {
+		argv = append(argv, "-e", "bootwright_clis_fips_required=true")
+	}
+	return argv
 }
 
 // ComponentPinnedVersion returns a controller/runtime pin declared in
@@ -92,6 +105,24 @@ func StateOpenShiftReleaseVersion(state v1alpha1.State) string {
 	return ""
 }
 
+// StateRequiresFIPSInstaller reports whether any OpenShift ContainerCluster
+// enables FIPS. Such clusters render fips: true into install-config, and the
+// stock openshift-install refuses to build their agent ISO — the controller
+// must additionally install the FIPS-capable openshift-install-fips binary.
+// OKD is skipped for parity with StateOpenShiftReleaseVersion (no OKD FIPS
+// installer is published).
+func StateRequiresFIPSInstaller(state v1alpha1.State) bool {
+	for _, cluster := range state.ContainerClusters {
+		if v1alpha1.DistributionType(cluster) != v1alpha1.DistributionOpenShift {
+			continue
+		}
+		if cluster.Spec.Security.FIPS.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
 // PlanCLIInstall returns a non-nil spec when the loaded state pins an
 // OpenShift release. nil means "no release pinned — skip CLI install".
 // venvBin lets the caller resolve `ansible-playbook` without coupling
@@ -107,5 +138,6 @@ func PlanCLIInstall(state v1alpha1.State, installDir, bundleDir string, venvBin 
 		BundleDir:         bundleDir,
 		Executable:        venvBin("ansible-playbook"),
 		ClisReleaseURL:    render.OpenShiftClientsReleaseURL(state, version),
+		FIPSRequired:      StateRequiresFIPSInstaller(state),
 	}
 }

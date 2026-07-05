@@ -453,3 +453,55 @@ func TestOCPCLIsRemoveStaleBinariesAndVerifyFinalVersions(t *testing.T) {
 		}
 	}
 }
+
+// TestOCPCLIsInstallFIPSInstallerWhenRequired pins that the controller fetches
+// the FIPS-capable openshift-install-fips from the RHEL9 client archive when a
+// cluster enables FIPS — the stock openshift-install refuses to build a
+// FIPS-mode agent ISO.
+func TestOCPCLIsInstallFIPSInstallerWhenRequired(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/controller_openshift_tools/tasks/main.yml")
+
+	probe := tasks[findAnsibleTask(t, tasks, "Probe installed openshift-install-fips version")]
+	if got, _ := probe["when"].(string); got != "bootwright_clis_fips_required | default(false) | bool" {
+		t.Fatalf("FIPS probe must gate on bootwright_clis_fips_required, got %v", probe["when"])
+	}
+
+	downloadIdx := findAnsibleTask(t, tasks, "Download openshift-install FIPS tarball")
+	removeIdx := findAnsibleTask(t, tasks, "Remove stale openshift-install-fips from install dir")
+	extractIdx := findAnsibleTask(t, tasks, "Extract openshift-install-fips into install dir")
+	finalAssertIdx := findAnsibleTask(t, tasks, "Verify final OpenShift CLI versions match requested release")
+	if !(downloadIdx < removeIdx && removeIdx < extractIdx && extractIdx < finalAssertIdx) {
+		t.Fatalf("FIPS installer must download, remove stale, then extract before the final version check")
+	}
+	for _, idx := range []int{downloadIdx, removeIdx, extractIdx} {
+		if got, _ := tasks[idx]["when"].(string); got != "bootwright_clis_install_oi_fips | bool" {
+			t.Fatalf("%s must gate on bootwright_clis_install_oi_fips, got %v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+
+	get, ok := tasks[downloadIdx]["ansible.builtin.get_url"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no get_url body", tasks[downloadIdx]["name"])
+	}
+	if url := fmt.Sprint(get["url"]); !strings.HasSuffix(url, "/openshift-install-rhel9-amd64.tar.gz") {
+		t.Fatalf("FIPS installer must come from the RHEL9 archive, got url=%v", get["url"])
+	}
+	if !strings.Contains(fmt.Sprint(get["checksum"]), "bootwright_clis_installer_fips_checksum") {
+		t.Fatalf("FIPS installer download must verify its own checksum, got %v", get["checksum"])
+	}
+
+	extract, ok := tasks[extractIdx]["ansible.builtin.unarchive"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no unarchive body", tasks[extractIdx]["name"])
+	}
+	if !stringListContains(extract["include"], "openshift-install-fips") {
+		t.Fatalf("FIPS extract must select the openshift-install-fips member, got %v", extract["include"])
+	}
+
+	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/defaults/main.yml")
+	for _, want := range []string{"openshift-install-fips", "bootwright_current_cluster.fips"} {
+		if !strings.Contains(defaults, want) {
+			t.Fatalf("agent install default must select %q, got:\n%s", want, defaults)
+		}
+	}
+}

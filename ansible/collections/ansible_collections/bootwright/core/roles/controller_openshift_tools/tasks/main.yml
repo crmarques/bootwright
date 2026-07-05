@@ -45,6 +45,16 @@
   changed_when: false
   failed_when: false
 
+- name: Probe installed openshift-install-fips version
+  ansible.builtin.command:
+    cmd: openshift-install-fips version
+  register: bootwright_clis_oi_fips_probe
+  environment:
+    PATH: "{{ bootwright_clis_lookup_path }}"
+  changed_when: false
+  failed_when: false
+  when: bootwright_clis_fips_required | default(false) | bool
+
 - name: Probe installed oc version
   ansible.builtin.command:
     cmd: oc version --client
@@ -73,6 +83,10 @@
       {{ bootwright_clis_oc_probe.stdout | default('')
          | regex_search('Client Version:\s*(\S+)', '\1')
          | default([], true) | first | default('') }}
+    bootwright_clis_oi_fips_version: >-
+      {{ bootwright_clis_oi_fips_probe.stdout | default('')
+         | regex_search('openshift-install(?:-fips)?\s+(\S+)', '\1')
+         | default([], true) | first | default('') }}
   changed_when: false
 
 - name: Decide whether each CLI needs install (require exact version)
@@ -81,6 +95,11 @@
       {{ bootwright_clis_oi_probe.rc != 0
          or bootwright_clis_oi_version | length == 0
          or bootwright_clis_oi_version != bootwright_openshift_release_version }}
+    bootwright_clis_install_oi_fips: >-
+      {{ (bootwright_clis_fips_required | default(false) | bool)
+         and (bootwright_clis_oi_fips_probe.rc | default(1) != 0
+              or bootwright_clis_oi_fips_version | length == 0
+              or bootwright_clis_oi_fips_version != bootwright_openshift_release_version) }}
     bootwright_clis_install_client: >-
       {{ bootwright_clis_oc_probe.rc != 0
          or bootwright_clis_oc_version | length == 0
@@ -94,33 +113,33 @@
     path: "{{ bootwright_clis_tmp_parent }}"
     prefix: bootwright-controller-clis-
   register: bootwright_clis_tmp
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Compute CLI working directory
   ansible.builtin.set_fact:
     bootwright_clis_workdir: "{{ bootwright_clis_tmp.path }}/{{ bootwright_openshift_release_version }}"
   changed_when: false
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Ensure tmp working directory exists
   ansible.builtin.file:
     path: "{{ bootwright_clis_workdir }}"
     state: directory
     mode: "0755"
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Download OpenShift CLI checksums
   ansible.builtin.get_url:
     url: "{{ bootwright_clis_release_url }}/sha256sum.txt"
     dest: "{{ bootwright_clis_workdir }}/sha256sum.txt"
     mode: "0644"
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Read OpenShift CLI checksums
   ansible.builtin.slurp:
     src: "{{ bootwright_clis_workdir }}/sha256sum.txt"
   register: bootwright_clis_checksums
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Resolve OpenShift CLI checksums
   ansible.builtin.set_fact:
@@ -134,16 +153,22 @@
          | select('search', '\s+openshift-install-linux-' ~ bootwright_openshift_release_version ~ '\.tar\.gz$')
          | first | default('')
          | regex_replace('\s+.*$', '') }}
+    bootwright_clis_installer_fips_checksum: >-
+      {{ (bootwright_clis_checksums.content | b64decode).splitlines()
+         | select('search', '\s+openshift-install-rhel9-amd64\.tar\.gz$')
+         | first | default('')
+         | regex_replace('\s+.*$', '') }}
   changed_when: false
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Verify OpenShift CLI checksums are known
   ansible.builtin.assert:
     that:
       - not (bootwright_clis_install_client | bool) or bootwright_clis_client_checksum is match('^[0-9a-f]{64}$')
       - not (bootwright_clis_install_oi | bool) or bootwright_clis_installer_checksum is match('^[0-9a-f]{64}$')
+      - not (bootwright_clis_install_oi_fips | bool) or bootwright_clis_installer_fips_checksum is match('^[0-9a-f]{64}$')
     fail_msg: "sha256sum.txt did not contain the expected OpenShift CLI tarball checksums"
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool
+  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Download openshift-client tarball
   ansible.builtin.get_url:
@@ -161,6 +186,14 @@
     checksum: "sha256:{{ bootwright_clis_installer_checksum }}"
   when: bootwright_clis_install_oi | bool
 
+- name: Download openshift-install FIPS tarball
+  ansible.builtin.get_url:
+    url: "{{ bootwright_clis_release_url }}/openshift-install-rhel9-amd64.tar.gz"
+    dest: "{{ bootwright_clis_workdir }}/openshift-install-fips.tar.gz"
+    mode: "0644"
+    checksum: "sha256:{{ bootwright_clis_installer_fips_checksum }}"
+  when: bootwright_clis_install_oi_fips | bool
+
 - name: Remove stale oc and kubectl from install dir
   ansible.builtin.file:
     path: "{{ bootwright_clis_install_dir }}/{{ item }}"
@@ -175,6 +208,12 @@
     path: "{{ bootwright_clis_install_dir }}/openshift-install"
     state: absent
   when: bootwright_clis_install_oi | bool
+
+- name: Remove stale openshift-install-fips from install dir
+  ansible.builtin.file:
+    path: "{{ bootwright_clis_install_dir }}/openshift-install-fips"
+    state: absent
+  when: bootwright_clis_install_oi_fips | bool
 
 - name: Extract oc and kubectl into install dir
   ansible.builtin.unarchive:
@@ -197,6 +236,16 @@
     mode: "0755"
   when: bootwright_clis_install_oi | bool
 
+- name: Extract openshift-install-fips into install dir
+  ansible.builtin.unarchive:
+    src: "{{ bootwright_clis_workdir }}/openshift-install-fips.tar.gz"
+    dest: "{{ bootwright_clis_install_dir }}"
+    remote_src: true
+    include:
+      - openshift-install-fips
+    mode: "0755"
+  when: bootwright_clis_install_oi_fips | bool
+
 - name: Probe final openshift-install version
   ansible.builtin.command:
     cmd: openshift-install version
@@ -213,6 +262,15 @@
     PATH: "{{ bootwright_clis_lookup_path }}"
   changed_when: false
 
+- name: Probe final openshift-install-fips version
+  ansible.builtin.command:
+    cmd: openshift-install-fips version
+  register: bootwright_clis_final_oi_fips_probe
+  environment:
+    PATH: "{{ bootwright_clis_lookup_path }}"
+  changed_when: false
+  when: bootwright_clis_fips_required | default(false) | bool
+
 - name: Parse final CLI versions
   ansible.builtin.set_fact:
     bootwright_clis_final_oi_version: >-
@@ -223,6 +281,10 @@
       {{ bootwright_clis_final_oc_probe.stdout | default('')
          | regex_search('Client Version:\s*(\S+)', '\1')
          | default([], true) | first | default('') }}
+    bootwright_clis_final_oi_fips_version: >-
+      {{ bootwright_clis_final_oi_fips_probe.stdout | default('')
+         | regex_search('openshift-install(?:-fips)?\s+(\S+)', '\1')
+         | default([], true) | first | default('') }}
   changed_when: false
 
 - name: Verify final OpenShift CLI versions match requested release
@@ -230,11 +292,13 @@
     that:
       - bootwright_clis_final_oi_version == bootwright_openshift_release_version
       - bootwright_clis_final_oc_version == bootwright_openshift_release_version
+      - not (bootwright_clis_fips_required | default(false) | bool) or bootwright_clis_final_oi_fips_version == bootwright_openshift_release_version
     fail_msg: >-
       Installed OpenShift CLI versions do not match requested release
       {{ bootwright_openshift_release_version }}:
       openshift-install={{ bootwright_clis_final_oi_version | default('<unknown>') }},
-      oc={{ bootwright_clis_final_oc_version | default('<unknown>') }}.
+      oc={{ bootwright_clis_final_oc_version | default('<unknown>') }},
+      openshift-install-fips={{ bootwright_clis_final_oi_fips_version | default('<n/a>') }}.
 
 - name: Remove tarball working directory
   ansible.builtin.file:
@@ -244,6 +308,9 @@
 
 - name: Show final CLI versions
   ansible.builtin.debug:
-    msg:
-      - "openshift-install {{ bootwright_clis_final_oi_version }}"
-      - "oc {{ bootwright_clis_final_oc_version }}"
+    msg: >-
+      {{
+        ['openshift-install ' ~ bootwright_clis_final_oi_version, 'oc ' ~ bootwright_clis_final_oc_version]
+        + (['openshift-install-fips ' ~ bootwright_clis_final_oi_fips_version]
+           if (bootwright_clis_fips_required | default(false) | bool) else [])
+      }}

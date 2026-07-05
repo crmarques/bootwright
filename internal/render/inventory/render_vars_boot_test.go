@@ -1123,3 +1123,24 @@ func commaListContains(list, want string) bool {
 	}
 	return false
 }
+
+// TestVarsProjectFIPSFlagForFIPSClusters pins that a FIPS OpenShift cluster
+// projects fips: true (which the agent install role reads to pick
+// openshift-install-fips) while non-FIPS clusters omit the key entirely.
+func TestVarsProjectFIPSFlagForFIPSClusters(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	cluster := Vars(state)["bootwright_clusters"].([]any)[0].(map[string]any)
+	if _, ok := cluster["fips"]; ok {
+		t.Fatalf("non-FIPS cluster must omit the fips key, got %v", cluster["fips"])
+	}
+
+	state.ContainerClusters[0].Spec.Security.FIPS.Enabled = true
+	cluster = Vars(state)["bootwright_clusters"].([]any)[0].(map[string]any)
+	if got := cluster["fips"]; got != true {
+		t.Fatalf("FIPS cluster must project fips: true, got %v", got)
+	}
+}
