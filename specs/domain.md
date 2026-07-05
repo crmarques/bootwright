@@ -108,6 +108,13 @@ OS-ready or Bootwright-managed OS state and `ceph-node` capability.
 
 - Desired state is declarative, idempotent, typed, and deterministic.
 - Generated installer files are outputs, not authored source of truth.
+- Desired-state YAML is authored by the operator; Bootwright writes it only
+  through explicit, opt-in reconciliation. `diff` reads live cluster state to
+  show how reality differs from desired state, and `diff --adopt` folds that
+  reality back into the authored YAML (preserving comments, snapshotting the
+  prior input to history) so a re-apply reproduces the running cluster. Adoption
+  is the sanctioned bridge from live reality to authored intent; it never runs
+  implicitly.
 - Secret bytes never appear in desired-state YAML or generated docs.
 - Validation errors name the owning object and exact field.
 - Provider swaps should leave cluster intent stable whenever the cluster itself

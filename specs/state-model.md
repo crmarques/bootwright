@@ -1128,12 +1128,24 @@ input hash only — it never observes node reality.
   mutating `destroy` records them under `runs/last-destroy-input/`. The
   snapshot is what was applied, written at the start of the mutating run;
   nothing reads it back, and plan/`--dry-run` never write it.
-- Read-only verbs (`status`, `state-check`, `render`, `plan`, `apply --dry-run`,
+- A command that mutates the context's desired-state input — `context update`
+  replacing the tree, `diff --adopt` editing objects — snapshots the current
+  input to `input-history/<seq>-<reason>/` before writing, under a bounded
+  retention. Every such mutation goes through one component so the
+  snapshot-then-write guarantee holds uniformly and the pre-change input stays
+  recoverable.
+- Read-only verbs (`status`, `diff`, `render`, `plan`, `apply --dry-run`,
   `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run
   lease, and must not mutate provider, BMC, cluster, or storage state. `status`,
-  `state-check`, `render`, `plan`, and `validate` must not contact provider
-  hosts, BMCs, or clusters at all; `preflight` may run an Ansible preflight but only
+  `render`, `plan`, `validate`, and `diff --recorded` must not contact provider
+  hosts, BMCs, or clusters at all; the default live `diff` reads live cluster
+  state read-only (managed Ceph seed reads and a container `ClusterVersion`
+  check) and still writes no runtime records. `diff --adopt` additionally writes
+  desired-state input YAML — folding discovered live state back into the context
+  input tree, snapshotting the prior input to history first — but writes no
+  runtime records and mutates no provider, BMC, cluster, or storage state.
+  `preflight` may run an Ansible preflight but only
   with read-only or check-mode operations that converge nothing. As the one
   exception to that read-only posture, `preflight` (and `apply` before its host
   check) may record SSH server-key trust, but only for a host with no existing
@@ -1293,25 +1305,38 @@ input hash only — it never observes node reality.
   runs never record trust on first use, so pipelines record it with `host
   trust` before `preflight`/`apply`, and only `host trust --replace` may accept
   a changed key.
-- `bootwright state-check` is a read-only desired-vs-recorded report. It never
-  mutates state, writes convergence records, or runs playbooks, and it accepts
-  `--stage`, `--clusters`, and `--output` like the other selection commands. It
-  classifies each selected resource against the durable convergence-safety
-  evidence recorded by the last apply: `missing` (no completed apply recorded),
-  `match` (applied with the current desired state), `drift` (desired state
-  changed since it was applied), or `foreign` (a non-Bootwright owner). It
+- `bootwright diff` compares the selected desired state against the live clusters
+  and prints the differences as a git-style diff (`-` desired, `+` real). For each
+  managed Ceph `StorageCluster` it discovers live state read-only on the seed —
+  hosts, services and their placements, OSDs, CRUSH rules, pools and replication,
+  ceph config, mgr modules, and health — and diffs it field by field; for each
+  `ContainerCluster` it runs a shallow reachability/`ClusterVersion` Available
+  check (a container cluster carries no declared quantitative expectation to diff
+  deeper against, so this is the meaningful floor). Live discovery is read-only
+  and best-effort: an unreachable seed or a never-applied cluster degrades to a
+  note, never a fatal error. Under the storage additive-only rule an object on the
+  cluster but not declared is reported as `real-only` (an `--adopt` candidate), not
+  a deletion. `diff` accepts `--stage`, `--clusters`, and `--output` like the other
+  selection commands and rejects `--override` (it neither mutates cluster state nor
+  suppresses its report).
+- `bootwright diff --recorded` skips all cluster contact and instead produces the
+  fast offline desired-vs-recorded report for automation. It classifies each
+  selected resource against the durable convergence-safety evidence recorded by the
+  last apply: `missing` (no completed apply recorded), `match` (applied with the
+  current desired state), `drift` (desired state changed since it was applied), or
+  `foreign` (a non-Bootwright owner). It
   additionally reports `undeclared` ("Owned but no longer declared") resources:
   Bootwright ownership records — at `Machine`, cluster, `InfraProvider`, and
   `InfraComponent` granularity — that correlate to no object in the FULL desired
   state (never the `--clusters`-scoped subset), i.e. objects deleted from desired
   state without being destroyed. `undeclared` is report-only: it does not affect
   the exit code, which gates on selected-state sync only; reclaim an orphan with
-  `destroy` (see the removal lifecycle in `docs/advanced/operations.md`). It
-  compares desired
+  `destroy` (see the removal lifecycle in `docs/advanced/operations.md`).
+  `--recorded` compares desired
   state against that recorded evidence only; it does not probe live hosts, BMCs,
   or clusters, so a change made out of band after a matching apply (a wiped disk,
-  an undefined VM, a deleted namespace) is not detected until the next apply
-  refreshes the record. A root whose resources are all `missing` is reported as
+  an undefined VM, a deleted namespace) is invisible to `--recorded` but is exactly
+  what the default live `diff` surfaces. A root whose resources are all `missing` is reported as
   one absence; a present root reports only the resources that are not in sync.
   Drift is reported per apply task: each selected apply task is one reported
   resource. Classification granularity is per task, and how finely it isolates a
@@ -1342,15 +1367,24 @@ input hash only — it never observes node reality.
   `plan`, to see the exact change. It
   is distinct from `status` (context setup checks, local readiness,
   and next-step spine), `preflight` (Ansible preflight), and `plan`/`apply
-  --dry-run` (the intended task graph). `--override` is rejected because
-  state-check neither mutates nor suppresses its report. The text report
+  --dry-run` (the intended task graph). The `--recorded` text report
   summarizes a present root's out-of-sync resources by class (drifted,
   foreign-owned, not-yet-applied) so opposite remediations are never conflated.
-  Exit codes let automation gate on drift without parsing the report: `0` when
-  the selected state is in sync, `3` when any selected resource is out of sync
-  (drift, foreign, or never-applied), `1` on load error, and `2` on usage error.
+  Exit codes let automation gate without parsing the report, for both modes: `0`
+  when the selected state is in sync, `3` when it is out of sync (a live
+  difference, drift, foreign, degraded, or never-applied), `1` on load error, and
+  `2` on usage error.
+- `bootwright diff --adopt` folds the discovered live state back into desired-state
+  YAML so a subsequent `apply` reproduces the cluster as it actually runs. It is the
+  one mutating form of `diff`, requires live discovery (rejected with `--recorded`),
+  and writes only inside the context input tree — snapshotting the prior input to
+  history first, so the pre-adopt state is recoverable. It edits declared objects in
+  place (preserving comments) and creates a one-object file for a pool that exists
+  only on the cluster; a difference it cannot safely fold in (a structural pool
+  change, host/service/CRUSH topology) is reported as detected-but-not-adopted for a
+  deliberate manual edit rather than silently dropped.
   Once the context has a recorded apply, the `status` next-step spine surfaces
-  `state-check` ahead of `plan`/`apply`. When the last run failed, the spine's
+  `diff` ahead of `plan`/`apply`. When the last run failed, the spine's
   next step is instead the exact scoped retry command (`apply` with the failed
   run's `--stage`/`--clusters` selection) alongside the failed tasks' log paths
   under `runs/history/<run-id>/`, so an interrupted apply resumes without an

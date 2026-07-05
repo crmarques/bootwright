@@ -291,20 +291,32 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     closed. This re-provisions the disks from scratch — it does not preserve the
     old OSD data.
 
-### Checking live OSD health
+### Comparing against live cluster state
 
-`diff` is offline by default (it compares desired state to the last
-recorded apply and contacts no clusters). To additionally verify a managed Ceph
-cluster is *live-healthy*, add `--probe`: it runs a read-only OSD-health check on
-each seed and reports a cluster that came up with fewer OSDs than declared, or
-`HEALTH_ERR`, as drift (exit code 3).
+`diff` is **live by default**: it discovers the real state of each managed Ceph
+cluster read-only on the seed (hosts, services and placements, OSDs, CRUSH rules,
+pools and replication, config, mgr modules, and health) and prints a git-style
+diff of desired-vs-real, and runs a shallow `ClusterVersion` reachability check
+for each container cluster. It exits `3` when anything differs.
 
 ```
-bootwright diff --clusters ceph-storage --probe
+bootwright diff --clusters ceph-storage
 ```
 
-An apply already fails closed when OSDs do not materialize; `--probe` is for
-catching an OSD that failed *after* a healthy apply, without re-running apply.
+To fold the live state back into desired-state YAML — so a re-apply reproduces
+the cluster as it actually runs — add `--adopt`. It edits declared objects in
+place (preserving comments), creates a file for a pool that exists only on the
+cluster, and snapshots the prior input to the context's input history first (so
+the change is recoverable); differences it cannot safely represent are reported
+for a manual edit rather than dropped.
+
+```
+bootwright diff --clusters ceph-storage --adopt
+```
+
+For a fast, no-contact check in automation, `--recorded` compares desired state
+against the last recorded apply instead of the live clusters (the classification
+report described under [Ownership & safety](ownership-and-safety.md)).
 
 ## Force-destroying renamed or unmarked machines
 

@@ -157,6 +157,22 @@ of enumeration rather than being flagged — so out-of-band removal is an explic
 classify `match` against the stale pre-destroy evidence until it is re-applied.
 This is the documented additive-only posture, not a gap.
 
+The default `diff` compares desired state against live reality rather than the
+recorded evidence (`diff --recorded` is the offline classifier above). A
+read-only discovery playbook runs a battery of `ceph … --format json` reads on
+each managed Ceph seed; a leaf observation model decodes those blobs, and a
+comparison engine diffs them field by field against the desired side derived
+through the same storage-topology resolver the renderer uses, so an expected
+value (a pool's effective replication, a rule's failure domain) matches exactly.
+Container clusters get a shallow in-process `ClusterVersion` reachability check
+against the stored kubeconfig — no deeper probe, since a container cluster
+carries no declared quantitative expectation. `diff --adopt` folds the live
+observation back into authored desired-state YAML through the single
+input-mutation component that snapshots history first (also used by `context
+update`); it edits declared objects in place and synthesizes files for
+cluster-only pools, reporting anything it cannot safely represent rather than
+dropping it.
+
 Shared machine services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about
 them. The graph owns service identity, consuming clusters, machine placement,

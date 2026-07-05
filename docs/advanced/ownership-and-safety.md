@@ -50,9 +50,10 @@ skip, resume, and teardown decision. They never contain secret bytes.
 ## What makes re-running apply safe
 
 Re-running `apply` compares recorded evidence against current desired state and
-classifies each resource into one of four outcomes. `bootwright diff`
+classifies each resource into one of four outcomes. `bootwright diff --recorded`
 reports exactly this, read-only, against recorded evidence — it never contacts
-hosts:
+hosts (plain `bootwright diff` instead compares desired state against the *live*
+clusters; see [Operations](operations.md#comparing-against-live-cluster-state)):
 
 | Outcome | Meaning | Reconcile behavior |
 | --- | --- | --- |

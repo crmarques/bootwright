@@ -257,11 +257,15 @@ mutates resources. Re-running `apply` creates what is missing, skips completed
 matching work when a concrete probe supports it, and fails closed when recorded
 state is foreign or unsafe to resume.
 
-Use `bootwright diff` to compare selected desired state with the last
-recorded apply. It is read-only and reports `missing`, `match`, `drift`, and
-`foreign` without contacting hosts; it sees recorded evidence, not live state. It
-also lists `undeclared` resources — objects owned by Bootwright but no longer in
-desired state — which are report-only and do not affect the exit code. For the
+Use `bootwright diff` to compare selected desired state with the **live**
+clusters: it discovers real Ceph state read-only and prints a git-style diff of
+desired-vs-real (and shallow-checks container reachability), and `--adopt` folds
+that reality back into desired-state YAML. Add `--recorded` for the fast,
+no-contact check that classifies each resource against the last recorded apply as
+`missing`, `match`, `drift`, or `foreign` (recorded evidence, not live state). The
+`--recorded` report also lists `undeclared` resources — objects owned by
+Bootwright but no longer in desired state — which are report-only and do not
+affect the exit code. For the
 classifier — including why classification is **not** itself an apply-time skip
 gate — see [Architecture](../contributing/architecture.md).
 
