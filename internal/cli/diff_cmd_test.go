@@ -43,6 +43,18 @@ func TestDiffRejectsOverride(t *testing.T) {
 	}
 }
 
+func TestDiffAdoptRejectsRecorded(t *testing.T) {
+	// --adopt folds live state into desired YAML, so it cannot ride on the
+	// offline --recorded report; the two are mutually exclusive (usage error).
+	_, stderr, code := runCLI(t, "diff", "--recorded", "--adopt")
+	if code != 2 {
+		t.Fatalf("diff --recorded --adopt exit = %d, want 2 (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stderr, "--adopt requires live discovery") {
+		t.Fatalf("stderr missing the adopt/recorded conflict: %q", stderr)
+	}
+}
+
 func TestDiffRejectsUnknownOutput(t *testing.T) {
 	stdout, stderr, code := runCLI(t, "diff", "--output", "yaml")
 	if code != 2 {

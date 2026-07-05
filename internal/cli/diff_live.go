@@ -34,6 +34,7 @@ type liveDiffReport struct {
 	Undeclared     []workflow.UndeclaredResource `json:"undeclared,omitempty"`
 	LoadWarnings   []string                      `json:"loadWarnings,omitempty"`
 	Warnings       []string                      `json:"warnings,omitempty"`
+	Adopt          *adoptSummary                 `json:"adopt,omitempty"`
 }
 
 // liveStorageDiff is one managed StorageCluster's live comparison. Note carries
@@ -274,6 +275,7 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 	}
 
 	printStateCheckOrphans(p, live.Undeclared)
+	printAdoptSummary(p, live.Adopt)
 	if len(live.Warnings) > 0 {
 		p.Section("Warnings")
 		for _, warning := range live.Warnings {
@@ -281,6 +283,30 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 		}
 	}
 	printStateCheckLoadWarnings(p, live.LoadWarnings)
+}
+
+// printAdoptSummary reports what `--adopt` folded into desired state and what it
+// left for the operator to edit by hand.
+func printAdoptSummary(p *cliout.Printer, adopt *adoptSummary) {
+	if adopt == nil {
+		return
+	}
+	p.Section("Adopted into desired state")
+	if adopt.empty() {
+		p.Status(cliout.StatusOK, "adopt", "nothing to fold in; desired state already matches the adoptable facets")
+	}
+	for _, applied := range adopt.Applied {
+		p.Status(cliout.StatusOK, "updated", applied)
+	}
+	for _, file := range adopt.NewFiles {
+		p.Status(cliout.StatusOK, "created", file)
+	}
+	if adopt.Snapshot != "" {
+		p.Status(cliout.StatusOK, "previous input", "saved to history: "+adopt.Snapshot)
+	}
+	for _, detected := range adopt.Detected {
+		p.Status(cliout.StatusWarn, "not adopted", detected)
+	}
 }
 
 // renderStorageDiff prints one storage cluster's facet diffs as a git-style

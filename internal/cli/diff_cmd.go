@@ -22,6 +22,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		clusterScope string
 		output       string
 		recorded     bool
+		adopt        bool
 	)
 	executable := workspace.ResolveAnsiblePlaybook()
 	cmd := &cobra.Command{
@@ -59,6 +60,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
 	cmd.Flags().BoolVar(&recorded, "recorded", false, "skip cluster contact; report drift against the last recorded apply instead of live state")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "fold the discovered live state back into desired-state YAML (snapshots the prior input to history first); implies live mode")
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -66,6 +68,9 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		}
 		if stage != "" && through != "" {
 			return failErr(2, errors.New("--stage and --through are mutually exclusive: --stage limits to exactly that phase, --through limits to every phase from the beginning up to and including it"))
+		}
+		if recorded && adopt {
+			return failErr(2, errors.New("--adopt requires live discovery and cannot be combined with --recorded"))
 		}
 		scope, err := converge.ApplyStageScope(stage)
 		if through != "" {
@@ -100,6 +105,13 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		// never-applied, and the orphans). Discovery noise is routed to stderr so
 		// stdout stays clean for the report or the JSON document.
 		live := buildLiveDiff(c.Context(), cf, executable, state, report, false, stderr)
+		if adopt {
+			summary, err := adoptLiveState(cf, state, live)
+			if err != nil {
+				return failErr(1, fmt.Errorf("adopt live state into desired state: %w", err))
+			}
+			live.Adopt = &summary
+		}
 		if output == outputJSON {
 			if err := cliout.JSON(stdout, live); err != nil {
 				return failErr(1, err)
