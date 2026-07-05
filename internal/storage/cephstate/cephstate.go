@@ -19,6 +19,7 @@ const (
 	ReadOSDStat       = "osd_stat"
 	ReadVersions      = "versions"
 	ReadOrchLS        = "orch_ls"
+	ReadOrchPS        = "orch_ps"
 	ReadOrchHostLS    = "orch_host_ls"
 	ReadOrchDeviceLS  = "orch_device_ls"
 	ReadOSDTree       = "osd_tree"
@@ -171,6 +172,56 @@ func (d Discovery) Services() ([]Service, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ServiceName < out[j].ServiceName })
 	return out, nil
+}
+
+// Daemon is one running daemon from `ceph orch ps --format json`. It resolves a
+// service's real placement: the set of hosts actually running its daemons,
+// which `ceph orch ls` does not report directly.
+type Daemon struct {
+	DaemonType  string `json:"daemon_type"`
+	DaemonID    string `json:"daemon_id"`
+	ServiceName string `json:"service_name"`
+	Hostname    string `json:"hostname"`
+	Status      string `json:"status_desc"`
+}
+
+// Daemons decodes `ceph orch ps`.
+func (d Discovery) Daemons() ([]Daemon, error) {
+	var out []Daemon
+	if err := d.decode(ReadOrchPS, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ServiceHosts returns, per service name, the sorted set of hosts running its
+// daemons — the real placement to diff against a desired service's resolved
+// placement. Returns an empty map (not an error) when orch ps was not collected.
+func (d Discovery) ServiceHosts() map[string][]string {
+	daemons, err := d.Daemons()
+	if err != nil {
+		return map[string][]string{}
+	}
+	sets := map[string]map[string]struct{}{}
+	for _, daemon := range daemons {
+		if daemon.ServiceName == "" || daemon.Hostname == "" {
+			continue
+		}
+		if sets[daemon.ServiceName] == nil {
+			sets[daemon.ServiceName] = map[string]struct{}{}
+		}
+		sets[daemon.ServiceName][daemon.Hostname] = struct{}{}
+	}
+	out := map[string][]string{}
+	for service, hosts := range sets {
+		list := make([]string, 0, len(hosts))
+		for host := range hosts {
+			list = append(list, host)
+		}
+		sort.Strings(list)
+		out[service] = list
+	}
+	return out
 }
 
 // Host is one registered cephadm host from `ceph orch host ls --format json`.

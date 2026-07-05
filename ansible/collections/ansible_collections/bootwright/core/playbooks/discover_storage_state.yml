@@ -28,6 +28,8 @@
         argv: [ceph, versions, --format, json]
       - name: orch_ls
         argv: [ceph, orch, ls, --format, json]
+      - name: orch_ps
+        argv: [ceph, orch, ps, --format, json]
       - name: orch_host_ls
         argv: [ceph, orch, host, ls, --format, json]
       - name: orch_device_ls
