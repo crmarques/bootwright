@@ -113,6 +113,50 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	return clone
 }
 
+// managedMachineOSStructuralHashVars projects the DESTRUCTIVE-IDENTITY (disk-wipe
+// reinstall) subset of a storage cluster's managed-OS install intent. The
+// managedMachineOS task otherwise hashes the whole storage-filtered State, so ANY
+// edit to the cluster — a pool size change, an OSD-device add, a machine's BMC
+// endpoint — flipped the install object to structural drift and apply refused it
+// as "would wipe the machine disks", even though none of those touch the installed
+// OS. This projection clears exactly the fields the on-host install marker
+// (machineOSInstallMarkerVars, which hashes only osInstall) ALSO excludes, so the
+// Go classification and the Ansible probe agree: a change to one of them is
+// reconcilable in place (the install is skipped, the storage/day-2 task applies the
+// edit), never a reinstall. It deliberately does NOT touch the marker hash itself —
+// re-hashing it would false-drift every already-installed host on upgrade.
+//
+// Cleared (not OS-install identity, absent from the marker): the storage
+// sub-objects (pools/filesystems/gateways/NFS/exports/placement, each classified
+// independently), the OSD device selection, and each machine's substrate (the
+// BMC/Redfish endpoint, which is how bootwright reaches the host, applied each boot,
+// not baked into the OS). Kept structural (present in the marker, a real reinstall
+// trigger): the machine OS spec, hardware/disk layout, network, and access.
+func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alpha1.State {
+	base := storageClusterDesiredHashVars(state, name)
+	var clone v1alpha1.State
+	data, err := json.Marshal(base)
+	if err != nil {
+		return base
+	}
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return base
+	}
+	for i := range clone.StorageClusters {
+		if ceph := clone.StorageClusters[i].Spec.Ceph; ceph != nil {
+			for j := range ceph.Topology.Hosts {
+				ceph.Topology.Hosts[j].Devices = nil
+				ceph.Topology.Hosts[j].OSD = nil
+			}
+			ceph.Topology.OSDDrivegroups = nil
+		}
+	}
+	for i := range clone.Machines {
+		clone.Machines[i].Spec.Substrate = v1alpha1.MachineSubstrate{}
+	}
+	return clone
+}
+
 func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
 	if cluster.Spec.Ceph == nil {
 		return nil

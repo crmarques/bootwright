@@ -95,8 +95,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
 					ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
 					State:         storageTaskState(state, cluster.Metadata.Name),
-					Forks:         len(managedOSMachines),
-					RedfishSlots:  len(managedOSMachines),
+					// A pool/topology/OSD-device/BMC edit changes the full state hash but
+					// not the OS-install identity: classify it reconcilable in place so
+					// apply does not refuse it as a machine-disk wipe reinstall.
+					StructuralHashVars: managedMachineOSStructuralHashVars(state, cluster.Metadata.Name),
+					Forks:              len(managedOSMachines),
+					RedfishSlots:       len(managedOSMachines),
 				},
 			}); err != nil {
 				return nil, err
