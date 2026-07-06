@@ -15,6 +15,13 @@ reboot
 {% set proxy_url = proxy.url | default('') %}
 {% if (proxy.url | default('') | length > 0) and (proxy.credentialsPath | default('') | length > 0) %}
 {% set _proxy_creds = (lookup('ansible.builtin.file', proxy.credentialsPath) | trim).split(':', 1) %}
+{# The credentials file must hold a 'user:password' pair. A generated secret always
+   is, but a file/keyFile-sourced secret is arbitrary; fail with a clear message
+   naming the secret and the required shape instead of an opaque Jinja index error
+   deep in the machines phase when _proxy_creds has no ':' to split. #}
+{% if _proxy_creds | length < 2 %}
+{{ undef(hint='machineOSInstall proxy credentials file ' ~ proxy.credentialsPath ~ " must contain a 'user:password' pair separated by a colon; the referenced secret has no ':' so the credentialed proxy URL cannot be built. Fix the secret to the user:password shape.") }}
+{% endif %}
 {% set _proxy_scheme, _proxy_hostport = proxy.url.split('://', 1) %}
 {# urlencode uses safe='/', so it does NOT escape '/'. A credential containing '/'
    (common in base64/random secrets) would otherwise terminate the URL authority at

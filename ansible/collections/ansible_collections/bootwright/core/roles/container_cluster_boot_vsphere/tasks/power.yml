@@ -1,4 +1,27 @@
 ---
+# Force a full power cycle (power off, then power on) so a retried install
+# always reboots into the freshly (re-)attached installer ISO. `powered-on`
+# alone is a no-op on a VM the media role hot-swapped the CD on while it was
+# still running from a failed/half-installed attempt — the node would never
+# reboot and the play would hang in readiness. Powering off first is idempotent
+# on the freshly created, already-off VM of a first boot. This mirrors the
+# Redfish driver's ForceOff -> wait Off -> power On semantics.
+- name: Power off vSphere machine
+  community.vmware.vmware_guest_powerstate:
+    hostname: "{{ bootwright_vsphere_boot.server }}"
+    port: "{{ bootwright_vsphere_boot.port | default(443) }}"
+    username: "{{ bootwright_vsphere_boot_credentials.username }}"
+    password: "{{ bootwright_vsphere_boot_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere_boot.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere_boot.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere_boot.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_boot_vm_name }}"
+    state: powered-off
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+
 - name: Power on vSphere machine
   community.vmware.vmware_guest_powerstate:
     hostname: "{{ bootwright_vsphere_boot.server }}"

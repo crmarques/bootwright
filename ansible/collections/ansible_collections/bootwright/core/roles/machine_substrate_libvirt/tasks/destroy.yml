@@ -112,11 +112,34 @@
       name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
       paths:
         - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
-        # Shared per-cluster source-ISO cache (staged once for the whole group).
-        # Cleared with the cluster so the source DVD is never left orphaned.
-        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
       attributes: {}
   when: bootwright_component.osManaged | default(false) | bool
+
+# The multi-GB source DVD is staged once and shared by every machine in the
+# cluster (throttle:1). Removing it from the per-machine record above would let
+# the first machine's destroy delete it mid-loop, forcing every surviving
+# machine to re-stage the full DVD on its next install if the teardown is
+# interrupted or partial. Instead, remove the shared cache only once this
+# machine's per-machine dir is gone AND no other machine's install dir remains,
+# so a complete teardown still clears it (no orphan) while a partial one keeps
+# it for the survivors.
+- name: Probe remaining managed-OS install machines in this cluster
+  ansible.builtin.find:
+    paths: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}"
+    file_type: directory
+    recurse: false
+    excludes:
+      - _source
+  register: bootwright_libvirt_os_install_remaining
+  when: bootwright_component.osManaged | default(false) | bool
+
+- name: Remove shared per-cluster source-ISO cache after the last machine
+  ansible.builtin.file:
+    path: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
+    state: absent
+  when:
+    - bootwright_component.osManaged | default(false) | bool
+    - (bootwright_libvirt_os_install_remaining.matched | default(0)) == 0
 
 - name: Remove libvirt network (idempotent across machines)
   community.libvirt.virt_net:

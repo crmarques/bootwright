@@ -90,13 +90,23 @@
         bootwright_ownership_record: "{{ bootwright_vsphere_media_previous_record }}"
       when: bootwright_vsphere_media_superseded | bool
 
-    # All machines of a cluster share one agent ISO and one datastore
-    # target; the marker dedupes the upload across the per-machine attach
-    # passes and the throttle keeps any residual uploads from racing the
-    # same datastore file. A rebuilt ISO (newer than the marker) re-uploads.
+    # All machines of a cluster share one agent ISO on the controller, but the
+    # attach target datastore is per-failure-domain, so the upload marker must
+    # be keyed by (server, datastore): two machines in different failure domains
+    # each upload to their own datastore, while machines sharing a datastore
+    # still dedupe. A shared stage-path marker would let the second machine skip
+    # its upload and attach media that was never copied to that datastore.
+    - name: Resolve vSphere upload marker path
+      ansible.builtin.set_fact:
+        bootwright_vsphere_media_uploaded_marker_path: "{{ bootwright_vsphere_media_stage_path }}.uploaded-{{ (bootwright_vsphere_media.server ~ '|' ~ bootwright_vsphere_media_datastore) | hash('sha1') }}"
+      changed_when: false
+
+    # The marker dedupes the upload across the per-machine attach passes and the
+    # throttle keeps any residual uploads from racing the same datastore file.
+    # A rebuilt ISO (newer than the marker) re-uploads.
     - name: Probe uploaded vSphere virtual media marker
       ansible.builtin.stat:
-        path: "{{ bootwright_vsphere_media_stage_path }}.uploaded"
+        path: "{{ bootwright_vsphere_media_uploaded_marker_path }}"
       register: bootwright_vsphere_media_uploaded_marker
 
     - name: Upload vSphere virtual media to the datastore
@@ -121,7 +131,7 @@
 
     - name: Mark vSphere virtual media uploaded
       ansible.builtin.copy:
-        dest: "{{ bootwright_vsphere_media_stage_path }}.uploaded"
+        dest: "{{ bootwright_vsphere_media_uploaded_marker_path }}"
         content: "[{{ bootwright_vsphere_media_datastore }}] {{ bootwright_vsphere_media_datastore_path }}\n"
         owner: root
         group: root

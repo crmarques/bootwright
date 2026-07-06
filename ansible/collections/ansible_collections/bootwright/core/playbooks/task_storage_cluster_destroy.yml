@@ -88,8 +88,8 @@
           Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
           ({{ inventory_hostname }}) for storage cluster {{ bootwright_storage_cluster_name }}
           is unreachable. If the cluster was never provisioned there is nothing to wipe —
-          re-run with --skip-unreachable to tear it down as already-absent. Otherwise power
-          the node(s) on and retry.
+          re-run with --override --skip-unreachable to tear it down as already-absent
+          (--skip-unreachable requires --override). Otherwise power the node(s) on and retry.
       when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
     - name: Stop tearing down unreachable storage hosts

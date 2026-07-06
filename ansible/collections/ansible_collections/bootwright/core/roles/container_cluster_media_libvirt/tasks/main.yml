@@ -37,13 +37,18 @@
     bootwright_libvirt_media_insert_requested: "{{ bootwright_libvirt_media_action == 'boot' }}"
     bootwright_libvirt_media_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
     bootwright_libvirt_media_boot_order: "{{ bootwright_component.boot.media.libvirt.bootOrder | default('disk-first') }}"
+    # Content-hash the helper into its own path so two bootwright versions
+    # converging concurrently on one provider host never race the shared
+    # copy/execute window and run the other version's helper (a fixed shared
+    # path lets a later copy overwrite the helper a running task is about to exec).
+    bootwright_libvirt_media_helper_path: "/var/tmp/bootwright-libvirt-media-insert-{{ lookup('ansible.builtin.file', role_path ~ '/files/insert_libvirt_media.py') | hash('sha1') }}.py"
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
 - name: Install virtual media insert helper
   ansible.builtin.copy:
     src: insert_libvirt_media.py
-    dest: /var/tmp/bootwright-libvirt-media-insert.py
+    dest: "{{ bootwright_libvirt_media_helper_path }}"
     owner: root
     group: root
     mode: "0700"
@@ -54,7 +59,7 @@
 - name: Insert staged virtual media directly into libvirt domain
   ansible.builtin.command:
     argv:
-      - /var/tmp/bootwright-libvirt-media-insert.py
+      - "{{ bootwright_libvirt_media_helper_path }}"
       - "{{ bootwright_component.boot.media.libvirt.uri }}"
       - "{{ bootwright_component.boot.media.libvirt.domain }}"
       - "{{ bootwright_component.boot.agentIso.stagePath }}"

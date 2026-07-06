@@ -2,6 +2,38 @@
 - name: Persist proxy settings on host
   when: bootwright_proxy_enabled
   block:
+    # Trust the egress proxy's TLS-inspection CA before any HTTPS work runs on
+    # this host. A proxy that re-signs HTTPS (SSL-bump) presents its own CA on
+    # every origin, so without this get_url/dnf/podman fail certificate
+    # verification ("unable to get local issuer certificate"). Installing the
+    # bundle into the system anchors covers every managed host that egresses
+    # through the proxy, matching docs/advanced/disconnected-proxy.md — not just
+    # Ceph storage nodes. Converges both ways: the anchor is removed when no
+    # inspecting proxy declares a trustBundleRef.
+    - name: Trust corporate proxy CA on host
+      ansible.builtin.copy:
+        src: "{{ bootwright_proxy_trust_bundle_ref }}"
+        dest: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
+        owner: root
+        group: root
+        mode: "0644"
+      register: bootwright_proxy_ca_anchor
+      when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
+
+    - name: Remove corporate proxy CA anchor when no trust bundle is declared
+      ansible.builtin.file:
+        path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
+        state: absent
+      register: bootwright_proxy_ca_anchor_removed
+      when: not (bootwright_proxy_trust_bundle_ref | default('') | length > 0)
+
+    - name: Update host trust store for corporate proxy CA
+      ansible.builtin.command:
+        argv:
+          - update-ca-trust
+      changed_when: (bootwright_proxy_ca_anchor.changed | default(false)) or (bootwright_proxy_ca_anchor_removed.changed | default(false))
+      when: (bootwright_proxy_ca_anchor.changed | default(false)) or (bootwright_proxy_ca_anchor_removed.changed | default(false))
+
     - name: Render /etc/environment proxy lines
       ansible.builtin.blockinfile:
         path: /etc/environment

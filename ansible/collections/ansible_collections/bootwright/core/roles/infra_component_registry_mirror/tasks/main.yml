@@ -153,9 +153,14 @@
     pull: missing
     env:
       REGISTRY_HTTP_ADDR: "0.0.0.0:{{ bootwright_component.port }}"
-      REGISTRY_AUTH: "{{ 'htpasswd' if (bootwright_mr_credentials_path | length) > 0 else '' }}"
-      REGISTRY_AUTH_HTPASSWD_PATH: "/auth/htpasswd"
-      REGISTRY_AUTH_HTPASSWD_REALM: "Registry Realm"
+      # Emit the htpasswd auth vars ONLY when credentials are configured. The
+      # distribution registry treats the presence of REGISTRY_AUTH_HTPASSWD_PATH
+      # as "configure htpasswd auth" and panics at startup when no htpasswd file
+      # exists (credentialsRef is optional for a disconnected mirror), crash-looping
+      # under restart_policy while podman reports the container started.
+      REGISTRY_AUTH: "{{ 'htpasswd' if (bootwright_mr_credentials_path | length) > 0 else omit }}"
+      REGISTRY_AUTH_HTPASSWD_PATH: "{{ '/auth/htpasswd' if (bootwright_mr_credentials_path | length) > 0 else omit }}"
+      REGISTRY_AUTH_HTPASSWD_REALM: "{{ 'Registry Realm' if (bootwright_mr_credentials_path | length) > 0 else omit }}"
     labels:
       bootwright.kind: registry
       bootwright.provider: "{{ bootwright_component.providerName }}"

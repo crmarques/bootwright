@@ -12,14 +12,18 @@
     bootwright_ownership_destroy_name: "{{ bootwright_ownership_record.name }}"
     bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_record.attributes | default({}) }}"
     bootwright_ownership_destroy_paths: "{{ bootwright_ownership_record.paths | default([]) }}"
-    # A self-contained shared infra-component (artifact server, registry, proxy) the Go
-    # destroy planner found still referenced by another context is RELEASED: skip the
-    # physical teardown of the shared container, firewall ports, and owned paths below,
-    # but still remove this context's ownership record at the end. Scoped narrowly so it
-    # never affects libvirt domains/networks or any non-shared kind.
+    # A shared infra-component this context only REFERENCES (the Go destroy planner
+    # found the owner context still runs the base) is RELEASED: skip the physical
+    # teardown of the shared container, firewall ports, and owned paths below, but
+    # still remove this context's reference record at the end. Release is honored for
+    # ANY infra-component kind, matching PlanInfraComponentReleases, which releases a
+    # reference regardless of component kind (additive contributions are always
+    # caller-scoped); keep the two in sync. Membership in the planner's release set is
+    # the sole gate — that set only ever carries reference-role records — so this never
+    # affects libvirt domains/networks (a different kind) or a non-shared infra-component
+    # (absent from the set, so still torn down).
     bootwright_ownership_destroy_release: >-
       {{ bootwright_ownership_record.kind == 'infra-component'
-         and (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') in ['artifacts', 'registry', 'proxy']
          and bootwright_infra_component_release_records is defined
          and bootwright_ownership_record.name in bootwright_infra_component_release_records.split(',') }}
   changed_when: false

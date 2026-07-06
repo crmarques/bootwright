@@ -2,7 +2,7 @@
 
 Durable ownership evidence is written at mutation time by the executing
 collection roles through `bootwright.core.ownership_record` and read by Go
-(`internal/runtime/ownership`) for destroy scoping, host package removal
+(`internal/ownership`) for destroy scoping, host package removal
 gating, orphan reporting, and state-check. Run, install, and convergence-safety
 ledgers remain Go-written; this contract covers only ownership evidence.
 
@@ -29,7 +29,7 @@ Path: `<ownership-dir>/resources/<kind>/<name>.json` (written by
 | `updatedAt` | UTC RFC3339 write timestamp. |
 
 The canonical schema is `ResourceRecord` in
-`internal/runtime/ownership/ownership.go`; Go validates every record it loads,
+`internal/ownership/ownership.go`; Go validates every record it loads,
 so a role writing a new field must keep the record decodable there.
 
 ## Package Records

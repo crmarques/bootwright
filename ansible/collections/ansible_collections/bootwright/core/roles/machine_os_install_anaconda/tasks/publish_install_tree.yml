@@ -81,23 +81,18 @@
 - name: Build and publish hosted install tree
   when: bootwright_tree_rebuild | bool
   block:
-    # Verify the DVD before trusting its contents. This is the origin-authenticity
-    # anchor a sealed per-node ISO also relies on (media add sha256-verified it);
-    # recorded in the identity marker and asserted against an optional pin.
-    - name: Verify hosted install tree DVD checksum
+    # Compute the DVD sha256 for the identity/diagnostics marker. The DVD's origin
+    # authenticity was already established at `bootwright media add` time (verified
+    # against the recorded sha256 there) — the same anchor a sealed per-node ISO
+    # relies on — so this only records the digest in the published tree's marker
+    # for traceability; there is no author-supplied pin to re-assert here.
+    - name: Record hosted install tree DVD checksum
       ansible.builtin.command:
         argv:
           - sha256sum
           - "{{ bootwright_tree_dvd_path }}"
       register: bootwright_tree_dvd_sha
       changed_when: false
-
-    - name: Assert hosted install tree DVD checksum matches pin
-      ansible.builtin.assert:
-        that:
-          - (bootwright_tree_dvd_sha.stdout.split()[0] | lower) == (bootwright_tree.fromMedia.checksum | lower | regex_replace('^sha256:', ''))
-        fail_msg: "hosted install tree DVD checksum mismatch for {{ bootwright_tree.fromMedia.original }}"
-      when: (bootwright_tree.fromMedia.checksum | default('') | length) > 0
 
     - name: Reset hosted install tree staging directories
       ansible.builtin.file:

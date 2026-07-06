@@ -47,13 +47,12 @@
     group: root
     mode: "0755"
 
+# The renderer emits no EPEL override under provider.community; the source is a
+# role variable (vars/os/RedHat.yml) an operator overrides to an internal EPEL
+# mirror for a disconnected site.
 - name: Resolve EPEL bootstrap package source
   ansible.builtin.set_fact:
-    bootwright_ceph_community_epel_url: >-
-      {{
-        bootwright_ceph_provider.community.epelReleaseURL
-        | default(bootwright_ceph_community_epel_release_url, true)
-      }}
+    bootwright_ceph_community_epel_url: "{{ bootwright_ceph_community_epel_release_url }}"
   changed_when: false
 
 - name: Require an https EPEL bootstrap package source
@@ -76,10 +75,15 @@
     state: present
     disable_gpg_check: true
 
+# The renderer emits no dependency-repo overrides under provider.community; both
+# knobs are role variables. Set bootwright_ceph_community_dependency_repos_enabled
+# to false on a host that entitles BaseOS/AppStream/CRB another way, or point
+# bootwright_ceph_community_dependency_default_mirror at an internal CentOS Stream
+# mirror for a disconnected site.
 - name: Resolve community Ceph dependency repository source
   ansible.builtin.set_fact:
-    bootwright_ceph_community_dependency_enabled: "{{ bootwright_ceph_provider.community.enableDependencyRepos | default(true) | bool }}"
-    bootwright_ceph_community_dependency_mirror: "{{ (bootwright_ceph_provider.community.dependencyMirror | default(bootwright_ceph_community_dependency_default_mirror, true)) | regex_replace('/$', '') }}"
+    bootwright_ceph_community_dependency_enabled: "{{ bootwright_ceph_community_dependency_repos_enabled | default(true) | bool }}"
+    bootwright_ceph_community_dependency_mirror: "{{ bootwright_ceph_community_dependency_default_mirror | regex_replace('/$', '') }}"
   changed_when: false
 
 - name: Require an https community Ceph dependency mirror and signing key
@@ -89,8 +93,8 @@
       - bootwright_ceph_community_dependency_gpgkey is match('^https://')
     fail_msg: >-
       Refusing to fetch community Ceph dependency packages or their signing key
-      over an insecure transport: set spec.ceph.community.dependencyMirror and
-      bootwright_ceph_community_dependency_gpgkey to https:// URLs (got
+      over an insecure transport: set bootwright_ceph_community_dependency_default_mirror
+      and bootwright_ceph_community_dependency_gpgkey to https:// URLs (got
       {{ bootwright_ceph_community_dependency_mirror }} and
       {{ bootwright_ceph_community_dependency_gpgkey }}).
   when: bootwright_ceph_community_dependency_enabled

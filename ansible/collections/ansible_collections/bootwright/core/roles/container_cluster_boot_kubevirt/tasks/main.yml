@@ -82,7 +82,7 @@
           'dv', bootwright_kubevirt_iso_dv_name,
           '--namespace', bootwright_kubevirt_namespace,
           '--image-path', bootwright_kubevirt_agent_iso_path,
-          '--size', '4Gi',
+          '--size', bootwright_kubevirt_agent_iso_size | string,
           '--force-bind',
           '--wait-secs', bootwright_kubevirt_boot_iso_timeout | string
         ]

@@ -60,6 +60,26 @@
     command:
       - --conf-file=/etc/dnsmasq.conf
 
+# podman_container state=started succeeds the moment the container is created,
+# even if dnsmasq then exits and crash-loops under restart_policy. When the
+# rendered listen-address exists on this host, confirm the container is actually
+# Running so a genuine crash (bad config, port conflict) fails loudly instead of
+# a misleading green. The check is skipped while the listen-address is still
+# absent — a dnsmasq bound to a substrate bridge created by the later machines
+# phase legitimately cannot start yet and self-heals via the restart policy.
+- name: Confirm dnsmasq container is running
+  containers.podman.podman_container_info:
+    name: "{{ bootwright_dnsmasq_container_name }}"
+  register: bootwright_dnsmasq_info
+  until: bootwright_dnsmasq_info.containers[0].State.Running | default(false)
+  retries: 5
+  delay: 2
+  changed_when: false
+  when: >-
+    (bootwright_component.bindAddress | default('')) in ['', '0.0.0.0']
+    or ((ansible_all_ipv4_addresses is defined)
+        and (bootwright_component.bindAddress in ansible_all_ipv4_addresses))
+
 - name: Open DNS port on host firewall
   ansible.posix.firewalld:
     port: "53/udp"

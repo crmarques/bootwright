@@ -10,6 +10,16 @@
   failed_when: false
   changed_when: false
 
+# wait_for with failed_when:false always registers failed=False (the failure is
+# suppressed), so `.failed` is a dead signal — it cannot distinguish a reachable
+# host from a timed-out one. The module only sets `msg` on a failure path (e.g.
+# "Timeout when waiting..."), so absence of msg is the reliable "port is open"
+# predicate. Everything below keys reachability off this fact, not off `.failed`.
+- name: Resolve managed OS SSH reachability before install
+  ansible.builtin.set_fact:
+    bootwright_os_pre_ssh_reachable: "{{ (bootwright_os_pre_ssh_port.msg | default('')) | length == 0 }}"
+  changed_when: false
+
 # Fail closed on the one combination that would otherwise wipe a host blind: the
 # SSH port is REACHABLE but no knownHostsPath is configured, so the ownership probe
 # below is skipped, readiness defaults to false, and the install proceeds to wipe an
@@ -26,7 +36,7 @@
       so the pre-install ownership probe can run, then re-apply; if the host is truly
       unused, power it off before the first apply so it is not seen as occupied.
   when:
-    - not (bootwright_os_pre_ssh_port.failed | default(false))
+    - bootwright_os_pre_ssh_reachable | bool
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) == 0
 
 - name: Record managed OS SSH host key before install when reachable
@@ -36,7 +46,7 @@
     bootwright_os_ssh_keyscan_retries: 1
     bootwright_os_ssh_keyscan_delay: 1
   when:
-    - not (bootwright_os_pre_ssh_port.failed | default(false))
+    - bootwright_os_pre_ssh_reachable | bool
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
 
 - name: Probe managed OS SSH authentication before install
@@ -64,7 +74,7 @@
   failed_when: false
   changed_when: false
   when:
-    - not (bootwright_os_pre_ssh_port.failed | default(false))
+    - bootwright_os_pre_ssh_reachable | bool
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
 
 - name: Resolve managed OS readiness before install

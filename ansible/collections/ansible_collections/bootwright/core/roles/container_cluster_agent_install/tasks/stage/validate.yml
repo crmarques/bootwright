@@ -11,7 +11,22 @@
     executable: /bin/sh
   register: bootwright_install_lookup
   changed_when: false
-  failed_when: bootwright_install_lookup.rc != 0
+  failed_when: false
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
+
+- name: Fail when openshift-install binary is missing
+  ansible.builtin.assert:
+    that:
+      - bootwright_install_lookup.rc == 0
+    fail_msg: >-
+      Required installer binary '{{ bootwright_openshift_install }}' was not
+      found on the controller PATH for cluster
+      {{ bootwright_current_cluster.name }}. It is installed by
+      `bootwright bastion setup`; FIPS OpenShift clusters need the
+      openshift-install-fips build in particular, which is only laid down when
+      the bastion was set up with FIPS in scope. Re-run
+      `bootwright bastion setup` (with the FIPS cluster in scope for a FIPS
+      install) and retry.
   when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
 
 - name: Set openshift-install path
@@ -31,7 +46,8 @@
     msg: >-
       Missing install-config.yaml at {{ bootwright_install_work_dir }}/install-config.yaml.
       The bootwright CLI is expected to inline secrets via ResolveInstaller before
-      handing off to Ansible; re-run `bootwright apply cluster` (or
+      handing off to Ansible; re-run
+      `bootwright apply --clusters {{ bootwright_current_cluster.name }}` (or
       `bootwright render installer --sensitive`) to regenerate it.
   when: bootwright_install_agent_action_effective in ['run', 'create_iso'] and not bootwright_install_config_stat.stat.exists
 
