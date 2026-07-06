@@ -34,6 +34,8 @@ const (
 	GroupInfraHosts          = inventory.GroupInfraHosts
 	GroupControllerHosts     = inventory.GroupControllerHosts
 	GroupOCPHosts            = inventory.GroupOCPHosts
+	GroupBootHosts           = inventory.GroupBootHosts
+	GroupStorageHosts        = inventory.GroupStorageHosts
 )
 
 // Installer emission.

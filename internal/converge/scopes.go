@@ -5,7 +5,10 @@
 package converge
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
@@ -123,17 +126,24 @@ func scopePhases(names []string) []Phase {
 	return out
 }
 
-// Paths and Ansible --limit groups shared across scope command builders.
-// Centralised so a single edit reaches all three (check/apply/destroy).
-const (
-	PreflightPlaybook = roles.PlaybookCheckPreflight
+const PreflightPlaybook = roles.PlaybookCheckPreflight
+
+// ansibleLimit joins inventory group names into an Ansible `--limit` expression.
+// The group names come from render (the single owner of inventory group
+// vocabulary), so a renamed group is a compile error here rather than a silently
+// stale literal.
+func ansibleLimit(groups ...string) string { return strings.Join(groups, ":") }
+
+// Ansible --limit groups shared across scope command builders. Centralised so a
+// single edit reaches all three (check/apply/destroy).
+var (
 	// infraAnsibleLimit pins the inventory groups `apply --stage infra` and
-	// `check infra` target. `bootwright_ocp_hosts` is included so
-	// bastion-side external_validate can run in every context input set,
-	// including bare-metal/all-external shapes like test 002 where the
-	// other remote groups would otherwise be empty and ansible would abort
-	// with "no hosts to target".
-	infraAnsibleLimit    = "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
-	clustersAnsibleLimit = "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts:bootwright_storage_hosts"
-	clusterAnsibleLimit  = "bootwright_ocp_hosts:bootwright_boot_hosts"
+	// `check infra` target. GroupOCPHosts is included so bastion-side
+	// external_validate can run in every context input set, including
+	// bare-metal/all-external shapes like test 002 where the other remote
+	// groups would otherwise be empty and ansible would abort with "no hosts to
+	// target".
+	infraAnsibleLimit    = ansibleLimit(render.GroupProviderHosts, render.GroupInfraComponentHosts, render.GroupInfraHosts, render.GroupOCPHosts)
+	clustersAnsibleLimit = ansibleLimit(render.GroupInfraHosts, render.GroupOCPHosts, render.GroupBootHosts, render.GroupStorageHosts)
+	clusterAnsibleLimit  = ansibleLimit(render.GroupOCPHosts, render.GroupBootHosts)
 )

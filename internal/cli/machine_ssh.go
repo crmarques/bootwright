@@ -131,14 +131,10 @@ func machineSSHUser(machine v1alpha1.Machine) string {
 
 // machineSSHKnownHostsPath resolves the host-key trust file for a Machine: its
 // per-Machine knownHostsRef secret when set, else the context-wide managed trust
-// store that `machine trust` writes. Mirrors the inventory's resolution so both
-// verify against the same recorded keys.
+// store that `machine trust` writes. The ref-vs-managed decision is shared with
+// the inventory renderer through sshtrust.MachineKnownHostsPath so both verify
+// against the same recorded keys; only the managed-store location differs (a live
+// context here, render's PathOptions there).
 func machineSSHKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, ctx workspace.Context) string {
-	if machine.Spec.Access.SSH == nil {
-		return ""
-	}
-	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, env, ctx.SecretsDir)
-	}
-	return sshtrust.KnownHostsPathForContext(ctx.BaseDir)
+	return sshtrust.MachineKnownHostsPath(machine, env, ctx.SecretsDir, sshtrust.KnownHostsPathForContext(ctx.BaseDir))
 }

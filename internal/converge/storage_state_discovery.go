@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/roles"
 	"github.com/crmarques/bootwright/internal/storage/cephstate"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -31,7 +32,7 @@ func RunCephStateDiscovery(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 	opts := runOptionsForContext(ctx, clustersDir, executable, state)
 	opts.BundleDir = bundleDir
 	opts.Playbook = roles.PlaybookDiscoverStorageState
-	opts.Limit = storageHostsGroup
+	opts.Limit = render.GroupStorageHosts
 	opts.ArtifactsBaseName = "storage-discovery"
 	opts.OutputLogPath = workflow.PreflightLogPath(ctx.RunsDir, "storage-discovery")
 	opts.Label = "storage state discovery"

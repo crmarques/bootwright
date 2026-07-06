@@ -192,13 +192,7 @@ func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, paths 
 }
 
 func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, paths PathOptions) string {
-	if h.Spec.Access.SSH == nil {
-		return ""
-	}
-	if h.Spec.Access.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(h.Spec.Access.SSH.KnownHostsRef.Name, env, paths.SecretsDir)
-	}
-	return sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir())
+	return sshtrust.MachineKnownHostsPath(h, env, paths.SecretsDir, sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()))
 }
 
 func sshCommonArgs(knownHostsPath string) string {
