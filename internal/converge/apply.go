@@ -60,6 +60,55 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	return fmt.Errorf("apply --override would destructively rebuild %s, protected by spec.safety.protectedKinds; run `bootwright destroy --override` for that scope first, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "))
 }
 
+// CheckApplyRenameOrphan fails closed on the signature of a cluster RENAME: a full
+// (unscoped) apply that provisions a NEW ContainerCluster while a DIFFERENT
+// ContainerCluster remains provisioned (a live install-record) but is no longer
+// declared. bootwright keys every install object on metadata.name, so a name change
+// reads the new name as greenfield and re-provisions it from scratch while the old
+// record orphans — on bare-metal that re-images the running hosts (also caught by the
+// boot occupancy guard), and on any substrate it silently strands the old cluster. A
+// rename in place is not supported, so stop and make the operator choose.
+//
+// It only fires on a FULL apply: a --clusters-scoped run legitimately omits other
+// clusters, so clusterSelectionActive suppresses it. A pure orphan (an undeclared
+// provisioned cluster with NO new cluster this run) is left alone — apply never
+// touches an undeclared cluster, and `destroy` is the tool to remove it.
+func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string, clusterSelectionActive bool) error {
+	if clusterSelectionActive {
+		return nil
+	}
+	provisioned, err := workflow.RecordedProvisionedClusters(clustersDir)
+	if err != nil {
+		return err
+	}
+	if len(provisioned) == 0 {
+		return nil
+	}
+	declared := map[string]bool{}
+	for _, cluster := range state.ContainerClusters {
+		declared[cluster.Metadata.Name] = true
+	}
+	var undeclared []string
+	for _, name := range provisioned {
+		if !declared[name] {
+			undeclared = append(undeclared, name)
+		}
+	}
+	if len(undeclared) == 0 {
+		return nil
+	}
+	var created []string
+	for _, o := range objects {
+		if o.Kind == workflow.ObjectKindContainerCluster && !o.Recorded() {
+			created = append(created, strings.TrimPrefix(o.Label, "ContainerCluster/"))
+		}
+	}
+	if len(created) == 0 {
+		return nil
+	}
+	return fmt.Errorf("apply would provision new ContainerCluster(s) %s while %s remain provisioned but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would re-provision the new name from scratch and orphan the old cluster (re-imaging its hosts on bare-metal). To rename, restore the old metadata.name; to replace, run `bootwright destroy --clusters %s` first; to keep both, destroy the undeclared cluster(s) when you no longer need them", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
+}
+
 // overrideDestroyRemedy builds the "run destroy first" clause, routing each
 // blocked resource at the destroy scope that clears it: cluster (storage/
 // container) rebuilds at the clusters-stage destroy, and machine substrate

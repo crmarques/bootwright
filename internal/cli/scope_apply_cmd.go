@@ -247,6 +247,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err != nil {
 				return failErr(1, err)
 			}
+			// Fail closed on the signature of a cluster rename (a new cluster while
+			// another is provisioned but no longer declared): bootwright cannot rename in
+			// place, so it would re-provision from scratch and orphan the old cluster.
+			if err := converge.CheckApplyRenameOrphan(plan.State, objects, clustersDir, sel.Active); err != nil {
+				return failErr(1, err)
+			}
 			// apply --override authorizes Bootwright-owned destructive rebuilds
 			// (managed-OS VM reinstall, owned-Ceph wipe-and-rebuild, cluster
 			// reinstall). On a destroy-protected Environment that destruction must

@@ -161,6 +161,40 @@ func RemoveClusterInstallState(clustersDir, cluster string) error {
 	return nil
 }
 
+// RecordedProvisionedClusters returns the names of ContainerClusters that carry a
+// live controller install-record under clustersDir — the clusters bootwright has
+// actually provisioned and not torn down (any status except destroyed). It
+// enumerates the per-cluster record files rather than the desired state, so a caller
+// can detect a provisioned cluster that is no longer declared: the signature of a
+// rename (the name changed, so the old record orphans and the new name re-provisions
+// from scratch) or an orphan (a declaration removed without a destroy). A missing
+// clustersDir yields an empty list.
+func RecordedProvisionedClusters(clustersDir string) ([]string, error) {
+	entries, err := os.ReadDir(clustersDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list provisioned cluster records: %w", err)
+	}
+	var out []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		record, found, err := LoadClusterInstallRecord(clustersDir, entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		if !found || record.Status == ClusterInstallStatusDestroyed {
+			continue
+		}
+		out = append(out, entry.Name())
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 func LoadClusterInstallRecord(clustersDir, cluster string) (ClusterInstallRecord, bool, error) {
 	path := ClusterInstallRecordPath(clustersDir, cluster)
 	data, err := os.ReadFile(path)
