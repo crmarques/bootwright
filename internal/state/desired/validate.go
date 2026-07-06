@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 // Validate is the single entry point. Every rule in
@@ -152,7 +153,12 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 			continue
 		}
 		for _, host := range sc.Spec.Ceph.Topology.Hosts {
-			if len(host.Devices) == 0 || host.MachineRef.Name == "" {
+			// Any osd-role host carries OSD data disks, whether selected via the
+			// literal `devices` shorthand, the `osd` drivegroup arm, or a fleet
+			// osdDrivegroup — all of which require/target the osd role (the lean
+			// `len(devices)>0` check missed the drivegroup and fleet shapes, which
+			// leave Devices empty, so their OSD disks were silently wiped).
+			if !topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) || host.MachineRef.Name == "" {
 				continue
 			}
 			machine, ok := stateview.Machine(state, host.MachineRef.Name)
@@ -163,7 +169,7 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 			if hints != nil && strings.TrimSpace(hints.DeviceName) != "" {
 				continue
 			}
-			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) declares OSD devices %v but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, host.Devices))
+			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) carries the %q role (OSD data disks) but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, v1alpha1.StorageCephRoleOSD))
 		}
 	}
 	return errs
