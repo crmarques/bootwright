@@ -44,7 +44,42 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateCrossLayer(state))...)
 	errs = append(errs, notes(validateSecretReferences(state))...)
 	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
+	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
+	return errs
+}
+
+// validateManagedOSCephNodeRootDisk fails closed when a Ceph OSD node installs its
+// OS via bootwright (managed OS) but declares no root device. The Anaconda kickstart
+// scopes its disk wipe to storage.rootDisk when one is resolved, but falls back to an
+// unconditional `clearpart --all` when it is empty — which on an OSD node ALSO wipes
+// the data disks the node is supposed to host, destroying the cluster's OSDs the next
+// time the node is (re)installed (e.g. removing rootDeviceHints then reconciling with
+// --override). rootDisk resolves only from spec.os.install.rootDeviceHints.deviceName,
+// so requiring it here guarantees the install targets the OS disk and leaves the OSD
+// devices intact. A node with no declared OSD devices has nothing to preserve and is
+// not gated.
+func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
+	var errs []string
+	for _, sc := range state.StorageClusters {
+		if sc.Spec.Ceph == nil {
+			continue
+		}
+		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+			if len(host.Devices) == 0 || host.MachineRef.Name == "" {
+				continue
+			}
+			machine, ok := stateview.Machine(state, host.MachineRef.Name)
+			if !ok || !v1alpha1.MachineInstallsOS(machine) {
+				continue
+			}
+			hints := machine.Spec.OS.Install.RootDeviceHints
+			if hints != nil && strings.TrimSpace(hints.DeviceName) != "" {
+				continue
+			}
+			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) declares OSD devices %v but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, host.Devices))
+		}
+	}
 	return errs
 }
 
