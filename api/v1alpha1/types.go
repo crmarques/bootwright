@@ -141,17 +141,17 @@ const (
 	ProviderServiceKindBMC = "bmc"
 
 	// EnvironmentComponentNone is the reserved component name/ref sentinel
-	// (never a management value); External, Managed, and Reference are the
-	// Environment.spec.infraComponents entry management vocabulary. Managed:
+	// (never a management value); External and Managed are the only accepted
+	// Environment.spec.infraComponents entry management values. Managed:
 	// this context provisions the service and may destroy it. External: a
 	// non-bootwright endpoint bootwright only consumes (a raw URL/address).
-	// Reference: a service OWNED (managed) by a sibling bootwright context;
-	// this context consumes it and contributes additive entries but never
-	// provisions or destroys the base.
-	EnvironmentComponentNone      = "none"
-	EnvironmentComponentExternal  = "external"
-	EnvironmentComponentManaged   = "managed"
-	EnvironmentComponentReference = "reference"
+	// A future "reference" value (consume a sibling context's owned service
+	// and contribute additive entries without provisioning the base) is not
+	// yet accepted by the validators; do not author it. The live cross-context
+	// ownership role is ComponentRoleReference below, a separate concept.
+	EnvironmentComponentNone     = "none"
+	EnvironmentComponentExternal = "external"
+	EnvironmentComponentManaged  = "managed"
 
 	// ComponentRole names the two lifecycle roles a bootwright context can
 	// hold over a shared infra-component, stamped on the ownership record's
@@ -221,12 +221,15 @@ const (
 	DefaultBMCEmulator           = "sushy-tools"
 	DefaultBMCBindAddress        = "0.0.0.0"
 	DefaultBMCEmulationStartPort = 8000
-	DefaultArtifactsHTTPPort     = 8443
-	DefaultSquidPort             = 3128
-	DefaultMirrorRegistryPort    = 5000
-	DefaultDNSPort               = 53
-	DefaultNTPPort               = 123
-	DefaultServiceBindAddress    = "0.0.0.0"
+	// DefaultArtifactsHTTPPort is the default port of the artifact server's
+	// HTTPS listener (8443 is the HTTPS convention); the "HTTP" in the name is
+	// historical and does not imply a plaintext listener.
+	DefaultArtifactsHTTPPort  = 8443
+	DefaultSquidPort          = 3128
+	DefaultMirrorRegistryPort = 5000
+	DefaultDNSPort            = 53
+	DefaultNTPPort            = 123
+	DefaultServiceBindAddress = "0.0.0.0"
 
 	ArtifactServerProtocolHTTP              = "http"
 	ArtifactServerProtocolHTTPS             = "https"

@@ -39,6 +39,46 @@ func TestDefaultReleaseImageDigestSourcesUsesExplicitOKDImage(t *testing.T) {
 	}
 }
 
+func TestDefaultReleaseImageDigestSourcesPinnedStockReleaseKeepsARTDev(t *testing.T) {
+	cluster := ContainerCluster{
+		Spec: ContainerClusterSpec{
+			Distribution: DistributionSpec{
+				Type: DistributionOpenShift,
+				Release: ReleaseSpec{
+					Image: OCPReleaseSourceQuayOCPRelease + "@sha256:abc",
+				},
+			},
+		},
+	}
+	got := DefaultReleaseImageDigestSources(cluster, "registry.example.test:5000")
+	if len(got) != 2 {
+		t.Fatalf("DefaultReleaseImageDigestSources len = %d, want 2: %#v", len(got), got)
+	}
+	if got[0].Source != OCPReleaseSourceQuayOCPRelease || got[1].Source != OCPReleaseSourceQuayARTDev {
+		t.Fatalf("sources = %#v, want stock ocp-release + ocp-v4.0-art-dev", got)
+	}
+}
+
+func TestDefaultReleaseImageDigestSourcesPinnedCustomReleaseSingleSource(t *testing.T) {
+	cluster := ContainerCluster{
+		Spec: ContainerClusterSpec{
+			Distribution: DistributionSpec{
+				Type: DistributionOpenShift,
+				Release: ReleaseSpec{
+					Image: "registry.example.test:5000/ns/release@sha256:abc",
+				},
+			},
+		},
+	}
+	got := DefaultReleaseImageDigestSources(cluster, "registry.example.test:5000")
+	if len(got) != 1 {
+		t.Fatalf("DefaultReleaseImageDigestSources len = %d, want 1: %#v", len(got), got)
+	}
+	if got[0].Source != "registry.example.test:5000/ns/release" {
+		t.Fatalf("source = %q, want the pinned custom release repository", got[0].Source)
+	}
+}
+
 func TestDefaultReleaseImageDigestSourcesOpenShiftDefaults(t *testing.T) {
 	cluster := ContainerCluster{
 		Spec: ContainerClusterSpec{

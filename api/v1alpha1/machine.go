@@ -121,7 +121,7 @@ type RootDeviceHints struct {
 }
 
 type MachineOSSpec struct {
-	Provided          *bool                `yaml:"provided" json:"provided"`
+	Provided          *bool                `yaml:"provided,omitempty" json:"provided,omitempty"`
 	InstallProfileRef LocalObjectReference `yaml:"installProfileRef,omitempty" json:"installProfileRef,omitempty"`
 	Install           MachineOSInstallSpec `yaml:"install,omitempty" json:"install,omitempty"`
 }
@@ -414,6 +414,7 @@ func MachineProfileRef(machine Machine) LocalObjectReference {
 func (n MachineNetworkConfig) IsZero() bool {
 	return n.NetworkConfigRef.Name == "" &&
 		n.AttachmentRef.Name == "" &&
+		len(n.InterfaceAddresses) == 0 &&
 		len(n.Overrides) == 0 &&
 		n.Spec == nil
 }

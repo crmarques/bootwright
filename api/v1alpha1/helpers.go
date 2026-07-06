@@ -68,11 +68,23 @@ func DefaultReleaseImageDigestSources(cluster ContainerCluster, mirrorURL string
 		return nil
 	}
 	if source := ReleaseImageSource(cluster); source != "" {
-		return []ImageDigestSource{{
+		sources := []ImageDigestSource{{
 			Source:       source,
 			Mirrors:      []string{mirrorURL + "/" + DefaultMirroredReleasePath},
 			SourcePolicy: ImageSourcePolicyNever,
 		}}
+		// A digest pin against the stock ocp-release repo still needs the
+		// ocp-v4.0-art-dev mapping: release *component* images live under the
+		// art-dev source in the single-repo `oc adm release mirror` layout, so
+		// without it disconnected nodes resolve components past the mirror.
+		if source == OCPReleaseSourceQuayOCPRelease {
+			sources = append(sources, ImageDigestSource{
+				Source:       OCPReleaseSourceQuayARTDev,
+				Mirrors:      []string{mirrorURL + "/" + DefaultMirroredReleasePath},
+				SourcePolicy: ImageSourcePolicyNever,
+			})
+		}
+		return sources
 	}
 	if DistributionType(cluster) != DistributionOpenShift {
 		return nil

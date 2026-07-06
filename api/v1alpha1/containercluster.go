@@ -118,6 +118,11 @@ type DistributionSpec struct {
 
 type ReleaseSpec struct {
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	// Channel is metadata only: it does NOT select a release. A release is
+	// pinned by version (or by image); openshift-install is always driven with
+	// the exact version. Nothing resolves the latest release in a channel, so
+	// authoring channel without version selects nothing. Validation still
+	// requires version-or-image and rejects channel for the okd distribution.
 	Channel string `yaml:"channel,omitempty" json:"channel,omitempty"`
 	Image   string `yaml:"image,omitempty" json:"image,omitempty"`
 }
