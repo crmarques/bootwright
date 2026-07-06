@@ -80,15 +80,23 @@ func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.S
 }
 
 // storageClusterStructuralHashVars projects the DESTRUCTIVE-IDENTITY subset of a
-// StorageCluster's desired state: the full desired-hash projection with the OSD
-// device selection (hosts[].devices, hosts[].osd, and topology.osdDrivegroups)
-// cleared. When the full desired hash drifts but this structural hash is
-// unchanged, the only change is the OSD device selection — which cephadm
-// reconciles additively via `ceph orch apply` — so apply proceeds in place and
-// --override does not wipe. A change to cluster/bootstrap identity, host set,
-// roles, or networks moves this hash and stays a destructive rebuild. The device
-// fields are cleared on a JSON deep copy so the shared render state is never
-// mutated.
+// StorageCluster's desired state: the full desired-hash projection with the entire
+// host topology (the host set, per-host roles/site/labels, the OSD device
+// selection, and topology.osdDrivegroups) cleared. Everything cephadm reconciles in
+// place via `ceph orch host add` + `ceph orch apply` — scaling out a node, adding a
+// device, rebalancing a mon/mgr/mds daemon by editing host roles — keeps this hash
+// stable and classifies reconcilable, so apply proceeds in place and --override does
+// not wipe. Only a change to cluster/bootstrap IDENTITY (the bootstrap host, fsid
+// seed, cluster/public networks, cluster name, distribution) moves this hash and
+// stays a destructive rebuild.
+//
+// Making a host REMOVAL reconcilable here is safe because it is never a silent OSD
+// wipe: a host still in the inventory whose declared devices shrank is caught by the
+// device-removal gate (install.yml, "Refuse to drop an OSD device that still hosts an
+// OSD"), and a host dropped from the topology entirely leaves the inventory group so
+// bootwright never touches its OSDs — it lingers in the cluster until explicitly
+// drained. The topology is cleared on a JSON deep copy so the shared render state is
+// never mutated.
 func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha1.State {
 	base := storageClusterDesiredHashVars(state, name)
 	var clone v1alpha1.State
@@ -104,10 +112,7 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		if ceph == nil {
 			continue
 		}
-		for j := range ceph.Topology.Hosts {
-			ceph.Topology.Hosts[j].Devices = nil
-			ceph.Topology.Hosts[j].OSD = nil
-		}
+		ceph.Topology.Hosts = nil
 		ceph.Topology.OSDDrivegroups = nil
 	}
 	return clone
