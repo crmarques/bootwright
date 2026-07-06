@@ -46,8 +46,61 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
 	errs = append(errs, notes(validateUniqueMachineSSHAddresses(state))...)
 	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
+	errs = append(errs, notes(validateOSDDevicesExcludeRootDisk(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
 	return errs
+}
+
+// validateOSDDevicesExcludeRootDisk fails closed when a Ceph node lists its own OS
+// root disk (rootDeviceHints.deviceName) among its OSD data/DB/WAL devices. cephadm
+// would ceph-volume that disk into an OSD, wiping the installed operating system the
+// node boots from. This complements the root-disk requirement: the OS disk must be
+// resolved AND must not double as an OSD. Only explicit device PATHS are checked (a
+// filter/`all: true` selection is left to cephadm's own "available device" filter,
+// which excludes the mounted root); an empty rootDeviceHints is covered by the
+// root-disk requirement above.
+func validateOSDDevicesExcludeRootDisk(state v1alpha1.State) []string {
+	var errs []string
+	for _, sc := range state.StorageClusters {
+		if sc.Spec.Ceph == nil {
+			continue
+		}
+		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+			if host.MachineRef.Name == "" {
+				continue
+			}
+			machine, ok := stateview.Machine(state, host.MachineRef.Name)
+			if !ok || machine.Spec.OS.Install.RootDeviceHints == nil {
+				continue
+			}
+			root := strings.TrimSpace(machine.Spec.OS.Install.RootDeviceHints.DeviceName)
+			if root == "" {
+				continue
+			}
+			for _, dev := range osdDeclaredDevicePaths(host) {
+				if strings.TrimSpace(dev) == root {
+					errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) lists its OS root disk %q as an OSD device; creating the OSD would wipe the installed operating system. Remove %q from the OSD device selection, or point rootDeviceHints at a different disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, root, root))
+					break
+				}
+			}
+		}
+	}
+	return errs
+}
+
+// osdDeclaredDevicePaths collects every explicit device PATH a ceph host declares as
+// an OSD device — the lean `devices` shorthand and the drivegroup-shaped
+// osd.dataDevices/dbDevices/walDevices path lists.
+func osdDeclaredDevicePaths(host v1alpha1.StorageCephHost) []string {
+	paths := append([]string{}, host.Devices...)
+	if host.OSD != nil {
+		for _, sel := range []*v1alpha1.StorageCephDeviceSelection{host.OSD.DataDevices, host.OSD.DBDevices, host.OSD.WALDevices} {
+			if sel != nil {
+				paths = append(paths, sel.Paths...)
+			}
+		}
+	}
+	return paths
 }
 
 // validateUniqueMachineSSHAddresses fails closed when two different Machines resolve
