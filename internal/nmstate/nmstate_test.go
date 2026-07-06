@@ -62,6 +62,25 @@ func TestEffectiveConfigInjectsInterfaceAddress(t *testing.T) {
 	}
 }
 
+func TestSetInterfaceAddressEnablesDisabledFamily(t *testing.T) {
+	// Templates commonly disable the opposite family (ipv6: {enabled: false}).
+	// Injecting a static address into that family must flip enabled to true so
+	// the rendered NMState document is valid, not an addressless inert block.
+	config := map[string]any{"interfaces": []any{
+		map[string]any{"name": "primary", "ipv6": map[string]any{"enabled": false}},
+	}}
+	SetInterfaceAddress(config, InterfaceAddress{
+		Interface: "primary", Family: "ipv6", IP: "fd00:132::20", PrefixLength: 64,
+	})
+	family := config["interfaces"].([]any)[0].(map[string]any)["ipv6"].(map[string]any)
+	if enabled, _ := family["enabled"].(bool); !enabled {
+		t.Fatalf("family carrying a static address must be enabled: %#v", family)
+	}
+	if !InterfaceHasStaticIP(config, "primary") {
+		t.Fatalf("injected ipv6 address not present: %#v", config)
+	}
+}
+
 func TestInterfaceHasStaticIP(t *testing.T) {
 	config := map[string]any{"interfaces": []any{
 		map[string]any{"name": "primary", "ipv4": map[string]any{

@@ -192,6 +192,45 @@ func TestApplySkipsReadyExtensionRecord(t *testing.T) {
 	}
 }
 
+// TestApplyReAppliesChecklessAddonDespiteReadyRecord guards that a check-less
+// add-on (Ready() is vacuously true) is re-applied rather than skipped on a
+// matching record: the live-probe pre-check cannot confirm the on-cluster
+// resources still exist, so trusting a stale record would leave an oc-deleted
+// add-on un-reconciled forever.
+func TestApplyReAppliesChecklessAddonDespiteReadyRecord(t *testing.T) {
+	dir := t.TempDir()
+	plan := readyExtensionPlan()
+	plan.Extension.Spec.Readiness.Checks = nil
+	writeReadyExtensionRecord(t, dir, plan)
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &sequencingRunner{}
+
+	result, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir,
+		Kubeconfig:  kubeconfig,
+		RunID:       "run",
+		StartedAt:   time.Now(),
+	}, plan)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if result.Skipped {
+		t.Fatalf("Apply skipped a check-less add-on on a vacuous readiness pre-check: %+v", result)
+	}
+	applied := 0
+	for _, e := range runner.events {
+		if strings.HasPrefix(e, "apply:") {
+			applied++
+		}
+	}
+	if applied == 0 {
+		t.Fatalf("check-less add-on was not re-applied; events=%v", runner.events)
+	}
+}
+
 func TestWaitSkipsReadyExtensionRecord(t *testing.T) {
 	dir := t.TempDir()
 	plan := readyExtensionPlan()

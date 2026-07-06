@@ -49,13 +49,19 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err != nil {
 		return TaskResult{}, err
 	}
-	if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
-		record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
-		if err != nil {
-			return TaskResult{}, err
-		}
-		if found && record.DesiredHash == hash {
-			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
+	// Only a check-backed Ready() is evidence the add-on is still live on-cluster.
+	// With no declared checks Ready() is vacuously true, so a matching record would
+	// skip forever even after someone deletes the add-on's resources with oc. Fall
+	// through and re-apply (oc apply is idempotent) when there are no checks.
+	if len(plan.Extension.Spec.Readiness.Checks) > 0 {
+		if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
+			record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
+			if err != nil {
+				return TaskResult{}, err
+			}
+			if found && record.DesiredHash == hash {
+				return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
+			}
 		}
 	}
 	now := time.Now().UTC()

@@ -136,7 +136,7 @@ func Compare(state v1alpha1.State, cluster v1alpha1.StorageCluster, disc cephsta
 	desiredOSD, osdSurface, unpinned := desiredOSDDevices(cluster, disc)
 	add("osd-devices", desiredOSD, realOSDDevices(disc), facetOptions{skipRealKey: func(key string) bool { return !osdSurface[key] }})
 	report.UnpinnedOSDHosts = unpinned
-	add("services", desiredServices(state, cluster), realServices(disc), facetOptions{})
+	add("services", desiredServices(state, cluster), realServices(disc), facetOptions{skipRealKey: isInfraService})
 	add("pools", desiredPools(state, cluster), realPools(disc), facetOptions{skipRealKey: isInternalPool})
 	add("crush-rules", desiredCrushRules(cluster, state), realCrushRules(disc), facetOptions{ignoreRealOnly: true})
 	add("config", desiredConfig(cluster), realConfig(disc), facetOptions{ignoreRealOnly: true})
@@ -440,6 +440,16 @@ func desiredServices(state v1alpha1.State, cluster v1alpha1.StorageCluster) []en
 		}
 		svc("nfs."+nfs.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, nfs.Spec.Ceph.Placement, ""))
 	}
+	// spec.ceph.services passthrough: cephadm names a service <type> or, when an
+	// id is given, <type>.<id>. Rendering them here keeps an authored passthrough
+	// service from reading as real-only drift once applied.
+	for _, passthrough := range cluster.Spec.Ceph.Services {
+		name := passthrough.ServiceType
+		if passthrough.ServiceID != "" {
+			name = passthrough.ServiceType + "." + passthrough.ServiceID
+		}
+		svc(name, topology.ResolvePlacement(cluster, passthrough.Placement, ""))
+	}
 	return out
 }
 
@@ -459,6 +469,21 @@ func realServices(disc cephstate.Discovery) []entry {
 		out = append(out, entry{key: service.ServiceName, fields: fields})
 	}
 	return out
+}
+
+// isInfraService reports whether a live cephadm service is bootstrap or
+// monitoring infrastructure rather than an operator-authored topology service:
+// crash (always deployed at bootstrap), the default monitoring stack
+// (prometheus/grafana/alertmanager/node-exporter/ceph-exporter), and the HA
+// management daemons spec.ceph.management renders (mgmt-gateway/oauth2-proxy and
+// its keepalive ingress). desiredServices does not model these, so a real-only
+// hit is filtered instead of reported as permanent drift or an adopt candidate.
+func isInfraService(name string) bool {
+	switch name {
+	case "crash", "prometheus", "grafana", "alertmanager", "node-exporter", "ceph-exporter", "mgmt-gateway", "oauth2-proxy":
+		return true
+	}
+	return strings.HasPrefix(name, "ingress.")
 }
 
 func desiredPools(state v1alpha1.State, cluster v1alpha1.StorageCluster) []entry {
@@ -618,7 +643,14 @@ func realHealth(disc cephstate.Discovery) []entry {
 	// counts are reported by the services/OSD facets and `ceph -s`; folding them
 	// in here would make the health object always differ (desired has no count),
 	// so they are deliberately not compared as fields.
-	return []entry{{key: "cluster", fields: []kv{{"health", health.Status}}}}
+	status := health.Status
+	// A transient HEALTH_WARN is not treated as drift, matching state-check
+	// --probe's storageHealthDegraded gate (only HEALTH_ERR is degraded): the two
+	// read-only surfaces must agree on whether a WARN cluster is in sync.
+	if status == "HEALTH_WARN" {
+		status = "HEALTH_OK"
+	}
+	return []entry{{key: "cluster", fields: []kv{{"health", status}}}}
 }
 
 func poolTypeString(erasure bool) string {
@@ -635,7 +667,11 @@ func isInternalPool(name string) bool {
 	case ".mgr", "device_health_metrics", ".nfs":
 		return true
 	}
-	return false
+	// RGW auto-creates its metadata/data pools (.rgw.root and the per-zone
+	// <zone>.rgw.log/control/meta/otp and <zone>.rgw.buckets.* pools) whenever a
+	// StorageObjectGateway is declared; they are never authored as StoragePools,
+	// so they must not be flagged real-only or synthesized into adopt YAML.
+	return strings.Contains(name, ".rgw.")
 }
 
 func joinSorted(items []string) string {

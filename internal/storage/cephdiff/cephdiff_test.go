@@ -156,7 +156,9 @@ func TestPoolsFacet(t *testing.T) {
 		cephstate.ReadPoolLSDetail: `[
 			{"pool":1,"pool_name":".mgr","type":1,"size":3,"min_size":2,"application_metadata":{"mgr":{}}},
 			{"pool":5,"pool_name":"rbd","type":1,"size":2,"min_size":2,"application_metadata":{"rbd":{}}},
-			{"pool":9,"pool_name":"extra","type":1,"size":3,"min_size":2,"application_metadata":{"rbd":{}}}
+			{"pool":9,"pool_name":"extra","type":1,"size":3,"min_size":2,"application_metadata":{"rbd":{}}},
+			{"pool":11,"pool_name":".rgw.root","type":1,"size":3,"min_size":2,"application_metadata":{"rgw":{}}},
+			{"pool":12,"pool_name":"default.rgw.buckets.data","type":1,"size":3,"min_size":2,"application_metadata":{"rgw":{}}}
 		]`,
 	})
 
@@ -187,6 +189,14 @@ func TestPoolsFacet(t *testing.T) {
 	// .mgr internal pool is filtered from real-only.
 	if _, ok := objByKey(pools, ".mgr"); ok {
 		t.Fatal(".mgr internal pool should be filtered from the diff")
+	}
+	// RGW auto-creates .rgw.root and the per-zone <zone>.rgw.* pools; neither is
+	// authored, so both must be filtered from real-only (not adopt candidates).
+	if _, ok := objByKey(pools, ".rgw.root"); ok {
+		t.Fatal(".rgw.root RGW pool should be filtered from the diff")
+	}
+	if _, ok := objByKey(pools, "default.rgw.buckets.data"); ok {
+		t.Fatal("default.rgw.buckets.data RGW pool should be filtered from the diff")
 	}
 }
 
@@ -280,7 +290,12 @@ func TestServicesFacet(t *testing.T) {
 	disc := discovery(t, true, map[string]string{
 		cephstate.ReadOrchLS: `[
 			{"service_type":"mon","service_name":"mon"},
-			{"service_type":"osd","service_name":"osd.data-srv1","service_id":"data-srv1"}
+			{"service_type":"osd","service_name":"osd.data-srv1","service_id":"data-srv1"},
+			{"service_type":"crash","service_name":"crash"},
+			{"service_type":"prometheus","service_name":"prometheus"},
+			{"service_type":"grafana","service_name":"grafana"},
+			{"service_type":"mgmt-gateway","service_name":"mgmt-gateway"},
+			{"service_type":"ingress","service_name":"ingress.rgw.store"}
 		]`,
 		cephstate.ReadOrchPS: `[
 			{"daemon_type":"mon","service_name":"mon","hostname":"srv1"},
@@ -302,6 +317,66 @@ func TestServicesFacet(t *testing.T) {
 	if _, ok := objByKey(services, "mon"); ok {
 		t.Fatal("mon placement matches; it must not appear")
 	}
+	// cephadm infra services (crash, monitoring stack, mgmt-gateway, ingress) are
+	// deployed by cephadm/management, not modeled by desiredServices, so a live
+	// instance must be filtered from real-only rather than reported as drift.
+	for _, infra := range []string{"crash", "prometheus", "grafana", "mgmt-gateway", "ingress.rgw.store"} {
+		if _, ok := objByKey(services, infra); ok {
+			t.Fatalf("infra service %q must be filtered from real-only drift", infra)
+		}
+	}
+}
+
+// TestServicesPassthroughRendered checks a spec.ceph.services passthrough entry
+// is rendered on the desired side (named <type> or <type>.<id>) so an applied
+// passthrough service reads in-sync rather than as real-only drift.
+func TestServicesPassthroughRendered(t *testing.T) {
+	cluster := managedCluster()
+	cluster.Spec.Ceph.Services = []v1alpha1.StorageCephService{
+		{ServiceType: "snmp-gateway"},
+		{ServiceType: "nvmeof", ServiceID: "rbd"},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	disc := discovery(t, true, map[string]string{
+		cephstate.ReadOrchLS: `[
+			{"service_type":"snmp-gateway","service_name":"snmp-gateway"}
+		]`,
+		// No placement authored -> resolves to every topology host (srv1, srv2).
+		cephstate.ReadOrchPS: `[
+			{"daemon_type":"snmp-gateway","service_name":"snmp-gateway","hostname":"srv1"},
+			{"daemon_type":"snmp-gateway","service_name":"snmp-gateway","hostname":"srv2"}
+		]`,
+	})
+	services := facet(Compare(state, cluster, disc), "services")
+	// snmp-gateway is declared and live -> in sync, must not appear.
+	if _, ok := objByKey(services, "snmp-gateway"); ok {
+		t.Fatal("applied passthrough snmp-gateway must not read as drift")
+	}
+	// nvmeof.rbd is declared but not live -> desired-only (proves <type>.<id> naming).
+	if s, ok := objByKey(services, "nvmeof.rbd"); !ok || s.State != ObjectDesiredOnly {
+		t.Fatalf("nvmeof.rbd passthrough should be desired-only, got %+v ok=%v", s, ok)
+	}
+}
+
+// TestDesiredHostsNaming covers desiredHosts' dual naming path: a host with an
+// explicit Hostname uses it verbatim, while a host with an empty Hostname falls
+// back to its machine name via CanonicalHostname.
+func TestDesiredHostsNaming(t *testing.T) {
+	cluster := osdCluster([]v1alpha1.StorageCephHost{
+		{Hostname: "named-host", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}, Roles: []string{"mon"}},
+		{MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}, Roles: []string{"mon"}},
+	})
+	hosts := desiredHosts(cluster)
+	keys := map[string]bool{}
+	for _, h := range hosts {
+		keys[h.key] = true
+	}
+	if !keys["named-host"] {
+		t.Fatalf("explicit Hostname should key the entry, got %+v", hosts)
+	}
+	if !keys["m2"] {
+		t.Fatalf("empty Hostname should fall back to the machine name, got %+v", hosts)
+	}
 }
 
 func TestHealthFacet(t *testing.T) {
@@ -313,10 +388,18 @@ func TestHealthFacet(t *testing.T) {
 		t.Fatal("HEALTH_OK must not produce a health diff")
 	}
 
+	// A transient HEALTH_WARN is tolerated, matching state-check --probe's
+	// storageHealthDegraded gate (only HEALTH_ERR is degraded).
 	warn := discovery(t, true, map[string]string{cephstate.ReadHealth: `{"status":"HEALTH_WARN","checks":{}}`})
-	h := facet(Compare(state, cluster, warn), "health")
+	if facet(Compare(state, cluster, warn), "health") != nil {
+		t.Fatal("HEALTH_WARN must not surface as drift (matches state-check --probe tolerance)")
+	}
+
+	// HEALTH_ERR is real drift and must surface.
+	bad := discovery(t, true, map[string]string{cephstate.ReadHealth: `{"status":"HEALTH_ERR","checks":{}}`})
+	h := facet(Compare(state, cluster, bad), "health")
 	if o, ok := objByKey(h, "cluster"); !ok || o.State != ObjectChanged {
-		t.Fatalf("HEALTH_WARN should surface as a changed health object, got %+v", h)
+		t.Fatalf("HEALTH_ERR should surface as a changed health object, got %+v", h)
 	}
 }
 

@@ -247,6 +247,18 @@ func TestManagedProxyURLDefaultsPort(t *testing.T) {
 	}
 }
 
+func TestManagedProxyURLBracketsIPv6(t *testing.T) {
+	state := stateWithManagedProxy()
+	state.Machines[0].Spec.Addresses[0].Address = "fd00::1"
+	got, err := ManagedProxyURL(state, v1alpha1.ClusterInstall{})
+	if err != nil {
+		t.Fatalf("ManagedProxyURL: %v", err)
+	}
+	if got != "http://[fd00::1]:3128" {
+		t.Errorf("ManagedProxyURL = %q, want bracketed IPv6 authority", got)
+	}
+}
+
 func TestManagedProxyURLErrors(t *testing.T) {
 	state := stateWithManagedProxy()
 	state.Machines[0].Spec.Access.SSH = &v1alpha1.MachineSSHSpec{}

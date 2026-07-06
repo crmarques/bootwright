@@ -10,7 +10,6 @@ type Status string
 
 const (
 	StatusSupported Status = "supported"
-	StatusScaffold  Status = "scaffold"
 	StatusUnknown   Status = "unknown"
 )
 

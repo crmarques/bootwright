@@ -78,6 +78,13 @@ func SetInterfaceAddress(config map[string]any, address InterfaceAddress) {
 		familyConfig = map[string]any{}
 		entry[family] = familyConfig
 	}
+	// Force the family enabled: templates commonly author the opposite family as
+	// `{enabled: false}` (e.g. ipv6 disabled), and injecting a static address into
+	// a disabled family yields an invalid/inert NMState document that nmstate
+	// rejects or ignores — leaving the node addressless while the rendezvous IP
+	// still points at the never-configured address. A family carrying a static
+	// address is enabled by definition.
+	familyConfig["enabled"] = true
 	familyConfig["address"] = []any{map[string]any{"ip": address.IP, "prefix-length": address.PrefixLength}}
 }
 

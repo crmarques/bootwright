@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -101,7 +102,10 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInstall) (string, 
 	if port == 0 {
 		port = v1alpha1.DefaultSquidPort
 	}
-	return fmt.Sprintf("http://%s:%d", hostAddr, port), nil
+	// net.JoinHostPort brackets a bare IPv6 literal (fd00::1 -> [fd00::1]:3128);
+	// a plain %s:%d would emit an unbracketed authority that clients dialing the
+	// rendered httpProxy reject (net.SplitHostPort: too many colons).
+	return "http://" + net.JoinHostPort(hostAddr, strconv.Itoa(port)), nil
 }
 
 func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
