@@ -31,8 +31,8 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		Long: "Compares the selected desired state against the real state of the clusters and\n" +
 			"prints the differences as a git-style diff (\"-\" desired, \"+\" real). For each\n" +
 			"managed Ceph StorageCluster it discovers live state read-only on the seed\n" +
-			"(hosts, services and placements, OSDs, CRUSH rules, pools and replication,\n" +
-			"config, mgr modules, health) and diffs it field by field; for each\n" +
+			"(hosts, services and placements, OSD device layout, CRUSH rules, pools and\n" +
+			"replication, config, mgr modules, health) and diffs it field by field; for each\n" +
 			"ContainerCluster it runs a shallow reachability/ClusterVersion check. It is\n" +
 			"read-only: it runs only read commands and writes no records (use --adopt on a\n" +
 			"future run to fold real state back into desired state).\n\n" +

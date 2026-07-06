@@ -1308,8 +1308,15 @@ input hash only — it never observes node reality.
 - `bootwright diff` compares the selected desired state against the live clusters
   and prints the differences as a git-style diff (`-` desired, `+` real). For each
   managed Ceph `StorageCluster` it discovers live state read-only on the seed —
-  hosts, services and their placements, OSDs, CRUSH rules, pools and replication,
-  ceph config, mgr modules, and health — and diffs it field by field; for each
+  hosts, services and their placements, OSD device layout (which physical devices
+  back OSDs on each host, from `ceph osd metadata`), CRUSH rules, pools and
+  replication, ceph config, mgr modules, and health — and diffs it field by
+  field. The `osd-devices` facet compares only hosts that pin explicit plain
+  `/dev/<name>` devices, where a real mismatch is genuine drift; a host that
+  selects devices by filter/`all` (or a stable `/dev/disk/by-*` alias) is not
+  drift — the filter intent is satisfied — but is reported as a reconstruction
+  advisory naming the devices it currently consumes, so the operator can pin
+  `osd.dataDevices.paths` for a byte-exact rebuild. For each
   `ContainerCluster` it runs a shallow reachability/`ClusterVersion` Available
   check (a container cluster carries no declared quantitative expectation to diff
   deeper against, so this is the meaningful floor). Live discovery is read-only

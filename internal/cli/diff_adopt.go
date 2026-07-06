@@ -1,11 +1,7 @@
 package cli
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/cephdiff"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -33,13 +30,22 @@ func (s adoptSummary) empty() bool {
 	return len(s.Applied) == 0 && len(s.NewFiles) == 0
 }
 
-// nodeEdit sets a scalar at a mapping-key path within the desired-state document
-// whose metadata.name matches objectName, creating intermediate mappings.
+// nodeEdit mutates the desired-state document whose metadata.name matches
+// objectName. In its scalar form it sets value at the mapping-key path, creating
+// intermediate mappings. In its sequence-append form (appendValues set) it
+// appends each value (as a !!str scalar, skipping ones already present) to the
+// sequence at hostPath within the spec.ceph.topology.hosts[] element identified
+// by hostRef — the purely additive OSD-device pin, which never rewrites or
+// removes an existing entry.
 type nodeEdit struct {
 	objectName string
 	path       []string
 	value      string
 	tag        string // "!!int" for numeric fields, "!!str" for string fields
+
+	hostRef      string   // machineRef.name / hostname of the target hosts[] element
+	hostPath     []string // sequence path within that host (e.g. devices)
+	appendValues []string
 }
 
 // adoptLiveState folds the live state of probed managed storage clusters into
@@ -99,11 +105,18 @@ func computeAdoptEdits(ctx workspace.Context, state v1alpha1.State, live liveDif
 				adoptPools(facet, storage.Cluster, cluster, poolByCluster[storage.Cluster], fileEdits, newFiles, &summary)
 			case "config":
 				adoptConfig(facet, cluster, fileEdits, &summary)
+			case "osd-devices":
+				adoptOSDDevices(facet, storage.Cluster, cluster, fileEdits, &summary)
 			default:
 				for _, object := range facet.Objects {
 					summary.Detected = append(summary.Detected, fmt.Sprintf("%s: %s %s (%s) — adjust the YAML manually", storage.Cluster, facet.Name, object.Key, object.State))
 				}
 			}
+		}
+		// Filter/all osd hosts are not drift, so they carry no facet object; report
+		// each as a reconstruction advisory naming the devices to pin by hand.
+		for _, adv := range storage.Report.UnpinnedOSDHosts {
+			summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s consumes [%s] via a filter/all selection — pin osd.dataDevices.paths for exact reconstruction", storage.Cluster, adv.Host, strings.Join(adv.Devices, " ")))
 		}
 	}
 
@@ -200,6 +213,101 @@ func adoptConfig(facet cephdiff.FacetDiff, cluster v1alpha1.StorageCluster, file
 	}
 }
 
+// adoptOSDDevices folds real OSD device layout into desired state. The only
+// auto-adopt is purely additive: when a host that pins explicit per-host device
+// paths has grown OSDs on further devices out of band, those devices are
+// appended to its declared list so a rebuild is faithful. A device that
+// disappeared (a declared path no longer backing an OSD), a host whose devices
+// come from a drivegroup or pathSpecs, and a declared-but-absent host are all
+// reported for deliberate hand-editing — never rewritten or removed.
+func adoptOSDDevices(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, fileEdits map[string][]nodeEdit, summary *adoptSummary) {
+	for _, object := range facet.Objects {
+		field, ok := osdDevicesField(object)
+		switch object.State {
+		case cephdiff.ObjectChanged:
+			if !ok || !field.HasDesired || !field.HasReal {
+				summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s devices differ — adjust the YAML manually", clusterName, object.Key))
+				continue
+			}
+			added := subtractFields(field.Real, field.Desired)
+			removed := subtractFields(field.Desired, field.Real)
+			host, hostOK := topology.CephNodeByName(cluster, object.Key)
+			seqPath, canAppend := hostDeviceSequencePath(host)
+			switch {
+			case len(added) > 0 && hostOK && canAppend && cluster.SourcePath != "":
+				fileEdits[cluster.SourcePath] = append(fileEdits[cluster.SourcePath], nodeEdit{
+					objectName:   cluster.Metadata.Name,
+					hostRef:      host.MachineRef.Name,
+					hostPath:     seqPath,
+					appendValues: devicePaths(added),
+				})
+				summary.Applied = append(summary.Applied, fmt.Sprintf("%s: osd host %s pin +[%s]", clusterName, object.Key, strings.Join(added, " ")))
+			case len(added) > 0:
+				summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s grew OSDs on [%s] but its devices are not a plain per-host path list — pin manually", clusterName, object.Key, strings.Join(added, " ")))
+			}
+			if len(removed) > 0 {
+				summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s declares [%s] that no longer backs an OSD — investigate; left in desired", clusterName, object.Key, strings.Join(removed, " ")))
+			}
+		case cephdiff.ObjectDesiredOnly:
+			summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s declares devices but has no OSDs on the cluster — left in desired", clusterName, object.Key))
+		default:
+			summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s (%s) — adjust the YAML manually", clusterName, object.Key, object.State))
+		}
+	}
+}
+
+// osdDevicesField returns the object's "devices" field.
+func osdDevicesField(object cephdiff.ObjectDiff) (cephdiff.FieldDiff, bool) {
+	for _, field := range object.Fields {
+		if field.Name == "devices" {
+			return field, true
+		}
+	}
+	return cephdiff.FieldDiff{}, false
+}
+
+// hostDeviceSequencePath returns the desired-state sequence a host's OSD data
+// devices are declared under and whether appending to it is safe: the `devices`
+// shorthand or osd.dataDevices.paths. A host whose devices come from a covering
+// drivegroup or from pathSpecs (per-device CRUSH class) is not safely appendable
+// and returns canAppend=false.
+func hostDeviceSequencePath(host v1alpha1.StorageCephHost) (path []string, canAppend bool) {
+	if len(host.Devices) > 0 {
+		return []string{"devices"}, true
+	}
+	if host.OSD != nil && host.OSD.DataDevices != nil && len(host.OSD.DataDevices.Paths) > 0 {
+		return []string{"osd", "dataDevices", "paths"}, true
+	}
+	return nil, false
+}
+
+// subtractFields returns the space-separated tokens of a that are absent from b,
+// sorted.
+func subtractFields(a, b string) []string {
+	inB := map[string]bool{}
+	for _, tok := range strings.Fields(b) {
+		inB[tok] = true
+	}
+	var out []string
+	for _, tok := range strings.Fields(a) {
+		if !inB[tok] {
+			out = append(out, tok)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// devicePaths maps kernel basenames back to their /dev/<name> device paths, the
+// form a plain per-host device list already uses.
+func devicePaths(basenames []string) []string {
+	out := make([]string, len(basenames))
+	for i, name := range basenames {
+		out[i] = "/dev/" + name
+	}
+	return out
+}
+
 // synthesizePoolFile builds a minimal StoragePool object for a pool discovered on
 // the cluster but not declared, and returns its target path (a sibling of the
 // cluster's source file) and marshaled YAML.
@@ -234,135 +342,6 @@ func synthesizePoolFile(cluster v1alpha1.StorageCluster, object cephdiff.ObjectD
 	}
 	path := filepath.Join(filepath.Dir(cluster.SourcePath), object.Key+".yaml")
 	return path, data, nil
-}
-
-// applyNodeEdits loads a desired-state file's documents, applies each edit to the
-// matching document, and re-marshals the whole file, preserving comments and the
-// order of unaffected documents.
-func applyNodeEdits(path string, edits []nodeEdit) ([]byte, error) {
-	docs, err := loadYAMLDocuments(path)
-	if err != nil {
-		return nil, err
-	}
-	for _, edit := range edits {
-		doc := findDocumentByName(docs, edit.objectName)
-		if doc == nil {
-			return nil, fmt.Errorf("adopt %s: no document named %q", path, edit.objectName)
-		}
-		if err := setScalarAtPath(doc, edit.path, edit.value, edit.tag); err != nil {
-			return nil, fmt.Errorf("adopt %s: %w", path, err)
-		}
-	}
-	return marshalYAMLDocuments(docs)
-}
-
-func loadYAMLDocuments(path string) ([]*yaml.Node, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	var docs []*yaml.Node
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	for {
-		var node yaml.Node
-		err := decoder.Decode(&node)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("decode %s: %w", path, err)
-		}
-		docNode := node
-		docs = append(docs, &docNode)
-	}
-	return docs, nil
-}
-
-func marshalYAMLDocuments(docs []*yaml.Node) ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := yaml.NewEncoder(&buf)
-	encoder.SetIndent(2)
-	for _, doc := range docs {
-		if err := encoder.Encode(doc); err != nil {
-			_ = encoder.Close()
-			return nil, err
-		}
-	}
-	if err := encoder.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// findDocumentByName returns the mapping node of the document whose metadata.name
-// equals name.
-func findDocumentByName(docs []*yaml.Node, name string) *yaml.Node {
-	for _, doc := range docs {
-		mapping := doc
-		if mapping.Kind == yaml.DocumentNode && len(mapping.Content) > 0 {
-			mapping = mapping.Content[0]
-		}
-		if mapping.Kind != yaml.MappingNode {
-			continue
-		}
-		metadata := mappingValue(mapping, "metadata")
-		if metadata == nil {
-			continue
-		}
-		if nameNode := mappingValue(metadata, "name"); nameNode != nil && nameNode.Value == name {
-			return mapping
-		}
-	}
-	return nil
-}
-
-// setScalarAtPath sets value at the mapping-key path within mapping, creating any
-// missing intermediate mappings.
-func setScalarAtPath(doc *yaml.Node, path []string, value, tag string) error {
-	mapping := doc
-	if mapping.Kind == yaml.DocumentNode && len(mapping.Content) > 0 {
-		mapping = mapping.Content[0]
-	}
-	if mapping.Kind != yaml.MappingNode {
-		return fmt.Errorf("document root is not a mapping")
-	}
-	for i, key := range path {
-		last := i == len(path)-1
-		child := mappingValue(mapping, key)
-		if last {
-			scalar := &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value}
-			if child != nil {
-				child.Kind = yaml.ScalarNode
-				child.Tag = tag
-				child.Value = value
-				child.Content = nil
-				return nil
-			}
-			mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, scalar)
-			return nil
-		}
-		if child == nil {
-			child = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-			mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, child)
-		}
-		if child.Kind != yaml.MappingNode {
-			return fmt.Errorf("path element %q is not a mapping", key)
-		}
-		mapping = child
-	}
-	return nil
-}
-
-func mappingValue(mapping *yaml.Node, key string) *yaml.Node {
-	if mapping.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		if mapping.Content[i].Value == key {
-			return mapping.Content[i+1]
-		}
-	}
-	return nil
 }
 
 func inputRelPath(inputDir, absPath string) (string, error) {

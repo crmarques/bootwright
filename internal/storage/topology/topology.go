@@ -197,3 +197,61 @@ func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.Stor
 	}
 	return v1alpha1.StorageCephHost{}, false
 }
+
+// OSDHostDataDevices returns the explicit OSD *data*-device paths this host
+// selects: the `devices` shorthand, the per-host osd.dataDevices paths and
+// pathSpecs, and any covering fleet osdDrivegroup's data-device paths —
+// deduplicated, shorthand first. It is empty for a filter/all selection (whose
+// devices ceph-volume resolves on-host, not statically) and for a non-OSD host.
+// It is the data-device analogue of render's OSDGateDevicePaths (which also
+// spans db/wal for the wipe/gate), kept here so cephdiff can resolve the desired
+// OSD layout without importing the renderer.
+func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) []string {
+	if cluster.Spec.Ceph == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(paths []string) {
+		for _, p := range paths {
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	add(host.Devices)
+	add(dataDeviceStaticPaths(host.OSD))
+	name := host.Hostname
+	if name == "" {
+		name = CanonicalHostname(cluster, host.MachineRef.Name)
+	}
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
+			if placed == name {
+				add(dataDeviceStaticPaths(&cluster.Spec.Ceph.Topology.OSDDrivegroups[i].OSD))
+				break
+			}
+		}
+	}
+	return out
+}
+
+// dataDeviceStaticPaths returns the explicit data-device paths an OSD spec names
+// (dataDevices.paths and dataDevices.pathSpecs[].path). It is empty for a
+// filter/all data selection, whose devices are not statically enumerable.
+func dataDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
+	if osd == nil || osd.DataDevices == nil {
+		return nil
+	}
+	var paths []string
+	paths = append(paths, osd.DataDevices.Paths...)
+	for _, p := range osd.DataDevices.PathSpecs {
+		if p.Path != "" {
+			paths = append(paths, p.Path)
+		}
+	}
+	return paths
+}

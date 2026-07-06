@@ -2,11 +2,86 @@ package cephdiff
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/cephstate"
 )
+
+func osdCluster(hosts []v1alpha1.StorageCephHost) v1alpha1.StorageCluster {
+	return v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph-prod"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Topology: v1alpha1.StorageCephTopology{Hosts: hosts},
+			},
+		},
+	}
+}
+
+func TestOSDDevicesFacet(t *testing.T) {
+	cluster := osdCluster([]v1alpha1.StorageCephHost{
+		{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb", "/dev/sdc"}},
+		{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
+		{Hostname: "srv3", MachineRef: v1alpha1.LocalObjectReference{Name: "srv3"}, Roles: []string{"mon"}},
+	})
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	disc := discovery(t, true, map[string]string{
+		cephstate.ReadOSDMetadata: `[
+			{"id":0,"hostname":"srv1","devices":"sdb"},
+			{"id":1,"hostname":"srv1","devices":"sdc"},
+			{"id":2,"hostname":"srv1","devices":"sdd"},
+			{"id":3,"hostname":"srv2","devices":"sdb"},
+			{"id":4,"hostname":"srv2","devices":"sdc"}
+		]`,
+	})
+	report := Compare(state, cluster, disc)
+
+	// srv1 pins /dev/sdb,/dev/sdc but the cluster grew an OSD on sdd -> drift.
+	osd := facet(report, "osd-devices")
+	srv1, ok := objByKey(osd, "srv1")
+	if !ok || srv1.State != ObjectChanged {
+		t.Fatalf("srv1 should be changed, got %+v ok=%v", srv1, ok)
+	}
+	devs, ok := fieldByName(srv1, "devices")
+	if !ok || devs.Desired != "sdb sdc" || devs.Real != "sdb sdc sdd" {
+		t.Fatalf("srv1 devices diff wrong: %+v", devs)
+	}
+	// srv2 selects with all:true -> reconstruction advisory, never facet drift.
+	if _, ok := objByKey(osd, "srv2"); ok {
+		t.Fatal("filter/all host must not appear as osd-devices drift")
+	}
+	if len(report.UnpinnedOSDHosts) != 1 || report.UnpinnedOSDHosts[0].Host != "srv2" {
+		t.Fatalf("expected one srv2 advisory, got %+v", report.UnpinnedOSDHosts)
+	}
+	if got := strings.Join(report.UnpinnedOSDHosts[0].Devices, ","); got != "sdb,sdc" {
+		t.Fatalf("srv2 advisory devices: got %q want sdb,sdc", got)
+	}
+}
+
+func TestOSDDevicesFacetInSyncAndStablePaths(t *testing.T) {
+	cluster := osdCluster([]v1alpha1.StorageCephHost{
+		{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb"}},
+		{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, Devices: []string{"/dev/disk/by-id/wwn-0xABC"}},
+	})
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	disc := discovery(t, true, map[string]string{
+		cephstate.ReadOSDMetadata: `[
+			{"id":0,"hostname":"srv1","devices":"sdb"},
+			{"id":1,"hostname":"srv2","devices":"sdb"}
+		]`,
+	})
+	report := Compare(state, cluster, disc)
+	// srv1 matches its pin; srv2 pins a stable /dev/disk/by-id alias (already
+	// reconstruction-faithful) so its kernel-name real device is not compared.
+	if osd := facet(report, "osd-devices"); osd != nil {
+		t.Fatalf("expected no osd-devices drift, got %+v", osd)
+	}
+	if len(report.UnpinnedOSDHosts) != 0 {
+		t.Fatalf("expected no advisories, got %+v", report.UnpinnedOSDHosts)
+	}
+}
 
 func managedCluster() v1alpha1.StorageCluster {
 	return v1alpha1.StorageCluster{

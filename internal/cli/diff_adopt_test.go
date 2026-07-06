@@ -134,6 +134,101 @@ spec:
 	}
 }
 
+func TestAdoptOSDDevices(t *testing.T) {
+	inputDir := t.TempDir()
+	clusterPath := filepath.Join(inputDir, "cluster.yaml")
+	clusterYAML := `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-prod
+spec:
+  ceph:
+    topology:
+      hosts:
+        - hostname: srv1
+          machineRef:
+            name: srv1
+          roles: [osd]
+          devices:
+            - /dev/sdb # authored device comment
+            - /dev/sdc
+        - hostname: srv2
+          machineRef:
+            name: srv2
+          roles: [osd]
+          osd:
+            dataDevices:
+              all: true
+`
+	if err := os.WriteFile(clusterPath, []byte(clusterYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cluster := v1alpha1.StorageCluster{
+		Metadata:   v1alpha1.Metadata{Name: "ceph-prod"},
+		SourcePath: clusterPath,
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
+				{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb", "/dev/sdc"}},
+				{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
+			}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	live := liveDiffReport{
+		Storage: []liveStorageDiff{{
+			Cluster: "ceph-prod", Probed: true, InSync: false,
+			Report: cephdiff.Report{Cluster: "ceph-prod", Probed: true,
+				Facets: []cephdiff.FacetDiff{{Name: "osd-devices", Objects: []cephdiff.ObjectDiff{
+					{Key: "srv1", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
+						{Name: "devices", Desired: "sdb sdc", Real: "sdb sdc sdd", HasDesired: true, HasReal: true},
+					}},
+				}}},
+				UnpinnedOSDHosts: []cephdiff.OSDDeviceAdvisory{{Host: "srv2", Devices: []string{"sdb", "sdc"}}},
+			},
+		}},
+	}
+
+	edits, summary, err := computeAdoptEdits(workspace.Context{InputDir: inputDir}, state, live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byRel := map[string]string{}
+	for _, edit := range edits {
+		byRel[edit.RelPath] = string(edit.Content)
+	}
+	out, ok := byRel["cluster.yaml"]
+	if !ok {
+		t.Fatalf("expected an edit to cluster.yaml, got %v", keysOf(byRel))
+	}
+	// The out-of-band OSD device is appended to srv1; existing pins and the
+	// authored comment survive.
+	for _, want := range []string{"/dev/sdb", "/dev/sdc", "/dev/sdd", "authored device comment"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("cluster.yaml missing %q:\n%s", want, out)
+		}
+	}
+	if !anyContains(summary.Applied, "srv1 pin +[sdd]") {
+		t.Fatalf("expected srv1 pin in Applied, got %v", summary.Applied)
+	}
+	// srv2's all:true selection is advised, never rewritten.
+	if !anyContains(summary.Detected, "srv2") || !anyContains(summary.Detected, "filter/all") {
+		t.Fatalf("expected srv2 filter/all advisory in Detected, got %v", summary.Detected)
+	}
+	if strings.Contains(out, "all: false") || anyContains(summary.Applied, "srv2") {
+		t.Fatalf("srv2 filter selection must not be rewritten:\n%s\napplied=%v", out, summary.Applied)
+	}
+}
+
+func anyContains(items []string, sub string) bool {
+	for _, item := range items {
+		if strings.Contains(item, sub) {
+			return true
+		}
+	}
+	return false
+}
+
 func keysOf(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

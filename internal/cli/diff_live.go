@@ -245,6 +245,7 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 		default:
 			renderStorageDiff(p, label, storage.Report)
 		}
+		renderOSDAdvisories(p, storage.Report)
 	}
 
 	for _, container := range live.Container {
@@ -306,6 +307,17 @@ func printAdoptSummary(p *cliout.Printer, adopt *adoptSummary) {
 	}
 	for _, detected := range adopt.Detected {
 		p.Status(cliout.StatusWarn, "not adopted", detected)
+	}
+}
+
+// renderOSDAdvisories prints the reconstruction-fidelity advice for osd-role
+// hosts that select devices by filter/all: the intent is satisfied (not drift),
+// but the desired YAML does not pin the physical devices, so a rebuild would not
+// be byte-for-byte the same. It prints regardless of InSync so a fully-converged
+// filter cluster still learns which devices to pin.
+func renderOSDAdvisories(p *cliout.Printer, report cephdiff.Report) {
+	for _, adv := range report.UnpinnedOSDHosts {
+		p.Status(cliout.StatusWarn, "unpinned OSDs", adv.Host+" on ["+strings.Join(adv.Devices, " ")+"] via a filter/all selection — pin osd.dataDevices.paths for exact reconstruction")
 	}
 }
 

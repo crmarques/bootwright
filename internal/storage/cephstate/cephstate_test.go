@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -210,6 +211,52 @@ func TestAbsentReadReturnsErrReadAbsent(t *testing.T) {
 	}
 	if _, err := disc.Pools(); !errors.Is(err, ErrReadAbsent) {
 		t.Fatalf("absent read should return ErrReadAbsent, got %v", err)
+	}
+}
+
+func TestOSDDevicesByHost(t *testing.T) {
+	root := t.TempDir()
+	writeCluster(t, root, "ceph-prod", true, map[string]string{
+		ReadOSDMetadata: `[
+			{"id":0,"hostname":"srv1","devices":"sdb"},
+			{"id":1,"hostname":"srv1","devices":"sdc"},
+			{"id":2,"hostname":"srv2","devices":"sdb,sdc"},
+			{"id":3,"hostname":"srv2","devices":"sdb"},
+			{"id":4,"hostname":"","devices":"sdz"}
+		]`,
+	})
+	discos, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byHost, err := discos["ceph-prod"].OSDDevicesByHost()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// srv1 has two single-device OSDs; srv2's two OSDs share and split devices,
+	// deduplicated and sorted; the host-less row is dropped.
+	if got := byHost["srv1"]; strings.Join(got, ",") != "sdb,sdc" {
+		t.Fatalf("srv1 devices: got %v want [sdb sdc]", got)
+	}
+	if got := byHost["srv2"]; strings.Join(got, ",") != "sdb,sdc" {
+		t.Fatalf("srv2 devices: got %v want [sdb sdc]", got)
+	}
+	if _, ok := byHost[""]; ok {
+		t.Fatal("host-less OSD metadata row must be dropped")
+	}
+}
+
+func TestOSDDevicesByHostAbsentRead(t *testing.T) {
+	root := t.TempDir()
+	writeCluster(t, root, "ceph-min", true, map[string]string{
+		ReadOSDStat: `{"num_osds":0,"num_up_osds":0,"num_in_osds":0}`,
+	})
+	discos, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := discos["ceph-min"].OSDDevicesByHost(); !errors.Is(err, ErrReadAbsent) {
+		t.Fatalf("absent osd_metadata should return ErrReadAbsent, got %v", err)
 	}
 }
 

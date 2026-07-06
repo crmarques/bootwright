@@ -24,6 +24,7 @@ const (
 	ReadOrchDeviceLS  = "orch_device_ls"
 	ReadOSDTree       = "osd_tree"
 	ReadOSDDF         = "osd_df"
+	ReadOSDMetadata   = "osd_metadata"
 	ReadCrushDump     = "crush_dump"
 	ReadCrushRuleDump = "crush_rule_dump"
 	ReadPoolLSDetail  = "pool_ls_detail"
@@ -292,6 +293,65 @@ func (d Discovery) OSDTree() ([]OSDTreeNode, error) {
 		return nil, err
 	}
 	return wrap.Nodes, nil
+}
+
+// OSDMeta is one OSD's metadata from `ceph osd metadata --format json`: the
+// daemon id, the host it runs on, and the comma-separated kernel device names
+// backing it (the `devices` field, e.g. "sdb" or "sdb,sdc" for a multi-device
+// OSD). It is the only read that maps an OSD to the physical devices it consumed.
+type OSDMeta struct {
+	ID       int    `json:"id"`
+	Hostname string `json:"hostname"`
+	Devices  string `json:"devices"`
+}
+
+// OSDMetadata decodes `ceph osd metadata`.
+func (d Discovery) OSDMetadata() ([]OSDMeta, error) {
+	var out []OSDMeta
+	if err := d.decode(ReadOSDMetadata, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// OSDDevicesByHost returns, keyed by ceph hostname, the sorted deduplicated set
+// of kernel device basenames backing that host's OSDs (from `ceph osd
+// metadata`). It is the ground truth for which physical devices a host's OSDs
+// actually consumed — precisely what a filter/all drivegroup selection leaves
+// implicit in desired state. It returns ErrReadAbsent (wrapped) when the read
+// was not collected, so an absent read reads as "unknown, do not diff" rather
+// than "this host has no OSDs".
+func (d Discovery) OSDDevicesByHost() (map[string][]string, error) {
+	metas, err := d.OSDMetadata()
+	if err != nil {
+		return nil, err
+	}
+	byHost := map[string]map[string]bool{}
+	for _, meta := range metas {
+		if meta.Hostname == "" {
+			continue
+		}
+		set := byHost[meta.Hostname]
+		if set == nil {
+			set = map[string]bool{}
+			byHost[meta.Hostname] = set
+		}
+		for _, dev := range strings.Split(meta.Devices, ",") {
+			if dev = strings.TrimSpace(dev); dev != "" {
+				set[dev] = true
+			}
+		}
+	}
+	out := make(map[string][]string, len(byHost))
+	for host, set := range byHost {
+		devices := make([]string, 0, len(set))
+		for dev := range set {
+			devices = append(devices, dev)
+		}
+		sort.Strings(devices)
+		out[host] = devices
+	}
+	return out, nil
 }
 
 // Pool data-protection types as Ceph reports them in the numeric `type` field.

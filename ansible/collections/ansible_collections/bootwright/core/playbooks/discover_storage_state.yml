@@ -38,6 +38,8 @@
         argv: [ceph, osd, tree, --format, json]
       - name: osd_df
         argv: [ceph, osd, df, tree, --format, json]
+      - name: osd_metadata
+        argv: [ceph, osd, metadata, --format, json]
       - name: crush_dump
         argv: [ceph, osd, crush, dump, --format, json]
       - name: crush_rule_dump

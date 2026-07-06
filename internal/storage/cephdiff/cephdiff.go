@@ -55,9 +55,27 @@ type Report struct {
 	Cluster string      `json:"cluster"`
 	Probed  bool        `json:"probed"`
 	Facets  []FacetDiff `json:"facets,omitempty"`
+	// UnpinnedOSDHosts lists osd-role hosts whose OSD selection is a filter/all
+	// (no explicit device paths): the host, and the devices its OSDs currently
+	// consume. The filter intent is satisfied, so these are reconstruction
+	// advisories — not drift — and deliberately do not affect InSync(): `diff`
+	// prints them as advice and `--adopt` reports them as pin-manually
+	// candidates, but nothing is ever rewritten (pinning would disable cephadm's
+	// automatic consumption of replacement disks, an intent change only the
+	// operator should make).
+	UnpinnedOSDHosts []OSDDeviceAdvisory `json:"unpinnedOSDHosts,omitempty"`
 }
 
-// InSync reports whether desired and real match across every facet.
+// OSDDeviceAdvisory is one filter/all osd-role host and the kernel device
+// basenames its OSDs currently consume, for the reconstruction-fidelity advice.
+type OSDDeviceAdvisory struct {
+	Host    string   `json:"host"`
+	Devices []string `json:"devices"`
+}
+
+// InSync reports whether desired and real match across every facet. The
+// UnpinnedOSDHosts advisories are intentionally excluded: a filter/all host is
+// not drift.
 func (r Report) InSync() bool {
 	for _, facet := range r.Facets {
 		if len(facet.Objects) > 0 {
@@ -115,6 +133,9 @@ func Compare(state v1alpha1.State, cluster v1alpha1.StorageCluster, disc cephsta
 	}
 
 	add("hosts", desiredHosts(cluster), realHosts(disc), facetOptions{})
+	desiredOSD, osdSurface, unpinned := desiredOSDDevices(cluster, disc)
+	add("osd-devices", desiredOSD, realOSDDevices(disc), facetOptions{skipRealKey: func(key string) bool { return !osdSurface[key] }})
+	report.UnpinnedOSDHosts = unpinned
 	add("services", desiredServices(state, cluster), realServices(disc), facetOptions{})
 	add("pools", desiredPools(state, cluster), realPools(disc), facetOptions{skipRealKey: isInternalPool})
 	add("crush-rules", desiredCrushRules(cluster, state), realCrushRules(disc), facetOptions{ignoreRealOnly: true})
@@ -261,6 +282,110 @@ func realHosts(disc cephstate.Discovery) []entry {
 		out = append(out, entry{key: host.Hostname, fields: []kv{{"labels", joinSorted(host.Labels)}}})
 	}
 	return out
+}
+
+// osdKind classifies how an osd-role host selects its data devices.
+type osdKind int
+
+const (
+	// osdFilterPaths is a filter/all selection (no explicit device paths): the
+	// device set is resolved on-host by ceph-volume, so desired pins nothing.
+	osdFilterPaths osdKind = iota
+	// osdKernelPaths names explicit plain /dev/<name> devices whose kernel
+	// basename compares reliably against `ceph osd metadata`.
+	osdKernelPaths
+	// osdStablePaths names explicit stable aliases (/dev/disk/by-*, /dev/mapper):
+	// already reconstruction-faithful, and not comparable to kernel names, so
+	// left uncompared.
+	osdStablePaths
+)
+
+func osdSelectionKind(paths []string) osdKind {
+	if len(paths) == 0 {
+		return osdFilterPaths
+	}
+	for _, p := range paths {
+		if !plainKernelDevice(p) {
+			return osdStablePaths
+		}
+	}
+	return osdKernelPaths
+}
+
+// plainKernelDevice reports whether a path is /dev/<kernelname> with no further
+// slash — the only form whose basename compares reliably against the short
+// device names `ceph osd metadata` reports.
+func plainKernelDevice(path string) bool {
+	if !strings.HasPrefix(path, "/dev/") {
+		return false
+	}
+	rest := strings.TrimPrefix(path, "/dev/")
+	return rest != "" && !strings.Contains(rest, "/")
+}
+
+// desiredOSDDevices builds the osd-devices desired side. It returns one entry per
+// osd-role host that pins explicit kernel devices (compared field-by-field), the
+// set of hostnames whose real OSD devices should surface as drift (only those
+// pinned hosts — every other host's real devices are dropped so a filter/all or
+// stable-alias host never reads as drift), and the filter/all hosts as
+// reconstruction advisories carrying the devices they actually consume.
+func desiredOSDDevices(cluster v1alpha1.StorageCluster, disc cephstate.Discovery) ([]entry, map[string]bool, []OSDDeviceAdvisory) {
+	surface := map[string]bool{}
+	realByHost, _ := disc.OSDDevicesByHost() // nil on absent read → advisories simply carry no devices
+	var entries []entry
+	var unpinned []OSDDeviceAdvisory
+	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		if !topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
+			continue
+		}
+		name := host.Hostname
+		if name == "" {
+			name = topology.CanonicalHostname(cluster, host.MachineRef.Name)
+		}
+		paths := topology.OSDHostDataDevices(cluster, host)
+		switch osdSelectionKind(paths) {
+		case osdKernelPaths:
+			surface[name] = true
+			entries = append(entries, entry{key: name, fields: []kv{{"devices", joinSortedBasenames(paths)}}})
+		case osdFilterPaths:
+			if devices := realByHost[name]; len(devices) > 0 {
+				unpinned = append(unpinned, OSDDeviceAdvisory{Host: name, Devices: devices})
+			}
+		case osdStablePaths:
+			// Already faithful; leave its real devices uncompared (surface stays false).
+		}
+	}
+	sort.Slice(unpinned, func(i, j int) bool { return unpinned[i].Host < unpinned[j].Host })
+	return entries, surface, unpinned
+}
+
+func realOSDDevices(disc cephstate.Discovery) []entry {
+	byHost, err := disc.OSDDevicesByHost()
+	if err != nil {
+		return nil
+	}
+	out := make([]entry, 0, len(byHost))
+	for host, devices := range byHost {
+		out = append(out, entry{key: host, fields: []kv{{"devices", strings.Join(devices, " ")}}})
+	}
+	return out
+}
+
+// joinSortedBasenames reduces each device path to its kernel basename, then
+// sorts and space-joins them to match realOSDDevices' format.
+func joinSortedBasenames(paths []string) string {
+	names := make([]string, 0, len(paths))
+	for _, p := range paths {
+		names = append(names, deviceBasename(p))
+	}
+	return joinSorted(names)
+}
+
+func deviceBasename(path string) string {
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		return path[i+1:]
+	}
+	return path
 }
 
 func desiredServices(state v1alpha1.State, cluster v1alpha1.StorageCluster) []entry {
