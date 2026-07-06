@@ -255,6 +255,38 @@
     - bootwright_libvirt_machine_data_disk_source_locations.results[ansible_loop.index0].stat.exists | default(false)
     - not (bootwright_libvirt_machine_data_disk_storage_locations.results[ansible_loop.index0].stat.exists | default(false))
 
+# A machineProfile diskGiB change no longer flips the cluster to a destructive
+# rebuild (the InfraProvider is cleared from the install structural hash), so the
+# edit reaches here in continue mode. "Create machine disk" guards on creates:, so
+# an existing disk is silently left at its old size — the resize vanishes. cephadm/
+# the guest partitions cannot follow an in-place qcow2 grow anyway, so refuse the
+# mismatch loudly instead of no-op'ing. The override reset deletes the disk first,
+# so it is exempt (the disk is recreated at the new size below).
+- name: Probe existing libvirt root disk size
+  ansible.builtin.command:
+    argv:
+      - qemu-img
+      - info
+      - --output=json
+      - "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
+  register: bootwright_libvirt_root_disk_info
+  changed_when: false
+  failed_when: false
+
+- name: Refuse an in-place libvirt root disk resize
+  ansible.builtin.assert:
+    that:
+      - ((bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] | int) == ((bootwright_component.profile.diskGiB | int) * 1073741824)
+    fail_msg: >-
+      Machine {{ bootwright_component.name }} declares profile diskGiB={{ bootwright_component.profile.diskGiB }}
+      ({{ (bootwright_component.profile.diskGiB | int) * 1073741824 }} bytes) but its provisioned root disk is
+      {{ (bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] }} bytes. Bootwright does not
+      resize a provisioned root disk in place — the guest partitions would not follow. Destroy and re-apply
+      this machine to change its root disk size.
+  when:
+    - bootwright_libvirt_root_disk_info.rc | default(1) == 0
+    - not (bootwright_libvirt_managed_os_reset | bool)
+
 - name: Create machine disk
   ansible.builtin.command:
     argv:

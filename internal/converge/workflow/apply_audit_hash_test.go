@@ -49,7 +49,7 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	base := func() v1alpha1.State {
 		return v1alpha1.State{
 			Environments: []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}},
-			Machines: []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "m1"}}},
+			Machines:     []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "m1"}}},
 			StorageClusters: []v1alpha1.StorageCluster{{
 				Metadata: v1alpha1.Metadata{Name: "ceph"},
 				Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
