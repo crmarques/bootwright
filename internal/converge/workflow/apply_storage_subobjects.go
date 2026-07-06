@@ -209,6 +209,20 @@ func storageSubObjectStructuralSpec(state v1alpha1.State, sub storageSubObject) 
 				}
 			}
 		}
+	case storageSubObjectKindGateway, storageSubObjectKindNFSExport, storageSubObjectKindExport:
+		// RGW gateways, NFS exports, and StorageExports are STATELESS cephadm services —
+		// their data lives in the backing pools/filesystem (their own sub-objects), not
+		// in the service — so every field is a `ceph orch apply` / config reconcile, never
+		// a data wipe: placement/count, ports, ingress/VIP, and squash/clients/accessType/
+		// pseudo all re-apply in place. Project only the sub-object identity so any field
+		// edit is reconcilable (a rename is a new object, classified missing, not a drift).
+		// This replaces the former nil projection that made every edit structural: refused
+		// by continue, warned as pool data loss, and wiped with the cluster under --override.
+		return struct {
+			Kind    string `json:"kind"`
+			Cluster string `json:"cluster"`
+			Name    string `json:"name"`
+		}{Kind: sub.Kind, Cluster: sub.Cluster, Name: sub.Name}
 	}
 	return nil
 }

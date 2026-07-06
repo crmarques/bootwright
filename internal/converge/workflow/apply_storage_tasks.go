@@ -120,6 +120,12 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		}
 		ceph.Topology.Hosts = nil
 		ceph.Topology.OSDDrivegroups = nil
+		// The management access (dashboard / mgmt-gateway HA VIP) and the cephadm
+		// service-spec passthrough are stateless daemons cephadm reconciles via
+		// `ceph orch apply` — enabling the mgmt-gateway or rebalancing a service is a
+		// day-2 reconfigure, not a cluster wipe — so they are not cluster identity.
+		ceph.Management = nil
+		ceph.Services = nil
 	}
 	return clone
 }
