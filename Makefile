@@ -94,7 +94,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -213,6 +213,7 @@ check: check-fast
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
 	$(MAKE) ansible-lint-check
+	$(MAKE) workflow-yaml-check
 	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) go-test-clean-checkout
 
@@ -331,6 +332,16 @@ shellcheck-check:
 	test -n "$$files" || { printf '%s\n' 'shellcheck-check: no authored shell scripts discovered under $(ANSIBLE_SRC_DIR)/ scripts/ (discovery filter broken?)'; exit 1; }; \
 	printf '%s\n' "$$files" | xargs $(SHELLCHECK) -x
 
+# yamllint the GitHub Actions workflows. The .yamllint config is Ansible-tuned
+# and ignores .github/, so pass an inline config: keep the structural rules
+# (key-duplicates, indentation, trailing whitespace) that catch a broken
+# workflow, and relax document-start (workflows legitimately omit the leading
+# ---) and line-length. Without this the workflow YAML is caught by nothing
+# local and a duplicate key or bad indent only surfaces when GitHub runs it.
+workflow-yaml-check:
+	@test -n "$(YAMLLINT)" || { printf '%s\n' 'yamllint not found in PATH; install with python3 -m pip install yamllint or set YAMLLINT=/path/to/yamllint'; exit 1; }
+	$(YAMLLINT) -d '{extends: default, rules: {document-start: disable, line-length: disable, truthy: {check-keys: false}, comments-indentation: disable}}' .github/workflows
+
 stale-term-check:
 	@if command -v rg >/dev/null 2>&1; then \
 		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer|internal/runtime/|internal/infra/support|internal/converge/checks' $(DEFINITION_CHECK_PATHS); \
@@ -444,7 +455,7 @@ help:
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
 		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip' \
 		'  check            Run fast guardrails, then Go/Python/Ansible checks, bundle sync, and go.mod tidiness' \
-		'  check-fast       Run cheap local guardrails plus Go unit tests (no Python, Ansible, race, or clean-checkout)' \
+		'  check-fast       Run cheap local guardrails plus Go unit tests (syncs the ansible bundle and needs ansible-playbook; no race, staticcheck, lint, or clean-checkout)' \
 		'  test             Run Go tests' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \
 		'  plan             Render installer assets for test/e2e/001-sno-libvirt into .state' \

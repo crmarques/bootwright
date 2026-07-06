@@ -48,6 +48,16 @@ jobs:
                 ] | .[] | select(. != null) | split("\n")[0]' "$GITHUB_EVENT_PATH" |
                 grep -Eq '^(fix\(docs\)|docs(\([^)]*\))?): .+'; then
                 should_publish=true
+              elif jq -r '[
+                  (.commits[]?.added[]?),
+                  (.commits[]?.modified[]?),
+                  (.commits[]?.removed[]?)
+                ] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+                grep -Eq '^(docs/|mkdocs\.yml$)'; then
+                # Republish when a push touches docs/ or mkdocs.yml even under a
+                # feat:/fix: subject, so synchronized code+docs commits (the
+                # repo's norm) do not leave the published site stale.
+                should_publish=true
               fi
               ;;
           esac

@@ -144,7 +144,7 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	// redact its output with no_log to keep the token out of stdout/logs.
 	assertRedactsByDefault(t, fmt.Sprint(mainTasks[insertIdx]["name"]), mainTasks[insertIdx]["no_log"])
 	insertArgv := fmt.Sprint(insertCommand["argv"])
-	for _, want := range []string{"/var/tmp/bootwright-libvirt-media-insert.py", "bootwright_component.boot.agentIso.stagePath", "bootwright_libvirt_media_boot_order"} {
+	for _, want := range []string{"bootwright_libvirt_media_helper_path", "bootwright_component.boot.agentIso.stagePath", "bootwright_libvirt_media_boot_order"} {
 		if !strings.Contains(insertArgv, want) {
 			t.Fatalf("%s argv missing %q: %v", mainTasks[insertIdx]["name"], want, insertCommand["argv"])
 		}

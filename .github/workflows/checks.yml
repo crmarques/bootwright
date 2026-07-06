@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Also run the full suite on release tags so a v* tag on an unmerged or
+    # unvetted commit still passes staticcheck, race, lint, and the guardrails
+    # before release.yml (which only runs `go test ./...`) ships binaries.
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -44,7 +48,9 @@ jobs:
         run: go test ./...
 
       - name: Go race test
-        run: go test -race ./...
+        # Match the Makefile's GO_TEST_RACE_FLAGS headroom: internal/cli runs
+        # ~12min under -race on slower runners, past Go's 600s/package default.
+        run: go test -race -timeout 1800s ./...
 
       - name: Go clean-checkout test
         run: make go-test-clean-checkout
@@ -68,9 +74,20 @@ jobs:
           sudo apt-get install -y shellcheck
           make shellcheck-check
 
+      - name: Workflow YAML lint
+        run: make workflow-yaml-check
+
       - name: Repository guardrails
         run: |
           make stale-term-check
           make cli-file-size-check
           make check-go-source-visibility
           make containerfile-pin-check
+
+      - name: Docs strict build
+        # Strict-build the docs on every PR so mkdocs --strict breakage fails
+        # here, not silently at pages.yml publish time (which only runs on
+        # docs-touching or docs:-subject pushes).
+        run: |
+          pip install --disable-pip-version-check -r docs/requirements.txt
+          mkdocs build --strict
