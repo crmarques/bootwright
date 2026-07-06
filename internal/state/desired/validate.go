@@ -44,8 +44,41 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateCrossLayer(state))...)
 	errs = append(errs, notes(validateSecretReferences(state))...)
 	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
+	errs = append(errs, notes(validateUniqueMachineSSHAddresses(state))...)
 	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
+	return errs
+}
+
+// validateUniqueMachineSSHAddresses fails closed when two different Machines resolve
+// to the same SSH address. bootwright reaches a node over that address to probe
+// ownership, apply day-2 network state, and verify readiness, so a shared address
+// means two logical Machines drive — and could reinstall or reconfigure — a single
+// physical host, and the pre-install ownership probe of one would see the other's OS.
+// A Machine with no SSH address (a VM that pre-provisions its OS) is skipped.
+func validateUniqueMachineSSHAddresses(state v1alpha1.State) []string {
+	byAddress := map[string][]string{}
+	for _, machine := range state.Machines {
+		address := strings.TrimSpace(stateview.MachineSSHAddressByName(state, machine.Metadata.Name))
+		if address == "" {
+			continue
+		}
+		byAddress[address] = append(byAddress[address], machine.Metadata.Name)
+	}
+	addresses := make([]string, 0, len(byAddress))
+	for address := range byAddress {
+		addresses = append(addresses, address)
+	}
+	sort.Strings(addresses)
+	var errs []string
+	for _, address := range addresses {
+		names := byAddress[address]
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		errs = append(errs, fmt.Sprintf("SSH address %q is used by more than one Machine (%s); an address reaches one host, so a shared value would let bootwright drive — and could reinstall — the wrong machine. Give each Machine a unique routable address", address, strings.Join(names, ", ")))
+	}
 	return errs
 }
 
