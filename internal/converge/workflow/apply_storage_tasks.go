@@ -107,6 +107,12 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	if err := json.Unmarshal(data, &clone); err != nil {
 		return base
 	}
+	// Shared fabric (provider BMC defaults, artifact-server/proxy/registry infra
+	// components) is reconfigure-only and re-applied by its own task, so editing it
+	// must not flip a StorageCluster to a destructive rebuild. cephadm reaches the
+	// nodes over SSH, not the BMC, so none of it is cluster identity.
+	clone.InfraProviders = nil
+	clone.InfraComponents = nil
 	for i := range clone.StorageClusters {
 		ceph := clone.StorageClusters[i].Spec.Ceph
 		if ceph == nil {
@@ -147,6 +153,11 @@ func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alp
 	if err := json.Unmarshal(data, &clone); err != nil {
 		return base
 	}
+	// Provider BMC defaults and infra components are how bootwright reaches the host,
+	// not part of the installed OS, so a fabric edit is not a reinstall (mirrors the
+	// per-machine substrate clear below).
+	clone.InfraProviders = nil
+	clone.InfraComponents = nil
 	for i := range clone.StorageClusters {
 		if ceph := clone.StorageClusters[i].Spec.Ceph; ceph != nil {
 			for j := range ceph.Topology.Hosts {

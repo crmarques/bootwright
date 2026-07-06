@@ -807,6 +807,19 @@ func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1al
 	clone.ClusterAddons = nil
 	clone.ClusterAddonBindings = nil
 	clone.ClusterAddonProfiles = nil
+	// Shared fabric — the InfraProviders, InfraComponents (artifact server, proxy,
+	// registry, DNS), and NetworkConfigs a cluster references — is reconfigure-only:
+	// each is classified and re-applied by its OWN task, and a change to it (a BMC TLS
+	// cipher, an artifact-server cipher, an egress proxy) does not require reinstalling
+	// a running cluster. Left in the embedded state, one edit to a shared object would
+	// move EVERY dependent cluster's structural hash and refuse the whole fleet as a
+	// reinstall. Clear it: any material effect on THIS cluster's install still moves
+	// the hash through the rendered InstallConfig/AgentConfig/Manifests the install-
+	// state gate hashes alongside this projection, so an install-changing edit stays a
+	// rebuild while a pure-fabric edit reconciles.
+	clone.InfraProviders = nil
+	clone.InfraComponents = nil
+	clone.NetworkConfigs = nil
 	for i := range clone.ContainerClusters {
 		for j := range clone.ContainerClusters[i].Spec.Hosts {
 			clone.ContainerClusters[i].Spec.Hosts[j].Labels = nil
