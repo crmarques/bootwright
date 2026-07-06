@@ -176,20 +176,13 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 		}
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-		if flags.output == outputText {
-			p := cliout.New(stdout)
-			p.Command(runCommandLabel)
-			p.Section("Prepare")
-			p.List([]cliout.Item{{Label: "Load desired state"}})
-		}
+		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
 		var state v1alpha1.State
 		state, err = loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
-		}
+		printPlanStep(stdout, flags.output, runCommandLabel)
 		// Resolve the cluster selection once: the render state to plan over, the
 		// storage roots actually provisioned, and the readiness work objects. A
 		// managed StorageCluster pulled into the render state only as a render
@@ -323,22 +316,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		// The single "Run" section is opened by the workflow reporter as it
 		// reports render/bundle prep, then printApplyRunStart adds the run
 		// identity fields under it — no separate workflow-start banner.
-		become := becomeCredential{}
-		if !dryRun && !plan.NoRemoteWork && willPromptForBecomePassword(plan.AskBecomePass) {
-			cliout.NewContinuation(stderr).BlankLine()
+		become, reporter, becomeCleanup, err := prepareMutatingRunCredential(stdin, stdout, stderr, plan, dryRun)
+		if err != nil {
+			return failErr(1, err)
 		}
-		if !dryRun && !plan.NoRemoteWork {
-			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.AskBecomePass, false, true)
-			if err != nil {
-				return failErr(1, err)
-			}
-			defer cleanup()
-			become = credential
-		}
-		reporter := newWorkflowReporter(stdout)
-		if plan.AskBecomePass && become.PasswordFile == "" {
-			reporter.WithPromptGap(stderr)
-		}
+		defer becomeCleanup()
 		usesAnsible := converge.ScopeUsesAnsible(runScope)
 		var bundleResult bundle.AnsibleBundleResult
 		if usesAnsible {

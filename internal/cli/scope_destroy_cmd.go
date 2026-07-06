@@ -113,12 +113,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-		if flags.output == outputText {
-			p := cliout.New(stdout)
-			p.Command(runCommandLabel)
-			p.Section("Prepare")
-			p.List([]cliout.Item{{Label: "Load desired state"}})
-		}
+		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
 		var state v1alpha1.State
 		state, err = loadDesiredState(cf)
 		if err != nil {
@@ -147,9 +142,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
-		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
-		}
+		printPlanStep(stdout, flags.output, runCommandLabel)
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
@@ -265,22 +258,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 		}
-		become := becomeCredential{}
-		if !dryRun && !plan.NoRemoteWork && willPromptForBecomePassword(plan.AskBecomePass) {
-			cliout.NewContinuation(stderr).BlankLine()
+		become, reporter, becomeCleanup, err := prepareMutatingRunCredential(stdin, stdout, stderr, plan, dryRun)
+		if err != nil {
+			return failErr(1, err)
 		}
-		if !dryRun && !plan.NoRemoteWork {
-			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.AskBecomePass, false, true)
-			if err != nil {
-				return failErr(1, err)
-			}
-			defer cleanup()
-			become = credential
-		}
-		reporter := newWorkflowReporter(stdout)
-		if plan.AskBecomePass && become.PasswordFile == "" {
-			reporter.WithPromptGap(stderr)
-		}
+		defer becomeCleanup()
 		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleStart()
 		}
