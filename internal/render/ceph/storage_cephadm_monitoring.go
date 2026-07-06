@@ -64,11 +64,18 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 			if service.config.Port > 0 {
 				spec["port"] = service.config.Port
 			}
-			if service.config.RetentionTime != "" {
-				spec["retention_time"] = service.config.RetentionTime
-			}
-			if service.config.RetentionSize != "" {
-				spec["retention_size"] = service.config.RetentionSize
+			// retention_time/retention_size exist only on cephadm's PrometheusSpec;
+			// every other monitoring service (loki, promtail, ...) maps to
+			// MonitoringSpec, which rejects the keys and fails `ceph orch apply -i`.
+			// So retention renders for prometheus only, even where the API/validator
+			// nominally accepts it on another service.
+			if service.serviceType == "prometheus" {
+				if service.config.RetentionTime != "" {
+					spec["retention_time"] = service.config.RetentionTime
+				}
+				if service.config.RetentionSize != "" {
+					spec["retention_size"] = service.config.RetentionSize
+				}
 			}
 		}
 		doc := cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec)

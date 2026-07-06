@@ -52,14 +52,17 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 	}
 	for _, gate := range servicePinGates {
 		if gate.uses(state) {
-			pins = appendServicePin(pins, gate.key.Kind, gate.key.Realisation)
+			pins = appendServicePin(pins, state, gate.key.Kind, gate.key.Realisation)
 		}
 	}
 	for _, version := range openshiftInstallVersions(state) {
 		pins = append(pins, ComponentPin{
-			Name:       "openshift-install",
-			Version:    version,
-			Source:     OpenShiftClientsMirrorBase + "/" + version + "/",
+			Name:    "openshift-install",
+			Version: version,
+			// Honor an Environment defaults.clientsMirror override so the
+			// bill of materials records the release URL the controller CLI
+			// install actually fetches from, not the upstream default.
+			Source:     OpenShiftClientsReleaseURL(state, version) + "/",
 			LookupDate: versionLookupDate,
 		})
 	}
@@ -111,17 +114,45 @@ var servicePinGates = []struct {
 	{roles.ServiceKey{Kind: v1alpha1.ComponentSlotArtifactServer, Realisation: v1alpha1.ArtifactServerProtocolHTTP}, usesManagedArtifacts},
 }
 
-func appendServicePin(pins []ComponentPin, kind, realisation string) []ComponentPin {
+func appendServicePin(pins []ComponentPin, state v1alpha1.State, kind, realisation string) []ComponentPin {
 	image, ok := roles.ServiceImagePin(kind, realisation)
 	if !ok {
 		return pins
 	}
-	return append(pins, ComponentPin{
+	pin := ComponentPin{
 		Name:       image.Type,
 		Version:    image.Version,
 		Source:     image.Source,
 		LookupDate: image.LookupDate,
-	})
+	}
+	// Reflect a componentImages override into the bill of materials so a
+	// disconnected operator auditing the lock file mirrors the reference that
+	// is actually pulled, not the upstream default this environment overrides.
+	// Resolve the override directly (not via managedServiceImage, whose version
+	// lookup re-enters ComponentPins) to avoid infinite recursion.
+	fallback := image.Repository + ":" + image.Version
+	if effective := managedComponentImage(state, image.Category, image.Type, fallback); effective != fallback {
+		pin.Source = effective
+		if tag := imageRefTag(effective); tag != "" {
+			pin.Version = tag
+		}
+	}
+	return append(pins, pin)
+}
+
+// imageRefTag returns the tag of a container image reference (the text after
+// the last ":" in the final path segment), or "" when the reference carries no
+// tag. Splitting on the final segment avoids mistaking a registry host:port for
+// a tag.
+func imageRefTag(ref string) string {
+	segment := ref
+	if slash := strings.LastIndex(ref, "/"); slash >= 0 {
+		segment = ref[slash+1:]
+	}
+	if colon := strings.LastIndex(segment, ":"); colon >= 0 {
+		return segment[colon+1:]
+	}
+	return ""
 }
 
 func openshiftInstallVersions(state v1alpha1.State) []string {

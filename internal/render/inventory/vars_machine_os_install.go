@@ -339,10 +339,12 @@ func machineInstallStorageVars(profile v1alpha1.MachineInstallProfile, state v1a
 			rootDevice = hints.DeviceName
 		}
 	}
+	// ks.cfg.j2 reads only storage.rootDisk (clearpart --all is unconditional, so
+	// customizations.storage.wipe is inert, and rootDevice is unused). Emitting only
+	// the consumed key keeps the vars contract - and the install marker hash derived
+	// from it - free of dead, misleading fields.
 	out := map[string]any{
-		"wipe":       storage.Wipe,
-		"rootDevice": rootDevice,
-		"rootDisk":   strings.TrimPrefix(rootDevice, "/dev/"),
+		"rootDisk": strings.TrimPrefix(rootDevice, "/dev/"),
 	}
 	return out
 }

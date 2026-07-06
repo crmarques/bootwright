@@ -1,7 +1,6 @@
 package ceph
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -59,29 +58,19 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 	return ops
 }
 
-// cephMgrAndLoggingOperations renders the topology-phase mgr-module enables and
-// the dashboard loki wiring. These run after the pool/filesystem storage-phase
-// ops in the rendered order, so they are a distinct builder from
-// cephTopologyOperations rather than folded into it.
+// cephMgrAndLoggingOperations renders the topology-phase mgr-module enables.
+// These run after the pool/filesystem storage-phase ops in the rendered order,
+// so they are a distinct builder from cephTopologyOperations rather than folded
+// into it. There is no dashboard Loki wiring: cephadm provisions grafana's Loki
+// datasource itself, and the mgr dashboard has no set-loki-api-host command
+// (its set-* commands are generated 1:1 from its Options, none of which is
+// LOKI_API_HOST), so emitting it would fail every apply.
 func cephMgrAndLoggingOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 	var ops []map[string]any
 	// mgr modules reconcile additively; the role probes `ceph mgr module ls`
 	// and skips already-enabled (or always-on) modules.
 	for _, module := range cluster.Spec.Ceph.MgrModules {
 		ops = append(ops, operationWithIdempotency("topology", "enable-mgr-module-"+module, "mgr-module", module, "ceph", "mgr", "module", "enable", module))
-	}
-	// Authoring loki wires the dashboard to it (the easy-to-forget half of
-	// centralized logging). promtail ships logs to loki, so there is no
-	// set-promtail-api-host — only set-loki-api-host. Last-write-wins.
-	if monitoring := cluster.Spec.Ceph.Monitoring; monitoring != nil && monitoring.Loki != nil {
-		if hosts := topology.ResolvePlacement(cluster, monitoring.Loki.Placement, ""); len(hosts) > 0 {
-			port := monitoring.Loki.Port
-			if port == 0 {
-				port = 3100
-			}
-			url := fmt.Sprintf("http://%s:%d", hosts[0], port)
-			ops = append(ops, operationInPhase("topology", "set-dashboard-loki-api-host", "ceph", "dashboard", "set-loki-api-host", url))
-		}
 	}
 	return ops
 }

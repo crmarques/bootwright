@@ -48,6 +48,27 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 	}
 }
 
+// TestNetworkConfigInterfaceNamesSkipsVirtualInterfaces pins that only
+// physical (ethernet/untyped) interfaces get a name that later drives MAC
+// generation and VM-NIC fabrication; bond/vlan (and other virtual) interfaces
+// are created inside the guest by NMState and must not become substrate NICs.
+func TestNetworkConfigInterfaceNamesSkipsVirtualInterfaces(t *testing.T) {
+	config := map[string]any{
+		"interfaces": []any{
+			map[string]any{"name": "eno1", "type": "ethernet"},
+			map[string]any{"name": "eno2", "type": "ethernet"},
+			map[string]any{"name": "bond0", "type": "bond"},
+			map[string]any{"name": "bond0.151", "type": "vlan"},
+			map[string]any{"name": "untyped"}, // treated as physical
+		},
+	}
+	got := networkConfigInterfaceNames(config)
+	want := []string{"eno1", "eno2", "untyped"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("networkConfigInterfaceNames = %#v, want %#v", got, want)
+	}
+}
+
 func TestMachineNetworkConfigUsesInlineMachineSpecs(t *testing.T) {
 	state := v1alpha1.State{}
 	ci := v1alpha1.ClusterInstall{

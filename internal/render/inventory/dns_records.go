@@ -172,7 +172,10 @@ func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterIns
 			continue
 		}
 		bind := component.Spec.NameResolution.BindAddress
-		if bind == "" || bind == "0.0.0.0" || seen[bind] {
+		// Wildcard binds ("", 0.0.0.0, ::) are not routable resolver
+		// addresses; emitting DNS=:: into the controller's
+		// systemd-resolved drop-in leaves it unable to resolve api/api-int.
+		if bind == "" || bind == "0.0.0.0" || bind == "::" || seen[bind] {
 			continue
 		}
 		seen[bind] = true

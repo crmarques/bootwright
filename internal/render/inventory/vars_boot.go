@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"sort"
 	"strings"
@@ -308,11 +309,33 @@ func normalizeRedfishURL(addr string) (baseURL, systemID string) {
 		base := s[:i]
 		rest := strings.TrimSuffix(s[i+len(systemsMarker):], "/")
 		if rest != "" && !strings.Contains(rest, "/") {
-			return base, rest
+			return bracketRedfishHost(base), rest
 		}
-		return base, ""
+		return bracketRedfishHost(base), ""
 	}
-	return strings.TrimRight(s, "/"), ""
+	return bracketRedfishHost(strings.TrimRight(s, "/")), ""
+}
+
+// bracketRedfishHost wraps a bare IPv6 literal authority in square brackets so
+// consumers that join "/redfish/v1/Systems" onto the base URL — and Python
+// urlsplit inside the Ansible reachability probe — parse the host correctly.
+// An unbracketed "fd00:140::99" otherwise has its trailing group misread as a
+// port ("Port could not be cast to integer value as '140::99'"), failing the
+// BMC probe far from the authoring mistake. Already-bracketed hosts, IPv4
+// literals, and DNS names pass through untouched.
+func bracketRedfishHost(base string) string {
+	i := strings.Index(base, "://")
+	if i < 0 {
+		return base
+	}
+	scheme, host := base[:i+3], base[i+3:]
+	if host == "" || strings.HasPrefix(host, "[") {
+		return base
+	}
+	if strings.Contains(host, ":") && net.ParseIP(host) != nil {
+		return scheme + "[" + host + "]"
+	}
+	return base
 }
 
 func normalizeRedfishTransport(addr string) string {

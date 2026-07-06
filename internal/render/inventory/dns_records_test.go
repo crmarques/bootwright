@@ -182,6 +182,23 @@ func TestClusterControllerNameResolversSkipsExternal(t *testing.T) {
 	}
 }
 
+// A dnsmasq bound to the IPv6 wildcard "::" is not a routable resolver
+// address, so it must be skipped exactly like "" and "0.0.0.0" rather than
+// emitting DNS=:: into the controller's systemd-resolved drop-in.
+func TestClusterControllerNameResolversSkipsWildcardBind(t *testing.T) {
+	for _, bind := range []string{"::", "0.0.0.0", ""} {
+		state := dnsRecordsState()
+		state.InfraComponents[0].Spec.NameResolution.BindAddress = bind
+		ci, err := installer.ClusterInstallForOCP(state, state.ContainerClusters[0])
+		if err != nil {
+			t.Fatalf("ClusterInstallForOCP: %v", err)
+		}
+		if got := ClusterControllerNameResolvers(state, ci); got != nil {
+			t.Fatalf("ClusterControllerNameResolvers(bind=%q) = %v, want nil", bind, got)
+		}
+	}
+}
+
 func dnsRecordsState() v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{

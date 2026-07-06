@@ -153,6 +153,14 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if storage["rootDisk"] != "vda" {
 		t.Fatalf("kickstart storage = %v", storage)
 	}
+	// rootDisk is the only key ks.cfg.j2 reads; wipe and rootDevice were dead vars
+	// that only fed the marker hash and must no longer be emitted.
+	if _, ok := storage["wipe"]; ok {
+		t.Fatalf("kickstart storage must omit dead wipe var, got %v", storage)
+	}
+	if _, ok := storage["rootDevice"]; ok {
+		t.Fatalf("kickstart storage must omit dead rootDevice var, got %v", storage)
+	}
 	boot := first["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
 	if !strings.Contains(iso["stagePath"].(string), "os-ceph-libvirt-ceph-0.iso") {
@@ -313,10 +321,12 @@ func TestManagedOSInstallRendersFIPSKernelArgs(t *testing.T) {
 	if got := installer["kernelArgs"].([]string); !reflect.DeepEqual(got, []string{"fips=1"}) {
 		t.Fatalf("installer.kernelArgs = %v", got)
 	}
+	// FIPS rides solely on installer.kernelArgs; the kickstart security block must
+	// NOT carry a fips key (ks.cfg.j2 never reads one, so emitting it would be a
+	// dead, misleading contract surface).
 	security := osInstall["kickstart"].(map[string]any)["security"].(map[string]any)
-	fips := security["fips"].(map[string]any)
-	if fips["enabled"] != true {
-		t.Fatalf("kickstart fips = %v", fips)
+	if _, ok := security["fips"]; ok {
+		t.Fatalf("kickstart security must omit fips (delivered via kernelArgs), got %v", security["fips"])
 	}
 }
 

@@ -50,6 +50,16 @@ func CephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
 
 func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
+	// The stretch tiebreaker is a mon-only arbiter in a third site. It must get a
+	// monmap location (ceph mon set_location, rendered separately) but NOT a CRUSH
+	// host-spec location: cephadm creates the failure-domain bucket at host add, so
+	// a location here would add a third datacenter bucket and `ceph mon
+	// enable_stretch_mode` refuses when the dividing bucket type has != 2 members.
+	stretch := cluster.Spec.Ceph.Topology.Stretch
+	tiebreaker := ""
+	if stretch != nil {
+		tiebreaker = topology.CanonicalHostname(cluster, stretch.Tiebreaker.Host)
+	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		labels := append([]string(nil), node.Roles...)
 		for _, label := range node.Labels {
@@ -66,9 +76,12 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 		// real failure-domain buckets (e.g. datacenter). Without stretch the
 		// failure domain is "host", so a location would parent every host bucket
 		// under a bogus host-type bucket named after the site — outside
-		// root=default, where no CRUSH rule maps PGs and all pool I/O hangs.
-		if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil && node.Site != "" {
+		// root=default, where no CRUSH rule maps PGs and all pool I/O hangs. The
+		// mon-only tiebreaker is excluded (see above); data-site hosts pin
+		// root=default so their failure-domain buckets nest under the data root.
+		if stretch != nil && node.Site != "" && node.Hostname != tiebreaker {
 			host["location"] = map[string]any{
+				"root":                          "default",
 				topology.FailureDomain(cluster): node.Site,
 			}
 		}

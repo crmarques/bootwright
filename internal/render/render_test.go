@@ -737,3 +737,41 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 		t.Fatalf("nodeNetworking not rendered: %v", vsphere)
 	}
 }
+
+// TestRenderCoreSharedOutputsStayInStep guards the single render body shared by
+// render.All (on-disk context bundle) and the tool-input bundle: the
+// secret-independent, mode-invariant artifacts — effective-state.yaml and the
+// lock — are produced by the shared renderCore, not by either mode's seams, so
+// both entry points must emit them byte-identically. If a future change
+// re-forks the two render bodies, one artifact could drift in one mode and not
+// the other; this test fails first.
+func TestRenderCoreSharedOutputsStayInStep(t *testing.T) {
+	t.Setenv("HOME", "/bootwright-golden/home")
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	allDir := t.TempDir()
+	if _, err := render.All(allDir, t.TempDir(), "/bootwright-golden/secrets", state); err != nil {
+		t.Fatalf("render.All: %v", err)
+	}
+	toolDir := t.TempDir()
+	if _, err := render.ToolInputsPortable(toolDir, state); err != nil {
+		t.Fatalf("render.ToolInputsPortable: %v", err)
+	}
+
+	for _, name := range []string{"effective-state.yaml", "bootwright.lock.yaml"} {
+		fromAll, err := os.ReadFile(filepath.Join(allDir, name))
+		if err != nil {
+			t.Fatalf("read All %s: %v", name, err)
+		}
+		fromTool, err := os.ReadFile(filepath.Join(toolDir, name))
+		if err != nil {
+			t.Fatalf("read ToolInputs %s: %v", name, err)
+		}
+		if !bytes.Equal(fromAll, fromTool) {
+			t.Fatalf("%s drifted between render.All and the tool-input render", name)
+		}
+	}
+}

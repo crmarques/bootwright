@@ -88,7 +88,7 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInstall
 		return ""
 	}
 	registry := component.Spec.Registry
-	host := proxy.ClusterFacingMachineAddress(state, registry.MachineRef.Name, ci)
+	host := mirrorRegistryHost(state, entry, registry, ci)
 	if host == "" {
 		return ""
 	}
@@ -97,6 +97,45 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInstall
 		port = v1alpha1.DefaultMirrorRegistryPort
 	}
 	return fmt.Sprintf("%s:%d", host, port)
+}
+
+// mirrorRegistryHost resolves the cluster-facing host of the managed mirror
+// registry. It prefers a declared endpoint address (parity with
+// artifactServer) or an explicit, routable bind address so a loopback bastion
+// SSH alias never silently resolves the mirror to the network gateway; only
+// when nothing is declared does it fall back to the machine's SSH/route
+// address.
+func mirrorRegistryHost(state v1alpha1.State, entry v1alpha1.EnvironmentRegistryComponent, registry *v1alpha1.RegistryComponent, ci v1alpha1.ClusterInstall) string {
+	if host := registryEndpointAddress(state, registry, entry.EndpointRef.Name); host != "" {
+		return host
+	}
+	if ip := net.ParseIP(registry.BindAddress); ip != nil && !ip.IsUnspecified() && !ip.IsLoopback() {
+		return registry.BindAddress
+	}
+	return proxy.ClusterFacingMachineAddress(state, registry.MachineRef.Name, ci)
+}
+
+// registryEndpointAddress resolves a declared endpoints[] address on the
+// registry machine, matching stateview's managed-service endpoint resolution:
+// a named endpoint wins, otherwise a sole endpoint is used.
+func registryEndpointAddress(state v1alpha1.State, registry *v1alpha1.RegistryComponent, endpointName string) string {
+	if endpointName != "" {
+		for _, endpoint := range registry.Endpoints {
+			if endpoint.Name == endpointName {
+				if address, ok := stateview.NamedMachineAddress(state, registry.MachineRef.Name, endpoint.AddressRef.Name); ok {
+					return address
+				}
+				return ""
+			}
+		}
+		return ""
+	}
+	if len(registry.Endpoints) == 1 {
+		if address, ok := stateview.NamedMachineAddress(state, registry.MachineRef.Name, registry.Endpoints[0].AddressRef.Name); ok {
+			return address
+		}
+	}
+	return ""
 }
 
 func installerImageDigestSources(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, env *v1alpha1.Environment) []v1alpha1.ImageDigestSource {

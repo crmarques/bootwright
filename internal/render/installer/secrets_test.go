@@ -405,6 +405,160 @@ func TestBakeProxyCredentials(t *testing.T) {
 	}
 }
 
+// TestLoadInstallerSecretsOKDRendersFakePullSecret pins the pull-secret-free
+// OKD path: rather than the literal "{}" (which openshift-install rejects with
+// "auths required"), the renderer emits OKD's conventional fake credential.
+func TestLoadInstallerSecretsOKDRendersFakePullSecret(t *testing.T) {
+	secretsDir := t.TempDir()
+	writeEncryptedSecret(t, secretsDir, "ssh", secretstore.MaterialSSHPublic, "ssh-ed25519 AAAA generated\n")
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"ssh": {Generated: &v1alpha1.EnvironmentSecretGenerated{
+						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+					}},
+				},
+			},
+		}},
+		Machines: []v1alpha1.Machine{installerNodeMachine("master-0")},
+	}
+	ocp := v1alpha1.ContainerCluster{
+		Metadata: v1alpha1.Metadata{Name: "okd"},
+		Spec: v1alpha1.ContainerClusterSpec{
+			Distribution: v1alpha1.DistributionSpec{Type: v1alpha1.DistributionOKD},
+			Install: v1alpha1.OCPInstallSpec{
+				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
+			},
+			Hosts: []v1alpha1.OCPHostSpec{{
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
+			}},
+		},
+	}
+
+	secrets, err := LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
+	if err != nil {
+		t.Fatalf("LoadInstallerSecrets: %v", err)
+	}
+	if secrets.PullSecret != fakeOKDPullSecret {
+		t.Fatalf("PullSecret = %q, want fake OKD pull secret %q", secrets.PullSecret, fakeOKDPullSecret)
+	}
+	// The emitted secret must pass the same auths check openshift-install runs.
+	if err := validatePullSecret(secrets.PullSecret, "okd"); err != nil {
+		t.Fatalf("fake OKD pull secret fails auths validation: %v", err)
+	}
+}
+
+// TestAdditionalTrustBundleRefsFoldsClusterInstallProxyCA pins that a
+// TLS-inspecting cluster-install proxy's CA is auto-folded into
+// additionalTrustBundle (mirroring the mirror-CA fold), and that a plain proxy
+// without a trust bundle contributes nothing.
+func TestAdditionalTrustBundleRefsFoldsClusterInstallProxyCA(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				ProxyFor: v1alpha1.EnvironmentProxyForSpec{ContainerClusterInstall: "corp"},
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					Proxies: []v1alpha1.EnvironmentProxyComponent{{
+						Name:       "corp",
+						Management: v1alpha1.EnvironmentComponentExternal,
+						Connection: &v1alpha1.EnvironmentProxyConnection{
+							HTTPSProxy:     "http://proxy.corp:3128",
+							TrustBundleRef: v1alpha1.SecretRef{Name: "corp-proxy-ca"},
+						},
+					}},
+				},
+			},
+		}},
+	}
+	ocp := v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: "ocp"}}
+
+	if got := refNames(additionalTrustBundleRefs(state, ocp)); !containsString(got, "corp-proxy-ca") {
+		t.Fatalf("additionalTrustBundleRefs = %v, want to include corp-proxy-ca", got)
+	}
+
+	state.Environments[0].Spec.InfraComponents.Proxies[0].Connection.TrustBundleRef = v1alpha1.SecretRef{}
+	if got := additionalTrustBundleRefs(state, ocp); len(got) != 0 {
+		t.Fatalf("additionalTrustBundleRefs = %v, want empty without a proxy trust bundle", refNames(got))
+	}
+}
+
+// TestEffectiveMirrorRegistryURLPrefersDeclaredEndpoint pins that a declared
+// registry endpoint address wins over the SSH/route heuristic, so a loopback
+// bastion SSH alias never silently resolves the mirror to a network gateway.
+func TestEffectiveMirrorRegistryURLPrefersDeclaredEndpoint(t *testing.T) {
+	env := &v1alpha1.Environment{
+		Metadata: v1alpha1.Metadata{Name: "env"},
+		Spec: v1alpha1.EnvironmentSpec{
+			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+				Registries: []v1alpha1.EnvironmentRegistryComponent{{
+					Name:         "default",
+					Management:   v1alpha1.EnvironmentComponentManaged,
+					ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
+					EndpointRef:  v1alpha1.LocalObjectReference{Name: "mirror"},
+				}},
+			},
+		},
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{*env},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "registry-host"},
+			Spec: v1alpha1.MachineSpec{
+				Addresses: []v1alpha1.MachineAddress{
+					{Name: "ssh", Address: "localhost"},
+					{Name: "data", Address: "10.10.0.9"},
+				},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
+				},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "registry"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotRegistry,
+				Registry: &v1alpha1.RegistryComponent{
+					Implementation: v1alpha1.InfraComponentTypeMirrorRegistry,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "registry-host"},
+					Port:           5000,
+					Endpoints: []v1alpha1.ServiceEndpoint{{
+						Name:       "mirror",
+						AddressRef: v1alpha1.LocalObjectReference{Name: "data"},
+					}},
+				},
+			},
+		}},
+	}
+
+	got := effectiveMirrorRegistryURL(state, v1alpha1.ClusterInstall{}, &state.Environments[0])
+	if got != "10.10.0.9:5000" {
+		t.Fatalf("effectiveMirrorRegistryURL = %q, want the declared endpoint address 10.10.0.9:5000", got)
+	}
+}
+
+func refNames(refs []v1alpha1.SecretRef) []string {
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, ref.Name)
+	}
+	return out
+}
+
+func containsString(values []string, want string) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
 func writeEncryptedSecret(t *testing.T, dir, name string, role secretstore.MaterialRole, content string) {
 	t.Helper()
 	writeEncryptedSecretBytes(t, dir, name, role, []byte(content))

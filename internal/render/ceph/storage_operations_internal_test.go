@@ -734,8 +734,10 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
-// Authoring loki/promtail renders role-less services and wires the dashboard to
-// loki (set-loki-api-host only — there is no set-promtail-api-host).
+// Authoring loki/promtail renders the role-less services, but WITHOUT a
+// retention_time (that key exists only on cephadm's PrometheusSpec; MonitoringSpec
+// -- loki/promtail -- rejects it) and WITHOUT any dashboard set-loki-api-host op
+// (no such mgr dashboard command exists; emitting it would fail every apply).
 func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -758,20 +760,18 @@ func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
 	if byType["loki"] == nil || byType["promtail"] == nil {
 		t.Fatalf("loki/promtail must render when authored: %v", byType)
 	}
-	if byType["loki"]["spec"].(map[string]any)["retention_time"] != "30d" {
-		t.Fatalf("loki retention_time = %v", byType["loki"]["spec"])
+	if spec, ok := byType["loki"]["spec"].(map[string]any); ok {
+		if _, present := spec["retention_time"]; present {
+			t.Fatalf("loki must not render retention_time (cephadm MonitoringSpec rejects it): %v", spec)
+		}
 	}
-	var dashboardOp []string
 	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
 		if op["name"] == "set-dashboard-loki-api-host" {
-			dashboardOp, _ = op["command"].([]string)
+			t.Fatal("there is no `ceph dashboard set-loki-api-host` command; the op must not be rendered")
 		}
 		if op["name"] == "set-dashboard-promtail-api-host" {
 			t.Fatal("there is no set-promtail-api-host op")
 		}
-	}
-	if !reflect.DeepEqual(dashboardOp, []string{"ceph", "dashboard", "set-loki-api-host", "http://ceph-0:3100"}) {
-		t.Fatalf("loki dashboard wiring = %v", dashboardOp)
 	}
 }
 
@@ -939,6 +939,168 @@ func TestRGWRealmZoneAndConfigRender(t *testing.T) {
 	spec := rgw["spec"].(map[string]any)
 	if spec["rgw_realm"] != "prod" || spec["rgw_zonegroup"] != "us" || spec["rgw_zone"] != "us-east" {
 		t.Fatalf("rgw spec realm/zone = %v", spec)
+	}
+}
+
+// A second gateway that shares a realm but declares its own zonegroup/zone must
+// still get those created (the first gateway's realm-create must not swallow
+// them), only the first zonegroup/zone of a realm is --master/--default, and the
+// realm's period is committed AFTER the later gateway's zonegroup/zone so its rgw
+// daemons reference a zone that exists.
+func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"rgw"},
+			}}},
+		}},
+	}
+	mkGW := func(name, id, zg, zone string) v1alpha1.StorageObjectGateway {
+		return v1alpha1.StorageObjectGateway{
+			Metadata: v1alpha1.Metadata{Name: name},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: name + ".example.com"},
+				Ceph:              v1alpha1.StorageObjectGatewayCephSpec{ServiceID: id, Realm: "corp", ZoneGroup: zg, Zone: zone},
+			},
+		}
+	}
+	state := v1alpha1.State{
+		StorageClusters:       []v1alpha1.StorageCluster{cluster},
+		StorageObjectGateways: []v1alpha1.StorageObjectGateway{mkGW("rgw", "east", "zg-east", "east-1"), mkGW("rgw-west", "west", "zg-west", "west-1")},
+	}
+
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	byName := map[string]map[string]any{}
+	var order []string
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		byName[name] = op
+		order = append(order, name)
+	}
+
+	// The realm is created once, --default; the FIRST zonegroup/zone are master.
+	eastZG, _ := byName["create-rgw-zonegroup-zg-east"]["command"].([]string)
+	if !reflect.DeepEqual(eastZG, []string{"radosgw-admin", "zonegroup", "create", "--rgw-zonegroup=zg-east", "--rgw-realm=corp", "--master", "--default"}) {
+		t.Fatalf("first zonegroup create = %v", eastZG)
+	}
+	// The SECOND gateway's zonegroup/zone must be created too (the bug: skipped).
+	westZG, ok := byName["create-rgw-zonegroup-zg-west"]["command"].([]string)
+	if !ok {
+		t.Fatal("second gateway sharing the realm must still create its own zonegroup")
+	}
+	if !reflect.DeepEqual(westZG, []string{"radosgw-admin", "zonegroup", "create", "--rgw-zonegroup=zg-west", "--rgw-realm=corp"}) {
+		t.Fatalf("peer zonegroup must join the realm without --master/--default: %v", westZG)
+	}
+	westZone, ok := byName["create-rgw-zone-west-1"]["command"].([]string)
+	if !ok {
+		t.Fatal("second gateway sharing the realm must still create its own zone")
+	}
+	if !reflect.DeepEqual(westZone, []string{"radosgw-admin", "zone", "create", "--rgw-zone=west-1", "--rgw-zonegroup=zg-west", "--rgw-realm=corp"}) {
+		t.Fatalf("peer zone = %v", westZone)
+	}
+	// The single period commit for the realm must follow BOTH zone creates.
+	idx := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+	if p := idx("commit-rgw-period-corp"); p < 0 || p < idx("create-rgw-zone-west-1") {
+		t.Fatalf("period commit (idx %d) must come after the peer zone create (idx %d)", p, idx("create-rgw-zone-west-1"))
+	}
+}
+
+// The mon-only stretch tiebreaker must NOT get a cephadm host-spec CRUSH
+// location (that would add a third failure-domain bucket and make
+// enable_stretch_mode fail EINVAL); data-site hosts get their site bucket nested
+// under root=default.
+func TestStretchTiebreakerOmitsCRUSHLocation(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"},
+					RuleName:      "stretch-rule",
+				},
+				Hosts: []v1alpha1.StorageCephHost{
+					{Hostname: "ceph-dc1-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}, Site: "dc1", Roles: []string{"mon", "osd"}},
+					{Hostname: "ceph-dc2-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc2-0"}, Site: "dc2", Roles: []string{"mon", "osd"}},
+					{Hostname: "arbiter", MachineRef: v1alpha1.LocalObjectReference{Name: "arbiter"}, Site: "dc3", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	byHost := map[string]map[string]any{}
+	for _, doc := range CephadmBootstrapSpec(v1alpha1.State{}, cluster) {
+		m := doc.(map[string]any)
+		byHost[m["hostname"].(string)] = m
+	}
+	if _, present := byHost["arbiter"]["location"]; present {
+		t.Fatalf("stretch tiebreaker must not carry a CRUSH host-spec location: %v", byHost["arbiter"])
+	}
+	loc, ok := byHost["ceph-dc1-0"]["location"].(map[string]any)
+	if !ok {
+		t.Fatalf("data-site host must carry a CRUSH location: %v", byHost["ceph-dc1-0"])
+	}
+	if loc["datacenter"] != "dc1" || loc["root"] != "default" {
+		t.Fatalf("data-site location must nest the site under root=default: %v", loc)
+	}
+}
+
+// The nfs-export idempotency key is <serviceID>|<pseudo>; the generated apply.sh
+// must single-quote it so the '|' is not parsed as a shell pipe (which under
+// set -euo pipefail aborts the whole script).
+func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
+	op := operationWithIdempotency("object-gateway", "create-nfs-export-lab-nfs-shared", "nfs-export", "lab-nfs|/shared",
+		"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", "lab-nfs", "--pseudo-path", "/shared", "--fsname", "cephfs", "--path", "/")
+	var b strings.Builder
+	writeOperation(&b, op)
+	line := b.String()
+	if strings.Contains(line, "bw_guarded nfs-export lab-nfs|/shared") {
+		t.Fatalf("nfs-export guard key '|' is unquoted and parses as a shell pipe:\n%s", line)
+	}
+	if !strings.Contains(line, "'lab-nfs|/shared'") {
+		t.Fatalf("nfs-export guard key must be single-quoted:\n%s", line)
+	}
+}
+
+// A management gateway carrying secrets is omitted from the native-CLI bundle but
+// the keepalive ingress that fronts it is not; apply.sh must warn (a [todo]
+// naming the missing mgmt-gateway step) so the operator knows the VIP has no
+// backend until the gateway is applied by hand.
+func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
+	mgmt := &v1alpha1.StorageCephManagement{
+		DNSName: "dash.example.com",
+		TLS:     &v1alpha1.StorageCephManagementTLS{},
+		Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+	}
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Management: mgmt,
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
+			}}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	script := CephApplyScript(state, cluster, CephScriptOptions{LibFile: "lib.sh", BootstrapSpecFile: "spec.yaml", LateServicesSpecFile: "late.yaml"})
+	if !strings.Contains(script, "[todo]") || !strings.Contains(script, "mgmt-gateway") {
+		t.Fatalf("apply.sh must warn about the omitted secret-bearing mgmt-gateway:\n%s", script)
+	}
+
+	// A management gateway WITHOUT secrets is in the bundle, so no warning fires.
+	plainCluster := cluster
+	plainCluster.Spec.Ceph.Management = &v1alpha1.StorageCephManagement{DNSName: "dash.example.com", Ingress: mgmt.Ingress}
+	plain := CephApplyScript(v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{plainCluster}}, plainCluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
+	if strings.Contains(plain, "[todo]") && strings.Contains(plain, "mgmt-gateway") {
+		t.Fatalf("no warning must fire when the gateway is secret-free and in the bundle:\n%s", plain)
 	}
 }
 

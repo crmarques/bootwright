@@ -62,6 +62,18 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	b.WriteString("\necho \"== stage 30: late service specs (ceph orch apply) ==\"\n")
 	writeOrchApply(&b, opts.LateServicesSpecFile)
 
+	// When the management gateway carries secret material (TLS cert / oauth2-proxy
+	// secrets) bootwright omits its cephadm doc from late-services and applies it
+	// from a dedicated secret-staging step this native-CLI bundle does not
+	// reproduce. late-services still deploys the keepalive ingress that fronts it,
+	// so warn the operator: the VIP is up but has no backend until the gateway is
+	// applied by hand (or via 'bootwright apply').
+	if ManagementHasSecrets(cluster) {
+		b.WriteString("\necho \"  [todo] spec.ceph.management carries TLS/oauth2-proxy secrets: the mgmt-gateway is NOT in this bundle.\"\n")
+		b.WriteString("echo \"  [todo] The keepalive ingress above fronts it, so its VIP has no backend until you apply the\"\n")
+		b.WriteString("echo \"  [todo] mgmt-gateway spec with your cert/secret files (or run 'bootwright apply --clusters <cluster>').\"\n")
+	}
+
 	fmt.Fprintf(&b, "\necho \"bootwright: ceph apply complete for %s\"\n", name)
 	return b.String()
 }
@@ -134,22 +146,26 @@ func writeOperation(b *strings.Builder, op map[string]any) {
 		// other argv-less operation has no native form and degrades to a stub.
 		if kind == "stretch-crush-rule" {
 			domain, replicas := stretchRuleParams(op)
-			fmt.Fprintf(b, "bw_stretch_crush_rule %s\n", shellquote.Quote([]string{resName, domain, replicas}))
+			fmt.Fprintf(b, "bw_stretch_crush_rule %s\n", shellquote.QuoteWords([]string{resName, domain, replicas}))
 			return
 		}
 		fmt.Fprintf(b, "echo \"  [todo] %s cannot be expressed as a native command; apply it with 'bootwright apply --clusters <cluster>'\"\n", name)
 		return
 	}
+	// QuoteWords (allowlist) not Quote (denylist): idempotency identities carry
+	// shell-active characters Quote's display denylist misses -- the nfs-export
+	// key is <serviceID>|<pseudo>, and an unquoted '|' would parse as a pipe and
+	// abort the script under set -euo pipefail.
 	sensitive := opSensitive(op)
 	switch {
 	case guarded && sensitive:
-		fmt.Fprintf(b, "bw_guarded_quiet %s\n", shellquote.Quote(append([]string{kind, resName, name}, cmd...)))
+		fmt.Fprintf(b, "bw_guarded_quiet %s\n", shellquote.QuoteWords(append([]string{kind, resName, name}, cmd...)))
 	case guarded:
-		fmt.Fprintf(b, "bw_guarded %s\n", shellquote.Quote(append([]string{kind, resName}, cmd...)))
+		fmt.Fprintf(b, "bw_guarded %s\n", shellquote.QuoteWords(append([]string{kind, resName}, cmd...)))
 	case sensitive:
-		fmt.Fprintf(b, "bw_run_quiet %s\n", shellquote.Quote(append([]string{name}, cmd...)))
+		fmt.Fprintf(b, "bw_run_quiet %s\n", shellquote.QuoteWords(append([]string{name}, cmd...)))
 	default:
-		fmt.Fprintf(b, "bw_run %s\n", shellquote.Quote(cmd))
+		fmt.Fprintf(b, "bw_run %s\n", shellquote.QuoteWords(cmd))
 	}
 }
 

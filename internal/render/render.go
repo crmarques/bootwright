@@ -72,69 +72,23 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 	return allOn(fs, renderedDir, clustersDir, PathOptions{SecretsDir: secretsDir}, state, nil)
 }
 
+// allOn renders the on-disk context bundle (installer placeholders under
+// clustersDir, Ansible inventory/vars carrying ownership records) by feeding
+// its four mode seams into the shared renderCore.
 func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
-	if err := checkResolvedNames(state); err != nil {
-		return Result{}, err
-	}
-	result := Result{
-		EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml"),
-		LockPath:           filepath.Join(renderedDir, "bootwright.lock.yaml"),
-		InventoryPath:      filepath.Join(renderedDir, "ansible", "inventory.yaml"),
-		VarsPath:           filepath.Join(renderedDir, "ansible", "vars.yaml"),
-		ArtifactsDir:       filepath.Join(renderedDir, "ansible", "artifacts"),
-		InstallerAssets:    InstallerAssets(clustersDir, state),
-		StorageAssets:      ceph.StorageAssets(renderedDir, state),
-	}
-	dirs := []string{renderedDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
-	for _, asset := range result.InstallerAssets {
-		dirs = append(dirs, asset.Dir)
-	}
-	for _, asset := range result.StorageAssets {
-		dirs = append(dirs, asset.Directories()...)
-	}
-	for _, dir := range dirs {
-		if err := ensureLocalDir(fs, dir); err != nil {
-			return result, err
-		}
-	}
-	writes := []struct {
-		path  string
-		value any
-	}{
-		{path: result.EffectiveStatePath, value: EffectiveState(state)},
-		{path: result.LockPath, value: Lock(state)},
-		{path: result.InventoryPath, value: inventory.InventoryWithOwnershipRecordsAndPathOptions(state, paths, records)},
-		{path: result.VarsPath, value: inventory.VarsWithPathOptionsAndOwnership(state, paths, records)},
-	}
-	for _, w := range writes {
-		if err := writeYAML(fs, w.path, w.value); err != nil {
-			return result, err
-		}
-	}
-	for _, ocp := range state.ContainerClusters {
-		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
-		installConfig, err := InstallerConfig(state, ocp)
-		if err != nil {
-			return result, err
-		}
-		if err := writeYAML(fs, asset.InstallConfigPath, installConfig); err != nil {
-			return result, err
-		}
-		agentConfig, err := AgentConfig(state, ocp)
-		if err != nil {
-			return result, err
-		}
-		if err := writeYAML(fs, asset.AgentConfigPath, agentConfig); err != nil {
-			return result, err
-		}
-		if err := writeInstallerManifests(fs, asset.InstallManifestsDir, InstallerManifests(ocp, PlaceholderInstallerSecrets(state, ocp))); err != nil {
-			return result, err
-		}
-	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state, storageAssetWriteOptions{}); err != nil {
-		return result, err
-	}
-	return result, nil
+	return renderCore(fs, renderedDir, state, renderParams{
+		installerAssets: func(s v1alpha1.State) []InstallerAsset { return InstallerAssets(clustersDir, s) },
+		inventory: func(s v1alpha1.State) any {
+			return inventory.InventoryWithOwnershipRecordsAndPathOptions(s, paths, records)
+		},
+		vars: func(s v1alpha1.State) any {
+			return inventory.VarsWithPathOptionsAndOwnership(s, paths, records)
+		},
+		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
+			return PlaceholderInstallerSecrets(s, ocp), nil
+		},
+		storageOpts: storageAssetWriteOptions{},
+	})
 }
 
 // ResolveInstallerForContext writes install-config / agent-config with real
@@ -199,8 +153,10 @@ func ToolInputsForContext(contextName, outputDir, secretsDir string, state v1alp
 }
 
 func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return toolInputsOn(fs, outputDir, state, toolInputsParams{
-		secretsDir: secretsDir,
+	return renderCore(fs, outputDir, state, renderParams{
+		installerAssets: func(s v1alpha1.State) []InstallerAsset { return installer.InstallerToolInputAssets(outputDir, s) },
+		inventory:       func(s v1alpha1.State) any { return inventory.Inventory(s, secretsDir) },
+		vars:            func(s v1alpha1.State) any { return inventory.VarsWithSecretsDir(s, secretsDir) },
 		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
 			return installer.LoadInstallerSecretsForContext(contextName, s, ocp, secretsDir)
 		},
@@ -233,8 +189,10 @@ func ToolInputsPortableOn(fs FileSystem, outputDir string, state v1alpha1.State)
 			return Result{}, err
 		}
 	}
-	return toolInputsOn(fs, outputDir, state, toolInputsParams{
-		secretsDir: secret.PlaceholderSecretsDir,
+	return renderCore(fs, outputDir, state, renderParams{
+		installerAssets: func(s v1alpha1.State) []InstallerAsset { return installer.InstallerToolInputAssets(outputDir, s) },
+		inventory:       func(s v1alpha1.State) any { return inventory.Inventory(s, secret.PlaceholderSecretsDir) },
+		vars:            func(s v1alpha1.State) any { return inventory.VarsWithSecretsDir(s, secret.PlaceholderSecretsDir) },
 		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
 			return installer.PortableInstallerSecrets(s, ocp), nil
 		},
@@ -242,33 +200,43 @@ func ToolInputsPortableOn(fs FileSystem, outputDir string, state v1alpha1.State)
 	})
 }
 
-// toolInputsParams parameterises the shared tool-input render core over its two
-// modes: context (real material inlined) and portable ({{ secret }} tokens).
-type toolInputsParams struct {
-	// secretsDir feeds inventory/vars path resolution: a real context secrets
-	// directory, or secret.PlaceholderSecretsDir for the portable token render.
-	secretsDir string
-	// installerSecrets supplies the per-cluster install-config/manifest secrets.
+// renderParams parameterises the shared render core over its modes: on-disk
+// context (allOn), tool-input context, and portable ({{ secret }} tokens). The
+// four seams are the only things that differ between those modes.
+type renderParams struct {
+	// installerAssets computes the per-cluster installer asset layout: rooted at
+	// the context clusters dir (allOn) or at the tool-input output dir.
+	installerAssets func(v1alpha1.State) []InstallerAsset
+	// inventory and vars render the Ansible inventory/vars documents, carrying
+	// ownership records + path options (allOn) or a secrets-dir seam (tool-input).
+	inventory func(v1alpha1.State) any
+	vars      func(v1alpha1.State) any
+	// installerSecrets supplies the per-cluster install-config/manifest secrets:
+	// placeholder references, real context material, or portable tokens.
 	installerSecrets func(v1alpha1.State, v1alpha1.ContainerCluster) (installer.InstallerSecrets, error)
 	// storageOpts controls external-cluster-details: a real secrets directory
 	// inlines the imported JSON; an empty value emits the SecretRef placeholder.
 	storageOpts storageAssetWriteOptions
 }
 
-func toolInputsOn(fs FileSystem, outputDir string, state v1alpha1.State, params toolInputsParams) (Result, error) {
+// renderCore is the single render body shared by every mode. baseDir roots the
+// effective-state, lock, Ansible, and storage outputs; params supplies the four
+// per-mode seams. It fails before any write when the state carries unresolved
+// names (checkResolvedNames).
+func renderCore(fs FileSystem, baseDir string, state v1alpha1.State, params renderParams) (Result, error) {
 	if err := checkResolvedNames(state); err != nil {
 		return Result{}, err
 	}
 	result := Result{
-		EffectiveStatePath: filepath.Join(outputDir, "effective-state.yaml"),
-		LockPath:           filepath.Join(outputDir, "bootwright.lock.yaml"),
-		InventoryPath:      filepath.Join(outputDir, "ansible", "inventory.yaml"),
-		VarsPath:           filepath.Join(outputDir, "ansible", "vars.yaml"),
-		ArtifactsDir:       filepath.Join(outputDir, "ansible", "artifacts"),
-		InstallerAssets:    installer.InstallerToolInputAssets(outputDir, state),
-		StorageAssets:      ceph.StorageAssets(outputDir, state),
+		EffectiveStatePath: filepath.Join(baseDir, "effective-state.yaml"),
+		LockPath:           filepath.Join(baseDir, "bootwright.lock.yaml"),
+		InventoryPath:      filepath.Join(baseDir, "ansible", "inventory.yaml"),
+		VarsPath:           filepath.Join(baseDir, "ansible", "vars.yaml"),
+		ArtifactsDir:       filepath.Join(baseDir, "ansible", "artifacts"),
+		InstallerAssets:    params.installerAssets(state),
+		StorageAssets:      ceph.StorageAssets(baseDir, state),
 	}
-	dirs := []string{outputDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
+	dirs := []string{baseDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
 		dirs = append(dirs, asset.Dir)
 	}
@@ -286,8 +254,8 @@ func toolInputsOn(fs FileSystem, outputDir string, state v1alpha1.State, params 
 	}{
 		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
-		{path: result.InventoryPath, value: inventory.Inventory(state, params.secretsDir)},
-		{path: result.VarsPath, value: inventory.VarsWithSecretsDir(state, params.secretsDir)},
+		{path: result.InventoryPath, value: params.inventory(state)},
+		{path: result.VarsPath, value: params.vars(state)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {

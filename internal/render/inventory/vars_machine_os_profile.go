@@ -78,10 +78,9 @@ func machineInstallSecurityVars(security v1alpha1.MachineInstallSecurity) map[st
 			"enabled": *security.Firewall.Enabled,
 		}
 	}
-	if security.FIPS.Enabled {
-		out["fips"] = map[string]any{
-			"enabled": true,
-		}
-	}
+	// FIPS is NOT emitted here: ks.cfg.j2 consumes only selinux and firewall, and
+	// FIPS is delivered via installer.kernelArgs=[fips=1] (mkksiso --cmdline), which
+	// Anaconda uses to configure the installed system in FIPS mode. A kickstart
+	// security.fips key would be a dead, misleading contract surface.
 	return out
 }

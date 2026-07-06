@@ -29,6 +29,48 @@ func TestComponentPinsIncludeManagedDNSImage(t *testing.T) {
 	}
 }
 
+// TestComponentPinsReflectOverrides pins that the bill of materials records the
+// artifacts an environment actually pulls: a componentImages override is
+// reflected into the service pin's source (and tag), and a clientsMirror
+// override is reflected into the openshift-install pin source, rather than the
+// upstream defaults those overrides supersede.
+func TestComponentPinsReflectOverrides(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.ComponentImages = map[string]map[string]v1alpha1.ComponentImageSpec{
+		v1alpha1.ComponentSlotNameResolution: {
+			v1alpha1.InfraComponentTypeDnsmasq: {Local: "registry.corp.example:5000/dnsmasq:2.90"},
+		},
+	}
+	state.Environments[0].Spec.Defaults.ClientsMirror = "https://mirror.corp.example/ocp"
+
+	pins := map[string]ComponentPin{}
+	for _, pin := range ComponentPins(state) {
+		pins[pin.Name] = pin
+	}
+
+	dns, ok := pins[v1alpha1.InfraComponentTypeDnsmasq]
+	if !ok {
+		t.Fatalf("dnsmasq pin missing: %v", pins)
+	}
+	if dns.Source != "registry.corp.example:5000/dnsmasq:2.90" {
+		t.Errorf("dnsmasq pin source got %q, want the overridden image reference", dns.Source)
+	}
+	if dns.Version != "2.90" {
+		t.Errorf("dnsmasq pin version got %q, want overridden tag 2.90", dns.Version)
+	}
+
+	install, ok := pins["openshift-install"]
+	if !ok {
+		t.Fatalf("openshift-install pin missing: %v", pins)
+	}
+	if install.Source != "https://mirror.corp.example/ocp/4.21.15/" {
+		t.Errorf("openshift-install pin source got %q, want the clientsMirror override", install.Source)
+	}
+}
+
 func TestVarsProjectResolvedComponentImages(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {

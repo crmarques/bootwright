@@ -148,6 +148,46 @@ func TestPlaceholderInstallerConfigKeepsVSphereCredentialPlaceholders(t *testing
 	}
 }
 
+// TestPlatformConfigVSphereUserManagedLoadBalancer covers the external-LB
+// case: when api/api-int/ingress are not all OpenShift-managed (e.g. a bastion
+// haproxy owns the VIPs), the vSphere platform must declare
+// loadBalancer.type=UserManaged so the integrated LB stays out of those VIPs.
+func TestPlatformConfigVSphereUserManagedLoadBalancer(t *testing.T) {
+	state := v1alpha1.State{}
+	ocp := v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: "ocp"}}
+
+	// No OpenShift-sourced endpoints -> userManaged -> loadBalancer UserManaged.
+	externalLB := v1alpha1.ClusterInstall{}
+	got := platformConfig(state, v1alpha1.PlatformTypeVSphere, externalLB, ocp, InstallerSecrets{})
+	lb := vspherePlatformLoadBalancer(t, got)
+	if lb == nil || lb["type"] != "UserManaged" {
+		t.Fatalf("external-LB vsphere platform loadBalancer = %v, want type=UserManaged", lb)
+	}
+
+	// All three standard endpoints OpenShift-managed -> integrated LB (no field).
+	openshiftManaged := v1alpha1.ClusterInstall{
+		Endpoints: map[string]v1alpha1.Endpoint{
+			v1alpha1.EndpointAPI:     {Source: v1alpha1.EndpointSource{Type: v1alpha1.EndpointSourceOpenShift}},
+			v1alpha1.EndpointAPIInt:  {Source: v1alpha1.EndpointSource{Type: v1alpha1.EndpointSourceOpenShift}},
+			v1alpha1.EndpointIngress: {Source: v1alpha1.EndpointSource{Type: v1alpha1.EndpointSourceOpenShift}},
+		},
+	}
+	got = platformConfig(state, v1alpha1.PlatformTypeVSphere, openshiftManaged, ocp, InstallerSecrets{})
+	if lb := vspherePlatformLoadBalancer(t, got); lb != nil {
+		t.Fatalf("openshift-managed vsphere platform loadBalancer = %v, want none", lb)
+	}
+}
+
+func vspherePlatformLoadBalancer(t *testing.T, platform map[string]any) map[string]any {
+	t.Helper()
+	vsphere, ok := platform["vsphere"].(map[string]any)
+	if !ok {
+		t.Fatalf("platform missing vsphere: %v", platform)
+	}
+	lb, _ := vsphere["loadBalancer"].(map[string]any)
+	return lb
+}
+
 func installConfigFirstVCenter(t *testing.T, config map[string]any) map[string]any {
 	t.Helper()
 	platform, ok := config["platform"].(map[string]any)

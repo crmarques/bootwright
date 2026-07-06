@@ -65,6 +65,24 @@ func TestNormalizeRedfishURL(t *testing.T) {
 			wantBase:     "REPLACE_WITH_REAL_BMC_URL_FOR_master-0",
 			wantSystemID: "",
 		},
+		{
+			name:         "bare_ipv6_literal_gets_bracketed",
+			in:           "redfish-virtualmedia+https://fd00:140::99/redfish/v1/Systems/1",
+			wantBase:     "https://[fd00:140::99]",
+			wantSystemID: "1",
+		},
+		{
+			name:         "bare_ipv6_literal_base_gets_bracketed",
+			in:           "redfish-virtualmedia://fd00:140::99",
+			wantBase:     "https://[fd00:140::99]",
+			wantSystemID: "",
+		},
+		{
+			name:         "already_bracketed_ipv6_passthrough",
+			in:           "https://[fd00:140::99]:8443/redfish/v1/Systems/1",
+			wantBase:     "https://[fd00:140::99]:8443",
+			wantSystemID: "1",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
