@@ -110,9 +110,15 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	// Shared fabric (provider BMC defaults, artifact-server/proxy/registry infra
 	// components) is reconfigure-only and re-applied by its own task, so editing it
 	// must not flip a StorageCluster to a destructive rebuild. cephadm reaches the
-	// nodes over SSH, not the BMC, so none of it is cluster identity.
+	// nodes over SSH, not the BMC, so none of it is cluster identity. The Environment
+	// (entitlements, secrets, proxy, base domain) and the Machine specs (hardware,
+	// BMC endpoint, network) are likewise fabric/reconfigure inputs — cephadm never
+	// re-bootstraps a running cluster because a node's BMC was re-IP'd or an
+	// unrelated Environment secret was added — so neither is Ceph-cluster identity.
 	clone.InfraProviders = nil
 	clone.InfraComponents = nil
+	clone.Environments = nil
+	clone.Machines = nil
 	for i := range clone.StorageClusters {
 		ceph := clone.StorageClusters[i].Spec.Ceph
 		if ceph == nil {
@@ -126,6 +132,13 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		// day-2 reconfigure, not a cluster wipe — so they are not cluster identity.
 		ceph.Management = nil
 		ceph.Services = nil
+		// ceph config keys, mgr modules, and the monitoring stack are all applied in
+		// place by `ceph config set` / `ceph mgr module enable` / `ceph orch apply`
+		// on a running cluster — a retention-time or config-key edit is a day-2
+		// reconfigure, never a re-bootstrap, so they are not cluster identity either.
+		ceph.Config = nil
+		ceph.MgrModules = nil
+		ceph.Monitoring = nil
 	}
 	return clone
 }
