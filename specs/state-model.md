@@ -1,7 +1,7 @@
 # Desired-State Model
 
 Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and
-eighteen user-authored kinds. The schema intentionally tracks the inputs
+nineteen user-authored kinds. The schema intentionally tracks the inputs
 consumed by `openshift-install` for agent installs, Bootwright-managed machine
 OS installation, and cephadm for external Ceph storage.
 
@@ -358,7 +358,13 @@ Rules:
   document exclusion.
 - `customizations.packages.installWeakDeps: false` renders weak-dependency
   exclusion.
-- `customizations.packages.languages[]` renders package language selection.
+- `customizations.localization` owns the installed system's locale: `language`
+  (system message locale, default `en_US.UTF-8`), `formats` (regional formatting
+  locale for dates/numbers/currency; follows `language` when omitted), `keyboard`
+  (default `us`), `timezone` (default `UTC`, hardware clock kept in UTC), and
+  `additionalLocales[]`. `language`, `formats`, and `additionalLocales` are
+  unioned into the Kickstart `%packages --inst-langs` list, which is
+  authoritative over which locales survive on the installed system.
 - `customizations.services.enabled[]` and
   `customizations.services.disabled[]` render Kickstart service state. A
   machine that references a managed OS install profile requires `sshd` in the
@@ -635,6 +641,12 @@ Rules:
   cephadm `--mon-ip` is always an address of this host: the address named by
   `bootstrap.addressRef`, defaulting to `cephadm.addressRef` and finally the
   host machine's SSH address.
+- `cephadm.bootstrap.singleHostDefaults: true` renders `cephadm bootstrap
+  --single-host-defaults`, setting the CRUSH/replication defaults a single-node
+  cluster needs to reach `active+clean`. It is valid only for a one-host,
+  non-stretch topology, and is rejected when `spec.ceph.config[global]` also sets
+  any of the three defaults the flag owns (`osd_pool_default_size`,
+  `osd_pool_default_min_size`, `osd_crush_chooseleaf_type`).
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
@@ -1152,8 +1164,8 @@ input hash only — it never observes node reality.
   trust record and only after an explicit interactive per-host fingerprint
   confirmation; never under `--dry-run`, JSON output, or non-interactive
   execution (`--yes`). A changed key is never accepted interactively — it keeps
-  failing closed until `bootwright host trust --replace` records it
-  deliberately.
+  failing closed until `bootwright machine trust --replace <machines>` records
+  it deliberately.
 - Cluster selection uses one flag name, `--clusters`, on every command that
   narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `preflight`
   scope subcommands, and `render`. It accepts a comma-separated list
@@ -1300,11 +1312,11 @@ input hash only — it never observes node reality.
   confirmation but never authorizes data loss (mirroring how `--yes` never implies
   `--override`). A reconfigure-only or reconcilable-in-place override touches nothing
   destructive and reaches neither gate.
-- `bootwright host trust` records SSH server-key trust for declared machines.
+- `bootwright machine trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
-  runs never record trust on first use, so pipelines record it with `host
-  trust` before `preflight`/`apply`, and only `host trust --replace` may accept
-  a changed key.
+  runs never record trust on first use, so pipelines record it with `machine
+  trust` before `preflight`/`apply`, and only `machine trust --replace <machines>`
+  may accept a changed key.
 - `bootwright diff` compares the selected desired state against the live clusters
   and prints the differences as a git-style diff (`-` desired, `+` real). For each
   managed Ceph `StorageCluster` it discovers live state read-only on the seed —
@@ -1327,60 +1339,62 @@ input hash only — it never observes node reality.
   selection commands and rejects `--override` (it neither mutates cluster state nor
   suppresses its report).
 - `bootwright diff --recorded` skips all cluster contact and instead produces the
-  fast offline desired-vs-recorded report for automation. It classifies each
-  selected resource against the durable convergence-safety evidence recorded by the
-  last apply: `missing` (no completed apply recorded), `match` (applied with the
-  current desired state), `drift` (desired state changed since it was applied), or
-  `foreign` (a non-Bootwright owner). It
-  additionally reports `undeclared` ("Owned but no longer declared") resources:
-  Bootwright ownership records — at `Machine`, cluster, `InfraProvider`, and
-  `InfraComponent` granularity — that correlate to no object in the FULL desired
-  state (never the `--clusters`-scoped subset), i.e. objects deleted from desired
-  state without being destroyed. `undeclared` is report-only: it does not affect
-  the exit code, which gates on selected-state sync only; reclaim an orphan with
-  `destroy` (see the removal lifecycle in `docs/advanced/operations.md`).
-  `--recorded` compares desired
-  state against that recorded evidence only; it does not probe live hosts, BMCs,
-  or clusters, so a change made out of band after a matching apply (a wiped disk,
-  an undefined VM, a deleted namespace) is invisible to `--recorded` but is exactly
-  what the default live `diff` surfaces. A root whose resources are all `missing` is reported as
-  one absence; a present root reports only the resources that are not in sync.
-  Drift is reported per apply task: each selected apply task is one reported
-  resource. Classification granularity is per task, and how finely it isolates a
-  single desired-state edit depends on the task's recorded hash scope. Two scopes
-  classify at true object granularity: a managed `StorageCluster`'s pools,
-  filesystems, object gateways, NFS exports, and exports are each classified
-  against their own recorded apply (the report names the individual pool or export
-  that drifted or is not yet applied — the same object granularity `apply` acts
-  on), and each `infrastructure` host task hashes a host-scoped projection so an
-  unrelated edit does not flip it. The ContainerCluster install tasks (agent ISO,
-  node boot, install wait, per-machine provisioning) hash the cluster-filtered
-  desired state for their full-drift signal but also carry a structural projection
-  that excludes day-2-owned intent (cluster add-ons, node labels/taints), so an
-  edit confined to that intent is reconcilable-in-place drift on the install object
-  rather than a destructive reinstall; a change to install-config/agent-config
-  identity still moves the structural hash and stays a rebuild. Any change within a
-  present cluster still reports every one of that cluster's install tasks as drift
-  (the display class), not only the task that consumes the changed object; use
-  `render effective` and diff, or `plan`, to see which object changed, and the
-  reconcilable/structural split to tell a day-2 reconcile from a reinstall.
-  A present `StorageCluster` lists its out-of-sync sub-objects under the cluster
-  root, while a never-applied cluster still collapses to one absence. The
-  `infrastructure` root aggregates the provider and infra-component host tasks.
-  The report names which resource drifted, not which field, and annotates each
-  drifted resource with whether its drift reconciles in place (a day-2 reconfigure,
-  a storage `set-*` edit, an OSD-device add) or needs a destructive rebuild, so a
-  safe reconcile is never mistaken for a wipe; run `render effective` and diff, or
-  `plan`, to see the exact change. It
-  is distinct from `status` (context setup checks, local readiness,
-  and next-step spine), `preflight` (Ansible preflight), and `plan`/`apply
-  --dry-run` (the intended task graph). The `--recorded` text report
-  summarizes a present root's out-of-sync resources by class (drifted,
-  foreign-owned, not-yet-applied) so opposite remediations are never conflated.
-  Exit codes let automation gate without parsing the report, for both modes: `0`
-  when the selected state is in sync, `3` when it is out of sync (a live
-  difference, drift, foreign, degraded, or never-applied), `1` on load error, and
-  `2` on usage error.
+  fast offline desired-vs-recorded report for automation. It compares desired
+  state against the convergence-safety evidence recorded by the last apply only;
+  it does not probe live hosts, BMCs, or clusters, so a change made out of band
+  after a matching apply (a wiped disk, an undefined VM, a deleted namespace) is
+  invisible to `--recorded` but is exactly what the default live `diff` surfaces.
+  - **Classification vocabulary.** It classifies each selected resource against
+    the durable convergence-safety evidence recorded by the last apply: `missing`
+    (no completed apply recorded), `match` (applied with the current desired
+    state), `drift` (desired state changed since it was applied), or `foreign` (a
+    non-Bootwright owner). It additionally reports `undeclared` ("Owned but no
+    longer declared") resources: Bootwright ownership records — at `Machine`,
+    cluster, `InfraProvider`, and `InfraComponent` granularity — that correlate to
+    no object in the FULL desired state (never the `--clusters`-scoped subset),
+    i.e. objects deleted from desired state without being destroyed. `undeclared`
+    is report-only: it does not affect the exit code, which gates on
+    selected-state sync only; reclaim an orphan with `destroy` (see the removal
+    lifecycle in `docs/advanced/operations.md`).
+  - **Evidence granularity.** A root whose resources are all `missing` is reported
+    as one absence; a present root reports only the resources that are not in sync.
+    Drift is reported per apply task: each selected apply task is one reported
+    resource. Classification granularity is per task, and how finely it isolates a
+    single desired-state edit depends on the task's recorded hash scope. Two scopes
+    classify at true object granularity: a managed `StorageCluster`'s pools,
+    filesystems, object gateways, NFS exports, and exports are each classified
+    against their own recorded apply (the report names the individual pool or
+    export that drifted or is not yet applied — the same object granularity
+    `apply` acts on), and each `infrastructure` host task hashes a host-scoped
+    projection so an unrelated edit does not flip it. The ContainerCluster install
+    tasks (agent ISO, node boot, install wait, per-machine provisioning) hash the
+    cluster-filtered desired state for their full-drift signal but also carry a
+    structural projection that excludes day-2-owned intent (cluster add-ons, node
+    labels/taints), so an edit confined to that intent is reconcilable-in-place
+    drift on the install object rather than a destructive reinstall; a change to
+    install-config/agent-config identity still moves the structural hash and stays
+    a rebuild. A present `StorageCluster` lists its out-of-sync sub-objects under
+    the cluster root, while a never-applied cluster still collapses to one absence.
+    The `infrastructure` root aggregates the provider and infra-component host
+    tasks.
+  - **Display classes.** Any change within a present cluster still reports every
+    one of that cluster's install tasks as drift (the display class), not only the
+    task that consumes the changed object. The `--recorded` text report summarizes
+    a present root's out-of-sync resources by class (drifted, foreign-owned,
+    not-yet-applied) so opposite remediations are never conflated. It is distinct
+    from `status` (context setup checks, local readiness, and next-step spine),
+    `preflight` (Ansible preflight), and `plan`/`apply --dry-run` (the intended
+    task graph).
+  - **Remediation hints.** The report names which resource drifted, not which
+    field, and annotates each drifted resource with whether its drift reconciles
+    in place (a day-2 reconfigure, a storage `set-*` edit, an OSD-device add) or
+    needs a destructive rebuild, so a safe reconcile is never mistaken for a wipe;
+    use `render effective` and diff, or `plan`, to see which object changed, and
+    the reconcilable/structural split to tell a day-2 reconcile from a reinstall.
+  - **Exit codes.** They let automation gate without parsing the report, for both
+    modes: `0` when the selected state is in sync, `3` when it is out of sync (a
+    live difference, drift, foreign, degraded, or never-applied), `1` on load
+    error, and `2` on usage error.
 - `bootwright diff --adopt` folds the discovered live state back into desired-state
   YAML so a subsequent `apply` reproduces the cluster as it actually runs. It is the
   one mutating form of `diff`, requires live discovery (rejected with `--recorded`),

@@ -119,8 +119,10 @@ artifact-server HTTP readiness wait. They confirm the endpoint is serving and
 read no response content, so no fetched bytes are ever consumed unverified.
 
 The libvirt lab substrate's emulated Redfish BMC is a cleartext basic-auth
-endpoint bound to all interfaces; it is a lab-only convenience that must stay on a
-trusted management segment.
+endpoint that binds all interfaces (`0.0.0.0`) by default. The bind address is an
+authored knob (`bindAddress` on the provider's emulated-BMC defaults), so an
+operator can narrow it to a management interface; even so it is a lab-only
+convenience that must stay on a trusted management segment.
 
 ## Proxy Boundaries
 

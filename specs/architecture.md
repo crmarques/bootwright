@@ -186,8 +186,11 @@ names. Current provider capability arms include:
 - machine profiles: `libvirt`, `vsphere`, `kubevirt`
 - explicit machines: `baremetal`
 
-Adding a substrate means adding a capability arm, validation, renderer support,
-and an apply adapter. It must not move physical facts into cluster intent.
+All four arms are apply-supported today: each has an in-tree apply adapter and
+substrate role. (`example init` prints the per-provider `apply support` line as
+the runtime source of truth.) Adding a substrate means adding a capability arm,
+validation, renderer support, and an apply adapter. It must not move physical
+facts into cluster intent.
 
 Adapters should use official CLI capabilities from the tools Bootwright drives
 before adding custom orchestration around the same operation. For example,

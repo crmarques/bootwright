@@ -23,7 +23,7 @@ uses:
 bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
 ```
 
-The scaffold writes seven `apiVersion: bootwright.io/v1alpha1` files:
+The scaffold writes nine `apiVersion: bootwright.io/v1alpha1` files:
 
 ```text
 my-sno-lab/

@@ -391,6 +391,11 @@ through Anaconda.
 | `spec.installer.anaconda.imageRef` | Yes | None | Names a `MachineImage`. |
 | `spec.installer.anaconda.repositories[]` | No | None | Additional install repositories; each requires `id` and an `http(s)` `baseURL`. |
 | `spec.customizations.hostname.source` | No | None | Currently `machineName`. |
+| `spec.customizations.localization.language` | No | `en_US.UTF-8` | System message locale. |
+| `spec.customizations.localization.formats` | No | Follows `language` | Regional formatting locale (dates, numbers, currency). |
+| `spec.customizations.localization.keyboard` | No | `us` | Console keyboard layout. |
+| `spec.customizations.localization.timezone` | No | `UTC` | System timezone; the hardware clock stays UTC. |
+| `spec.customizations.localization.additionalLocales[]` | No | None | Extra locales beyond `language`/`formats` to install. |
 | `spec.customizations.ssh.authorizeMachineSSHKey` | No | `false` | Authorize the machine SSH key during install. |
 | `spec.customizations.ssh.passwordAuthentication` | No | `false` | Enable or disable password SSH auth. |
 | `spec.customizations.storage.rootDevice.source` | No | None | Currently `machineRootDeviceHints`. |
@@ -399,7 +404,6 @@ through Anaconda.
 | `spec.customizations.packages.install[]` | No | None | Packages to install. |
 | `spec.customizations.packages.excludeDocs` | No | `false` | Render Kickstart `--excludedocs`. |
 | `spec.customizations.packages.installWeakDeps` | No | OS default | Tri-state weak dependency setting. |
-| `spec.customizations.packages.languages[]` | No | None | Installed language set. |
 | `spec.customizations.services.enabled[]` | No | None | Services to enable. |
 | `spec.customizations.services.disabled[]` | No | None | Services to disable. |
 | `spec.customizations.security.selinux.mode` | No | OS default | `enforcing`, `permissive`, or `disabled`. |

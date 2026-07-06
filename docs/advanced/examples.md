@@ -48,17 +48,20 @@ the authored kinds it exercises.
 | `examples/baremetal-redfish-addons` | advanced | You need the day-2 add-on model: ordered profiles, OLM operators with readiness checks, and a raw-manifest add-on. | OLM operators with channels, `startingCSV`, and readiness checks; ordered profiles bound to a cluster; a `manifestSet` add-on delivering a raw `Namespace`. Kinds: the six core plus `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding`. |
 | `examples/baremetal-redfish-imported-ceph-odf` | advanced | You need an OpenShift cluster consuming an **imported** (externally managed) Ceph cluster through Data Foundation. | `StorageCluster` in import posture; a `StorageExport` surface bound to ODF external mode via a file secret; `clusters/storage/` alongside `clusters/container/`. Kinds: the six core plus `StorageCluster`, `StorageExport`, `ClusterAddon`, `ClusterAddonBinding`. |
 | `examples/baremetal-redfish-multidc-virtualized-odf-ceph` | advanced | You want the full reference platform: parent clusters, KubeVirt child clusters, managed stretched Ceph, and Data Foundation. | Multi-DC bare-metal parents with KubeVirt-hosted children; a managed stretched Ceph cluster (two sites plus a tiebreaker); the full storage spine; ODF and OpenShift Virtualization with selective per-cluster binding; parent/child apply ordering. Exercises nearly every kind, including `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`, and `StorageExport`. |
-| `examples/ceph-distribution-oss` | simple | You need managed Ceph with upstream/community sources, in isolation from any OpenShift cluster. | Community (OSS) Ceph distribution with no entitlement; minimal storage-node `Machine`. Storage-only. Kinds: `Environment`, `Machine`, `StorageCluster`. |
-| `examples/ceph-distribution-redhat` | intermediate | You need managed Red Hat Ceph Storage with Red Hat entitlement references. | Entitlement model (one named `Environment.spec.entitlements[]` referenced by `StorageCluster.spec.ceph.entitlementRef`); RHSM plus `registry.redhat.io` service-account credential plumbing. Storage-only. Kinds: `Environment`, `Machine`, `StorageCluster`. |
-| `examples/ceph-distribution-ibm` | intermediate | You need IBM Storage Ceph entitlement and license modeling. | IBM Storage Ceph distribution; the IBM license-acceptance gate (`license.accept`); the `cp.icr.io/cp` registry credential model; the separate `redhat/rhel` entitlement the IBM item names via `rhelEntitlementRef` for the RHEL subscription. Storage-only. Kinds: `Environment`, `Machine`, `StorageCluster`. |
+| `examples/ceph-distribution-oss` | simple | You want to read how the community/OSS Ceph distribution is selected (a schema snippet, not a runnable tree). | **Distribution/entitlement snippet, not runnable as-is:** its one storage-node `Machine` is `os.provided` on a placeholder (RFC-5737) address, so it selects the distribution model rather than provisioning anything. Community (OSS) Ceph with no entitlement. Storage-only. Kinds: `Environment`, `Machine`, `StorageCluster`. |
+| `examples/ceph-distribution-redhat` | simple | You want to read how Red Hat Ceph Storage entitlement is referenced (a schema snippet, not a runnable tree). | **Distribution/entitlement snippet, not runnable as-is** (placeholder `os.provided` `Machine`, as above). Entitlement model (one named `Environment.spec.entitlements[]` referenced by `StorageCluster.spec.ceph.entitlementRef`); RHSM plus `registry.redhat.io` service-account credential plumbing. Storage-only. Kinds: `Environment`, `Machine`, `StorageCluster`. |
+| `examples/ceph-distribution-ibm` | simple | You want to read how IBM Storage Ceph entitlement and license acceptance are modeled (a schema snippet, not a runnable tree). | **Distribution/entitlement snippet, not runnable as-is** (placeholder `os.provided` `Machine`, as above). IBM Storage Ceph distribution; the IBM license-acceptance gate (`license.accept`); the `cp.icr.io/cp` registry credential model; the separate `redhat/rhel` entitlement the IBM item names via `rhelEntitlementRef` for the RHEL subscription. Storage-only. Kinds: `Environment`, `Machine`, `StorageCluster`. |
 | `examples/ceph-ibm-libvirt-lab` | advanced | You want an end-to-end, self-contained IBM Storage Ceph lab on one machine — three libvirt VMs installed with managed RHEL, then block + file + object storage with an HA dashboard. | The full provisioning loop on a single host: libvirt VMs with emulated Redfish BMCs, Bootwright-managed RHEL install, then a managed IBM Storage Ceph cluster (three mons incl. a tiebreaker, two OSD nodes) serving RBD, CephFS, and RGW; an RGW ingress VIP plus a native `mgmt-gateway` HA dashboard VIP (`keepalive_only` ingress); lab `dnsmasq` resolving both. Storage-only. Kinds: `Environment`, `Machine`, `InfraProvider`, `NetworkConfig`, `InfraComponent`, `MachineImage`, `MachineInstallProfile`, `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`. |
 | `examples/ceph-ibm-baremetal-redfish` | advanced | You want the same IBM Storage Ceph build on real bare metal behind enterprise network services — three physical servers provisioned over Redfish, on an external proxy with external DNS and NTP. | Real Redfish virtual-media provisioning of three physical nodes; Bootwright-managed RHEL install before cephadm; a managed IBM Storage Ceph cluster (three mons incl. a tiebreaker, two OSD nodes) serving RBD, CephFS, and RGW with an ingress VIP and a `mgmt-gateway` HA dashboard VIP; an **external** proxy (`proxyFor.bootwright`), **external** name resolution, and **external** NTP declared in `Environment.spec.infraComponents`, with only a bastion artifact server managed. Storage-only. Kinds: `Environment`, `Machine`, `InfraProvider`, `NetworkConfig`, `InfraComponent`, `MachineImage`, `MachineInstallProfile`, `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`. |
 
 !!! note "Managed Ceph vs imported Ceph"
-    The three `ceph-distribution-*` examples are **storage-only** trees: a
-    `StorageCluster` with no `ContainerCluster`, provisioned and managed by
-    Bootwright via `cephadm`. They differ only in which Ceph distribution they
-    select (community, Red Hat, IBM) and the entitlement that selection needs.
+    The three `ceph-distribution-*` examples are **storage-only distribution
+    snippets**, not runnable trees: each is a `StorageCluster` with no
+    `ContainerCluster` and a single placeholder (`os.provided`, RFC-5737 address)
+    `Machine`. They exist to show how each Ceph distribution is selected
+    (community, Red Hat, IBM) and the entitlement that selection needs — for an
+    end-to-end managed IBM Ceph build provisioned by Bootwright via `cephadm`,
+    use `ceph-ibm-libvirt-lab` or `ceph-ibm-baremetal-redfish` instead.
     Contrast them with `baremetal-redfish-imported-ceph-odf`, where the
     `StorageCluster` is in **import** posture — it consumes an externally
     managed Ceph cluster rather than provisioning one. See
@@ -81,8 +84,11 @@ the authored kinds it exercises.
 bootwright validate -f <example-dir>
 ```
 
-Validation is offline — it never contacts hosts — and should fail only where an
-example intentionally leaves placeholders that you must edit for your lab.
+Validation is offline — it never contacts hosts. Most examples validate clean.
+Note that validation is structural: it does not reject placeholder addresses, so
+a tree can pass `validate` and still be non-runnable until you replace its
+placeholders (for example, the `ceph-distribution-*` snippets use RFC-5737
+documentation addresses and pass validation but are not meant to be applied).
 
 !!! note "File layout differs between examples"
     The simple single-node and `ceph-distribution-*` trees use a **flat**

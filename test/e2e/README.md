@@ -1,7 +1,8 @@
 # End-To-End Fixtures
 
 These directories are runnable desired-state cases for provider, render, and
-cluster-install flows. Each case uses the current desired-state schema:
+cluster-install flows. Each case uses the current desired-state schema. The flat
+cases (001-005, 007) lay their objects out as single files at the case root:
 
 ```text
 environment.yaml       Environment
@@ -12,6 +13,10 @@ networks.yaml          NetworkConfig
 cluster-machines.yaml  Machine
 container-cluster.yaml ContainerCluster
 ```
+
+The nested cases (006, 008, 009, 010) instead use a `clusters/` + `infra/` tree
+with per-object files (one object per file), mirroring a real multi-cluster
+workspace; browse the case directory for its exact layout.
 
 ## Cases
 
@@ -25,6 +30,8 @@ container-cluster.yaml ContainerCluster
 | `006-ceph-3nodes-libvirt-managed-os` | Three-node Ceph on libvirt with managed RHEL install |
 | `007-sno-vsphere` | Single-node OpenShift on vCenter-managed vSphere VMs |
 | `008-ceph-3nodes-vsphere-managed-os` | Three-node Ceph on vSphere with managed RHEL install |
+| `009-ceph-3nodes-baremetal-managed-os` | Three-node Ceph on real bare metal with managed RHEL install |
+| `010-ceph-3nodes-libvirt-boot-iso` | Three-node Ceph on libvirt booted from a prebuilt boot ISO |
 
 ## Local Fixture Checks
 

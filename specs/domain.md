@@ -88,9 +88,12 @@ desired state must fail strict decode or validation.
 ## Supported Substrates
 
 Bootwright keeps substrate abstractions open for libvirt, bare metal, vSphere,
-OpenShift Virtualization, and future providers. The current schema accepts
-provider facts for those substrates; apply coverage can land independently when
-the corresponding adapter is implemented.
+OpenShift Virtualization, and future providers. All four of those substrates are
+apply-supported today — each has an apply adapter in-tree — and `example init`
+prints a per-provider `apply support: supported` line as the runtime source of
+truth. The schema-versus-apply split matters only for *future* providers: the
+schema can accept a new provider's facts before its adapter lands, so apply
+coverage for any additional substrate can land independently.
 
 The first supported nested topology treats a child OpenShift cluster as a
 normal `ContainerCluster` whose machines come from a KubeVirt `InfraProvider`.

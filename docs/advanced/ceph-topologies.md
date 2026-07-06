@@ -213,13 +213,22 @@ Omit `clusterCIDRs` to keep IBM's default of one network carrying everything.
 ## FIPS
 
 FIPS has two independent gates. `spec.ceph.security.fips` is the **cluster
-gate**: it asserts that the storage cluster runs in FIPS mode and is verified at
-apply time. The **node profile** is set on each storage node's
-`MachineInstallProfile` for machines whose OS Bootwright installs, so the RHEL
-install comes up in FIPS mode. Both must agree — a cluster gated FIPS on hosts
-that did not install with the FIPS profile fails closed. FIPS is an
-install-time customization, so changing it on an installed machine is a
-reinstall; see [managed-OS reinstall](operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
+gate**: it asserts that the storage cluster runs in FIPS mode. The **node
+profile** is set on each storage node's `MachineInstallProfile` for machines
+whose OS Bootwright installs, so the RHEL install comes up in FIPS mode.
+
+The gate is a **one-way desired-state check**, run at validate time (before
+apply), not a runtime probe of the hosts: when the cluster gate is on, every
+managed-OS storage node's install profile must also enable FIPS, or validation
+fails closed. It does not check the reverse direction — FIPS-enabled node
+profiles under a non-FIPS cluster gate pass — and nodes whose OS Bootwright does
+not install (`os.provided: true`) carry no install profile and are out of scope
+for the check. There is no `fips-mode-setup` verification in the Ansible roles;
+correctness of the running mode is the operator's responsibility on
+provided-OS hosts.
+
+FIPS is an install-time customization, so changing it on an installed machine is
+a reinstall; see [managed-OS reinstall](operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
 
 ## Stretch mode
 
