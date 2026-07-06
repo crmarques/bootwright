@@ -94,8 +94,8 @@ func TestVSphereVCenterSessionCheck(t *testing.T) {
 
 	var okRequests []*http.Request
 	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusCreated, &okRequests)})
-	if len(checks) != 1 || checks[0].Status != StatusOK {
-		t.Fatalf("session check with 201 = %+v, want one OK check", checks)
+	if session, ok := findCheckByName(checks, "vcenter.example.test vCenter session"); !ok || session.Status != StatusOK {
+		t.Fatalf("session check with 201 = %+v, want an OK session check", checks)
 	}
 	if len(okRequests) != 2 || okRequests[0].Method != http.MethodPost || okRequests[1].Method != http.MethodDelete {
 		t.Fatalf("probe request sequence = %v, want POST then DELETE", okRequests)
@@ -103,7 +103,7 @@ func TestVSphereVCenterSessionCheck(t *testing.T) {
 
 	var failRequests []*http.Request
 	checks = vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusUnauthorized, &failRequests)})
-	if len(checks) != 1 || checks[0].Status != StatusFail || !strings.Contains(checks[0].Impact, "rejected the declared credentials") {
+	if session, ok := findCheckByName(checks, "vcenter.example.test vCenter session"); !ok || session.Status != StatusFail || !strings.Contains(session.Impact, "rejected the declared credentials") {
 		t.Fatalf("session check with 401 = %+v, want a credentials failure", checks)
 	}
 	if len(failRequests) != 1 || failRequests[0].Method != http.MethodPost {
@@ -133,8 +133,8 @@ func TestVSphereVCenterSessionCheckReadsContextStoreMaterial(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}})
-	if len(checks) != 1 || checks[0].Status != StatusOK {
-		t.Fatalf("context-store session check = %+v, want one OK check", checks)
+	if session, ok := findCheckByName(checks, "vcenter.example.test vCenter session"); !ok || session.Status != StatusOK {
+		t.Fatalf("context-store session check = %+v, want an OK session check", checks)
 	}
 }
 
@@ -148,7 +148,71 @@ func TestVSphereVCenterSessionCheckWarnsWithoutMaterial(t *testing.T) {
 		t.Fatal("probe must not run without credential material")
 		return nil, nil
 	}})
-	if len(checks) != 1 || checks[0].Status != StatusWarn {
-		t.Fatalf("session check without material = %+v, want one WARN check", checks)
+	if session, ok := findCheckByName(checks, "vcenter.example.test vCenter session"); !ok || session.Status != StatusWarn {
+		t.Fatalf("session check without material = %+v, want a WARN session check", checks)
+	}
+}
+
+func findCheckByName(checks []Check, name string) (Check, bool) {
+	for _, c := range checks {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return Check{}, false
+}
+
+// TestVSphereVCenterInsecureTLSWarns pins that a vCenter probe opting out of
+// certificate verification emits a distinct WARN naming that basic-auth
+// credentials transit unverified TLS, mirroring the BMC two-leg posture.
+func TestVSphereVCenterInsecureTLSWarns(t *testing.T) {
+	state, secretsDir := vsphereCheckTestState(t)
+	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}})
+	warn, ok := findCheckByName(checks, "vcenter.example.test vCenter TLS")
+	if !ok || warn.Status != StatusWarn || !strings.Contains(warn.Impact, "unverified TLS") {
+		t.Fatalf("insecure vCenter probe = %+v, want a WARN naming unverified TLS", checks)
+	}
+
+	// A verifying probe emits no such warning.
+	state.InfraProviders[0].Spec.VSphere.VCenters[0].DisableCertificateVerification = false
+	checks = vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}})
+	if _, ok := findCheckByName(checks, "vcenter.example.test vCenter TLS"); ok {
+		t.Fatalf("verifying vCenter probe must not emit a TLS warning: %+v", checks)
+	}
+}
+
+// TestVSphereVCenterDedupesByCredentials pins that two providers sharing a
+// vCenter server with different credentials are each probed, so a bad second
+// credential surfaces at preflight rather than mid-convergence.
+func TestVSphereVCenterDedupesByCredentials(t *testing.T) {
+	state, secretsDir := vsphereCheckTestState(t)
+	state.Environments[0].Spec.Secrets["vcenter-credentials-2"] = v1alpha1.EnvironmentSecretSpec{File: "vcenter-credentials"}
+	state.InfraProviders = append(state.InfraProviders, v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: "lab-vsphere-2"},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerVSphere,
+			VSphere: &v1alpha1.InfraProviderVSphere{
+				VCenters: []v1alpha1.VSphereVCenter{{
+					Server:                         "vcenter.example.test",
+					Datacenters:                    []string{"dc1"},
+					CredentialsRef:                 v1alpha1.SecretRef{Name: "vcenter-credentials-2"},
+					DisableCertificateVerification: true,
+				}},
+			},
+		},
+	})
+	probes := 0
+	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
+		if req.Method == http.MethodPost {
+			probes++
+		}
+		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}})
+	if probes != 2 {
+		t.Fatalf("session POST probes = %d, want 2 (one per distinct credential): %+v", probes, checks)
 	}
 }

@@ -6,9 +6,11 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	secret "github.com/crmarques/bootwright/internal/secrets"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps Deps) []Check {
+func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir, secretsDir string, deps Deps) []Check {
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
 		return nil
 	}
@@ -52,17 +54,56 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 		default:
 			checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
 			checks = append(checks, kubeVirtAPIReadyCheck(name, path, deps))
-			usable[name] = path
+			usable["host:"+name] = path
 		}
+	}
+	// Providers that point at an external hub via kubeconfigRef (rather than a
+	// greenfield hostClusterRef this run installs) have their kubeconfig on disk
+	// before the run, so the live API/CRD probe is runnable at preflight. A
+	// missing or malformed file is already reported by the secret-material
+	// checks, so skip the probe when the file is absent to avoid a duplicate
+	// FAIL; when it is present, gate the KubeVirt API the same as the host arm.
+	env := stateview.Environment(state)
+	for _, p := range state.InfraProviders {
+		k := p.Spec.KubeVirt
+		if k == nil || k.KubeconfigRef == nil || k.KubeconfigRef.Name == "" {
+			continue
+		}
+		if k.HostClusterRef != nil && k.HostClusterRef.Name != "" {
+			continue // handled by the hostClusterRef arm above
+		}
+		refName := k.KubeconfigRef.Name
+		if seen["kc:"+refName] {
+			continue
+		}
+		seen["kc:"+refName] = true
+		path := secret.ResolveMaterialPath(refName, env, secretsDir, secret.MaterialPrimary)
+		externalSource := secret.MaterialPathUsesExternalSource(refName, env, secret.MaterialPrimary)
+		info, err := deps.statSecretPath(path, externalSource)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		checks = append(checks, kubeVirtAPIReadyCheck(refName, path, deps))
+		usable["kc:"+refName] = path
 	}
 	// Per provider (networkAttachments are provider-scoped, even when several
 	// providers share one host cluster), verify the referenced network resolves
 	// on the host cluster whose kubeconfig is usable.
 	for _, p := range state.InfraProviders {
-		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil {
+		k := p.Spec.KubeVirt
+		if k == nil {
 			continue
 		}
-		path, ok := usable[p.Spec.KubeVirt.HostClusterRef.Name]
+		var key string
+		switch {
+		case k.HostClusterRef != nil && k.HostClusterRef.Name != "":
+			key = "host:" + k.HostClusterRef.Name
+		case k.KubeconfigRef != nil && k.KubeconfigRef.Name != "":
+			key = "kc:" + k.KubeconfigRef.Name
+		default:
+			continue
+		}
+		path, ok := usable[key]
 		if !ok {
 			continue
 		}

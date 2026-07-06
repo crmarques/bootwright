@@ -182,7 +182,7 @@ func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T)
 		}},
 	}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "INFO")
 	for _, check := range checks {
 		if check.Name == "metal-ocp KubeVirt API" {
@@ -208,7 +208,7 @@ func TestKubeVirtHostClusterExternalStillRequiresKubeconfig(t *testing.T) {
 		},
 	}}}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
 }
 
@@ -234,7 +234,7 @@ func TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig(t
 		}},
 	}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
 }
 
@@ -1029,6 +1029,139 @@ func assertPreflightCheckStatus(t *testing.T, checks []Check, name, status strin
 		}
 	}
 	t.Fatalf("preflight check %q not found: %+v", name, checks)
+}
+
+// TestSecretFileCheckAllowsOwnerOnlyModes pins that a hardened read-only secret
+// (0400) passes while any group/other access (0640, 0604) still fails: the check
+// guards against over-broad permissions, not tighter-than-0600 ones.
+func TestSecretFileCheckAllowsOwnerOnlyModes(t *testing.T) {
+	deps := Deps{StatPath: os.Stat}
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	for _, tc := range []struct {
+		mode os.FileMode
+		want Status
+	}{
+		{0o600, StatusOK},
+		{0o400, StatusOK},
+		{0o640, StatusFail},
+		{0o604, StatusFail},
+	} {
+		if err := os.Chmod(path, tc.mode); err != nil {
+			t.Fatalf("chmod %04o: %v", tc.mode, err)
+		}
+		if got := secretFileCheck("ref", path, "credentialsRef", false, false, false, deps).Status; got != tc.want {
+			t.Fatalf("secret file mode %04o = %s, want %s", tc.mode, got, tc.want)
+		}
+	}
+}
+
+// TestSecretsDirCheckAllowsOwnerOnlyModes pins the same relaxation for the
+// secrets directory: 0500 passes, group/other bits fail.
+func TestSecretsDirCheckAllowsOwnerOnlyModes(t *testing.T) {
+	deps := Deps{StatPath: os.Stat}
+	for _, tc := range []struct {
+		mode os.FileMode
+		want Status
+	}{
+		{0o700, StatusOK},
+		{0o500, StatusOK},
+		{0o750, StatusFail},
+		{0o705, StatusFail},
+	} {
+		dir := t.TempDir()
+		if err := os.Chmod(dir, tc.mode); err != nil {
+			t.Fatalf("chmod %04o: %v", tc.mode, err)
+		}
+		if got := secretsDirCheck(dir, deps).Status; got != tc.want {
+			t.Fatalf("secrets dir mode %04o = %s, want %s", tc.mode, got, tc.want)
+		}
+		_ = os.Chmod(dir, 0o700) // restore so t.TempDir cleanup can remove it
+	}
+}
+
+// TestAddonsStageGatesMissingKubeconfig pins that a stage-scoped add-ons run
+// (base out of scope, so no cluster install produces the kubeconfig) gates the
+// per-cluster kubeconfig up front, while a run that also installs the cluster
+// (base in scope) does not — the kubeconfig is produced mid-run.
+func TestAddonsStageGatesMissingKubeconfig(t *testing.T) {
+	state := v1alpha1.State{ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
+		Metadata: v1alpha1.Metadata{Name: "b1"},
+		Spec:     v1alpha1.ClusterAddonBindingSpec{ClusterRef: v1alpha1.LocalObjectReference{Name: "dc1"}},
+	}}}
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) { return "/bin/" + name, nil },
+		StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+		UID:      func() int { return 0 },
+	}
+	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	assertPreflightCheckStatus(t, checks, "dc1 kubeconfig", "FAIL")
+
+	checks = CollectChecks(state, []Phase{{Name: "add-ons"}, {Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	if _, ok := findCheckByName(checks, "dc1 kubeconfig"); ok {
+		t.Fatalf("a base-in-scope run must not gate the add-on kubeconfig: %+v", checks)
+	}
+}
+
+// TestKubeVirtKubeconfigRefProbesAPI pins that a provider pointing at an
+// external hub via kubeconfigRef (its kubeconfig already on disk) gets the live
+// KubeVirt API/CRD and networkRef probes, not just a secret-file existence check.
+func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
+	sourceDir := t.TempDir()
+	kubeconfig := filepath.Join(sourceDir, "hub-kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata:   v1alpha1.Metadata{Name: "env"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{"hub-kubeconfig": {File: "hub-kubeconfig"}},
+			},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "ext-kv"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+					KubeconfigRef: &v1alpha1.SecretRef{Name: "hub-kubeconfig"},
+					Namespace:     "child",
+				},
+				NetworkAttachments: []v1alpha1.NetworkAttachmentCapability{{
+					Name: "vmnet",
+					KubeVirt: &v1alpha1.NetworkAttachmentKubeVirt{
+						NetworkRef: v1alpha1.KubeVirtNetworkRef{
+							Kind: v1alpha1.KubeVirtNetworkKindNAD, Name: "vmnet", Namespace: "child",
+						},
+					},
+				}},
+			},
+		}},
+	}
+	var probedCRD, probedNAD bool
+	deps := Deps{
+		StatPath:         os.Stat,
+		StatExternalPath: os.Stat,
+		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
+			for _, a := range args {
+				if a == "crd" {
+					probedCRD = true
+					return []byte("virtualmachines.kubevirt.io\n"), nil
+				}
+			}
+			probedNAD = true
+			return []byte("networkattachmentdefinition.k8s.cni.cncf.io/vmnet\n"), nil
+		},
+	}
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "/clusters", sourceDir, deps)
+	assertPreflightCheckStatus(t, checks, "hub-kubeconfig KubeVirt API", "OK")
+	assertPreflightCheckStatus(t, checks, "vmnet network", "OK")
+	if !probedCRD || !probedNAD {
+		t.Fatalf("kubeconfigRef arm did not run both probes: crd=%v nad=%v", probedCRD, probedNAD)
+	}
 }
 
 func writeExecutable(t *testing.T, path string) {

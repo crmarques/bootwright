@@ -118,6 +118,26 @@ func TestInstallSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 	}
 }
 
+// A baseURL carrying yum variables ($basearch/$releasever) is expanded by the
+// install target, not the controller, so probing the literal path would 404 a
+// source that installs fine — report it INFO without probing.
+func TestInstallSourceReachabilityYumVariableReportsInfo(t *testing.T) {
+	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
+	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
+		Type: v1alpha1.MachineImageInstallSourceTypeURL,
+		URL:  "https://mirror.example.test/rhel/9/BaseOS/$basearch/os/",
+	}
+	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
+		t.Fatal("a yum-variable baseURL must not be probed")
+		return nil, nil
+	}}
+
+	checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
+	if len(checks) != 1 || checks[0].Status != StatusInfo {
+		t.Fatalf("checks = %+v, want one INFO for a yum-variable baseURL", checks)
+	}
+}
+
 // The install source is only needed once the machines phase provisions the OS.
 func TestInstallSourceReachabilitySkippedOutsideMachinesPhase(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")

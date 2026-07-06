@@ -68,10 +68,25 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, s
 			continue
 		}
 		for _, vc := range p.Spec.VSphere.VCenters {
-			if vc.Server == "" || seen[vc.Server] {
+			// Dedupe on the full connection identity — a second provider that
+			// declares the same server with different credentials (or a different
+			// port) is a distinct session to probe, so a bad second credential
+			// still surfaces at preflight rather than mid-convergence.
+			key := fmt.Sprintf("%s|%d|%s", vc.Server, vc.Port, vc.CredentialsRef.Name)
+			if vc.Server == "" || seen[key] {
 				continue
 			}
-			seen[vc.Server] = true
+			seen[key] = true
+			if vc.DisableCertificateVerification {
+				checks = append(checks, Check{
+					Group:       checkGroupInstallerTools,
+					Name:        vc.Server + " vCenter TLS",
+					Status:      StatusWarn,
+					Evidence:    "disableCertificateVerification is set for " + vc.Server,
+					Impact:      "the session probe (and apply) send vCenter basic-auth credentials over unverified TLS, exposing them to a man-in-the-middle on the management segment",
+					Remediation: "add the vCenter CA to the provider trust and clear disableCertificateVerification outside self-signed labs",
+				})
+			}
 			checks = append(checks, vsphereSessionCheck(vc, resolver, deps))
 		}
 	}

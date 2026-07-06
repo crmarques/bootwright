@@ -81,6 +81,13 @@ func installSourceURLs(source v1alpha1.MachineImageInstallSource) []string {
 }
 
 func installSourceCheck(baseURL string, deps Deps) Check {
+	// A baseURL carrying yum variables ($basearch/$releasever/...) is resolved by
+	// Anaconda on the install target, not the controller. Probing the literal
+	// unexpanded path would 404 and hard-fail a source the target can install
+	// from, so report it INFO (operator-resolved) instead of probing.
+	if strings.ContainsRune(baseURL, '$') {
+		return infoCheck(checkGroupInstallSource, baseURL, "contains a yum variable (e.g. $basearch/$releasever); the install target expands it at install time, so the controller cannot probe this URL")
+	}
 	probe := strings.TrimRight(baseURL, "/") + "/" + installSourceRepoMetadata
 	req, err := http.NewRequest(http.MethodGet, probe, nil)
 	if err != nil {

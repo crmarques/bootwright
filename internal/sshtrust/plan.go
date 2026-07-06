@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -157,6 +159,32 @@ func EvaluateHost(ctx context.Context, machine v1alpha1.Machine, store Store, re
 	return report, record, true, nil
 }
 
+// scanHostKeyCommand builds the accept-new probe that records the target's
+// host key into knownHostsPath. It uses `ssh` rather than `ssh-keyscan`
+// deliberately: ssh-keyscan ignores the controller's crypto policy (it still
+// offers curve25519 in KEXINIT even under FIPS), so a FIPS backend refuses the
+// exchange and no key is ever returned. `ssh` Includes
+// /etc/crypto-policies/back-ends/openssh.config, so it negotiates a
+// FIPS-approved KEX and records the key the connection actually used. Auth is
+// expected to fail here (no identity offered) — accept-new pins the host key
+// before auth, so the recorded known_hosts file is the source of truth. Mirrors
+// roles/machine_os_install_anaconda/tasks/ssh_trust.yml.
+func scanHostKeyCommand(address string, seconds int, knownHostsPath string) execution.Command {
+	return execution.Command{
+		Name: "ssh",
+		Args: []string{
+			"-o", "StrictHostKeyChecking=accept-new",
+			"-o", "UserKnownHostsFile=" + knownHostsPath,
+			"-o", "HashKnownHosts=no",
+			"-o", "BatchMode=yes",
+			"-o", "GSSAPIAuthentication=no",
+			"-o", "ConnectTimeout=" + strconv.Itoa(seconds),
+			address,
+			"true",
+		},
+	}
+}
+
 func ScanHostKeys(ctx context.Context, address string, timeout time.Duration) ([]ScannedKey, error) {
 	if strings.TrimSpace(address) == "" {
 		return nil, errors.New("address is required")
@@ -165,16 +193,29 @@ func ScanHostKeys(ctx context.Context, address string, timeout time.Duration) ([
 	if seconds < 1 {
 		seconds = 1
 	}
+	dir, err := os.MkdirTemp("", "bootwright-hostkey-")
+	if err != nil {
+		return nil, fmt.Errorf("create host-key scratch dir: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	knownHostsPath := filepath.Join(dir, "known_hosts")
+
 	runCtx, cancel := context.WithTimeout(ctx, timeout+time.Second)
 	defer cancel()
-	out, err := execution.OSRunner{}.Output(runCtx, execution.Command{
-		Name: "ssh-keyscan",
-		Args: []string{"-T", strconv.Itoa(seconds), "-t", "ed25519,ecdsa,rsa", address},
-	})
+	// The ssh exit code is deliberately ignored: auth fails without an
+	// identity, but accept-new still records the host key before auth.
+	_, _ = execution.OSRunner{}.Output(runCtx, scanHostKeyCommand(address, seconds, knownHostsPath))
+
+	recorded, err := os.ReadFile(knownHostsPath)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, os.ErrNotExist) {
+			// Handshake never reached host-key exchange (e.g. unreachable):
+			// no key recorded, so the caller reports "no host keys returned".
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read recorded host key for %s: %w", address, err)
 	}
-	return ParseScanOutput(address, out)
+	return ParseScanOutput(address, recorded)
 }
 
 func ManagedTrustMachines(state v1alpha1.State, policy locality.Policy) []v1alpha1.Machine {

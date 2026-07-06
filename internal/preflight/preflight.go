@@ -175,6 +175,13 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 	}
 	if phaseInScope("add-ons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
+		// A stage-scoped add-ons run (base out of scope) does not install any
+		// cluster, so each binding's target kubeconfig must already be on disk;
+		// gate it here instead of failing per task at requireKubeconfig. A full
+		// apply (base in scope) produces the kubeconfig mid-run, so it is not gated.
+		if !phaseInScope("base", selected, hasState) {
+			checks = append(checks, addonsKubeconfigChecks(state, clustersDir, deps)...)
+		}
 	}
 	if (phaseInScope("deps", selected, hasState) || phaseInScope("base", selected, hasState)) && stateHasManagedStorageClustersInScope(state, secretScope) {
 		checks = append(checks,
@@ -186,7 +193,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 		checks = append(checks, secretRefChecksScoped(state, secretsDir, selected, deps, secretScope)...)
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps, hostTrustScope)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
-		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
+		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, secretsDir, deps)...)
 		checks = append(checks, vsphereVCenterChecks(state, selected, contextName, secretsDir, deps)...)
 	}
 	return checks
@@ -259,6 +266,32 @@ func binaryCheck(group, name string, extraDirs []string, remediation string, dep
 	return okCheck(group, name, path)
 }
 
+// addonsKubeconfigChecks verifies that every cluster a ClusterAddonBinding
+// targets has its kubeconfig on disk. Used only for a stage-scoped add-ons run,
+// where no cluster install produces it during the run.
+func addonsKubeconfigChecks(state v1alpha1.State, clustersDir string, deps Deps) []Check {
+	var checks []Check
+	seen := map[string]bool{}
+	for _, binding := range state.ClusterAddonBindings {
+		cluster := binding.Spec.ClusterRef.Name
+		if cluster == "" || seen[cluster] {
+			continue
+		}
+		seen[cluster] = true
+		path := filepath.Join(clustersDir, cluster, "secrets", "kubeconfig")
+		info, err := deps.StatPath(path)
+		switch {
+		case err != nil:
+			checks = append(checks, failCheck(checkGroupInstallerTools, cluster+" kubeconfig", path+" missing", "Add-ons need the installed cluster kubeconfig", "run bootwright apply --stage clusters --clusters "+cluster+" --yes before applying add-ons"))
+		case info.IsDir():
+			checks = append(checks, failCheck(checkGroupInstallerTools, cluster+" kubeconfig", path+" is a directory", "Add-ons need a kubeconfig file", "replace "+path+" with the cluster kubeconfig"))
+		default:
+			checks = append(checks, okCheck(checkGroupInstallerTools, cluster+" kubeconfig", path))
+		}
+	}
+	return checks
+}
+
 func parseOpenShiftInstallVersion(out string) string {
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
@@ -278,8 +311,8 @@ func secretsDirCheck(secretsDir string, deps Deps) Check {
 	if !info.IsDir() {
 		return failCheck(checkGroupSecretMaterial, name, secretsDir+" is not a directory", "Context secret material cannot be read", "replace it with a directory")
 	}
-	if got := info.Mode().Perm(); got != 0o700 {
-		return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; expected 0700", secretsDir, got), "Secret directory permissions are too broad or too narrow", "chmod 0700 "+secretsDir)
+	if got := info.Mode().Perm(); got&0o077 != 0 {
+		return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; group/other accessible", secretsDir, got), "Secret directory is accessible beyond its owner", "chmod go-rwx "+secretsDir)
 	}
 	return okCheck(checkGroupSecretMaterial, name, secretsDir)
 }
@@ -307,8 +340,8 @@ func secretFileCheck(refName, path, label string, publicKey, contextBacked, exte
 		return failCheck(checkGroupSecretMaterial, name, path+" is a directory", "Referenced secret material must be a regular file", "replace "+path+" with a regular file")
 	}
 	if !publicKey {
-		if got := info.Mode().Perm(); got != 0o600 {
-			return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; expected 0600", path, got), "Secret file permissions are too broad or too narrow", "chmod 0600 "+path)
+		if got := info.Mode().Perm(); got&0o077 != 0 {
+			return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; group/other accessible", path, got), "Secret file is readable beyond its owner", "chmod go-rwx "+path)
 		}
 	}
 	return okCheck(checkGroupSecretMaterial, name, path)
@@ -327,8 +360,8 @@ func generatedSecretCheck(refName, path, label, generatedKind string, deps Deps)
 	if info.IsDir() {
 		return failCheck(checkGroupSecretMaterial, name, path+" is a directory", "Generated secret material must be a regular file", "remove "+path+" and run bootwright secret generate")
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; expected 0600", path, got), "Secret file permissions are too broad or too narrow", "chmod 0600 "+path)
+	if got := info.Mode().Perm(); got&0o077 != 0 {
+		return failCheck(checkGroupSecretMaterial, name, fmt.Sprintf("%s mode %04o; group/other accessible", path, got), "Secret file is readable beyond its owner", "chmod go-rwx "+path)
 	}
 	return okCheck(checkGroupSecretMaterial, name, path)
 }
