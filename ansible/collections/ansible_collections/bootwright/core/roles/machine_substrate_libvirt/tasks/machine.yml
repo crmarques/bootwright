@@ -51,6 +51,49 @@
       }}
   changed_when: false
 
+# The domain name <cluster>-<machine> carries no context component, so a second
+# Bootwright context (or a foreign owner) can already hold a running domain of the
+# same name on this hypervisor. Before the override reset destroys/undefines it, or
+# a plain apply redefines it, require the Bootwright ownership marker for THIS
+# context/cluster/machine — mirroring destroy.yml. When the domain is absent the
+# probe fails and the guard is skipped, so first apply still creates it; on a
+# same-context re-apply the marker is present and mutation proceeds. Apply fails
+# closed (no --force-unowned escape): it must never touch a domain it does not own.
+- name: Read libvirt domain ownership metadata for apply
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - dumpxml
+      - "{{ bootwright_libvirt_domain_name }}"
+  register: bootwright_libvirt_apply_domain_xml
+  changed_when: false
+  failed_when: false
+
+- name: Resolve libvirt domain ownership for apply
+  ansible.builtin.set_fact:
+    bootwright_libvirt_apply_owned: >-
+      {{
+        (bootwright_libvirt_apply_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
+        and (bootwright_libvirt_apply_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?cluster>' ~ (bootwright_current_cluster.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?cluster>')
+        and (bootwright_libvirt_apply_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?machine>' ~ (bootwright_component.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?machine>')
+      }}
+  changed_when: false
+  when: bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+
+- name: Refuse to mutate a non-Bootwright libvirt domain on apply
+  ansible.builtin.assert:
+    that:
+      - bootwright_libvirt_apply_owned | default(false) | bool
+    fail_msg: >-
+      Refusing to apply over libvirt domain {{ bootwright_libvirt_domain_name }}:
+      it already exists on this hypervisor but carries no Bootwright ownership
+      marker for this context/cluster/machine, so it may belong to another
+      Bootwright context or a foreign owner. Rename this cluster/machine or remove
+      the existing domain manually, then retry.
+  when: bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+
 - name: Stop managed OS libvirt domain for override reinstall
   ansible.builtin.command:
     argv:
