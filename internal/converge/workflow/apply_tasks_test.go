@@ -139,6 +139,34 @@ func (r *recordingApplyRunner) snapshot() ([]string, int) {
 	return append([]string(nil), r.calls...), r.maxActive
 }
 
+// cancelOnRunApplyRunner cancels the run context the first time it is invoked,
+// recording every playbook it is asked to run. It exercises the scheduler's
+// "stop launching after cancellation" path: only the task that triggered the
+// cancel must have launched.
+type cancelOnRunApplyRunner struct {
+	cancel func()
+	mu     sync.Mutex
+	calls  []string
+}
+
+func (r *cancelOnRunApplyRunner) Run(_ context.Context, spec ansible.RunSpec) error {
+	r.mu.Lock()
+	r.calls = append(r.calls, spec.Playbook)
+	r.mu.Unlock()
+	r.cancel()
+	return nil
+}
+
+func (r *cancelOnRunApplyRunner) Command(spec ansible.RunSpec) []string {
+	return []string{spec.Playbook}
+}
+
+func (r *cancelOnRunApplyRunner) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...)
+}
+
 func (r *externalDetailsAnsibleRunner) Run(_ context.Context, spec ansible.RunSpec) error {
 	r.runCalled = true
 	r.lastSpec = spec
@@ -415,6 +443,116 @@ func TestRunApplyTaskGraphContinuesIndependentBranchAfterTaskFailure(t *testing.
 	}
 	if task, _ := ledger.Task("blocked-a"); task.Status != TaskStatusBlocked || !strings.Contains(task.SkippedReason, "dependency fail-a failed") {
 		t.Fatalf("blocked-a = %s/%q, want blocked by failed dependency", task.Status, task.SkippedReason)
+	}
+}
+
+func TestObjectProtectedKindStorageSubObjectMapsToStorageCluster(t *testing.T) {
+	for _, kind := range []string{storageSubObjectKindPool, storageSubObjectKindFilesystem, storageSubObjectKindGateway, storageSubObjectKindNFSExport, storageSubObjectKindExport} {
+		if got := objectProtectedKind(ObjectClassification{Kind: kind}); got != v1alpha1.KindStorageCluster {
+			t.Fatalf("%s protected kind = %q, want StorageCluster", kind, got)
+		}
+	}
+}
+
+func TestOverrideDestructiveKindProtectedCoversStoragePool(t *testing.T) {
+	pool := ObjectClassification{
+		Kind:   storageSubObjectKindPool,
+		Label:  "StoragePool/ceph.rbd",
+		counts: map[ConvergeSafetyClassification]int{ConvergeSafetyDrift: 1},
+	}
+	protected := map[string]bool{v1alpha1.KindStorageCluster: true}
+	if got := OverrideDestructiveKindProtected([]ObjectClassification{pool}, protected); len(got) != 1 || got[0] != "StoragePool/ceph.rbd" {
+		t.Fatalf("a protected StorageCluster must gate a structurally-drifted pool rebuild, got %v", got)
+	}
+	// Negative: pool not in the protected set -> not gated.
+	if got := OverrideDestructiveKindProtected([]ObjectClassification{pool}, map[string]bool{}); len(got) != 0 {
+		t.Fatalf("unprotected pool must not be gated, got %v", got)
+	}
+	// Negative: reconcilable-only drift is not destructive -> not gated.
+	reconcilable := pool
+	reconcilable.counts = map[ConvergeSafetyClassification]int{ConvergeSafetyDrift: 1}
+	reconcilable.reconcilable = 1
+	if got := OverrideDestructiveKindProtected([]ObjectClassification{reconcilable}, protected); len(got) != 0 {
+		t.Fatalf("reconcilable-only pool drift must not be gated, got %v", got)
+	}
+}
+
+func TestRunApplyTaskGraphStopsLaunchingAfterContextCancel(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := &cancelOnRunApplyRunner{cancel: cancel}
+	tasks := []ApplyTask{
+		{
+			Entry:    TaskLedgerEntry{ID: "first", Kind: ApplyTaskKindProvider, Label: "first", Status: TaskStatusPending},
+			Playbook: "first",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "second", Kind: ApplyTaskKindProvider, Label: "second", Status: TaskStatusPending},
+			Playbook: "second",
+			State:    state,
+		},
+	}
+	ledger, err := RunApplyTaskGraph(ctx, io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	// The graph does not complete (second never runs), so an error is expected;
+	// the point is that no task launched after the cancellation.
+	_ = err
+	calls := runner.snapshot()
+	if len(calls) != 1 || calls[0] != "first" {
+		t.Fatalf("runner calls = %v, want only the cancel-triggering task to have launched", calls)
+	}
+	if task, _ := ledger.Task("second"); task.Status == TaskStatusOK || task.Status == TaskStatusRunning {
+		t.Fatalf("second task status = %s, want it never launched after cancellation", task.Status)
+	}
+}
+
+func TestRestoreClusterInstallRecordOnSkipRemovesPhantom(t *testing.T) {
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	now := time.Now()
+	// A start-mark stamped installing/booting for a cluster with no prior record
+	// (a fresh nodeBoot that then no-op skipped because no hosts matched).
+	phantom := ClusterInstallRecord{Cluster: "c", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseBooting, UpdatedAt: now.UTC()}
+	if err := SaveClusterInstallRecord(clustersDir, phantom); err != nil {
+		t.Fatalf("SaveClusterInstallRecord: %v", err)
+	}
+	if err := restoreClusterInstallRecordOnSkip(clustersDir, "c", ClusterInstallRecord{}, false); err != nil {
+		t.Fatalf("restoreClusterInstallRecordOnSkip: %v", err)
+	}
+	if _, found, err := LoadClusterInstallRecord(clustersDir, "c"); err != nil || found {
+		t.Fatalf("phantom installing record should be removed, found=%v err=%v", found, err)
+	}
+}
+
+func TestRestoreClusterInstallRecordOnSkipRestoresPrior(t *testing.T) {
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	now := time.Now()
+	prior := ClusterInstallRecord{Cluster: "c", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseISOCreated, RunID: "run-1", UpdatedAt: now.UTC()}
+	overwritten := ClusterInstallRecord{Cluster: "c", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseBooting, RunID: "run-2", UpdatedAt: now.UTC()}
+	if err := SaveClusterInstallRecord(clustersDir, overwritten); err != nil {
+		t.Fatalf("SaveClusterInstallRecord: %v", err)
+	}
+	if err := restoreClusterInstallRecordOnSkip(clustersDir, "c", prior, true); err != nil {
+		t.Fatalf("restoreClusterInstallRecordOnSkip: %v", err)
+	}
+	got, found, err := LoadClusterInstallRecord(clustersDir, "c")
+	if err != nil || !found {
+		t.Fatalf("expected a restored record, found=%v err=%v", found, err)
+	}
+	if got.Phase != ClusterInstallPhaseISOCreated || got.RunID != "run-1" {
+		t.Fatalf("expected prior record restored, got %+v", got)
 	}
 }
 

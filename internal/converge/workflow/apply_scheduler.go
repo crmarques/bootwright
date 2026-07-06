@@ -176,6 +176,18 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			if running >= parallelism {
 				break
 			}
+			// Once the run is being torn down — a fatal ledger/lease error
+			// (fatalErr) or a signal-cancelled context (Ctrl-C) — stop launching
+			// newly-ready tasks. Otherwise a task freed as a killed task's failure
+			// event drains would be started under the dead ctx: runOneApplyTask
+			// stamps its cluster-install record 'started', exec.CommandContext kills
+			// ansible instantly, and it is recorded 'failed' — a phantom
+			// started->failed record for work that never ran, which then forces
+			// --override on the next apply. Let the running tasks drain and the
+			// unstarted ones terminalize as blocked below.
+			if fatalErr != nil || ctx.Err() != nil {
+				break
+			}
 			if taskTerminal(task.Entry.Status) || started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskRedfishAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) || !taskHostSlotAvailable(task, runningHostSlots, perHostLimit) {
 				continue
 			}
@@ -338,8 +350,13 @@ func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease)
 				lease.HeartbeatAt = now.UTC()
 				if err := saveRunLease(runsDir, lease); err != nil {
 					if isLeaseNotOwned(err) {
-						// Taken over by a newer holder; stop refreshing rather than
-						// clobber their lease. Not a run failure, so emit no error.
+						// Taken over by a newer holder. We no longer hold the lease, so
+						// we must NOT keep launching mutating tasks concurrently with the
+						// new holder (the exact double-mutator the lease prevents). Emit a
+						// distinct lease-lost error so the scheduler stops and finishes the
+						// run as failed; finishRun's RemoveRunLeaseIfOwner leaves the new
+						// holder's lease untouched.
+						errors <- fmt.Errorf("apply lease taken over by another run: %w", err)
 						return
 					}
 					errors <- fmt.Errorf("refresh apply lease: %w", err)

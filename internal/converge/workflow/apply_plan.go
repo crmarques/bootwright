@@ -31,6 +31,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return nil, err
 		}
 	}
+	// A scoped sub-phase run assumes the phases it does NOT include already ran, so
+	// mark the capabilities those phases land as available. Without this a documented
+	// sub-phase (e.g. `--stage machines`) fails Lower() with "requires unavailable
+	// capability provider.host-ready:<host>" (or the KubeVirt host-cluster caps),
+	// mirroring how base-only ISO reuse and addAvailableMachineOSCapabilities already
+	// assume a prior run for capabilities their phase does not plan.
+	addAvailablePriorPhaseCapabilities(graph, state, phaseSet, kubeVirtReqsByCluster)
 	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, phaseSet)
 	if err != nil {
 		return nil, err
@@ -534,6 +541,46 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 		}
 	}
 	return nil
+}
+
+// addAvailablePriorPhaseCapabilities marks the capabilities landed by phases that
+// are NOT in the planned phaseSet as already-available, so a scoped sub-phase run
+// (e.g. `--stage machines`) plans against the assumption that its excluded phases
+// already ran — the same prior-run assumption the base-only ISO-reuse path makes.
+// It only adds a capability whose provider is genuinely absent from this graph
+// (the phase that provides it is out of scope): ActivityGraph.Lower prefers an
+// available capability over an in-graph provider, so adding one that a planned
+// phase provides would silently drop the ordering dependency. The phaseSet guards
+// below encode exactly that "provider not planned" condition.
+func addAvailablePriorPhaseCapabilities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, kubeVirtReqsByCluster map[string][]CapabilityRef) {
+	// Fabric lands the provider-host services (provider.host-ready / service-ready)
+	// and the infra-component service endpoints that machine-prepare tasks require.
+	if !phaseSet[ApplyPhaseFabric] {
+		members := render.HostGroupMembers(state)
+		for _, host := range members[render.GroupProviderHosts] {
+			graph.AddAvailable(providerHostReadyCapability(host))
+			graph.AddAvailable(providerServiceReadyCapability(host))
+		}
+		for _, host := range members[render.GroupInfraComponentHosts] {
+			graph.AddAvailable(serviceEndpointReadyCapability(host))
+		}
+	}
+	// KubeVirt child machine/ISO/boot tasks require the parent host cluster installed
+	// (landed by base) and its kubevirt-providing add-on (landed by add-ons).
+	clusterInstalledKind := clusterInstalledCapability("").Kind
+	kubevirtAddonKind := addonProvidesCapability("", v1alpha1.ClusterAddonProvidesKubeVirt).Kind
+	baseInScope := phaseSet[ApplyPhaseBase]
+	addonsInScope := phaseSet[ApplyPhaseAddons]
+	for _, caps := range kubeVirtReqsByCluster {
+		for _, capability := range caps {
+			switch {
+			case capability.Kind == clusterInstalledKind && !baseInScope:
+				graph.AddAvailable(capability)
+			case capability.Kind == kubevirtAddonKind && !addonsInScope:
+				graph.AddAvailable(capability)
+			}
+		}
+	}
 }
 
 func addAvailableMachineOSCapabilities(graph *ActivityGraph, state v1alpha1.State) {

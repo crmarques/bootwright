@@ -2,6 +2,7 @@ package converge
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/ownership"
@@ -72,9 +73,10 @@ func (d ReleaseDecision) Names() []string {
 //     record, never the owner's base, for ALL component kinds. Released without a
 //     sibling scan (a reference is always caller-scoped).
 //   - role owner       -> this context runs the base. If any sibling context holds a
-//     reference record for the same (kind,name,host), tearing the base down would break
-//     those referrers, so it is reported in Blocks for the caller to refuse (unless
-//     --override).
+//     reference OR a co-owner record for the same (kind,name,host), tearing the base
+//     down would break those siblings, so it is reported in Blocks for the caller to
+//     refuse (unless --override). Co-owners are counted because the role:reference
+//     writer is not yet wired, so a genuinely shared service reads as multiple owners.
 //
 // A genuine failure to enumerate sibling contexts is returned as an error so the caller
 // can fail closed; an individual unreadable sibling store is a warning and the scan
@@ -101,18 +103,27 @@ func PlanInfraComponentReleases(selfContext string, records []ownership.Resource
 		if len(stores) == 0 {
 			continue
 		}
-		referrers, skipped := ownership.ReferenceContexts(stores, selfContext, ownership.SharedComponentID{
+		id := ownership.SharedComponentID{
 			Kind: record.Kind,
 			Name: record.Name,
 			Host: record.Host,
-		})
+		}
+		referrers, skipped := ownership.ReferenceContexts(stores, selfContext, id)
 		decision.Warnings = append(decision.Warnings, skipped...)
-		if len(referrers) > 0 {
+		// The role:reference writer is not yet wired (management: reference is not
+		// authorable), so two contexts that both drive the same shared bastion service
+		// each stamp an OWNER record for the same (kind,name,host). Count a sibling
+		// co-owner as a blocker too — otherwise the first context to destroy tears down
+		// a base the co-owner still depends on. Fail closed (unless --override).
+		coOwners, coSkipped := ownership.OtherContextsWithRole(stores, selfContext, id, ownership.RoleOwner)
+		decision.Warnings = append(decision.Warnings, coSkipped...)
+		blockers := mergeUniqueSorted(referrers, coOwners)
+		if len(blockers) > 0 {
 			decision.Blocks = append(decision.Blocks, InfraComponentReferencedOwner{
 				Name:          record.Name,
 				Host:          record.Host,
 				ComponentKind: componentKind,
-				Referrers:     referrers,
+				Referrers:     blockers,
 			})
 		}
 	}
@@ -129,7 +140,7 @@ func ReferencedOwnerError(blocks []InfraComponentReferencedOwner) error {
 	for _, block := range blocks {
 		parts = append(parts, fmt.Sprintf("%s (referrers: %s)", block.Name, strings.Join(block.Referrers, ", ")))
 	}
-	return fmt.Errorf("refusing to tear down shared infra-component(s) still referenced by other contexts: %s; detach the referrers first, or re-run with --override to tear them down regardless", strings.Join(parts, "; "))
+	return fmt.Errorf("refusing to tear down shared infra-component(s) still referenced or co-owned by other contexts: %s; detach the other contexts first, or re-run with --override to tear them down regardless", strings.Join(parts, "; "))
 }
 
 // ApplyInfraComponentReleaseExtraVar stamps the release set onto a destroy plan. A
@@ -140,6 +151,26 @@ func ApplyInfraComponentReleaseExtraVar(plan *WorkflowPlan, names []string) {
 		return
 	}
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, InfraComponentReleaseExtraVar+"="+strings.Join(names, ","))
+}
+
+// mergeUniqueSorted merges two context-name lists into one deduplicated, sorted list
+// (blank names dropped), for combining reference-holders and co-owners into one
+// blocker set.
+func mergeUniqueSorted(a, b []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(a)+len(b))
+	for _, list := range [][]string{a, b} {
+		for _, name := range list {
+			name = strings.TrimSpace(name)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // siblingContextStores lists every usable Bootwright context's ownership store except

@@ -364,3 +364,36 @@ func TestSummarizeFailureRespectsTailBudget(t *testing.T) {
 			strings.Count(got, "noise line"), got)
 	}
 }
+
+func TestCallerOwnedChainTrusted(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("permission-bit checks are meaningless when running as root")
+	}
+	uid := uint32(os.Getuid())
+	home := t.TempDir()
+	site := filepath.Join(home, ".local", "lib", "python", "site-packages")
+	if err := os.MkdirAll(site, 0o755); err != nil {
+		t.Fatalf("mkdir site: %v", err)
+	}
+
+	if !callerOwnedChainTrusted(site, home, uid) {
+		t.Fatalf("caller-owned 0755 chain should be trusted")
+	}
+
+	// A group/other-writable component anywhere up the chain must break trust.
+	mid := filepath.Join(home, ".local")
+	if err := os.Chmod(mid, 0o777); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	if callerOwnedChainTrusted(site, home, uid) {
+		t.Fatalf("world-writable parent must not be trusted")
+	}
+	if err := os.Chmod(mid, 0o755); err != nil {
+		t.Fatalf("chmod back: %v", err)
+	}
+
+	// A uid mismatch (simulated with an impossible owner) must break trust.
+	if callerOwnedChainTrusted(site, home, uid+1) {
+		t.Fatalf("foreign-owned chain must not be trusted")
+	}
+}

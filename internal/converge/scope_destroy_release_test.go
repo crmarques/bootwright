@@ -40,6 +40,35 @@ func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileReferenced(t *testing
 	}
 }
 
+func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileCoOwned(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
+	ctxHub := mustContext(t, "hub")
+	ctxSpoke := mustContext(t, "spoke")
+
+	// No role:reference writer exists yet, so a genuinely shared service reads as two
+	// OWNER records for the same (kind,name,host). hub's teardown must fail closed
+	// because spoke co-owns (still depends on) the same base.
+	owner := sharedArtifactRecord()
+	coOwner := owner
+	coOwner.Context = "spoke" // role empty => owner
+	saveRecord(t, ctxHub.OwnershipDir, owner)
+	saveRecord(t, ctxSpoke.OwnershipDir, coOwner)
+
+	decision, err := PlanInfraComponentReleases("hub", []ownership.ResourceRecord{owner})
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(decision.Blocks) != 1 {
+		t.Fatalf("want 1 block from co-owner, got %d (%+v)", len(decision.Blocks), decision.Blocks)
+	}
+	if block := decision.Blocks[0]; block.Name != "prov1-edge" || !slices.Equal(block.Referrers, []string{"spoke"}) {
+		t.Fatalf("unexpected co-owner block %+v", block)
+	}
+	if ReferencedOwnerError(decision.Blocks) == nil {
+		t.Fatalf("co-owner block must render a refusal error")
+	}
+}
+
 func TestPlanInfraComponentReleasesReleasesReferenceForAllKinds(t *testing.T) {
 	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
 	ctxHub := mustContext(t, "hub")

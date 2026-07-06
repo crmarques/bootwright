@@ -263,26 +263,37 @@ func RemoveRunLeaseIfOwner(runsDir, runID string) error {
 	return RemoveRunLease(runsDir)
 }
 
-// leaseFresh reports whether an on-disk lease belongs to a run that is still
-// alive: a recent heartbeat and, when the lease was taken on this host, a live
-// process. It mirrors the freshness arms of AssessRunActivity but works from the
-// lease alone, so it can gate mutating runs that do not maintain a ledger.
-func leaseFresh(lease RunLease, now time.Time) bool {
-	// A lease held by a live local process is active regardless of heartbeat age:
-	// a long privileged step (an ansible task that outlasts the 2-minute heartbeat
-	// window) is still mutating hosts, so a stale heartbeat alone must not invite a
-	// takeover. Only a dead/absent local process, or a lease taken on another host
-	// (PID not checkable here), falls back to the heartbeat-age rule.
+// leaseLiveness is the single source of truth for whether a lease's run is still
+// alive, given the caller has already handled the missing-lease and different-run
+// cases. The four arms are: a live local process is active regardless of heartbeat
+// age (a long privileged step outlasting the ~2-minute heartbeat window is still
+// mutating hosts, so a stale heartbeat alone must not invite a takeover); a lease
+// with no heartbeat, or whose local process is provably gone, is stale; otherwise
+// the heartbeat-age window decides. Both the advisory pre-mutation check
+// (leaseFresh) and the acquisition/status gate (AssessRunActivity) call this so the
+// two mutual-exclusion gates cannot disagree on what counts as a live run.
+func leaseLiveness(lease RunLease, now time.Time) (RunActivityState, string) {
 	if localLeaseProcessAlive(lease) {
-		return true
+		return RunActivityActive, "apply lease process is running"
 	}
 	if lease.HeartbeatAt.IsZero() {
-		return false
+		return RunActivityStale, "apply lease has no heartbeat"
 	}
 	if localLeaseProcessMissing(lease) {
-		return false
+		return RunActivityStale, "apply lease process is not running"
 	}
-	return now.UTC().Sub(lease.HeartbeatAt.UTC()) <= ApplyLeaseStaleAfter
+	if now.UTC().Sub(lease.HeartbeatAt.UTC()) > ApplyLeaseStaleAfter {
+		return RunActivityStale, "apply lease heartbeat is stale"
+	}
+	return RunActivityActive, "apply lease heartbeat is fresh"
+}
+
+// leaseFresh reports whether an on-disk lease belongs to a run that is still
+// alive. It shares leaseLiveness with AssessRunActivity but works from the lease
+// alone, so it can gate mutating runs that do not maintain a ledger.
+func leaseFresh(lease RunLease, now time.Time) bool {
+	state, _ := leaseLiveness(lease, now)
+	return state == RunActivityActive
 }
 
 // AcquireRunLease atomically claims the run lease for a mutating run. It fails
@@ -374,24 +385,10 @@ func AssessRunActivity(runsDir string, ledger RunLedger, now time.Time) (RunActi
 	if lease.RunID != ledger.RunID {
 		return RunActivity{State: RunActivityStale, Detail: fmt.Sprintf("apply lease belongs to %s", lease.RunID), Lease: &lease}, nil
 	}
-	// A live local process holds an active run even after its heartbeat ages out:
-	// a long privileged step outlasting the heartbeat window is still mutating
-	// hosts, so a stale heartbeat alone must not declare it dead and invite a
-	// takeover. Only a gone local process — or a remote-host lease, where the
-	// process is not checkable — falls back to the heartbeat-age rule below.
-	if localLeaseProcessAlive(lease) {
-		return RunActivity{State: RunActivityActive, Detail: "apply lease process is running", Lease: &lease}, nil
-	}
-	if lease.HeartbeatAt.IsZero() {
-		return RunActivity{State: RunActivityStale, Detail: "apply lease has no heartbeat", Lease: &lease}, nil
-	}
-	if localLeaseProcessMissing(lease) {
-		return RunActivity{State: RunActivityStale, Detail: "apply lease process is not running", Lease: &lease}, nil
-	}
-	if now.UTC().Sub(lease.HeartbeatAt.UTC()) > ApplyLeaseStaleAfter {
-		return RunActivity{State: RunActivityStale, Detail: "apply lease heartbeat is stale", Lease: &lease}, nil
-	}
-	return RunActivity{State: RunActivityActive, Detail: "apply lease heartbeat is fresh", Lease: &lease}, nil
+	// The lease belongs to this run: the shared four-arm freshness decision (also
+	// used by leaseFresh) determines active vs stale.
+	state, detail := leaseLiveness(lease, now)
+	return RunActivity{State: state, Detail: detail, Lease: &lease}, nil
 }
 
 var (

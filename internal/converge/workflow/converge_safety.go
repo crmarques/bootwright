@@ -303,6 +303,15 @@ func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHas
 	return record.StructuralHash == structuralHash
 }
 
+// ClassifyConvergeSafety classifies a recorded object against the desired hash by
+// comparing desired-vs-RECORDED-desired only — it does not read live cluster state.
+// The foreign arm fires when a record's Manager is not this run's owner; today every
+// bootwright-written record carries Manager=ConvergeSafetyOwner, so foreign is a
+// fail-safe for a future non-bootwright writer, not a live out-of-band-drift detector.
+// Drift injected outside bootwright (a `ceph` pool resize, an `oc edit`) does not
+// change the recorded desired hash and so is invisible here by design; live
+// divergence is surfaced by the per-role Ansible reconcile gates and by
+// `bootwright diff --live`, not by this preflight classification.
 func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManager string) ConvergeSafetyClassification {
 	if strings.TrimSpace(record.ResourceID) == "" {
 		return ConvergeSafetyMissing

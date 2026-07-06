@@ -355,6 +355,10 @@ func sudoUserSitePackages() string {
 	if !ok || home == "" {
 		return ""
 	}
+	uid, _, ok := localroot.CallerUIDGID()
+	if !ok {
+		return ""
+	}
 	out, _, err := callerio.CommandOutput("python3", "-m", "site", "--user-site")
 	if err != nil {
 		return ""
@@ -363,13 +367,57 @@ func sudoUserSitePackages() string {
 	if site == "" {
 		return ""
 	}
-	if !strings.HasPrefix(filepath.Clean(site), filepath.Clean(home)+string(os.PathSeparator)) && filepath.Clean(site) != filepath.Clean(home) {
+	cleanSite := filepath.Clean(site)
+	cleanHome := filepath.Clean(home)
+	if !strings.HasPrefix(cleanSite, cleanHome+string(os.PathSeparator)) && cleanSite != cleanHome {
 		return ""
 	}
 	if info, err := os.Stat(site); err != nil || !info.IsDir() {
 		return ""
 	}
+	// Root's ansible-playbook imports modules from this directory, so a widening
+	// beyond what plain `sudo ansible` would trust is a code-exec-as-root risk:
+	// an attacker who can write the site dir (or any parent up to HOME) could
+	// plant a module and run as root on the next apply. Trust it only when the
+	// whole chain up to HOME is owned by the caller and not group/other-writable.
+	if !callerOwnedChainTrusted(cleanSite, cleanHome, uid) {
+		return ""
+	}
 	return site
+}
+
+// callerOwnedChainTrusted reports whether path and every parent up to and
+// including home is owned by uid and carries no group/other write bit. It
+// walks with Lstat so a symlinked component is judged on its own ownership and
+// permissions rather than its target's.
+func callerOwnedChainTrusted(path, home string, uid uint32) bool {
+	for {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return false
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return false
+		}
+		if stat.Uid != uid {
+			return false
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			return false
+		}
+		if path == home {
+			return true
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			// Reached the filesystem root without passing through home; the
+			// prefix check upstream guarantees this only happens when home is
+			// itself the root, which we already validated above.
+			return true
+		}
+		path = parent
+	}
 }
 
 func appendPythonPath(env []string, extra string) []string {

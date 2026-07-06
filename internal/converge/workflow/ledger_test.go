@@ -1,12 +1,84 @@
 package workflow
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+// leaseLiveness is the single decision tree shared by leaseFresh (the advisory
+// pre-mutation check) and AssessRunActivity (the acquisition/status gate). This
+// table locks its four arms so the two mutual-exclusion gates cannot drift apart.
+func TestLeaseLiveness(t *testing.T) {
+	host, _ := os.Hostname()
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	oldAlive := runLeaseProcessAlive
+	oldToken := runLeaseProcessStartToken
+	defer func() { runLeaseProcessAlive = oldAlive; runLeaseProcessStartToken = oldToken }()
+
+	cases := []struct {
+		name       string
+		alive      bool
+		tokenOK    bool
+		token      string
+		lease      RunLease
+		now        time.Time
+		wantState  RunActivityState
+		wantDetail string
+	}{
+		{
+			name:  "live local process is active regardless of heartbeat age",
+			alive: true, tokenOK: true, token: "tok",
+			lease:     RunLease{Hostname: host, PID: 42, ProcessStart: "tok", HeartbeatAt: now.Add(-time.Hour)},
+			now:       now,
+			wantState: RunActivityActive, wantDetail: "apply lease process is running",
+		},
+		{
+			name:      "no heartbeat is stale",
+			alive:     false,
+			lease:     RunLease{Hostname: host, PID: 42},
+			now:       now,
+			wantState: RunActivityStale, wantDetail: "apply lease has no heartbeat",
+		},
+		{
+			name:      "gone local process is stale",
+			alive:     false,
+			lease:     RunLease{Hostname: host, PID: 42, HeartbeatAt: now},
+			now:       now.Add(time.Second),
+			wantState: RunActivityStale, wantDetail: "apply lease process is not running",
+		},
+		{
+			name:      "remote lease with aged heartbeat is stale",
+			alive:     false,
+			lease:     RunLease{Hostname: "other-host", PID: 42, HeartbeatAt: now},
+			now:       now.Add(ApplyLeaseStaleAfter + time.Second),
+			wantState: RunActivityStale, wantDetail: "apply lease heartbeat is stale",
+		},
+		{
+			name:      "remote lease with fresh heartbeat is active",
+			alive:     false,
+			lease:     RunLease{Hostname: "other-host", PID: 42, HeartbeatAt: now},
+			now:       now.Add(ApplyLeaseStaleAfter - time.Second),
+			wantState: RunActivityActive, wantDetail: "apply lease heartbeat is fresh",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runLeaseProcessAlive = func(int) bool { return tc.alive }
+			runLeaseProcessStartToken = func(int) (string, bool) { return tc.token, tc.tokenOK }
+			gotState, gotDetail := leaseLiveness(tc.lease, tc.now)
+			if gotState != tc.wantState || gotDetail != tc.wantDetail {
+				t.Fatalf("leaseLiveness = %s/%q, want %s/%q", gotState, gotDetail, tc.wantState, tc.wantDetail)
+			}
+			if got := leaseFresh(tc.lease, tc.now); got != (tc.wantState == RunActivityActive) {
+				t.Fatalf("leaseFresh = %v, want %v (must agree with leaseLiveness)", got, tc.wantState == RunActivityActive)
+			}
+		})
+	}
+}
 
 func TestRunLedgerRoundTrip(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)

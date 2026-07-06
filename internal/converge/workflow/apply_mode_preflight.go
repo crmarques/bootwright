@@ -177,10 +177,16 @@ func OverrideDestructiveDriftedObjects(objects []ObjectClassification) []string 
 // objectProtectedKind maps a classified object to the spec.safety.protectedKinds
 // category it belongs to — a container or storage cluster, or any machine-substrate
 // task (managed-OS install / machine-infra step) to Machine — or "" for an object no
-// protectedKind covers.
+// protectedKind covers. A storage sub-object (pool/filesystem/gateway/export) maps
+// to StorageCluster: its data lives inside the protected cluster, and
+// protectedKinds cannot name a sub-object directly (validation restricts it to
+// {ContainerCluster, StorageCluster, Machine}), so protecting the StorageCluster is
+// the only granular way to gate a data-destroying pool/filesystem rebuild.
 func objectProtectedKind(o ObjectClassification) string {
 	switch {
 	case o.Kind == ObjectKindStorageCluster:
+		return v1alpha1.KindStorageCluster
+	case IsStorageSubObjectKind(o.Kind):
 		return v1alpha1.KindStorageCluster
 	case o.Kind == ObjectKindContainerCluster:
 		return v1alpha1.KindContainerCluster

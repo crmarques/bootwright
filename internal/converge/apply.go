@@ -219,15 +219,41 @@ type ApplyRunReporter interface {
 	BundleReady(result bundle.AnsibleBundleResult)
 }
 
+// The report* helpers drive the ApplyRunReporter progress surface, tolerating a nil
+// reporter so a non-CLI caller (test harness, alternate frontend) can run ExecuteApply
+// without a progress surface. Every reporter call goes through one of these so no path
+// dereferences a nil reporter.
+func reportRenderStart(r ApplyRunReporter) {
+	if r != nil {
+		r.RenderStart()
+	}
+}
+
+func reportResolveInstallerStart(r ApplyRunReporter) {
+	if r != nil {
+		r.ResolveInstallerStart()
+	}
+}
+
+func reportBundleStart(r ApplyRunReporter) {
+	if r != nil {
+		r.BundleStart()
+	}
+}
+
+func reportBundleReady(r ApplyRunReporter, result bundle.AnsibleBundleResult) {
+	if r != nil {
+		r.BundleReady(result)
+	}
+}
+
 // ExecuteApply renders inputs, prepares the task graph, snapshots the run
 // input, resolves installer secrets when needed, refreshes the Ansible
 // bundle, and runs the prepared apply task graph. It returns the render
 // result, the (possibly refreshed) bundle result, and the run ledger; the
 // CLI maps the ledger state to exit codes and prints results.
 func ExecuteApply(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, runOpts workflow.RunOptions, applyTarget workflow.ApplyTarget, clusterScope string, plan WorkflowPlan, tasks []workflow.ApplyTask, limits workflow.ConcurrencyLimits, usesAnsible bool, bundleResult bundle.AnsibleBundleResult, bundleVersionMarker string, reporter ApplyRunReporter, applyReporter workflow.ApplyReporter) (render.Result, bundle.AnsibleBundleResult, workflow.RunLedger, error) {
-	if reporter != nil {
-		reporter.RenderStart()
-	}
+	reportRenderStart(reporter)
 	renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 	if err != nil {
 		return render.Result{}, bundleResult, workflow.RunLedger{}, err
@@ -242,18 +268,18 @@ func ExecuteApply(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspac
 		return render.Result{}, bundleResult, workflow.RunLedger{}, err
 	}
 	if plan.TargetsClusters {
-		reporter.ResolveInstallerStart()
+		reportResolveInstallerStart(reporter)
 		if _, err := workflow.ResolveInstallerForContext(ctx.Name, clustersDir, ctx.SecretsDir, plan.State); err != nil {
 			return render.Result{}, bundleResult, workflow.RunLedger{}, err
 		}
 	}
 	if !plan.NoRemoteWork && usesAnsible {
-		reporter.BundleStart()
+		reportBundleStart(reporter)
 		bundleResult, err = PrepareWorkflowBundle(bundleResult.Dir, bundleVersionMarker, false)
 		if err != nil {
 			return render.Result{}, bundleResult, workflow.RunLedger{}, err
 		}
-		reporter.BundleReady(bundleResult)
+		reportBundleReady(reporter, bundleResult)
 		runOpts.BundleDir = bundleResult.Dir
 	}
 	ledger, err := workflow.RunPreparedApplyTaskGraph(cmdCtx, stdout, stderr, ctx.RunsDir, runOpts, applyTarget, clusterScope, prepared, applyReporter, nil)

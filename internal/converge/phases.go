@@ -5,10 +5,9 @@ import (
 )
 
 type Phase struct {
-	Name          string
-	ApplyPlaybook string
-	NeedsRoot     bool
-	Description   string
+	Name        string
+	NeedsRoot   bool
+	Description string
 	// AnsibleLimit is the inventory --limit a single-phase (sub-phase) run
 	// targets; a sub-phase scope inherits it. Empty means no limit (add-ons runs
 	// no ansible). The family scopes carry their own AnsibleLimit directly.
@@ -16,9 +15,9 @@ type Phase struct {
 }
 
 // phases are the five sub-phases of the two families. infra = fabric + machines;
-// clusters = deps + base + add-ons. Each maps to several task playbooks, so the
-// per-phase ApplyPlaybook field is left empty (advisory) and the task graph is
-// authoritative. NeedsRoot is coarse: base and add-ons mix root work (container
+// clusters = deps + base + add-ons. Each maps to several task playbooks, so a phase
+// carries no single apply playbook — the task graph is authoritative. NeedsRoot is
+// coarse: base and add-ons mix root work (container
 // install, add-on ownership) with non-root work (ceph bootstrap), so it stays true.
 var phases = map[string]Phase{
 	PhaseFabric: {

@@ -2,8 +2,10 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -62,6 +64,23 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	runner := runnerFactory(stdout, stderr)
 	now := time.Now()
+	// The start-mark stamps status=installing (phase booting/waiting/creating-iso)
+	// before Run decides whether the task has any hosts to act on. If Run then
+	// no-op skips (empty inventory for this cluster's phase), the succeeded-mark is
+	// gated off below and the record would be left installing — the next apply's
+	// resume then refuses ('node boot completion is uncertain') for a run that
+	// touched no host. Capture the prior record so a skip can undo the start-mark.
+	_, isInstallStartKind := clusterInstallTaskStartPhase(task.Entry.Kind)
+	restorable := isInstallStartKind && task.Entry.Cluster != "" && stateHasContainerCluster(task.State, task.Entry.Cluster)
+	var priorInstall ClusterInstallRecord
+	var priorInstallFound bool
+	if restorable {
+		var loadErr error
+		priorInstall, priorInstallFound, loadErr = LoadClusterInstallRecord(opts.ClustersDir, task.Entry.Cluster)
+		if loadErr != nil {
+			return applyTaskResult{id: task.Entry.ID, err: loadErr}
+		}
+	}
 	if err := MarkClusterInstallTaskStarted(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
@@ -72,6 +91,11 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+	}
+	if result.Skipped && restorable {
+		if restoreErr := restoreClusterInstallRecordOnSkip(opts.ClustersDir, task.Entry.Cluster, priorInstall, priorInstallFound); restoreErr != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: restoreErr}
+		}
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster && !result.Skipped {
 		clusterName := strings.TrimPrefix(task.Entry.ID, "storage.")
@@ -103,6 +127,25 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+}
+
+// restoreClusterInstallRecordOnSkip undoes a start-mark left by a task that then
+// no-op skipped: it re-saves the record that existed before the start-mark, or —
+// when no record existed — removes the phantom installing record (only the
+// install record, not the kubeconfig/connection). This keeps a skipped, host-less
+// install task from stranding the cluster in 'installing' so the next apply's
+// resume path does not refuse to proceed.
+func restoreClusterInstallRecordOnSkip(clustersDir, cluster string, prior ClusterInstallRecord, priorFound bool) error {
+	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
+		return nil
+	}
+	if priorFound {
+		return SaveClusterInstallRecord(clustersDir, prior)
+	}
+	if err := os.Remove(ClusterInstallRecordPath(clustersDir, cluster)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove phantom cluster install record %s: %w", ClusterInstallRecordPath(clustersDir, cluster), err)
+	}
+	return nil
 }
 
 // provisioningPlaybookConvergeSkip implements a ProvisioningPlaybook's run:
