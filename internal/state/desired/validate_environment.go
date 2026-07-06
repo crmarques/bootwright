@@ -168,27 +168,16 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 	if len(env.Spec.Resources) == 0 {
 		return []string{fmt.Sprintf("Environment/%s spec.resources must include at least one file or directory when set", env.Metadata.Name)}
 	}
+	// The path-shape rules (empty, whitespace, absolute, directory escape) are
+	// enforced at load by resolveEnvironmentResourcePath, which aborts before
+	// Validate runs; duplicating them here only produced dead arms whose nicely
+	// routed findings never rendered. The cross-entry duplicate check is the one
+	// rule load does not cover, so it is all that remains reachable here.
 	var errs []string
 	seen := map[string]bool{}
 	for i, value := range env.Spec.Resources {
 		owner := fmt.Sprintf("Environment/%s spec.resources[%d]", env.Metadata.Name, i)
-		if strings.TrimSpace(value) == "" {
-			errs = append(errs, fmt.Sprintf("%s must not be empty", owner))
-			continue
-		}
-		if strings.TrimSpace(value) != value {
-			errs = append(errs, fmt.Sprintf("%s %q must not contain leading or trailing whitespace", owner, value))
-			continue
-		}
-		if filepath.IsAbs(value) {
-			errs = append(errs, fmt.Sprintf("%s %q must be relative to the Environment file", owner, value))
-			continue
-		}
 		clean := filepath.Clean(value)
-		if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			errs = append(errs, fmt.Sprintf("%s %q must stay within the Environment file directory", owner, value))
-			continue
-		}
 		if seen[clean] {
 			errs = append(errs, fmt.Sprintf("%s %q is a duplicate", owner, value))
 			continue

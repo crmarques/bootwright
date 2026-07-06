@@ -287,6 +287,18 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 		if customResourceString(metadata, "name") == "" {
 			errs = append(errs, itemPrefix+".metadata.name is required")
 		}
+		// Desired state must never embed secret bytes (the security.md invariant).
+		// OLM custom resources are applied via stdin, so an inline kind=Secret
+		// would be written verbatim (and logged) with zero diagnostic. Reject it
+		// and steer operators to reference a secret they provide at apply time.
+		if customResourceString(resource, "kind") == "Secret" {
+			if _, ok := resource["data"]; ok {
+				errs = append(errs, itemPrefix+" is a kind=Secret carrying inline data; desired state must not embed secret bytes — provide the Secret at apply time instead of inlining it")
+			}
+			if _, ok := resource["stringData"]; ok {
+				errs = append(errs, itemPrefix+" is a kind=Secret carrying inline stringData; desired state must not embed secret bytes — provide the Secret at apply time instead of inlining it")
+			}
+		}
 		// metadata.namespace is intentionally optional: cluster-scoped custom
 		// resources (e.g. the kubernetes-nmstate NMState instance) have none, and
 		// oc apply ignores a namespace set on a cluster-scoped resource anyway.

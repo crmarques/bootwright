@@ -11,7 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
-	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 // Validate is the single entry point. Every rule in
@@ -27,8 +26,8 @@ func Validate(state v1alpha1.State) error {
 }
 
 // validateFindings runs every per-kind validator and returns the raw findings.
-// Validate wraps them in a ValidationError; ValidateScoped diffs two findings
-// sets. Keep the validator call order here as the single source of truth.
+// Validate wraps them in a ValidationError. Keep the validator call order here as
+// the single source of truth.
 func validateFindings(state v1alpha1.State) []Finding {
 	var errs []Finding
 	errs = append(errs, notes(validateEnvironments(state))...)
@@ -50,58 +49,6 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateOSDDevicesExcludeRootDisk(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
 	return errs
-}
-
-// validateOSDDevicesExcludeRootDisk fails closed when a Ceph node lists its own OS
-// root disk (rootDeviceHints.deviceName) among its OSD data/DB/WAL devices. cephadm
-// would ceph-volume that disk into an OSD, wiping the installed operating system the
-// node boots from. This complements the root-disk requirement: the OS disk must be
-// resolved AND must not double as an OSD. Only explicit device PATHS are checked (a
-// filter/`all: true` selection is left to cephadm's own "available device" filter,
-// which excludes the mounted root); an empty rootDeviceHints is covered by the
-// root-disk requirement above.
-func validateOSDDevicesExcludeRootDisk(state v1alpha1.State) []string {
-	var errs []string
-	for _, sc := range state.StorageClusters {
-		if sc.Spec.Ceph == nil {
-			continue
-		}
-		for _, host := range sc.Spec.Ceph.Topology.Hosts {
-			if host.MachineRef.Name == "" {
-				continue
-			}
-			machine, ok := stateview.Machine(state, host.MachineRef.Name)
-			if !ok || machine.Spec.OS.Install.RootDeviceHints == nil {
-				continue
-			}
-			root := strings.TrimSpace(machine.Spec.OS.Install.RootDeviceHints.DeviceName)
-			if root == "" {
-				continue
-			}
-			for _, dev := range osdDeclaredDevicePaths(host) {
-				if strings.TrimSpace(dev) == root {
-					errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) lists its OS root disk %q as an OSD device; creating the OSD would wipe the installed operating system. Remove %q from the OSD device selection, or point rootDeviceHints at a different disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, root, root))
-					break
-				}
-			}
-		}
-	}
-	return errs
-}
-
-// osdDeclaredDevicePaths collects every explicit device PATH a ceph host declares as
-// an OSD device — the lean `devices` shorthand and the drivegroup-shaped
-// osd.dataDevices/dbDevices/walDevices path lists.
-func osdDeclaredDevicePaths(host v1alpha1.StorageCephHost) []string {
-	paths := append([]string{}, host.Devices...)
-	if host.OSD != nil {
-		for _, sel := range []*v1alpha1.StorageCephDeviceSelection{host.OSD.DataDevices, host.OSD.DBDevices, host.OSD.WALDevices} {
-			if sel != nil {
-				paths = append(paths, sel.Paths...)
-			}
-		}
-	}
-	return paths
 }
 
 // validateUniqueMachineSSHAddresses fails closed when two different Machines resolve
@@ -136,45 +83,6 @@ func validateUniqueMachineSSHAddresses(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateManagedOSCephNodeRootDisk fails closed when a Ceph OSD node installs its
-// OS via bootwright (managed OS) but declares no root device. The Anaconda kickstart
-// scopes its disk wipe to storage.rootDisk when one is resolved, but falls back to an
-// unconditional `clearpart --all` when it is empty — which on an OSD node ALSO wipes
-// the data disks the node is supposed to host, destroying the cluster's OSDs the next
-// time the node is (re)installed (e.g. removing rootDeviceHints then reconciling with
-// --override). rootDisk resolves only from spec.os.install.rootDeviceHints.deviceName,
-// so requiring it here guarantees the install targets the OS disk and leaves the OSD
-// devices intact. A node with no declared OSD devices has nothing to preserve and is
-// not gated.
-func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
-	var errs []string
-	for _, sc := range state.StorageClusters {
-		if sc.Spec.Ceph == nil {
-			continue
-		}
-		for _, host := range sc.Spec.Ceph.Topology.Hosts {
-			// Any osd-role host carries OSD data disks, whether selected via the
-			// literal `devices` shorthand, the `osd` drivegroup arm, or a fleet
-			// osdDrivegroup — all of which require/target the osd role (the lean
-			// `len(devices)>0` check missed the drivegroup and fleet shapes, which
-			// leave Devices empty, so their OSD disks were silently wiped).
-			if !topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) || host.MachineRef.Name == "" {
-				continue
-			}
-			machine, ok := stateview.Machine(state, host.MachineRef.Name)
-			if !ok || !v1alpha1.MachineInstallsOS(machine) {
-				continue
-			}
-			hints := machine.Spec.OS.Install.RootDeviceHints
-			if hints != nil && strings.TrimSpace(hints.DeviceName) != "" {
-				continue
-			}
-			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) carries the %q role (OSD data disks) but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, v1alpha1.StorageCephRoleOSD))
-		}
-	}
-	return errs
-}
-
 // validateUniqueBMCAddresses fails closed when two different Machines declare the
 // same BMC (Redfish) endpoint. A BMC address identifies one physical host's
 // management controller, so a shared address is a copy-paste error that points two
@@ -183,76 +91,93 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 // validation, before any apply, is the cheapest guard against that fat-finger; VM
 // substrates (KubeVirt/vSphere) declare no BMC address and are unaffected.
 func validateUniqueBMCAddresses(state v1alpha1.State) []string {
-	byAddress := map[string][]string{}
+	// Key on the normalized endpoint, not the raw string: the boot renderer
+	// collapses equivalent Redfish spellings (redfish+https / redfish-virtualmedia
+	// / redfish schemes, a trailing /redfish/v1/Systems/<id> suffix, trailing
+	// slashes) to one baseUrl, so two Machines that spell the SAME endpoint
+	// differently drive one physical host at apply — the exact wrong-host disk-wipe
+	// this guard exists to prevent. Comparing raw strings would let those variants
+	// bypass it.
+	type group struct {
+		display string
+		names   []string
+	}
+	byKey := map[string]*group{}
 	for _, machine := range state.Machines {
 		address := strings.TrimSpace(machine.Spec.Hardware.Management.BMC.Address)
 		if address == "" {
 			continue
 		}
-		byAddress[address] = append(byAddress[address], machine.Metadata.Name)
+		key := normalizeBMCAddressKey(address)
+		g, ok := byKey[key]
+		if !ok {
+			g = &group{display: address}
+			byKey[key] = g
+		}
+		g.names = append(g.names, machine.Metadata.Name)
 	}
-	addresses := make([]string, 0, len(byAddress))
-	for address := range byAddress {
-		addresses = append(addresses, address)
+	keys := make([]string, 0, len(byKey))
+	for key := range byKey {
+		keys = append(keys, key)
 	}
-	sort.Strings(addresses)
+	sort.Strings(keys)
 	var errs []string
-	for _, address := range addresses {
-		names := byAddress[address]
-		if len(names) < 2 {
+	for _, key := range keys {
+		g := byKey[key]
+		if len(g.names) < 2 {
 			continue
 		}
-		sort.Strings(names)
-		errs = append(errs, fmt.Sprintf("BMC address %q is declared by more than one Machine (%s); a BMC endpoint identifies one physical host, so a shared address would drive — and could disk-wipe — the wrong machine. Give each Machine a unique hardware.management.bmc.address", address, strings.Join(names, ", ")))
+		sort.Strings(g.names)
+		errs = append(errs, fmt.Sprintf("BMC address %q is declared by more than one Machine (%s); a BMC endpoint identifies one physical host, so a shared address would drive — and could disk-wipe — the wrong machine. Give each Machine a unique hardware.management.bmc.address", g.display, strings.Join(g.names, ", ")))
 	}
 	return errs
 }
 
-// ValidateScoped validates a scoped subset of the effective desired state while
-// suppressing findings that are artifacts of scoping rather than genuine
-// desired-state errors. `--scoped-validation` narrows validation to the objects
-// a --clusters/--stage run acts on so an error in an out-of-scope object does
-// not block the run; but the scoped state is deliberately incomplete, so
-// dropping out-of-scope objects can orphan a reference an in-scope or
-// render-reference object still carries:
-//
-//   - an InfraComponent (artifact server, proxy, ...) survives a --clusters
-//     scope in full, but its host Machine is pulled in only when an in-scope
-//     cluster consumes the service; scoping a storage cluster that does not
-//     consume it leaves the component referencing a Machine no longer present.
-//   - a storage-cluster apply keeps the data-foundation ClusterAddonBindings as
-//     render references (they drive the per-consumer Ceph client auth) but drops
-//     the consuming ContainerClusters from the work set, so each binding's
-//     clusterRef names a ContainerCluster no longer present.
-//
-// Such a finding appears when validating `scoped` but not when validating the
-// self-consistent `full` state, so it is a false positive for the scoped run and
-// is dropped. A genuine error in an in-scope object appears in both and is
-// reported. An error in an object scoping removed entirely never appears in
-// `scoped`, so the existing out-of-scope-error tolerance is preserved. The
-// reported set is always a subset of the scoped findings: ValidateScoped only
-// ever suppresses, never adds.
-//
-// full must be the complete effective desired state `scoped` was derived from.
-func ValidateScoped(scoped, full v1alpha1.State) error {
-	scopedFindings := validateFindings(scoped)
-	if len(scopedFindings) == 0 {
-		return nil
+// normalizeBMCAddressKey mirrors the boot renderer's normalizeRedfishURL /
+// normalizeRedfishTransport (internal/render/inventory/vars_boot.go) so the
+// duplicate-BMC guard compares endpoints exactly as apply drives them. Kept in
+// sync by hand: the renderer package is not importable here. It folds the
+// transport scheme, a /redfish/v1/Systems/<id> suffix, and trailing slashes into
+// a single comparison key; it deliberately does NOT normalize ports, matching the
+// renderer.
+func normalizeBMCAddressKey(addr string) string {
+	base, systemID := normalizeRedfishEndpoint(addr)
+	return base + "|" + systemID
+}
+
+func normalizeRedfishEndpoint(addr string) (base, systemID string) {
+	s := normalizeRedfishScheme(strings.TrimSpace(addr))
+	const systemsMarker = "/redfish/v1/Systems/"
+	if i := strings.Index(s, systemsMarker); i >= 0 {
+		b := s[:i]
+		rest := strings.TrimSuffix(s[i+len(systemsMarker):], "/")
+		if rest != "" && !strings.Contains(rest, "/") {
+			return b, rest
+		}
+		return b, ""
 	}
-	genuine := make(map[string]bool)
-	for _, finding := range validateFindings(full) {
-		genuine[finding.Message] = true
+	return strings.TrimRight(s, "/"), ""
+}
+
+func normalizeRedfishScheme(addr string) string {
+	i := strings.Index(addr, "://")
+	if i <= 0 {
+		return addr
 	}
-	var kept []Finding
-	for _, finding := range scopedFindings {
-		if genuine[finding.Message] {
-			kept = append(kept, finding)
+	scheme := strings.ToLower(addr[:i])
+	suffix := addr[i:]
+	if j := strings.LastIndex(scheme, "+"); j >= 0 {
+		switch transport := scheme[j+1:]; transport {
+		case "http", "https":
+			return transport + suffix
 		}
 	}
-	if len(kept) == 0 {
-		return nil
+	switch scheme {
+	case "redfish", "redfish-virtualmedia":
+		return "https" + suffix
+	default:
+		return addr
 	}
-	return newValidationError(kept)
 }
 
 // duplicateNameFindings reports every metadata.name that appears more than once
@@ -666,7 +591,17 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 // tree from.
 func clusterInstallUsesHostedTree(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
 	for _, m := range ci.Machines {
-		profile, ok := stateview.MachineInstallProfile(state, m.Source.ProfileRef.Name)
+		// The OS install profile is machine.spec.os.installProfileRef, not the
+		// substrate machineProfile that m.Source.ProfileRef carries; resolve the
+		// Machine and read the OS install ref the renderer uses
+		// (vars_machine_os_install.go). Keying off the substrate profile always
+		// missed (bare-metal machines author no substrate profile), so this guard
+		// never fired.
+		machine, ok := stateview.Machine(state, m.Source.MachineRef.Name)
+		if !ok {
+			continue
+		}
+		profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
 		if !ok || profile.Spec.Installer.Anaconda == nil {
 			continue
 		}

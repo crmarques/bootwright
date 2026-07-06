@@ -172,6 +172,130 @@ func TestHostRouteAddressFallback(t *testing.T) {
 	}
 }
 
+func TestStorageClusterArtifactInstallCarriesMachineBootDefault(t *testing.T) {
+	installs := false
+	provider := v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: "bare-metal"},
+		Spec:     v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerBareMetal},
+	}
+	machine := v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: "srv-0"},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "bare-metal"}},
+			OS: v1alpha1.MachineOSSpec{
+				Provided:          &installs,
+				InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-ceph"},
+			},
+		},
+	}
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Topology: v1alpha1.StorageCephTopology{
+					Hosts: []v1alpha1.StorageCephHost{
+						{MachineRef: v1alpha1.LocalObjectReference{Name: "srv-0"}},
+					},
+				},
+			},
+		},
+	}
+	env := v1alpha1.Environment{
+		Spec: v1alpha1.EnvironmentSpec{
+			Defaults: v1alpha1.EnvironmentDefaultsSpec{
+				ArtifactAccess: v1alpha1.ClusterArtifactAccess{
+					ServerRef:           v1alpha1.LocalObjectReference{Name: "default"},
+					RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{EndpointRef: v1alpha1.LocalObjectReference{Name: "ip"}},
+					MachineBoot:         v1alpha1.ClusterArtifactEndpointRef{EndpointRef: v1alpha1.LocalObjectReference{Name: "tree"}},
+				},
+			},
+		},
+	}
+	state := v1alpha1.State{
+		Environments:    []v1alpha1.Environment{env},
+		InfraProviders:  []v1alpha1.InfraProvider{provider},
+		Machines:        []v1alpha1.Machine{machine},
+		StorageClusters: []v1alpha1.StorageCluster{cluster},
+	}
+
+	ci, ok := StorageClusterArtifactInstall(state, cluster)
+	if !ok {
+		t.Fatal("StorageClusterArtifactInstall returned false for a bare-metal managed-OS ceph node")
+	}
+	// The hostedTree install resolves its package tree through the machineBoot
+	// endpoint; dropping the Environment default (as the pre-fix code did) leaves
+	// the node booting a package-less installer.
+	if got := ci.ArtifactAccess.MachineBoot.EndpointRef.Name; got != "tree" {
+		t.Fatalf("ci.ArtifactAccess.MachineBoot.EndpointRef.Name = %q, want %q", got, "tree")
+	}
+	if got := ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name; got != "ip" {
+		t.Fatalf("ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = %q, want %q", got, "ip")
+	}
+	if got := ci.ArtifactAccess.ServerRef.Name; got != "default" {
+		t.Fatalf("ci.ArtifactAccess.ServerRef.Name = %q, want %q", got, "default")
+	}
+}
+
+func TestClusterNetworkConfigsOrdersIPv4First(t *testing.T) {
+	// The v6-only NetworkConfig sorts first by name ("a-v6" < "z-v4"), so a
+	// name-order sort would make the cluster IPv6-primary purely from object
+	// naming. The dual-stack ordering must place the IPv4 network first.
+	state := v1alpha1.State{
+		NetworkConfigs: []v1alpha1.NetworkConfig{
+			{
+				Metadata: v1alpha1.Metadata{Name: "a-v6"},
+				Spec:     v1alpha1.NetworkConfigSpec{MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "fd00::/64"}}},
+			},
+			{
+				Metadata: v1alpha1.Metadata{Name: "z-v4"},
+				Spec:     v1alpha1.NetworkConfigSpec{MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "10.0.0.0/16"}}},
+			},
+		},
+	}
+	infra := v1alpha1.ClusterInstall{
+		Metadata: v1alpha1.Metadata{Name: "cluster"},
+		Machines: []v1alpha1.InstallMachine{
+			{Name: "m0", Network: v1alpha1.MachineNetworkConfig{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "a-v6"}}},
+			{Name: "m1", Network: v1alpha1.MachineNetworkConfig{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "z-v4"}}},
+		},
+	}
+
+	got := ClusterNetworkConfigs(state, infra)
+	if len(got) != 2 {
+		t.Fatalf("ClusterNetworkConfigs returned %d configs, want 2", len(got))
+	}
+	if got[0].Metadata.Name != "z-v4" {
+		t.Fatalf("primary NetworkConfig = %q, want the IPv4 network %q", got[0].Metadata.Name, "z-v4")
+	}
+}
+
+func TestClusterNetworkConfigsSingleFamilyKeepsNameOrder(t *testing.T) {
+	state := v1alpha1.State{
+		NetworkConfigs: []v1alpha1.NetworkConfig{
+			{
+				Metadata: v1alpha1.Metadata{Name: "a-net"},
+				Spec:     v1alpha1.NetworkConfigSpec{MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "10.0.0.0/16"}}},
+			},
+			{
+				Metadata: v1alpha1.Metadata{Name: "z-net"},
+				Spec:     v1alpha1.NetworkConfigSpec{MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "10.1.0.0/16"}}},
+			},
+		},
+	}
+	infra := v1alpha1.ClusterInstall{
+		Metadata: v1alpha1.Metadata{Name: "cluster"},
+		Machines: []v1alpha1.InstallMachine{
+			{Name: "m0", Network: v1alpha1.MachineNetworkConfig{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "a-net"}}},
+			{Name: "m1", Network: v1alpha1.MachineNetworkConfig{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "z-net"}}},
+		},
+	}
+
+	got := ClusterNetworkConfigs(state, infra)
+	if len(got) != 2 || got[0].Metadata.Name != "a-net" || got[1].Metadata.Name != "z-net" {
+		t.Fatalf("single-family order = %+v, want name order [a-net z-net]", got)
+	}
+}
+
 func TestIsLoopbackAlias(t *testing.T) {
 	for _, value := range []string{"localhost", "LOCALHOST", "127.0.0.1", "::1", "0.0.0.0"} {
 		if !IsLoopbackAlias(value) {

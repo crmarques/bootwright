@@ -73,9 +73,23 @@ func TestVSphereMachineProfileFields(t *testing.T) {
 		Name:             "control-plane",
 		Template:         "rhcos",
 		FailureDomainRef: v1alpha1.LocalObjectReference{Name: "dc1-zone-a"},
+		CPU:              4,
+		MemoryMiB:        16384,
+		DiskGiB:          120,
 	}
 	if errs := validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{valid}, failureDomains); len(errs) != 0 {
 		t.Fatalf("valid vSphere profile should be accepted, got %v", errs)
+	}
+
+	// A profile that omits cpu/memoryMiB/diskGiB (the "inherit the template's
+	// shape" mistake) renders 0-cpu/0-memory/0-disk into vmware_guest and must
+	// be rejected at validate rather than deep in Ansible.
+	zeroSized := valid
+	zeroSized.CPU, zeroSized.MemoryMiB, zeroSized.DiskGiB = 0, 0, 0
+	errsZero := validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{zeroSized}, failureDomains)
+	wantZero := "cpu/memoryMiB/diskGiB must be greater than zero for vsphere machine profiles"
+	if !strings.Contains(strings.Join(errsZero, "\n"), wantZero) {
+		t.Fatalf("missing %q in %v", wantZero, errsZero)
 	}
 
 	dangling := valid
@@ -164,6 +178,29 @@ func TestVSphereISOStagingValidation(t *testing.T) {
 	duplicated.FailureDomains = append(append([]v1alpha1.VSphereFailureDomain(nil), base.FailureDomains...), base.FailureDomains[0])
 	errs = validateProviderVSphere("spec.vsphere", &duplicated)
 	want = `.failureDomains[1].name "dc1-zone-a" is duplicated`
+	if !strings.Contains(strings.Join(errs, "\n"), want) {
+		t.Fatalf("missing %q in %v", want, errs)
+	}
+}
+
+// TestVSphereDuplicateVCenterServer covers the duplicate vcenters[].server
+// guard: render dedupes vcenters by server keeping the first entry, so a second
+// entry for the same vCenter silently drops its datacenters and credentialsRef.
+func TestVSphereDuplicateVCenterServer(t *testing.T) {
+	spec := v1alpha1.InfraProviderVSphere{
+		VCenters: []v1alpha1.VSphereVCenter{
+			{Server: "vc.example.com", Datacenters: []string{"dc1"}, CredentialsRef: v1alpha1.SecretRef{Name: "c1"}},
+			{Server: "vc.example.com", Datacenters: []string{"dc2"}, CredentialsRef: v1alpha1.SecretRef{Name: "c2"}},
+		},
+		FailureDomains: []v1alpha1.VSphereFailureDomain{{
+			Name: "dc1-zone-a", Region: "dc1", Zone: "a", Server: "vc.example.com",
+			Topology: v1alpha1.VSphereFailureTopology{
+				Datacenter: "dc1", ComputeCluster: "compute", Datastore: "datastore1", Networks: []string{"lab"},
+			},
+		}},
+	}
+	errs := validateProviderVSphere("spec.vsphere", &spec)
+	want := `.vcenters[1].server "vc.example.com" is duplicated`
 	if !strings.Contains(strings.Join(errs, "\n"), want) {
 		t.Fatalf("missing %q in %v", want, errs)
 	}

@@ -263,6 +263,9 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 		if fs.Spec.CephFS.MDS.StandbyCountWanted < 0 {
 			errs = append(errs, prefix+".cephfs.mds.standbyCountWanted must be non-negative")
 		}
+		if ok {
+			errs = append(errs, validateStorageMDSStandbyFeasible(prefix+".cephfs.mds", fs.Spec.CephFS.MDS, topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS))...)
+		}
 		if ss := fs.Spec.CephFS.MDS.ServiceSpec; ss != nil {
 			for i, cidr := range ss.Networks {
 				errs = append(errs, validateCIDR(fmt.Sprintf("%s.cephfs.mds.serviceSpec.networks[%d]", prefix, i), cidr)...)
@@ -271,6 +274,33 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 		errs = append(errs, validateStorageSubvolumeGroups(prefix+".cephfs.subvolumeGroups", fs, pools)...)
 	}
 	return errs
+}
+
+// validateStorageMDSStandbyFeasible rejects an MDS standby intent the placement
+// can never satisfy. cephadm runs one MDS daemon per placed host; max_mds
+// consumes activeCount of them (default 1), standby-replay one more per active
+// rank, and standbyCountWanted the rest. When the resolved placement provides
+// fewer daemons than that sum, the cluster degrades to a permanent
+// MDS_INSUFFICIENT_STANDBY, so fail at validate rather than converge into it.
+func validateStorageMDSStandbyFeasible(prefix string, mds v1alpha1.StorageCephFSMetadataServices, hosts []string) []string {
+	available := len(hosts)
+	if available == 0 {
+		// The empty-placement case is already reported by validateStoragePlacementHosts.
+		return nil
+	}
+	active := mds.ActiveCount
+	if active == 0 {
+		active = 1
+	}
+	needed := active + mds.StandbyCountWanted
+	if mds.StandbyReplay {
+		needed += active
+	}
+	if needed <= available {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s placement resolves to %d MDS daemon host(s), fewer than the %d the active+standby intent needs (activeCount %d, standbyCountWanted %d, standbyReplay %t); it would converge to a permanent MDS_INSUFFICIENT_STANDBY, so add hosts to the placement or reduce the standby intent",
+		prefix, available, needed, active, mds.StandbyCountWanted, mds.StandbyReplay)}
 }
 
 var cephOctalModePattern = regexp.MustCompile(`^0?[0-7]{3,4}$`)
@@ -412,12 +442,6 @@ func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObje
 }
 
 func validateStorageGatewayIngressEndpoint(prefix string, ingress v1alpha1.StorageObjectGatewayIngress, gw v1alpha1.StorageObjectGateway) []string {
-	var errs []string
-	if ingress.Address == "" {
-		errs = append(errs, fmt.Sprintf("%s.address is required for StorageObjectGateway/%s ingress", prefix, gw.Metadata.Name))
-	}
-	if ingress.PrefixLength == 0 {
-		errs = append(errs, fmt.Sprintf("%s.prefixLength is required for StorageObjectGateway/%s ingress", prefix, gw.Metadata.Name))
-	}
-	return errs
+	_ = gw
+	return validateStorageIngressVIP(prefix, ingress.Address, ingress.PrefixLength)
 }

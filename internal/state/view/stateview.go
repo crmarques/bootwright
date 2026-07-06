@@ -199,6 +199,14 @@ func StorageClusterArtifactInstall(state v1alpha1.State, cluster v1alpha1.Storag
 		ci.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
 			ServerRef:           defaults.ServerRef,
 			RedfishVirtualMedia: defaults.RedfishVirtualMedia,
+			// A hostedTree managed-OS install fetches its packages from the
+			// artifact server's machineBoot endpoint. A StorageCluster cannot
+			// author spec.install.artifactAccess, so carry the Environment
+			// default through or the tree URL never resolves and the node boots
+			// a package-less installer (installer.sourceURL / image.installTree
+			// render empty and the cluster-install validator spuriously demands
+			// a machineBoot ref that is already authored).
+			MachineBoot: defaults.MachineBoot,
 		}
 	}
 	return ci, true
@@ -307,9 +315,29 @@ func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInstall) 
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
+		// The first machineNetwork entry decides OCP's primary IP family, and
+		// the installer emits CIDRs in this traversal order. When a cluster's
+		// v4 and v6 machine networks live in separate NetworkConfig objects,
+		// order any object carrying an IPv4 machineNetwork ahead of a v6-only
+		// one so the primary family defaults to IPv4 regardless of how the
+		// objects happen to be named (a rename must not silently flip it).
+		// Same-family objects fall back to name order, so single-stack fixtures
+		// are unaffected.
+		if vi, vj := networkConfigHasIPv4(out[i]), networkConfigHasIPv4(out[j]); vi != vj {
+			return vi
+		}
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
 	return out
+}
+
+func networkConfigHasIPv4(network v1alpha1.NetworkConfig) bool {
+	for _, machineNetwork := range network.Spec.MachineNetwork {
+		if ip, _, err := net.ParseCIDR(machineNetwork.CIDR); err == nil && ip.To4() != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func ClusterConsumedNetworkConfigs(infra v1alpha1.ClusterInstall) []string {

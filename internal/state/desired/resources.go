@@ -86,6 +86,15 @@ func environmentResourceDirectoryFiles(env v1alpha1.Environment, index int, ref,
 				if _, skip := nonWorkspaceDirs[base]; skip {
 					return filepath.SkipDir
 				}
+				// Mirror discoverFiles: operator-supplied Ansible content
+				// (playbooks/roles/collections) is referenced by path from a
+				// ProvisioningPlaybook, not decoded as Bootwright objects, so a
+				// selected resource directory must skip it too — otherwise the
+				// same tree validates under plain discovery but dies here on a
+				// playbook's top-level sequence.
+				if _, skip := ansibleContentDirs[base]; skip {
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		}
@@ -431,29 +440,17 @@ func scanResourceInventoryFile(file string, out map[resourceKey]string) {
 	}
 }
 
+// knownResourceKind reports whether kind is an authored Bootwright kind. It
+// derives membership from the single-source AuthoredKindAccessors registry
+// (guard-tested for completeness) rather than a hand-enumerated switch that
+// silently drifts as kinds are added.
 func knownResourceKind(kind string) bool {
-	switch kind {
-	case v1alpha1.KindEnvironment,
-		v1alpha1.KindMachine,
-		v1alpha1.KindMachineImage,
-		v1alpha1.KindMachineInstallProfile,
-		v1alpha1.KindNetworkConfig,
-		v1alpha1.KindInfraProvider,
-		v1alpha1.KindInfraComponent,
-		v1alpha1.KindContainerCluster,
-		v1alpha1.KindStorageCluster,
-		v1alpha1.KindStoragePlacementPolicy,
-		v1alpha1.KindStoragePool,
-		v1alpha1.KindStorageFilesystem,
-		v1alpha1.KindStorageObjectGateway,
-		v1alpha1.KindStorageExport,
-		v1alpha1.KindClusterAddon,
-		v1alpha1.KindClusterAddonProfile,
-		v1alpha1.KindClusterAddonBinding:
-		return true
-	default:
-		return false
+	for _, accessor := range v1alpha1.AuthoredKindAccessors() {
+		if accessor.Kind == kind {
+			return true
+		}
 	}
+	return false
 }
 
 func uniqueFiles(groups ...[]string) []string {

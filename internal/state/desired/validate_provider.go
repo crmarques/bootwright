@@ -127,6 +127,12 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 		owner := fmt.Sprintf("%s.vcenters[%d]", prefix, i)
 		if vc.Server == "" {
 			errs = append(errs, owner+".server is required")
+		} else if vcenterServers[vc.Server] {
+			// Render dedupes vcenters by server keeping the first entry, so a
+			// second entry for the same vCenter silently drops its datacenters
+			// and credentialsRef from install-config. Multiple datacenters
+			// belong in one entry's datacenters list.
+			errs = append(errs, fmt.Sprintf("%s.server %q is duplicated; list multiple datacenters for one vCenter under a single vcenters[] entry's datacenters", owner, vc.Server))
 		} else {
 			vcenterServers[vc.Server] = true
 		}
@@ -243,6 +249,13 @@ func validateMachineProfiles(prefix, providerType string, profiles []v1alpha1.Ma
 			errs = append(errs, owner+" cpu/memoryMiB/diskGiB must be non-negative")
 		}
 		if providerType == v1alpha1.ProvisionerVSphere {
+			// The vSphere adapter feeds cpu/memoryMiB/diskGiB straight into
+			// vmware_guest hardware and a disk[0].size_gb; a cloned template
+			// inherits nothing from omitted values, so 0 renders an unbootable
+			// 0-cpu/0-memory/0-disk VM that vCenter rejects deep in apply.
+			if profile.CPU <= 0 || profile.MemoryMiB <= 0 || profile.DiskGiB <= 0 {
+				errs = append(errs, owner+" cpu/memoryMiB/diskGiB must be greater than zero for vsphere machine profiles")
+			}
 			if profile.FailureDomainRef.Name != "" && !failureDomains[profile.FailureDomainRef.Name] {
 				errs = append(errs, fmt.Sprintf("%s.failureDomainRef %q does not match any failureDomains[].name", owner, profile.FailureDomainRef.Name))
 			}

@@ -16,7 +16,11 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 		errs = append(errs, prefix+".failureDomain is required")
 	}
 	if len(stretch.DataSites) != 2 {
-		errs = append(errs, fmt.Sprintf("%s.dataSites must contain exactly two sites", prefix))
+		// dataSites is optional: when omitted, normalize derives it from every
+		// non-tiebreaker host site, so an OSD-only extra site lands here and trips
+		// this check. Show the current (possibly derived) value and point at the
+		// remedy rather than implying the operator authored the wrong count.
+		errs = append(errs, fmt.Sprintf("%s.dataSites must name exactly two data sites, got %d %v; if this was derived from spec.ceph.topology.hosts, author spec.ceph.topology.stretch.dataSites explicitly to name the two data sites and exclude OSD-only or tiebreaker sites", prefix, len(stretch.DataSites), stretch.DataSites))
 	}
 	dataSites := map[string]bool{}
 	for i, site := range stretch.DataSites {

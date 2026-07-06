@@ -78,6 +78,60 @@ func TestLoadReportsNoExclusionsWithoutEnvironmentSelection(t *testing.T) {
 	}
 }
 
+// TestEnvironmentResourceDirectorySkipsAnsibleContent covers mc#2: a selected
+// resource directory must skip operator Ansible content (playbooks/roles/
+// collections) exactly like plain discovery does, so the same tree does not
+// validate under discovery yet die under spec.resources selection on a
+// playbook's top-level sequence.
+func TestEnvironmentResourceDirectorySkipsAnsibleContent(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	delete(files, "environment.yaml")
+	nested := map[string]string{
+		"environment.yaml": newEnvironmentYAMLWithResources("infra"),
+		// A playbook is a top-level YAML sequence with no apiVersion; strict
+		// decode would reject it, so the walk must skip the ansible-content dir.
+		"infra/playbooks/site.yml": "- hosts: all\n  tasks: []\n",
+	}
+	for name, content := range files {
+		nested["infra/"+name] = content
+	}
+	writeFiles(t, dir, nested)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("resource dir with ansible content should validate: %v", err)
+	}
+}
+
+// TestKnownResourceKindCoversRegistry covers go-architecture#2: knownResourceKind
+// must accept every authored kind (it is derived from AuthoredKindAccessors),
+// including the two the old hand-enumerated switch had already dropped.
+func TestKnownResourceKindCoversRegistry(t *testing.T) {
+	for _, kind := range supportedKinds() {
+		if !knownResourceKind(kind) {
+			t.Fatalf("knownResourceKind(%q) = false, want true", kind)
+		}
+	}
+	if knownResourceKind("Bogus") {
+		t.Fatal("knownResourceKind(\"Bogus\") = true, want false")
+	}
+}
+
+// TestUnsupportedKindErrorListsSupported covers api-author-ux#5: a kind typo
+// error must name the accepted kinds so a casing/plural mistake is visible.
+func TestUnsupportedKindErrorListsSupported(t *testing.T) {
+	dir := t.TempDir()
+	writeClusterSelectionFile(t, dir, "bad.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: Machin\nmetadata: { name: x }\nspec: {}\n")
+	_, err := Load([]string{dir})
+	if err == nil {
+		t.Fatal("expected unsupported kind error, got nil")
+	}
+	for _, want := range []string{`unsupported kind "Machin"`, "supported kinds:", "Machine"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
 func copyClusterSelectionFixture(t *testing.T) string {
 	t.Helper()
 	source := filepath.Join("..", "..", "..", "test", "e2e", "001-sno-libvirt")

@@ -9,7 +9,12 @@ import (
 )
 
 func endpointNetworkMatches(ci v1alpha1.ClusterInstall, networkConfigs map[string]v1alpha1.NetworkConfig, ip net.IP) []string {
-	matchedCIDRs := map[string]string{}
+	// Dedupe by the owning NetworkConfig (or machine) name, not by CIDR: two
+	// overlapping machineNetwork CIDRs in ONE config (e.g. a /24 inside a /23)
+	// must count as a single match, otherwise the "matches multiple selected
+	// NetworkConfigs" diagnostic names the same config twice and misattributes
+	// the overlap to several configs.
+	matched := map[string]bool{}
 	for _, name := range stateview.ClusterConsumedNetworkConfigs(ci) {
 		networkConfig, ok := networkConfigs[name]
 		if !ok {
@@ -17,7 +22,7 @@ func endpointNetworkMatches(ci v1alpha1.ClusterInstall, networkConfigs map[strin
 		}
 		for _, machineNetwork := range networkConfig.Spec.MachineNetwork {
 			if cidrContainsIP(machineNetwork.CIDR, ip) {
-				matchedCIDRs[machineNetwork.CIDR] = name
+				matched[name] = true
 			}
 		}
 	}
@@ -28,12 +33,12 @@ func endpointNetworkMatches(ci v1alpha1.ClusterInstall, networkConfigs map[strin
 		name := ci.Metadata.Name + "/" + machine.Name
 		for _, machineNetwork := range machine.Network.Spec.MachineNetwork {
 			if cidrContainsIP(machineNetwork.CIDR, ip) {
-				matchedCIDRs[machineNetwork.CIDR] = name
+				matched[name] = true
 			}
 		}
 	}
-	matches := make([]string, 0, len(matchedCIDRs))
-	for _, name := range matchedCIDRs {
+	matches := make([]string, 0, len(matched))
+	for name := range matched {
 		matches = append(matches, name)
 	}
 	sort.Strings(matches)

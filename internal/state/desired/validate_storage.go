@@ -37,6 +37,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
 	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters)...)
 	errs = append(errs, validateStorageNFSExports(state.StorageNFSExports, clusters, filesystems)...)
+	errs = append(errs, validateStorageServiceIDUniqueness(state)...)
 	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, machines)...)
 	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
@@ -474,13 +475,15 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 	if ingress.Name == "" {
 		errs = append(errs, prefix+".ingress.name is required")
 	}
-	if ingress.Address == "" {
-		errs = append(errs, prefix+".ingress.address is required")
-	}
-	if ingress.PrefixLength == 0 {
-		errs = append(errs, prefix+".ingress.prefixLength is required")
-	}
+	errs = append(errs, validateStorageIngressVIP(prefix+".ingress", ingress.Address, ingress.PrefixLength)...)
 	errs = append(errs, validateStoragePlacementHosts(prefix+".ingress.placement", ingress.Placement, cluster, true, v1alpha1.StorageCephRoleIngress)...)
+	// On a stretch cluster the HA dashboard VIP is the whole point of the
+	// mgmt-gateway ingress, so its placement must cover each data site the same
+	// way the RGW/MDS placements do; narrowing it to one site would let the VIP
+	// die with that site while still validating clean.
+	if storageClusterStretchEnabled(cluster) {
+		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress)...)
+	}
 	if mgmt.TLS != nil {
 		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, env)...)
 		errs = append(errs, validateStorageSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, env)...)
@@ -610,6 +613,68 @@ func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1a
 		if counts[site] < 2 {
 			errs = append(errs, fmt.Sprintf("%s must include at least two %s-capable hosts in data site %q for stretch-mode availability", prefix, role, site))
 		}
+	}
+	return errs
+}
+
+// validateStorageIngressVIP checks a keepalived-backed ingress VIP: a parseable
+// IP and a prefix length in range for its address family (1-32 for IPv4, 1-128
+// for IPv6). A non-IP address or an out-of-range prefix would otherwise flow
+// verbatim into the rendered ingress virtual_ip and the dnsmasq record, failing
+// only at live `ceph orch apply`/keepalived instead of at validate.
+func validateStorageIngressVIP(owner, address string, prefixLength int) []string {
+	var errs []string
+	ip := net.ParseIP(address)
+	switch {
+	case address == "":
+		errs = append(errs, owner+".address is required")
+	case ip == nil:
+		errs = append(errs, fmt.Sprintf("%s.address %q is not a valid IP", owner, address))
+	}
+	maxPrefix := 128
+	if ip != nil && ip.To4() != nil {
+		maxPrefix = 32
+	}
+	switch {
+	case prefixLength == 0:
+		errs = append(errs, owner+".prefixLength is required")
+	case prefixLength < 1 || prefixLength > maxPrefix:
+		errs = append(errs, fmt.Sprintf("%s.prefixLength %d out of range (1-%d)", owner, prefixLength, maxPrefix))
+	}
+	return errs
+}
+
+// validateStorageServiceIDUniqueness enforces that the cephadm service each
+// StorageObjectGateway (rgw) and StorageNFSExport (nfs) renders is unique by
+// serviceType/serviceID within its StorageCluster. cephadm keys a service by
+// type and id, so two gateways (or two NFS services) with the same serviceID on
+// one cluster render two `ceph orch apply` docs that collapse to a single
+// last-write-wins service, silently dropping the earlier one's placement/port/
+// zone binding — the same uniqueness the services[] passthrough and OSD
+// drivegroups already enforce.
+func validateStorageServiceIDUniqueness(state v1alpha1.State) []string {
+	var errs []string
+	// cluster -> "serviceType/serviceID" -> first owner description.
+	seen := map[string]map[string]string{}
+	mark := func(cluster, serviceType, serviceID, owner string) {
+		if cluster == "" || serviceID == "" {
+			return
+		}
+		if seen[cluster] == nil {
+			seen[cluster] = map[string]string{}
+		}
+		identity := serviceType + "/" + serviceID
+		if prev, ok := seen[cluster][identity]; ok {
+			errs = append(errs, fmt.Sprintf("%s duplicates cephadm service %q already declared by %s on StorageCluster/%s; cephadm keeps only one, silently dropping the other", owner, identity, prev, cluster))
+			return
+		}
+		seen[cluster][identity] = owner
+	}
+	for _, gw := range state.StorageObjectGateways {
+		mark(gw.Spec.StorageClusterRef.Name, "rgw", gw.Spec.Ceph.ServiceID, fmt.Sprintf("StorageObjectGateway/%s spec.ceph.serviceID", gw.Metadata.Name))
+	}
+	for _, nfs := range state.StorageNFSExports {
+		mark(nfs.Spec.StorageClusterRef.Name, "nfs", nfs.Spec.Ceph.ServiceID, fmt.Sprintf("StorageNFSExport/%s spec.ceph.serviceID", nfs.Metadata.Name))
 	}
 	return errs
 }

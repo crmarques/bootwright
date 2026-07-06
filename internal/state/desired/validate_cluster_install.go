@@ -144,7 +144,49 @@ func validateEndpointAddressNetwork(prefix string, ci v1alpha1.ClusterInstall, n
 	default:
 		errs = append(errs, fmt.Sprintf("%s %q matches multiple selected NetworkConfigs (%s)", prefix, address, joinSortedNames(matches)))
 	}
+	// A single-node cluster (SNO) has no keepalived VIP: api, api-int, and
+	// ingress all legitimately resolve to the lone node's own IP. Only a
+	// multi-node cluster floats VIPs that must stay distinct from every node.
+	if len(ci.Machines) > 1 {
+		for _, node := range clusterInstallNodeInstallIPs(ci) {
+			if node.ip.Equal(ip) {
+				errs = append(errs, fmt.Sprintf("%s %q collides with the static install IP of %s; an API/ingress VIP must not equal a node address or keepalived and the node contend for it (ARP conflict, flapping API) mid-install", prefix, address, node.owner))
+				break
+			}
+		}
+	}
 	return errs
+}
+
+type nodeInstallIP struct {
+	ip    net.IP
+	owner string
+}
+
+// clusterInstallNodeInstallIPs resolves each node's static install IP from its
+// interfaceAddresses (addressRef -> spec.addresses[]). These are exactly the
+// addresses a VIP must not reuse, since keepalived would fight the node that
+// statically owns the address.
+func clusterInstallNodeInstallIPs(ci v1alpha1.ClusterInstall) []nodeInstallIP {
+	var out []nodeInstallIP
+	for _, machine := range ci.Machines {
+		addrByName := map[string]string{}
+		for _, addr := range machine.Addresses {
+			if addr.Name != "" {
+				addrByName[addr.Name] = addr.Address
+			}
+		}
+		for _, ia := range machine.Network.InterfaceAddresses {
+			raw, ok := addrByName[ia.AddressRef.Name]
+			if !ok {
+				continue
+			}
+			if ip := net.ParseIP(raw); ip != nil {
+				out = append(out, nodeInstallIP{ip: ip, owner: fmt.Sprintf("node %q", machine.Name)})
+			}
+		}
+	}
+	return out
 }
 
 // validateEndpointBindAddressNetwork checks that an infraComponent-sourced

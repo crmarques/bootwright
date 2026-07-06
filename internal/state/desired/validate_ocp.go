@@ -30,6 +30,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 		errs = append(errs, validateDistribution(ocp)...)
 		errs = append(errs, validateContainerClusterFIPS(ocp)...)
 		errs = append(errs, validateClusterNetworking(ocp)...)
+		errs = append(errs, validateClusterNetworkIPFamilies(ocp)...)
 		if ocp.Spec.Install.Method != "" && ocp.Spec.Install.Method != v1alpha1.OCPInstallMethodAgent {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.method %q must be %q",
 				ocp.Metadata.Name, ocp.Spec.Install.Method, v1alpha1.OCPInstallMethodAgent))
@@ -138,6 +139,47 @@ func validateClusterNetworking(ocp v1alpha1.ContainerCluster) []string {
 	return errs
 }
 
+// validateClusterNetworkIPFamilies enforces OpenShift's cross-list IP-family
+// contract: the primary (first-entry) IP family of clusterNetwork and
+// serviceNetwork must match. openshift-install rejects a mismatch at create time
+// — dual-stack requires every networking list to share one primary family, and a
+// single-stack cluster requires one consistent family across both lists — so
+// catch it at validate instead of mid-apply from the installer. Per-CIDR syntax
+// is already checked by validateClusterNetworking; this only compares the primary
+// entries once both parse.
+func validateClusterNetworkIPFamilies(ocp v1alpha1.ContainerCluster) []string {
+	networking := ocp.Spec.Networking
+	if networking == nil || len(networking.ClusterNetwork) == 0 || len(networking.ServiceNetwork) == 0 {
+		return nil
+	}
+	clusterFamily, ok := cidrIPFamily(networking.ClusterNetwork[0].CIDR)
+	if !ok {
+		return nil
+	}
+	serviceFamily, ok := cidrIPFamily(networking.ServiceNetwork[0])
+	if !ok {
+		return nil
+	}
+	if clusterFamily != serviceFamily {
+		return []string{fmt.Sprintf("ContainerCluster/%s spec.networking primary IP family mismatch: clusterNetwork[0] is %s but serviceNetwork[0] is %s; openshift-install requires the first entry of clusterNetwork and serviceNetwork to share one IP family",
+			ocp.Metadata.Name, clusterFamily, serviceFamily)}
+	}
+	return nil
+}
+
+// cidrIPFamily reports the IP family ("IPv4"/"IPv6") of a CIDR, and ok=false when
+// it does not parse (a syntax error validateClusterNetworking already reports).
+func cidrIPFamily(cidr string) (string, bool) {
+	ip, _, err := net.ParseCIDR(strings.TrimSpace(cidr))
+	if err != nil {
+		return "", false
+	}
+	if ip.To4() != nil {
+		return "IPv4", true
+	}
+	return "IPv6", true
+}
+
 func validateDistribution(ocp v1alpha1.ContainerCluster) []string {
 	var errs []string
 	if image := ocp.Spec.Distribution.Release.Image; image != "" {
@@ -195,6 +237,13 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 			errs = append(errs, fmt.Sprintf("%s.hostname is required", prefix))
 		} else if seenHostnames[node.Hostname] {
 			errs = append(errs, fmt.Sprintf("%s.hostname %q is duplicated", prefix, node.Hostname))
+		} else if !dnsSubdomain.MatchString(node.Hostname) {
+			// The hostname renders verbatim into agent-config (openshift-install
+			// rejects a non-RFC1123 name at ISO creation, mid-apply) and is the
+			// day-2 Node object name; kubelets register lowercase names, so an
+			// uppercase or underscore/trailing-dash name is either rejected or
+			// silently misses the real Node. Reject it at validate.
+			errs = append(errs, fmt.Sprintf("%s.hostname %q must be a lowercase RFC1123 subdomain (lowercase alphanumerics, '-' and '.')", prefix, node.Hostname))
 		}
 		seenHostnames[node.Hostname] = true
 		switch node.Role {

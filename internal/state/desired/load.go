@@ -324,7 +324,7 @@ func loadFile(path string, state *v1alpha1.State) error {
 			if isExtensionManifestFile(path) {
 				continue
 			}
-			return fmt.Errorf("decode %s document %d: unsupported apiVersion %q", path, index, typeMeta.APIVersion)
+			return fmt.Errorf("decode %s document %d: unsupported apiVersion %q (supported: %q)", path, index, typeMeta.APIVersion, v1alpha1.APIVersion)
 		}
 		if !mappingHasKey(node, "metadata") {
 			return fmt.Errorf("decode %s document %d: metadata is required", path, index)
@@ -469,10 +469,24 @@ func loadFile(path string, state *v1alpha1.State) error {
 		case "":
 			return fmt.Errorf("decode %s document %d: kind is required", path, index)
 		default:
-			return fmt.Errorf("decode %s document %d: unsupported kind %q", path, index, typeMeta.Kind)
+			return fmt.Errorf("decode %s document %d: unsupported kind %q; supported kinds: %s", path, index, typeMeta.Kind, strings.Join(supportedKinds(), ", "))
 		}
 	}
 	return nil
+}
+
+// supportedKinds lists every authored kind name, sorted, from the
+// single-source AuthoredKindAccessors registry. Decode errors append it so a
+// casing/plural typo (Machin, machines) is visible against the accepted set
+// instead of guessed at.
+func supportedKinds() []string {
+	accessors := v1alpha1.AuthoredKindAccessors()
+	kinds := make([]string, 0, len(accessors))
+	for _, accessor := range accessors {
+		kinds = append(kinds, accessor.Kind)
+	}
+	sort.Strings(kinds)
+	return kinds
 }
 
 func isExtensionManifestFile(path string) bool {
@@ -506,7 +520,7 @@ func decodeKnown(node yaml.Node, value any) error {
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
-	return decoder.Decode(value)
+	return rewriteKnownFieldError(decoder.Decode(value), value)
 }
 
 func sortState(state *v1alpha1.State) {

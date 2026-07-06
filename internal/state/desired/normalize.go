@@ -1,12 +1,24 @@
 package desiredstate
 
 import (
+	"net"
 	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
+)
+
+// IPv6 counterparts of the stock IPv4 cluster/service network defaults, used
+// when a cluster's machine networks are IPv6-only so the rendered install-config
+// does not silently mix address families (openshift-install rejects that, but
+// only at apply time). Kept local: they are a normalize-time default, not part
+// of the authored API surface.
+const (
+	defaultClusterNetworkCIDRIPv6       = "fd01::/48"
+	defaultClusterNetworkHostPrefixIPv6 = 64
+	defaultServiceNetworkCIDRIPv6       = "fd02::/112"
 )
 
 // Normalize applies defaults in-place. Pure transformation: no
@@ -32,6 +44,7 @@ func Normalize(state *v1alpha1.State) {
 		normalizeContainerCluster(&state.ContainerClusters[i], env)
 	}
 	applyClusterPlatformDefaults(state)
+	applyClusterNetworkDefaults(state)
 	applyEnvironmentArtifactAccessDefaults(state, env)
 	applyBareMetalBMCDefaults(state)
 	for i := range state.ClusterAddons {
@@ -512,6 +525,73 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	}
 }
 
+// applyClusterNetworkDefaults injects the default cluster/service networks for
+// any ContainerCluster that omits them, matching the address family of the
+// cluster's resolved machine networks. An IPv6-only estate gets IPv6 defaults so
+// the rendered install-config does not pair an IPv6 machineNetwork with IPv4
+// cluster/service networks (a family mismatch openshift-install rejects only at
+// apply); every other shape keeps the historical IPv4 defaults.
+func applyClusterNetworkDefaults(state *v1alpha1.State) {
+	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
+	for i := range state.ContainerClusters {
+		ocp := &state.ContainerClusters[i]
+		if ocp.Spec.Networking == nil {
+			ocp.Spec.Networking = &v1alpha1.OCPNetworkingSpec{}
+		}
+		v6 := clusterMachineNetworkIsIPv6Only(*state, *ocp, networkConfigs)
+		if len(ocp.Spec.Networking.ClusterNetwork) == 0 {
+			cidr, hostPrefix := v1alpha1.DefaultClusterNetworkCIDR, v1alpha1.DefaultClusterNetworkHostPrefix
+			if v6 {
+				cidr, hostPrefix = defaultClusterNetworkCIDRIPv6, defaultClusterNetworkHostPrefixIPv6
+			}
+			ocp.Spec.Networking.ClusterNetwork = []v1alpha1.ContainerClusterNetworkCIDR{{CIDR: cidr, HostPrefix: hostPrefix}}
+		}
+		if len(ocp.Spec.Networking.ServiceNetwork) == 0 {
+			cidr := v1alpha1.DefaultServiceNetworkCIDR
+			if v6 {
+				cidr = defaultServiceNetworkCIDRIPv6
+			}
+			ocp.Spec.Networking.ServiceNetwork = []string{cidr}
+		}
+	}
+}
+
+// clusterMachineNetworkIsIPv6Only reports whether every resolved machine network
+// CIDR behind a cluster's nodes is IPv6. A single IPv4 CIDR (or no resolvable
+// machine network at all) returns false, keeping the historical IPv4 defaults.
+func clusterMachineNetworkIsIPv6Only(state v1alpha1.State, ocp v1alpha1.ContainerCluster, networkConfigs map[string]v1alpha1.NetworkConfig) bool {
+	ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
+	if !ok {
+		return false
+	}
+	var cidrs []string
+	for _, name := range stateview.ClusterConsumedNetworkConfigs(ci) {
+		if nc, ok := networkConfigs[name]; ok {
+			for _, mn := range nc.Spec.MachineNetwork {
+				cidrs = append(cidrs, mn.CIDR)
+			}
+		}
+	}
+	for _, machine := range ci.Machines {
+		if machine.Network.Spec == nil {
+			continue
+		}
+		for _, mn := range machine.Network.Spec.MachineNetwork {
+			cidrs = append(cidrs, mn.CIDR)
+		}
+	}
+	if len(cidrs) == 0 {
+		return false
+	}
+	for _, cidr := range cidrs {
+		ip, _, err := net.ParseCIDR(cidr)
+		if err != nil || ip.To4() != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func normalizeStoragePool(pool *v1alpha1.StoragePool) {
 	if pool.Spec.Ceph.Type == "" {
 		pool.Spec.Ceph.Type = v1alpha1.StoragePoolTypeReplicated
@@ -577,15 +657,9 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 	if ocp.Spec.Networking == nil {
 		ocp.Spec.Networking = &v1alpha1.OCPNetworkingSpec{}
 	}
-	if len(ocp.Spec.Networking.ClusterNetwork) == 0 {
-		ocp.Spec.Networking.ClusterNetwork = []v1alpha1.ContainerClusterNetworkCIDR{{
-			CIDR:       v1alpha1.DefaultClusterNetworkCIDR,
-			HostPrefix: v1alpha1.DefaultClusterNetworkHostPrefix,
-		}}
-	}
-	if len(ocp.Spec.Networking.ServiceNetwork) == 0 {
-		ocp.Spec.Networking.ServiceNetwork = []string{v1alpha1.DefaultServiceNetworkCIDR}
-	}
+	// The cluster/service network defaults are family-aware and depend on the
+	// resolved machine networks, so they are injected by applyClusterNetworkDefaults
+	// (state-level pass) rather than here where only the cluster is in scope.
 	applyEnvironmentInstallDefaults(ocp, env)
 }
 

@@ -2,11 +2,11 @@ package desiredstate
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infra/media"
 	"github.com/crmarques/bootwright/internal/nmstate"
 )
 
@@ -47,6 +47,85 @@ func validateMachines(state v1alpha1.State) []string {
 	}
 	errs = append(errs, validateMachineImages(state)...)
 	errs = append(errs, validateMachineInstallProfiles(state)...)
+	errs = append(errs, validateUniqueMachineInstallIPs(state)...)
+	errs = append(errs, validateUniqueMachineNICMACs(state)...)
+	return errs
+}
+
+// validateUniqueMachineInstallIPs fails closed when two different Machines resolve
+// their interfaceAddresses to the same static install IP. Install-IP uniqueness was
+// only ever checked within a single machine, so two nodes claiming one address
+// validated clean and rendered two agent hosts carrying the same static address;
+// both boot into an IP conflict and the install stalls with hard-to-diagnose
+// rendezvous failures. Mirrors validateUniqueMachineSSHAddresses.
+func validateUniqueMachineInstallIPs(state v1alpha1.State) []string {
+	byIP := map[string][]string{}
+	for _, machine := range state.Machines {
+		addresses := map[string]string{}
+		for _, a := range machine.Spec.Addresses {
+			if a.Name != "" {
+				addresses[a.Name] = a.Address
+			}
+		}
+		seen := map[string]bool{}
+		for _, ia := range machine.Spec.Network.Config.InterfaceAddresses {
+			ip := strings.TrimSpace(addresses[ia.AddressRef.Name])
+			if ip == "" || seen[ip] {
+				continue
+			}
+			seen[ip] = true
+			byIP[ip] = append(byIP[ip], machine.Metadata.Name)
+		}
+	}
+	ips := make([]string, 0, len(byIP))
+	for ip := range byIP {
+		ips = append(ips, ip)
+	}
+	sort.Strings(ips)
+	var errs []string
+	for _, ip := range ips {
+		names := byIP[ip]
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		errs = append(errs, fmt.Sprintf("install IP %q is assigned by interfaceAddresses on more than one Machine (%s); a static install address identifies one node, so a shared value boots two nodes into an IP conflict that stalls the install. Give each Machine a unique address", ip, strings.Join(names, ", ")))
+	}
+	return errs
+}
+
+// validateUniqueMachineNICMACs fails closed when two different Machines declare the
+// same NIC MAC. MAC dedup was per-machine only, so a copy-pasted MAC on a second
+// machine validated clean and the agent-config shipped two hosts with one macAddress;
+// the agent installer matches hosts by MAC and rejects the config at ISO creation,
+// deep in apply, instead of at validate. Comparison is case-insensitive.
+func validateUniqueMachineNICMACs(state v1alpha1.State) []string {
+	byMAC := map[string][]string{}
+	for _, machine := range state.Machines {
+		seen := map[string]bool{}
+		for _, nic := range machine.Spec.Hardware.NICs {
+			mac := strings.ToLower(strings.TrimSpace(nic.MACAddress))
+			if mac == "" || seen[mac] {
+				continue
+			}
+			seen[mac] = true
+			byMAC[mac] = append(byMAC[mac], machine.Metadata.Name)
+		}
+	}
+	macs := make([]string, 0, len(byMAC))
+	for mac := range byMAC {
+		macs = append(macs, mac)
+	}
+	sort.Strings(macs)
+	var errs []string
+	for _, mac := range macs {
+		names := byMAC[mac]
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		errs = append(errs, fmt.Sprintf("NIC MAC %q is declared by more than one Machine (%s); the agent installer matches hosts by MAC, so a shared address makes two nodes contend for one host entry. Give each hardware.nics[].macAddress a unique value", mac, strings.Join(names, ", ")))
+	}
 	return errs
 }
 
@@ -198,6 +277,10 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 		if nic.MACAddress != "" && !looksLikeMAC(nic.MACAddress) {
 			errs = append(errs, fmt.Sprintf("%s.macAddress %q is not a valid MAC address", owner, nic.MACAddress))
 		}
+		if nic.MACAddress != "" && looksLikeMAC(nic.MACAddress) && providerOK &&
+			provider.Spec.Type == v1alpha1.ProvisionerVSphere && !macInVSphereManualRange(nic.MACAddress) {
+			errs = append(errs, fmt.Sprintf("%s.macAddress %q is outside the vCenter manually-assigned MAC range 00:50:56:00:00:00-00:50:56:3f:ff:ff; vCenter rejects a VM create whose NIC carries a manual MAC outside it. Use an address in that range, or omit macAddress to let bootwright generate one", owner, nic.MACAddress))
+		}
 		if nic.MACAddress != "" {
 			if seenMAC[nic.MACAddress] {
 				errs = append(errs, fmt.Sprintf("%s.macAddress %q is duplicated", owner, nic.MACAddress))
@@ -278,6 +361,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 		}
 	}
 	errs = append(errs, validateMachineInterfaceAddresses(prefix+".config.interfaceAddresses", machine, config)...)
+	errs = append(errs, validateInterfaceAddressesResolveInterface(prefix+".config.interfaceAddresses", config, machineNetworkTemplateInterfaceNames(config, networks))...)
 	errs = append(errs, validateMachineInstallIPInNetwork(prefix+".config.interfaceAddresses", machine, config, networks)...)
 	injects := machineConfigInterfaceAddresses(machine, config)
 	var effective map[string]any
@@ -308,10 +392,10 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 	if config.NetworkConfigRef.Name == "" && config.Spec == nil {
 		errs = append(errs, prefix+" is only valid with config.networkConfigRef or config.spec")
 	}
-	addrNames := map[string]bool{}
+	addrByName := map[string]string{}
 	for _, address := range machine.Spec.Addresses {
 		if address.Name != "" {
-			addrNames[address.Name] = true
+			addrByName[address.Name] = address.Address
 		}
 	}
 	seen := map[string]bool{}
@@ -336,8 +420,16 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 		}
 		if ia.AddressRef.Name == "" {
 			errs = append(errs, owner+".addressRef is required")
-		} else if !addrNames[ia.AddressRef.Name] {
+		} else if address, ok := addrByName[ia.AddressRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to spec.addresses[].name", owner, ia.AddressRef.Name))
+		} else if ip := net.ParseIP(strings.TrimSpace(address)); ip != nil {
+			// family defaults to ipv4 in the NMState writer, so a v6 literal with the
+			// family omitted lands in the ipv4 block and renders an invalid NMState
+			// document that fails at agent boot. Require the resolved literal's family
+			// to match the declared (or defaulted) family.
+			if wantIPv4 := ia.Family == "" || ia.Family == "ipv4"; (ip.To4() != nil) != wantIPv4 {
+				errs = append(errs, fmt.Sprintf("%s.addressRef %q resolves to %s, which is not an %s address; set family to match the literal", owner, ia.AddressRef.Name, strings.TrimSpace(address), interfaceAddressFamilyLabel(ia.Family)))
+			}
 		}
 		switch {
 		case ia.PrefixLength < 1 || ia.PrefixLength > 128:
@@ -347,6 +439,83 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 		}
 	}
 	return errs
+}
+
+// validateInterfaceAddressesResolveInterface fails closed when an
+// interfaceAddresses[].interface names an interface the effective NetworkConfig
+// template does not declare. The install-IP inject creates an interface entry when
+// the name is absent, so a typo would silently mint a typeless phantom interface
+// carrying the install IP while the real interface stays address-less and the node
+// boots with no address on its machine network. templateInterfaces is nil when no
+// template is selectable (reported elsewhere), which disables the check.
+func validateInterfaceAddressesResolveInterface(prefix string, config v1alpha1.MachineNetworkConfig, templateInterfaces map[string]bool) []string {
+	if len(config.InterfaceAddresses) == 0 || templateInterfaces == nil {
+		return nil
+	}
+	var errs []string
+	for i, ia := range config.InterfaceAddresses {
+		if ia.Interface == "" || templateInterfaces[ia.Interface] {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("%s[%d].interface %q does not match any interface in the effective NetworkConfig; interfaceAddresses can only assign an install IP to an interface the template declares", prefix, i, ia.Interface))
+	}
+	return errs
+}
+
+// interfaceAddressFamilyLabel renders the effective family of an interfaceAddress:
+// an empty family defaults to ipv4 in the NMState writer.
+func interfaceAddressFamilyLabel(family string) string {
+	if family == "ipv6" {
+		return "ipv6"
+	}
+	return "ipv4"
+}
+
+// machineNetworkTemplateInterfaceNames returns the set of every interface name
+// declared by the effective NetworkConfig template a machine selects (ref +
+// overrides, or inline spec), BEFORE interfaceAddresses are injected. Passing it to
+// validateMachineInterfaceAddresses lets a typo'd interface be rejected instead of
+// silently minting a phantom interface via the inject. A nil result means no
+// template is selectable (reported elsewhere) and disables the resolution check.
+func machineNetworkTemplateInterfaceNames(config v1alpha1.MachineNetworkConfig, networks map[string]v1alpha1.NetworkConfig) map[string]bool {
+	var template map[string]any
+	switch {
+	case config.NetworkConfigRef.Name != "":
+		n, ok := networks[config.NetworkConfigRef.Name]
+		if !ok {
+			return nil
+		}
+		template = nmstate.EffectiveConfig(n.Spec.Template.NetworkConfig, config.Overrides, nil)
+	case config.Spec != nil:
+		template = nmstate.EffectiveConfig(config.Spec.Template.NetworkConfig, nil, nil)
+	default:
+		return nil
+	}
+	names := map[string]bool{}
+	raw, _ := template["interfaces"].([]any)
+	for _, item := range raw {
+		iface, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, _ := iface["name"].(string); name != "" {
+			names[name] = true
+		}
+	}
+	return names
+}
+
+// macInVSphereManualRange reports whether a MAC falls inside the vCenter
+// manually-assigned range 00:50:56:00:00:00-00:50:56:3f:ff:ff. vCenter rejects a VM
+// create whose NIC carries a manual MAC outside it (generated MACs are masked into
+// this range in internal/render/installer/mac.go), so an authored out-of-range MAC on
+// a vSphere machine must fail at validate, not mid-apply behind a no_log module error.
+func macInVSphereManualRange(mac string) bool {
+	hw, err := net.ParseMAC(mac)
+	if err != nil || len(hw) != 6 {
+		return false
+	}
+	return hw[0] == 0x00 && hw[1] == 0x50 && hw[2] == 0x56 && hw[3] <= 0x3f
 }
 
 // validateMachineInstallIPInNetwork checks that each interfaceAddresses-resolved
@@ -498,285 +667,4 @@ func machineConfigInterfaceAddresses(machine v1alpha1.Machine, config v1alpha1.M
 		})
 	}
 	return out
-}
-
-func validateMachineImages(state v1alpha1.State) []string {
-	var errs []string
-	for _, image := range state.MachineImages {
-		if e := validateName(v1alpha1.KindMachineImage, image.Metadata.Name); e != "" {
-			errs = append(errs, e)
-			continue
-		}
-		prefix := fmt.Sprintf("MachineImage/%s spec", image.Metadata.Name)
-		if image.Spec.Type != v1alpha1.MachineImageTypeISO {
-			errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, image.Spec.Type, v1alpha1.MachineImageTypeISO))
-		}
-		switch image.Spec.MediaType {
-		case "", v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot:
-		default:
-			errs = append(errs, fmt.Sprintf("%s.mediaType %q must be one of: %s, %s", prefix, image.Spec.MediaType, v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot))
-		}
-		if image.Spec.URL == "" {
-			errs = append(errs, prefix+".url is required")
-		} else if err := media.ValidateISOReference(image.Spec.URL); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.url %s", prefix, err))
-		}
-		errs = append(errs, validateMachineImageInstallSource(prefix, image.Spec.MediaType, image.Spec.URL, image.Spec.InstallSource)...)
-		if _, err := media.NormalizeSHA256(image.Spec.Checksum); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
-		}
-	}
-	return errs
-}
-
-func validateMachineInstallProfiles(state v1alpha1.State) []string {
-	var errs []string
-	images := indexMachineImages(state.MachineImages)
-	for _, profile := range state.MachineInstallProfiles {
-		if e := validateName(v1alpha1.KindMachineInstallProfile, profile.Metadata.Name); e != "" {
-			errs = append(errs, e)
-			continue
-		}
-		prefix := fmt.Sprintf("MachineInstallProfile/%s spec", profile.Metadata.Name)
-		if profile.Spec.OS.Family == "" {
-			errs = append(errs, prefix+".os.family is required")
-		}
-		if profile.Spec.OS.Version == "" {
-			errs = append(errs, prefix+".os.version is required")
-		}
-		if profile.Spec.OS.Architecture == "" {
-			errs = append(errs, prefix+".os.architecture is required")
-		}
-		if profile.Spec.Installer.Type != v1alpha1.MachineInstallProfileTypeAnaconda {
-			errs = append(errs, fmt.Sprintf("%s.installer.type %q must be %q", prefix, profile.Spec.Installer.Type, v1alpha1.MachineInstallProfileTypeAnaconda))
-		}
-		if profile.Spec.Installer.Anaconda == nil {
-			errs = append(errs, prefix+".installer.anaconda is required")
-			continue
-		}
-		imageRef := profile.Spec.Installer.Anaconda.ImageRef.Name
-		if imageRef == "" {
-			errs = append(errs, prefix+".installer.anaconda.imageRef is required")
-		} else if _, ok := images[imageRef]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef %q does not match any MachineImage", prefix, imageRef))
-		}
-		errs = append(errs, validateMachineInstallRepositories(prefix+".installer.anaconda.repositories", profile.Spec.Installer.Anaconda.Repositories)...)
-		customizations := profile.Spec.Customizations
-		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
-			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))
-		}
-		if source := customizations.Storage.RootDevice.Source; source != "" && source != v1alpha1.MachineInstallRootDeviceMachine {
-			errs = append(errs, fmt.Sprintf("%s.customizations.storage.rootDevice.source %q must be %q", prefix, source, v1alpha1.MachineInstallRootDeviceMachine))
-		}
-		errs = append(errs, validateMachineInstallLocalization(prefix+".customizations.localization", customizations.Localization)...)
-		errs = append(errs, validateMachineInstallPackages(prefix+".customizations.packages", customizations.Packages)...)
-		errs = append(errs, validateMachineInstallServices(prefix+".customizations.services", customizations.Services)...)
-		errs = append(errs, validateMachineInstallSecurity(prefix+".customizations.security", profile, customizations)...)
-	}
-	return errs
-}
-
-// validateMachineInstallLocalization rejects whitespace in any localization
-// field. Each renders as a bare token on a kickstart lang/keyboard/timezone
-// line, an --inst-langs entry, or an LC_* assignment in %post, so an embedded
-// space would inject a stray argument or corrupt the directive rather than fail
-// loudly at install.
-func validateMachineInstallLocalization(prefix string, loc v1alpha1.MachineInstallLocalization) []string {
-	var errs []string
-	for _, field := range []struct{ name, value string }{
-		{"language", loc.Language},
-		{"formats", loc.Formats},
-		{"keyboard", loc.Keyboard},
-		{"timezone", loc.Timezone},
-	} {
-		if strings.ContainsAny(field.value, " \t") {
-			errs = append(errs, fmt.Sprintf("%s.%s %q must not contain whitespace", prefix, field.name, field.value))
-		}
-	}
-	seen := map[string]bool{}
-	for i, locale := range loc.AdditionalLocales {
-		switch {
-		case locale == "":
-			errs = append(errs, fmt.Sprintf("%s.additionalLocales[%d] must not be empty", prefix, i))
-		case strings.ContainsAny(locale, " \t"):
-			errs = append(errs, fmt.Sprintf("%s.additionalLocales[%d] %q must not contain whitespace", prefix, i, locale))
-		case seen[locale]:
-			errs = append(errs, fmt.Sprintf("%s.additionalLocales[%d] %q is duplicated", prefix, i, locale))
-		}
-		seen[locale] = true
-	}
-	return errs
-}
-
-func validateMachineInstallPackages(prefix string, packages v1alpha1.MachineInstallPackages) []string {
-	var errs []string
-	switch packages.Environment {
-	case "", v1alpha1.MachineInstallPackageEnvMinimal:
-	default:
-		errs = append(errs, fmt.Sprintf("%s.environment %q must be %q", prefix, packages.Environment, v1alpha1.MachineInstallPackageEnvMinimal))
-	}
-	errs = append(errs, validateMachineInstallStringList(prefix+".install", packages.Install)...)
-	return errs
-}
-
-func validateMachineInstallServices(prefix string, services v1alpha1.MachineInstallServices) []string {
-	var errs []string
-	errs = append(errs, validateMachineInstallStringList(prefix+".enabled", services.Enabled)...)
-	errs = append(errs, validateMachineInstallStringList(prefix+".disabled", services.Disabled)...)
-	enabled := map[string]bool{}
-	for _, service := range services.Enabled {
-		enabled[service] = true
-	}
-	for i, service := range services.Disabled {
-		if enabled[service] {
-			errs = append(errs, fmt.Sprintf("%s.disabled[%d] %q must not also be enabled", prefix, i, service))
-		}
-	}
-	return errs
-}
-
-func validateMachineInstallSecurity(prefix string, profile v1alpha1.MachineInstallProfile, customizations v1alpha1.MachineInstallCustomizations) []string {
-	var errs []string
-	security := customizations.Security
-	switch security.SELinux.Mode {
-	case "", v1alpha1.MachineInstallSELinuxEnforcing, v1alpha1.MachineInstallSELinuxPermissive, v1alpha1.MachineInstallSELinuxDisabled:
-	default:
-		errs = append(errs, fmt.Sprintf("%s.selinux.mode %q must be one of: %s, %s, %s",
-			prefix, security.SELinux.Mode, v1alpha1.MachineInstallSELinuxEnforcing, v1alpha1.MachineInstallSELinuxPermissive, v1alpha1.MachineInstallSELinuxDisabled))
-	}
-	if security.FIPS.Enabled && strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
-		errs = append(errs, fmt.Sprintf("%s.fips.enabled is only supported for RHEL install profiles", prefix))
-	}
-	if security.Firewall.Enabled != nil && *security.Firewall.Enabled {
-		if !machineInstallStringListContains(customizations.Packages.Install, "firewalld") {
-			errs = append(errs, prefix+".firewall.enabled requires customizations.packages.install to include firewalld")
-		}
-		if !machineInstallStringListContains(customizations.Services.Enabled, "firewalld") {
-			errs = append(errs, prefix+".firewall.enabled requires customizations.services.enabled to include firewalld")
-		}
-	}
-	return errs
-}
-
-func validateMachineInstallStringList(prefix string, values []string) []string {
-	var errs []string
-	seen := map[string]bool{}
-	for i, value := range values {
-		if value == "" {
-			errs = append(errs, fmt.Sprintf("%s[%d] must not be empty", prefix, i))
-			continue
-		}
-		if strings.TrimSpace(value) != value {
-			errs = append(errs, fmt.Sprintf("%s[%d] %q must not contain leading or trailing whitespace", prefix, i, value))
-		}
-		if seen[value] {
-			errs = append(errs, fmt.Sprintf("%s[%d] %q is duplicated", prefix, i, value))
-		}
-		seen[value] = true
-	}
-	return errs
-}
-
-func machineInstallStringListContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-// validateMachineImageInstallSource reads the normalize-materialized
-// mediaType and installSource.type; an empty installSource.type means no
-// install source was authored at all. imageURL is spec.url (the booted media),
-// used to reject a hostedTree that points fromMedia back at its own boot ISO.
-func validateMachineImageInstallSource(prefix, mediaType, imageURL string, installSource v1alpha1.MachineImageInstallSource) []string {
-	var errs []string
-	sourceType := installSource.Type
-	switch sourceType {
-	case "", v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM, v1alpha1.MachineImageInstallSourceTypeHostedTree:
-	default:
-		return []string{fmt.Sprintf("%s.installSource.type %q must be one of: %s, %s, %s", prefix, installSource.Type, v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM, v1alpha1.MachineImageInstallSourceTypeHostedTree)}
-	}
-	if mediaType == v1alpha1.MachineImageMediaTypeBoot && sourceType == "" {
-		errs = append(errs, prefix+".installSource is required when mediaType is boot")
-	}
-	// fromMedia belongs only to hostedTree; guard it before the type switch so
-	// a stray fromMedia on url/redhatCDN/dvd fails loudly instead of being
-	// silently ignored.
-	if sourceType != v1alpha1.MachineImageInstallSourceTypeHostedTree && installSource.FromMedia != "" {
-		errs = append(errs, prefix+".installSource.fromMedia is only valid when installSource.type is hostedTree")
-	}
-	switch sourceType {
-	case "":
-		return errs
-	case v1alpha1.MachineImageInstallSourceTypeURL:
-		if installSource.EntitlementRef.Name != "" {
-			errs = append(errs, prefix+".installSource.entitlementRef must be empty when installSource.type is url")
-		}
-		if installSource.URL == "" && len(installSource.Repositories) == 0 {
-			errs = append(errs, prefix+".installSource.url or installSource.repositories is required when installSource.type is url")
-		}
-		if installSource.URL != "" && !httpURL(installSource.URL) {
-			errs = append(errs, prefix+".installSource.url must be http:// or https://")
-		}
-		errs = append(errs, validateMachineInstallRepositories(prefix+".installSource.repositories", installSource.Repositories)...)
-	case v1alpha1.MachineImageInstallSourceTypeRHSM:
-		if installSource.URL != "" {
-			errs = append(errs, prefix+".installSource.url must be empty when installSource.type is redhatCDN")
-		}
-		if len(installSource.Repositories) > 0 {
-			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is redhatCDN")
-		}
-		if installSource.EntitlementRef.Name == "" {
-			errs = append(errs, prefix+".installSource.entitlementRef is required when installSource.type is redhatCDN")
-		}
-	case v1alpha1.MachineImageInstallSourceTypeHostedTree:
-		// hostedTree keeps the booted media small and has bootwright serve the
-		// packages: the DVD is fromMedia, the tree URL is derived from the
-		// cluster artifact server, and url/repositories/entitlementRef are all
-		// owned by bootwright, so authoring them is a conflict.
-		if mediaType != v1alpha1.MachineImageMediaTypeBoot {
-			errs = append(errs, prefix+".installSource.type hostedTree requires mediaType: boot (spec.url is the small boot ISO; fromMedia is the DVD)")
-		}
-		if installSource.FromMedia == "" {
-			errs = append(errs, prefix+".installSource.fromMedia is required when installSource.type is hostedTree")
-		} else if err := media.ValidateISOReference(installSource.FromMedia); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.installSource.fromMedia %s", prefix, err))
-		} else if installSource.FromMedia == imageURL {
-			errs = append(errs, prefix+".installSource.fromMedia must reference the DVD, not the boot ISO in spec.url")
-		} else if httpURL(installSource.FromMedia) {
-			errs = append(errs, prefix+".installSource.fromMedia must reference local media (local-media: or file://), not a URL: stage the DVD with `bootwright media add` so it is checksum-verified in the media store before it is served")
-		}
-		if installSource.URL != "" {
-			errs = append(errs, prefix+".installSource.url must be empty when installSource.type is hostedTree (bootwright derives the tree URL from the cluster artifact server)")
-		}
-		if len(installSource.Repositories) > 0 {
-			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is hostedTree (the DVD .treeinfo serves BaseOS and AppStream)")
-		}
-		if installSource.EntitlementRef.Name != "" {
-			errs = append(errs, prefix+".installSource.entitlementRef must be empty when installSource.type is hostedTree")
-		}
-	}
-	return errs
-}
-
-func httpURL(s string) bool {
-	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
-}
-
-func validateMachineInstallRepositories(prefix string, repos []v1alpha1.MachineInstallRepository) []string {
-	var errs []string
-	for i, repo := range repos {
-		owner := fmt.Sprintf("%s[%d]", prefix, i)
-		if repo.ID == "" {
-			errs = append(errs, owner+".id is required")
-		}
-		if repo.BaseURL == "" {
-			errs = append(errs, owner+".baseURL is required")
-		} else if !httpURL(repo.BaseURL) {
-			errs = append(errs, owner+".baseURL must be http:// or https://")
-		}
-	}
-	return errs
 }
