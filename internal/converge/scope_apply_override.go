@@ -103,6 +103,21 @@ func ApplyReconcilableOnlyStorageExtraVar(plan *WorkflowPlan, names []string) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_reconcilable_only_clusters="+strings.Join(names, ","))
 }
 
+// ApplyOCPFirstInstallClustersExtraVar threads the names of the ContainerClusters a
+// run will boot-and-install onto bare-metal hosts for the FIRST time (no controller
+// record) to the boot role, so its pre-boot Redfish occupancy guard runs for exactly
+// those clusters: it refuses to disk-wipe a host that already reports a running OS
+// when bootwright has never provisioned the cluster (a mis-pointed BMC, a host
+// repurposed from another cluster, or a re-apply after lost records). An owned
+// cluster is absent from the list and never occupancy-checked, so a legitimate
+// re-provision is unaffected. Empty appends nothing (the guard never runs).
+func ApplyOCPFirstInstallClustersExtraVar(plan *WorkflowPlan, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ocp_first_install_clusters="+strings.Join(names, ","))
+}
+
 // OwnedStorageClusters returns the bare names of StorageClusters the controller
 // records as Bootwright-owned (recorded and not foreign). --reclaim-devices keys on
 // this so an in-band device wipe is only ever authorized for a cluster Bootwright

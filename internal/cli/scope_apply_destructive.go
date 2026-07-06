@@ -58,15 +58,17 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		}
 		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, owned)
 	}
-	// Irreversible-disk-wipe warning for a first bare-metal install. The OCP
-	// agent-install path has no pre-boot occupancy probe (a deferred,
-	// hardware-dependent driver), so a first apply onto a mis-pointed BMC — or
-	// a re-apply after the controller records were lost — would silently
-	// re-image a physical host that may be running production. Name the hosts
-	// before the confirm so the operator can abort; an owned/recorded cluster
-	// is excluded (its install-state healthy-skip already protects it).
+	// Irreversible-disk-wipe warning + occupancy guard for a first bare-metal
+	// install. A first apply onto a mis-pointed BMC — or a re-apply after the
+	// controller records were lost — would re-image a physical host that may be
+	// running production. Name the hosts before the confirm, and arm the boot
+	// role's pre-boot Redfish occupancy guard for exactly these first-install
+	// clusters so it fails closed on a host already running an OS. An owned/recorded
+	// cluster is excluded (its install-state healthy-skip already protects it, and a
+	// legitimate re-provision must not be occupancy-blocked).
 	if firstBoot := workflow.BareMetalFirstInstallClusters(objects, tasks); len(firstBoot) > 0 {
-		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. bootwright does not probe whether these hosts are already in use — confirm the BMC addresses point at unused/authorized machines before continuing.")
+		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
+		converge.ApplyOCPFirstInstallClustersExtraVar(plan, firstBoot)
 	}
 }
 

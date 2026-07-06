@@ -1,0 +1,42 @@
+---
+# Pre-boot occupancy guard for a FIRST install (this cluster is in
+# bootwright_ocp_first_install_clusters, i.e. bootwright holds no record of ever
+# provisioning it). Powering the host from the agent virtual media next would run
+# coreos-installer and DISK-WIPE the target host, so before doing that to a machine
+# bootwright has never provisioned, refuse if the BMC reports the host is already
+# running an OS — a mis-pointed BMC address, a host repurposed from another cluster,
+# or a re-apply after the controller records were lost.
+#
+# Best-effort and FAIL-OPEN: a BMC that does not populate BootProgress (older Redfish
+# or an OEM value), a non-200 response, or any query error proceeds exactly as before
+# — only a definite PowerState=On + BootProgress.LastState=OSRunning blocks. An owned
+# cluster (a legitimate re-provision) is never in the first-install list and never
+# reaches this task, so re-imaging your own drifted cluster is unaffected.
+- name: Query Redfish system for pre-boot occupancy
+  ansible.builtin.uri:
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+  register: bootwright_redfish_occupancy
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+
+- name: Refuse to disk-wipe a host already running an OS on a first install
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          (bootwright_redfish_occupancy.status | default(0) | int) == 200
+          and (bootwright_redfish_occupancy.json.PowerState | default('') == 'On')
+          and (bootwright_redfish_occupancy.json.BootProgress.LastState | default('') == 'OSRunning')
+        )
+    fail_msg: >-
+      Host {{ bootwright_component.name | default(inventory_hostname) }} for cluster
+      {{ bootwright_current_cluster.name | default('<unknown>') }} reports it is powered
+      on and running an OS (Redfish BootProgress=OSRunning), but bootwright has no
+      record of provisioning this cluster. Booting the agent installer would DISK-WIPE
+      this host. If it is unused, power it off and re-apply. If you are intentionally
+      re-imaging it (repurposing the host, or recovering lost controller state), reset
+      the machine or destroy the current owner first, then re-apply.
+    quiet: true

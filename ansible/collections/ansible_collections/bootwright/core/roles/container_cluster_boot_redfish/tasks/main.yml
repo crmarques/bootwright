@@ -43,6 +43,16 @@
         - bootwright_component.boot.redfish.setBootSource | default(true) | bool
         - (bootwright_component.interfaces | default([]) | length) > 0
 
+    # Fail closed before wiping a host already running an OS on a FIRST install (no
+    # bootwright record for this cluster). Fail-open on any BMC that does not report
+    # BootProgress; owned re-provisions are never in the first-install list.
+    - name: Guard against wiping an occupied host on a first install
+      ansible.builtin.import_tasks: validation/occupancy.yml
+      when:
+        - bootwright_redfish_action_effective == 'boot'
+        - bootwright_component.boot.redfish.setBootSource | default(true) | bool
+        - bootwright_current_cluster.name | default('') in (bootwright_ocp_first_install_clusters | default('') | split(','))
+
     - name: Boot node from Redfish virtual media
       when: bootwright_redfish_action_effective == 'boot'
       block:
