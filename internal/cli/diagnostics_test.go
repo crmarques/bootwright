@@ -38,6 +38,30 @@ func TestDiagnosticsMapUnknownInstallField(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsOnlySupportedFieldSuggestsRemoval(t *testing.T) {
+	diagnostics := diagnosticsFromError(errors.New("ContainerCluster/sno-baremetal spec.distribution.release.channel is only supported for openshift"))
+	if len(diagnostics) != 1 {
+		t.Fatalf("diagnosticsFromError returned %d entries, want 1", len(diagnostics))
+	}
+	got := diagnostics[0]
+	if got.Object != "ContainerCluster/sno-baremetal" || got.Field != "spec.distribution.release.channel" {
+		t.Fatalf("extraction = (%q, %q), want ContainerCluster/sno-baremetal spec.distribution.release.channel", got.Object, got.Field)
+	}
+	if got.Remediation != "remove spec.distribution.release.channel from ContainerCluster/sno-baremetal" {
+		t.Fatalf("remediation = %q, want a removal hint, not 'set ... to a valid value'", got.Remediation)
+	}
+}
+
+func TestDiagnosticsBadValueFieldSuggestsCorrection(t *testing.T) {
+	diagnostics := diagnosticsFromError(errors.New(`ContainerCluster/sno spec.networking.clusterNetwork[0].cidr "not-a-cidr" is not a valid CIDR`))
+	if len(diagnostics) != 1 {
+		t.Fatalf("diagnosticsFromError returned %d entries, want 1", len(diagnostics))
+	}
+	if got := diagnostics[0].Remediation; got != "set spec.networking.clusterNetwork[0].cidr on ContainerCluster/sno to a valid value" {
+		t.Fatalf("remediation = %q, want a set-to-valid-value hint", got)
+	}
+}
+
 func TestDiagnosticsExtractObjectFieldValueFromMessage(t *testing.T) {
 	diagnostics := diagnosticsFromError(errors.New(`ContainerCluster/sno spec.networking.clusterNetwork[0].cidr "not-a-cidr" is not a valid CIDR`))
 	if len(diagnostics) != 1 {

@@ -315,6 +315,16 @@ func synthesizePoolFile(cluster v1alpha1.StorageCluster, object cephdiff.ObjectD
 	if cluster.SourcePath == "" {
 		return "", nil, fmt.Errorf("cluster source file unknown")
 	}
+	// An erasure-coded pool needs a full spec.ceph.erasure block (k/m at minimum),
+	// but live discovery exposes only the profile name — not the chunk counts — so
+	// a synthesized EC pool would write ceph.type=erasure with no erasure block and
+	// fail the next load/validate. Refuse it here; the caller reports it as
+	// detected-but-not-adopted for deliberate hand-authoring.
+	for _, field := range object.Fields {
+		if field.Name == "type" && field.Real == v1alpha1.StoragePoolTypeErasureCode {
+			return "", nil, fmt.Errorf("erasure-coded pool needs a hand-authored spec.ceph.erasure profile (dataChunks/codingChunks); adopt cannot reconstruct it")
+		}
+	}
 	pool := v1alpha1.StoragePool{
 		APIVersion: v1alpha1.APIVersion,
 		Kind:       v1alpha1.KindStoragePool,

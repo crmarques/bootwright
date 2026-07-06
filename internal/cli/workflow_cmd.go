@@ -23,13 +23,16 @@ func newPreflightCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra
 A live preflight (without --dry-run) runs an Ansible preflight whose result is
 the process exit code: 0 when every check passes, non-zero when any check
 fails. Per-check pass/fail detail is in the terminal output and the run, task,
-and cluster logs under Bootwright storage, not in a single result document.
+and cluster logs under Bootwright storage.
 
---output json is accepted only with --dry-run, and returns the planned preflight
-command graph (the work that would run), not pass/fail results. In CI, gate on
-the live preflight exit code, and use 'preflight <target> --dry-run --output
-json' to inspect the plan. For offline desired-state validation with structured
-result JSON, use 'validate'.`,
+In CI, gate on the live preflight exit code. Structured --output json behavior
+varies by target: the scope-based targets (infra, clusters, container-cluster,
+storage-cluster, all) accept --output json only with --dry-run, and return the
+planned preflight command graph (the work that would run), not pass/fail
+results; 'preflight add-ons' has no --dry-run and instead emits machine-readable
+pass/fail JSON from a live run with --output json; 'preflight bastion' has
+neither flag. For offline desired-state validation with structured result JSON,
+use 'validate'.`,
 	}
 	cmd.AddCommand(
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
@@ -81,6 +84,7 @@ func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		defaultPlan:   true,
 		hideDryRun:    true,
 		hideApproval:  true,
+		hideExecFlags: true,
 		stageSelector: true,
 		commandLabel:  "plan",
 		action:        "plan",

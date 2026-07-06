@@ -29,6 +29,29 @@ func TestDestroyRunFrameListsTeardownSteps(t *testing.T) {
 	}
 }
 
+func TestDestroyOrphanHintScopedToSweepCoverage(t *testing.T) {
+	var buf bytes.Buffer
+	printDestroyOrphans(&buf, []workflow.UndeclaredResource{
+		{Kind: "libvirt-domain", Name: "vm-a"},
+		{Kind: "kubevirt-machine", Name: "vm-b"},
+		{Kind: "storage-cluster", Name: "ceph-old"},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "libvirt-domain/vm-a") || !strings.Contains(out, "a full `bootwright destroy` reclaims it") {
+		t.Fatalf("libvirt-domain orphan should promise reclaim:\n%s", out)
+	}
+	for _, line := range []string{"kubevirt-machine/vm-b", "storage-cluster/ceph-old"} {
+		if !strings.Contains(out, line) {
+			t.Fatalf("missing orphan %q:\n%s", line, out)
+		}
+	}
+	// The sweep does not cover kubevirt/storage records, so their hint must not
+	// over-promise an automatic reclaim.
+	if strings.Count(out, "does not reclaim this record") != 2 {
+		t.Fatalf("kubevirt and storage orphans should each get the not-reclaimed hint:\n%s", out)
+	}
+}
+
 func TestDestroyOutputNamesCoveredClusters(t *testing.T) {
 	now := time.Now()
 	ledger := workflow.NewRunLedger("destroy-test", "clusters destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{

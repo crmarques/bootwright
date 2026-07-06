@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/spf13/cobra"
 )
 
@@ -15,8 +17,12 @@ func argsNeedLocalRoot(args []string) bool {
 		return false
 	case "validate":
 		return validateArgsNeedLocalRoot(args[1:])
-	case "apply":
+	case "plan", "diff", "status":
+		// Read-only inspectors that read the root-owned context (rendered-dir,
+		// secrets-dir, runs-dir, live state), so they escalate.
 		return true
+	case "apply":
+		return applyArgsNeedLocalRoot(args[1:])
 	case "destroy":
 		return destroyArgsNeedLocalRoot(args[1:])
 	case "bastion":
@@ -48,23 +54,28 @@ func argsNeedLocalRoot(args []string) bool {
 			// reject as the caller, not after a doomed sudo prompt. Mirrors
 			// secret delete / media add.
 			return argsHaveNameValue(args[2:])
+		case "list", "trust":
+			// machine list and machine trust both read the root-owned context
+			// (desired state, ownership records, the trust store), so they escalate.
+			return true
+		default:
+			// Unknown subcommand (a typo like `machine lst`): stay rootless so
+			// cobra rejects it with a "did you mean" hint as the caller.
+			return false
 		}
-		// machine list and machine trust both read the root-owned context
-		// (desired state, ownership records, the trust store), so they escalate.
-		return true
 	case "context":
 		if len(args) < 2 {
 			return false
 		}
 		switch args[1] {
-		case "init", "update":
+		case "init", "update", "delete":
 			return false
 		case "list", "use", "current":
 			return true
-		case "delete":
-			return false
 		default:
-			return true
+			// Unknown subcommand (a typo like `context lst`): stay rootless so
+			// cobra rejects it as the caller.
+			return false
 		}
 	case "secret":
 		if len(args) == 1 {
@@ -81,8 +92,15 @@ func argsNeedLocalRoot(args []string) bool {
 			// missing --name) fails cobra as the caller, not after a doomed sudo
 			// prompt. Mirrors validateArgsNeedLocalRoot.
 			return argsHaveNameValue(args[2:])
+		case "generate", "list", "check", "encryption":
+			// Read or write the root-owned secrets-dir (and its encryption keys),
+			// so they escalate.
+			return true
+		default:
+			// Unknown subcommand (a typo like `secret lst`): stay rootless so
+			// cobra rejects it as the caller.
+			return false
 		}
-		return true
 	case "media":
 		if len(args) == 1 {
 			return false
@@ -90,8 +108,13 @@ func argsNeedLocalRoot(args []string) bool {
 		switch args[1] {
 		case "add", "remove", "rm":
 			return argsHaveNameValue(args[2:])
+		case "list":
+			return true
+		default:
+			// Unknown subcommand (a typo like `media lst`): stay rootless so
+			// cobra rejects it as the caller.
+			return false
 		}
-		return true
 	case "cluster":
 		// Bare `cluster` is a pure dispatcher that only prints help, so it must
 		// not escalate. Its subcommands (list/access/kubeconfig) read the
@@ -99,10 +122,48 @@ func argsNeedLocalRoot(args []string) bool {
 		if len(args) == 1 {
 			return false
 		}
-		return true
+		switch args[1] {
+		case "list", "access", "kubeconfig":
+			return true
+		default:
+			// Unknown subcommand (a typo like `cluster lst`): stay rootless so
+			// cobra rejects it as the caller.
+			return false
+		}
 	default:
-		return true
+		// Unknown top-level command (a typo like `statsu`): stay rootless so
+		// cobra rejects it with a "did you mean" hint as the caller instead of a
+		// doomed sudo password prompt.
+		return false
 	}
+}
+
+// applyArgsNeedLocalRoot reports whether an `apply` invocation must escalate. A
+// valid apply reads the root-owned context, so it is rootful — but a bogus
+// --stage/--through value is a malformed invocation cobra rejects, so the gate
+// stays rootless to fail stage validation fast rather than after a doomed sudo
+// password prompt, mirroring the destroy stage handling.
+func applyArgsNeedLocalRoot(args []string) bool {
+	valid := converge.ApplyStageNames()
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case (arg == "--stage" || arg == "--through") && i+1 < len(args):
+			if !slices.Contains(valid, args[i+1]) {
+				return false
+			}
+			i++ // skip the value
+		case strings.HasPrefix(arg, "--stage="):
+			if !slices.Contains(valid, strings.TrimPrefix(arg, "--stage=")) {
+				return false
+			}
+		case strings.HasPrefix(arg, "--through="):
+			if !slices.Contains(valid, strings.TrimPrefix(arg, "--through=")) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func renderArgsHaveExecutionTarget(args []string) bool {

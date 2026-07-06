@@ -38,7 +38,6 @@ func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		fromFile string
 		fromURL  string
 		sum      string
-		force    bool
 		yes      bool
 	)
 	cmd := &cobra.Command{
@@ -52,7 +51,6 @@ func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "copy ISO bytes from a local file")
 	cmd.Flags().StringVar(&fromURL, "from-url", "", "download ISO bytes from an HTTP(S) URL")
 	cmd.Flags().StringVar(&sum, "sha256", "", "expected ISO SHA-256 checksum")
-	cmd.Flags().BoolVar(&force, "force", false, "replace an existing media entry")
 	addYesFlag(cmd, &yes, "replace")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if name == "" {
@@ -65,16 +63,19 @@ func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		if exists && force && !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace media %s in %s? [y/N] (default: no): ", name, media.StoreDir())) {
+		// Replacing an existing entry is acknowledged by a single --yes (or an
+		// interactive y), matching secret set — no separate --force dance. The
+		// confirmed `exists` flag is what authorizes the store to overwrite.
+		if exists && !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace media %s in %s? [y/N] (default: no): ", name, media.StoreDir())) {
 			return failErr(1, errors.New("media add aborted"))
 		}
 		var (
 			entry media.Entry
 		)
 		if fromFile != "" {
-			entry, err = media.AddFile(name, fromFile, sum, force)
+			entry, err = media.AddFile(name, fromFile, sum, exists)
 		} else {
-			entry, err = media.AddURL(name, fromURL, sum, force)
+			entry, err = media.AddURL(name, fromURL, sum, exists)
 		}
 		if err != nil {
 			return failErr(1, err)

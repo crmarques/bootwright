@@ -188,7 +188,14 @@ func registerContextNameCompletion(cmd *cobra.Command, flag string) {
 func requireSubcommand(cmd *cobra.Command) {
 	cmd.FParseErrWhitelist = cobra.FParseErrWhitelist{UnknownFlags: true}
 	cmd.Args = rejectUnknownSubcommandArgs
-	cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+	// A bare dispatcher invocation (no subcommand) is a usage error, not a
+	// success: print help for guidance, then exit 2 so a CI gate that forgets
+	// the target (e.g. `bootwright preflight`) fails instead of passing green
+	// having checked nothing.
+	cmd.RunE = func(c *cobra.Command, _ []string) error {
+		_ = c.Help()
+		return failErr(2, fmt.Errorf("%s requires a subcommand", c.CommandPath()))
+	}
 }
 
 // rejectUnknownSubcommandArgs is a cobra.PositionalArgs for dispatcher commands:
@@ -200,7 +207,10 @@ func rejectUnknownSubcommandArgs(c *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	return unknownSubcommandError(c, args[0])
+	// A rejected positional is a usage error: exit 2 so CI can distinguish "my
+	// invocation is wrong" from "the run failed" (exit 1), matching the exit-code
+	// contract in plan/apply help.
+	return failErr(2, unknownSubcommandError(c, args[0]))
 }
 
 // unknownSubcommandError formats the message cobra.OnlyValidArgs produces for an

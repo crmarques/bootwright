@@ -157,10 +157,37 @@ func confirm(in io.Reader, prompt io.Writer, message string) bool {
 		return false
 	}
 	fmt.Fprint(prompt, message)
-	line, err := bufio.NewReader(in).ReadString('\n')
+	// Read exactly one line straight from the shared stdin without wrapping it in
+	// a fresh bufio.Reader: a per-call buffered reader would swallow every byte
+	// past this line, so a later prompt over the same piped stdin would see a
+	// spurious EOF and silently reject a correct answer.
+	line, err := readSingleLine(in)
 	if err != nil && line == "" {
 		return false
 	}
 	answer := strings.TrimSpace(strings.ToLower(line))
 	return answer == "y" || answer == "yes"
+}
+
+// readSingleLine reads up to and including the next newline one byte at a time,
+// leaving any following bytes in the underlying reader for the next consumer. A
+// trailing line with no newline is returned on EOF.
+func readSingleLine(in io.Reader) (string, error) {
+	if br, ok := in.(*bufio.Reader); ok {
+		return br.ReadString('\n')
+	}
+	var b strings.Builder
+	buf := make([]byte, 1)
+	for {
+		n, err := in.Read(buf)
+		if n > 0 {
+			b.WriteByte(buf[0])
+			if buf[0] == '\n' {
+				return b.String(), nil
+			}
+		}
+		if err != nil {
+			return b.String(), err
+		}
+	}
 }

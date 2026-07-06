@@ -314,20 +314,25 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
+			// A --skip-unreachable teardown that skipped powered-off nodes leaves
+			// those clusters only partially destroyed. The storage-destroy step
+			// writes its result file when it completes, which can be BEFORE a later
+			// independent task fails the run, so record and warn about the partial
+			// teardown regardless of overall outcome — otherwise a completed partial
+			// wipe silently loses its ownership re-stamp and operator warning to an
+			// unrelated later failure.
+			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr != nil {
+				printPartialStorageDestroyWarning(stdout, partial, partialErr)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			// A --skip-unreachable teardown that skipped powered-off nodes leaves
-			// those clusters only partially destroyed: stamp their ownership record
-			// (so status flags them and they are not treated as gone) and warn.
 			// Resolve the partial set BEFORE resetting convergence records so the
 			// reset keeps a partially-destroyed cluster's records intact — otherwise
 			// a later apply --expect-new would re-bootstrap atop its residual Ceph
 			// state instead of failing closed.
-			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, partial)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result

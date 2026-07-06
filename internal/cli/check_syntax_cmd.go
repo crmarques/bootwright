@@ -176,8 +176,12 @@ func storageAdvisoryChecks(state v1alpha1.State) []preflightCheck {
 }
 
 type syntaxCheckReport struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK bool `json:"ok"`
+	// ExitCode mirrors the process exit status (0 valid, 1 load or validation
+	// error) so CI consuming the JSON gets the same automation signal the
+	// generic command-error report carries, without parsing text.
+	ExitCode int    `json:"exitCode"`
+	Error    string `json:"error,omitempty"`
 	// Excluded* name loaded clusters that Environment spec.containerClusters /
 	// spec.storageClusters selection drops from the effective state; they are
 	// not validated and apply never touches them.
@@ -205,11 +209,17 @@ type syntaxCheckReport struct {
 	ClusterAddons            int                      `json:"clusterAddons"`
 	Profiles                 int                      `json:"clusterAddonProfiles"`
 	ExtensionBindings        int                      `json:"clusterAddonBindings"`
+	ProvisioningPlaybooks    int                      `json:"provisioningPlaybooks"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions desiredstate.ClusterSelectionExclusions, checkErr error) error {
+	exitCode := 0
+	if checkErr != nil {
+		exitCode = 1
+	}
 	report := syntaxCheckReport{
 		OK:                        checkErr == nil,
+		ExitCode:                  exitCode,
 		ExcludedContainerClusters: exclusions.ContainerClusters,
 		ExcludedStorageClusters:   exclusions.StorageClusters,
 		Advisories:                advice.StorageAdvisories(state),
@@ -231,6 +241,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		ClusterAddons:             len(state.ClusterAddons),
 		Profiles:                  len(state.ClusterAddonProfiles),
 		ExtensionBindings:         len(state.ClusterAddonBindings),
+		ProvisioningPlaybooks:     len(state.ProvisioningPlaybooks),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
@@ -297,5 +308,6 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "ClusterAddons", Value: fmt.Sprint(len(state.ClusterAddons))},
 		{Key: "ClusterAddonProfiles", Value: fmt.Sprint(len(state.ClusterAddonProfiles))},
 		{Key: "ClusterAddonBindings", Value: fmt.Sprint(len(state.ClusterAddonBindings))},
+		{Key: "ProvisioningPlaybooks", Value: fmt.Sprint(len(state.ProvisioningPlaybooks))},
 	}
 }

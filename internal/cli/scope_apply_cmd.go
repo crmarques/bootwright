@@ -26,6 +26,7 @@ type scopeApplyOptions struct {
 	defaultPlan   bool
 	hideDryRun    bool
 	hideApproval  bool
+	hideExecFlags bool
 	stageSelector bool
 	commandLabel  string
 	action        string
@@ -119,6 +120,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	if options.defaultPlan {
 		if flag := cmd.Flags().Lookup("output"); flag != nil {
 			flag.Usage = flagOutputUsage
+		}
+	}
+	if options.hideExecFlags {
+		// plan contacts nothing and runs no Ansible, so hide the flags that only
+		// shape a real mutating run. Otherwise its --help advertises alarming
+		// WIPE/reinstall and become-password controls that do nothing here.
+		for _, name := range []string{"reclaim-devices", "allow-destroy", "ask-become-pass", "strict-secrets", "verbose"} {
+			_ = cmd.Flags().MarkHidden(name)
 		}
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

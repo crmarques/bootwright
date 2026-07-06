@@ -2,11 +2,24 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/converge"
 )
+
+func TestConfirmPreservesBufferedStdinAcrossPrompts(t *testing.T) {
+	// Two piped answers over one stdin: the first confirm must consume only its
+	// own line and leave the second answer for the next prompt.
+	in := strings.NewReader("y\nyes\n")
+	if !confirm(in, io.Discard, "first? ") {
+		t.Fatal("first confirm should accept 'y'")
+	}
+	if !confirm(in, io.Discard, "second? ") {
+		t.Fatal("second confirm should accept the still-buffered 'yes', not see a spurious EOF")
+	}
+}
 
 func TestWorkflowSummaryOmitsPasswordPromptExplanations(t *testing.T) {
 	oldCurrentEUID := currentEUID

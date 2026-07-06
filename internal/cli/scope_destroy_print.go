@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/state/graph"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
@@ -31,7 +32,26 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 		if o.Cluster != "" {
 			label += " (cluster " + o.Cluster + ")"
 		}
-		p.Status(output.StatusWarn, label, "not in desired state; a full `bootwright destroy` reclaims it")
+		if destroySweepReclaims(o.Kind) {
+			p.Status(output.StatusWarn, label, "not in desired state; a full `bootwright destroy` reclaims it")
+			continue
+		}
+		p.Status(output.StatusWarn, label, "not in desired state; a full `bootwright destroy` does not reclaim this record — destroy it while it is still declared, or clean it up manually")
+	}
+}
+
+// destroySweepReclaims reports whether a full destroy's ownership-record sweep
+// actually reclaims an orphan of this kind. The sweep
+// (task_machine_infra_destroy.yml) allowlists exactly these three kinds;
+// kubevirt-machine, vsphere-machine, and storage-cluster records are torn down
+// only from desired-state component loops, so once the object is gone no sweep
+// reaches them and the "destroy reclaims it" promise would be false.
+func destroySweepReclaims(kind string) bool {
+	switch kind {
+	case string(ownership.KindLibvirtDomain), string(ownership.KindLibvirtNetwork), string(ownership.KindManagedOSInstall):
+		return true
+	default:
+		return false
 	}
 }
 

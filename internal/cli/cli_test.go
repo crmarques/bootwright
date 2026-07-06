@@ -26,12 +26,14 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/host/localroot"
+	"github.com/crmarques/bootwright/internal/infra/media"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	"github.com/crmarques/bootwright/internal/state/advice"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
+	"github.com/crmarques/bootwright/internal/storage/cephdiff"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -2687,7 +2689,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 		},
 	}
 
-	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"secret", "list"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("ensureLocalRootForArgs: %v", err)
 	}
@@ -2697,7 +2699,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if len(gotArgs) != 10 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], workspace.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || gotArgs[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || gotArgs[6] != localRootSudoAuthEnv+"="+localSudoAuthNonInteractive || !reflect.DeepEqual(gotArgs[7:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 10 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], workspace.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || gotArgs[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || gotArgs[6] != localRootSudoAuthEnv+"="+localSudoAuthNonInteractive || !reflect.DeepEqual(gotArgs[7:], []string{"/usr/local/bin/bootwright", "secret", "list"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
 	}
 }
@@ -2728,7 +2730,7 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	}
 
 	var stderr bytes.Buffer
-	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader("secret\n"), &bytes.Buffer{}, &stderr)
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"secret", "list"}, strings.NewReader("secret\n"), &bytes.Buffer{}, &stderr)
 	if err != nil {
 		t.Fatalf("ensureLocalRootForArgs: %v", err)
 	}
@@ -2756,7 +2758,7 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	if got := localRootEnvValue(calls[3], localRootBecomePasswordFileEnv); got != "" {
 		t.Fatalf("check command should not receive a become password file: %v", calls[3])
 	}
-	if !reflect.DeepEqual(calls[3][commandIndex:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if !reflect.DeepEqual(calls[3][commandIndex:], []string{"/usr/local/bin/bootwright", "secret", "list"}) {
 		t.Fatalf("fourth sudo call = %v", calls[3])
 	}
 }
@@ -2836,7 +2838,7 @@ func TestEnsureLocalRootForArgsRetriesInvalidSudoPassword(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader("wrong\nalso-wrong\nsecret\n"), &bytes.Buffer{}, &stderr)
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"secret", "list"}, strings.NewReader("wrong\nalso-wrong\nsecret\n"), &bytes.Buffer{}, &stderr)
 	if err != nil {
 		t.Fatalf("ensureLocalRootForArgs: %v", err)
 	}
@@ -2878,7 +2880,7 @@ func TestEnsureLocalRootForArgsFailsAfterThreeInvalidSudoPasswords(t *testing.T)
 	}
 
 	var stderr bytes.Buffer
-	_, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader("wrong\nalso-wrong\nstill-wrong\n"), &bytes.Buffer{}, &stderr)
+	_, handled, err := ensureLocalRootForArgs(context.Background(), []string{"secret", "list"}, strings.NewReader("wrong\nalso-wrong\nstill-wrong\n"), &bytes.Buffer{}, &stderr)
 	if err == nil {
 		t.Fatal("expected sudo authentication failure")
 	}
@@ -2907,7 +2909,7 @@ func TestEnsureLocalRootForArgsSkipsWhenAlreadyRoot(t *testing.T) {
 			return exec.CommandContext(ctx, os.Args[0], "-test.run=TestLocalRootGateHelperProcess", "--")
 		},
 	}
-	_, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	_, handled, err := ensureLocalRootForArgs(context.Background(), []string{"secret", "list"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("ensureLocalRootForArgs: %v", err)
 	}
@@ -4835,5 +4837,122 @@ func requireSingleClusterFreshness(t *testing.T, report statusReport, want strin
 	}
 	if got := report.Clusters[0].InstallerFreshness; got != want {
 		t.Fatalf("installer freshness = %q, want %q; report=%+v", got, want, report.Clusters[0])
+	}
+}
+
+// TestArgsRequestJSONHonorsFlagTerminator pins that argsRequestJSON selects JSON
+// error output only for a genuine --output json flag, and treats anything after
+// the "--" terminator as a positional (never a JSON request).
+func TestArgsRequestJSONHonorsFlagTerminator(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"space form", []string{"status", "--output", "json"}, true},
+		{"equals form", []string{"status", "--output=json"}, true},
+		{"text output", []string{"status", "--output", "text"}, false},
+		{"no output flag", []string{"status"}, false},
+		{"after terminator", []string{"status", "--", "--output", "json"}, false},
+		{"before terminator", []string{"status", "--output", "json", "--", "x"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := argsRequestJSON(tc.args); got != tc.want {
+				t.Fatalf("argsRequestJSON(%q) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestMediaAddReplaceIsSingleGate pins that replacing an existing ISO is
+// acknowledged by a single --yes (or an interactive y), with no separate
+// --force flag — matching secret set. Regression guard for the old two-flag
+// (--force plus --yes/prompt) dance.
+func TestMediaAddReplaceIsSingleGate(t *testing.T) {
+	setTestHomeAndRoot(t)
+
+	help, stderr, code := runCLI(t, "media", "add", "--help")
+	if code != 0 {
+		t.Fatalf("media add --help exited %d, stderr=%q", code, stderr)
+	}
+	if strings.Contains(help, "--force") {
+		t.Fatalf("media add must not document --force:\n%s", help)
+	}
+	if !strings.Contains(help, "--yes") {
+		t.Fatalf("media add must document --yes:\n%s", help)
+	}
+
+	storeDir, err := media.EnsureStoreDir()
+	if err != nil {
+		t.Fatalf("ensure media store: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, "rhel.iso"), []byte("old"), 0o600); err != nil {
+		t.Fatalf("seed existing media: %v", err)
+	}
+	src := filepath.Join(t.TempDir(), "src.iso")
+	if err := os.WriteFile(src, []byte("new"), 0o600); err != nil {
+		t.Fatalf("write source iso: %v", err)
+	}
+
+	// Declining the single prompt aborts the replace — no --force involved.
+	_, stderr, code = runCLIWithInput(t, "n\n", "media", "add", "--name", "rhel.iso", "--from-file", src)
+	if code == 0 {
+		t.Fatalf("declined media replace must fail; stderr=%q", stderr)
+	}
+	if !strings.Contains(stderr, "aborted") {
+		t.Fatalf("declined media replace must report aborted; stderr=%q", stderr)
+	}
+
+	// A single --yes acknowledges the replace with no --force.
+	_, stderr, code = runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", src, "--yes")
+	if code != 0 {
+		t.Fatalf("media add replace with --yes exited %d, stderr=%q", code, stderr)
+	}
+}
+
+// TestSynthesizePoolFileRefusesErasure pins that diff --adopt does not synthesize
+// a StoragePool file for a live erasure-coded pool: live discovery exposes only
+// the profile name, not the k/m chunk counts, so a synthesized file would write
+// spec.ceph.type=erasure with no erasure block and fail the next load/validate.
+// It must be reported as detected-but-not-adopted instead.
+func TestSynthesizePoolFileRefusesErasure(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata:   v1alpha1.Metadata{Name: "ceph"},
+		SourcePath: "/tmp/ceph/cluster.yaml",
+	}
+	ecPool := cephdiff.ObjectDiff{
+		Key:   "ec-pool",
+		State: cephdiff.ObjectRealOnly,
+		Fields: []cephdiff.FieldDiff{
+			{Name: "type", Real: "erasure", HasReal: true},
+			{Name: "erasure_profile", Real: "myprofile", HasReal: true},
+			{Name: "application", Real: "rbd", HasReal: true},
+		},
+	}
+	if _, _, err := synthesizePoolFile(cluster, ecPool); err == nil {
+		t.Fatal("synthesizePoolFile must refuse an erasure-coded pool, got nil error")
+	}
+
+	// A replicated pool still synthesizes a valid file.
+	replPool := cephdiff.ObjectDiff{
+		Key:   "rbd-pool",
+		State: cephdiff.ObjectRealOnly,
+		Fields: []cephdiff.FieldDiff{
+			{Name: "type", Real: "replicated", HasReal: true},
+			{Name: "size", Real: "3", HasReal: true},
+			{Name: "min_size", Real: "2", HasReal: true},
+			{Name: "application", Real: "rbd", HasReal: true},
+		},
+	}
+	path, content, err := synthesizePoolFile(cluster, replPool)
+	if err != nil {
+		t.Fatalf("synthesizePoolFile(replicated) failed: %v", err)
+	}
+	if !strings.HasSuffix(path, "rbd-pool.yaml") {
+		t.Fatalf("unexpected synthesized path %q", path)
+	}
+	if !strings.Contains(string(content), "type: replicated") {
+		t.Fatalf("synthesized replicated pool missing type: replicated:\n%s", content)
 	}
 }

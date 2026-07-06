@@ -98,6 +98,8 @@ func commandErrorRemediation(message string) string {
 		return "run bootwright context list, then bootwright context use --name <name> or bootwright context init --name <name> -f <path> --yes"
 	case strings.Contains(message, "context") && strings.Contains(message, "not ready"):
 		return "run bootwright status and fix the reported checks"
+	case strings.Contains(message, "needs root to access") || strings.Contains(message, "passwordless sudo"):
+		return "run the command interactively so bootwright can prompt for the sudo password, run it as root, or configure passwordless sudo"
 	case strings.Contains(message, "would write OpenShift installer files with secret material"):
 		return "rerun with --sensitive only for a local, unversioned output directory"
 	case strings.Contains(message, "no such file or directory") || strings.Contains(message, "not found"):
@@ -111,6 +113,11 @@ func commandErrorRemediation(message string) string {
 
 func argsRequestJSON(args []string) bool {
 	for i, arg := range args {
+		// Everything after the "--" terminator is a positional, not a flag, so a
+		// bare "--output json" there does not select JSON error output.
+		if arg == "--" {
+			return false
+		}
 		if arg == "--output" && i+1 < len(args) && args[i+1] == outputJSON {
 			return true
 		}

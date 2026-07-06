@@ -15,12 +15,23 @@ func newRenderEffectiveCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "effective",
 		Short: "Render normalized effective state",
-		Args:  cobra.NoArgs,
+		Long: `Render the normalized effective state (defaults applied) for the active
+context.
+
+This subcommand reads the configured context. Authors iterating on raw input
+YAML without a configured context (or without root) can produce the identical
+effective-state.yaml context-free with:
+
+  bootwright render --input-dir <dir> --output-dir <dir>`,
+		Args: cobra.NoArgs,
 		Example: `  # Write normalized desired state with defaults applied
   bootwright render effective
 
   # Machine-readable output for CI
-  bootwright render effective --output json`,
+  bootwright render effective --output json
+
+  # Same effective state, context-free (no configured context, no root)
+  bootwright render --input-dir ./input --output-dir ./out`,
 	}
 	cf := addCommonFlags()
 	addOutputFlag(cmd, &output)

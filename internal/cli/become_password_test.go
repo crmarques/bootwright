@@ -48,6 +48,26 @@ func TestPrepareBecomePasswordFileRejectsEmptyPassword(t *testing.T) {
 	}
 }
 
+func TestReadSudoPasswordEOFExplainsRootRequirement(t *testing.T) {
+	// Force the non-interactive path (no controlling TTY) so the read falls
+	// through to the empty stdin and returns the wrapped EOF error.
+	old := openControllingTTY
+	t.Cleanup(func() { openControllingTTY = old })
+	openControllingTTY = func() (*os.File, error) { return nil, errors.New("no tty") }
+
+	_, err := readSudoPassword(strings.NewReader(""), io.Discard)
+	if err == nil {
+		t.Fatal("EOF stdin should fail")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "needs root to access /var/lib/bootwright") || !strings.Contains(msg, "passwordless sudo") {
+		t.Fatalf("error = %q, want it to name the root requirement and passwordless sudo", msg)
+	}
+	if got := commandErrorRemediation(msg); !strings.Contains(got, "passwordless sudo") {
+		t.Fatalf("remediation = %q, want a sudo/root hint", got)
+	}
+}
+
 func TestPrepareBecomeCredentialReusesInheritedPasswordFile(t *testing.T) {
 	path, cleanup, err := become.WritePasswordFile("secret")
 	if err != nil {

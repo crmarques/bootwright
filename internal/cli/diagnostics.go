@@ -59,15 +59,37 @@ func diagnosticFromFinding(finding desiredstate.Finding) Diagnostic {
 	if finding.Value != "" {
 		diagnostic.Value = finding.Value
 	}
-	if finding.Object != "" || finding.Field != "" {
-		switch {
-		case diagnostic.Object != "" && diagnostic.Field != "":
-			diagnostic.Remediation = "set " + diagnostic.Field + " on " + diagnostic.Object + " to a valid value"
-		case diagnostic.Field != "":
-			diagnostic.Remediation = "set " + diagnostic.Field + " to a valid value"
-		}
+	if (finding.Object != "" || finding.Field != "") && diagnostic.Field != "" {
+		diagnostic.Remediation = fieldRemediation(diagnostic.Object, diagnostic.Field, finding.Message)
 	}
 	return diagnostic
+}
+
+// suggestsRemoval reports whether a validator message describes a field that is
+// conditionally unsupported or required-empty. No value of such a field is
+// valid, so the fix is to remove it (or change the mode that gates it), not to
+// "set it to a valid value".
+func suggestsRemoval(message string) bool {
+	return strings.Contains(message, "only supported") ||
+		strings.Contains(message, "must be empty") ||
+		strings.Contains(message, "is not supported")
+}
+
+// fieldRemediation renders the fix hint for a field-scoped diagnostic. A
+// conditionally-unsupported / must-be-empty field cannot be set to any valid
+// value, so the correct fix is removal; every other field-scoped error is a bad
+// value the operator should correct.
+func fieldRemediation(object, field, message string) string {
+	if suggestsRemoval(message) {
+		if object != "" {
+			return "remove " + field + " from " + object
+		}
+		return "remove " + field
+	}
+	if object != "" {
+		return "set " + field + " on " + object + " to a valid value"
+	}
+	return "set " + field + " to a valid value"
 }
 
 var (
@@ -111,10 +133,8 @@ func diagnosticFromMessage(message string) Diagnostic {
 	if match := quotedValue.FindStringSubmatch(message); len(match) == 2 {
 		diagnostic.Value = match[1]
 	}
-	if diagnostic.Object != "" && diagnostic.Field != "" {
-		diagnostic.Remediation = "set " + diagnostic.Field + " on " + diagnostic.Object + " to a valid value"
-	} else if diagnostic.Field != "" {
-		diagnostic.Remediation = "set " + diagnostic.Field + " to a valid value"
+	if diagnostic.Field != "" {
+		diagnostic.Remediation = fieldRemediation(diagnostic.Object, diagnostic.Field, message)
 	}
 	if diagnostic.Rule == "" {
 		diagnostic.Rule = message

@@ -32,7 +32,7 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 	watch := false
 	watchInterval := 5 * time.Second
 	cmd := &cobra.Command{
-		Use:   "status [target]",
+		Use:   "status",
 		Short: "Show where the context stands and the next command",
 		Long: "Inspects the current context rendered-dir and secrets-dir, surfaces declared\n" +
 			"Environment, Provider, Infrastructure, ContainerCluster, and StorageCluster\n" +
@@ -144,7 +144,11 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
+	tty := cliout.Interactive(stdout)
+	first := true
 	for {
+		cliout.Write(stdout, statusWatchRefreshPreamble(tty, first, time.Now()))
+		first = false
 		if err := runStatus(stdout, cf); err != nil {
 			return err
 		}
@@ -167,6 +171,23 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 			return ctx.Err()
 		case <-timer.C:
 		}
+	}
+}
+
+// statusWatchRefreshPreamble returns what to emit before each --watch refresh.
+// On a TTY it redraws in place like watch(1) — home the cursor and clear the
+// screen so each refresh replaces the previous report instead of stacking a
+// fresh multi-section report onto scrollback every interval. Piped output cannot
+// redraw, so it delimits each refresh (after the first) with a timestamped
+// separator to keep the appended reports parseable.
+func statusWatchRefreshPreamble(tty, first bool, now time.Time) string {
+	switch {
+	case tty:
+		return "\x1b[H\x1b[2J"
+	case first:
+		return ""
+	default:
+		return fmt.Sprintf("\n----- status refresh %s -----\n", now.Format(time.RFC3339))
 	}
 }
 
