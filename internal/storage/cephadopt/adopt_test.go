@@ -1,4 +1,4 @@
-package cli
+package cephadopt
 
 import (
 	"os"
@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func TestComputeAdoptEdits(t *testing.T) {
+func TestComputeEdits(t *testing.T) {
 	inputDir := t.TempDir()
 	poolPath := filepath.Join(inputDir, "pools", "rbd.yaml")
 	if err := os.MkdirAll(filepath.Dir(poolPath), 0o755); err != nil {
@@ -59,30 +59,28 @@ spec:
 			{Metadata: v1alpha1.Metadata{Name: "rbd"}, SourcePath: poolPath, Spec: v1alpha1.StoragePoolSpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph-prod"}}},
 		},
 	}
-	live := liveDiffReport{
-		Storage: []liveStorageDiff{{
-			Cluster: "ceph-prod", Probed: true, InSync: false,
-			Report: cephdiff.Report{Cluster: "ceph-prod", Probed: true, Facets: []cephdiff.FacetDiff{
-				{Name: "pools", Objects: []cephdiff.ObjectDiff{
-					{Key: "rbd", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
-						{Name: "size", Desired: "3", Real: "2", HasDesired: true, HasReal: true},
-					}},
-					{Key: "extra", State: cephdiff.ObjectRealOnly, Fields: []cephdiff.FieldDiff{
-						{Name: "type", Real: "replicated", HasReal: true},
-						{Name: "size", Real: "3", HasReal: true},
-						{Name: "application", Real: "rbd", HasReal: true},
-					}},
+	probed := []ProbedStorage{{
+		Cluster: "ceph-prod",
+		Report: cephdiff.Report{Cluster: "ceph-prod", Probed: true, Facets: []cephdiff.FacetDiff{
+			{Name: "pools", Objects: []cephdiff.ObjectDiff{
+				{Key: "rbd", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
+					{Name: "size", Desired: "3", Real: "2", HasDesired: true, HasReal: true},
 				}},
-				{Name: "config", Objects: []cephdiff.ObjectDiff{
-					{Key: "global/mon_max_pg_per_osd", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
-						{Name: "value", Desired: "250", Real: "300", HasDesired: true, HasReal: true},
-					}},
+				{Key: "extra", State: cephdiff.ObjectRealOnly, Fields: []cephdiff.FieldDiff{
+					{Name: "type", Real: "replicated", HasReal: true},
+					{Name: "size", Real: "3", HasReal: true},
+					{Name: "application", Real: "rbd", HasReal: true},
+				}},
+			}},
+			{Name: "config", Objects: []cephdiff.ObjectDiff{
+				{Key: "global/mon_max_pg_per_osd", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
+					{Name: "value", Desired: "250", Real: "300", HasDesired: true, HasReal: true},
 				}},
 			}},
 		}},
-	}
+	}}
 
-	edits, summary, err := computeAdoptEdits(workspace.Context{InputDir: inputDir}, state, live)
+	edits, summary, err := ComputeEdits(workspace.Context{InputDir: inputDir}, state, probed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,21 +173,19 @@ spec:
 		}},
 	}
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
-	live := liveDiffReport{
-		Storage: []liveStorageDiff{{
-			Cluster: "ceph-prod", Probed: true, InSync: false,
-			Report: cephdiff.Report{Cluster: "ceph-prod", Probed: true,
-				Facets: []cephdiff.FacetDiff{{Name: "osd-devices", Objects: []cephdiff.ObjectDiff{
-					{Key: "srv1", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
-						{Name: "devices", Desired: "sdb sdc", Real: "sdb sdc sdd", HasDesired: true, HasReal: true},
-					}},
-				}}},
-				UnpinnedOSDHosts: []cephdiff.OSDDeviceAdvisory{{Host: "srv2", Devices: []string{"sdb", "sdc"}}},
-			},
-		}},
-	}
+	probed := []ProbedStorage{{
+		Cluster: "ceph-prod",
+		Report: cephdiff.Report{Cluster: "ceph-prod", Probed: true,
+			Facets: []cephdiff.FacetDiff{{Name: "osd-devices", Objects: []cephdiff.ObjectDiff{
+				{Key: "srv1", State: cephdiff.ObjectChanged, Fields: []cephdiff.FieldDiff{
+					{Name: "devices", Desired: "sdb sdc", Real: "sdb sdc sdd", HasDesired: true, HasReal: true},
+				}},
+			}}},
+			UnpinnedOSDHosts: []cephdiff.OSDDeviceAdvisory{{Host: "srv2", Devices: []string{"sdb", "sdc"}}},
+		},
+	}}
 
-	edits, summary, err := computeAdoptEdits(workspace.Context{InputDir: inputDir}, state, live)
+	edits, summary, err := ComputeEdits(workspace.Context{InputDir: inputDir}, state, probed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +213,52 @@ spec:
 	}
 	if strings.Contains(out, "all: false") || anyContains(summary.Applied, "srv2") {
 		t.Fatalf("srv2 filter selection must not be rewritten:\n%s\napplied=%v", out, summary.Applied)
+	}
+}
+
+// TestSynthesizePoolFileRefusesErasure pins that diff --adopt does not synthesize
+// a StoragePool file for a live erasure-coded pool: live discovery exposes only
+// the profile name, not the k/m chunk counts, so a synthesized file would write
+// spec.ceph.type=erasure with no erasure block and fail the next load/validate.
+// It must be reported as detected-but-not-adopted instead.
+func TestSynthesizePoolFileRefusesErasure(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata:   v1alpha1.Metadata{Name: "ceph"},
+		SourcePath: "/tmp/ceph/cluster.yaml",
+	}
+	ecPool := cephdiff.ObjectDiff{
+		Key:   "ec-pool",
+		State: cephdiff.ObjectRealOnly,
+		Fields: []cephdiff.FieldDiff{
+			{Name: "type", Real: "erasure", HasReal: true},
+			{Name: "erasure_profile", Real: "myprofile", HasReal: true},
+			{Name: "application", Real: "rbd", HasReal: true},
+		},
+	}
+	if _, _, err := synthesizePoolFile(cluster, ecPool); err == nil {
+		t.Fatal("synthesizePoolFile must refuse an erasure-coded pool, got nil error")
+	}
+
+	// A replicated pool still synthesizes a valid file.
+	replPool := cephdiff.ObjectDiff{
+		Key:   "rbd-pool",
+		State: cephdiff.ObjectRealOnly,
+		Fields: []cephdiff.FieldDiff{
+			{Name: "type", Real: "replicated", HasReal: true},
+			{Name: "size", Real: "3", HasReal: true},
+			{Name: "min_size", Real: "2", HasReal: true},
+			{Name: "application", Real: "rbd", HasReal: true},
+		},
+	}
+	path, content, err := synthesizePoolFile(cluster, replPool)
+	if err != nil {
+		t.Fatalf("synthesizePoolFile(replicated) failed: %v", err)
+	}
+	if !strings.HasSuffix(path, "rbd-pool.yaml") {
+		t.Fatalf("unexpected synthesized path %q", path)
+	}
+	if !strings.Contains(string(content), "type: replicated") {
+		t.Fatalf("synthesized replicated pool missing type: replicated:\n%s", content)
 	}
 }
 

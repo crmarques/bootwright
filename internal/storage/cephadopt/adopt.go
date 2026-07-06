@@ -1,4 +1,13 @@
-package cli
+// Package cephadopt folds the live state of a managed Ceph cluster back into
+// authored desired-state YAML — the engine behind `bootwright diff --adopt`. It
+// decides which observed facets are cleanly representable and auto-adoptable
+// (replicated pool sizing, declared ceph config values, additive OSD-device
+// pins, cluster-only pools) and reports everything else as detected-but-not-
+// adopted so the operator edits it deliberately. It never rewrites or removes an
+// existing entry, and it writes only through the workspace input-mutation
+// component, which snapshots history first. The CLI supplies the live comparison
+// and renders the returned Summary; the adoption policy lives here.
+package cephadopt
 
 import (
 	"fmt"
@@ -14,19 +23,27 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// adoptSummary reports the outcome of `diff --adopt`: the history snapshot taken
+// ProbedStorage is one managed storage cluster's live comparison the adopt engine
+// folds in: the cluster name and the facet-diff report the discovery produced.
+// The caller passes only clusters it actually reached, in a deterministic order.
+type ProbedStorage struct {
+	Cluster string
+	Report  cephdiff.Report
+}
+
+// Summary reports the outcome of `diff --adopt`: the history snapshot taken
 // before writing, the edits applied, the new object files created, and the
 // differences detected but deliberately not auto-adopted (which the operator
 // edits by hand). Detected keeps adopt honest: it never silently drops a
 // difference it cannot safely fold in.
-type adoptSummary struct {
+type Summary struct {
 	Snapshot string   `json:"snapshot,omitempty"`
 	Applied  []string `json:"applied,omitempty"`
 	NewFiles []string `json:"newFiles,omitempty"`
 	Detected []string `json:"detected,omitempty"`
 }
 
-func (s adoptSummary) empty() bool {
+func (s Summary) Empty() bool {
 	return len(s.Applied) == 0 && len(s.NewFiles) == 0
 }
 
@@ -48,24 +65,24 @@ type nodeEdit struct {
 	appendValues []string
 }
 
-// adoptLiveState folds the live state of probed managed storage clusters into
-// desired YAML through the centralized ApplyInputEdits (which snapshots history
+// Adopt folds the live state of probed managed storage clusters into desired YAML
+// through the centralized workspace.ApplyInputEdits (which snapshots history
 // first). Only the cleanly-representable facets are auto-adopted — replicated
 // pool sizing, declared ceph config values, and pools that exist only on the
 // cluster; everything else is reported as detected-but-not-adopted so the
 // operator can edit it deliberately. It returns the summary and never mutates
 // files outside the context input tree.
-func adoptLiveState(cf *commonFlags, state v1alpha1.State, live liveDiffReport) (adoptSummary, error) {
-	edits, summary, err := computeAdoptEdits(cf.ctx, state, live)
+func Adopt(ctx workspace.Context, state v1alpha1.State, probed []ProbedStorage) (Summary, error) {
+	edits, summary, err := ComputeEdits(ctx, state, probed)
 	if err != nil {
-		return adoptSummary{}, err
+		return Summary{}, err
 	}
 	if len(edits) == 0 {
 		return summary, nil
 	}
-	snapshot, err := workspace.ApplyInputEdits(cf.ctx, "diff adopt", edits)
+	snapshot, err := workspace.ApplyInputEdits(ctx, "diff adopt", edits)
 	if err != nil {
-		return adoptSummary{}, err
+		return Summary{}, err
 	}
 	summary.Snapshot = snapshot
 	sort.Strings(summary.Applied)
@@ -74,8 +91,10 @@ func adoptLiveState(cf *commonFlags, state v1alpha1.State, live liveDiffReport) 
 	return summary, nil
 }
 
-func computeAdoptEdits(ctx workspace.Context, state v1alpha1.State, live liveDiffReport) ([]workspace.InputEdit, adoptSummary, error) {
-	var summary adoptSummary
+// ComputeEdits is the pure adoption policy: it decides which live facets fold in
+// and returns the input edits plus a summary, without writing anything.
+func ComputeEdits(ctx workspace.Context, state v1alpha1.State, probed []ProbedStorage) ([]workspace.InputEdit, Summary, error) {
+	var summary Summary
 	clusterByName := map[string]v1alpha1.StorageCluster{}
 	for _, cluster := range state.StorageClusters {
 		clusterByName[cluster.Metadata.Name] = cluster
@@ -94,10 +113,7 @@ func computeAdoptEdits(ctx workspace.Context, state v1alpha1.State, live liveDif
 	fileEdits := map[string][]nodeEdit{}
 	newFiles := map[string][]byte{}
 
-	for _, storage := range live.Storage {
-		if !storage.Probed {
-			continue
-		}
+	for _, storage := range probed {
 		cluster := clusterByName[storage.Cluster]
 		for _, facet := range storage.Report.Facets {
 			switch facet.Name {
@@ -124,18 +140,18 @@ func computeAdoptEdits(ctx workspace.Context, state v1alpha1.State, live liveDif
 	for path, mutations := range fileEdits {
 		content, err := applyNodeEdits(path, mutations)
 		if err != nil {
-			return nil, adoptSummary{}, err
+			return nil, Summary{}, err
 		}
 		rel, err := inputRelPath(ctx.InputDir, path)
 		if err != nil {
-			return nil, adoptSummary{}, err
+			return nil, Summary{}, err
 		}
 		edits = append(edits, workspace.InputEdit{RelPath: rel, Content: content})
 	}
 	for path, content := range newFiles {
 		rel, err := inputRelPath(ctx.InputDir, path)
 		if err != nil {
-			return nil, adoptSummary{}, err
+			return nil, Summary{}, err
 		}
 		edits = append(edits, workspace.InputEdit{RelPath: rel, Content: content})
 	}
@@ -148,7 +164,7 @@ func computeAdoptEdits(ctx workspace.Context, state v1alpha1.State, live liveDif
 // and synthesizes a new StoragePool file for a pool that exists only on the
 // cluster. Structural changes (type, erasure profile) and other tunables are
 // detected, not auto-adopted.
-func adoptPools(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, fileEdits map[string][]nodeEdit, newFiles map[string][]byte, summary *adoptSummary) {
+func adoptPools(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, fileEdits map[string][]nodeEdit, newFiles map[string][]byte, summary *Summary) {
 	for _, object := range facet.Objects {
 		switch object.State {
 		case cephdiff.ObjectChanged:
@@ -183,7 +199,7 @@ func adoptPools(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.S
 	}
 }
 
-func adoptConfig(facet cephdiff.FacetDiff, cluster v1alpha1.StorageCluster, fileEdits map[string][]nodeEdit, summary *adoptSummary) {
+func adoptConfig(facet cephdiff.FacetDiff, cluster v1alpha1.StorageCluster, fileEdits map[string][]nodeEdit, summary *Summary) {
 	if cluster.SourcePath == "" {
 		return
 	}
@@ -220,7 +236,7 @@ func adoptConfig(facet cephdiff.FacetDiff, cluster v1alpha1.StorageCluster, file
 // disappeared (a declared path no longer backing an OSD), a host whose devices
 // come from a drivegroup or pathSpecs, and a declared-but-absent host are all
 // reported for deliberate hand-editing — never rewritten or removed.
-func adoptOSDDevices(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, fileEdits map[string][]nodeEdit, summary *adoptSummary) {
+func adoptOSDDevices(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, fileEdits map[string][]nodeEdit, summary *Summary) {
 	for _, object := range facet.Objects {
 		field, ok := osdDevicesField(object)
 		switch object.State {

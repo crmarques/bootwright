@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/status"
+	"github.com/crmarques/bootwright/internal/storage/cephadopt"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -106,7 +107,13 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		// stdout stays clean for the report or the JSON document.
 		live := buildLiveDiff(c.Context(), cf, executable, state, report, false, stderr)
 		if adopt {
-			summary, err := adoptLiveState(cf, state, live)
+			var probed []cephadopt.ProbedStorage
+			for _, storage := range live.Storage {
+				if storage.Probed {
+					probed = append(probed, cephadopt.ProbedStorage{Cluster: storage.Cluster, Report: storage.Report})
+				}
+			}
+			summary, err := cephadopt.Adopt(cf.ctx, state, probed)
 			if err != nil {
 				return failErr(1, fmt.Errorf("adopt live state into desired state: %w", err))
 			}

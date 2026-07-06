@@ -33,7 +33,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/advice"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
-	"github.com/crmarques/bootwright/internal/storage/cephdiff"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -4908,51 +4907,5 @@ func TestMediaAddReplaceIsSingleGate(t *testing.T) {
 	_, stderr, code = runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", src, "--yes")
 	if code != 0 {
 		t.Fatalf("media add replace with --yes exited %d, stderr=%q", code, stderr)
-	}
-}
-
-// TestSynthesizePoolFileRefusesErasure pins that diff --adopt does not synthesize
-// a StoragePool file for a live erasure-coded pool: live discovery exposes only
-// the profile name, not the k/m chunk counts, so a synthesized file would write
-// spec.ceph.type=erasure with no erasure block and fail the next load/validate.
-// It must be reported as detected-but-not-adopted instead.
-func TestSynthesizePoolFileRefusesErasure(t *testing.T) {
-	cluster := v1alpha1.StorageCluster{
-		Metadata:   v1alpha1.Metadata{Name: "ceph"},
-		SourcePath: "/tmp/ceph/cluster.yaml",
-	}
-	ecPool := cephdiff.ObjectDiff{
-		Key:   "ec-pool",
-		State: cephdiff.ObjectRealOnly,
-		Fields: []cephdiff.FieldDiff{
-			{Name: "type", Real: "erasure", HasReal: true},
-			{Name: "erasure_profile", Real: "myprofile", HasReal: true},
-			{Name: "application", Real: "rbd", HasReal: true},
-		},
-	}
-	if _, _, err := synthesizePoolFile(cluster, ecPool); err == nil {
-		t.Fatal("synthesizePoolFile must refuse an erasure-coded pool, got nil error")
-	}
-
-	// A replicated pool still synthesizes a valid file.
-	replPool := cephdiff.ObjectDiff{
-		Key:   "rbd-pool",
-		State: cephdiff.ObjectRealOnly,
-		Fields: []cephdiff.FieldDiff{
-			{Name: "type", Real: "replicated", HasReal: true},
-			{Name: "size", Real: "3", HasReal: true},
-			{Name: "min_size", Real: "2", HasReal: true},
-			{Name: "application", Real: "rbd", HasReal: true},
-		},
-	}
-	path, content, err := synthesizePoolFile(cluster, replPool)
-	if err != nil {
-		t.Fatalf("synthesizePoolFile(replicated) failed: %v", err)
-	}
-	if !strings.HasSuffix(path, "rbd-pool.yaml") {
-		t.Fatalf("unexpected synthesized path %q", path)
-	}
-	if !strings.Contains(string(content), "type: replicated") {
-		t.Fatalf("synthesized replicated pool missing type: replicated:\n%s", content)
 	}
 }

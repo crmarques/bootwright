@@ -1,4 +1,4 @@
-package cli
+package cephadopt
 
 import (
 	"bytes"
@@ -12,9 +12,9 @@ import (
 
 // This file holds the low-level YAML-document mutation primitives `diff --adopt`
 // uses: load/marshal a multi-document desired-state file preserving comments, and
-// apply the two kinds of edit (scalar set, sequence append) an adoptSummary's
-// nodeEdits describe. The adopt policy — which differences fold in and which are
-// only reported — lives in diff_adopt.go.
+// apply the two kinds of edit (scalar set, sequence append) a Summary's nodeEdits
+// describe. The adopt policy — which differences fold in and which are only
+// reported — lives in adopt.go.
 
 // applyNodeEdits loads a desired-state file's documents, applies each edit to the
 // matching document, and re-marshals the whole file, preserving comments and the

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/storage/cephadopt"
 	"github.com/crmarques/bootwright/internal/storage/cephdiff"
 	"github.com/crmarques/bootwright/internal/storage/cephstate"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -34,7 +35,7 @@ type liveDiffReport struct {
 	Undeclared     []workflow.UndeclaredResource `json:"undeclared,omitempty"`
 	LoadWarnings   []string                      `json:"loadWarnings,omitempty"`
 	Warnings       []string                      `json:"warnings,omitempty"`
-	Adopt          *adoptSummary                 `json:"adopt,omitempty"`
+	Adopt          *cephadopt.Summary            `json:"adopt,omitempty"`
 }
 
 // liveStorageDiff is one managed StorageCluster's live comparison. Note carries
@@ -288,12 +289,12 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 
 // printAdoptSummary reports what `--adopt` folded into desired state and what it
 // left for the operator to edit by hand.
-func printAdoptSummary(p *cliout.Printer, adopt *adoptSummary) {
+func printAdoptSummary(p *cliout.Printer, adopt *cephadopt.Summary) {
 	if adopt == nil {
 		return
 	}
 	p.Section("Adopted into desired state")
-	if adopt.empty() {
+	if adopt.Empty() {
 		p.Status(cliout.StatusOK, "adopt", "nothing to fold in; desired state already matches the adoptable facets")
 	}
 	for _, applied := range adopt.Applied {
