@@ -281,6 +281,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_provider_host_name=" + host},
 						Forks:         1,
 						State:         clusterState,
+						// Finalize is a post-provision reconcile step, not a disk-wipe
+						// reinstall; without a structural projection any day-2 edit
+						// (a host label, a ClusterAddon) flipped it to structural drift
+						// and continue refused with a false "would reinstall the machine
+						// — its disks wiped". Share the install task's projection so
+						// only a genuine install-identity change stays a rebuild.
+						StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 					},
 				}); err != nil {
 					return nil, err
@@ -577,6 +584,11 @@ func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State
 				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
 				Forks:         1,
 				State:         clusterState,
+				// Prepare is an idempotent pre-provision step, not a disk-wipe
+				// reinstall; share the install task's structural projection so a
+				// reconcilable day-2 edit (label/addon/pool) does not falsely flip it
+				// to structural drift and refuse the run as a machine re-image.
+				StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 			},
 		}); err != nil {
 			return nil, err
@@ -616,6 +628,11 @@ func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State
 				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
 				Forks:         1,
 				State:         storageTaskState(state, clusterName),
+				// Managed-OS prepare is idempotent, not a reinstall; reuse the same
+				// destructive-identity projection as the OS-install task so a day-2
+				// storage edit (OSD device, pool) reconciles instead of falsely
+				// refusing as a machine disk wipe.
+				StructuralHashVars: managedMachineOSStructuralHashVars(state, clusterName),
 			},
 		}); err != nil {
 			return nil, err
@@ -824,7 +841,26 @@ func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1al
 		for j := range clone.ContainerClusters[i].Spec.Hosts {
 			clone.ContainerClusters[i].Spec.Hosts[j].Labels = nil
 			clone.ContainerClusters[i].Spec.Hosts[j].Taints = nil
+			// An infra host installs as a worker and is promoted to infra day-2 by
+			// the reconfigure-only nodeconfig task (installerNodeRole maps infra ->
+			// worker, computeReplicaCount counts worker+infra), so every rendered
+			// install artifact is byte-identical for worker<->infra. Project the role
+			// through that same mapping here: master<->worker stays a real reinstall
+			// (structural), while promoting an installed worker to infra reconciles
+			// in place instead of steering to a full node re-image.
+			clone.ContainerClusters[i].Spec.Hosts[j].Role = installTimeNodeRole(clone.ContainerClusters[i].Spec.Hosts[j].Role)
 		}
 	}
 	return clone
+}
+
+// installTimeNodeRole mirrors internal/render/installer.installerNodeRole: an infra
+// host is a worker at install time (promoted to infra day-2), so it collapses to
+// "worker" for the destructive-identity hash. Kept local to avoid importing the
+// installer render package into the workflow layer.
+func installTimeNodeRole(role string) string {
+	if role == v1alpha1.NodeRoleWorker || role == v1alpha1.NodeRoleInfra {
+		return v1alpha1.NodeRoleWorker
+	}
+	return v1alpha1.NodeRoleMaster
 }
