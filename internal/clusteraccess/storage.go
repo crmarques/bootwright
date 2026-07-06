@@ -11,17 +11,12 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-const (
-	cephAdminConfigPath  = "/etc/ceph/ceph.conf"
-	cephAdminKeyringPath = "/etc/ceph/ceph.client.admin.keyring"
-	// cephDashboardUser is cephadm's default initial dashboard user; Bootwright
-	// does not override it at bootstrap, so it is always "admin".
-	cephDashboardUser = "admin"
-	// cephDashboardPasswordFile is the controller-side secrets filename the
-	// storage_cluster_cephadm role writes the captured dashboard password to,
-	// alongside the container clusters' kubeadmin-password.
-	cephDashboardPasswordFile = "dashboard-password"
-)
+// cephDashboardPasswordFile is the controller-side secrets filename the
+// storage_cluster_cephadm role writes the captured dashboard password to,
+// alongside the container clusters' kubeadmin-password. The Ceph on-node layout
+// facts (config/keyring paths, default dashboard user) are owned by
+// storage/topology alongside the dashboard port.
+const cephDashboardPasswordFile = "dashboard-password"
 
 // cephDashboardPort is the dashboard/mgmt-gateway https port shown in the access
 // URL. It derives from the single owner of that default (topology) so the
@@ -87,8 +82,8 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		Management:       management,
 		SeedHost:         cluster.Spec.Ceph.Cephadm.Bootstrap.Host,
 		MonitorEndpoints: topology.MonitorEndpoints(state, cluster),
-		ConfigPath:       cephAdminConfigPath,
-		KeyringPath:      cephAdminKeyringPath,
+		ConfigPath:       topology.CephAdminConfigPath,
+		KeyringPath:      topology.CephAdminKeyringPath,
 	}
 	if summary.SeedHost != "" {
 		summary.SeedAddress = topology.NodeAddress(state, cluster, summary.SeedHost)
@@ -111,7 +106,7 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 	// which stats the file without reading it).
 	if management == v1alpha1.StorageClusterManagementManaged {
 		if path := StorageDashboardPasswordPath(clustersDir, cluster.Metadata.Name); path != "" {
-			summary.DashboardUser = cephDashboardUser
+			summary.DashboardUser = topology.CephDashboardDefaultUser
 			summary.DashboardPasswordPath = path
 			summary.DashboardPasswordCommand = "sudo cat " + shellquote.Quote([]string{path})
 			summary.DashboardPassword = FileStatus(path)

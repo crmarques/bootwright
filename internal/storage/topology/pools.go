@@ -22,6 +22,18 @@ const (
 	// for both the renderer (spec.ceph.management.port) and the access-summary
 	// dashboard URL, so the deployed gateway and the reported URL cannot drift.
 	CephManagementDefaultPort = 8443
+
+	// CephAdminConfigPath and CephAdminKeyringPath are the seed-node paths where
+	// cephadm places the cluster config and the client.admin keyring. Bootwright
+	// keeps no copy on the controller, so access (ssh + cephadm shell) references
+	// these on-node paths; they live here with the other Ceph default-layout facts
+	// so the access summary and any future storage consumer read one owner.
+	CephAdminConfigPath  = "/etc/ceph/ceph.conf"
+	CephAdminKeyringPath = "/etc/ceph/ceph.client.admin.keyring"
+
+	// CephDashboardDefaultUser is cephadm's default initial dashboard user.
+	// Bootwright does not override it at bootstrap, so it is always "admin".
+	CephDashboardDefaultUser = "admin"
 )
 
 // EffectivePoolReplicas resolves a replicated pool's size/minSize: authored
