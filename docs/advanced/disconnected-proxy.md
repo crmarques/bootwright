@@ -64,6 +64,15 @@ or the Red Hat CDN over the network during install; on a proxied estate that
 traffic goes through `proxyFor.machineOSInstall`. See
 [Managed OS installs](managed-os.md) for the install-media side.
 
+For a fully air-gapped estate that has a RHEL DVD but no package mirror or
+reachable CDN, the boot ISO's `packageSource: hostedTree` is the self-contained
+option: Bootwright extracts the DVD once into the artifact server and each node
+installs GPG-signed packages from that local tree over the `machineBoot` http
+endpoint — no external mirror, CDN, or proxy at install time. The node's package
+fetch is local, so it is **not** routed through `proxyFor.machineOSInstall`. See
+[hostedTree](managed-os.md#package-source-mirror-redhatcdn-or-hostedtree) for the
+media and endpoint wiring.
+
 !!! warning "machineOSInstall must be an external proxy"
     The managed OS is installed *before* any Bootwright-managed proxy could
     exist, so `machineOSInstall` only takes effect for an `external` proxy entry

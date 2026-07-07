@@ -131,6 +131,64 @@ spec:
       fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
 ```
 
+During apply Bootwright extracts the DVD **once** into the artifact server's
+document root (`.../public/trees/<id>/`) and serves it as an installation tree;
+each node boots the small `bootMedia` ISO over BMC virtual media and fetches its
+packages from that tree over HTTP. So the ~10 GB DVD payload lands on disk once
+per `(cluster, image)` instead of inside every per-node install ISO — the disk
+lever the tip above describes, taken all the way.
+
+`hostedTree` needs two things wired up:
+
+1. **Stage both ISOs in the media store.** `bootMedia` is the small boot ISO and
+   `fromMedia` is the full DVD; add each so both are checksum-verified:
+
+    ```
+    bootwright media add rhel-9.7-x86_64-boot.iso --from-file …
+    bootwright media add rhel-9.7-x86_64-dvd.iso  --from-file …
+    ```
+
+    `fromMedia` must be a `local-media:` (or `file://`) reference — not a URL —
+    so the DVD is verified in the store before it is served, and it must differ
+    from `bootMedia`.
+
+2. **A node-reachable `machineBoot` HTTP endpoint.** The tree is served over the
+   cluster's `machineBoot` artifact endpoint, so the artifact server needs an
+   `http` listener and the endpoint must be bound (on the cluster's
+   `install.artifactAccess` or an `Environment` default):
+
+    ```yaml
+    spec:                     # InfraComponent: the artifact server
+      artifactServer:
+        listeners:
+          - { name: https, protocol: https, port: 8443 }   # BMC fetches the boot ISO
+          - { name: http,  protocol: http,  port: 8080 }   # node fetches packages
+        endpoints:
+          - { name: tree, listenerRef: http, addressRef: ip }
+    ```
+
+    ```yaml
+    spec:                     # Environment defaults (or a cluster's install.artifactAccess)
+      defaults:
+        artifactAccess:
+          machineBoot:
+            endpointRef: tree
+    ```
+
+    Serve `machineBoot` over **http**. The Anaconda installer verifies TLS and
+    would reject the artifact server's self-signed certificate; packages stay Red
+    Hat GPG-signed, so plain http is content-safe (a tampered tree cannot install
+    an unsigned package). The BMC still fetches the boot ISO over HTTPS as before —
+    only the package fetch moves to the node.
+
+!!! note "Trust: as safe as a sealed per-node ISO"
+    The DVD is sha256-verified in the media store, extracted faithfully (Red Hat's
+    documented full copy, preserving `.treeinfo`), then published read-only and
+    content-addressed, so the served tree provably equals the verified DVD; the
+    node installs only Red Hat GPG-signed packages, which `dnf` enforces during
+    the install. Nothing on the wire can substitute an unsigned or tampered
+    package, matching the trust of installing from a sealed DVD ISO.
+
 !!! note "Registering against a corporate Satellite"
     A `redhatCDN` install registers against the public Red Hat CDN unless the
     referenced entitlement's `rhsm` arm carries a `satellite` block, in which case
