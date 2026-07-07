@@ -236,6 +236,37 @@ func TestInventoryUsesLocalConnectionForControllerAddressAliasHostRefs(t *testin
 	}
 }
 
+func TestInventoryUsesLocalConnectionForBastionWithoutSSH(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	// A provided-OS bastion may omit its ssh block to declare it is the local
+	// bastion bootwright runs on.
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name == "bastion" {
+			state.Machines[i].Spec.Access.SSH = nil
+		}
+	}
+
+	// A policy that matches no address, to prove the local connection comes from
+	// the absent ssh block, not from controller address resolution.
+	inv := inventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
+		Hostname:       func() (string, error) { return "somewhere-else", nil },
+		InterfaceAddrs: func() ([]net.Addr, error) { return nil, nil },
+		LookupIP:       func(string) ([]net.IP, error) { return nil, nil },
+	}})
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	serviceHost := hosts["bastion"].(map[string]any)
+	if got := serviceHost["ansible_connection"]; got != "local" {
+		t.Fatalf("ansible_connection = %v, want local for ssh-less bastion: %v", got, serviceHost)
+	}
+	if _, ok := serviceHost["ansible_ssh_private_key_file"]; ok {
+		t.Fatalf("ssh-less bastion should not render SSH key material: %v", serviceHost)
+	}
+}
+
 func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {

@@ -64,7 +64,13 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 	hosts := map[string]any{}
 	for _, name := range sortedHostSet(allHostSet) {
 		h, ok := stateview.Machine(state, name)
-		if !ok || h.Spec.Access.SSH == nil {
+		if !ok {
+			continue
+		}
+		// A machine with no ssh block is only reachable when it is the local
+		// bastion bootwright runs on (provided-OS, rendered ansible_connection:
+		// local); an ssh-less agent node stays out of the SSH host set.
+		if h.Spec.Access.SSH == nil && !locality.IsControllerLocalMachine(h, localPolicy) {
 			continue
 		}
 		hosts[name] = machineInventoryEntry(h, env, paths, localPolicy)

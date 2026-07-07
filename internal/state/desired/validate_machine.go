@@ -178,16 +178,13 @@ func validateMachineOS(prefix string, machine v1alpha1.Machine, installProfiles 
 }
 
 func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
-	if machine.Spec.OS.Provided == nil {
-		if machine.Spec.Access.SSH == nil {
-			return nil
-		}
-		return validateMachineSSH(prefix, machine)
-	}
-	if *machine.Spec.OS.Provided || machine.Spec.OS.InstallProfileRef.Name != "" {
-		if machine.Spec.Access.SSH == nil {
-			return []string{prefix + ".ssh is required when os.provided=true or os.installProfileRef is set"}
-		}
+	// bootwright installs the OS only when os.installProfileRef is set, and it
+	// reaches the freshly-installed node over SSH, so ssh is mandatory there. A
+	// provided-OS Machine may omit ssh to declare it is the local bastion
+	// bootwright runs on: it is rendered with ansible_connection: local and has
+	// no remote address to connect to (see locality.IsControllerLocalMachine).
+	if machine.Spec.OS.InstallProfileRef.Name != "" && machine.Spec.Access.SSH == nil {
+		return []string{prefix + ".ssh is required when os.installProfileRef is set"}
 	}
 	if machine.Spec.Access.SSH == nil {
 		return nil

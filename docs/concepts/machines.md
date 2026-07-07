@@ -18,8 +18,9 @@ after install.
 rules on this kind:
 
 - **provided** (`os.provided: true`) — the machine already runs a usable OS.
-  Bootwright neither provisions a substrate nor installs an OS; it only needs SSH
-  access.
+  Bootwright neither provisions a substrate nor installs an OS; it reaches the
+  machine over `access.ssh`. Omitting `access.ssh` declares it is the local
+  bastion Bootwright runs on, and it is reached with a local connection.
 - **managed** (`os.provided: false` plus `os.installProfileRef`) — Bootwright
   installs the OS through Anaconda before any cluster or storage work, using a
   [`MachineImage`](#machineimage) and a [`MachineInstallProfile`](#machineinstallprofile).
@@ -58,7 +59,7 @@ The tables below describe only `spec`.
 | `spec.network.config` | No | None | Install network selection and overrides. Must be empty when `os.provided: true`. |
 | `spec.network.interfaceBinding[]` | When `os.provided: false` on `baremetal` with a `NetworkConfig` | None | Maps hardware NIC names to NMState interface names. |
 | `spec.addresses[]` | No | None | Durable named addresses used by SSH, services, and endpoint resolution. |
-| `spec.access.ssh` | When `os.provided: true` or `os.installProfileRef` is set | None | SSH address, user, key, and optional known-hosts material. |
+| `spec.access.ssh` | When `os.installProfileRef` is set | None | SSH address, user, key, and optional known-hosts material. Optional on a provided-OS machine: omit it to declare the local bastion (local connection). |
 
 ### Capabilities
 
@@ -78,9 +79,11 @@ and gates several other fields.
 !!! warning "`os.provided: true` means OS-ready and substrate-free"
     When `os.provided: true` the machine already runs a usable OS and Bootwright
     neither provisions a substrate nor installs an OS. In that mode
-    `os.installProfileRef`, `os.install`, and `network.config` must all be empty,
-    and `access.ssh` is required. Setting any of those install fields alongside
-    `os.provided: true` is a validation error.
+    `os.installProfileRef`, `os.install`, and `network.config` must all be empty.
+    `access.ssh` is optional: supply it to reach a remote host, or omit it to
+    declare the local bastion Bootwright runs on (reached with a local
+    connection). Setting any of those install fields alongside `os.provided:
+    true` is a validation error.
 
 When `os.provided: false`, the machine needs a substrate
 (`substrate.providerRef`). It is OS-installed by Bootwright when
@@ -156,7 +159,9 @@ with `spec`; the two are mutually exclusive. `overrides` and
 
 `access.ssh` carries durable SSH connection details. Both `ssh.addressRef` (a
 name from `spec.addresses[]`) and `ssh.keyRef` are required whenever the block is
-present.
+present. A provided-OS machine may omit the whole block to declare it is the
+local bastion Bootwright runs on; it is then reached with a local connection and
+needs no SSH address or key.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
