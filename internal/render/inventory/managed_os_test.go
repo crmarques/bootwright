@@ -330,37 +330,17 @@ func TestManagedOSInstallRendersFIPSKernelArgs(t *testing.T) {
 	}
 }
 
-func TestManagedOSInstallKeepsProfileRepositoriesAdditional(t *testing.T) {
-	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
-	if err != nil {
-		t.Fatalf("LoadNormalizeValidate: %v", err)
-	}
-	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.Repositories = append(state.MachineInstallProfiles[0].Spec.Installer.Anaconda.Repositories,
-		v1alpha1.MachineInstallRepository{ID: "extras", BaseURL: "https://repos.example.test/rhel/9/extras/x86_64/os/"},
-	)
-
-	vars := VarsWithSecretsDir(state, "/context/secrets")
-	groups := vars["bootwright_managed_os_install_groups"].([]any)
-	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
-	installer := first["osInstall"].(map[string]any)["installer"].(map[string]any)
-	if _, ok := installer["sourceURL"]; ok {
-		t.Fatalf("installer.sourceURL = %v, want omitted for DVD media", installer["sourceURL"])
-	}
-	repositories := installer["repositories"].([]any)
-	if len(repositories) != 1 {
-		t.Fatalf("repositories = %v", repositories)
-	}
-}
-
 func TestManagedOSInstallUsesImageSourceURL(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-		URL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
-		Repositories: []v1alpha1.MachineInstallRepository{
-			{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		Mirror: &v1alpha1.MachinePackageMirror{
+			BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+			Repositories: []v1alpha1.MachineInstallRepository{
+				{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+			},
 		},
 	}
 
@@ -388,10 +368,10 @@ func TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
-	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-		Type:      v1alpha1.MachineImageInstallSourceTypeHostedTree,
-		FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso",
+	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		HostedTree: &v1alpha1.MachinePackageHostedTree{
+			FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso",
+		},
 	}
 
 	vars := VarsWithSecretsDir(state, "/context/secrets")
@@ -424,10 +404,10 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 			ConnectToInsights: true,
 		},
 	})
-	state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
-	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-		Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
-		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+		},
 	}
 
 	vars := VarsWithSecretsDir(state, "/context/secrets")
@@ -473,10 +453,10 @@ func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
 				},
 			},
 		})
-		state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
-		state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-			Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
-			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+		state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
+			RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+				EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+			},
 		}
 		return state
 	}

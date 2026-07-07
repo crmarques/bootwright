@@ -21,7 +21,11 @@ import (
 // the machineBoot listener (author it http: the installer verifies TLS and
 // would reject a self-signed artifact certificate the node does not trust).
 func machineOSHostedTreeVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, image v1alpha1.MachineImage) (string, map[string]any, bool) {
-	dvd, err := media.Resolve(image.Spec.InstallSource.FromMedia)
+	hostedTree := image.Spec.PackageSource.GetHostedTree()
+	if hostedTree == nil {
+		return "", nil, false
+	}
+	dvd, err := media.Resolve(hostedTree.FromMedia)
 	if err != nil {
 		return "", nil, false
 	}

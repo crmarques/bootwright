@@ -85,15 +85,13 @@ func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 		MachineImages: []v1alpha1.MachineImage{{
 			Metadata: v1alpha1.Metadata{Name: "rhel-iso"},
 			Spec: v1alpha1.MachineImageSpec{
-				Type: "iso",
-				URL:  "nfs://server/export/rhel.iso",
+				BootMedia: "nfs://server/export/rhel.iso",
 			},
 		}},
 		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
 			Spec: v1alpha1.MachineInstallProfileSpec{
 				Installer: v1alpha1.MachineInstallProfileInstaller{
-					Type: v1alpha1.MachineInstallProfileTypeAnaconda,
 					Anaconda: &v1alpha1.MachineInstallAnaconda{
 						ImageRef: v1alpha1.LocalObjectReference{Name: "rhel-iso"},
 					},
@@ -119,7 +117,7 @@ func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 		}},
 	}
 
-	want := `StorageCluster/ceph spec.ceph.topology.hosts[0].machineRef "ceph-0" MachineImage "rhel-iso" spec.url "nfs://server/export/rhel.iso" does not resolve to installable media:`
+	want := `StorageCluster/ceph spec.ceph.topology.hosts[0].machineRef "ceph-0" MachineImage "rhel-iso" spec.bootMedia "nfs://server/export/rhel.iso" does not resolve to installable media:`
 	renderedDir := t.TempDir()
 	if _, err := render.All(renderedDir, t.TempDir(), t.TempDir(), state); err == nil {
 		t.Fatal("render.All succeeded, want unresolvable OS-install image error")
@@ -134,7 +132,7 @@ func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 
 	// A resolvable ISO URL clears this specific check: the same machine no
 	// longer contributes an unresolved-media event.
-	state.MachineImages[0].Spec.URL = "https://example.com/rhel-boot.iso"
+	state.MachineImages[0].Spec.BootMedia = "https://example.com/rhel-boot.iso"
 	if _, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state); err != nil && strings.Contains(err.Error(), "does not resolve to installable media") {
 		t.Fatalf("render.All still reports unresolvable media for a resolvable URL: %v", err)
 	}

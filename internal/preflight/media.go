@@ -38,20 +38,32 @@ func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, sec
 		if !ok {
 			continue
 		}
-		resolved, err := media.Resolve(image.Spec.URL)
-		if err != nil || resolved.Path == "" {
-			// A bad reference is a validate-phase concern; an empty path is an
-			// http(s):// image the provider host fetches itself.
-			continue
+		for _, ref := range machineImageMediaRefs(image) {
+			resolved, err := media.Resolve(ref)
+			if err != nil || resolved.Path == "" {
+				// A bad reference is a validate-phase concern; an empty path is an
+				// http(s):// image the provider host fetches itself.
+				continue
+			}
+			if seen[resolved.Path] {
+				continue
+			}
+			seen[resolved.Path] = true
+			checks = append(checks, installerMediaCheck(resolved, deps))
 		}
-		if seen[resolved.Path] {
-			continue
-		}
-		seen[resolved.Path] = true
-		checks = append(checks, installerMediaCheck(resolved, deps))
 	}
 	sort.SliceStable(checks, func(i, j int) bool { return checks[i].Name < checks[j].Name })
 	return checks
+}
+
+// machineImageMediaRefs lists the local ISO references an image needs staged on
+// the controller: bootMedia always, plus the hostedTree DVD when set.
+func machineImageMediaRefs(image v1alpha1.MachineImage) []string {
+	refs := []string{image.Spec.BootMedia}
+	if t := image.Spec.PackageSource.GetHostedTree(); t != nil {
+		refs = append(refs, t.FromMedia)
+	}
+	return refs
 }
 
 func installerMediaCheck(resolved media.Resolved, deps Deps) Check {

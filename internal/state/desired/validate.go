@@ -375,24 +375,25 @@ func validateMachineImageEntitlements(state v1alpha1.State) []string {
 	env := primaryEnvironment(&state)
 	var errs []string
 	for _, image := range state.MachineImages {
-		source := image.Spec.InstallSource
-		if source.Type != v1alpha1.MachineImageInstallSourceTypeRHSM {
+		cdn := image.Spec.PackageSource.GetRedhatCDN()
+		if cdn == nil {
 			continue
 		}
-		ref := source.EntitlementRef.Name
+		ref := cdn.EntitlementRef.Name
 		if ref == "" {
 			continue
 		}
+		field := fmt.Sprintf("MachineImage/%s spec.packageSource.redhatCDN.entitlementRef %q", image.Metadata.Name, ref)
 		entitlement, ok := entitlements.Find(env, ref)
 		if !ok {
-			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef %q does not match any Environment.spec.entitlements[].name", image.Metadata.Name, ref))
+			errs = append(errs, field+" does not match any Environment.spec.entitlements[].name")
 			continue
 		}
 		if entitlement.Provider != v1alpha1.EntitlementProviderRedHat {
-			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef %q resolves to provider %q, want %q", image.Metadata.Name, ref, entitlement.Provider, v1alpha1.EntitlementProviderRedHat))
+			errs = append(errs, fmt.Sprintf("%s resolves to provider %q, want %q", field, entitlement.Provider, v1alpha1.EntitlementProviderRedHat))
 		}
 		if entitlement.Product != v1alpha1.EntitlementProductRHEL {
-			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef %q resolves to product %q, want %q", image.Metadata.Name, ref, entitlement.Product, v1alpha1.EntitlementProductRHEL))
+			errs = append(errs, fmt.Sprintf("%s resolves to product %q, want %q", field, entitlement.Product, v1alpha1.EntitlementProductRHEL))
 		}
 	}
 	return errs
@@ -609,7 +610,7 @@ func clusterInstallUsesHostedTree(state v1alpha1.State, ci v1alpha1.ClusterInsta
 		if !ok {
 			continue
 		}
-		if image.Spec.InstallSource.Type == v1alpha1.MachineImageInstallSourceTypeHostedTree {
+		if image.Spec.PackageSource.GetHostedTree() != nil {
 			return true
 		}
 	}

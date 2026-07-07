@@ -104,9 +104,10 @@ func TestInstallSourceReachabilitySkipsDVDMedia(t *testing.T) {
 // entitlement secret-material checks, so it is not probed here.
 func TestInstallSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
-	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-		Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
-		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+		},
 	}
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
 		t.Fatal("redhatCDN install sources must not be probed")
@@ -123,9 +124,10 @@ func TestInstallSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 // source that installs fine — report it INFO without probing.
 func TestInstallSourceReachabilityYumVariableReportsInfo(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
-	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-		Type: v1alpha1.MachineImageInstallSourceTypeURL,
-		URL:  "https://mirror.example.test/rhel/9/BaseOS/$basearch/os/",
+	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		Mirror: &v1alpha1.MachinePackageMirror{
+			BaseURL: "https://mirror.example.test/rhel/9/BaseOS/$basearch/os/",
+		},
 	}
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
 		t.Fatal("a yum-variable baseURL must not be probed")

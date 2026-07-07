@@ -11,7 +11,6 @@ spec:
 
   installer:
     # Anaconda installs RHEL onto each node from the DVD ISO BEFORE cephadm runs.
-    type: anaconda
     anaconda:
       imageRef: rhel-9-7-dvd
 

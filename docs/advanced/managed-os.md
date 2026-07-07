@@ -43,21 +43,20 @@ profile's `installer.anaconda.imageRef` names the image.
 
 `MachineImage` describes the bootable media and where Anaconda fetches packages.
 
-### Boot ISO vs DVD media
+### Boot media vs DVD
 
-`spec.mediaType` is `boot` or `dvd`:
+A `MachineImage` names one bootable ISO (`spec.bootMedia`) and, for a boot ISO,
+where Anaconda fetches packages (`spec.packageSource`):
 
 - A **DVD ISO** (~10 GB) bundles the installer and the BaseOS/AppStream
-  repositories, so Anaconda installs offline with a Kickstart `cdrom` source and
-  needs no `installSource`.
-- A **boot ISO** (~1 GB) carries only the installer, so it **requires** an
-  `installSource`: Bootwright renders a `url --url=` (or RHSM) install source plus
+  repositories, so Anaconda installs offline with a Kickstart `cdrom` source —
+  set only `bootMedia` and omit `packageSource`.
+- A **boot ISO** (~1 GB) carries only the installer, so it needs a
+  `packageSource`: Bootwright renders a `url --url=` (or RHSM) install source plus
   `repo` entries instead of `cdrom`, and Anaconda fetches packages over the
   network during install.
 
-`mediaType` defaults to `dvd` when omitted; the filename does not select it, so a
-netinstall (boot) ISO always needs an explicit `mediaType: boot`. The DVD form
-from the lab example:
+The DVD form from the lab example:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -65,25 +64,24 @@ kind: MachineImage
 metadata:
   name: rhel-9-x86-64-dvd
 spec:
-  type: iso
-  mediaType: dvd
-  url: local-media:rhel-9.7-x86_64-dvd.iso
+  bootMedia: local-media:rhel-9.7-x86_64-dvd.iso
 ```
 
 !!! tip "Disk footprint scales with media size × node count"
     Bootwright bakes each machine's Kickstart into its **own** install ISO
     (Redfish virtual-media boot cannot pass kernel arguments), so an N-node group
     costs about `N ×` the source media size in customized ISOs. The source ISO is
-    staged once per `(cluster, image)`. This is the main reason to prefer a
-    `mediaType: boot` source (~1 GB) over a full `dvd` (~10 GB) for groups.
+    staged once per `(cluster, image)`. This is the main reason to prefer a small
+    boot ISO with a `packageSource` (~1 GB) over a full DVD (~10 GB) for groups; a
+    `hostedTree` package source keeps the payload off every node entirely.
 
-### Install source: url vs redhatCDN
+### Package source: mirror, redhatCDN, or hostedTree
 
-`installSource` (required for `mediaType: boot`) is a presence union; its `type`
-is derived from the fields present when omitted.
+`packageSource` is a discriminated union — the arm you set is the source type
+(there is no `type` field). Omit it entirely for a full DVD.
 
-For a **package mirror** (`type: url`), point `installSource.url` at a BaseOS
-install tree and add the AppStream repository — a RHEL install needs both:
+For a **package mirror** (`mirror`), point `baseURL` at a BaseOS install tree and
+add the AppStream repository — a RHEL install needs both:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -91,21 +89,18 @@ kind: MachineImage
 metadata:
   name: rhel-9-boot
 spec:
-  type: iso
-  mediaType: boot
-  url: local-media:rhel-9.7-x86_64-boot.iso
-  installSource:
-    type: url
-    url: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
-    repositories:
-      - id: appstream
-        baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
+  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
+  packageSource:
+    mirror:
+      baseURL: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
+      repositories:
+        - id: appstream
+          baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
-For the **Red Hat CDN** (`type: redhatCDN`), reference a `rhel` entitlement (an
-RHSM organization plus activation key) declared in
-`Environment.spec.entitlements`; Anaconda registers the node and installs from the
-subscription CDN:
+For the **Red Hat CDN** (`redhatCDN`), reference a `rhel` entitlement (an RHSM
+organization plus activation key) declared in `Environment.spec.entitlements`;
+Anaconda registers the node and installs from the subscription CDN:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -113,12 +108,27 @@ kind: MachineImage
 metadata:
   name: rhel-9-boot-cdn
 spec:
-  type: iso
-  mediaType: boot
-  url: local-media:rhel-9.7-x86_64-boot.iso
-  installSource:
-    type: redhatCDN
-    entitlementRef: rhel
+  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
+  packageSource:
+    redhatCDN:
+      entitlementRef: rhel
+```
+
+For an air-gapped estate with no mirror, **`hostedTree`** has Bootwright extract
+the DVD named by `fromMedia` once into the cluster artifact server and serve it
+locally, so the ~10 GB payload is not baked into every per-node ISO (see
+[Disconnected & proxied installs](disconnected-proxy.md)):
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-boot-tree
+spec:
+  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
+  packageSource:
+    hostedTree:
+      fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
 ```
 
 !!! note "Registering against a corporate Satellite"
@@ -136,7 +146,7 @@ spec:
 - `spec.headersRefs[]` — `Environment` secrets holding extra HTTP headers sent
   when downloading the ISO.
 
-`bootwright apply` preflight probes each `type: url` install tree's
+`bootwright apply` preflight probes each `packageSource.mirror` install tree's
 `repodata/repomd.xml` before the machines phase: a server that answers without
 yum metadata fails fast, while one the controller cannot reach only warns — the
 install nodes, not the controller, are the authoritative fetcher.
@@ -157,7 +167,6 @@ spec:
     version: "9.7"
     architecture: x86_64
   installer:
-    type: anaconda
     anaconda:
       imageRef: rhel-9-x86-64-dvd
   customizations:
@@ -258,10 +267,11 @@ bootwright media remove --name rhel-9.7-x86_64-boot.iso --yes
 ```
 
 `media add` takes exactly one of `--from-file` or `--from-url`, an optional
-`--sha256` checksum, and `--force` to replace an existing entry. A `*boot.iso`
-filename auto-derives `mediaType: boot` on any `MachineImage` that references it.
-Besides `local-media:`, a `MachineImage.spec.url` may be a `file://` absolute
-path or an `http(s)://` URL.
+`--sha256` checksum, and `--force` to replace an existing entry. Whether a
+`MachineImage` is a boot ISO or a full DVD is decided by its `packageSource`
+(present ⇒ boot ISO, absent ⇒ DVD), not by the filename. Besides `local-media:`,
+a `MachineImage.spec.bootMedia` may be a `file://` absolute path or an
+`http(s)://` URL.
 
 ## Routing the Anaconda fetch through a proxy
 
@@ -270,7 +280,7 @@ CDN) only through a forward proxy, set
 `Environment.spec.proxyFor.machineOSInstall` to a declared **external** proxy.
 Bootwright renders `--proxy=` onto the `rhsm`, `url`, and `repo` Kickstart
 directives so Anaconda registers and fetches through it — useful for a
-`type: redhatCDN` boot-ISO install on an estate with no internal mirror but a
+`redhatCDN` boot-ISO install on an estate with no internal mirror but a
 corporate proxy. Each node brings up its network from its
 [machine network config](../concepts/machines.md) before Anaconda fetches, so a
 boot ISO needs no extra early-networking setup. For the full proxy-target model

@@ -36,28 +36,26 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if !ok {
 		return nil
 	}
-	resolved, err := media.Resolve(image.Spec.URL)
+	resolved, err := media.Resolve(image.Spec.BootMedia)
 	if err != nil {
 		return nil
 	}
 	env := stateview.Environment(state)
-	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.InstallSource, env, paths.SecretsDir)
+	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, env, paths.SecretsDir)
 	// hostedTree overrides the package source: bootwright extracts fromMedia (a
 	// DVD) into the cluster artifact server and the installing node fetches
 	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
 	// .treeinfo already advertises BaseOS + AppStream, so one tree URL replaces
-	// any authored repositories. An unresolvable tree leaves sourceURL empty so
-	// the boot ISO install fails loudly (cdrom on a package-less ISO) instead of
+	// any repositories. An unresolvable tree leaves sourceURL empty so the boot
+	// ISO install fails loudly (cdrom on a package-less ISO) instead of
 	// mis-installing; the cluster-install validator rejects that up front.
 	var hostedTree map[string]any
-	if image.Spec.InstallSource.Type == v1alpha1.MachineImageInstallSourceTypeHostedTree {
+	if image.Spec.PackageSource.GetHostedTree() != nil {
 		treeURL, tree, _ := machineOSHostedTreeVars(state, ci, image)
 		sourceURL, imageRepositories, hostedTree = treeURL, nil, tree
 	}
-	profileRepositories := machineInstallRepositoryVars(profile.Spec.Installer.Anaconda.Repositories)
 	installer := map[string]any{
-		"type":         profile.Spec.Installer.Type,
-		"repositories": append(imageRepositories, profileRepositories...),
+		"repositories": imageRepositories,
 	}
 	if profile.Spec.Customizations.Security.FIPS.Enabled {
 		installer["kernelArgs"] = []string{"fips=1"}
@@ -72,7 +70,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		installer["proxy"] = proxyVars
 	}
 	sshUser := managedOSSSHUser(machine)
-	imageVars := machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName)
+	imageVars := machineOSInstallImageVars(resolved, machineOSMediaType(image.Spec.PackageSource), image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName)
 	if hostedTree != nil {
 		imageVars["installTree"] = hostedTree
 	}
@@ -235,26 +233,45 @@ func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.Instal
 	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
 }
 
-// machineImageInstallSourceVars renders the install source exactly as
-// normalize materialized it: the primary install tree is source.url
-// (normalize already promoted repositories[0].baseURL into it when the url
-// was omitted) and every remaining repository is an additional repo entry.
-func machineImageInstallSourceVars(source v1alpha1.MachineImageInstallSource, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
-	rhsm := map[string]any{}
-	if source.EntitlementRef.Name != "" {
-		resolved, ok := entitlements.Resolve(env, source.EntitlementRef.Name, "", secretsDir)
-		if !ok {
-			return source.URL, machineInstallRepositoryVars(source.Repositories), rhsm
-		}
-		rhsm["enabled"] = true
-		rhsm["organizationPath"] = resolved.RHSM.OrganizationPath
-		rhsm["activationKeyPath"] = resolved.RHSM.ActivationKeyPath
-		rhsm["connectToInsights"] = resolved.RHSM.ConnectToInsights
-		if satellite := rhsmSatelliteVars(resolved.RHSM.Satellite); satellite != nil {
-			rhsm["satellite"] = satellite
-		}
+// machineOSMediaType derives the render-only image.mediaType the Ansible role
+// keys its mkksiso path on: a full DVD (no packageSource) carries its packages,
+// anything with a packageSource is a small boot ISO.
+func machineOSMediaType(source *v1alpha1.MachinePackageSource) string {
+	if source == nil {
+		return v1alpha1.MachineImageMediaTypeDVD
 	}
-	return source.URL, machineInstallRepositoryVars(source.Repositories), rhsm
+	return v1alpha1.MachineImageMediaTypeBoot
+}
+
+// machineImageInstallSourceVars projects the packageSource arm into the
+// kickstart install-source vars (sourceURL, repositories, rhsm): mirror →
+// BaseURL + repo entries; redhatCDN → resolved rhsm; nil (a full DVD) and
+// hostedTree both return empty (nil installs via cdrom, and the caller overlays
+// the derived tree URL for hostedTree).
+func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
+	rhsm := map[string]any{}
+	if source == nil {
+		return "", machineInstallRepositoryVars(nil), rhsm
+	}
+	if m := source.Mirror; m != nil {
+		return m.BaseURL, machineInstallRepositoryVars(m.Repositories), rhsm
+	}
+	cdn := source.RedhatCDN
+	if cdn == nil || cdn.EntitlementRef.Name == "" {
+		return "", machineInstallRepositoryVars(nil), rhsm
+	}
+	resolved, ok := entitlements.Resolve(env, cdn.EntitlementRef.Name, "", secretsDir)
+	if !ok {
+		return "", nil, rhsm
+	}
+	rhsm["enabled"] = true
+	rhsm["organizationPath"] = resolved.RHSM.OrganizationPath
+	rhsm["activationKeyPath"] = resolved.RHSM.ActivationKeyPath
+	rhsm["connectToInsights"] = resolved.RHSM.ConnectToInsights
+	if satellite := rhsmSatelliteVars(resolved.RHSM.Satellite); satellite != nil {
+		rhsm["satellite"] = satellite
+	}
+	return "", nil, rhsm
 }
 
 // managedOSInstallProxyVars resolves the environment proxy named by

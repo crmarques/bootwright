@@ -197,23 +197,3 @@ func TestMachineInstallOSFloor(t *testing.T) {
 		t.Fatalf("empty OS rejected here: %v", errs)
 	}
 }
-
-func TestMachineImageDVDRejectsNetworkInstallSource(t *testing.T) {
-	dvd := v1alpha1.MachineImageMediaTypeDVD
-	url := v1alpha1.MachineImageInstallSource{Type: v1alpha1.MachineImageInstallSourceTypeURL, URL: "https://tree.test/os"}
-	if !containsSubstring(validateMachineImageInstallSource("MachineImage/x spec", dvd, "local-media:dvd.iso", url), "is not valid with mediaType: dvd") {
-		t.Fatalf("expected dvd+url rejection")
-	}
-	rhsm := v1alpha1.MachineImageInstallSource{Type: v1alpha1.MachineImageInstallSourceTypeRHSM, EntitlementRef: v1alpha1.LocalObjectReference{Name: "sub"}}
-	if !containsSubstring(validateMachineImageInstallSource("MachineImage/x spec", dvd, "local-media:dvd.iso", rhsm), "is not valid with mediaType: dvd") {
-		t.Fatalf("expected dvd+redhatCDN rejection")
-	}
-	// A DVD with no install source is the normal case and stays valid.
-	if errs := validateMachineImageInstallSource("MachineImage/x spec", dvd, "local-media:dvd.iso", v1alpha1.MachineImageInstallSource{}); len(errs) != 0 {
-		t.Fatalf("dvd without installSource rejected: %v", errs)
-	}
-	// A boot ISO with a url source is unaffected.
-	if containsSubstring(validateMachineImageInstallSource("MachineImage/x spec", v1alpha1.MachineImageMediaTypeBoot, "local-media:boot.iso", url), "is not valid with mediaType: dvd") {
-		t.Fatalf("boot+url incorrectly rejected as dvd")
-	}
-}

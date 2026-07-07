@@ -68,12 +68,13 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 		}
 	}
 	for _, image := range state.MachineImages {
-		if image.Spec.InstallSource.EntitlementRef.Name == "" {
+		cdn := image.Spec.PackageSource.GetRedhatCDN()
+		if cdn == nil || cdn.EntitlementRef.Name == "" {
 			continue
 		}
 		appendEntitlement(
-			image.Spec.InstallSource.EntitlementRef.Name,
-			"MachineImage/"+image.Metadata.Name+" installSource entitlementRef",
+			cdn.EntitlementRef.Name,
+			"MachineImage/"+image.Metadata.Name+" packageSource.redhatCDN entitlementRef",
 			[]string{"machines"},
 			secretRefOwner{},
 		)

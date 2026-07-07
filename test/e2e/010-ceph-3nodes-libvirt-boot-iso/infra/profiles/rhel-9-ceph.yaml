@@ -9,7 +9,6 @@ spec:
     architecture: x86_64
 
   installer:
-    type: anaconda
     anaconda:
       imageRef: rhel-9-x86-64-boot
 

@@ -47,13 +47,14 @@ func installSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 		if !ok {
 			continue
 		}
-		source := image.Spec.InstallSource
-		if source.Type != v1alpha1.MachineImageInstallSourceTypeURL {
-			// DVD media carries its own packages, and redhatCDN reachability
-			// hides behind entitlement auth; neither is probed here.
+		mirror := image.Spec.PackageSource.GetMirror()
+		if mirror == nil {
+			// A full DVD carries its own packages; redhatCDN reachability hides
+			// behind entitlement auth; a hostedTree is served locally by
+			// bootwright. None is probed here — only an operator-hosted mirror.
 			continue
 		}
-		for _, base := range installSourceURLs(source) {
+		for _, base := range installSourceURLs(mirror) {
 			if seen[base] {
 				continue
 			}
@@ -67,12 +68,12 @@ func installSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 
 // installSourceURLs lists the install-tree and repository base URLs that
 // Anaconda fetches packages from, in declaration order (primary tree first).
-func installSourceURLs(source v1alpha1.MachineImageInstallSource) []string {
+func installSourceURLs(mirror *v1alpha1.MachinePackageMirror) []string {
 	var urls []string
-	if source.URL != "" {
-		urls = append(urls, source.URL)
+	if mirror.BaseURL != "" {
+		urls = append(urls, mirror.BaseURL)
 	}
-	for _, repo := range source.Repositories {
+	for _, repo := range mirror.Repositories {
 		if repo.BaseURL != "" {
 			urls = append(urls, repo.BaseURL)
 		}

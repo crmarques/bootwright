@@ -30,9 +30,6 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.Machines {
 		normalizeMachine(&state.Machines[i])
 	}
-	for i := range state.MachineImages {
-		normalizeMachineImage(&state.MachineImages[i])
-	}
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
 	}
@@ -205,39 +202,9 @@ func normalizeMachine(m *v1alpha1.Machine) {
 	}
 }
 
-// normalizeMachineImage materializes the install-media derivations so they
-// land in effective state: mediaType defaults to dvd, an omitted
-// installSource.type derives from which fields are present, and a url install
-// source without a url promotes repositories[0].baseURL to the primary install
-// tree. Validators and renderers read the materialized values instead of
-// recomputing them. Authored values always win; invalid ones are left for
-// Validate to reject.
-func normalizeMachineImage(image *v1alpha1.MachineImage) {
-	spec := &image.Spec
-	// mediaType defaults to dvd unconditionally. A filename suffix must not select
-	// the install mode: deriving boot from a "boot.iso" URL let a pure rename flip
-	// dvd<->boot (and whether installSource is required). A netinstall image
-	// authors mediaType: boot explicitly.
-	if spec.MediaType == "" {
-		spec.MediaType = v1alpha1.MachineImageMediaTypeDVD
-	}
-	source := &spec.InstallSource
-	if source.Type == "" {
-		switch {
-		case source.EntitlementRef.Name != "":
-			source.Type = v1alpha1.MachineImageInstallSourceTypeRHSM
-		case source.FromMedia != "":
-			source.Type = v1alpha1.MachineImageInstallSourceTypeHostedTree
-		case source.URL != "" || len(source.Repositories) > 0:
-			source.Type = v1alpha1.MachineImageInstallSourceTypeURL
-		}
-	}
-	if source.Type == v1alpha1.MachineImageInstallSourceTypeURL &&
-		source.URL == "" && len(source.Repositories) > 0 && source.Repositories[0].BaseURL != "" {
-		source.URL = source.Repositories[0].BaseURL
-		source.Repositories = source.Repositories[1:]
-	}
-}
+// MachineImage needs no normalization: bootMedia and the packageSource arms are
+// authored explicitly (no mediaType default, no install-source type derivation,
+// no repositories[0] promotion). Validators and renderers read the arms directly.
 
 func normalizeProvider(p *v1alpha1.InfraProvider) {
 	if p.Spec.Type == v1alpha1.ProvisionerLibvirt && p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil {

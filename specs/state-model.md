@@ -253,9 +253,7 @@ kind: MachineImage
 metadata:
   name: rhel-94-dvd-iso
 spec:
-  type: iso
-  mediaType: dvd
-  url: local-media:rhel-9.4-x86_64-dvd.iso
+  bootMedia: local-media:rhel-9.4-x86_64-dvd.iso
   checksum: sha256:0000000000000000000000000000000000000000000000000000000000000000
   trustRefs:
     - image-ca
@@ -263,27 +261,24 @@ spec:
 
 Rules:
 
-- `spec.type` currently accepts `iso`.
-- `spec.mediaType` accepts `dvd` or `boot`; when omitted it defaults to `dvd`
-  (materialized by `render effective`). The filename never selects the install
-  mode — deriving it from a `boot.iso` suffix would let a pure rename flip the
-  mode and whether `installSource` is required — so a netinstall (boot) image
-  must author `mediaType: boot` explicitly.
-- `spec.installSource` is required for `mediaType: boot`. It accepts
-  `type: url` for a plain HTTP(S) install tree or `type: redhatCDN` for an
-  RHSM-backed Red Hat CDN install. When `type` is omitted, normalize derives
-  it from the fields present: `entitlementRef` means `redhatCDN`, `url` or
-  `repositories` mean `url`.
-- `installSource.type: url` can set `url` as the primary Anaconda install
-  tree. Alternatively, `repositories[0].baseURL` becomes the primary install
-  tree and subsequent repositories become additional Kickstart `repo`
-  entries; normalize materializes the promotion, so the effective state
-  shows the chosen install tree in `url`.
-- `installSource.type: redhatCDN` sets `entitlementRef`, which must
-  resolve to a Red Hat `rhel` entitlement. RHSM organization and activation
-  key secret refs are owned by that Environment entitlement.
-- `url` is required and accepts `local-media:<filename.iso>`, `file://`
-  absolute paths, `http://`, or `https://`.
+- `spec.bootMedia` is required and locates the ISO the machine boots over BMC
+  virtual media. It accepts `local-media:<filename.iso>`, `file://` absolute
+  paths, `http://`, or `https://`.
+- `spec.packageSource` is omitted for a full DVD — the DVD carries its own
+  packages, which install offline via `cdrom`. Set it for a small boot ISO,
+  which carries no packages, to declare where Anaconda fetches them. Exactly
+  one arm selects the source: `mirror`, `redhatCDN`, or `hostedTree`.
+- `packageSource.mirror` installs from an HTTP(S) install tree you host:
+  `baseURL` is the primary Anaconda install tree (BaseOS) and `repositories[]`
+  become additional Kickstart `repo` entries (e.g. AppStream). Every `baseURL`
+  must be `http://` or `https://`.
+- `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a Red
+  Hat `rhel` entitlement. RHSM organization and activation key secret refs are
+  owned by that Environment entitlement.
+- `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
+  once and serves from the cluster artifact server. It must reference local
+  media (`local-media:` or `file://`, not a URL) and must differ from
+  `spec.bootMedia`.
 - `local-media:<filename.iso>` resolves to the root-managed ISO media store
   under `/var/lib/bootwright/media/`. The media key is exactly the stored
   filename; it must be a basename ending in `.iso` and must not contain path
@@ -310,7 +305,6 @@ spec:
     version: "9.4"
     architecture: x86_64
   installer:
-    type: anaconda
     anaconda:
       imageRef: rhel-94-dvd-iso
   customizations:
@@ -337,12 +331,11 @@ spec:
 
 Rules:
 
-- `spec.installer.type` currently accepts `anaconda`.
-- `spec.installer.anaconda.imageRef` references a `MachineImage`.
-- `spec.installer.anaconda.repositories[]` declares additional Anaconda
-  repositories for the profile; each entry requires an `id` and an `http(s)`
-  `baseURL`. The primary boot-ISO install source is owned by the referenced
-  `MachineImage`.
+- `spec.installer.anaconda` is the only installer backend; its presence is the
+  discriminator (there is no `type` field).
+- `spec.installer.anaconda.imageRef` references a `MachineImage`. Additional
+  install repositories are owned by that `MachineImage`'s
+  `spec.packageSource.mirror.repositories[]`, not by the profile.
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.

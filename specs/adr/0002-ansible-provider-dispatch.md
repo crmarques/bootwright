@@ -117,7 +117,7 @@ and the optional media hook). Single-implementation roles —
 `container_cluster_agent_install`, `cluster_network_load_balancer_vips` — have no
 alternative to dispatch to, so their task playbooks import them by their exact
 collection name and select them by their owning kind's discriminator (for OS
-install, `MachineInstallProfile.spec.installer.type`). When such a family grows a
+install, the `MachineInstallProfile.spec.installer.anaconda` arm). When such a family grows a
 second backend, move it behind a registry projection like the substrate families
 rather than branching inside a playbook.
 

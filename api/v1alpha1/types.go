@@ -41,28 +41,26 @@ const (
 	ProvisionerBareMetal = "baremetal"
 
 	// Machine canonical capability tags.
-	MachineCapabilityOpenShiftNode          = "openshift-node"
-	MachineCapabilityLibvirt                = "libvirt"
-	MachineCapabilityContainerRuntime       = "container-runtime"
-	MachineCapabilityArtifactServer         = "artifact-server"
-	MachineCapabilityLoadBalancer           = "load-balancer"
-	MachineCapabilityProxy                  = "proxy"
-	MachineCapabilityNameResolution         = "name-resolution"
-	MachineCapabilityNTP                    = "ntp"
-	MachineCapabilityRegistry               = "registry"
-	MachineCapabilityCephAdmin              = "ceph-admin"
-	MachineCapabilityCephNode               = "ceph-node"
-	MachineInstallOSFamilyRHEL              = "rhel"
-	MachineInstallProfileTypeAnaconda       = "anaconda"
-	MachineImageTypeISO                     = "iso"
-	MachineImageMediaTypeDVD                = "dvd"
-	MachineImageMediaTypeBoot               = "boot"
-	MachineImageInstallSourceTypeURL        = "url"
-	MachineImageInstallSourceTypeRHSM       = "redhatCDN"
-	MachineImageInstallSourceTypeHostedTree = "hostedTree"
-	MachineInstallHostnameMachineName       = "machineName"
-	MachineInstallRootDeviceMachine         = "machineRootDeviceHints"
-	MachineInstallPackageEnvMinimal         = "minimal"
+	MachineCapabilityOpenShiftNode    = "openshift-node"
+	MachineCapabilityLibvirt          = "libvirt"
+	MachineCapabilityContainerRuntime = "container-runtime"
+	MachineCapabilityArtifactServer   = "artifact-server"
+	MachineCapabilityLoadBalancer     = "load-balancer"
+	MachineCapabilityProxy            = "proxy"
+	MachineCapabilityNameResolution   = "name-resolution"
+	MachineCapabilityNTP              = "ntp"
+	MachineCapabilityRegistry         = "registry"
+	MachineCapabilityCephAdmin        = "ceph-admin"
+	MachineCapabilityCephNode         = "ceph-node"
+	MachineInstallOSFamilyRHEL        = "rhel"
+	// MediaType spellings are render-internal now (the schema has no mediaType
+	// field): render emits image.mediaType so the Ansible role can pick the
+	// mkksiso path. dvd = packages ride on bootMedia; boot = a small boot ISO.
+	MachineImageMediaTypeDVD          = "dvd"
+	MachineImageMediaTypeBoot         = "boot"
+	MachineInstallHostnameMachineName = "machineName"
+	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
+	MachineInstallPackageEnvMinimal   = "minimal"
 
 	// Localization baselines applied when a MachineInstallProfile leaves the
 	// corresponding customizations.localization field unset. They match the

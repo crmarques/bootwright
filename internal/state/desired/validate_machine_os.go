@@ -16,20 +16,12 @@ func validateMachineImages(state v1alpha1.State) []string {
 			continue
 		}
 		prefix := fmt.Sprintf("MachineImage/%s spec", image.Metadata.Name)
-		if image.Spec.Type != v1alpha1.MachineImageTypeISO {
-			errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, image.Spec.Type, v1alpha1.MachineImageTypeISO))
+		if image.Spec.BootMedia == "" {
+			errs = append(errs, prefix+".bootMedia is required")
+		} else if err := media.ValidateISOReference(image.Spec.BootMedia); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.bootMedia %s", prefix, err))
 		}
-		switch image.Spec.MediaType {
-		case "", v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot:
-		default:
-			errs = append(errs, fmt.Sprintf("%s.mediaType %q must be one of: %s, %s", prefix, image.Spec.MediaType, v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot))
-		}
-		if image.Spec.URL == "" {
-			errs = append(errs, prefix+".url is required")
-		} else if err := media.ValidateISOReference(image.Spec.URL); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.url %s", prefix, err))
-		}
-		errs = append(errs, validateMachineImageInstallSource(prefix, image.Spec.MediaType, image.Spec.URL, image.Spec.InstallSource)...)
+		errs = append(errs, validateMachinePackageSource(prefix, image.Spec.BootMedia, image.Spec.PackageSource)...)
 		if _, err := media.NormalizeSHA256(image.Spec.Checksum); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
 		}
@@ -56,9 +48,6 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 			errs = append(errs, prefix+".os.architecture is required")
 		}
 		errs = append(errs, validateMachineInstallOSFloor(prefix+".os", profile.Spec.OS)...)
-		if profile.Spec.Installer.Type != v1alpha1.MachineInstallProfileTypeAnaconda {
-			errs = append(errs, fmt.Sprintf("%s.installer.type %q must be %q", prefix, profile.Spec.Installer.Type, v1alpha1.MachineInstallProfileTypeAnaconda))
-		}
 		if profile.Spec.Installer.Anaconda == nil {
 			errs = append(errs, prefix+".installer.anaconda is required")
 			continue
@@ -69,7 +58,6 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		} else if _, ok := images[imageRef]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef %q does not match any MachineImage", prefix, imageRef))
 		}
-		errs = append(errs, validateMachineInstallRepositories(prefix+".installer.anaconda.repositories", profile.Spec.Installer.Anaconda.Repositories)...)
 		customizations := profile.Spec.Customizations
 		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
 			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))
@@ -239,85 +227,51 @@ func machineInstallStringListContains(values []string, want string) bool {
 	return false
 }
 
-// validateMachineImageInstallSource reads the normalize-materialized
-// mediaType and installSource.type; an empty installSource.type means no
-// install source was authored at all. imageURL is spec.url (the booted media),
-// used to reject a hostedTree that points fromMedia back at its own boot ISO.
-func validateMachineImageInstallSource(prefix, mediaType, imageURL string, installSource v1alpha1.MachineImageInstallSource) []string {
+// validateMachinePackageSource checks the packageSource union. nil means
+// bootMedia is a full DVD (packages install offline via cdrom). Otherwise
+// exactly one arm must be set and internally valid; the arm is the source type.
+func validateMachinePackageSource(prefix, bootMedia string, ps *v1alpha1.MachinePackageSource) []string {
+	if ps == nil {
+		return nil
+	}
 	var errs []string
-	sourceType := installSource.Type
-	switch sourceType {
-	case "", v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM, v1alpha1.MachineImageInstallSourceTypeHostedTree:
-	default:
-		return []string{fmt.Sprintf("%s.installSource.type %q must be one of: %s, %s, %s", prefix, installSource.Type, v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM, v1alpha1.MachineImageInstallSourceTypeHostedTree)}
+	arms := 0
+	for _, set := range []bool{ps.Mirror != nil, ps.RedhatCDN != nil, ps.HostedTree != nil} {
+		if set {
+			arms++
+		}
 	}
-	if mediaType == v1alpha1.MachineImageMediaTypeBoot && sourceType == "" {
-		errs = append(errs, prefix+".installSource is required when mediaType is boot")
+	if arms == 0 {
+		return []string{prefix + ".packageSource must set exactly one of: mirror, redhatCDN, hostedTree (or omit packageSource for a full DVD)"}
 	}
-	// A dvd image already carries its packages; pairing it with a url or redhatCDN
-	// install source silently bypasses the DVD payload (the kickstart url/rhsm
-	// command takes precedence) while the multi-GB DVD is still staged per node, and
-	// a version skew between the DVD stage2 and the remote tree can fail mid-install.
-	// A boot ISO is the small media for a network install.
-	if mediaType == v1alpha1.MachineImageMediaTypeDVD &&
-		(sourceType == v1alpha1.MachineImageInstallSourceTypeURL || sourceType == v1alpha1.MachineImageInstallSourceTypeRHSM) {
-		errs = append(errs, fmt.Sprintf("%s.installSource.type %q is not valid with mediaType: dvd; the DVD already carries its packages, so a network install source would bypass the DVD payload. Use mediaType: boot for a network install, or drop installSource to install from the DVD", prefix, sourceType))
+	if arms > 1 {
+		errs = append(errs, prefix+".packageSource must set exactly one of: mirror, redhatCDN, hostedTree")
 	}
-	// fromMedia belongs only to hostedTree; guard it before the type switch so
-	// a stray fromMedia on url/redhatCDN/dvd fails loudly instead of being
-	// silently ignored.
-	if sourceType != v1alpha1.MachineImageInstallSourceTypeHostedTree && installSource.FromMedia != "" {
-		errs = append(errs, prefix+".installSource.fromMedia is only valid when installSource.type is hostedTree")
+	if m := ps.Mirror; m != nil {
+		// baseURL is the primary install tree (the kickstart `url --url=`);
+		// repositories are strictly additional (e.g. AppStream).
+		if m.BaseURL == "" {
+			errs = append(errs, prefix+".packageSource.mirror.baseURL is required")
+		} else if !httpURL(m.BaseURL) {
+			errs = append(errs, prefix+".packageSource.mirror.baseURL must be http:// or https://")
+		}
+		errs = append(errs, validateMachineInstallRepositories(prefix+".packageSource.mirror.repositories", m.Repositories)...)
 	}
-	switch sourceType {
-	case "":
-		return errs
-	case v1alpha1.MachineImageInstallSourceTypeURL:
-		if installSource.EntitlementRef.Name != "" {
-			errs = append(errs, prefix+".installSource.entitlementRef must be empty when installSource.type is url")
-		}
-		if installSource.URL == "" && len(installSource.Repositories) == 0 {
-			errs = append(errs, prefix+".installSource.url or installSource.repositories is required when installSource.type is url")
-		}
-		if installSource.URL != "" && !httpURL(installSource.URL) {
-			errs = append(errs, prefix+".installSource.url must be http:// or https://")
-		}
-		errs = append(errs, validateMachineInstallRepositories(prefix+".installSource.repositories", installSource.Repositories)...)
-	case v1alpha1.MachineImageInstallSourceTypeRHSM:
-		if installSource.URL != "" {
-			errs = append(errs, prefix+".installSource.url must be empty when installSource.type is redhatCDN")
-		}
-		if len(installSource.Repositories) > 0 {
-			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is redhatCDN")
-		}
-		if installSource.EntitlementRef.Name == "" {
-			errs = append(errs, prefix+".installSource.entitlementRef is required when installSource.type is redhatCDN")
-		}
-	case v1alpha1.MachineImageInstallSourceTypeHostedTree:
-		// hostedTree keeps the booted media small and has bootwright serve the
-		// packages: the DVD is fromMedia, the tree URL is derived from the
-		// cluster artifact server, and url/repositories/entitlementRef are all
-		// owned by bootwright, so authoring them is a conflict.
-		if mediaType != v1alpha1.MachineImageMediaTypeBoot {
-			errs = append(errs, prefix+".installSource.type hostedTree requires mediaType: boot (spec.url is the small boot ISO; fromMedia is the DVD)")
-		}
-		if installSource.FromMedia == "" {
-			errs = append(errs, prefix+".installSource.fromMedia is required when installSource.type is hostedTree")
-		} else if err := media.ValidateISOReference(installSource.FromMedia); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.installSource.fromMedia %s", prefix, err))
-		} else if installSource.FromMedia == imageURL {
-			errs = append(errs, prefix+".installSource.fromMedia must reference the DVD, not the boot ISO in spec.url")
-		} else if httpURL(installSource.FromMedia) {
-			errs = append(errs, prefix+".installSource.fromMedia must reference local media (local-media: or file://), not a URL: stage the DVD with `bootwright media add` so it is checksum-verified in the media store before it is served")
-		}
-		if installSource.URL != "" {
-			errs = append(errs, prefix+".installSource.url must be empty when installSource.type is hostedTree (bootwright derives the tree URL from the cluster artifact server)")
-		}
-		if len(installSource.Repositories) > 0 {
-			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is hostedTree (the DVD .treeinfo serves BaseOS and AppStream)")
-		}
-		if installSource.EntitlementRef.Name != "" {
-			errs = append(errs, prefix+".installSource.entitlementRef must be empty when installSource.type is hostedTree")
+	if c := ps.RedhatCDN; c != nil && c.EntitlementRef.Name == "" {
+		errs = append(errs, prefix+".packageSource.redhatCDN.entitlementRef is required")
+	}
+	if t := ps.HostedTree; t != nil {
+		// bootwright extracts the DVD and derives the tree URL from the cluster
+		// artifact server, so the DVD must be verifiable local media.
+		switch {
+		case t.FromMedia == "":
+			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia is required")
+		case media.ValidateISOReference(t.FromMedia) != nil:
+			errs = append(errs, fmt.Sprintf("%s.packageSource.hostedTree.fromMedia %s", prefix, media.ValidateISOReference(t.FromMedia)))
+		case t.FromMedia == bootMedia:
+			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia must reference the DVD, not the boot ISO in spec.bootMedia")
+		case httpURL(t.FromMedia):
+			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia must reference local media (local-media: or file://), not a URL: stage the DVD with `bootwright media add` so it is checksum-verified in the media store before it is served")
 		}
 	}
 	return errs

@@ -182,68 +182,92 @@ type MachineImage struct {
 	SourcePath string           `yaml:"-" json:"-"`
 }
 
-// MachineImageSpec describes bootable install media used by managed OS
-// installation. The normalize phase materializes every derivable field
-// (mediaType, installSource.type, the repositories[0] install-tree
-// promotion), so `render effective` shows exactly what rendering consumes.
+// MachineImageSpec describes the install media for a managed OS install. It
+// names one bootable ISO (bootMedia) plus, for a boot ISO that carries no
+// packages, where Anaconda fetches them (packageSource). Omitting packageSource
+// declares bootMedia a full DVD that installs offline from its own payload.
 type MachineImageSpec struct {
-	// Type currently accepts "iso".
-	Type string `yaml:"type" json:"type"`
-	// MediaType accepts "dvd" or "boot". When omitted, normalize defaults it
-	// to "dvd" unconditionally: a filename suffix must not silently select the
-	// install mode (a rename could flip dvd<->boot and whether installSource is
-	// required), so a boot/netinstall ISO must author mediaType: boot
-	// explicitly. "dvd" bakes packages into a full per-node install ISO; "boot"
-	// keeps the booted media small and fetches packages from installSource.
-	MediaType string `yaml:"mediaType,omitempty" json:"mediaType,omitempty"`
-	// URL locates the ISO: "local-media:<filename.iso>" for the managed
-	// media store, a "file://" absolute path, or "http(s)://".
-	URL string `yaml:"url" json:"url"`
-	// InstallSource declares where Anaconda fetches packages; it is
-	// required when mediaType is "boot".
-	InstallSource MachineImageInstallSource `yaml:"installSource,omitempty" json:"installSource,omitempty"`
-	// Checksum optionally pins the ISO content as "sha256:<hex>".
+	// BootMedia locates the ISO the machine boots over BMC virtual media:
+	// "local-media:<file.iso>" for the managed media store, a "file://"
+	// absolute path, or "http(s)://". A full DVD installs offline from its own
+	// payload; a small boot ISO needs a packageSource.
+	BootMedia string `yaml:"bootMedia" json:"bootMedia"`
+	// PackageSource declares where Anaconda fetches packages when bootMedia is a
+	// boot ISO. Omit it for a full DVD (packages install from the DVD via
+	// cdrom). When set, exactly one arm selects the source.
+	PackageSource *MachinePackageSource `yaml:"packageSource,omitempty" json:"packageSource,omitempty"`
+	// Checksum optionally pins bootMedia content as "sha256:<hex>".
 	Checksum string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
 	// TrustRefs name Environment secrets holding CA bundles trusted when
-	// downloading the ISO.
+	// downloading bootMedia.
 	TrustRefs []SecretRef `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
 	// HeadersRefs name Environment secrets holding extra HTTP headers sent
-	// when downloading the ISO.
+	// when downloading bootMedia.
 	HeadersRefs []SecretRef `yaml:"headersRefs,omitempty" json:"headersRefs,omitempty"`
 }
 
-// MachineImageInstallSource declares the package source for install media
-// that carries no packages (mediaType: boot). The three types trade off who
-// hosts the packages: "url" points the installer at a tree you already serve,
-// "redhatCDN" installs from Red Hat's CDN over an RHSM entitlement, and
-// "hostedTree" has bootwright itself extract a DVD once and serve it from the
-// cluster's artifact server (the air-gapped, no-mirror case).
-type MachineImageInstallSource struct {
-	// Type accepts "url" (plain HTTP(S) install tree you host), "redhatCDN"
-	// (RHSM-backed Red Hat CDN install), or "hostedTree" (bootwright extracts
-	// fromMedia and serves it from the cluster artifact server). When omitted,
-	// normalize derives it from the fields present: entitlementRef means
-	// "redhatCDN", fromMedia means "hostedTree", url or repositories mean "url".
-	Type string `yaml:"type,omitempty" json:"type,omitempty"`
-	// URL is the primary Anaconda install tree for type "url".
-	URL string `yaml:"url,omitempty" json:"url,omitempty"`
-	// Repositories become additional Kickstart repo entries for type "url".
-	// When url is omitted, normalize promotes repositories[0].baseURL to the
-	// primary install tree (url) and keeps only the remaining entries here.
+// MachinePackageSource selects where a boot ISO's packages come from. Exactly
+// one arm is set; the arm itself is the discriminator (there is no type field).
+type MachinePackageSource struct {
+	// Mirror installs from an HTTP(S) install tree you already host.
+	Mirror *MachinePackageMirror `yaml:"mirror,omitempty" json:"mirror,omitempty"`
+	// RedhatCDN registers against Red Hat's CDN over an RHSM entitlement.
+	RedhatCDN *MachinePackageRedhatCDN `yaml:"redhatCDN,omitempty" json:"redhatCDN,omitempty"`
+	// HostedTree has bootwright extract a DVD once and serve it from the
+	// cluster artifact server (the air-gapped, no-mirror case).
+	HostedTree *MachinePackageHostedTree `yaml:"hostedTree,omitempty" json:"hostedTree,omitempty"`
+}
+
+// GetMirror, GetRedhatCDN, and GetHostedTree are nil-safe accessors: they
+// return the arm (or nil) whether or not packageSource itself is set, so callers
+// can read an optional union without a nil-check dance.
+func (p *MachinePackageSource) GetMirror() *MachinePackageMirror {
+	if p == nil {
+		return nil
+	}
+	return p.Mirror
+}
+
+func (p *MachinePackageSource) GetRedhatCDN() *MachinePackageRedhatCDN {
+	if p == nil {
+		return nil
+	}
+	return p.RedhatCDN
+}
+
+func (p *MachinePackageSource) GetHostedTree() *MachinePackageHostedTree {
+	if p == nil {
+		return nil
+	}
+	return p.HostedTree
+}
+
+// MachinePackageMirror is an HTTP(S) install tree the operator hosts.
+type MachinePackageMirror struct {
+	// BaseURL is the primary Anaconda install tree (BaseOS), an http(s) URL.
+	BaseURL string `yaml:"baseURL,omitempty" json:"baseURL,omitempty"`
+	// Repositories become additional Kickstart repo entries (e.g. AppStream).
 	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
-	// EntitlementRef names the Environment.spec.entitlements[] entry (a Red
-	// Hat "rhel" entitlement) backing a "redhatCDN" install.
-	EntitlementRef LocalObjectReference `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
-	// FromMedia references the full DVD ISO (same grammar as spec.url:
-	// "local-media:<file.iso>", "file://", or "http(s)://") that bootwright
-	// extracts once into the cluster artifact server's document root and serves
-	// as an installation tree over the machineBoot endpoint. Required for, and
-	// only valid with, type "hostedTree". The installing node then fetches
-	// GPG-signed packages from that tree, so the DVD payload lands on disk once
-	// per (cluster, image) instead of inside every per-node ISO. Packages stay
-	// Red Hat-signed end to end; serve the machineBoot endpoint over HTTP (the
-	// installer verifies TLS and would reject a self-signed artifact cert).
-	FromMedia string `yaml:"fromMedia,omitempty" json:"fromMedia,omitempty"`
+}
+
+// MachinePackageRedhatCDN installs from the Red Hat CDN over an entitlement.
+type MachinePackageRedhatCDN struct {
+	// EntitlementRef names the Environment.spec.entitlements[] entry (a Red Hat
+	// "rhel" entitlement) backing the CDN install.
+	EntitlementRef LocalObjectReference `yaml:"entitlementRef" json:"entitlementRef"`
+}
+
+// MachinePackageHostedTree has bootwright extract a DVD into the cluster
+// artifact server and serve it as an install tree over the machineBoot
+// endpoint. The installing node fetches GPG-signed packages from that tree, so
+// the DVD payload lands on disk once per (cluster, image) instead of inside
+// every per-node ISO. Serve machineBoot over HTTP (the installer verifies TLS
+// and would reject a self-signed artifact cert).
+type MachinePackageHostedTree struct {
+	// FromMedia references the full DVD ISO to extract, as a "local-media:" or
+	// "file://" reference (not a URL — the DVD is checksum-verified in the media
+	// store). Must differ from spec.bootMedia (the boot ISO).
+	FromMedia string `yaml:"fromMedia" json:"fromMedia"`
 }
 
 type MachineInstallProfile struct {
@@ -267,13 +291,12 @@ type MachineInstallOS struct {
 }
 
 type MachineInstallProfileInstaller struct {
-	Type     string                  `yaml:"type" json:"type"`
+	// Anaconda is the only installer backend; its presence is the discriminator.
 	Anaconda *MachineInstallAnaconda `yaml:"anaconda,omitempty" json:"anaconda,omitempty"`
 }
 
 type MachineInstallAnaconda struct {
-	ImageRef     LocalObjectReference       `yaml:"imageRef" json:"imageRef"`
-	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
+	ImageRef LocalObjectReference `yaml:"imageRef" json:"imageRef"`
 }
 
 type MachineInstallRepository struct {

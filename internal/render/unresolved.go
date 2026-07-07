@@ -132,10 +132,10 @@ func unresolvedMachineOSInstallImages(state v1alpha1.State) []string {
 			if !ok {
 				continue
 			}
-			if _, err := media.Resolve(image.Spec.URL); err != nil {
+			if _, err := media.Resolve(image.Spec.BootMedia); err != nil {
 				events = append(events, fmt.Sprintf(
-					"StorageCluster/%s spec.ceph.topology.hosts[%d].machineRef %q MachineImage %q spec.url %q does not resolve to installable media: %v",
-					cluster.Metadata.Name, i, name, image.Metadata.Name, image.Spec.URL, err))
+					"StorageCluster/%s spec.ceph.topology.hosts[%d].machineRef %q MachineImage %q spec.bootMedia %q does not resolve to installable media: %v",
+					cluster.Metadata.Name, i, name, image.Metadata.Name, image.Spec.BootMedia, err))
 			}
 		}
 	}

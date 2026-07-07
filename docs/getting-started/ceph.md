@@ -138,11 +138,11 @@ intent.
 These drive the managed RHEL install — the part that distinguishes this lab from
 the agent-installed OpenShift SNO lab.
 
-- `MachineImage` `rhel-9-x86-64-dvd`: an ISO of `mediaType: dvd` whose
-  `url: local-media:rhel-9.7-x86_64-dvd.iso` resolves to the managed media store
-  (you stage the ISO with `bootwright media add` below).
+- `MachineImage` `rhel-9-x86-64-dvd`: a full DVD (no `packageSource`) whose
+  `bootMedia: local-media:rhel-9.7-x86_64-dvd.iso` resolves to the managed media
+  store (you stage the ISO with `bootwright media add` below).
 - `MachineInstallProfile` `rhel-9-ceph-node`: the Anaconda install
-  (`installer.type: anaconda`, `anaconda.imageRef: rhel-9-x86-64-dvd`) for
+  (`installer.anaconda.imageRef: rhel-9-x86-64-dvd`) for
   `os.family: rhel`, `version: "9.7"`. Its `customizations` authorize the
   generated `ceph-node-ssh` key for root login, wipe and lay down the root device,
   install a minimal base plus the runtime prerequisites (`podman`, `lvm2`,
@@ -201,7 +201,7 @@ environment differs.
 | `infra/providers/libvirt.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network (default `vbr-ceph-ibm`). |
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |
 | `clusters/storage/ceph-ibm/nodes/*.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
-| `infra/os/rhel-9-x86-64-dvd.yaml` | `spec.url` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
+| `infra/os/rhel-9-x86-64-dvd.yaml` | `spec.bootMedia` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
 | `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.7`). |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph product stream (default `"9"`). |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `management.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |

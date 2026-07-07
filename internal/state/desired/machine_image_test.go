@@ -7,12 +7,11 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func TestMachineImageURLAcceptsLocalMediaReference(t *testing.T) {
+func TestMachineImageBootMediaAcceptsLocalMediaReference(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type: v1alpha1.MachineImageTypeISO,
-			URL:  "local-media:rhel.iso",
+			BootMedia: "local-media:rhel.iso",
 		},
 	}}})
 	if len(errs) != 0 {
@@ -20,12 +19,11 @@ func TestMachineImageURLAcceptsLocalMediaReference(t *testing.T) {
 	}
 }
 
-func TestMachineImageURLRejectsInvalidLocalMediaReference(t *testing.T) {
+func TestMachineImageBootMediaRejectsInvalidLocalMediaReference(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type: v1alpha1.MachineImageTypeISO,
-			URL:  "local-media:../rhel.iso",
+			BootMedia: "local-media:../rhel.iso",
 		},
 	}}})
 	if len(errs) == 0 {
@@ -36,12 +34,11 @@ func TestMachineImageURLRejectsInvalidLocalMediaReference(t *testing.T) {
 	}
 }
 
-func TestMachineImageURLRejectsRetiredMediaReference(t *testing.T) {
+func TestMachineImageBootMediaRejectsRetiredMediaReference(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type: v1alpha1.MachineImageTypeISO,
-			URL:  "media:rhel.iso",
+			BootMedia: "media:rhel.iso",
 		},
 	}}})
 	if len(errs) == 0 {
@@ -52,35 +49,33 @@ func TestMachineImageURLRejectsRetiredMediaReference(t *testing.T) {
 	}
 }
 
-func TestMachineImageBootISORequiresInstallSource(t *testing.T) {
+func TestMachineImagePackageSourceRequiresExactlyOneArm(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: v1alpha1.MachineImageMediaTypeBoot,
-			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+			BootMedia:     "local-media:rhel-9.8-x86_64-boot.iso",
+			PackageSource: &v1alpha1.MachinePackageSource{},
 		},
 	}}})
 	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted boot ISO without install source")
+		t.Fatal("validateMachineImages accepted a packageSource with no arm set")
 	}
-	if !strings.Contains(errs[0], "installSource is required") {
+	if !strings.Contains(errs[0], "packageSource must set exactly one of: mirror, redhatCDN, hostedTree") {
 		t.Fatalf("error = %q", errs[0])
 	}
 }
 
-func TestMachineImageBootISOAcceptsInstallSourceRepositories(t *testing.T) {
+func TestMachineImagePackageSourceMirrorAcceptsRepositories(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: v1alpha1.MachineImageMediaTypeBoot,
-			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
-			InstallSource: v1alpha1.MachineImageInstallSource{
-				Type: v1alpha1.MachineImageInstallSourceTypeURL,
-				Repositories: []v1alpha1.MachineInstallRepository{
-					{ID: "baseos", BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
-					{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+			PackageSource: &v1alpha1.MachinePackageSource{
+				Mirror: &v1alpha1.MachinePackageMirror{
+					BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+					Repositories: []v1alpha1.MachineInstallRepository{
+						{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+					},
 				},
 			},
 		},
@@ -90,17 +85,17 @@ func TestMachineImageBootISOAcceptsInstallSourceRepositories(t *testing.T) {
 	}
 }
 
-func TestMachineImageInstallSourceRepositoryRejectsNonHTTPBaseURL(t *testing.T) {
+func TestMachineImagePackageSourceMirrorRejectsNonHTTPRepositoryBaseURL(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: v1alpha1.MachineImageMediaTypeBoot,
-			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
-			InstallSource: v1alpha1.MachineImageInstallSource{
-				Type: v1alpha1.MachineImageInstallSourceTypeURL,
-				Repositories: []v1alpha1.MachineInstallRepository{
-					{ID: "baseos", BaseURL: "ftp://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
+			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+			PackageSource: &v1alpha1.MachinePackageSource{
+				Mirror: &v1alpha1.MachinePackageMirror{
+					BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+					Repositories: []v1alpha1.MachineInstallRepository{
+						{ID: "baseos", BaseURL: "ftp://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
+					},
 				},
 			},
 		},
@@ -108,21 +103,35 @@ func TestMachineImageInstallSourceRepositoryRejectsNonHTTPBaseURL(t *testing.T) 
 	if len(errs) == 0 {
 		t.Fatal("validateMachineImages accepted non-http repository baseURL")
 	}
-	if !strings.Contains(errs[0], "installSource.repositories[0].baseURL must be http:// or https://") {
+	if !strings.Contains(errs[0], "packageSource.mirror.repositories[0].baseURL must be http:// or https://") {
 		t.Fatalf("error = %q", errs[0])
 	}
 }
 
-func TestMachineImageBootISOAcceptsRedHatCDNEntitlementRef(t *testing.T) {
+func TestMachineImagePackageSourceMirrorRequiresBaseURL(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: v1alpha1.MachineImageMediaTypeBoot,
-			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
-			InstallSource: v1alpha1.MachineImageInstallSource{
-				Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
-				EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+			PackageSource: &v1alpha1.MachinePackageSource{
+				Mirror: &v1alpha1.MachinePackageMirror{},
+			},
+		},
+	}}})
+	if !containsSubstring(errs, "packageSource.mirror.baseURL is required") {
+		t.Fatalf("errors = %v, want mirror.baseURL requirement", errs)
+	}
+}
+
+func TestMachineImagePackageSourceRedhatCDNAcceptsEntitlementRef(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+			PackageSource: &v1alpha1.MachinePackageSource{
+				RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				},
 			},
 		},
 	}}})
@@ -131,22 +140,20 @@ func TestMachineImageBootISOAcceptsRedHatCDNEntitlementRef(t *testing.T) {
 	}
 }
 
-func TestMachineImageRedHatCDNInstallSourceRequiresEntitlementRef(t *testing.T) {
+func TestMachineImagePackageSourceRedhatCDNRequiresEntitlementRef(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: v1alpha1.MachineImageMediaTypeBoot,
-			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
-			InstallSource: v1alpha1.MachineImageInstallSource{
-				Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
+			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+			PackageSource: &v1alpha1.MachinePackageSource{
+				RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{},
 			},
 		},
 	}}})
 	if len(errs) == 0 {
 		t.Fatal("validateMachineImages accepted redhatCDN source without entitlementRef")
 	}
-	if !strings.Contains(strings.Join(errs, "\n"), "entitlementRef is required") {
+	if !strings.Contains(strings.Join(errs, "\n"), "packageSource.redhatCDN.entitlementRef is required") {
 		t.Fatalf("errors = %v", errs)
 	}
 }
@@ -173,8 +180,11 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 		MachineImages: []v1alpha1.MachineImage{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
 			Spec: v1alpha1.MachineImageSpec{
-				InstallSource: v1alpha1.MachineImageInstallSource{
-					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+				PackageSource: &v1alpha1.MachinePackageSource{
+					RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+						EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+					},
 				},
 			},
 		}},
@@ -183,64 +193,6 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 		t.Fatal("validateSecretReferences accepted undeclared entitlement RHSM secret ref")
 	}
 	if !strings.Contains(errs[0], "redhat-activation-key") {
-		t.Fatalf("error = %q", errs[0])
-	}
-}
-
-func TestMachineImageMediaTypeIgnoresFilename(t *testing.T) {
-	// A boot.iso filename no longer derives boot: mediaType defaults to dvd
-	// unconditionally so a rename cannot flip the install mode (and whether
-	// installSource is required). A boot image authors mediaType: boot explicitly.
-	state := v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			Type: v1alpha1.MachineImageTypeISO,
-			URL:  "local-media:rhel-9.8-x86_64-boot.iso",
-		},
-	}}}
-	Normalize(&state)
-	if got := state.MachineImages[0].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
-		t.Fatalf("materialized mediaType = %q, want %q (filename must not select the mode)", got, v1alpha1.MachineImageMediaTypeDVD)
-	}
-	// As a dvd image it needs no installSource.
-	if errs := validateMachineImages(state); len(errs) != 0 {
-		t.Fatalf("dvd image without installSource should validate, got %v", errs)
-	}
-}
-
-func TestMachineImageRejectsUnknownMediaType(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: "cdrom",
-			URL:       "local-media:rhel.iso",
-		},
-	}}})
-	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted unknown mediaType")
-	}
-	if !strings.Contains(errs[0], `mediaType "cdrom" must be one of: dvd, boot`) {
-		t.Fatalf("error = %q", errs[0])
-	}
-}
-
-func TestMachineImageRejectsUnknownInstallSourceType(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			Type:      v1alpha1.MachineImageTypeISO,
-			MediaType: v1alpha1.MachineImageMediaTypeBoot,
-			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
-			InstallSource: v1alpha1.MachineImageInstallSource{
-				Type: "cdn",
-			},
-		},
-	}}})
-	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted unknown installSource.type")
-	}
-	if !strings.Contains(errs[0], `installSource.type "cdn" must be one of: url, redhatCDN`) {
 		t.Fatalf("error = %q", errs[0])
 	}
 }

@@ -277,12 +277,11 @@ func TestMachineImageRedHatCDNRequiresRHELEntitlement(t *testing.T) {
 		MachineImages: []v1alpha1.MachineImage{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
 			Spec: v1alpha1.MachineImageSpec{
-				Type:      v1alpha1.MachineImageTypeISO,
-				MediaType: v1alpha1.MachineImageMediaTypeBoot,
-				URL:       "local-media:rhel-9.8-x86_64-boot.iso",
-				InstallSource: v1alpha1.MachineImageInstallSource{
-					Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
-					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+				BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+				PackageSource: &v1alpha1.MachinePackageSource{
+					RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+						EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+					},
 				},
 			},
 		}},

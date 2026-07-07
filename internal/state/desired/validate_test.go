@@ -1249,15 +1249,18 @@ spec:
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.localization.additionalLocales[1] "pt_BR.UTF-8" is duplicated`,
 		},
 		{
-			name: "machine-install-repository-base-url-scheme",
+			// Additional install repositories moved off the install profile onto
+			// the MachineImage packageSource.mirror; the removed profile-level
+			// installer.anaconda.repositories field must fail strict decode.
+			name: "machine-install-anaconda-repositories-rejected",
 			mutate: func(files map[string]string) {
 				files["machine-install.yaml"] = strings.Replace(machineInstallProfileYAML("rhel", `
     services:
       enabled:
         - sshd
-`), "      imageRef: rhel-iso\n", "      imageRef: rhel-iso\n      repositories:\n        - id: extras\n          baseURL: bootwright-secret-ref:extras-repo\n", 1)
+`), "      imageRef: rhel-iso\n", "      imageRef: rhel-iso\n      repositories:\n        - id: extras\n          baseURL: https://repos.example.test/extras/\n", 1)
 			},
-			wantSubstring: `MachineInstallProfile/rhel spec.installer.anaconda.repositories[0].baseURL must be http:// or https://`,
+			wantSubstring: "field repositories not found",
 		},
 		{
 			name: "machine-os-install-profile-ref-missing",
@@ -4104,8 +4107,7 @@ func machineInstallProfileYAML(osFamily, customizations string) string {
 kind: MachineImage
 metadata: { name: rhel-iso }
 spec:
-  type: iso
-  url: local-media:rhel-9.4.iso
+  bootMedia: local-media:rhel-9.4.iso
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile
@@ -4116,7 +4118,6 @@ spec:
     version: "9.4"
     architecture: x86_64
   installer:
-    type: anaconda
     anaconda:
       imageRef: rhel-iso
   customizations:
@@ -4427,7 +4428,10 @@ func TestClusterInstallUsesHostedTreeResolvesOSInstallProfile(t *testing.T) {
 	profile.Spec.Installer.Anaconda = &v1alpha1.MachineInstallAnaconda{ImageRef: v1alpha1.LocalObjectReference{Name: "rhel-img"}}
 
 	image := v1alpha1.MachineImage{Metadata: v1alpha1.Metadata{Name: "rhel-img"}}
-	image.Spec.InstallSource.Type = v1alpha1.MachineImageInstallSourceTypeHostedTree
+	image.Spec.BootMedia = "local-media:rhel-9.7-x86_64-boot.iso"
+	image.Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		HostedTree: &v1alpha1.MachinePackageHostedTree{FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso"},
+	}
 
 	state := v1alpha1.State{
 		Machines:               []v1alpha1.Machine{machine},
@@ -4446,7 +4450,9 @@ func TestClusterInstallUsesHostedTreeResolvesOSInstallProfile(t *testing.T) {
 		t.Fatal("hostedTree install profile resolved via os.installProfileRef must be detected")
 	}
 
-	image.Spec.InstallSource.Type = "url"
+	image.Spec.PackageSource = &v1alpha1.MachinePackageSource{
+		Mirror: &v1alpha1.MachinePackageMirror{BaseURL: "https://mirror.example.test/rhel/9/BaseOS/x86_64/os/"},
+	}
 	state.MachineImages = []v1alpha1.MachineImage{image}
 	if clusterInstallUsesHostedTree(state, ci) {
 		t.Fatal("non-hostedTree install source must not be detected as hostedTree")
