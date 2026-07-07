@@ -105,7 +105,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	var out []any
 	for _, cluster := range ManagedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
-		provider := cephprovider.Select(cluster, env, paths.SecretsDir)
+		provider := cephprovider.Select(cluster, state.Entitlements, env, paths.SecretsDir)
 		asset := cephrender.StorageAssets("{{ bootwright_rendered_dir }}", v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}})[0]
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,

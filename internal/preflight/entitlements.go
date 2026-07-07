@@ -2,10 +2,10 @@ package preflight
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1.Environment) []secretRefRequirement {
-	entitlementsByName := map[string]v1alpha1.EnvironmentEntitlement{}
-	for _, entitlement := range env.Spec.Entitlements {
-		entitlementsByName[entitlement.Name] = entitlement
+func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
+	entitlementsByName := map[string]v1alpha1.Entitlement{}
+	for _, entitlement := range state.Entitlements {
+		entitlementsByName[entitlement.Metadata.Name] = entitlement
 	}
 	var out []secretRefRequirement
 	appendEntitlement := func(refName, label string, phases []string, owner secretRefOwner) {
@@ -13,13 +13,13 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 		if !ok {
 			return
 		}
-		// rhsm is either inline or, for ibm/ibm-storage-ceph, deferred to a
-		// referenced redhat/rhel entitlement; collect its secrets from
+		// rhsm is either inline or, for ibm-storage-ceph, deferred to a
+		// referenced redhat-rhel entitlement; collect its secrets from
 		// whichever carries it so they stay required.
-		rhsm := entitlement.RHSM
-		if rhsm == nil && entitlement.RHELEntitlementRef.Name != "" {
-			if rhel, ok := entitlementsByName[entitlement.RHELEntitlementRef.Name]; ok {
-				rhsm = rhel.RHSM
+		rhsm := entitlement.Spec.RHSM
+		if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
+			if rhel, ok := entitlementsByName[entitlement.Spec.RHELEntitlementRef.Name]; ok {
+				rhsm = rhel.Spec.RHSM
 			}
 		}
 		if rhsm != nil {
@@ -48,18 +48,18 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 				})
 			}
 		}
-		if entitlement.Registry != nil {
-			if entitlement.Registry.CredentialsRef.Name != "" {
+		if entitlement.Spec.Registry != nil {
+			if entitlement.Spec.Registry.CredentialsRef.Name != "" {
 				out = append(out, secretRefRequirement{
-					refName: entitlement.Registry.CredentialsRef.Name,
+					refName: entitlement.Spec.Registry.CredentialsRef.Name,
 					label:   label + " registry credentialsRef",
 					phases:  phases,
 					owner:   owner,
 				})
 			}
-			if entitlement.Registry.TrustBundleRef.Name != "" {
+			if entitlement.Spec.Registry.TrustBundleRef.Name != "" {
 				out = append(out, secretRefRequirement{
-					refName: entitlement.Registry.TrustBundleRef.Name,
+					refName: entitlement.Spec.Registry.TrustBundleRef.Name,
 					label:   label + " registry trustBundleRef",
 					phases:  phases,
 					owner:   owner,

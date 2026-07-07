@@ -15,6 +15,7 @@ const (
 	APIVersion = "bootwright.io/v1alpha1"
 
 	KindEnvironment            = "Environment"
+	KindEntitlement            = "Entitlement"
 	KindMachine                = "Machine"
 	KindMachineImage           = "MachineImage"
 	KindMachineInstallProfile  = "MachineInstallProfile"
@@ -172,13 +173,19 @@ const (
 	SSHKeyPairTypeECDSAP384 = "ecdsa-p384"
 	SSHKeyPairTypeECDSAP521 = "ecdsa-p521"
 
-	EntitlementProviderCommunity = "community"
-	EntitlementProviderRedHat    = "redhat"
-	EntitlementProviderIBM       = "ibm"
+	// Entitlement spec.type discriminator values (the authored vocabulary).
+	EntitlementTypeRedHatRHEL     = "redhat-rhel"
+	EntitlementTypeRedHatCeph     = "redhat-ceph"
+	EntitlementTypeIBMStorageCeph = "ibm-storage-ceph"
+
+	// Provider and product spellings are no longer authored; the resolver
+	// derives them from spec.type (EntitlementTypeProviderProduct) for the
+	// cephadm ansible vars, so these remain only as the emitted values.
+	EntitlementProviderRedHat = "redhat"
+	EntitlementProviderIBM    = "ibm"
 
 	EntitlementProductCeph           = "ceph"
 	EntitlementProductRHEL           = "rhel"
-	EntitlementProductOpenShift      = "openshift"
 	EntitlementProductIBMStorageCeph = "ibm-storage-ceph"
 
 	// InfraComponent arm implementation choices (spec.<arm>.implementation):
@@ -403,6 +410,7 @@ func ClusterAdminSSHKeyName(clusterName string) string {
 // State is the loaded fleet.
 type State struct {
 	Environments             []Environment            `yaml:"environments,omitempty" json:"environments,omitempty"`
+	Entitlements             []Entitlement            `yaml:"entitlements,omitempty" json:"entitlements,omitempty"`
 	Machines                 []Machine                `yaml:"machines,omitempty" json:"machines,omitempty"`
 	MachineImages            []MachineImage           `yaml:"machineImages,omitempty" json:"machineImages,omitempty"`
 	MachineInstallProfiles   []MachineInstallProfile  `yaml:"machineInstallProfiles,omitempty" json:"machineInstallProfiles,omitempty"`

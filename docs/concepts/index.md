@@ -45,7 +45,7 @@ links point to the domain page where each kind is documented in full.
 
 | Kind | Owns |
 | --- | --- |
-| [`Environment`](environment.md) | Fleet defaults, selected resources, selected clusters, secret declarations, service access catalog, proxy and registry defaults, install trust, entitlements, and component image pins. |
+| [`Environment`](environment.md) | Fleet defaults, selected resources, selected clusters, secret declarations, service access catalog, proxy and registry defaults, install trust, and component image pins. |
 | [`Machine`](machines.md) | A raw, managed-OS, or OS-ready machine: capabilities, substrate binding, hardware inventory, OS mode, install network, named addresses, and durable SSH access. |
 | [`MachineImage`](machines.md) | Bootable OS install media for managed machine OS installs. |
 | [`MachineInstallProfile`](machines.md) | Reusable managed OS installer settings and customizations. |

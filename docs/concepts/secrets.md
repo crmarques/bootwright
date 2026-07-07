@@ -258,54 +258,53 @@ secret-loading workflow as part of a first apply.
 
 ## Entitlements
 
-Vendor entitlements declare *named* access for one provider/product pair. They
-live on `Environment.spec.entitlements[]` and are referenced by storage and OS
-install inputs — for example `StorageCluster.spec.ceph.entitlementRef` names one.
-`name`, `provider`, and `product` are always required; the `rhsm`, `registry`,
-`license`, and `rhelEntitlementRef` arms become required per pair.
+An entitlement declares *named* vendor-controlled access for one product. It is
+its own first-class `Entitlement` kind — one object per file, shared fleet-wide,
+and in a tree layout it lives under `infra/entitlements/<name>.yaml`. It is
+referenced by name from storage and OS install inputs — for example
+`StorageCluster.spec.ceph.entitlementRef` names one. `metadata.name` and
+`spec.type` are always required; `spec.type` is the discriminator, and the
+`rhsm`, `registry`, `license`, and `rhelEntitlementRef` arms become required per
+type. The secrets it names live on `Environment.spec.secrets`.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `entitlements[].name` | Yes | — | Local entitlement name referenced by storage or OS install inputs. |
-| `entitlements[].provider` | Yes | — | `community`, `redhat`, or `ibm`. |
-| `entitlements[].product` | Yes | — | `ceph`, `openshift`, `rhel`, or `ibm-storage-ceph`, depending on provider. |
-| `entitlements[].rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever `rhsm` is required. |
-| `entitlements[].rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever `rhsm` is required. |
-| `entitlements[].rhsm.connectToInsights` | No | `false` | Whether managed RHEL installs connect to Insights. |
-| `entitlements[].rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. |
-| `entitlements[].rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
-| `entitlements[].rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
-| `entitlements[].registry.url` | No | — | Vendor registry URL; must not embed credentials (use `credentialsRef`). |
-| `entitlements[].registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat/ceph` and `ibm/ibm-storage-ceph`. |
-| `entitlements[].registry.trustBundleRef` | No | — | Registry trust bundle. |
-| `entitlements[].license.accept` | Conditional | `false` | Must be `true` for `ibm/ibm-storage-ceph`. |
-| `entitlements[].rhelEntitlementRef` | Conditional | — | Names a `redhat/rhel` entitlement supplying the RHEL subscription. Required for `ibm/ibm-storage-ceph`; rejected on every other pair (which carry `rhsm` inline). |
+| `metadata.name` | Yes | — | Entitlement name referenced by storage or OS install inputs. |
+| `spec.type` | Yes | — | Discriminator: `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
+| `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever `rhsm` is required. |
+| `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever `rhsm` is required. |
+| `spec.rhsm.connectToInsights` | No | `false` | Whether managed RHEL installs connect to Insights. |
+| `spec.rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. |
+| `spec.rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
+| `spec.rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
+| `spec.registry.url` | No | — | Vendor registry URL; must not embed credentials (use `credentialsRef`). Defaults to `registry.redhat.io` (`redhat-ceph`) or `cp.icr.io/cp` (`ibm-storage-ceph`). |
+| `spec.registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat-ceph` and `ibm-storage-ceph`. |
+| `spec.registry.trustBundleRef` | No | — | Registry trust bundle. |
+| `spec.license.accept` | Conditional | `false` | Must be `true` for `ibm-storage-ceph`. |
+| `spec.rhelEntitlementRef` | Conditional | — | Names a `redhat-rhel` entitlement supplying the RHEL subscription. Required for `ibm-storage-ceph`; rejected on every other type (which carry `rhsm` inline). |
 
-### Provider and product pairs
+### Types
 
-Only the following pairs are accepted; any other combination is rejected.
+Exactly one of three `spec.type` values is accepted; any other value is rejected.
 
-| Provider | Products |
+| `spec.type` | Meaning |
 | --- | --- |
-| `community` | `ceph`, `openshift` |
-| `redhat` | `ceph`, `rhel`, `openshift` |
-| `ibm` | `ibm-storage-ceph` |
+| `redhat-rhel` | A Red Hat RHEL subscription (RHSM) — the RHEL BaseOS/AppStream repos. |
+| `redhat-ceph` | A single Red Hat subscription covering both RHEL and the `rhceph` tools repo, plus `registry.redhat.io` access. |
+| `ibm-storage-ceph` | IBM Storage Ceph product access (registry + license), running on RHEL entitled by a separate `redhat-rhel` entitlement. |
 
-The required arms follow from the pair rather than a discriminator field:
+The required arms follow from `spec.type`:
 
-| Provider / product | Required arms |
+| `spec.type` | Required arms |
 | --- | --- |
-| `community/ceph` | none |
-| `community/openshift` | none |
-| `redhat/openshift` | none |
-| `redhat/rhel` | `rhsm` (`organizationRef` + `activationKeyRef`) |
-| `redhat/ceph` | `rhsm` + `registry.credentialsRef` |
-| `ibm/ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` + `rhelEntitlementRef` (no inline `rhsm`) |
+| `redhat-rhel` | `rhsm` (`organizationRef` + `activationKeyRef`) |
+| `redhat-ceph` | `rhsm` + `registry.credentialsRef` |
+| `ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` + `rhelEntitlementRef` (no inline `rhsm`) |
 
 IBM Storage Ceph ships its own image registry (`cp.icr.io`) and product license
 but runs on RHEL it does not itself entitle, so its RHEL subscription is a
-separate `redhat/rhel` entitlement named via `rhelEntitlementRef` — an inline
-`rhsm` arm on an `ibm/ibm-storage-ceph` entitlement is rejected. (`redhat/ceph`
+separate `redhat-rhel` entitlement named via `rhelEntitlementRef` — an inline
+`rhsm` arm on an `ibm-storage-ceph` entitlement is rejected. (`redhat-ceph`
 stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
 tools repo, so its own `rhsm` arm covers both.)
 
@@ -326,15 +325,18 @@ spec:
     - redhat-org
     - redhat-activation-key
     - redhat-registry-credentials
-  entitlements:
-    - name: rhcs
-      provider: redhat
-      product: ceph
-      rhsm:
-        organizationRef: redhat-org
-        activationKeyRef: redhat-activation-key
-      registry:
-        credentialsRef: redhat-registry-credentials
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: rhcs
+spec:
+  type: redhat-ceph
+  rhsm:
+    organizationRef: redhat-org
+    activationKeyRef: redhat-activation-key
+  registry:
+    credentialsRef: redhat-registry-credentials
 ```
 
 ### Corporate Satellite
@@ -360,17 +362,20 @@ spec:
     - corp-satellite-ca
     - rhel-org
     - rhel-activation-key
-  entitlements:
-    - name: rhel
-      provider: redhat
-      product: rhel
-      rhsm:
-        organizationRef: rhel-org
-        activationKeyRef: rhel-activation-key
-        connectToInsights: true
-        satellite:
-          hostname: satellite.corp.example.com
-          trustBundleRef: corp-satellite-ca
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: rhel
+spec:
+  type: redhat-rhel
+  rhsm:
+    organizationRef: rhel-org
+    activationKeyRef: rhel-activation-key
+    connectToInsights: true
+    satellite:
+      hostname: satellite.corp.example.com
+      trustBundleRef: corp-satellite-ca
 ```
 
 The `rhsm` kickstart command is supported on Red Hat Enterprise Linux only
@@ -384,5 +389,5 @@ OpenShift/RHCOS agent-install nodes do not use Satellite.
   workflow inside a first apply.
 - [Disconnected and proxied installs](../advanced/disconnected-proxy.md) — trust
   bundles, mirror credentials, and RHSM in disconnected and proxied environments.
-- [Environment](environment.md) — the full `spec.secrets`, `spec.entitlements`,
-  and proxy/registry surface.
+- [Environment](environment.md) — the full `spec.secrets` and proxy/registry
+  surface, and the field reference for the first-class `Entitlement` kind.

@@ -394,14 +394,15 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 	}
 	state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
 	state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Entitlements = append(state.Environments[0].Spec.Entitlements, v1alpha1.EnvironmentEntitlement{
-		Name:     "rhel",
-		Provider: v1alpha1.EntitlementProviderRedHat,
-		Product:  v1alpha1.EntitlementProductRHEL,
-		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-			OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
-			ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
-			ConnectToInsights: true,
+	state.Entitlements = append(state.Entitlements, v1alpha1.Entitlement{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatRHEL,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
+				ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
+				ConnectToInsights: true,
+			},
 		},
 	})
 	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
@@ -438,18 +439,19 @@ func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
 		state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
 		state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
 		state.Environments[0].Spec.Secrets["corp-satellite-ca"] = v1alpha1.EnvironmentSecretSpec{}
-		state.Environments[0].Spec.Entitlements = append(state.Environments[0].Spec.Entitlements, v1alpha1.EnvironmentEntitlement{
-			Name:     "rhel",
-			Provider: v1alpha1.EntitlementProviderRedHat,
-			Product:  v1alpha1.EntitlementProductRHEL,
-			RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-				OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
-				ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
-				ConnectToInsights: true,
-				Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
-					Hostname:       "satellite.corp.example.com",
-					ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
-					TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+		state.Entitlements = append(state.Entitlements, v1alpha1.Entitlement{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
+					ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
+					ConnectToInsights: true,
+					Satellite: &v1alpha1.EntitlementRHSMSatellite{
+						Hostname:       "satellite.corp.example.com",
+						ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
+						TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+					},
 				},
 			},
 		})

@@ -1,11 +1,11 @@
 # IBM Storage Ceph distribution
 
 Selects the IBM Storage Ceph distribution with `spec.ceph.distribution: ibm`.
-Two `Environment.spec.entitlements[]` entries split the access by concern: a
-`redhat/rhel` entry (`rhel`) holds the RHEL subscription, and an
-`ibm/ibm-storage-ceph` entry (`ibm-storage-ceph`) holds the IBM registry and
-license and names the `rhel` entry via `rhelEntitlementRef`. The `StorageCluster`
-references the IBM entry with `spec.ceph.entitlementRef`.
+Two `Entitlement` objects split the access by concern: a `redhat-rhel`
+entitlement (`rhel`) holds the RHEL subscription, and an `ibm-storage-ceph`
+entitlement (`ibm-storage-ceph`) holds the IBM registry and license and names
+the `rhel` entitlement via `rhelEntitlementRef`. The `StorageCluster` references
+the IBM entitlement with `spec.ceph.entitlementRef`.
 
 Bootwright prepares each storage node by registering it with RHSM (from the
 `rhel` entry), enabling the RHEL base/appstream repositories, installing the IBM

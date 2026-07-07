@@ -24,6 +24,9 @@ func AuthoredKindAccessors() []KindAccessor {
 		{KindEnvironment, "Environments", func(s State) []string {
 			return metadataNames(s.Environments, func(o Environment) Metadata { return o.Metadata })
 		}},
+		{KindEntitlement, "Entitlements", func(s State) []string {
+			return metadataNames(s.Entitlements, func(o Entitlement) Metadata { return o.Metadata })
+		}},
 		{KindMachine, "Machines", func(s State) []string {
 			return metadataNames(s.Machines, func(o Machine) Metadata { return o.Metadata })
 		}},

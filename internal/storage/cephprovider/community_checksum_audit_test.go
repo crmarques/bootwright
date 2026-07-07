@@ -24,7 +24,7 @@ func ossChecksumCluster(checksum string) v1alpha1.StorageCluster {
 
 func TestSelectOSSProviderProjectsCommunityChecksum(t *testing.T) {
 	sum := strings.Repeat("a", 64)
-	provider := Select(ossChecksumCluster("sha256:"+sum), nil, "/context/secrets")
+	provider := Select(ossChecksumCluster("sha256:"+sum), nil, nil, "/context/secrets")
 	// The provider normalizes the operator value to bare sha256 hex (the shape
 	// the community role re-prefixes into get_url's checksum).
 	if provider.Community.Checksum != sum {
@@ -38,7 +38,7 @@ func TestSelectOSSProviderProjectsCommunityChecksum(t *testing.T) {
 
 func TestSelectOSSProviderOmitsUnsetCommunityChecksum(t *testing.T) {
 	// Absent checksum keeps today's behavior: no checksum var reaches the role.
-	provider := Select(ossChecksumCluster(""), nil, "/context/secrets")
+	provider := Select(ossChecksumCluster(""), nil, nil, "/context/secrets")
 	if provider.Community.Checksum != "" {
 		t.Fatalf("unset checksum projected: %q", provider.Community.Checksum)
 	}
@@ -56,7 +56,7 @@ func TestSelectOSSProviderOmitsUnsetCommunityChecksum(t *testing.T) {
 			},
 		},
 	}
-	community = Vars(Select(noChecksum, nil, "/context/secrets"))["community"].(map[string]any)
+	community = Vars(Select(noChecksum, nil, nil, "/context/secrets"))["community"].(map[string]any)
 	if _, ok := community["checksum"]; ok {
 		t.Fatalf("community vars must omit checksum when only mirror is set: %#v", community)
 	}

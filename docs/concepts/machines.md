@@ -252,7 +252,7 @@ so there is no `type` field. Set exactly one:
 | Arm | Fields | Description |
 | --- | --- | --- |
 | `mirror` | `baseURL` (required, `http(s)`), `repositories[]` (`id` + `http(s)` `baseURL`) | Install from an HTTP(S) install tree you host. `baseURL` is the primary tree (BaseOS); `repositories` are additional (e.g. AppStream). |
-| `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `Environment.spec.entitlements[]` `rhel` entitlement. |
+| `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. |
 | `hostedTree` | `fromMedia` (required, `local-media:`/`file://`) | Bootwright extracts the DVD named by `fromMedia` once and serves it from the cluster artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from `spec.bootMedia`. |
 
 !!! note "Registering against a corporate Satellite"
@@ -289,10 +289,10 @@ spec:
           baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
-A boot ISO from the Red Hat CDN (`redhatCDN`) references a `rhel` entitlement
-(an RHSM organization plus activation key) declared in
-[`Environment.spec.entitlements`](environment.md#entitlements); Anaconda
-registers the node and installs from the subscription CDN:
+A boot ISO from the Red Hat CDN (`redhatCDN`) references a `redhat-rhel`
+[`Entitlement`](environment.md#entitlements) (an RHSM organization plus
+activation key); Anaconda registers the node and installs from the subscription
+CDN:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

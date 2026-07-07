@@ -1,7 +1,7 @@
 # Desired-State Model
 
 Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and
-nineteen user-authored kinds. The schema intentionally tracks the inputs
+twenty user-authored kinds. The schema intentionally tracks the inputs
 consumed by `openshift-install` for agent installs, Bootwright-managed machine
 OS installation, and cephadm for external Ceph storage.
 
@@ -10,7 +10,7 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Kinds
 
-The nineteen kinds and the fact each owns are listed in `domain.md` (Operating
+The twenty kinds and the fact each owns are listed in `domain.md` (Operating
 Model). This document specifies each kind's fields, validation, and the CLI
 contract.
 
@@ -106,21 +106,24 @@ Rules:
   `ecdsa-p384`, `ecdsa-p521`; optional `comment`). `file` and `generated` are
   mutually exclusive.
   Any other shape is rejected naming `Environment.spec.secrets`.
-- `entitlements[]` declares named subscription, registry entitlement, and
-  license references for products that need vendor-controlled access. Each entry
-  sets a `provider`/`product` pair from this compatibility matrix; other pairs
-  are rejected:
-  - `community`: `ceph`, `openshift`
-  - `redhat`: `ceph`, `rhel`, `openshift`
-  - `ibm`: `ibm-storage-ceph`
+- Entitlements are their own first-class `Entitlement` kind (one object per
+  file), not an `Environment` field; the secret material they name still lives in
+  `Environment.spec.secrets`. Each `Entitlement` declares named subscription,
+  registry entitlement, and license references for products that need
+  vendor-controlled access. `spec.type` is the discriminator, from this set;
+  other values are rejected:
+  - `redhat-rhel`: a RHEL subscription (RHSM), for the RHEL BaseOS/AppStream
+    repos.
+  - `redhat-ceph`: a single Red Hat subscription covering both RHEL and the
+    `rhceph` tools repo, plus `registry.redhat.io` access.
+  - `ibm-storage-ceph`: IBM Storage Ceph product access (registry + license).
 
-  A `rhel` entitlement and a `redhat`/`ceph` entitlement require `rhsm`
-  (`organizationRef`, `activationKeyRef`); `redhat`/`ceph` also requires
+  A `redhat-rhel` and a `redhat-ceph` entitlement require `rhsm`
+  (`organizationRef`, `activationKeyRef`); `redhat-ceph` also requires
   `registry.credentialsRef`. An `ibm-storage-ceph` entitlement requires
   `registry.credentialsRef`, `license.accept: true`, and `rhelEntitlementRef`
-  naming a `redhat`/`rhel` entitlement for the RHEL subscription it runs on; it
-  takes no inline `rhsm` arm. Referenced secret material still lives in
-  `Environment.spec.secrets`.
+  naming a `redhat-rhel` entitlement for the RHEL subscription it runs on; it
+  takes no inline `rhsm` arm.
 
 Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
@@ -272,9 +275,9 @@ Rules:
   `baseURL` is the primary Anaconda install tree (BaseOS) and `repositories[]`
   become additional Kickstart `repo` entries (e.g. AppStream). Every `baseURL`
   must be `http://` or `https://`.
-- `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a Red
-  Hat `rhel` entitlement. RHSM organization and activation key secret refs are
-  owned by that Environment entitlement.
+- `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a
+  `redhat-rhel` `Entitlement`. RHSM organization and activation key secret refs
+  are owned by that entitlement.
 - `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
   once and serves from the cluster artifact server. It must reference local
   media (`local-media:` or `file://`, not a URL) and must differ from
@@ -618,14 +621,14 @@ Rules:
   top of the HTTPS transport, and when unset the binary is fetched with no
   content pin (the default). `spec.ceph.community` must be empty for `redhat`
   and `ibm`.
-- `distribution: redhat` requires `entitlementRef` to resolve to a Red
-  Hat `ceph` entitlement. Red Hat Ceph Storage repositories and registry
+- `distribution: redhat` requires `entitlementRef` to resolve to a
+  `redhat-ceph` `Entitlement`. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph
   packages or images.
-- `distribution: ibm` requires `entitlementRef` to resolve to an IBM
-  `ibm-storage-ceph` entitlement with accepted license terms. IBM Storage Ceph
+- `distribution: ibm` requires `entitlementRef` to resolve to an
+  `ibm-storage-ceph` `Entitlement` with accepted license terms. IBM Storage Ceph
   registry access and license acceptance come from that entitlement; the RHEL
-  BaseOS/AppStream repos cephadm needs come from the `redhat`/`rhel` entitlement
+  BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` entitlement
   it names via `rhelEntitlementRef`. Neither must mix with upstream Ceph packages
   or images.
 - `cephadm.addressRef`, when set, selects a named

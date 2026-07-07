@@ -252,8 +252,8 @@ type MachinePackageMirror struct {
 
 // MachinePackageRedhatCDN installs from the Red Hat CDN over an entitlement.
 type MachinePackageRedhatCDN struct {
-	// EntitlementRef names the Environment.spec.entitlements[] entry (a Red Hat
-	// "rhel" entitlement) backing the CDN install.
+	// EntitlementRef names an Entitlement of type redhat-rhel backing the CDN
+	// install.
 	EntitlementRef LocalObjectReference `yaml:"entitlementRef" json:"entitlementRef"`
 }
 

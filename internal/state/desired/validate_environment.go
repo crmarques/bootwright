@@ -44,7 +44,6 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentStorageClusters(env, state)...)
 		errs = append(errs, validateEnvironmentInfraComponents(env, state)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
-		errs = append(errs, validateEnvironmentEntitlements(env)...)
 		errs = append(errs, validateEnvironmentRegistries(env)...)
 		errs = append(errs, validateEnvironmentInstallTrust(env)...)
 		errs = append(errs, validateComponentImages(env)...)

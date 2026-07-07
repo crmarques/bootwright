@@ -172,6 +172,7 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		}
 	}
 	if len(state.Environments) == 0 &&
+		len(state.Entitlements) == 0 &&
 		len(state.Machines) == 0 &&
 		len(state.MachineImages) == 0 &&
 		len(state.MachineInstallProfiles) == 0 &&
@@ -340,6 +341,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.Environments = append(state.Environments, item)
+		case v1alpha1.KindEntitlement:
+			var item v1alpha1.Entitlement
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.Entitlements = append(state.Entitlements, item)
 		case v1alpha1.KindMachine:
 			var item v1alpha1.Machine
 			if err := decodeKnown(node, &item); err != nil {
@@ -531,6 +539,12 @@ func sortState(state *v1alpha1.State) {
 			return state.Environments[i].SourcePath < state.Environments[j].SourcePath
 		}
 		return state.Environments[i].Metadata.Name < state.Environments[j].Metadata.Name
+	}))
+	sort.SliceStable(state.Entitlements, sortByName(func(i, j int) bool {
+		if state.Entitlements[i].Metadata.Name == state.Entitlements[j].Metadata.Name {
+			return state.Entitlements[i].SourcePath < state.Entitlements[j].SourcePath
+		}
+		return state.Entitlements[i].Metadata.Name < state.Entitlements[j].Metadata.Name
 	}))
 	sort.SliceStable(state.Machines, sortByName(func(i, j int) bool {
 		if state.Machines[i].Metadata.Name == state.Machines[j].Metadata.Name {

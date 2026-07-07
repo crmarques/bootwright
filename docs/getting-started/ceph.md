@@ -59,12 +59,13 @@ The example is a complete, valid bootwright tree. Its layout:
 
 ```text
 my-ceph-lab/
-  environment.yaml                                   Environment: secrets, entitlements, lab DNS
+  environment.yaml                                   Environment: secrets, cluster selection, lab DNS
   infra/
     providers/libvirt.yaml                           InfraProvider: libvirt + VM profiles + bridge
     machines/bastion.yaml                            Machine: the libvirt host (localhost)
     networkconfigs/ceph-net.yaml                     NetworkConfig: 192.168.140.0/24, static IPs
     components/lab-dns.yaml                           InfraComponent: dnsmasq resolver + forwarders
+    entitlements/{rhel,ibm-storage-ceph}.yaml         Entitlements: RHEL subscription + IBM Storage Ceph
     os/rhel-9-x86-64-dvd.yaml                        MachineImage: RHEL 9.7 DVD (local-media)
     os/rhel-9-ceph-node.yaml                         MachineInstallProfile: Anaconda RHEL install
   clusters/storage/ceph-ibm/
@@ -84,20 +85,22 @@ Read them in dependency order; each owns exactly one slice of the truth.
 
 The catalog that ties the tree together. It sets `spec.baseDomain`
 (`bootwright.test`), activates the cluster under `spec.storageClusters`, names the
-secrets the workflow needs under `spec.secrets`, declares the two `entitlements`
-that license the install, and selects the managed lab DNS under
-`spec.infraComponents.nameResolution`. It also sets
+secrets the workflow needs under `spec.secrets`, and selects the managed lab DNS
+under `spec.infraComponents.nameResolution`. It also sets
 `spec.safety.destroyProtection: requiredOverride`, so `destroy` refuses to run
 without `--override`.
 
-The two entitlements are decoupled by concern — IBM Storage Ceph runs on RHEL it
-does not itself entitle:
+### Entitlements (`infra/entitlements/`)
 
-- `rhel` (`provider: redhat`, `product: rhel`) registers each node with
+The two `Entitlement` objects that license the install are their own first-class
+files (referenced by name from the `StorageCluster`), decoupled by concern — IBM
+Storage Ceph runs on RHEL it does not itself entitle:
+
+- `rhel` (`type: redhat-rhel`) registers each node with
   `subscription-manager` so the RHEL BaseOS/AppStream repos cephadm needs are
   available. Its `rhsm.organizationRef` and `rhsm.activationKeyRef` resolve to the
   `rhel-org` and `rhel-activation-key` secrets.
-- `ibm-storage-ceph` (`provider: ibm`, `product: ibm-storage-ceph`) logs each node
+- `ibm-storage-ceph` (`type: ibm-storage-ceph`) logs each node
   into the IBM registry `cp.icr.io/cp` for the container images, accepts the
   product license (`license.accept: true`), and names the RHEL entitlement via
   `rhelEntitlementRef: rhel`. Its `registry.credentialsRef` resolves to the

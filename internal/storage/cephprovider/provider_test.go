@@ -12,7 +12,7 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 			Ceph: &v1alpha1.StorageClusterCephSpec{},
 		},
 	}
-	provider := Select(cluster, nil, "/context/secrets")
+	provider := Select(cluster, nil, nil, "/context/secrets")
 	if provider.Distribution != v1alpha1.StorageCephDistributionOSS {
 		t.Fatalf("distribution = %q, want oss", provider.Distribution)
 	}
@@ -46,7 +46,7 @@ func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
 			},
 		},
 	}
-	provider := Select(cluster, nil, "/context/secrets")
+	provider := Select(cluster, nil, nil, "/context/secrets")
 	if provider.Community.Release != "reef" || provider.Community.Mirror != "https://mirror.example.test/ceph" {
 		t.Fatalf("community override not projected: %#v", provider.Community)
 	}
@@ -67,7 +67,7 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 
 	// A full x.y.z release pins the repository as a version and derives the
 	// matching container image.
-	provider := Select(oss("19.2.1", ""), nil, "/context/secrets")
+	provider := Select(oss("19.2.1", ""), nil, nil, "/context/secrets")
 	if provider.Community.Version != "19.2.1" || provider.Community.Release != "" {
 		t.Fatalf("version not classified: %#v", provider.Community)
 	}
@@ -87,7 +87,7 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 	}
 
 	// A release name leaves the image unpinned (floats).
-	nameProvider := Select(oss("squid", ""), nil, "/context/secrets")
+	nameProvider := Select(oss("squid", ""), nil, nil, "/context/secrets")
 	if nameProvider.Community.Release != "squid" || nameProvider.Image != "" {
 		t.Fatalf("name release derived an image: %#v image=%q", nameProvider.Community, nameProvider.Image)
 	}
@@ -96,7 +96,7 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 	}
 
 	// An explicit image overrides the derived one.
-	pinned := Select(oss("19.2.1", "quay.io/ceph/ceph@sha256:abc"), nil, "/context/secrets")
+	pinned := Select(oss("19.2.1", "quay.io/ceph/ceph@sha256:abc"), nil, nil, "/context/secrets")
 	if pinned.Image != "quay.io/ceph/ceph@sha256:abc" {
 		t.Fatalf("explicit image not honored: %q", pinned.Image)
 	}
@@ -112,17 +112,17 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 	}
 
 	// Default stream (release unset) keeps rhceph-9-tools.
-	def := Select(redhat("", ""), nil, "/context/secrets").Repository.RedHatRepos
+	def := Select(redhat("", ""), nil, nil, "/context/secrets").Repository.RedHatRepos
 	if got := def[len(def)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
 		t.Fatalf("default tools repo = %q", got)
 	}
 
 	// An explicit stream selects rhceph-<N>-tools and is honored from a major.minor.
-	repos := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, "/context/secrets").Repository.RedHatRepos
+	repos := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, nil, "/context/secrets").Repository.RedHatRepos
 	if got := repos[len(repos)-1]; got != "rhceph-10-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
 		t.Fatalf("stream tools repo = %q, want rhceph-10-tools", got)
 	}
-	provider := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, "/context/secrets")
+	provider := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, nil, "/context/secrets")
 	if provider.Image != "registry.redhat.io/rhceph/rhceph-10-rhel9:10" {
 		t.Fatalf("explicit image not honored: %q", provider.Image)
 	}
@@ -137,10 +137,10 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 			Release:      release,
 		}}}
 	}
-	if url := Select(ibm(""), nil, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo" {
+	if url := Select(ibm(""), nil, nil, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo" {
 		t.Fatalf("default ibm repo url = %q", url)
 	}
-	if url := Select(ibm("10"), nil, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-9.repo" {
+	if url := Select(ibm("10"), nil, nil, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-9.repo" {
 		t.Fatalf("stream ibm repo url = %q, want stream 10", url)
 	}
 }
@@ -173,7 +173,7 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := Select(cluster(tc.distribution, tc.release, tc.image), nil, "/context/secrets")
+			provider := Select(cluster(tc.distribution, tc.release, tc.image), nil, nil, "/context/secrets")
 			if provider.ImageBase != tc.want {
 				t.Fatalf("ImageBase = %q, want %q", provider.ImageBase, tc.want)
 			}
@@ -201,24 +201,25 @@ func TestImageRepositoryStripsTagAndDigest(t *testing.T) {
 }
 
 func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-		Name:     "rhcs",
-		Provider: v1alpha1.EntitlementProviderRedHat,
-		Product:  v1alpha1.EntitlementProductCeph,
-		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-			OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
-			ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-key"},
-			ConnectToInsights: true,
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhcs"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatCeph,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
+				ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-key"},
+				ConnectToInsights: true,
+			},
+			Registry: &v1alpha1.EntitlementRegistry{
+				CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"},
+			},
 		},
-		Registry: &v1alpha1.EnvironmentEntitlementRegistry{
-			CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"},
-		},
-	}}}}
+	}}
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution:   v1alpha1.StorageCephDistributionRedHat,
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 	}}}
-	provider := Select(cluster, env, "/context/secrets")
+	provider := Select(cluster, ents, nil, "/context/secrets")
 	vars := Vars(provider)
 	registry := vars["registry"].(map[string]any)
 	if registry["url"] != RedHatRegistryURL {
@@ -240,26 +241,27 @@ func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
 }
 
 func TestSelectRedHatProviderProjectsSatellite(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-		Name:     "rhcs",
-		Provider: v1alpha1.EntitlementProviderRedHat,
-		Product:  v1alpha1.EntitlementProductCeph,
-		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-			OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-			ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-key"},
-			Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
-				Hostname:       "satellite.corp.example.com",
-				ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
-				TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhcs"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatCeph,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+				ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-key"},
+				Satellite: &v1alpha1.EntitlementRHSMSatellite{
+					Hostname:       "satellite.corp.example.com",
+					ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
+					TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+				},
 			},
+			Registry: &v1alpha1.EntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"}},
 		},
-		Registry: &v1alpha1.EnvironmentEntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"}},
-	}}}}
+	}}
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution:   v1alpha1.StorageCephDistributionRedHat,
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 	}}}
-	rhsm := Vars(Select(cluster, env, "/context/secrets"))["rhsm"].(map[string]any)
+	rhsm := Vars(Select(cluster, ents, nil, "/context/secrets"))["rhsm"].(map[string]any)
 	satellite, ok := rhsm["satellite"].(map[string]any)
 	if !ok {
 		t.Fatalf("day-2 rhsm.satellite missing: %#v", rhsm)
@@ -274,32 +276,34 @@ func TestSelectRedHatProviderProjectsSatellite(t *testing.T) {
 func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {
 	// The ibm item carries registry + license only; its RHSM is sourced from the
 	// referenced redhat/rhel item, yet the projected vars are identical.
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{
+	ents := []v1alpha1.Entitlement{
 		{
-			Name:     "rhel",
-			Provider: v1alpha1.EntitlementProviderRedHat,
-			Product:  v1alpha1.EntitlementProductRHEL,
-			RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-				OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
-				ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
+				},
 			},
 		},
 		{
-			Name:               "ibm-ceph",
-			Provider:           v1alpha1.EntitlementProviderIBM,
-			Product:            v1alpha1.EntitlementProductIBMStorageCeph,
-			RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-			Registry: &v1alpha1.EnvironmentEntitlementRegistry{
-				CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
+			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
+				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				Registry: &v1alpha1.EntitlementRegistry{
+					CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
+				},
+				License: &v1alpha1.EntitlementLicense{Accept: true},
 			},
-			License: &v1alpha1.EnvironmentEntitlementLicense{Accept: true},
 		},
-	}}}
+	}
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution:   v1alpha1.StorageCephDistributionIBM,
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "ibm-ceph"},
 	}}}
-	vars := Vars(Select(cluster, env, "/context/secrets"))
+	vars := Vars(Select(cluster, ents, nil, "/context/secrets"))
 	rhsm := vars["rhsm"].(map[string]any)
 	if rhsm["organizationPath"] != "/context/secrets/ibm-org" || rhsm["activationKeyPath"] != "/context/secrets/ibm-key" {
 		t.Fatalf("rhsm vars (via rhelEntitlementRef) = %#v", rhsm)
@@ -336,7 +340,7 @@ func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
 		cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: tc.distribution,
 		}}}
-		repos := Select(cluster, nil, "/context/secrets").Repository.RedHatRepos
+		repos := Select(cluster, nil, nil, "/context/secrets").Repository.RedHatRepos
 		if len(repos) != len(tc.want) {
 			t.Fatalf("%s redhatRepos = %#v, want %#v", tc.distribution, repos, tc.want)
 		}
@@ -345,13 +349,13 @@ func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
 				t.Fatalf("%s redhatRepos[%d] = %q, want %q", tc.distribution, i, repos[i], tc.want[i])
 			}
 		}
-		repo := Vars(Select(cluster, nil, "/context/secrets"))["repository"].(map[string]any)
+		repo := Vars(Select(cluster, nil, nil, "/context/secrets"))["repository"].(map[string]any)
 		if _, ok := repo["redhatRepos"].([]string); !ok {
 			t.Fatalf("%s Vars repository.redhatRepos missing or wrong type: %#v", tc.distribution, repo)
 		}
 	}
 	oss := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}}}
-	if repos := Select(oss, nil, "/context/secrets").Repository.RedHatRepos; len(repos) != 0 {
+	if repos := Select(oss, nil, nil, "/context/secrets").Repository.RedHatRepos; len(repos) != 0 {
 		t.Fatalf("oss redhatRepos = %#v, want none", repos)
 	}
 }

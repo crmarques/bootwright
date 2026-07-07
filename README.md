@@ -135,11 +135,12 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and nineteen kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty kinds:
 
 | Kind | Owns |
 | --- | --- |
 | `Environment` | Shared environment defaults: selected resource files or directories, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
+| `Entitlement` | Named vendor-controlled content access for one product (`spec.type`): RHSM subscription (with optional Satellite), vendor registry credentials, and license, referenced by `StorageCluster` and `MachineImage` |
 | `Machine` | Raw, Bootwright-managed, or externally installed machine desired state: substrate binding, OS mode, install network, named addresses, SSH, and capabilities |
 | `MachineImage` | Bootwright-managed OS install media such as trusted base ISOs |
 | `MachineInstallProfile` | Bootwright-managed OS installation profile, installer type, repositories, storage, SSH, packages, services, SELinux, firewall, and FIPS install customizations |

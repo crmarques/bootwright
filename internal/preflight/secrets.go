@@ -134,7 +134,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				phases:  []string{"deps", "base"},
 			})
 		}
-		out = append(out, collectEntitlementSecretRefRequirements(state, env)...)
+		out = append(out, collectEntitlementSecretRefRequirements(state)...)
 	}
 
 	for _, machine := range state.Machines {

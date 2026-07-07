@@ -31,6 +31,7 @@ func Validate(state v1alpha1.State) error {
 func validateFindings(state v1alpha1.State) []Finding {
 	var errs []Finding
 	errs = append(errs, notes(validateEnvironments(state))...)
+	errs = append(errs, notes(validateEntitlements(state))...)
 	errs = append(errs, notes(validateMachines(state))...)
 	errs = append(errs, validateNetworkConfigs(state)...)
 	errs = append(errs, notes(validateProviders(state))...)
@@ -372,7 +373,6 @@ func validateMachineNodeBindings(state v1alpha1.State) []string {
 }
 
 func validateMachineImageEntitlements(state v1alpha1.State) []string {
-	env := primaryEnvironment(&state)
 	var errs []string
 	for _, image := range state.MachineImages {
 		cdn := image.Spec.PackageSource.GetRedhatCDN()
@@ -384,16 +384,13 @@ func validateMachineImageEntitlements(state v1alpha1.State) []string {
 			continue
 		}
 		field := fmt.Sprintf("MachineImage/%s spec.packageSource.redhatCDN.entitlementRef %q", image.Metadata.Name, ref)
-		entitlement, ok := entitlements.Find(env, ref)
+		entitlement, ok := entitlements.Find(state.Entitlements, ref)
 		if !ok {
-			errs = append(errs, field+" does not match any Environment.spec.entitlements[].name")
+			errs = append(errs, field+" does not match any Entitlement")
 			continue
 		}
-		if entitlement.Provider != v1alpha1.EntitlementProviderRedHat {
-			errs = append(errs, fmt.Sprintf("%s resolves to provider %q, want %q", field, entitlement.Provider, v1alpha1.EntitlementProviderRedHat))
-		}
-		if entitlement.Product != v1alpha1.EntitlementProductRHEL {
-			errs = append(errs, fmt.Sprintf("%s resolves to product %q, want %q", field, entitlement.Product, v1alpha1.EntitlementProductRHEL))
+		if entitlement.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
+			errs = append(errs, fmt.Sprintf("%s resolves to type %q, want %q", field, entitlement.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL))
 		}
 	}
 	return errs
@@ -697,15 +694,15 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)
 		require(owner+".trustBundleRef", registries.Mirror.TrustBundleRef)
 	}
-	for i, entitlement := range env.Spec.Entitlements {
-		owner := fmt.Sprintf("Environment/%s spec.entitlements[%d]", env.Metadata.Name, i)
-		if entitlement.RHSM != nil {
-			require(owner+".rhsm.organizationRef", entitlement.RHSM.OrganizationRef)
-			require(owner+".rhsm.activationKeyRef", entitlement.RHSM.ActivationKeyRef)
+	for _, entitlement := range state.Entitlements {
+		owner := fmt.Sprintf("Entitlement/%s spec", entitlement.Metadata.Name)
+		if entitlement.Spec.RHSM != nil {
+			require(owner+".rhsm.organizationRef", entitlement.Spec.RHSM.OrganizationRef)
+			require(owner+".rhsm.activationKeyRef", entitlement.Spec.RHSM.ActivationKeyRef)
 		}
-		if entitlement.Registry != nil {
-			require(owner+".registry.credentialsRef", entitlement.Registry.CredentialsRef)
-			require(owner+".registry.trustBundleRef", entitlement.Registry.TrustBundleRef)
+		if entitlement.Spec.Registry != nil {
+			require(owner+".registry.credentialsRef", entitlement.Spec.Registry.CredentialsRef)
+			require(owner+".registry.trustBundleRef", entitlement.Spec.Registry.TrustBundleRef)
 		}
 	}
 	for _, machine := range state.Machines {

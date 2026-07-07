@@ -86,7 +86,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
-	errs = append(errs, validateStorageCephDistribution(prefix, cluster, env)...)
+	errs = append(errs, validateStorageCephDistribution(prefix, cluster, state)...)
 	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), ceph.Release)...)
 	errs = append(errs, validateStorageCephImage(prefix, ceph.Image)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)

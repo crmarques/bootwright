@@ -41,7 +41,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		return nil
 	}
 	env := stateview.Environment(state)
-	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, env, paths.SecretsDir)
+	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, state.Entitlements, env, paths.SecretsDir)
 	// hostedTree overrides the package source: bootwright extracts fromMedia (a
 	// DVD) into the cluster artifact server and the installing node fetches
 	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
@@ -248,7 +248,7 @@ func machineOSMediaType(source *v1alpha1.MachinePackageSource) string {
 // BaseURL + repo entries; redhatCDN → resolved rhsm; nil (a full DVD) and
 // hostedTree both return empty (nil installs via cdrom, and the caller overlays
 // the derived tree URL for hostedTree).
-func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
+func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents []v1alpha1.Entitlement, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
 	rhsm := map[string]any{}
 	if source == nil {
 		return "", machineInstallRepositoryVars(nil), rhsm
@@ -260,7 +260,7 @@ func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, env *v
 	if cdn == nil || cdn.EntitlementRef.Name == "" {
 		return "", machineInstallRepositoryVars(nil), rhsm
 	}
-	resolved, ok := entitlements.Resolve(env, cdn.EntitlementRef.Name, "", secretsDir)
+	resolved, ok := entitlements.Resolve(ents, env, cdn.EntitlementRef.Name, "", secretsDir)
 	if !ok {
 		return "", nil, rhsm
 	}

@@ -37,7 +37,6 @@ type EnvironmentSpec struct {
 	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
 	InstallTrust      *EnvironmentInstallTrustSpec             `yaml:"installTrust,omitempty" json:"installTrust,omitempty"`
 	Secrets           EnvironmentSecrets                       `yaml:"secrets,omitempty" json:"secrets,omitempty"`
-	Entitlements      []EnvironmentEntitlement                 `yaml:"entitlements,omitempty" json:"entitlements,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
 }
 
@@ -88,85 +87,6 @@ type EnvironmentProxyForSpec struct {
 
 type EnvironmentSecretStorageSpec struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
-}
-
-// EnvironmentEntitlement declares named vendor-controlled access for one
-// provider/product pair. It is the documented outlier among the union
-// grammars (see the package comment): the required arms follow from the
-// provider/product pair instead of a type discriminator. Pairs outside this
-// table are rejected.
-//
-//	provider/product      required arms
-//	community/ceph        none
-//	community/openshift   none
-//	redhat/openshift      none
-//	redhat/rhel           rhsm
-//	redhat/ceph           rhsm + registry.credentialsRef
-//	ibm/ibm-storage-ceph  registry.credentialsRef + license.accept: true + rhelEntitlementRef
-//
-// IBM Storage Ceph ships its own image registry (cp.icr.io) and product license
-// but runs on RHEL it does not itself entitle: its packages come from a public
-// IBM repo, while the RHEL BaseOS/AppStream repos cephadm needs are reached
-// through a separate Red Hat subscription. So an ibm/ibm-storage-ceph
-// entitlement carries registry + license and names a redhat/rhel entitlement
-// via rhelEntitlementRef for that subscription; an inline rhsm arm on it is
-// rejected. (redhat/ceph stays bundled: a single Red Hat subscription entitles
-// both RHEL and the rhceph tools repo, so its own rhsm arm covers both.)
-type EnvironmentEntitlement struct {
-	Name     string `yaml:"name" json:"name"`
-	Provider string `yaml:"provider" json:"provider"`
-	Product  string `yaml:"product" json:"product"`
-	// RHELEntitlementRef names a redhat/rhel entitlement supplying the RHEL
-	// subscription (rhsm) this entitlement depends on but does not itself
-	// carry. Required for ibm/ibm-storage-ceph (which takes no inline rhsm
-	// arm); rejected on every other pair.
-	RHELEntitlementRef LocalObjectReference            `yaml:"rhelEntitlementRef,omitempty" json:"rhelEntitlementRef,omitempty"`
-	RHSM               *EnvironmentEntitlementRHSM     `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
-	Registry           *EnvironmentEntitlementRegistry `yaml:"registry,omitempty" json:"registry,omitempty"`
-	License            *EnvironmentEntitlementLicense  `yaml:"license,omitempty" json:"license,omitempty"`
-}
-
-type EnvironmentEntitlementRHSM struct {
-	OrganizationRef   SecretRef                            `yaml:"organizationRef,omitempty" json:"organizationRef,omitempty"`
-	ActivationKeyRef  SecretRef                            `yaml:"activationKeyRef,omitempty" json:"activationKeyRef,omitempty"`
-	ConnectToInsights bool                                 `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
-	Satellite         *EnvironmentEntitlementRHSMSatellite `yaml:"satellite,omitempty" json:"satellite,omitempty"`
-}
-
-// EnvironmentEntitlementRHSMSatellite redirects this entitlement's RHSM
-// registration from the public Red Hat CDN (subscription.redhat.io) to a
-// corporate Red Hat Satellite or Capsule. When set, both the install-time
-// Anaconda kickstart (rhsm --server-hostname / --rhsm-baseurl) and the day-2
-// cephadm subscription-manager register target this server; the org and
-// activation key on the enclosing rhsm arm are interpreted against it. The CA
-// bundle named by trustBundleRef is trusted (anchors + update-ca-trust) before
-// registration so the Satellite's certificate validates. Applies to
-// RHEL/Anaconda installs; the rhsm kickstart command is RHEL-only.
-type EnvironmentEntitlementRHSMSatellite struct {
-	// Hostname is the Satellite or Capsule FQDN, e.g.
-	// satellite.corp.example.com. It is a bare host (no scheme or path); the
-	// renderer derives the rhsm server-hostname and, when ContentBaseURL is
-	// unset, the default content baseurl from it.
-	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-	// TrustBundleRef names a spec.secrets PEM CA bundle for the Satellite's
-	// certificate chain, mirroring registry.trustBundleRef. Required in
-	// practice for the common private/self-signed Satellite CA; omit only when
-	// the Satellite certificate already chains to an already-trusted root.
-	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
-	// ContentBaseURL overrides the subscription content host (rhsm baseurl).
-	// Defaults during normalization to https://<hostname>/pulp/content. Set it
-	// for non-standard content paths or a Capsule.
-	ContentBaseURL string `yaml:"contentBaseURL,omitempty" json:"contentBaseURL,omitempty"`
-}
-
-type EnvironmentEntitlementRegistry struct {
-	URL            string    `yaml:"url,omitempty" json:"url,omitempty"`
-	CredentialsRef SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
-	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
-}
-
-type EnvironmentEntitlementLicense struct {
-	Accept bool `yaml:"accept,omitempty" json:"accept,omitempty"`
 }
 
 // EnvironmentInfraComponentsSpec catalogs the per-slot service entries. Each

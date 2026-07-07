@@ -172,13 +172,9 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 		{
 			name: "redhat-stream-and-image",
 			edit: func(state *v1alpha1.State) {
-				state.Environments = []v1alpha1.Environment{{
-					Metadata: v1alpha1.Metadata{Name: "env"},
-					Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-						Name:     "ceph-entitlement",
-						Provider: v1alpha1.EntitlementProviderRedHat,
-						Product:  v1alpha1.EntitlementProductCeph,
-					}}},
+				state.Entitlements = []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-entitlement"},
+					Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeRedHatCeph},
 				}}
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
@@ -600,35 +596,25 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			want: "spec.ceph.entitlementRef is required when distribution requires subscription or license handling",
 		},
 		{
-			name: "redhat-wrong-entitlement-provider",
+			name: "redhat-wrong-entitlement-type",
 			edit: func(state *v1alpha1.State) {
-				state.Environments = []v1alpha1.Environment{{
-					Metadata: v1alpha1.Metadata{Name: "env"},
-					Spec: v1alpha1.EnvironmentSpec{
-						Entitlements: []v1alpha1.EnvironmentEntitlement{{
-							Name:     "ceph-entitlement",
-							Provider: v1alpha1.EntitlementProviderIBM,
-							Product:  v1alpha1.EntitlementProductIBMStorageCeph,
-						}},
-					},
+				state.Entitlements = []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-entitlement"},
+					Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeIBMStorageCeph},
 				}}
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 			},
-			want: `resolves to provider "ibm", want "redhat"`,
+			want: `resolves to type "ibm-storage-ceph", want "redhat-ceph"`,
 		},
 		{
 			name: "community-on-non-oss",
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
-				state.Environments = []v1alpha1.Environment{{
-					Metadata: v1alpha1.Metadata{Name: "env"},
-					Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-						Name:     "ceph-entitlement",
-						Provider: v1alpha1.EntitlementProviderRedHat,
-						Product:  v1alpha1.EntitlementProductCeph,
-					}}},
+				state.Entitlements = []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-entitlement"},
+					Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeRedHatCeph},
 				}}
 				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Mirror: "https://download.ceph.com"}
 			},
@@ -651,13 +637,9 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 		{
 			name: "release-bad-redhat-stream",
 			edit: func(state *v1alpha1.State) {
-				state.Environments = []v1alpha1.Environment{{
-					Metadata: v1alpha1.Metadata{Name: "env"},
-					Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-						Name:     "ceph-entitlement",
-						Provider: v1alpha1.EntitlementProviderRedHat,
-						Product:  v1alpha1.EntitlementProductCeph,
-					}}},
+				state.Entitlements = []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-entitlement"},
+					Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeRedHatCeph},
 				}}
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"

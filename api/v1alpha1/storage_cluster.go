@@ -58,11 +58,13 @@ type StorageClusterCephSpec struct {
 	// cluster version reproducible. It must pin a version tag or a sha256 digest
 	// (no mutable :latest). For oss an x.y.z Release derives this automatically;
 	// redhat and ibm registry tags are not x.y.z, so they pin here explicitly.
-	Image          string                    `yaml:"image,omitempty" json:"image,omitempty"`
-	Community      *StorageCephCommunitySpec `yaml:"community,omitempty" json:"community,omitempty"`
-	EntitlementRef LocalObjectReference      `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
-	Cephadm        StorageCephadmSpec        `yaml:"cephadm" json:"cephadm"`
-	Networks       StorageCephNetworks       `yaml:"networks,omitempty" json:"networks,omitempty"`
+	Image     string                    `yaml:"image,omitempty" json:"image,omitempty"`
+	Community *StorageCephCommunitySpec `yaml:"community,omitempty" json:"community,omitempty"`
+	// EntitlementRef names an Entitlement: type redhat-ceph for distribution
+	// redhat, ibm-storage-ceph for distribution ibm; empty for oss.
+	EntitlementRef LocalObjectReference `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
+	Cephadm        StorageCephadmSpec   `yaml:"cephadm" json:"cephadm"`
+	Networks       StorageCephNetworks  `yaml:"networks,omitempty" json:"networks,omitempty"`
 	// Security declares the managed Ceph cluster's security posture. FIPS, when
 	// enabled, requires every Ceph node's MachineInstallProfile to install in
 	// FIPS mode and a redhat or ibm distribution (FIPS-validated Ceph crypto is

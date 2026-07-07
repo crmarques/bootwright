@@ -33,11 +33,11 @@ The complete reference trees that exercise each topology are catalogued under
 upstream community packages and images), `redhat` (Red Hat Ceph Storage), or
 `ibm` (IBM Storage Ceph). The subscription distributions install from
 entitlement-backed repositories, so `spec.ceph.entitlementRef` must name an
-`Environment.spec.entitlements[]` entry that resolves a Red Hat or IBM Ceph
-entitlement; `oss` takes no entitlement. An `ibm/ibm-storage-ceph` entitlement
-carries only the IBM registry and license and names a separate `redhat/rhel`
+`Entitlement` that resolves to a `redhat-ceph` or `ibm-storage-ceph`
+entitlement; `oss` takes no entitlement. An `ibm-storage-ceph` entitlement
+carries only the IBM registry and license and names a separate `redhat-rhel`
 entitlement (via `rhelEntitlementRef`) for the RHEL subscription cephadm
-registers each node with. The entitlement model — provider/product pairs,
+registers each node with. The entitlement model — the `spec.type` values,
 license acceptance, and the credential plumbing — lives in
 [Secrets and entitlements](../concepts/secrets.md#entitlements).
 
@@ -55,7 +55,7 @@ empty for `redhat`/`ibm`).
 ceph:
   distribution: redhat
   release: "9"
-  entitlementRef: rhcs           # Environment.spec.entitlements[] name
+  entitlementRef: rhcs           # names a redhat-ceph Entitlement
   cephadm:
     bootstrap:
       host: ceph-0               # topology host cephadm bootstraps on

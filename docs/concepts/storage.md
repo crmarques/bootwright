@@ -91,7 +91,7 @@ spec:
 | `ceph.release` | No | `squid` (`oss`); `9` (`redhat`, `ibm`) | Ceph release for the chosen distribution. For `oss`, an upstream release name (`squid`, `reef`, `quincy`) or a full `x.y.z` version (for example `19.2.1`); a version pins the package repository and, when `ceph.image` is unset, derives the matching `quay.io/ceph/ceph:vX.Y.Z` image. For `redhat`/`ibm`, the product stream (for example `9`), selecting the `rhceph-<N>-tools` / `ibm-storage-ceph-<N>` repositories. |
 | `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). `redhat`/`ibm` tags are not `x.y.z`, so they pin here explicitly. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | Upstream package base URL for mirrored or disconnected environments. `oss` only. |
-| `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Environment.spec.entitlements[]` entry. Must resolve to a Red Hat Ceph (for `redhat`) or IBM Storage Ceph (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
+| `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Entitlement` object. Must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
 | `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
 | `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
@@ -139,8 +139,8 @@ Distribution requirements:
 | Distribution | Requirements |
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
-| `redhat` | `entitlementRef` must resolve to a Red Hat Ceph entitlement; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
-| `ibm` | `entitlementRef` must resolve to an IBM Storage Ceph entitlement with accepted license terms, which names a `redhat/rhel` entitlement via `rhelEntitlementRef` for the RHEL subscription; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
+| `redhat` | `entitlementRef` must resolve to a `redhat-ceph` entitlement; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
+| `ibm` | `entitlementRef` must resolve to an `ibm-storage-ceph` entitlement with accepted license terms, which names a `redhat-rhel` entitlement via `rhelEntitlementRef` for the RHEL subscription; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
 
 ### Monitoring
 

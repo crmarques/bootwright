@@ -8,20 +8,21 @@ import (
 )
 
 func TestNormalizeDerivesSatelliteContentBaseURL(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-		Name:     "rhel",
-		Provider: v1alpha1.EntitlementProviderRedHat,
-		Product:  v1alpha1.EntitlementProductRHEL,
-		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-			OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
-			ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
-			Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
-				Hostname: "  satellite.corp.example.com  ",
+	state := v1alpha1.State{Entitlements: []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatRHEL,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
+				ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+				Satellite: &v1alpha1.EntitlementRHSMSatellite{
+					Hostname: "  satellite.corp.example.com  ",
+				},
 			},
 		},
-	}}}}
-	normalizeEnvironment(env)
-	sat := env.Spec.Entitlements[0].RHSM.Satellite
+	}}}
+	Normalize(&state)
+	sat := state.Entitlements[0].Spec.RHSM.Satellite
 	if sat.Hostname != "satellite.corp.example.com" {
 		t.Fatalf("hostname not trimmed: %q", sat.Hostname)
 	}
@@ -30,12 +31,12 @@ func TestNormalizeDerivesSatelliteContentBaseURL(t *testing.T) {
 	}
 
 	// An explicit contentBaseURL is preserved.
-	env.Spec.Entitlements[0].RHSM.Satellite = &v1alpha1.EnvironmentEntitlementRHSMSatellite{
+	state.Entitlements[0].Spec.RHSM.Satellite = &v1alpha1.EntitlementRHSMSatellite{
 		Hostname:       "capsule.corp.example.com",
 		ContentBaseURL: "https://capsule.corp.example.com/custom/content",
 	}
-	normalizeEnvironment(env)
-	if got := env.Spec.Entitlements[0].RHSM.Satellite.ContentBaseURL; got != "https://capsule.corp.example.com/custom/content" {
+	Normalize(&state)
+	if got := state.Entitlements[0].Spec.RHSM.Satellite.ContentBaseURL; got != "https://capsule.corp.example.com/custom/content" {
 		t.Fatalf("explicit contentBaseURL overwritten: %q", got)
 	}
 }

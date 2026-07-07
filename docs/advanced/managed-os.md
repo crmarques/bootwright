@@ -98,9 +98,9 @@ spec:
           baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
-For the **Red Hat CDN** (`redhatCDN`), reference a `rhel` entitlement (an RHSM
-organization plus activation key) declared in `Environment.spec.entitlements`;
-Anaconda registers the node and installs from the subscription CDN:
+For the **Red Hat CDN** (`redhatCDN`), reference a `redhat-rhel` `Entitlement`
+(an RHSM organization plus activation key); Anaconda registers the node and
+installs from the subscription CDN:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

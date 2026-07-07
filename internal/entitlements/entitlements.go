@@ -41,36 +41,44 @@ type Resolved struct {
 	License  License
 }
 
-func Find(env *v1alpha1.Environment, name string) (v1alpha1.EnvironmentEntitlement, bool) {
-	if env == nil || name == "" {
-		return v1alpha1.EnvironmentEntitlement{}, false
+// Find returns the Entitlement named name from the loaded set, if present.
+func Find(ents []v1alpha1.Entitlement, name string) (v1alpha1.Entitlement, bool) {
+	if name == "" {
+		return v1alpha1.Entitlement{}, false
 	}
-	for _, entitlement := range env.Spec.Entitlements {
-		if entitlement.Name == name {
+	for _, entitlement := range ents {
+		if entitlement.Metadata.Name == name {
 			return entitlement, true
 		}
 	}
-	return v1alpha1.EnvironmentEntitlement{}, false
+	return v1alpha1.Entitlement{}, false
 }
 
-func Resolve(env *v1alpha1.Environment, name, defaultRegistryURL, secretsDir string) (Resolved, bool) {
-	entitlement, ok := Find(env, name)
+// Resolve materializes the Entitlement named name into subscription, registry
+// and license facts with secret material resolved to on-disk paths. ents is the
+// lookup and rhelEntitlementRef-follow domain; env is needed only to resolve
+// secret material (secrets live on Environment.spec.secrets), keeping the
+// secret-by-name invariant. provider/product are derived from spec.type so the
+// day-2 cephadm render is unchanged.
+func Resolve(ents []v1alpha1.Entitlement, env *v1alpha1.Environment, name, defaultRegistryURL, secretsDir string) (Resolved, bool) {
+	entitlement, ok := Find(ents, name)
 	if !ok {
 		return Resolved{}, false
 	}
+	provider, product, _ := v1alpha1.EntitlementTypeProviderProduct(entitlement.Spec.Type)
 	out := Resolved{
-		Name:     entitlement.Name,
-		Provider: entitlement.Provider,
-		Product:  entitlement.Product,
+		Name:     entitlement.Metadata.Name,
+		Provider: provider,
+		Product:  product,
 	}
-	// An entitlement either carries rhsm inline (redhat/rhel, redhat/ceph) or,
-	// for ibm/ibm-storage-ceph, defers it to a referenced redhat/rhel
-	// entitlement. Either way the resolved RHSM is populated identically, so
-	// downstream rendering does not distinguish the two.
-	rhsm := entitlement.RHSM
-	if rhsm == nil && entitlement.RHELEntitlementRef.Name != "" {
-		if rhel, ok := Find(env, entitlement.RHELEntitlementRef.Name); ok {
-			rhsm = rhel.RHSM
+	// An entitlement either carries rhsm inline (redhat-rhel, redhat-ceph) or,
+	// for ibm-storage-ceph, defers it to a referenced redhat-rhel entitlement.
+	// Either way the resolved RHSM is populated identically, so downstream
+	// rendering does not distinguish the two.
+	rhsm := entitlement.Spec.RHSM
+	if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
+		if rhel, ok := Find(ents, entitlement.Spec.RHELEntitlementRef.Name); ok {
+			rhsm = rhel.Spec.RHSM
 		}
 	}
 	if rhsm != nil {
@@ -87,18 +95,18 @@ func Resolve(env *v1alpha1.Environment, name, defaultRegistryURL, secretsDir str
 			}
 		}
 	}
-	if entitlement.Registry != nil {
+	if entitlement.Spec.Registry != nil {
 		out.Registry = Registry{
-			URL:             entitlement.Registry.URL,
-			CredentialsPath: secret.ResolveMaterialPath(entitlement.Registry.CredentialsRef.Name, env, secretsDir, secret.MaterialPrimary),
-			TrustBundlePath: secret.ResolveMaterialPath(entitlement.Registry.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary),
+			URL:             entitlement.Spec.Registry.URL,
+			CredentialsPath: secret.ResolveMaterialPath(entitlement.Spec.Registry.CredentialsRef.Name, env, secretsDir, secret.MaterialPrimary),
+			TrustBundlePath: secret.ResolveMaterialPath(entitlement.Spec.Registry.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary),
 		}
 	}
 	if out.Registry.URL == "" {
 		out.Registry.URL = defaultRegistryURL
 	}
-	if entitlement.License != nil {
-		out.License.Accepted = entitlement.License.Accept
+	if entitlement.Spec.License != nil {
+		out.License.Accepted = entitlement.Spec.License.Accept
 	}
 	return out, true
 }

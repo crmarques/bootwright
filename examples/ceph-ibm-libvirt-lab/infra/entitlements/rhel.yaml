@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: rhel
+# The RHEL subscription IBM Storage Ceph runs on. Registers each node with
+# subscription-manager (rhsm) so the RHEL BaseOS/AppStream repos are available
+# for cephadm/ceph-common. Reusable by any RHEL machine.
+spec:
+  type: redhat-rhel
+
+  rhsm:
+    organizationRef: rhel-org
+    activationKeyRef: rhel-activation-key

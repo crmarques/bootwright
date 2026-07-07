@@ -543,18 +543,19 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 					"redhat-org":                {},
 					"redhat-activation-key":     {},
 				},
-				Entitlements: []v1alpha1.EnvironmentEntitlement{{
-					Name:     "rhcs",
-					Provider: v1alpha1.EntitlementProviderRedHat,
-					Product:  v1alpha1.EntitlementProductCeph,
-					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-					},
-					Registry: &v1alpha1.EnvironmentEntitlementRegistry{
-						CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
-					},
-				}},
+			},
+		}},
+		Entitlements: []v1alpha1.Entitlement{{
+			Metadata: v1alpha1.Metadata{Name: "rhcs"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatCeph,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+				},
+				Registry: &v1alpha1.EntitlementRegistry{
+					CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+				},
 			},
 		}},
 		Machines: []v1alpha1.Machine{{
@@ -623,18 +624,19 @@ func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 					"redhat-activation-key":     {},
 					"ceph-registry-credentials": {},
 				},
-				Entitlements: []v1alpha1.EnvironmentEntitlement{{
-					Name:     "rhcs",
-					Provider: v1alpha1.EntitlementProviderRedHat,
-					Product:  v1alpha1.EntitlementProductCeph,
-					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-					},
-					Registry: &v1alpha1.EnvironmentEntitlementRegistry{
-						CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
-					},
-				}},
+			},
+		}},
+		Entitlements: []v1alpha1.Entitlement{{
+			Metadata: v1alpha1.Metadata{Name: "rhcs"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatCeph,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+				},
+				Registry: &v1alpha1.EntitlementRegistry{
+					CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+				},
 			},
 		}},
 		Machines: []v1alpha1.Machine{{

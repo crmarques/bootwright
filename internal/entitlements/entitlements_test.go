@@ -6,34 +6,36 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestResolveFollowsRHELEntitlementRef verifies that an ibm/ibm-storage-ceph
+// TestResolveFollowsRHELEntitlementRef verifies that an ibm-storage-ceph
 // entitlement, which carries no inline rhsm arm, resolves its RHSM material
-// from the referenced redhat/rhel entitlement while keeping its own registry
+// from the referenced redhat-rhel entitlement while keeping its own registry
 // and license arms.
 func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{
+	ents := []v1alpha1.Entitlement{
 		{
-			Name:     "rhel",
-			Provider: v1alpha1.EntitlementProviderRedHat,
-			Product:  v1alpha1.EntitlementProductRHEL,
-			RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-				OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
-				ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
+				},
 			},
 		},
 		{
-			Name:               "ibm-ceph",
-			Provider:           v1alpha1.EntitlementProviderIBM,
-			Product:            v1alpha1.EntitlementProductIBMStorageCeph,
-			RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-			Registry: &v1alpha1.EnvironmentEntitlementRegistry{
-				CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
+			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
+				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				Registry: &v1alpha1.EntitlementRegistry{
+					CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
+				},
+				License: &v1alpha1.EntitlementLicense{Accept: true},
 			},
-			License: &v1alpha1.EnvironmentEntitlementLicense{Accept: true},
 		},
-	}}}
+	}
 
-	resolved, ok := Resolve(env, "ibm-ceph", "cp.icr.io/cp", "/secrets")
+	resolved, ok := Resolve(ents, nil, "ibm-ceph", "cp.icr.io/cp", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(ibm-ceph) not found")
 	}
@@ -47,8 +49,8 @@ func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 		t.Fatalf("license accepted = %v", resolved.License.Accepted)
 	}
 
-	// The referenced redhat/rhel entitlement still resolves its rhsm inline.
-	rhel, ok := Resolve(env, "rhel", "registry.redhat.io", "/secrets")
+	// The referenced redhat-rhel entitlement still resolves its rhsm inline.
+	rhel, ok := Resolve(ents, nil, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(rhel) not found")
 	}
@@ -59,34 +61,36 @@ func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 
 // TestResolveCarriesSatellite verifies a corporate Satellite redirect on an
 // rhsm arm resolves its hostname/content URL and materialized CA path, and that
-// an ibm/ibm-storage-ceph entitlement inherits it through rhelEntitlementRef.
+// an ibm-storage-ceph entitlement inherits it through rhelEntitlementRef.
 func TestResolveCarriesSatellite(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{
+	ents := []v1alpha1.Entitlement{
 		{
-			Name:     "rhel",
-			Provider: v1alpha1.EntitlementProviderRedHat,
-			Product:  v1alpha1.EntitlementProductRHEL,
-			RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-				OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
-				ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
-				Satellite: &v1alpha1.EnvironmentEntitlementRHSMSatellite{
-					Hostname:       "satellite.corp.example.com",
-					ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
-					TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+					Satellite: &v1alpha1.EntitlementRHSMSatellite{
+						Hostname:       "satellite.corp.example.com",
+						ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
+						TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+					},
 				},
 			},
 		},
 		{
-			Name:               "ibm-ceph",
-			Provider:           v1alpha1.EntitlementProviderIBM,
-			Product:            v1alpha1.EntitlementProductIBMStorageCeph,
-			RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-			Registry:           &v1alpha1.EnvironmentEntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"}},
-			License:            &v1alpha1.EnvironmentEntitlementLicense{Accept: true},
+			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
+				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				Registry:           &v1alpha1.EntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"}},
+				License:            &v1alpha1.EntitlementLicense{Accept: true},
+			},
 		},
-	}}}
+	}
 
-	rhel, ok := Resolve(env, "rhel", "registry.redhat.io", "/secrets")
+	rhel, ok := Resolve(ents, nil, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(rhel) not found")
 	}
@@ -96,7 +100,7 @@ func TestResolveCarriesSatellite(t *testing.T) {
 		t.Fatalf("rhel satellite = %#v", rhel.RHSM.Satellite)
 	}
 
-	ibm, ok := Resolve(env, "ibm-ceph", "cp.icr.io/cp", "/secrets")
+	ibm, ok := Resolve(ents, nil, "ibm-ceph", "cp.icr.io/cp", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(ibm-ceph) not found")
 	}
@@ -105,16 +109,17 @@ func TestResolveCarriesSatellite(t *testing.T) {
 	}
 
 	// Without a satellite block, the resolved redirect stays empty (public CDN).
-	bare := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
-		Name:     "rhel",
-		Provider: v1alpha1.EntitlementProviderRedHat,
-		Product:  v1alpha1.EntitlementProductRHEL,
-		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-			OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
-			ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+	bare := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatRHEL,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
+				ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+			},
 		},
-	}}}}
-	resolved, ok := Resolve(bare, "rhel", "registry.redhat.io", "/secrets")
+	}}
+	resolved, ok := Resolve(bare, nil, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(bare rhel) not found")
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/media"
 )
 
-func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment) []string {
+func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	distribution := storageCephDistribution(cluster)
 	if cluster.Spec.Ceph.Distribution != "" && distribution == "" {
 		return []string{fmt.Sprintf("%s.distribution %q must be one of {%s, %s, %s}",
@@ -24,30 +24,26 @@ func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageClus
 		}
 		return nil
 	case v1alpha1.StorageCephDistributionRedHat:
-		return validateStorageCephDistributionEntitlement(prefix, env, ref, v1alpha1.EntitlementProviderRedHat, v1alpha1.EntitlementProductCeph)
+		return validateStorageCephDistributionEntitlement(prefix, state, ref, v1alpha1.EntitlementTypeRedHatCeph)
 	case v1alpha1.StorageCephDistributionIBM:
-		return validateStorageCephDistributionEntitlement(prefix, env, ref, v1alpha1.EntitlementProviderIBM, v1alpha1.EntitlementProductIBMStorageCeph)
+		return validateStorageCephDistributionEntitlement(prefix, state, ref, v1alpha1.EntitlementTypeIBMStorageCeph)
 	default:
 		return nil
 	}
 }
 
-func validateStorageCephDistributionEntitlement(prefix string, env *v1alpha1.Environment, ref, provider, product string) []string {
+func validateStorageCephDistributionEntitlement(prefix string, state v1alpha1.State, ref, wantType string) []string {
 	if ref == "" {
 		return []string{prefix + ".entitlementRef is required when distribution requires subscription or license handling"}
 	}
-	entitlement, ok := entitlements.Find(env, ref)
+	entitlement, ok := entitlements.Find(state.Entitlements, ref)
 	if !ok {
-		return []string{fmt.Sprintf("%s.entitlementRef %q does not match any Environment.spec.entitlements[].name", prefix, ref)}
+		return []string{fmt.Sprintf("%s.entitlementRef %q does not match any Entitlement", prefix, ref)}
 	}
-	var errs []string
-	if entitlement.Provider != provider {
-		errs = append(errs, fmt.Sprintf("%s.entitlementRef %q resolves to provider %q, want %q", prefix, ref, entitlement.Provider, provider))
+	if entitlement.Spec.Type != wantType {
+		return []string{fmt.Sprintf("%s.entitlementRef %q resolves to type %q, want %q", prefix, ref, entitlement.Spec.Type, wantType)}
 	}
-	if entitlement.Product != product {
-		errs = append(errs, fmt.Sprintf("%s.entitlementRef %q resolves to product %q, want %q", prefix, ref, entitlement.Product, product))
-	}
-	return errs
+	return nil
 }
 
 // validateStorageCephRelease checks spec.ceph.release against the meaning the

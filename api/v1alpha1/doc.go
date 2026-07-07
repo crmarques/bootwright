@@ -22,9 +22,10 @@
 // discriminator — authoring exactly one arm selects the kind — and is used
 // only where the surrounding document already fixes which arm is legal:
 // InfraProvider spec.networkAttachments, where the provider's spec.type is
-// the kind. EnvironmentEntitlement is the one documented outlier: its
-// required arms follow from the provider/product pair (see the table on the
-// struct).
+// the kind. Entitlement is the one documented outlier: its spec.type
+// discriminator selects a set of required arms (rhsm/registry/license) rather
+// than a single populated arm, so it is neither a plain discriminated nor a
+// presence union (see the table on the struct).
 //
 // Named collections. A named set of things is a list of entries with a name
 // field wherever the names are user-invented (bindAddresses, listeners,

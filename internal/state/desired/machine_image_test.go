@@ -166,15 +166,16 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 				Secrets: v1alpha1.EnvironmentSecrets{
 					"redhat-org": {},
 				},
-				Entitlements: []v1alpha1.EnvironmentEntitlement{{
-					Name:     "rhel",
-					Provider: v1alpha1.EntitlementProviderRedHat,
-					Product:  v1alpha1.EntitlementProductRHEL,
-					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
-						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-					},
-				}},
+			},
+		}},
+		Entitlements: []v1alpha1.Entitlement{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+				},
 			},
 		}},
 		MachineImages: []v1alpha1.MachineImage{{

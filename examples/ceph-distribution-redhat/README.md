@@ -1,9 +1,9 @@
 # Red Hat Ceph Storage distribution
 
 Selects Red Hat Ceph Storage with `spec.ceph.distribution: redhat` and resolves
-all subscription and registry material through one named
-`Environment.spec.entitlements[]` entry (`rhcs`), referenced from the
-`StorageCluster` with `spec.ceph.entitlementRef`.
+all subscription and registry material through one `Entitlement` object
+(`rhcs`, type `redhat-ceph`), referenced from the `StorageCluster` with
+`spec.ceph.entitlementRef`.
 
 Bootwright prepares each storage node by registering it with RHSM, enabling the
 RHEL base/appstream and `rhceph-*-tools` repositories, and logging in to

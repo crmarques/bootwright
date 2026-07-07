@@ -274,7 +274,7 @@ func subscriptionRepository(def distributionDef, stream string) Repository {
 	return repo
 }
 
-func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) Provider {
+func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, env *v1alpha1.Environment, secretsDir string) Provider {
 	distribution := Distribution(cluster)
 	def := distributions[distribution]
 	provider := Provider{
@@ -299,7 +299,7 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 	}
 	provider.ImageBase = imageBase(distribution, def, subscriptionStream(cluster), provider.Image)
 	if def.requiresEntitlement() && cluster.Spec.Ceph != nil {
-		provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
+		provider.Entitlement, _ = entitlements.Resolve(ents, env, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
 	}
 	return provider
 }

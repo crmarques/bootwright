@@ -316,10 +316,22 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
+		require(fmt.Sprintf("StorageCluster/%s spec.ceph.entitlementRef", cluster.Metadata.Name),
+			v1alpha1.KindEntitlement, cluster.Spec.Ceph.EntitlementRef.Name)
 		for i, node := range cluster.Spec.Ceph.Topology.Hosts {
 			require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.hosts[%d].machineRef", cluster.Metadata.Name, i),
 				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
+	}
+	for _, image := range state.MachineImages {
+		if cdn := image.Spec.PackageSource.GetRedhatCDN(); cdn != nil {
+			require(fmt.Sprintf("MachineImage/%s spec.packageSource.redhatCDN.entitlementRef", image.Metadata.Name),
+				v1alpha1.KindEntitlement, cdn.EntitlementRef.Name)
+		}
+	}
+	for _, entitlement := range state.Entitlements {
+		require(fmt.Sprintf("Entitlement/%s spec.rhelEntitlementRef", entitlement.Metadata.Name),
+			v1alpha1.KindEntitlement, entitlement.Spec.RHELEntitlementRef.Name)
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		require(fmt.Sprintf("StoragePlacementPolicy/%s spec.storageClusterRef", policy.Metadata.Name),

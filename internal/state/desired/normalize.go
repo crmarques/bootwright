@@ -27,6 +27,9 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.Environments {
 		normalizeEnvironment(&state.Environments[i])
 	}
+	for i := range state.Entitlements {
+		normalizeEntitlementSatellite(state.Entitlements[i].Spec.RHSM)
+	}
 	for i := range state.Machines {
 		normalizeMachine(&state.Machines[i])
 	}
@@ -160,16 +163,13 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 		}
 		env.Spec.Secrets[name] = secret
 	}
-	for i := range env.Spec.Entitlements {
-		normalizeEntitlementSatellite(env.Spec.Entitlements[i].RHSM)
-	}
 }
 
 // normalizeEntitlementSatellite trims the Satellite hostname and, when the
 // operator left contentBaseURL unset, derives the canonical Satellite 6 content
 // path (https://<hostname>/pulp/content) so normalized state shows the effective
 // value the renderer will use.
-func normalizeEntitlementSatellite(rhsm *v1alpha1.EnvironmentEntitlementRHSM) {
+func normalizeEntitlementSatellite(rhsm *v1alpha1.EntitlementRHSM) {
 	if rhsm == nil || rhsm.Satellite == nil {
 		return
 	}

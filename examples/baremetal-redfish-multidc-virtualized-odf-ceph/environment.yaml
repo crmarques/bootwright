@@ -45,15 +45,7 @@ spec:
     - redhat-org
     - redhat-activation-key
 
-  entitlements:
-    - name: rhcs
-      provider: redhat
-      product: ceph
-      rhsm:
-        organizationRef: redhat-org
-        activationKeyRef: redhat-activation-key
-      registry:
-        credentialsRef: ceph-registry-credentials
+  # Entitlements are first-class objects under infra/entitlements/ (rhcs).
 
   infraComponents:
     artifactServers:
