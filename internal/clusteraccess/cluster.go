@@ -6,6 +6,7 @@ package clusteraccess
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -110,6 +111,18 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 		})
 	}
 	return out
+}
+
+// RevealSecretFile reads a captured credential file (kubeadmin-password,
+// dashboard-password) and returns its trimmed cleartext. It is the only reader
+// of a secret's bytes in this package — every summary reports paths and presence
+// only — so callers gate it behind an explicit --secrets opt-in.
+func RevealSecretFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 func FileStatus(path string) Artifact {

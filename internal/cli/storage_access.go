@@ -8,14 +8,18 @@ import (
 )
 
 // printStorageAccessSections renders one block per storage cluster into an
-// existing printer, so it composes with both the standalone cluster access command
-// and the post-apply continuation.
-func printStorageAccessSections(p *cliout.Printer, summaries []clusteraccess.StorageSummary) {
+// existing printer, so it composes with both the standalone cluster info command
+// and the post-apply continuation. showSecrets reveals the dashboard password's
+// cleartext inline; the post-apply caller always passes false.
+func printStorageAccessSections(p *cliout.Printer, summaries []clusteraccess.StorageSummary, showSecrets bool) {
 	for _, summary := range summaries {
 		p.Section("Storage cluster " + summary.Name)
 		p.Fields(storageAccessFields(summary))
 		if summary.DashboardPasswordPath != "" {
 			p.Status(accessArtifactStatus(summary.DashboardPassword), "dashboard password", accessArtifactDetail(summary.DashboardPassword))
+			if showSecrets {
+				p.Fields([]cliout.Field{{Key: "Dashboard password", Value: revealValue(summary.DashboardPasswordPath, summary.DashboardPassword)}})
+			}
 		}
 		p.Status(cliout.StatusInfo, "health", "run the health check to confirm Ceph reports HEALTH_OK")
 	}

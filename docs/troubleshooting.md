@@ -259,7 +259,7 @@ and no longer matches the stored copy, reset it directly on the cluster. The
 needed:
 
 ```bash
-# SSH to the seed node (the SSH line from cluster access)
+# SSH to the seed node (the SSH line from cluster info)
 ssh root@192.168.134.20
 
 # Set a new admin password. Modern Ceph requires the password to be supplied
@@ -274,7 +274,7 @@ rm -f /tmp/dash-pass
 sudo ceph mgr services
 ```
 
-To keep `bootwright cluster access` accurate, write the same value back to the
+To keep `bootwright cluster info` accurate, write the same value back to the
 stored file on the controller:
 
 ```bash

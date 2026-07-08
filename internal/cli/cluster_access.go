@@ -18,7 +18,7 @@ func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Re
 	}
 	p := cliout.NewContinuation(stdout)
 	printClusterAccessSections(p, container)
-	printStorageAccessSections(p, storage)
+	printStorageAccessSections(p, storage, false)
 }
 
 func printClusterAccessSections(p *cliout.Printer, summaries []clusteraccess.ClusterSummary) {

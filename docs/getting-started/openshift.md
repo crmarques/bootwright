@@ -215,11 +215,12 @@ terminal state. Re-running `apply` later is safe — matching work is skipped.
 
 ## Access The Cluster
 
-Once apply finishes, list the local access details (URLs, kubeconfig path, and
-the password-retrieval command — no secret bytes are printed by default):
+Once apply finishes, list the local access details (URLs, kubeconfig path, the
+password-retrieval command, and the `cluster rsh` line for each node — no secret
+bytes are printed unless you add `--secrets`):
 
 ```bash
-bootwright cluster access
+bootwright cluster info
 ```
 
 To use the cluster, save the generated admin kubeconfig to a file you own. The

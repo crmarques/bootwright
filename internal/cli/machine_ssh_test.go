@@ -119,9 +119,9 @@ func TestMachineSSHCLIExecsClient(t *testing.T) {
 	}
 	t.Cleanup(func() { defaultMachineSSHDeps = previous })
 
-	_, stderr, code := runCLI(t, "machine", "ssh", "--name", "provider-01", "--", "uptime")
+	_, stderr, code := runCLI(t, "machine", "exec", "--name", "provider-01", "--", "uptime")
 	if code != 0 {
-		t.Fatalf("machine ssh exited %d, stderr=%q", code, stderr)
+		t.Fatalf("machine exec exited %d, stderr=%q", code, stderr)
 	}
 	if gotPath != "/usr/bin/ssh" {
 		t.Fatalf("exec path = %q", gotPath)
@@ -134,9 +134,55 @@ func TestMachineSSHCLIExecsClient(t *testing.T) {
 	}
 }
 
-func TestMachineSSHCLIRequiresName(t *testing.T) {
+func TestMachineRshExecsInteractiveShell(t *testing.T) {
 	initHostTrustTestContext(t)
-	if _, _, code := runCLI(t, "machine", "ssh"); code == 0 {
-		t.Fatal("machine ssh without --name should fail")
+
+	var gotArgs []string
+	previous := defaultMachineSSHDeps
+	defaultMachineSSHDeps = machineSSHDeps{
+		lookPath: func(string) (string, error) { return "/usr/bin/ssh", nil },
+		exec: func(_ string, argv []string, _ []string) error {
+			gotArgs = argv
+			return nil
+		},
+	}
+	t.Cleanup(func() { defaultMachineSSHDeps = previous })
+
+	_, stderr, code := runCLI(t, "machine", "rsh", "--name", "provider-01")
+	if code != 0 {
+		t.Fatalf("machine rsh exited %d, stderr=%q", code, stderr)
+	}
+	// An interactive shell ends at the target, with no trailing command.
+	if gotArgs[len(gotArgs)-1] != "core@provider-01.example.test" {
+		t.Fatalf("rsh argv should end at the target, got %v", gotArgs)
+	}
+}
+
+func TestMachineRshRejectsTrailingCommand(t *testing.T) {
+	initHostTrustTestContext(t)
+	_, stderr, code := runCLI(t, "machine", "rsh", "--name", "provider-01", "--", "uptime")
+	if code != 2 {
+		t.Fatalf("machine rsh with a command should exit 2, got %d", code)
+	}
+	if !strings.Contains(stderr, "machine exec") {
+		t.Fatalf("rsh error should point at machine exec: %q", stderr)
+	}
+}
+
+func TestMachineExecRequiresCommand(t *testing.T) {
+	initHostTrustTestContext(t)
+	_, stderr, code := runCLI(t, "machine", "exec", "--name", "provider-01")
+	if code != 2 {
+		t.Fatalf("machine exec without a command should exit 2, got %d", code)
+	}
+	if !strings.Contains(stderr, "requires a command after --") {
+		t.Fatalf("exec error should explain the missing command: %q", stderr)
+	}
+}
+
+func TestMachineRshRequiresName(t *testing.T) {
+	initHostTrustTestContext(t)
+	if _, _, code := runCLI(t, "machine", "rsh"); code == 0 {
+		t.Fatal("machine rsh without --name should fail")
 	}
 }

@@ -218,16 +218,21 @@ $ bootwright machine list --silent                   # names only, one per line
 $ bootwright machine list --output json
 ```
 
-`bootwright machine ssh --name <machine>` opens an SSH session to a `Machine`
-using the identity Bootwright already knows for it — the resolved `access.ssh`
-address, user (default `root`), private key, and the context host-key trust store
-recorded by `bootwright machine trust`. A trailing command runs on the `Machine`
-instead of opening a shell:
+`bootwright machine rsh --name <machine>` opens an interactive SSH shell on a
+`Machine` using the identity Bootwright already knows for it — the resolved
+`access.ssh` address, user (default `root`), private key, and the context
+host-key trust store recorded by `bootwright machine trust`. `machine exec` runs
+a single command on the `Machine` instead of opening a shell:
 
 ```console
-$ bootwright machine ssh --name ceph-dc1-0
-$ bootwright machine ssh --name ceph-dc1-0 -- systemctl status ceph.target
+$ bootwright machine rsh --name ceph-dc1-0
+$ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 ```
+
+To reach a node cluster-first — by cluster and node rather than by Machine name —
+use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`
+for a one-off command); the node selector accepts the Machine name, the node
+hostname, or a `<role>-<ordinal>` such as `master-0`.
 
 ## MachineImage
 

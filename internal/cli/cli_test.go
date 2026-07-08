@@ -2534,8 +2534,13 @@ func TestLocalRootGateArgs(t *testing.T) {
 		// subcommands read root-owned cluster artifacts and stay rootful.
 		{args: []string{"cluster"}, want: false},
 		{args: []string{"cluster", "list"}, want: true},
-		{args: []string{"cluster", "access"}, want: true},
+		{args: []string{"cluster", "info"}, want: true},
 		{args: []string{"cluster", "kubeconfig", "--name", "managed-01"}, want: true},
+		// cluster rsh/exec exec the ssh client as root; a missing --name stays
+		// rootless so cobra rejects it as the caller.
+		{args: []string{"cluster", "rsh", "--name", "managed-01"}, want: true},
+		{args: []string{"cluster", "rsh"}, want: false},
+		{args: []string{"cluster", "exec", "--name", "managed-01", "--", "uptime"}, want: true},
 		// Bare `bastion` only prints help; setup reads the root-owned context and
 		// mutates the host, so it stays rootful. The read-only check moved to
 		// preflight bastion.
@@ -2547,10 +2552,12 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"machine"}, want: false},
 		{args: []string{"machine", "trust"}, want: true},
 		{args: []string{"machine", "list"}, want: true},
-		// `machine ssh` execs the client as root to read the root-owned key, but a
-		// missing --name is a malformed invocation cobra rejects rootlessly.
-		{args: []string{"machine", "ssh", "--name", "ceph-0"}, want: true},
-		{args: []string{"machine", "ssh"}, want: false},
+		// `machine rsh`/`machine exec` exec the client as root to read the
+		// root-owned key, but a missing --name is a malformed invocation cobra
+		// rejects rootlessly.
+		{args: []string{"machine", "rsh", "--name", "ceph-0"}, want: true},
+		{args: []string{"machine", "rsh"}, want: false},
+		{args: []string{"machine", "exec", "--name", "ceph-0", "--", "uptime"}, want: true},
 		{args: []string{"example", "init", "--name", "lab", "--output-dir", "./lab-input"}, want: false},
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},

@@ -336,10 +336,10 @@ List the cluster and its access details:
 
 ```bash
 bootwright cluster list
-bootwright cluster access --name ceph-ibm
+bootwright cluster info --name ceph-ibm
 ```
 
-`cluster access` reports the seed node, the SSH and health-check commands, the
+`cluster info` reports the seed node, the SSH and health-check commands, the
 dashboard URL, and the dashboard password file. Run the health check it prints;
 `HEALTH_OK` from `ceph -s` confirms the cluster is reachable and healthy. Expect
 3 mons (`ceph-1`, `ceph-2`, `ceph-3`), 2 mgr, 6 OSDs, 1 CephFS, an RGW service,
@@ -354,9 +354,9 @@ ingress VIP `192.168.140.80`).
 
 `cephadm bootstrap` generates a one-time random `admin` password. Bootwright
 captures it **during the install** and saves it on the controller at
-`clusters/ceph-ibm/secrets/dashboard-password` (mode 0600). `cluster access`
-prints that file path plus a `sudo cat` command — never the bytes. View it, then
-log in as `admin`:
+`clusters/ceph-ibm/secrets/dashboard-password` (mode 0600). `cluster info`
+prints that file path plus a `sudo cat` command — never the bytes unless you pass
+`--secrets`. View it, then log in as `admin`:
 
 ```bash
 sudo cat /var/lib/bootwright/contexts/ceph-ibm-lab/clusters/ceph-ibm/secrets/dashboard-password

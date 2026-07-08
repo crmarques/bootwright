@@ -27,7 +27,8 @@ func newMachineCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 	}
 	cmd.AddCommand(
 		newMachineListCmd(stdout),
-		newMachineSSHCmd(stdin, stdout, stderr),
+		newMachineRshCmd(),
+		newMachineExecCmd(),
 		newHostTrustCmd(stdin, stdout, stderr),
 	)
 	requireSubcommand(cmd)

@@ -79,31 +79,56 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runCLI(t, "cluster", "access")
+	stdout, stderr, code := runCLI(t, "cluster", "info")
 	if code != 0 {
-		t.Fatalf("cluster access exited %d, stderr=%q", code, stderr)
+		t.Fatalf("cluster info exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{
-		"Bootwright: cluster access",
+		"Bootwright: cluster info",
 		"Cluster sno-libvirt",
 		"Kubeconfig: " + kubeconfigPath,
 		"Password file: " + passwordPath,
 		"Show password: sudo cat " + passwordPath,
+		// The node cross-link tells the operator how to shell into each node.
+		"Node master-0: bootwright cluster rsh --name sno-libvirt --node master-0",
 	} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("cluster access output missing %q:\n%s", want, stdout)
+			t.Fatalf("cluster info output missing %q:\n%s", want, stdout)
 		}
 	}
 	if strings.Contains(stdout, "do-not-print-this-password") {
-		t.Fatalf("cluster access leaked password bytes:\n%s", stdout)
+		t.Fatalf("cluster info leaked password bytes without --secrets:\n%s", stdout)
+	}
+}
+
+func TestClusterInfoSecretsRevealsKubeadminPassword(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	kubeconfigPath := filepath.Join(ctx.ClustersDir, "sno-libvirt", "secrets", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfigPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kubeconfigPath, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	passwordPath := filepath.Join(ctx.ClustersDir, "sno-libvirt", "secrets", "kubeadmin-password")
+	if err := os.WriteFile(passwordPath, []byte("reveal-this-password\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := runCLI(t, "cluster", "info", "--name", "sno-libvirt", "--secrets")
+	if code != 0 {
+		t.Fatalf("cluster info --secrets exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "Kubeadmin password: reveal-this-password") {
+		t.Fatalf("cluster info --secrets did not reveal the password:\n%s", stdout)
 	}
 }
 
 func TestClusterAccessCommandRejectsUnknownCluster(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	_, stderr, code := runCLI(t, "cluster", "access", "--name", "missing")
+	_, stderr, code := runCLI(t, "cluster", "info", "--name", "missing")
 	if code == 0 {
-		t.Fatal("cluster access accepted unknown cluster")
+		t.Fatal("cluster info accepted unknown cluster")
 	}
 	if !strings.Contains(stderr, "unknown cluster(s): missing") {
 		t.Fatalf("stderr missing unknown cluster message: %q", stderr)

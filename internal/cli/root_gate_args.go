@@ -48,9 +48,9 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "ssh":
-			// machine ssh execs the client as root to read the root-owned SSH
-			// key, but a missing --name is a malformed invocation cobra should
+		case "rsh", "exec":
+			// machine rsh/exec exec the ssh client as root to read the root-owned
+			// SSH key, but a missing --name is a malformed invocation cobra should
 			// reject as the caller, not after a doomed sudo prompt. Mirrors
 			// secret delete / media add.
 			return argsHaveNameValue(args[2:])
@@ -117,14 +117,20 @@ func argsNeedLocalRoot(args []string) bool {
 		}
 	case "cluster":
 		// Bare `cluster` is a pure dispatcher that only prints help, so it must
-		// not escalate. Its subcommands (list/access/kubeconfig) read the
-		// root-owned context cluster artifacts and stay rootful.
+		// not escalate.
 		if len(args) == 1 {
 			return false
 		}
 		switch args[1] {
-		case "list", "access", "kubeconfig":
+		case "list", "info", "kubeconfig":
+			// Read the root-owned context cluster artifacts (kubeconfig,
+			// passwords, install assets), so they escalate.
 			return true
+		case "rsh", "exec":
+			// cluster rsh/exec resolve a node then exec the ssh client as root to
+			// read the root-owned SSH key; a missing --name is a malformed
+			// invocation that stays rootless so cobra rejects it as the caller.
+			return argsHaveNameValue(args[2:])
 		default:
 			// Unknown subcommand (a typo like `cluster lst`): stay rootless so
 			// cobra rejects it as the caller.

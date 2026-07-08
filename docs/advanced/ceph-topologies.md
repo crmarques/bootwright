@@ -279,7 +279,7 @@ ceph:
 (`mgmt-gateway`) fronted by a `keepalive_only` ingress, giving the Ceph
 dashboard a single highly-available VIP that floats across the mgr hosts instead
 of pinning operators to the active mgr's address. The VIP and its DNS name show
-up in `bootwright cluster access`, and a managed `nameResolution` component
+up in `bootwright cluster info`, and a managed `nameResolution` component
 should publish that name. The `ceph-ibm-libvirt-lab` and
 `ceph-ibm-baremetal-redfish` [reference examples](examples.md) build the HA
 dashboard end to end.
@@ -359,7 +359,7 @@ for the owned-Ceph wipe-and-rebuild path.
 
 ## Accessing a managed cluster
 
-`bootwright cluster access` prints everything needed to reach a managed Ceph
+`bootwright cluster info` prints everything needed to reach a managed Ceph
 cluster, derived entirely from desired state — the seed node SSH line, the
 monitor list, a health-check command, the dashboard URL, and the dashboard
 credential file path. Run the **Health check** line; `HEALTH_OK` from `ceph -s`
@@ -373,8 +373,8 @@ the controller (`clusters/<storage-cluster>/secrets/dashboard-password`, mode
 !!! note "Dashboard password is captured at install only"
     The password is captured solely from the one-time `cephadm bootstrap`. It is
     never re-read or re-synced on later applies, and — like every secret —
-    `cluster access` only ever shows its file path and a `sudo cat` command,
-    never the bytes. The file persists after the cluster is destroyed; delete the
+    `cluster info` shows its file path and a `sudo cat` command by default,
+    revealing the bytes only when you pass `--secrets`. The file persists after the cluster is destroyed; delete the
     cluster's `secrets/` directory by hand if you want the credential gone. If
     the file is lost or the in-cluster password was changed, see
     [Recovering the Ceph dashboard password](../troubleshooting.md#recovering-the-ceph-dashboard-password).

@@ -14,10 +14,23 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-type clusterAccessReport struct {
-	Context  string                         `json:"context"`
-	Clusters []clusteraccess.ClusterSummary `json:"clusters"`
-	Storage  []clusteraccess.StorageSummary `json:"storage,omitempty"`
+// clusterInfoReport is the --output json shape of `cluster info`. Each entry
+// embeds its full access summary; the cleartext *Value fields are populated only
+// under --secrets, so a default run never serializes a secret's bytes.
+type clusterInfoReport struct {
+	Context  string              `json:"context"`
+	Clusters []clusterInfoResult `json:"clusters"`
+	Storage  []storageInfoResult `json:"storage,omitempty"`
+}
+
+type clusterInfoResult struct {
+	clusteraccess.ClusterSummary
+	KubeadminPasswordValue string `json:"kubeadminPasswordValue,omitempty"`
+}
+
+type storageInfoResult struct {
+	clusteraccess.StorageSummary
+	DashboardPasswordValue string `json:"dashboardPasswordValue,omitempty"`
 }
 
 type clusterListReport struct {
@@ -49,7 +62,9 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newClusterListCmd(stdout),
-		newClusterAccessCommand(stdout),
+		newClusterInfoCmd(stdout),
+		newClusterRshCmd(),
+		newClusterExecCmd(),
 		newClusterKubeconfigCmd(stdout),
 	)
 	requireSubcommand(cmd)
@@ -127,42 +142,35 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newClusterAccessCommand(stdout io.Writer) *cobra.Command {
-	return newClusterAccessCmd(stdout, clusterAccessCommandSpec{
-		use:            "access",
-		label:          "cluster access",
-		includeStorage: true,
-		example: `  # Print access details for every managed cluster in the current context
-  bootwright cluster access
-
-  # Print access details for one container or storage cluster
-  bootwright cluster access --name managed-01
-  bootwright cluster access --name ceph-libvirt`,
-	})
-}
-
-type clusterAccessCommandSpec struct {
-	use            string
-	label          string
-	example        string
-	includeStorage bool
-}
-
-func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra.Command {
+func newClusterInfoCmd(stdout io.Writer) *cobra.Command {
 	var outputFormat string
-	clusterName := ""
+	var clusterName string
+	var showSecrets bool
 	cmd := &cobra.Command{
-		Use:     spec.use,
-		Short:   "Print local access details for installed clusters",
-		Args:    cobra.NoArgs,
-		Example: spec.example,
+		Use:   "info",
+		Short: "Print local access details for installed clusters",
+		Long: `Print how to reach each installed cluster: API/console URLs and the kubeconfig
+and kubeadmin details for container clusters, plus the seed node, SSH, and
+dashboard details for Ceph storage clusters. Each cluster also lists its nodes
+with the 'cluster rsh' command to open a shell on them.
+
+Secret values are never printed unless --secrets is passed; without it only their
+file paths and a 'sudo cat' hint are shown.`,
+		Args: cobra.NoArgs,
+		Example: `  # Access details for every managed cluster in the current context
+  bootwright cluster info
+
+  # One container or storage cluster
+  bootwright cluster info --name managed-01
+  bootwright cluster info --name ceph-libvirt
+
+  # Also reveal the kubeadmin / dashboard passwords inline
+  bootwright cluster info --name managed-01 --secrets`,
 	}
-	clusterFlagUsage := "ContainerCluster name to inspect (default: all)"
-	if spec.includeStorage {
-		clusterFlagUsage = "ContainerCluster or StorageCluster name to inspect (default: all)"
-	}
-	cmd.Flags().StringVar(&clusterName, "name", "", clusterFlagUsage)
+	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name to inspect (default: all)")
+	cmd.Flags().BoolVar(&showSecrets, "secrets", false, "also print secret values (kubeadmin and Ceph dashboard passwords), not just their paths")
 	addOutputFlag(cmd, &outputFormat)
+	registerAccessClusterNameCompletion(cmd)
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {
@@ -173,21 +181,17 @@ func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra
 			return failErr(1, err)
 		}
 		if clusterName != "" {
-			if err := clusteraccess.ValidateAccessClusterName(state, clusterName, spec.includeStorage); err != nil {
+			if err := clusteraccess.ValidateAccessClusterName(state, clusterName, true); err != nil {
 				return failErr(2, err)
 			}
 		}
 		clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
-		summaries := clusteraccess.ClusterSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
-		summaries = clusteraccess.FilterClusterSummaries(summaries, clusterName)
-		var storage []clusteraccess.StorageSummary
-		if spec.includeStorage {
-			storage = clusteraccess.FilterStorageSummaries(clusteraccess.StorageSummaries(state, clustersDir), clusterName)
-		}
+		summaries := clusteraccess.FilterClusterSummaries(clusteraccess.ClusterSummariesFromAssets(state, render.InstallerAssets(clustersDir, state)), clusterName)
+		storage := clusteraccess.FilterStorageSummaries(clusteraccess.StorageSummaries(state, clustersDir), clusterName)
 		if outputFormat == outputJSON {
-			return cliout.JSON(stdout, clusterAccessReport{Context: cf.ctx.Name, Clusters: summaries, Storage: storage})
+			return cliout.JSON(stdout, buildClusterInfoReport(cf.ctx.Name, summaries, storage, showSecrets))
 		}
-		printClusterAccessSummaries(stdout, spec.label, summaries, storage)
+		printClusterInfo(stdout, state, summaries, storage, showSecrets)
 		return nil
 	}
 	return cmd
@@ -233,9 +237,9 @@ func printClusterList(stdout io.Writer, summaries []clusteraccess.ClusterSummary
 	}
 }
 
-func printClusterAccessSummaries(stdout io.Writer, command string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary) {
+func printClusterInfo(stdout io.Writer, state v1alpha1.State, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) {
 	p := cliout.New(stdout)
-	p.Command(command)
+	p.Command("cluster info")
 	if len(summaries) == 0 && len(storage) == 0 {
 		p.Summary(cliout.StatusSkip, "clusters", "none declared")
 		return
@@ -256,11 +260,40 @@ func printClusterAccessSummaries(stdout io.Writer, command string, summaries []c
 			cliout.Field{Key: "Password file", Value: summary.KubeadminPasswordPath},
 			cliout.Field{Key: "Show password", Value: summary.KubeadminPasswordCommand},
 		)
+		if showSecrets {
+			fields = append(fields, cliout.Field{Key: "Kubeadmin password", Value: revealValue(summary.KubeadminPasswordPath, summary.KubeadminPassword)})
+		}
 		p.Fields(fields)
 		p.Status(accessArtifactStatus(summary.Kubeconfig), "kubeconfig", accessArtifactDetail(summary.Kubeconfig))
 		p.Status(accessArtifactStatus(summary.KubeadminPassword), "kubeadmin password", accessArtifactDetail(summary.KubeadminPassword))
+		printClusterNodeAccess(p, state, summary.Name)
 	}
-	printStorageAccessSections(p, storage)
+	printStorageAccessSections(p, storage, showSecrets)
+}
+
+// buildClusterInfoReport assembles the --output json payload, embedding each
+// access summary and adding the cleartext password only when --secrets is set.
+func buildClusterInfoReport(context string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) clusterInfoReport {
+	report := clusterInfoReport{Context: context}
+	for _, summary := range summaries {
+		entry := clusterInfoResult{ClusterSummary: summary}
+		if showSecrets && summary.KubeadminPassword.Present {
+			if value, err := clusteraccess.RevealSecretFile(summary.KubeadminPasswordPath); err == nil {
+				entry.KubeadminPasswordValue = value
+			}
+		}
+		report.Clusters = append(report.Clusters, entry)
+	}
+	for _, summary := range storage {
+		entry := storageInfoResult{StorageSummary: summary}
+		if showSecrets && summary.DashboardPassword.Present {
+			if value, err := clusteraccess.RevealSecretFile(summary.DashboardPasswordPath); err == nil {
+				entry.DashboardPasswordValue = value
+			}
+		}
+		report.Storage = append(report.Storage, entry)
+	}
+	return report
 }
 
 func clusterListEntries(summaries []clusteraccess.ClusterSummary) []clusterListEntry {

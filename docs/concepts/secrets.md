@@ -314,9 +314,9 @@ store. `bootwright secret show` reads only context-local secret files (never
 
 !!! note "Install secrets and access"
     After a successful cluster install, the kubeadmin password is stored at
-    `clusters/<cluster>/secrets/kubeadmin-password`; `bootwright cluster access`
+    `clusters/<cluster>/secrets/kubeadmin-password`; `bootwright cluster info`
     prints the API and console URLs, kubeconfig path, password file path, and
-    the retrieval command without printing bytes by default. A managed Ceph
+    the retrieval command without printing bytes unless you pass `--secrets`. A managed Ceph
     cluster's dashboard `admin` password is captured at install under
     `clusters/<storage-cluster>/secrets/dashboard-password` the same way.
 

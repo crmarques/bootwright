@@ -92,7 +92,7 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		"bootwright plan",
 		"bootwright apply --yes",
 		"bootwright status --watch",
-		"bootwright cluster access",
+		"bootwright cluster info",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("root help missing %q:\n%s", want, stdout)

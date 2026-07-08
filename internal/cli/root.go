@@ -48,7 +48,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright plan
   bootwright apply --yes
   bootwright status --watch
-  bootwright cluster access`,
+  bootwright cluster info`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
