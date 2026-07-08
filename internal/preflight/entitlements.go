@@ -67,14 +67,17 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 			}
 		}
 	}
-	for _, image := range state.MachineImages {
-		cdn := image.Spec.PackageSource.GetRedhatCDN()
+	for _, profile := range state.MachineInstallProfiles {
+		if profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		cdn := profile.Spec.Installer.Anaconda.PackageSource.GetRedhatCDN()
 		if cdn == nil || cdn.EntitlementRef.Name == "" {
 			continue
 		}
 		appendEntitlement(
 			cdn.EntitlementRef.Name,
-			"MachineImage/"+image.Metadata.Name+" packageSource.redhatCDN entitlementRef",
+			"MachineInstallProfile/"+profile.Metadata.Name+" installer.anaconda.packageSource.redhatCDN entitlementRef",
 			[]string{"machines"},
 			secretRefOwner{},
 		)

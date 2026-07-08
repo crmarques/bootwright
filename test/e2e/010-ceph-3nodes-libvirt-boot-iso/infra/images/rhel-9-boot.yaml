@@ -4,10 +4,3 @@ metadata:
   name: rhel-9-x86-64-boot
 spec:
   bootMedia: local-media:rhel-9.7-x86_64-boot.iso
-
-  packageSource:
-    mirror:
-      baseURL: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
-      repositories:
-        - id: appstream
-          baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/

@@ -50,7 +50,8 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if env != nil {
 		eff = proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall))
 	}
-	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, state.Entitlements, idx, paths.SecretsDir, eff)
+	packageSource := profile.Spec.Installer.Anaconda.PackageSource
+	sourceURL, imageRepositories, rhsm := machineInstallPackageSourceVars(packageSource, state.Entitlements, idx, paths.SecretsDir, eff)
 	// hostedTree overrides the package source: bootwright extracts fromMedia (a
 	// DVD) into the cluster artifact server and the installing node fetches
 	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
@@ -59,8 +60,8 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	// ISO install fails loudly (cdrom on a package-less ISO) instead of
 	// mis-installing; the cluster-install validator rejects that up front.
 	var hostedTree map[string]any
-	if image.Spec.PackageSource.GetHostedTree() != nil {
-		treeURL, tree, _ := machineOSHostedTreeVars(state, ci, image)
+	if packageSource.GetHostedTree() != nil {
+		treeURL, tree, _ := machineOSHostedTreeVars(state, ci, packageSource)
 		sourceURL, imageRepositories, hostedTree = treeURL, nil, tree
 	}
 	installer := map[string]any{
@@ -88,7 +89,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		installer["proxy"] = proxyVars
 	}
 	sshUser := managedOSSSHUser(machine)
-	imageVars := machineOSInstallImageVars(resolved, machineOSMediaType(image.Spec.PackageSource), image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName)
+	imageVars := machineOSInstallImageVars(resolved, machineOSMediaType(packageSource), image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m), clusterName)
 	if hostedTree != nil {
 		imageVars["installTree"] = hostedTree
 	}
@@ -254,19 +255,19 @@ func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.Instal
 // machineOSMediaType derives the render-only image.mediaType the Ansible role
 // keys its mkksiso path on: a full DVD (no packageSource) carries its packages,
 // anything with a packageSource is a small boot ISO.
-func machineOSMediaType(source *v1alpha1.MachinePackageSource) string {
+func machineOSMediaType(source *v1alpha1.MachineInstallPackageSource) string {
 	if source == nil {
 		return v1alpha1.MachineImageMediaTypeDVD
 	}
 	return v1alpha1.MachineImageMediaTypeBoot
 }
 
-// machineImageInstallSourceVars projects the packageSource arm into the
+// machineInstallPackageSourceVars projects the packageSource arm into the
 // kickstart install-source vars (sourceURL, repositories, rhsm): mirror →
 // BaseURL + repo entries; redhatCDN → resolved rhsm; nil (a full DVD) and
 // hostedTree both return empty (nil installs via cdrom, and the caller overlays
 // the derived tree URL for hostedTree).
-func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string, eff *proxy.Effective) (string, []any, map[string]any) {
+func machineInstallPackageSourceVars(source *v1alpha1.MachineInstallPackageSource, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string, eff *proxy.Effective) (string, []any, map[string]any) {
 	rhsm := map[string]any{}
 	if source == nil {
 		return "", machineInstallRepositoryVars(nil, eff), rhsm

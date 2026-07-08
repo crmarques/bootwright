@@ -4,11 +4,12 @@ This fixture is the boot-ISO variant of
 `006-ceph-3nodes-libvirt-managed-os`. It provisions the same Ceph-only 3-node
 lab on a laptop libvirt host with Bootwright-managed RHEL installation through
 emulated Redfish virtual media, but installs from a minimal **boot ISO**
-(`mediaType: boot`) instead of the full DVD. A boot ISO carries only the
-installer, so the `MachineImage` declares an `installSource` pointing Anaconda
-at a network BaseOS install tree plus an AppStream repository; Bootwright renders
-`url --url=` and `repo` Kickstart directives instead of `cdrom`. Everything else —
-machines, provider, network, DNS, and the Ceph topology — is identical to 006.
+instead of the full DVD. A boot ISO carries only the installer, so the
+`MachineImage` declares only `bootMedia` while the `MachineInstallProfile`
+declares `installer.anaconda.packageSource.mirror` pointing Anaconda at a
+network BaseOS install tree plus an AppStream repository. Bootwright renders
+`url --url=` and `repo` Kickstart directives instead of `cdrom`. Everything else
+— machines, provider, network, DNS, and the Ceph topology — is identical to 006.
 Each YAML file contains one desired-state object with short names so the fixture
 stays easy to inspect.
 
@@ -48,7 +49,7 @@ the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
 - `infra/networkconfigs/ceph-bridge.yaml`: lab network, resolver, and route
   template.
 - `infra/images/rhel-9-boot.yaml` and `infra/profiles/rhel-9-ceph.yaml`: managed
-  OS install inputs (boot ISO plus its `installSource` package mirror).
+  OS install inputs (boot ISO plus the profile-owned Anaconda package mirror).
 - `clusters/storage/ceph-libvirt/*.yaml`: Ceph cluster topology, placement
   policy, pools, filesystem, and export.
 - `add-ons/`: reserved for future add-on definitions; this fixture does not
@@ -58,13 +59,13 @@ the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
 
 - A RHEL 9.7 x86_64 **boot** ISO stored locally on the bastion.
 - A reachable HTTP(S) RHEL 9 package mirror exposing BaseOS and AppStream
-  install trees, referenced by `infra/images/rhel-9-boot.yaml`
-  `spec.installSource`. Unlike the DVD fixture, the boot ISO ships no packages,
-  so Anaconda fetches them from this mirror during install. Replace the
-  `mirror.example.test` URLs with a mirror the Ceph nodes can reach (the
-  managed `lab-dns` forwarders and the libvirt NAT network must route to it).
-  `bootwright apply` preflight probes these URLs and warns or fails early if the
-  mirror is unreachable or the install tree is missing.
+  install trees, referenced by `infra/profiles/rhel-9-ceph.yaml`
+  `spec.installer.anaconda.packageSource.mirror`. Unlike the DVD fixture, the
+  boot ISO ships no packages, so Anaconda fetches them from this mirror during
+  install. Replace the `mirror.example.test` URLs with a mirror the Ceph nodes
+  can reach (the managed `lab-dns` forwarders and the libvirt NAT network must
+  route to it). `bootwright apply` preflight probes these URLs and warns or
+  fails early if the mirror is unreachable or the install tree is missing.
 - Working upstream internet on the libvirt host. The Ceph nodes reach the
   community Ceph repository (`download.ceph.com`), the EPEL bootstrap RPM
   (`dl.fedoraproject.org`), the CentOS Stream community repositories that supply
@@ -107,19 +108,30 @@ Register the RHEL boot ISO in the root-managed media store before applying:
 bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file /path/to/rhel-boot.iso
 ```
 
-The fixture references that ISO and its package source with:
+The fixture references that ISO and its install-time package source with:
 
 ```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-x86-64-boot
 spec:
-  type: iso
-  mediaType: boot
-  url: local-media:rhel-9.7-x86_64-boot.iso
-  installSource:
-    type: url
-    url: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
-    repositories:
-      - id: appstream
-        baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
+  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-ceph-node
+spec:
+  installer:
+    anaconda:
+      imageRef: rhel-9-x86-64-boot
+      packageSource:
+        mirror:
+          baseURL: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
+          repositories:
+            - id: appstream
+              baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
 ## Run

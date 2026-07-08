@@ -444,8 +444,9 @@ registration to a corporate Red Hat Satellite (or Capsule): the same
 and the CA named by `trustBundleRef` is trusted before registration. One block
 covers both the install-time Anaconda kickstart and the day-2 cephadm
 `subscription-manager register`, so nodes never fall back to the CDN. Because the
-redirect lives on the entitlement, a `MachineImage` boot ISO or a Ceph cluster
-that already references the entitlement inherits Satellite with no other changes.
+redirect lives on the entitlement, a `MachineInstallProfile` Red Hat CDN package
+source or a Ceph cluster that already references the entitlement inherits
+Satellite with no other changes.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

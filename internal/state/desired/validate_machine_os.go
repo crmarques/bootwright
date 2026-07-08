@@ -21,7 +21,6 @@ func validateMachineImages(state v1alpha1.State) []string {
 		} else if err := media.ValidateISOReference(image.Spec.BootMedia); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.bootMedia %s", prefix, err))
 		}
-		errs = append(errs, validateMachinePackageSource(prefix, image.Spec.BootMedia, image.Spec.PackageSource)...)
 		if _, err := media.NormalizeSHA256(image.Spec.Checksum); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
 		}
@@ -52,12 +51,17 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 			errs = append(errs, prefix+".installer.anaconda is required")
 			continue
 		}
-		imageRef := profile.Spec.Installer.Anaconda.ImageRef.Name
+		anaconda := profile.Spec.Installer.Anaconda
+		imageRef := anaconda.ImageRef.Name
+		bootMedia := ""
 		if imageRef == "" {
 			errs = append(errs, prefix+".installer.anaconda.imageRef is required")
-		} else if _, ok := images[imageRef]; !ok {
+		} else if image, ok := images[imageRef]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef %q does not match any MachineImage", prefix, imageRef))
+		} else {
+			bootMedia = image.Spec.BootMedia
 		}
+		errs = append(errs, validateMachineInstallPackageSource(prefix+".installer.anaconda", bootMedia, anaconda.PackageSource)...)
 		customizations := profile.Spec.Customizations
 		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
 			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))
@@ -227,10 +231,10 @@ func machineInstallStringListContains(values []string, want string) bool {
 	return false
 }
 
-// validateMachinePackageSource checks the packageSource union. nil means
+// validateMachineInstallPackageSource checks the packageSource union. nil means
 // bootMedia is a full DVD (packages install offline via cdrom). Otherwise
 // exactly one arm must be set and internally valid; the arm is the source type.
-func validateMachinePackageSource(prefix, bootMedia string, ps *v1alpha1.MachinePackageSource) []string {
+func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.MachineInstallPackageSource) []string {
 	if ps == nil {
 		return nil
 	}
@@ -268,8 +272,8 @@ func validateMachinePackageSource(prefix, bootMedia string, ps *v1alpha1.Machine
 			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia is required")
 		case media.ValidateISOReference(t.FromMedia) != nil:
 			errs = append(errs, fmt.Sprintf("%s.packageSource.hostedTree.fromMedia %s", prefix, media.ValidateISOReference(t.FromMedia)))
-		case t.FromMedia == bootMedia:
-			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia must reference the DVD, not the boot ISO in spec.bootMedia")
+		case bootMedia != "" && t.FromMedia == bootMedia:
+			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia must reference the DVD, not the boot ISO in installer.anaconda.imageRef bootMedia")
 		case httpURL(t.FromMedia):
 			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia must reference local media (local-media: or file://), not a URL: stage the DVD with `bootwright media add` so it is checksum-verified in the media store before it is served")
 		}

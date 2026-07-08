@@ -27,9 +27,8 @@
     fail_msg: >-
       Managed Anaconda OS install image {{ bootwright_component.osInstall.image.original | default('') }}
       is marked as mediaType=boot, but no installer source was
-      rendered. Configure MachineImage spec.installSource with an install
-      source, or use mediaType=dvd for full install media that can be installed
-      from CD-ROM.
+      rendered. Configure MachineInstallProfile spec.installer.anaconda.packageSource,
+      or reference full DVD install media that can be installed from CD-ROM.
 
 - name: Validate managed Anaconda RHSM install source
   ansible.builtin.assert:

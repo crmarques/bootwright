@@ -152,9 +152,11 @@ intent.
 These drive the managed RHEL install — the part that distinguishes this lab from
 the agent-installed OpenShift SNO lab.
 
-- `MachineImage` `rhel-9-x86-64-dvd`: a full DVD (no `packageSource`) whose
+- `MachineImage` `rhel-9-x86-64-dvd`: a full DVD whose
   `bootMedia: local-media:rhel-9.7-x86_64-dvd.iso` resolves to the managed media
-  store (you stage the ISO with `bootwright media add` below).
+  store (you stage the ISO with `bootwright media add` below). The install
+  profile omits `installer.anaconda.packageSource`, so Anaconda installs from
+  the DVD via `cdrom`.
 - `MachineInstallProfile` `rhel-9-ceph-node`: the Anaconda install
   (`installer.anaconda.imageRef: rhel-9-x86-64-dvd`) for
   `os.family: rhel`, `version: "9.7"`. Its `customizations` authorize the

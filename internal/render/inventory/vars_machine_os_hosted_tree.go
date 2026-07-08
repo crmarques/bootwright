@@ -10,18 +10,18 @@ import (
 )
 
 // machineOSHostedTreeVars resolves the publish + fetch coordinates for a
-// hostedTree image: bootwright extracts the DVD (installSource.fromMedia) once
-// into the cluster artifact server's document root and the installing node
-// fetches GPG-signed packages from it over the machineBoot endpoint. It returns
-// the tree URL to render as installer.sourceURL and the image.installTree vars
-// the Ansible extraction step consumes. ok is false when the DVD reference, a
-// bootwright-managed artifact server, or its node-reachable machineBoot
-// endpoint cannot be resolved; the caller then leaves sourceURL empty so the
-// boot ISO install fails loudly rather than mis-installing. The scheme follows
-// the machineBoot listener (author it http: the installer verifies TLS and
-// would reject a self-signed artifact certificate the node does not trust).
-func machineOSHostedTreeVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, image v1alpha1.MachineImage) (string, map[string]any, bool) {
-	hostedTree := image.Spec.PackageSource.GetHostedTree()
+// hostedTree packageSource: bootwright extracts the DVD (fromMedia) once into
+// the cluster artifact server's document root and the installing node fetches
+// GPG-signed packages from it over the machineBoot endpoint. It returns the
+// tree URL to render as installer.sourceURL and the image.installTree vars the
+// Ansible extraction step consumes. ok is false when the DVD reference, a
+// bootwright-managed artifact server, or its node-reachable machineBoot endpoint
+// cannot be resolved; the caller then leaves sourceURL empty so the boot ISO
+// install fails loudly rather than mis-installing. The scheme follows the
+// machineBoot listener (author it http: the installer verifies TLS and would
+// reject a self-signed artifact certificate the node does not trust).
+func machineOSHostedTreeVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, source *v1alpha1.MachineInstallPackageSource) (string, map[string]any, bool) {
+	hostedTree := source.GetHostedTree()
 	if hostedTree == nil {
 		return "", nil, false
 	}

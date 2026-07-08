@@ -323,9 +323,12 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
 	}
-	for _, image := range state.MachineImages {
-		if cdn := image.Spec.PackageSource.GetRedhatCDN(); cdn != nil {
-			require(fmt.Sprintf("MachineImage/%s spec.packageSource.redhatCDN.entitlementRef", image.Metadata.Name),
+	for _, profile := range state.MachineInstallProfiles {
+		if profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		if cdn := profile.Spec.Installer.Anaconda.PackageSource.GetRedhatCDN(); cdn != nil {
+			require(fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.redhatCDN.entitlementRef", profile.Metadata.Name),
 				v1alpha1.KindEntitlement, cdn.EntitlementRef.Name)
 		}
 	}

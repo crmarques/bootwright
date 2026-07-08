@@ -236,29 +236,29 @@ hostname, or a `<role>-<ordinal>` such as `master-0`.
 
 ## MachineImage
 
-`MachineImage` describes the install media for a managed OS install: one
-bootable ISO (`bootMedia`) plus, for a boot ISO that carries no packages, where
-Anaconda fetches them (`packageSource`). Omitting `packageSource` declares
-`bootMedia` a full DVD that installs offline from its own payload.
+`MachineImage` describes the bootable media for a managed OS install. Where
+Anaconda fetches install-time packages is declared by the
+`MachineInstallProfile` that selects the image.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.bootMedia` | Yes | None | The ISO the machine boots over BMC virtual media: `local-media:<filename.iso>`, a `file://` absolute path, `http://`, or `https://`. |
-| `spec.packageSource` | No | None (⇒ full DVD) | Where Anaconda fetches packages for a boot ISO. Omit for a full DVD (installs via `cdrom`). Set exactly one arm — see below. |
 | `spec.checksum` | No | None | Optional `sha256:<hex>` pin on `bootMedia`. |
 | `spec.trustRefs[]` | No | None | `Environment` secrets holding CA bundles trusted when downloading `bootMedia`. |
 | `spec.headersRefs[]` | No | None | `Environment` secrets holding extra HTTP headers sent when downloading `bootMedia`. |
 
-### Package source
+### Anaconda package source
 
 `packageSource` is a discriminated union — the arm you set is the source type,
-so there is no `type` field. Set exactly one:
+so there is no `type` field. Set it under
+`MachineInstallProfile.spec.installer.anaconda` when the referenced
+`MachineImage` is a boot ISO; omit it for a full DVD.
 
 | Arm | Fields | Description |
 | --- | --- | --- |
 | `mirror` | `baseURL` (required, `http(s)`), `repositories[]` (`id` + `http(s)` `baseURL`) | Install from an HTTP(S) install tree you host. `baseURL` is the primary tree (BaseOS); `repositories` are additional (e.g. AppStream). |
 | `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. |
-| `hostedTree` | `fromMedia` (required, `local-media:`/`file://`) | Bootwright extracts the DVD named by `fromMedia` once and serves it from the cluster artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from `spec.bootMedia`. |
+| `hostedTree` | `fromMedia` (required, `local-media:`/`file://`) | Bootwright extracts the DVD named by `fromMedia` once and serves it from the cluster artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from the referenced image's `spec.bootMedia`. |
 
 !!! note "Registering against a corporate Satellite"
     A `redhatCDN` install registers against the public Red Hat CDN unless the
@@ -271,27 +271,34 @@ so there is no `type` field. Set exactly one:
 
 A DVD ISO (~10 GB) bundles the installer and the BaseOS/AppStream repositories,
 so Anaconda installs offline with a Kickstart `cdrom` source — set only
-`bootMedia` and omit `packageSource`. A boot ISO (~1 GB) carries only the
-installer, so it needs a `packageSource`: Bootwright renders a `url --url=` (or
-RHSM) install source plus `repo` entries instead of `cdrom`, and Anaconda
-fetches packages over the network during install.
+`bootMedia` and omit `installer.anaconda.packageSource` on the profile. A boot
+ISO (~1 GB) carries only the installer, so the profile needs a `packageSource`:
+Bootwright renders a `url --url=` (or RHSM) install source plus `repo` entries
+instead of `cdrom`, and Anaconda fetches packages over the network during
+install.
 
 A boot ISO sourced from a package `mirror` points `baseURL` at a BaseOS install
 tree and adds the AppStream repository — a RHEL install needs both:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: MachineImage
+kind: MachineInstallProfile
 metadata:
-  name: rhel-9-boot
+  name: rhel-9-ceph-node
 spec:
-  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
-  packageSource:
-    mirror:
-      baseURL: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
-      repositories:
-        - id: appstream
-          baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
+  os:
+    family: rhel
+    version: "9.7"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-boot
+      packageSource:
+        mirror:
+          baseURL: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
+          repositories:
+            - id: appstream
+              baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
 A boot ISO from the Red Hat CDN (`redhatCDN`) references a `redhat-rhel`
@@ -301,14 +308,20 @@ CDN:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: MachineImage
+kind: MachineInstallProfile
 metadata:
-  name: rhel-9-boot-cdn
+  name: rhel-9-ceph-node
 spec:
-  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
-  packageSource:
-    redhatCDN:
-      entitlementRef: rhel
+  os:
+    family: rhel
+    version: "9.7"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-boot
+      packageSource:
+        redhatCDN:
+          entitlementRef: rhel
 ```
 
 A boot ISO with a **self-hosted install tree** (`hostedTree`) is the air-gapped,
@@ -324,17 +337,23 @@ BaseOS and AppStream, so no `repositories` are needed):
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: MachineImage
+kind: MachineInstallProfile
 metadata:
-  name: rhel-9-boot-tree
+  name: rhel-9-ceph-node
 spec:
-  bootMedia: local-media:rhel-9.7-x86_64-boot.iso
-  packageSource:
-    hostedTree:
-      fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
+  os:
+    family: rhel
+    version: "9.7"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-boot
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
 ```
 
-A full DVD needs no `packageSource` at all:
+A full DVD image needs no profile `packageSource` at all:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -363,7 +382,7 @@ spec:
     installs, copied at most once on a remote provider host — but the per-machine
     output ISOs are unavoidable. An N-node group therefore costs about
     `N ×` media size of customized media, which is the main reason to prefer a
-    small boot ISO with a `packageSource` (~1&nbsp;GB) over a full DVD
+    small boot ISO with a profile `packageSource` (~1&nbsp;GB) over a full DVD
     (~10&nbsp;GB). To also keep the package payload off every node, a
     `hostedTree` package source serves the DVD's packages once from the artifact
     server (see above).
@@ -386,6 +405,7 @@ through Anaconda.
 | `spec.os.architecture` | Yes | None | Architecture such as `x86_64`. |
 | `spec.installer.anaconda` | Yes | None | Anaconda installer block (its presence is the installer discriminator). |
 | `spec.installer.anaconda.imageRef` | Yes | None | Names a `MachineImage`. |
+| `spec.installer.anaconda.packageSource` | No | None (⇒ full DVD) | Where Anaconda fetches packages when `imageRef` names a boot ISO. Omit for a full DVD image. |
 | `spec.customizations.hostname.source` | No | None | Currently `machineName`. |
 | `spec.customizations.localization.language` | No | `en_US.UTF-8` | System message locale. |
 | `spec.customizations.localization.formats` | No | Follows `language` | Regional formatting locale (dates, numbers, currency). |

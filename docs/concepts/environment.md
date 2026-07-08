@@ -160,9 +160,10 @@ Each `Entitlement` declares named vendor-controlled access for one product.
 discriminator, and the `rhsm`, `registry`, `license`, and `rhelEntitlementRef`
 arms become required per type (see [Required arms](#required-arms)). It is
 referenced by name from `StorageCluster.spec.ceph.entitlementRef`,
-`MachineImage.spec.packageSource.redhatCDN.entitlementRef`, and — for
-`ibm-storage-ceph` — from another entitlement's `spec.rhelEntitlementRef`. The
-secrets it names live on `Environment.spec.secrets`.
+`MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN.entitlementRef`,
+and — for `ibm-storage-ceph` — from another entitlement's
+`spec.rhelEntitlementRef`. The secrets it names live on
+`Environment.spec.secrets`.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |

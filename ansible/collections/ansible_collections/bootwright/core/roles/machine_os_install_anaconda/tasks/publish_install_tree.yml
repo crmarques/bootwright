@@ -1,5 +1,5 @@
 ---
-# Extract the hosted install tree (installSource.type: hostedTree) from its DVD
+# Extract the hosted install tree (packageSource.hostedTree) from its DVD
 # into the artifact server document root, once per (cluster, image). The trust
 # model matches a per-node install ISO: the DVD is sha256-verified, extracted
 # faithfully (Red Hat's documented copy of the whole tree, preserving

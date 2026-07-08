@@ -38,7 +38,7 @@ func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, sec
 		if !ok {
 			continue
 		}
-		for _, ref := range machineImageMediaRefs(image) {
+		for _, ref := range machineInstallMediaRefs(image, profile) {
 			resolved, err := media.Resolve(ref)
 			if err != nil || resolved.Path == "" {
 				// A bad reference is a validate-phase concern; an empty path is an
@@ -56,11 +56,11 @@ func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, sec
 	return checks
 }
 
-// machineImageMediaRefs lists the local ISO references an image needs staged on
-// the controller: bootMedia always, plus the hostedTree DVD when set.
-func machineImageMediaRefs(image v1alpha1.MachineImage) []string {
+// machineInstallMediaRefs lists the local ISO references an install needs
+// staged on the controller: bootMedia always, plus the hostedTree DVD when set.
+func machineInstallMediaRefs(image v1alpha1.MachineImage, profile v1alpha1.MachineInstallProfile) []string {
 	refs := []string{image.Spec.BootMedia}
-	if t := image.Spec.PackageSource.GetHostedTree(); t != nil {
+	if t := profile.Spec.Installer.Anaconda.PackageSource.GetHostedTree(); t != nil {
 		refs = append(refs, t.FromMedia)
 	}
 	return refs

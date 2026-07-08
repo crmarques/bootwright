@@ -278,7 +278,7 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	errs = append(errs, validateSharedMachineServices(state)...)
 	errs = append(errs, validateMachineNodeBindings(state)...)
 	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
-	errs = append(errs, validateMachineImageEntitlements(state)...)
+	errs = append(errs, validateMachineInstallProfileEntitlements(state)...)
 	return errs
 }
 
@@ -373,10 +373,13 @@ func validateMachineNodeBindings(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateMachineImageEntitlements(state v1alpha1.State) []string {
+func validateMachineInstallProfileEntitlements(state v1alpha1.State) []string {
 	var errs []string
-	for _, image := range state.MachineImages {
-		cdn := image.Spec.PackageSource.GetRedhatCDN()
+	for _, profile := range state.MachineInstallProfiles {
+		if profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		cdn := profile.Spec.Installer.Anaconda.PackageSource.GetRedhatCDN()
 		if cdn == nil {
 			continue
 		}
@@ -384,7 +387,7 @@ func validateMachineImageEntitlements(state v1alpha1.State) []string {
 		if ref == "" {
 			continue
 		}
-		field := fmt.Sprintf("MachineImage/%s spec.packageSource.redhatCDN.entitlementRef %q", image.Metadata.Name, ref)
+		field := fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.redhatCDN.entitlementRef %q", profile.Metadata.Name, ref)
 		entitlement, ok := entitlements.Find(state.Entitlements, ref)
 		if !ok {
 			errs = append(errs, field+" does not match any Entitlement")
@@ -548,7 +551,7 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 		}
 		if clusterInstallUsesHostedTree(state, ci) {
 			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerMachineBoot); !ok {
-				errs = append(errs, fmt.Sprintf("%s installs a node from a hostedTree MachineImage, so the installer fetches packages from the artifact server; set spec.install.artifactAccess.machineBoot.endpointRef to a resolvable endpoint (serve it over http so the installer does not reject a self-signed certificate)",
+				errs = append(errs, fmt.Sprintf("%s installs a node from an Anaconda hostedTree packageSource, so the installer fetches packages from the artifact server; set spec.install.artifactAccess.machineBoot.endpointRef to a resolvable endpoint (serve it over http so the installer does not reject a self-signed certificate)",
 					prefix))
 			}
 		}
@@ -577,17 +580,17 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 		}
 		if clusterInstallUsesHostedTree(state, ci) {
 			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerMachineBoot); !ok {
-				errs = append(errs, fmt.Sprintf("%s installs a node from a hostedTree MachineImage; set Environment.spec.defaults.artifactAccess.machineBoot.endpointRef so the installer can fetch packages from artifact server %q (serve it over http)", prefix, ci.ArtifactAccess.ServerRef.Name))
+				errs = append(errs, fmt.Sprintf("%s installs a node from an Anaconda hostedTree packageSource; set Environment.spec.defaults.artifactAccess.machineBoot.endpointRef so the installer can fetch packages from artifact server %q (serve it over http)", prefix, ci.ArtifactAccess.ServerRef.Name))
 			}
 		}
 	}
 	return errs
 }
 
-// clusterInstallUsesHostedTree reports whether any machine in ci installs from a
-// MachineImage whose installSource.type is hostedTree, so validation can require
-// the node-reachable machineBoot artifact endpoint the installer fetches the
-// tree from.
+// clusterInstallUsesHostedTree reports whether any machine in ci installs from
+// an Anaconda hostedTree packageSource, so validation can require the
+// node-reachable machineBoot artifact endpoint the installer fetches the tree
+// from.
 func clusterInstallUsesHostedTree(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
 	for _, m := range ci.Machines {
 		// The OS install profile is machine.spec.os.installProfileRef, not the
@@ -604,11 +607,7 @@ func clusterInstallUsesHostedTree(state v1alpha1.State, ci v1alpha1.ClusterInsta
 		if !ok || profile.Spec.Installer.Anaconda == nil {
 			continue
 		}
-		image, ok := stateview.MachineImage(state, profile.Spec.Installer.Anaconda.ImageRef.Name)
-		if !ok {
-			continue
-		}
-		if image.Spec.PackageSource.GetHostedTree() != nil {
+		if profile.Spec.Installer.Anaconda.PackageSource.GetHostedTree() != nil {
 			return true
 		}
 	}

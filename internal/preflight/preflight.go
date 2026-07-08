@@ -158,7 +158,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 	}
 	if hasState {
 		checks = append(checks, installerMediaChecks(state, selected, deps, secretScope)...)
-		checks = append(checks, installSourceReachabilityChecks(state, selected, deps, secretScope)...)
+		checks = append(checks, packageSourceReachabilityChecks(state, selected, deps, secretScope)...)
 	}
 	if anyPhaseInScope([]string{"machines", "base"}, selected) && hasState && stateNeedsVSphere(state) {
 		checks = append(checks, vspherePyvmomiCheck(deps))

@@ -214,9 +214,9 @@ func normalizeMachine(m *v1alpha1.Machine) {
 	}
 }
 
-// MachineImage needs no normalization: bootMedia and the packageSource arms are
-// authored explicitly (no mediaType default, no install-source type derivation,
-// no repositories[0] promotion). Validators and renderers read the arms directly.
+// MachineImage needs no normalization: bootMedia is authored explicitly and
+// package source belongs to MachineInstallProfile. Validators and renderers read
+// those fields directly.
 
 func normalizeProvider(p *v1alpha1.InfraProvider) {
 	if p.Spec.Type == v1alpha1.ProvisionerLibvirt && p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil {

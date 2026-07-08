@@ -11,6 +11,12 @@ spec:
   installer:
     anaconda:
       imageRef: rhel-9-x86-64-boot
+      packageSource:
+        mirror:
+          baseURL: https://mirror.example.test/rhel/9/BaseOS/x86_64/os/
+          repositories:
+            - id: appstream
+              baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 
   customizations:
     hostname:

@@ -1120,6 +1120,21 @@ spec:
 			wantSubstring: "field profileRef not found",
 		},
 		{
+			name: "machine-image-package-source-rejected",
+			mutate: func(files map[string]string) {
+				files["machine-image.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata: { name: rhel-iso }
+spec:
+  bootMedia: local-media:rhel-9.6-x86_64-boot.iso
+  packageSource:
+    hostedTree:
+      fromMedia: local-media:rhel-9.6-x86_64-dvd.iso
+`
+			},
+			wantSubstring: "field packageSource not found",
+		},
+		{
 			name: "cluster-artifact-access-provider-ref",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "    artifactAccess:\n", "    artifactAccess:\n      providerRef: rack\n", 1)
@@ -1285,9 +1300,9 @@ spec:
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.localization.additionalLocales[1] "pt_BR.UTF-8" is duplicated`,
 		},
 		{
-			// Additional install repositories moved off the install profile onto
-			// the MachineImage packageSource.mirror; the removed profile-level
-			// installer.anaconda.repositories field must fail strict decode.
+			// Additional install repositories belong under the install profile's
+			// packageSource.mirror; the removed direct repositories field must
+			// fail strict decode.
 			name: "machine-install-anaconda-repositories-rejected",
 			mutate: func(files map[string]string) {
 				files["machine-install.yaml"] = strings.Replace(machineInstallProfileYAML("rhel", `
@@ -4544,13 +4559,15 @@ func TestClusterInstallUsesHostedTreeResolvesOSInstallProfile(t *testing.T) {
 	machine.Spec.Substrate.ProfileRef = v1alpha1.LocalObjectReference{Name: "bm-profile"}
 
 	profile := v1alpha1.MachineInstallProfile{Metadata: v1alpha1.Metadata{Name: "rhel-hosted"}}
-	profile.Spec.Installer.Anaconda = &v1alpha1.MachineInstallAnaconda{ImageRef: v1alpha1.LocalObjectReference{Name: "rhel-img"}}
+	profile.Spec.Installer.Anaconda = &v1alpha1.MachineInstallAnaconda{
+		ImageRef: v1alpha1.LocalObjectReference{Name: "rhel-img"},
+		PackageSource: &v1alpha1.MachineInstallPackageSource{
+			HostedTree: &v1alpha1.MachineInstallPackageHostedTree{FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso"},
+		},
+	}
 
 	image := v1alpha1.MachineImage{Metadata: v1alpha1.Metadata{Name: "rhel-img"}}
 	image.Spec.BootMedia = "local-media:rhel-9.7-x86_64-boot.iso"
-	image.Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		HostedTree: &v1alpha1.MachinePackageHostedTree{FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso"},
-	}
 
 	state := v1alpha1.State{
 		Machines:               []v1alpha1.Machine{machine},
@@ -4569,10 +4586,10 @@ func TestClusterInstallUsesHostedTreeResolvesOSInstallProfile(t *testing.T) {
 		t.Fatal("hostedTree install profile resolved via os.installProfileRef must be detected")
 	}
 
-	image.Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		Mirror: &v1alpha1.MachinePackageMirror{BaseURL: "https://mirror.example.test/rhel/9/BaseOS/x86_64/os/"},
+	profile.Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+		Mirror: &v1alpha1.MachineInstallPackageMirror{BaseURL: "https://mirror.example.test/rhel/9/BaseOS/x86_64/os/"},
 	}
-	state.MachineImages = []v1alpha1.MachineImage{image}
+	state.MachineInstallProfiles = []v1alpha1.MachineInstallProfile{profile}
 	if clusterInstallUsesHostedTree(state, ci) {
 		t.Fatal("non-hostedTree install source must not be detected as hostedTree")
 	}

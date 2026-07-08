@@ -2,9 +2,9 @@ package v1alpha1
 
 // Entitlement is named vendor-controlled content access for one product. It is
 // referenced BY NAME from StorageCluster.spec.ceph.entitlementRef,
-// MachineImage.spec.packageSource.redhatCDN.entitlementRef, and from another
-// Entitlement via spec.rhelEntitlementRef. Secrets it names live on
-// Environment.spec.secrets and are resolved by name (never by value).
+// MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN.entitlementRef,
+// and from another Entitlement via spec.rhelEntitlementRef. Secrets it names
+// live on Environment.spec.secrets and are resolved by name (never by value).
 //
 // spec.type is the discriminator (a discriminated union on the API's dominant
 // grammar). The required arms follow from the type; provider and product are

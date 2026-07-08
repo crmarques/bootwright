@@ -49,109 +49,100 @@ func TestMachineImageBootMediaRejectsRetiredMediaReference(t *testing.T) {
 	}
 }
 
-func TestMachineImagePackageSourceRequiresExactlyOneArm(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			BootMedia:     "local-media:rhel-9.8-x86_64-boot.iso",
-			PackageSource: &v1alpha1.MachinePackageSource{},
-		},
-	}}})
+func machineInstallPackageSourceState(source *v1alpha1.MachineInstallPackageSource) v1alpha1.State {
+	return v1alpha1.State{
+		MachineImages: []v1alpha1.MachineImage{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.MachineImageSpec{
+				BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
+			},
+		}},
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
+			Metadata: v1alpha1.Metadata{Name: "rhel-profile"},
+			Spec: v1alpha1.MachineInstallProfileSpec{
+				OS: v1alpha1.MachineInstallOS{
+					Family:       "rhel",
+					Version:      "9.8",
+					Architecture: "x86_64",
+				},
+				Installer: v1alpha1.MachineInstallProfileInstaller{
+					Anaconda: &v1alpha1.MachineInstallAnaconda{
+						ImageRef:      v1alpha1.LocalObjectReference{Name: "rhel"},
+						PackageSource: source,
+					},
+				},
+			},
+		}},
+	}
+}
+
+func TestMachineInstallPackageSourceRequiresExactlyOneArm(t *testing.T) {
+	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{}))
 	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted a packageSource with no arm set")
+		t.Fatal("validateMachineInstallProfiles accepted a packageSource with no arm set")
 	}
 	if !strings.Contains(errs[0], "packageSource must set exactly one of: mirror, redhatCDN, hostedTree") {
 		t.Fatalf("error = %q", errs[0])
 	}
 }
 
-func TestMachineImagePackageSourceMirrorAcceptsRepositories(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-			PackageSource: &v1alpha1.MachinePackageSource{
-				Mirror: &v1alpha1.MachinePackageMirror{
-					BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
-					Repositories: []v1alpha1.MachineInstallRepository{
-						{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
-					},
-				},
+func TestMachineInstallPackageSourceMirrorAcceptsRepositories(t *testing.T) {
+	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
+		Mirror: &v1alpha1.MachineInstallPackageMirror{
+			BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+			Repositories: []v1alpha1.MachineInstallRepository{
+				{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
 			},
 		},
-	}}})
+	}))
 	if len(errs) != 0 {
-		t.Fatalf("validateMachineImages errors = %v", errs)
+		t.Fatalf("validateMachineInstallProfiles errors = %v", errs)
 	}
 }
 
-func TestMachineImagePackageSourceMirrorRejectsNonHTTPRepositoryBaseURL(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-			PackageSource: &v1alpha1.MachinePackageSource{
-				Mirror: &v1alpha1.MachinePackageMirror{
-					BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
-					Repositories: []v1alpha1.MachineInstallRepository{
-						{ID: "baseos", BaseURL: "ftp://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
-					},
-				},
+func TestMachineInstallPackageSourceMirrorRejectsNonHTTPRepositoryBaseURL(t *testing.T) {
+	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
+		Mirror: &v1alpha1.MachineInstallPackageMirror{
+			BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+			Repositories: []v1alpha1.MachineInstallRepository{
+				{ID: "baseos", BaseURL: "ftp://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
 			},
 		},
-	}}})
+	}))
 	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted non-http repository baseURL")
+		t.Fatal("validateMachineInstallProfiles accepted non-http repository baseURL")
 	}
 	if !strings.Contains(errs[0], "packageSource.mirror.repositories[0].baseURL must be http:// or https://") {
 		t.Fatalf("error = %q", errs[0])
 	}
 }
 
-func TestMachineImagePackageSourceMirrorRequiresBaseURL(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-			PackageSource: &v1alpha1.MachinePackageSource{
-				Mirror: &v1alpha1.MachinePackageMirror{},
-			},
-		},
-	}}})
+func TestMachineInstallPackageSourceMirrorRequiresBaseURL(t *testing.T) {
+	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
+		Mirror: &v1alpha1.MachineInstallPackageMirror{},
+	}))
 	if !containsSubstring(errs, "packageSource.mirror.baseURL is required") {
 		t.Fatalf("errors = %v, want mirror.baseURL requirement", errs)
 	}
 }
 
-func TestMachineImagePackageSourceRedhatCDNAcceptsEntitlementRef(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-			PackageSource: &v1alpha1.MachinePackageSource{
-				RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
-					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-				},
-			},
+func TestMachineInstallPackageSourceRedhatCDNAcceptsEntitlementRef(t *testing.T) {
+	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
+		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 		},
-	}}})
+	}))
 	if len(errs) != 0 {
-		t.Fatalf("validateMachineImages errors = %v", errs)
+		t.Fatalf("validateMachineInstallProfiles errors = %v", errs)
 	}
 }
 
-func TestMachineImagePackageSourceRedhatCDNRequiresEntitlementRef(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
-		Metadata: v1alpha1.Metadata{Name: "rhel"},
-		Spec: v1alpha1.MachineImageSpec{
-			BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-			PackageSource: &v1alpha1.MachinePackageSource{
-				RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{},
-			},
-		},
-	}}})
+func TestMachineInstallPackageSourceRedhatCDNRequiresEntitlementRef(t *testing.T) {
+	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
+		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{},
+	}))
 	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted redhatCDN source without entitlementRef")
+		t.Fatal("validateMachineInstallProfiles accepted redhatCDN source without entitlementRef")
 	}
 	if !strings.Contains(strings.Join(errs, "\n"), "packageSource.redhatCDN.entitlementRef is required") {
 		t.Fatalf("errors = %v", errs)
@@ -178,13 +169,23 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 				},
 			},
 		}},
-		MachineImages: []v1alpha1.MachineImage{{
-			Metadata: v1alpha1.Metadata{Name: "rhel"},
-			Spec: v1alpha1.MachineImageSpec{
-				BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-				PackageSource: &v1alpha1.MachinePackageSource{
-					RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
-						EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+		MachineImages: machineInstallPackageSourceState(nil).MachineImages,
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
+			Metadata: v1alpha1.Metadata{Name: "rhel-profile"},
+			Spec: v1alpha1.MachineInstallProfileSpec{
+				OS: v1alpha1.MachineInstallOS{
+					Family:       "rhel",
+					Version:      "9.8",
+					Architecture: "x86_64",
+				},
+				Installer: v1alpha1.MachineInstallProfileInstaller{
+					Anaconda: &v1alpha1.MachineInstallAnaconda{
+						ImageRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+						PackageSource: &v1alpha1.MachineInstallPackageSource{
+							RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+								EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+							},
+						},
 					},
 				},
 			},

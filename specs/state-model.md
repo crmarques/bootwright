@@ -244,7 +244,9 @@ Rules:
 
 ## MachineImage
 
-`MachineImage` describes bootable media used by managed OS installation.
+`MachineImage` describes bootable media used by managed OS installation. It
+does not declare where Anaconda gets install-time packages; that behavior
+belongs to the `MachineInstallProfile` that selects the image.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -263,21 +265,6 @@ Rules:
 - `spec.bootMedia` is required and locates the ISO the machine boots over BMC
   virtual media. It accepts `local-media:<filename.iso>`, `file://` absolute
   paths, `http://`, or `https://`.
-- `spec.packageSource` is omitted for a full DVD — the DVD carries its own
-  packages, which install offline via `cdrom`. Set it for a small boot ISO,
-  which carries no packages, to declare where Anaconda fetches them. Exactly
-  one arm selects the source: `mirror`, `redhatCDN`, or `hostedTree`.
-- `packageSource.mirror` installs from an HTTP(S) install tree you host:
-  `baseURL` is the primary Anaconda install tree (BaseOS) and `repositories[]`
-  become additional Kickstart `repo` entries (e.g. AppStream). Every `baseURL`
-  must be `http://` or `https://`.
-- `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a
-  `redhat-rhel` `Entitlement`. RHSM organization and activation key secret refs
-  are owned by that entitlement.
-- `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
-  once and serves from the cluster artifact server. It must reference local
-  media (`local-media:` or `file://`, not a URL) and must differ from
-  `spec.bootMedia`.
 - `local-media:<filename.iso>` resolves to the root-managed ISO media store
   under `/var/lib/bootwright/media/`. The media key is exactly the stored
   filename; it must be a basename ending in `.iso` and must not contain path
@@ -333,8 +320,27 @@ Rules:
 - `spec.installer.anaconda` is the only installer backend; its presence is the
   discriminator (there is no `type` field).
 - `spec.installer.anaconda.imageRef` references a `MachineImage`. Additional
-  install repositories are owned by that `MachineImage`'s
-  `spec.packageSource.mirror.repositories[]`, not by the profile.
+  install-time package sources are owned by this Anaconda installer block.
+- `spec.installer.anaconda.packageSource` is omitted for a full DVD image — the
+  DVD carries its own packages, which install offline via `cdrom`. Set it when
+  `imageRef` points at a small boot ISO, which carries no packages, to declare
+  where Anaconda fetches them during installation. Exactly one arm selects the
+  source: `mirror`, `redhatCDN`, or `hostedTree`.
+- `packageSource.mirror` installs from an HTTP(S) install tree you host:
+  `baseURL` is the primary Anaconda install tree (BaseOS) and `repositories[]`
+  become additional Kickstart `repo` entries (e.g. AppStream). Every `baseURL`
+  must be `http://` or `https://`.
+- `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a
+  `redhat-rhel` `Entitlement`. RHSM organization and activation key secret refs
+  are owned by that entitlement.
+- `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
+  once and serves from the cluster artifact server. It must reference local
+  media (`local-media:` or `file://`, not a URL) and must differ from the
+  referenced `MachineImage.spec.bootMedia`.
+- `packageSource` affects only the Anaconda installation transaction.
+  Bootwright does not render persistent repo files or `repo --install` from it;
+  future updates use the installed system's normal Red Hat/RHSM repositories or
+  later provisioning roles.
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.

@@ -198,11 +198,11 @@ func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
 	}
 }
 
-// TestManagedOSInstallVarsFromBootISOFixture pins the boot-ISO variant: the
-// 010 fixture declares mediaType: boot with a url install source, so rendering
-// must emit image.mediaType=boot, the BaseOS install tree as installer.sourceURL
-// (driving a Kickstart `url --url=` instead of `cdrom`), and the AppStream
-// repository as an additional `repo` entry.
+// TestManagedOSInstallVarsFromBootISOFixture pins the boot-ISO variant: the 010
+// fixture declares an Anaconda packageSource.mirror, so rendering must emit
+// image.mediaType=boot, the BaseOS install tree as installer.sourceURL (driving
+// a Kickstart `url --url=` instead of `cdrom`), and the AppStream repository as
+// an additional `repo` entry.
 func TestManagedOSInstallVarsFromBootISOFixture(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "010-ceph-3nodes-libvirt-boot-iso")})
 	if err != nil {
@@ -335,8 +335,8 @@ func TestManagedOSInstallUsesImageSourceURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		Mirror: &v1alpha1.MachinePackageMirror{
+	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+		Mirror: &v1alpha1.MachineInstallPackageMirror{
 			BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
 			Repositories: []v1alpha1.MachineInstallRepository{
 				{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
@@ -358,18 +358,19 @@ func TestManagedOSInstallUsesImageSourceURL(t *testing.T) {
 }
 
 // TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint pins the fail-closed
-// render path: a hostedTree image whose cluster has no resolvable machineBoot
-// artifact endpoint must leave installer.sourceURL unset (so the boot ISO
-// install fails loudly on a package-less cdrom rather than mis-installing) and
-// must not emit image.installTree. The cluster-install validator rejects this
-// configuration up front; the renderer only has to fail safe, not panic.
+// render path: a hostedTree packageSource whose cluster has no resolvable
+// machineBoot artifact endpoint must leave installer.sourceURL unset (so the
+// boot ISO install fails loudly on a package-less cdrom rather than
+// mis-installing) and must not emit image.installTree. The cluster-install
+// validator rejects this configuration up front; the renderer only has to fail
+// safe, not panic.
 func TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		HostedTree: &v1alpha1.MachinePackageHostedTree{
+	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+		HostedTree: &v1alpha1.MachineInstallPackageHostedTree{
 			FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso",
 		},
 	}
@@ -405,8 +406,8 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 			},
 		},
 	})
-	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
 			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 		},
 	}
@@ -455,8 +456,8 @@ func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
 				},
 			},
 		})
-		state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
-			RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+		state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+			RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
 				EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 			},
 		}

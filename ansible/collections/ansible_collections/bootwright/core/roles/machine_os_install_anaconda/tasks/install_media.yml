@@ -168,7 +168,7 @@
         - (bootwright_component.osInstall.image.checksum | default('') | length) > 0
         - not (bootwright_os_source_sha256.skipped | default(false) | bool)
 
-    # Hosted install tree (installSource.type: hostedTree): extract the DVD
+    # Hosted install tree (packageSource.hostedTree): extract the DVD
     # (image.installTree.fromMedia) once into the artifact server document root
     # so every node in the group fetches GPG-signed packages from one shared
     # read-only tree instead of carrying the DVD payload inside its own ISO.

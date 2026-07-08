@@ -274,26 +274,29 @@ func TestEntitlementValidation(t *testing.T) {
 	}
 }
 
-func TestMachineImageRedHatCDNRequiresRHELEntitlement(t *testing.T) {
+func TestMachineInstallProfileRedHatCDNRequiresRHELEntitlement(t *testing.T) {
 	state := v1alpha1.State{
 		Entitlements: []v1alpha1.Entitlement{{
 			Metadata: v1alpha1.Metadata{Name: "rhcs"},
 			Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeRedHatCeph},
 		}},
-		MachineImages: []v1alpha1.MachineImage{{
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
-			Spec: v1alpha1.MachineImageSpec{
-				BootMedia: "local-media:rhel-9.8-x86_64-boot.iso",
-				PackageSource: &v1alpha1.MachinePackageSource{
-					RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
-						EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+			Spec: v1alpha1.MachineInstallProfileSpec{
+				Installer: v1alpha1.MachineInstallProfileInstaller{
+					Anaconda: &v1alpha1.MachineInstallAnaconda{
+						PackageSource: &v1alpha1.MachineInstallPackageSource{
+							RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+								EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+							},
+						},
 					},
 				},
 			},
 		}},
 	}
-	errs := validateMachineImageEntitlements(state)
+	errs := validateMachineInstallProfileEntitlements(state)
 	if got := strings.Join(errs, "; "); !strings.Contains(got, `resolves to type "redhat-ceph", want "redhat-rhel"`) {
-		t.Fatalf("validateMachineImageEntitlements errors = %q", got)
+		t.Fatalf("validateMachineInstallProfileEntitlements errors = %q", got)
 	}
 }

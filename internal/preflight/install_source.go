@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	checkGroupInstallSource   = "Install source"
-	installSourceRepoMetadata = "repodata/repomd.xml"
+	checkGroupPackageSource   = "Package source"
+	packageSourceRepoMetadata = "repodata/repomd.xml"
 )
 
-// installSourceReachabilityChecks probes the package install trees a boot-ISO
+// packageSourceReachabilityChecks probes the package install trees a boot-ISO
 // managed-OS machine depends on. A boot ISO carries no packages, so Anaconda
-// fetches them from spec.installSource (a url-type install tree plus extra
-// repositories) during install; an unreachable mirror or a wrong install-tree
+// fetches them from the Anaconda packageSource during install; an unreachable
+// mirror or a wrong install-tree
 // path otherwise fails minutes deep in the machines phase with an opaque
 // Anaconda error. Surfacing it here points the operator at the mirror up front.
 //
@@ -26,10 +26,10 @@ const (
 // authoritative fetcher, so a controller that cannot reach the mirror (a
 // different network, a self-signed TLS chain it does not trust) only warns,
 // while a mirror that answers but serves no repodata at the path (a wrong
-// install-tree URL) fails outright. redhatCDN install sources are skipped — the
+// install-tree URL) fails outright. redhatCDN package sources are skipped — the
 // CDN needs entitlement auth to probe, and its credentials are already covered
 // by the entitlement secret-material checks.
-func installSourceReachabilityChecks(state v1alpha1.State, selected []Phase, deps Deps, secretScope *SecretScope) []Check {
+func packageSourceReachabilityChecks(state v1alpha1.State, selected []Phase, deps Deps, secretScope *SecretScope) []Check {
 	if !phaseInScope("machines", selected, true) {
 		return nil
 	}
@@ -43,32 +43,28 @@ func installSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 		if !ok || profile.Spec.Installer.Anaconda == nil {
 			continue
 		}
-		image, ok := stateview.MachineImage(state, profile.Spec.Installer.Anaconda.ImageRef.Name)
-		if !ok {
-			continue
-		}
-		mirror := image.Spec.PackageSource.GetMirror()
+		mirror := profile.Spec.Installer.Anaconda.PackageSource.GetMirror()
 		if mirror == nil {
 			// A full DVD carries its own packages; redhatCDN reachability hides
 			// behind entitlement auth; a hostedTree is served locally by
 			// bootwright. None is probed here — only an operator-hosted mirror.
 			continue
 		}
-		for _, base := range installSourceURLs(mirror) {
+		for _, base := range packageMirrorURLs(mirror) {
 			if seen[base] {
 				continue
 			}
 			seen[base] = true
-			checks = append(checks, installSourceCheck(base, deps))
+			checks = append(checks, packageSourceMirrorCheck(base, deps))
 		}
 	}
 	sort.SliceStable(checks, func(i, j int) bool { return checks[i].Name < checks[j].Name })
 	return checks
 }
 
-// installSourceURLs lists the install-tree and repository base URLs that
+// packageMirrorURLs lists the install-tree and repository base URLs that
 // Anaconda fetches packages from, in declaration order (primary tree first).
-func installSourceURLs(mirror *v1alpha1.MachinePackageMirror) []string {
+func packageMirrorURLs(mirror *v1alpha1.MachineInstallPackageMirror) []string {
 	var urls []string
 	if mirror.BaseURL != "" {
 		urls = append(urls, mirror.BaseURL)
@@ -81,40 +77,40 @@ func installSourceURLs(mirror *v1alpha1.MachinePackageMirror) []string {
 	return urls
 }
 
-func installSourceCheck(baseURL string, deps Deps) Check {
+func packageSourceMirrorCheck(baseURL string, deps Deps) Check {
 	// A baseURL carrying yum variables ($basearch/$releasever/...) is resolved by
 	// Anaconda on the install target, not the controller. Probing the literal
 	// unexpanded path would 404 and hard-fail a source the target can install
 	// from, so report it INFO (operator-resolved) instead of probing.
 	if strings.ContainsRune(baseURL, '$') {
-		return infoCheck(checkGroupInstallSource, baseURL, "contains a yum variable (e.g. $basearch/$releasever); the install target expands it at install time, so the controller cannot probe this URL")
+		return infoCheck(checkGroupPackageSource, baseURL, "contains a yum variable (e.g. $basearch/$releasever); the install target expands it at install time, so the controller cannot probe this URL")
 	}
-	probe := strings.TrimRight(baseURL, "/") + "/" + installSourceRepoMetadata
+	probe := strings.TrimRight(baseURL, "/") + "/" + packageSourceRepoMetadata
 	req, err := http.NewRequest(http.MethodGet, probe, nil)
 	if err != nil {
-		return failCheck(checkGroupInstallSource, baseURL, err.Error(),
+		return failCheck(checkGroupPackageSource, baseURL, err.Error(),
 			"Boot-ISO installs fetch packages from this repository during install",
-			"check the installSource URL "+baseURL)
+			"check the packageSource.mirror URL "+baseURL)
 	}
 	resp, err := preflightHTTPDo(deps, req, false)
 	if err != nil {
 		return Check{
-			Group:       checkGroupInstallSource,
+			Group:       checkGroupPackageSource,
 			Name:        baseURL,
 			Status:      StatusWarn,
 			Evidence:    "controller probe failed: " + err.Error(),
 			Impact:      "The install target fetches packages from this repository; the controller could not verify it (it may not share the install network)",
-			Remediation: "confirm the install nodes can reach " + baseURL + " (for a self-signed mirror, add its CA to the MachineImage trustRefs)",
+			Remediation: "confirm the install nodes can reach " + baseURL + " (for a self-signed mirror, add its CA to Environment.spec.installTrust.caBundleRefs)",
 		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return okCheck(checkGroupInstallSource, baseURL, fmt.Sprintf("%s answered HTTP %d", probe, resp.StatusCode))
+		return okCheck(checkGroupPackageSource, baseURL, fmt.Sprintf("%s answered HTTP %d", probe, resp.StatusCode))
 	default:
-		return failCheck(checkGroupInstallSource, baseURL,
+		return failCheck(checkGroupPackageSource, baseURL,
 			fmt.Sprintf("%s answered HTTP %d", probe, resp.StatusCode),
 			"The server answered but serves no yum metadata at this path, so Anaconda cannot install from it",
-			"point installSource at the install-tree root that contains repodata/ (for example .../BaseOS/x86_64/os/)")
+			"point packageSource.mirror.baseURL or repositories[].baseURL at the install-tree root that contains repodata/ (for example .../BaseOS/x86_64/os/)")
 	}
 }

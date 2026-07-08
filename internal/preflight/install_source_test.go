@@ -11,11 +11,11 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// The 010 fixture's three ceph nodes install from the same boot image, whose
-// url install source declares a BaseOS install tree plus an AppStream repo. The
-// check probes each unique base URL's repodata/repomd.xml once (deduped across
-// nodes) and verifies TLS by default.
-func TestInstallSourceReachabilityProbesRepoMetadata(t *testing.T) {
+// The 010 fixture's three ceph nodes install through the same profile-owned
+// packageSource.mirror, which declares a BaseOS install tree plus an AppStream
+// repo. The check probes each unique base URL's repodata/repomd.xml once
+// (deduped across nodes) and verifies TLS by default.
+func TestPackageSourceReachabilityProbesRepoMetadata(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	var probed []string
 	deps := Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
@@ -23,19 +23,19 @@ func TestInstallSourceReachabilityProbesRepoMetadata(t *testing.T) {
 			t.Fatalf("probe method = %s, want GET", req.Method)
 		}
 		if insecure {
-			t.Fatal("install-source probe must verify TLS by default")
+			t.Fatal("package-source probe must verify TLS by default")
 		}
 		probed = append(probed, req.URL.String())
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}}
 
-	checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
+	checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
 	if len(checks) != 2 {
 		t.Fatalf("checks = %d, want 2 (BaseOS tree + AppStream repo, deduped across nodes): %+v", len(checks), checks)
 	}
 	for _, c := range checks {
-		if c.Group != checkGroupInstallSource || c.Status != StatusOK {
-			t.Fatalf("check = %+v, want OK in %q", c, checkGroupInstallSource)
+		if c.Group != checkGroupPackageSource || c.Status != StatusOK {
+			t.Fatalf("check = %+v, want OK in %q", c, checkGroupPackageSource)
 		}
 	}
 	if len(probed) != 2 {
@@ -50,13 +50,13 @@ func TestInstallSourceReachabilityProbesRepoMetadata(t *testing.T) {
 
 // A server that answers but serves no yum metadata at the path means a wrong
 // install-tree URL — a definitive failure, not an ambiguous reachability blip.
-func TestInstallSourceReachabilityFailsOnHTTPError(t *testing.T) {
+func TestPackageSourceReachabilityFailsOnHTTPError(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}}
 
-	checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
+	checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
 	if len(checks) != 2 {
 		t.Fatalf("checks = %d, want 2", len(checks))
 	}
@@ -70,13 +70,13 @@ func TestInstallSourceReachabilityFailsOnHTTPError(t *testing.T) {
 // A controller that cannot reach the mirror may simply not share the install
 // network, so a transport error only warns — the install target is the
 // authoritative fetcher.
-func TestInstallSourceReachabilityWarnsOnTransportError(t *testing.T) {
+func TestPackageSourceReachabilityWarnsOnTransportError(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
 		return nil, errors.New("dial tcp: connection refused")
 	}}
 
-	checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
+	checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
 	if len(checks) != 2 {
 		t.Fatalf("checks = %d, want 2", len(checks))
 	}
@@ -87,34 +87,34 @@ func TestInstallSourceReachabilityWarnsOnTransportError(t *testing.T) {
 	}
 }
 
-// DVD media carries its own packages, so it has no install source to probe.
-func TestInstallSourceReachabilitySkipsDVDMedia(t *testing.T) {
+// DVD media carries its own packages, so it has no package source to probe.
+func TestPackageSourceReachabilitySkipsDVDMedia(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
-		t.Fatal("DVD media must not be probed for an install source")
+		t.Fatal("DVD media must not be probed for a package source")
 		return nil, nil
 	}}
 
-	if checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil); len(checks) != 0 {
+	if checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil); len(checks) != 0 {
 		t.Fatalf("checks = %+v, want none for DVD media", checks)
 	}
 }
 
 // redhatCDN reachability hides behind entitlement auth and is covered by the
 // entitlement secret-material checks, so it is not probed here.
-func TestInstallSourceReachabilitySkipsRedhatCDN(t *testing.T) {
+func TestPackageSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
-	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		RedhatCDN: &v1alpha1.MachinePackageRedhatCDN{
+	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
 			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 		},
 	}
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
-		t.Fatal("redhatCDN install sources must not be probed")
+		t.Fatal("redhatCDN package sources must not be probed")
 		return nil, nil
 	}}
 
-	if checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil); len(checks) != 0 {
+	if checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil); len(checks) != 0 {
 		t.Fatalf("checks = %+v, want none for redhatCDN", checks)
 	}
 }
@@ -122,10 +122,10 @@ func TestInstallSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 // A baseURL carrying yum variables ($basearch/$releasever) is expanded by the
 // install target, not the controller, so probing the literal path would 404 a
 // source that installs fine — report it INFO without probing.
-func TestInstallSourceReachabilityYumVariableReportsInfo(t *testing.T) {
+func TestPackageSourceReachabilityYumVariableReportsInfo(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
-	state.MachineImages[0].Spec.PackageSource = &v1alpha1.MachinePackageSource{
-		Mirror: &v1alpha1.MachinePackageMirror{
+	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
+		Mirror: &v1alpha1.MachineInstallPackageMirror{
 			BaseURL: "https://mirror.example.test/rhel/9/BaseOS/$basearch/os/",
 		},
 	}
@@ -134,28 +134,28 @@ func TestInstallSourceReachabilityYumVariableReportsInfo(t *testing.T) {
 		return nil, nil
 	}}
 
-	checks := installSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
+	checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil)
 	if len(checks) != 1 || checks[0].Status != StatusInfo {
 		t.Fatalf("checks = %+v, want one INFO for a yum-variable baseURL", checks)
 	}
 }
 
-// The install source is only needed once the machines phase provisions the OS.
-func TestInstallSourceReachabilitySkippedOutsideMachinesPhase(t *testing.T) {
+// The package source is only needed once the machines phase provisions the OS.
+func TestPackageSourceReachabilitySkippedOutsideMachinesPhase(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
 		t.Fatal("probe must not run outside the machines phase")
 		return nil, nil
 	}}
 
-	if checks := installSourceReachabilityChecks(state, []Phase{{Name: "add-ons"}}, deps, nil); len(checks) != 0 {
+	if checks := packageSourceReachabilityChecks(state, []Phase{{Name: "add-ons"}}, deps, nil); len(checks) != 0 {
 		t.Fatalf("checks = %+v, want none outside the machines phase", checks)
 	}
 }
 
-// CollectChecks must wire the install-source probe into the apply/preflight
+// CollectChecks must wire the package-source probe into the apply/preflight
 // host check alongside the installer-media check.
-func TestCollectChecksIncludesInstallSource(t *testing.T) {
+func TestCollectChecksIncludesPackageSource(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{
 		LookPath:      func(name string, _ []string) (string, error) { return "/bin/" + name, nil },
