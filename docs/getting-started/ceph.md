@@ -59,7 +59,8 @@ The example is a complete, valid bootwright tree. Its layout:
 
 ```text
 my-ceph-lab/
-  environment.yaml                                   Environment: secrets, cluster selection, lab DNS
+  environment.yaml                                   Environment: cluster selection, lab DNS
+  secrets.yaml                                       Secrets: node/bastion SSH, BMC, RHSM, IBM registry
   infra/
     providers/libvirt.yaml                           InfraProvider: libvirt + VM profiles + bridge
     machines/bastion.yaml                            Machine: the libvirt host (localhost)
@@ -84,8 +85,8 @@ Read them in dependency order; each owns exactly one slice of the truth.
 ### Environment (`environment.yaml`)
 
 The catalog that ties the tree together. It sets `spec.baseDomain`
-(`bootwright.test`), activates the cluster under `spec.storageClusters`, names the
-secrets the workflow needs under `spec.secrets`, and selects the managed lab DNS
+(`bootwright.test`), activates the cluster under `spec.storageClusters`, and
+selects the managed lab DNS
 under `spec.infraComponents.nameResolution`. It also sets
 `spec.safety.destroyProtection: requiredOverride`, so `destroy` refuses to run
 without `--override`.
@@ -106,6 +107,16 @@ Storage Ceph runs on RHEL it does not itself entitle:
   `rhelEntitlementRef: rhel`. Its `registry.credentialsRef` resolves to the
   `ibm-ceph-registry` secret (username `cp`, the IBM entitlement key as the
   password).
+
+### Secret (`secrets.yaml`)
+
+Six `kind: Secret` objects, one per named secret, each with a `spec.type` and an
+optional `spec.source`. The bytes never go in YAML — `spec.source` says where
+they come from: `bastion-host-ssh` (`sshKeyPair`) is a `file` reference to an
+operator-owned key; `ceph-node-ssh` (`sshKeyPair`) and `bmc-credentials`
+(`usernamePassword`) are `generated`; and `rhel-org`, `rhel-activation-key`
+(`opaque`), and `ibm-ceph-registry` (`usernamePassword`) are context-local,
+set with `bootwright secret set`.
 
 ### InfraProvider (`infra/providers/libvirt.yaml`)
 
@@ -225,8 +236,8 @@ If you change the `192.168.140.*` network, update every place it appears:
 
 This lab needs three pieces of credential material plus a staged RHEL ISO. None
 goes in YAML — the secrets are stored, encrypted, in the bootwright context with
-`bootwright secret set`, using the secret **names** declared in the example's
-`Environment`.
+`bootwright secret set`, using the secret **names** the example's `Secret`
+objects declare.
 
 ### Stage the RHEL DVD ISO
 
@@ -253,8 +264,8 @@ bootwright media list
 
 ### Set the secrets
 
-Set the three operator-supplied secrets by the names the `Environment` declares,
-then converge the generated and `file:`-sourced entries:
+Set the three operator-supplied secrets by the names the `Secret` objects
+declare, then converge the generated and `file`-sourced entries:
 
 ```bash
 # Red Hat subscription: organization ID and activation key (plain strings).

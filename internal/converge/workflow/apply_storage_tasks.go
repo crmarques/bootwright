@@ -119,6 +119,7 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	clone.InfraComponents = nil
 	clone.Environments = nil
 	clone.Machines = nil
+	clone.Secrets = nil
 	for i := range clone.StorageClusters {
 		ceph := clone.StorageClusters[i].Spec.Ceph
 		if ceph == nil {

@@ -41,7 +41,8 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		return nil
 	}
 	env := stateview.Environment(state)
-	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, state.Entitlements, env, paths.SecretsDir)
+	idx := secret.NewIndex(state)
+	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, state.Entitlements, idx, paths.SecretsDir)
 	// hostedTree overrides the package source: bootwright extracts fromMedia (a
 	// DVD) into the cluster artifact server and the installing node fetches
 	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
@@ -87,7 +88,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"hostname":               machineInstallHostname(state, machine),
 			"sshUser":                sshUser,
 			"sshPasswordHash":        managedOSSSHLoginPasswordHash,
-			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
+			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
 			"localization":           machineInstallLocalizationVars(profile.Spec.Customizations.Localization),
@@ -102,13 +103,13 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		ssh := map[string]any{
 			"address":        v1alpha1.MachineSSHAddress(machine),
 			"user":           sshUser,
-			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
+			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
 		}
 		// The managed trust store has no portable form: in placeholder mode these
 		// resolve empty, so omit the keys rather than emit blank values (matching
 		// how machineInventoryEntry / storageClusterSSHVars already guard them). An
 		// explicit known-hosts SecretRef still tokenizes via machineKnownHostsPath.
-		if knownHosts := machineKnownHostsPath(machine, env, paths); knownHosts != "" {
+		if knownHosts := machineKnownHostsPath(machine, paths); knownHosts != "" {
 			ssh["knownHostsPath"] = knownHosts
 		}
 		if trustDir := sshtrust.DirForSecrets(paths.trustSecretsDir()); trustDir != "" {
@@ -248,7 +249,7 @@ func machineOSMediaType(source *v1alpha1.MachinePackageSource) string {
 // BaseURL + repo entries; redhatCDN → resolved rhsm; nil (a full DVD) and
 // hostedTree both return empty (nil installs via cdrom, and the caller overlays
 // the derived tree URL for hostedTree).
-func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents []v1alpha1.Entitlement, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
+func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string) (string, []any, map[string]any) {
 	rhsm := map[string]any{}
 	if source == nil {
 		return "", machineInstallRepositoryVars(nil), rhsm
@@ -260,7 +261,7 @@ func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents [
 	if cdn == nil || cdn.EntitlementRef.Name == "" {
 		return "", machineInstallRepositoryVars(nil), rhsm
 	}
-	resolved, ok := entitlements.Resolve(ents, env, cdn.EntitlementRef.Name, "", secretsDir)
+	resolved, ok := entitlements.Resolve(ents, idx, cdn.EntitlementRef.Name, "", secretsDir)
 	if !ok {
 		return "", nil, rhsm
 	}
@@ -300,7 +301,7 @@ func managedOSInstallProxyVars(state v1alpha1.State, env *v1alpha1.Environment, 
 	}
 	out := map[string]any{"url": url}
 	if eff.Auth.Name != "" {
-		if path := secret.ResolveMaterialPath(eff.Auth.Name, env, secretsDir, secret.MaterialPrimary); path != "" {
+		if path := secret.ResolveMaterialPath(eff.Auth.Name, secret.NewIndex(state), secretsDir, secret.MaterialPrimary); path != "" {
 			out["credentialsPath"] = path
 		}
 	}

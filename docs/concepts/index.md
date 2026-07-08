@@ -379,17 +379,16 @@ default is. Three patterns recur:
 ### Secrets
 
 Desired state references secrets by name only and never carries secret bytes, so
-it is safe to commit. A reference names an entry in `Environment.spec.secrets`;
-the bytes live in the context secret store or operator-owned local files. See
+it is safe to commit. A reference names a `kind: Secret` object; the bytes live
+in the context secret store or operator-owned local files. See
 [Secrets & entitlements](secrets.md) for the source/context storage modes and
 `secret generate`.
 
-!!! note "Environment.spec.secrets uses a bespoke codec"
-    `Environment.spec.secrets` is the API's one bespoke collection codec: it is
-    *authored as a list* of scalar names or single-key objects, and decodes into
-    a name-keyed map. It is neither a plain list nor a plain map. The
-    [Environment](environment.md) page documents the full shape and the
-    `file`/`generated` arms.
+!!! note "Secret is its own kind"
+    A secret is a first-class `kind: Secret` object with a `spec.type` (what the
+    material is) and an optional `spec.source` (how it is obtained), not an
+    `Environment` field. The [Secrets & entitlements](secrets.md) page documents
+    the type vocabulary and the `contextStore`/`file`/`generated` source arms.
 
 ### Validation model
 

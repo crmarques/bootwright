@@ -68,9 +68,7 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 	t.Run("explicit-declared", func(t *testing.T) {
 		dir := t.TempDir()
 		files := newBaselineFiles()
-		files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
-			"    - bastion-host-ssh:\n        file: ~/ssh\n",
-			"    - bastion-host-ssh:\n        file: ~/ssh\n    - bastion-host-known-hosts\n", 1)
+		files["environment.yaml"] = newEnvironmentYAML + secretDoc("bastion-host-known-hosts", "opaque")
 		files["service-machines.yaml"] = strings.Replace(newHostsYAML,
 			"      keyRef: bastion-host-ssh\n",
 			"      keyRef: bastion-host-ssh\n      knownHostsRef: bastion-host-known-hosts\n", 1)
@@ -90,7 +88,7 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected validation error, got nil")
 		}
-		want := `Machine/services-host spec.access.ssh.knownHostsRef "bastion-host-known-hosts" is not declared`
+		want := `Machine/services-host spec.access.ssh.knownHostsRef "bastion-host-known-hosts" is not a declared Secret`
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q does not contain %q", err, want)
 		}
@@ -561,7 +559,7 @@ func TestDefaultedPullSecretRefErrorSaysDefaulted(t *testing.T) {
 	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
 		"    pullSecretRef: openshift-pull-secret\n", "", 1)
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
-		"    - openshift-pull-secret\n", "", 1)
+		pullSecretDoc, "", 1)
 
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
@@ -569,7 +567,7 @@ func TestDefaultedPullSecretRefErrorSaysDefaulted(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadNormalizeValidate: expected defaulted pull secret error")
 	}
-	want := `ContainerCluster/sno install.pullSecretRef "openshift-pull-secret" is not declared in Environment/env spec.secrets (defaulted; declare the secret or set spec.install.pullSecretRef)`
+	want := `ContainerCluster/sno install.pullSecretRef "openshift-pull-secret" is not a declared Secret (defaulted; declare the secret or set spec.install.pullSecretRef)`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -586,7 +584,7 @@ func TestAuthoredPullSecretRefErrorHasNoDefaultedNote(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadNormalizeValidate: expected authored pull secret error")
 	}
-	want := `ContainerCluster/sno install.pullSecretRef "my-pull-secret" is not declared in Environment/env spec.secrets`
+	want := `ContainerCluster/sno install.pullSecretRef "my-pull-secret" is not a declared Secret`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -619,7 +617,7 @@ func TestDefaultedNodeSSHKeyPairRefErrorSaysDefaulted(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadNormalizeValidate: expected defaulted nodeSSH secret error")
 	}
-	want := `ContainerCluster/sno2 install.nodeSSH.keyPairRef "sno2-cluster-admin-ssh-key" is not declared in Environment/env spec.secrets (defaulted; declare the secret or set spec.install.nodeSSH)`
+	want := `ContainerCluster/sno2 install.nodeSSH.keyPairRef "sno2-cluster-admin-ssh-key" is not a declared Secret (defaulted; declare the secret or set spec.install.nodeSSH)`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -757,8 +755,8 @@ spec:
 		{
 			name: "environment-clustertrust-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  secrets:\n",
-				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n\n  secrets:\n", 1)},
+				"  infraComponents:\n",
+				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n\n  infraComponents:\n", 1)},
 			wantSubstring: "field clusterTrust not found",
 		},
 		{
@@ -880,16 +878,9 @@ spec:
 			name: "openshift-pull-secret-required",
 			files: map[string]string{
 				"cluster.yaml":     strings.Replace(newClusterYAML, "pullSecretRef: openshift-pull-secret", "", 1),
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - openshift-pull-secret\n", "", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, pullSecretDoc, "", 1),
 			},
-			wantSubstring: `install.pullSecretRef "openshift-pull-secret" is not declared`,
-		},
-		{
-			name: "secret-keyfile-without-file-rejected",
-			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - bastion-host-ssh:\n        file: ~/ssh",
-				"    - bastion-host-ssh:\n        keyFile: ~/ssh.key", 1)},
-			wantSubstring: "spec.secrets[bastion-host-ssh].keyFile requires file",
+			wantSubstring: `install.pullSecretRef "openshift-pull-secret" is not a declared Secret`,
 		},
 		{
 			name: "secretstorage-mode-rejected",
@@ -915,23 +906,51 @@ spec:
 		{
 			name: "generated-ssh-key-type-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-				"    - sno-cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: dsa", 1)},
-			wantSubstring: `spec.secrets[sno-cluster-admin-ssh-key].generated.sshKeyPair.type "dsa" must be one of {ed25519, rsa, ecdsa-p256, ecdsa-p384, ecdsa-p521}`,
+				nodeSSHKeySecretDoc,
+				`---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: sno-cluster-admin-ssh-key }
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: dsa
+`, 1)},
+			wantSubstring: `Secret/sno-cluster-admin-ssh-key spec.source.generated.keyType "dsa" must be one of {ed25519, rsa, ecdsa-p256, ecdsa-p384, ecdsa-p521}`,
 		},
 		{
-			name: "generated-secret-multiple-kinds-rejected",
+			name: "generated-foreign-param-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - bmc-credentials:\n        generated:\n          credentials:\n            username: admin",
-				"    - bmc-credentials:\n        generated:\n          credentials:\n            username: admin\n          sshKeyPair:\n            type: ed25519", 1)},
-			wantSubstring: "spec.secrets[bmc-credentials].generated sets more than one generated kind",
+				bmcCredentialsSecretDoc,
+				`---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: bmc-credentials }
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+      keyType: ed25519
+`, 1)},
+			wantSubstring: "Secret/bmc-credentials spec.source.generated.keyType is not valid for a usernamePassword secret",
 		},
 		{
 			name: "generated-non-ssh-key-for-ssh-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-				"    - sno-cluster-admin-ssh-key:\n        generated:\n          credentials:\n            username: admin", 1)},
-			wantSubstring: `install.nodeSSH.keyPairRef "sno-cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[sno-cluster-admin-ssh-key].generated is not sshKeyPair`,
+				nodeSSHKeySecretDoc,
+				`---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: sno-cluster-admin-ssh-key }
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+`, 1)},
+			wantSubstring: `install.nodeSSH.keyPairRef "sno-cluster-admin-ssh-key" is a usernamePassword Secret but a sshKeyPair Secret is required`,
 		},
 		{
 			name: "cluster-admin-ssh-mixed-refs-rejected",
@@ -950,16 +969,16 @@ spec:
 		{
 			name: "installtrust-duplicate-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  secrets:\n",
-				"  installTrust:\n    caBundleRefs:\n      - corp-ca\n      - corp-ca\n\n  secrets:\n", 1)},
+				"  infraComponents:\n",
+				"  installTrust:\n    caBundleRefs:\n      - corp-ca\n      - corp-ca\n\n  infraComponents:\n", 1)},
 			wantSubstring: `spec.installTrust.caBundleRefs[1] "corp-ca" is duplicated`,
 		},
 		{
 			name: "installtrust-unknown-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  secrets:\n",
-				"  installTrust:\n    caBundleRefs:\n      - corp-ca\n\n  secrets:\n", 1)},
-			wantSubstring: `spec.installTrust.caBundleRefs[0] "corp-ca" is not declared`,
+				"  infraComponents:\n",
+				"  installTrust:\n    caBundleRefs:\n      - corp-ca\n\n  infraComponents:\n", 1)},
+			wantSubstring: `spec.installTrust.caBundleRefs[0] "corp-ca" is not a declared Secret`,
 		},
 		{
 			name: "additionaltrust-duplicate-ref-rejected",
@@ -971,7 +990,7 @@ spec:
 		{
 			name: "api-serving-cert-names-required",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - bastion-host-ssh:\n        file: ~/ssh\n", "    - bastion-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
+				"environment.yaml": newEnvironmentYAML + secretDoc("api-tls", "tlsCertificate"),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: openshift-pull-secret\n",
 					"    pullSecretRef: openshift-pull-secret\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - secretRef: api-tls\n", 1),
@@ -981,7 +1000,7 @@ spec:
 		{
 			name: "api-serving-cert-api-int-rejected",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - bastion-host-ssh:\n        file: ~/ssh\n", "    - bastion-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
+				"environment.yaml": newEnvironmentYAML + secretDoc("api-tls", "tlsCertificate"),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: openshift-pull-secret\n",
 					"    pullSecretRef: openshift-pull-secret\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api-int.sno.bootwright.test\n            secretRef: api-tls\n", 1),
@@ -991,19 +1010,28 @@ spec:
 		{
 			name: "serving-cert-file-source-keyfile-required",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - bastion-host-ssh:\n        file: ~/ssh\n", "    - bastion-host-ssh:\n        file: ~/ssh\n    - api-tls:\n        file: ./api.crt\n", 1),
+				"environment.yaml": newEnvironmentYAML + `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: api-tls }
+spec:
+  type: tlsCertificate
+  source:
+    file:
+      cert: ./api.crt
+`,
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: openshift-pull-secret\n",
 					"    pullSecretRef: openshift-pull-secret\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api.sno.bootwright.test\n            secretRef: api-tls\n", 1),
 			},
-			wantSubstring: `uses file-sourced TLS material but Environment/env spec.secrets[api-tls].keyFile is empty`,
+			wantSubstring: `Secret/api-tls spec.source.file.key is required for a tlsCertificate secret`,
 		},
 		{
 			name: "ingress-serving-cert-unknown-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"    pullSecretRef: openshift-pull-secret\n",
 				"    pullSecretRef: openshift-pull-secret\n    servingCertificates:\n      ingress:\n        defaultCertificateRef: ingress-tls\n", 1)},
-			wantSubstring: `defaultCertificateRef "ingress-tls" is not declared`,
+			wantSubstring: `defaultCertificateRef "ingress-tls" is not a declared Secret`,
 		},
 	}
 	for _, tc := range cases {
@@ -1038,8 +1066,16 @@ func TestGeneratedSSHKeyPairTypesValidate(t *testing.T) {
 			dir := t.TempDir()
 			files := newBaselineFiles()
 			files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
-				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-				"    - sno-cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: "+keyType, 1)
+				nodeSSHKeySecretDoc,
+				`---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: sno-cluster-admin-ssh-key }
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: `+keyType+"\n", 1)
 			writeFiles(t, dir, files)
 
 			if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
@@ -1571,8 +1607,8 @@ func TestNameResolutionComponentForwarderValidation(t *testing.T) {
 func TestNodeSSHSplitRefsValidate(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
-		"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-		"    - cluster-admin-public:\n        file: ~/ssh.pub\n    - cluster-admin-private:\n        file: ~/ssh", 1)
+		nodeSSHKeySecretDoc,
+		secretDoc("cluster-admin-public", "sshKeyPair")+secretDoc("cluster-admin-private", "sshKeyPair"), 1)
 	files["cluster.yaml"] = strings.Replace(newClusterYAML,
 		"    nodeSSH:\n      keyPairRef: sno-cluster-admin-ssh-key",
 		"    nodeSSH:\n      publicKeyRef: cluster-admin-public\n      privateKeyRef: cluster-admin-private", 1)
@@ -1677,9 +1713,18 @@ func TestEnvironmentSecretEmptyEntryDeclaresContextMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	spec := state.Environments[0].Spec.Secrets["openshift-pull-secret"]
-	if spec.File != "" || spec.Generated != nil {
-		t.Fatalf("openshift-pull-secret = %+v, want context-local empty source", spec)
+	var found bool
+	for _, s := range state.Secrets {
+		if s.Metadata.Name != "openshift-pull-secret" {
+			continue
+		}
+		found = true
+		if s.Spec.Source.File != nil || s.Spec.Source.Generated != nil {
+			t.Fatalf("openshift-pull-secret source = %+v, want context-local (no file/generated arm)", s.Spec.Source)
+		}
+	}
+	if !found {
+		t.Fatal("openshift-pull-secret Secret was not loaded")
 	}
 }
 
@@ -1872,7 +1917,7 @@ func TestEnvironmentProxyTrustBundleRefMustBeDeclared(t *testing.T) {
 		inject(files)
 		writeFiles(t, dir, files)
 		_, err := LoadNormalizeValidate([]string{dir})
-		want := `spec.infraComponents.proxies[0].connection.trustBundleRef "corporate-proxy-ca" is not declared in Environment/env spec.secrets`
+		want := `spec.infraComponents.proxies[0].connection.trustBundleRef "corporate-proxy-ca" is not a declared Secret`
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %v does not contain %q", err, want)
 		}
@@ -1882,7 +1927,7 @@ func TestEnvironmentProxyTrustBundleRefMustBeDeclared(t *testing.T) {
 		dir := t.TempDir()
 		files := newBaselineFiles()
 		inject(files)
-		files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  secrets:\n", "  secrets:\n    - corporate-proxy-ca\n", 1)
+		files["environment.yaml"] = files["environment.yaml"] + secretDoc("corporate-proxy-ca", "caBundle")
 		writeFiles(t, dir, files)
 		if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
 			t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -2089,10 +2134,7 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  secrets:
-    - bmc-credentials
-    - bastion-host-ssh
-`,
+` + bmcCredentialsSecretDoc + bastionSSHSecretDoc,
 				"service-machines.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: { name: bastion }
@@ -2164,11 +2206,11 @@ func TestComponentImagesRequirePinnedReference(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			files := newBaselineFiles()
-			files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  secrets:\n", `  componentImages:
+			files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  componentImages:
     proxy:
       squid:
         public: `+tc.image+`
-  secrets:
+  infraComponents:
 `, 1)
 			writeFiles(t, dir, files)
 			_, err := LoadNormalizeValidate([]string{dir})
@@ -2379,7 +2421,7 @@ func TestEnvironmentResourcesSupportDirectories(t *testing.T) {
 func TestEnvironmentStorageClusterSelectionOmitsContainerRoots(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  secrets:\n", "  storageClusters:\n    - imported-ceph\n\n  secrets:\n", 1)
+	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  infraComponents:\n", "  storageClusters:\n    - imported-ceph\n\n  infraComponents:\n", 1)
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)
 	delete(files, "infra-component.yaml")
 	files["storage.yaml"] = `apiVersion: bootwright.io/v1alpha1
@@ -3075,7 +3117,7 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef: sno", "kubeconfigRef: external-virt-cluster-kubeconfig", 1)
 			},
-			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not declared in Environment/env spec.secrets`,
+			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not a declared Secret`,
 		},
 		{
 			// An omitted attachmentRef defaults to the networkConfigRef name
@@ -3553,7 +3595,7 @@ spec:
 }
 
 func addKubeVirtKubeconfigSecret(environmentYAML string) string {
-	return strings.Replace(environmentYAML, "    - bmc-credentials:\n", "    - external-virt-cluster-kubeconfig:\n        file: ~/virt.kubeconfig\n    - bmc-credentials:\n", 1)
+	return environmentYAML + secretDoc("external-virt-cluster-kubeconfig", "opaque")
 }
 
 func addSecondKubeVirtNetworkAttachment(childYAML string) string {
@@ -3570,11 +3612,7 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  secrets:
-    - openshift-pull-secret
-    - sno-cluster-admin-ssh-key:
-        file: ~/ssh.pub
-`,
+` + pullSecretDoc + nodeSSHKeySecretDoc,
 		"network-a.yaml": kubeVirtCycleNetworkYAML("net-a", "192.168.140.0/24", "192.168.140.1"),
 		"network-b.yaml": kubeVirtCycleNetworkYAML("net-b", "192.168.141.0/24", "192.168.141.1"),
 		"provider-a.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -3762,16 +3800,7 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-
-  secrets:
-    - openshift-pull-secret
-    - sno-cluster-admin-ssh-key:
-        file: ~/ssh.pub
-    - bastion-host-ssh:
-        file: ~/ssh
-    - vcenter-credentials:
-        file: ~/vcenter
-`,
+` + pullSecretDoc + nodeSSHKeySecretDoc + bastionSSHSecretDoc + secretDoc("vcenter-credentials", "usernamePassword"),
 		"service-machines.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: { name: services-host }
@@ -4161,6 +4190,61 @@ func environmentYAMLWithNTP(sources string) string {
 	return strings.Replace(newEnvironmentYAML, "    artifactServers:\n", "    ntp:\n"+sources+"    artifactServers:\n", 1)
 }
 
+// Secrets are first-class top-level objects. The baseline declares them as
+// extra YAML documents appended to environment.yaml, so they load whenever the
+// Environment does — including under spec.resources selection, where the
+// environment file always loads. Each doc is a standalone building block so
+// individual tests can add, drop, or reshape one secret with a string replace.
+const pullSecretDoc = `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: openshift-pull-secret }
+spec:
+  type: dockerConfigJson
+`
+
+const nodeSSHKeySecretDoc = `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: sno-cluster-admin-ssh-key }
+spec:
+  type: sshKeyPair
+  source:
+    file:
+      privateKey: ~/ssh.pub
+`
+
+const bastionSSHSecretDoc = `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: bastion-host-ssh }
+spec:
+  type: sshKeyPair
+  source:
+    file:
+      privateKey: ~/ssh
+`
+
+const bmcCredentialsSecretDoc = `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: bmc-credentials }
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+`
+
+const newBaselineSecretsYAML = pullSecretDoc + nodeSSHKeySecretDoc + bastionSSHSecretDoc + bmcCredentialsSecretDoc
+
+// secretDoc renders a standalone context-local Secret YAML document (leading
+// separator included) for a given type — the shape a bare, no-source secret
+// declaration takes.
+func secretDoc(name, secretType string) string {
+	return "---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: { name: " + name + " }\nspec:\n  type: " + secretType + "\n"
+}
+
 const newEnvironmentYAML = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata: { name: env }
@@ -4172,17 +4256,7 @@ spec:
         management: managed
         componentRef: artifact-server
 
-  secrets:
-    - openshift-pull-secret
-    - sno-cluster-admin-ssh-key:
-        file: ~/ssh.pub
-    - bastion-host-ssh:
-        file: ~/ssh
-    - bmc-credentials:
-        generated:
-          credentials:
-            username: admin
-`
+` + newBaselineSecretsYAML
 
 func newEnvironmentYAMLWithResources(resources ...string) string {
 	var b strings.Builder
@@ -4204,17 +4278,7 @@ spec:
 		b.WriteString(resource)
 		b.WriteByte('\n')
 	}
-	b.WriteString(`  secrets:
-    - openshift-pull-secret
-    - sno-cluster-admin-ssh-key:
-        file: ~/ssh.pub
-    - bastion-host-ssh:
-        file: ~/ssh
-    - bmc-credentials:
-        generated:
-          credentials:
-            username: admin
-`)
+	b.WriteString(newBaselineSecretsYAML)
 	return b.String()
 }
 

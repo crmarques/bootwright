@@ -23,7 +23,7 @@ Operators author desired state as twenty YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
-| `Environment` | What defaults, selected resource files, secrets, proxy, mirrors, and component image pins apply to the fleet? |
+| `Environment` | What defaults, selected resource files, proxy, mirrors, and component image pins apply to the fleet? |
 | `Entitlement` | What vendor-controlled content access (subscription, registry, license) does a `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph` product need? |
 | `Machine` | Which raw, Bootwright-installed, or OS-ready machine should be used, and what substrate, OS, network, SSH, and capability facts does it own? |
 | `MachineImage` | Which bootable OS install media can Bootwright customize and serve? |
@@ -43,6 +43,7 @@ Operators author desired state as twenty YAML kinds:
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |
 | `ClusterAddonBinding` | Which installed cluster receives add-ons, profiles, and binding-scoped input values? |
 | `ProvisioningPlaybook` | Which operator-supplied Ansible playbook runs against machines at a provisioning stage? |
+| `Secret` | What named secret material does a `SecretRef` resolve to, and how is it obtained? |
 
 Every fact has one owner. Machines own substrate selection, OS lifecycle mode,
 OS install network, durable addresses, SSH reachability, and generic

@@ -443,7 +443,10 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 
 func TestSecretRefChecksRequireInstallTrustCABundle(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	state.Environments[0].Spec.Secrets["corp-ca"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Secrets = append(state.Secrets, v1alpha1.Secret{
+		Metadata: v1alpha1.Metadata{Name: "corp-ca"},
+		Spec:     v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeCABundle},
+	})
 	state.Environments[0].Spec.InstallTrust = &v1alpha1.EnvironmentInstallTrustSpec{
 		CABundleRefs: []v1alpha1.SecretRef{{Name: "corp-ca"}},
 	}
@@ -478,10 +481,14 @@ func TestSecretRefChecksStatFileSourcesAsCallerOwned(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"openshift-pull-secret": {File: pullSecret},
-				},
+			Spec:       v1alpha1.EnvironmentSpec{},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata:   v1alpha1.Metadata{Name: "openshift-pull-secret"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeDockerConfigJSON,
+				Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: pullSecret}},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
@@ -509,7 +516,7 @@ func TestSecretRefChecksStatFileSourcesAsCallerOwned(t *testing.T) {
 }
 
 func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
-	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
+	state := importedCephSecretState(v1alpha1.SecretSource{})
 	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "add-ons"}}, Deps{
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
@@ -535,15 +542,7 @@ func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
-					"ceph-known-hosts":          {},
-					"ceph-registry-credentials": {},
-					"redhat-org":                {},
-					"redhat-activation-key":     {},
-				},
-			},
+			Spec: v1alpha1.EnvironmentSpec{},
 		}},
 		Entitlements: []v1alpha1.Entitlement{{
 			Metadata: v1alpha1.Metadata{Name: "rhcs"},
@@ -558,6 +557,13 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "ceph-node-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair, Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{}}}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph-registry-credentials"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeUsernamePassword}},
+			{Metadata: v1alpha1.Metadata{Name: "redhat-org"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+			{Metadata: v1alpha1.Metadata{Name: "redhat-activation-key"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+		},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
 			Spec: v1alpha1.MachineSpec{
@@ -617,14 +623,7 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
-					"redhat-org":                {},
-					"redhat-activation-key":     {},
-					"ceph-registry-credentials": {},
-				},
-			},
+			Spec: v1alpha1.EnvironmentSpec{},
 		}},
 		Entitlements: []v1alpha1.Entitlement{{
 			Metadata: v1alpha1.Metadata{Name: "rhcs"},
@@ -639,6 +638,12 @@ func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "ceph-node-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair, Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{}}}},
+			{Metadata: v1alpha1.Metadata{Name: "redhat-org"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+			{Metadata: v1alpha1.Metadata{Name: "redhat-activation-key"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph-registry-credentials"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeUsernamePassword}},
+		},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
 			Spec: v1alpha1.MachineSpec{
@@ -721,9 +726,11 @@ func checkNames(checks []Check) []string {
 }
 
 func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
-	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
-	state.Environments[0].Spec.Secrets["ceph-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["ceph-admin-ssh"] = v1alpha1.EnvironmentSecretSpec{}
+	state := importedCephSecretState(v1alpha1.SecretSource{})
+	state.Secrets = append(state.Secrets,
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ceph-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ceph-admin-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
+	)
 	state.Machines = []v1alpha1.Machine{{
 		Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
 		Spec: v1alpha1.MachineSpec{
@@ -767,11 +774,13 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
-	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
-		Generated: &v1alpha1.EnvironmentSecretGenerated{
-			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+	upsertSecret(&state, v1alpha1.Secret{
+		Metadata: v1alpha1.Metadata{Name: keyName},
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeSSHKeyPair,
+			Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
 		},
-	}
+	})
 	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
@@ -799,12 +808,14 @@ func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	}
 }
 
-func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1.State {
+func importedCephSecretState(source v1alpha1.SecretSource) v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"shared-ceph-external-details": secretSpec,
-			}},
+			Spec: v1alpha1.EnvironmentSpec{},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-external-details"},
+			Spec:     v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque, Source: source},
 		}},
 		StorageExports: []v1alpha1.StorageExport{{
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
@@ -923,7 +934,10 @@ func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
 
 func TestClusterPreflightRequiresTLSPairMaterial(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}
+	upsertSecret(&state, v1alpha1.Secret{
+		Metadata: v1alpha1.Metadata{Name: "api-tls"},
+		Spec:     v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate},
+	})
 	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{
 		APIServer: &v1alpha1.APIServerServingCertificateSpec{
 			NamedCertificates: []v1alpha1.APIServerNamedCertificateSpec{{
@@ -1120,8 +1134,14 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata:   v1alpha1.Metadata{Name: "env"},
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{"hub-kubeconfig": {File: "hub-kubeconfig"}},
+			Spec:       v1alpha1.EnvironmentSpec{},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata:   v1alpha1.Metadata{Name: "hub-kubeconfig"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeOpaque,
+				Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "hub-kubeconfig"}},
 			},
 		}},
 		InfraProviders: []v1alpha1.InfraProvider{{
@@ -1164,6 +1184,19 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 	if !probedCRD || !probedNAD {
 		t.Fatalf("kubeconfigRef arm did not run both probes: crd=%v nad=%v", probedCRD, probedNAD)
 	}
+}
+
+// upsertSecret replaces the like-named first-class Secret in state, or appends
+// it when absent, mirroring the overwrite semantics of the former
+// Environment.spec.secrets map.
+func upsertSecret(state *v1alpha1.State, secret v1alpha1.Secret) {
+	for i := range state.Secrets {
+		if state.Secrets[i].Metadata.Name == secret.Metadata.Name {
+			state.Secrets[i] = secret
+			return
+		}
+	}
+	state.Secrets = append(state.Secrets, secret)
 }
 
 func writeExecutable(t *testing.T, path string) {

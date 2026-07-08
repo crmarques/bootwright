@@ -59,21 +59,19 @@ func vsphereInstallerTestState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"pull": {},
-					"ssh": {
-						Generated: &v1alpha1.EnvironmentSecretGenerated{
-							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
-						},
-					},
-					"vcenter-credentials": {
-						Generated: &v1alpha1.EnvironmentSecretGenerated{
-							Credentials: &v1alpha1.GeneratedCredentialsSpec{Username: "administrator@vsphere.local"},
-						},
-					},
-				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "pull"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON}},
+			{Metadata: v1alpha1.Metadata{Name: "ssh"}, Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeSSHKeyPair,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
+			}},
+			{Metadata: v1alpha1.Metadata{Name: "vcenter-credentials"}, Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeUsernamePassword,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{Username: "administrator@vsphere.local"}},
+			}},
+		},
 		InfraProviders: []v1alpha1.InfraProvider{provider},
 		Machines:       machines,
 		ContainerClusters: []v1alpha1.ContainerCluster{{

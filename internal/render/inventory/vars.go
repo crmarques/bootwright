@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/proxy"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render/installer"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -33,6 +34,7 @@ func VarsWithSecretsDirAndOwnership(state v1alpha1.State, secretsDir string, own
 }
 
 func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ownershipRecords []ownership.ResourceRecord) map[string]any {
+	paths.SecretIndex = secret.NewIndex(state)
 	env := stateview.Environment(state)
 	clusters := make([]any, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
@@ -51,7 +53,7 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 			"nodes":                  nodesVars(ocp),
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}
-		if keyPath := nodeSSHPrivateKeyPath(env, ocp, paths.SecretsDir); keyPath != "" {
+		if keyPath := nodeSSHPrivateKeyPath(state, paths.SecretIndex, ocp, paths.SecretsDir); keyPath != "" {
 			entry["nodeSSHPrivateKeyPath"] = keyPath
 		}
 		if resolvers := ClusterControllerNameResolvers(state, ci); len(resolvers) > 0 {

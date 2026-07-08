@@ -100,9 +100,9 @@ func LoadExternalDetailsSecretJSONForContext(contextName string, state v1alpha1.
 	if strings.TrimSpace(name) == "" {
 		return "", fmt.Errorf("data foundation externalDetails.fromSecretRef is required")
 	}
-	env := primaryEnvironment(state)
-	path := secret.ResolvePath(name, env, secretsDir)
-	resolver := secret.NewResolver(contextName, secretsDir, env)
+	idx := secret.NewIndex(state)
+	path := secret.ResolvePath(name, idx, secretsDir)
+	resolver := secret.NewResolver(contextName, secretsDir, idx)
 	data, err := resolver.ReadMaterial(name, secret.MaterialPrimary)
 	if err != nil {
 		return "", fmt.Errorf("read data foundation external details secret %q at %s: %w", name, path, err)
@@ -167,11 +167,4 @@ func secretOrPlaceholder(value string) string {
 		return value
 	}
 	return GeneratedAtApplyPlaceholder
-}
-
-func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
-	if len(state.Environments) == 0 {
-		return nil
-	}
-	return &state.Environments[0]
 }

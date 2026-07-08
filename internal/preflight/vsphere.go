@@ -11,7 +11,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	secret "github.com/crmarques/bootwright/internal/secrets"
-	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -59,8 +58,7 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, s
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) || !stateNeedsVSphere(state) {
 		return nil
 	}
-	env := stateview.Environment(state)
-	resolver := secret.NewResolver(contextName, secretsDir, env)
+	resolver := secret.NewResolver(contextName, secretsDir, secret.NewIndex(state))
 	seen := map[string]bool{}
 	var checks []Check
 	for _, p := range state.InfraProviders {

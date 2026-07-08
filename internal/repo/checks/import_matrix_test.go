@@ -79,7 +79,7 @@ var allowedImports = map[string][]string{
 	// Storage and addons.
 	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view", "internal/storage/datafoundation"},
 	"internal/storage/cephadopt":      {"api/v1alpha1", "internal/storage/cephdiff", "internal/storage/topology", "internal/workspace"},
-	"internal/storage/cephprovider":   {"api/v1alpha1", "internal/entitlements"},
+	"internal/storage/cephprovider":   {"api/v1alpha1", "internal/entitlements", "internal/secrets"},
 	"internal/storage/cephstate":      {},
 	"internal/storage/cephdiff":       {"api/v1alpha1", "internal/storage/cephstate", "internal/storage/topology"},
 	"internal/storage/datafoundation": {"api/v1alpha1", "internal/secrets", "internal/state/view", "internal/storage/topology"},

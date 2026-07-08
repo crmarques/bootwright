@@ -43,6 +43,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateProvisioningPlaybooks(state))...)
 	errs = append(errs, notes(validateStorage(state))...)
 	errs = append(errs, notes(validateCrossLayer(state))...)
+	errs = append(errs, notes(validateSecrets(state))...)
 	errs = append(errs, notes(validateSecretReferences(state))...)
 	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
 	errs = append(errs, notes(validateUniqueMachineSSHAddresses(state))...)
@@ -624,8 +625,10 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		return nil
 	}
 	declared := map[string]bool{}
-	for name := range env.Spec.Secrets {
-		declared[name] = true
+	secretType := map[string]string{}
+	for _, s := range state.Secrets {
+		declared[s.Metadata.Name] = true
+		secretType[s.Metadata.Name] = s.Spec.Type
 	}
 	var errs []string
 	// requireNoted carries an optional note appended to the dangling-secret
@@ -641,7 +644,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			return
 		}
 		if !declared[ref.Name] {
-			msg := fmt.Sprintf("%s %q is not declared in Environment/%s spec.secrets", owner, ref.Name, env.Metadata.Name)
+			msg := fmt.Sprintf("%s %q is not a declared Secret", owner, ref.Name)
 			if note != "" {
 				msg += " " + note
 			}
@@ -651,25 +654,22 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	require := func(owner string, ref v1alpha1.SecretRef) {
 		requireNoted(owner, ref, "")
 	}
-	requireTLS := func(owner string, ref v1alpha1.SecretRef) {
-		require(owner, ref)
-		if ref.Name == "" || !declared[ref.Name] {
-			return
-		}
-		spec := env.Spec.Secrets[ref.Name]
-		if spec.File != "" && spec.KeyFile == "" && spec.Generated == nil {
-			errs = append(errs, fmt.Sprintf("%s %q uses file-sourced TLS material but Environment/%s spec.secrets[%s].keyFile is empty", owner, ref.Name, env.Metadata.Name, ref.Name))
-		}
-	}
-	requireSSHKeyNoted := func(owner string, ref v1alpha1.SecretRef, note string) {
+	// requireTypeNoted additionally checks the referenced Secret's declared type
+	// matches what the consuming field expects.
+	requireTypeNoted := func(owner string, ref v1alpha1.SecretRef, wantType, note string) {
 		requireNoted(owner, ref, note)
 		if ref.Name == "" || !declared[ref.Name] {
 			return
 		}
-		spec := env.Spec.Secrets[ref.Name]
-		if spec.Generated != nil && spec.Generated.SSHKeyPair == nil {
-			errs = append(errs, fmt.Sprintf("%s %q uses generated material but Environment/%s spec.secrets[%s].generated is not sshKeyPair", owner, ref.Name, env.Metadata.Name, ref.Name))
+		if got := secretType[ref.Name]; got != wantType {
+			errs = append(errs, fmt.Sprintf("%s %q is a %s Secret but a %s Secret is required", owner, ref.Name, got, wantType))
 		}
+	}
+	requireTLS := func(owner string, ref v1alpha1.SecretRef) {
+		requireTypeNoted(owner, ref, v1alpha1.SecretTypeTLSCertificate, "")
+	}
+	requireSSHKeyNoted := func(owner string, ref v1alpha1.SecretRef, note string) {
+		requireTypeNoted(owner, ref, v1alpha1.SecretTypeSSHKeyPair, note)
 	}
 	requireSSHKey := func(owner string, ref v1alpha1.SecretRef) {
 		requireSSHKeyNoted(owner, ref, "")

@@ -14,6 +14,12 @@ import (
 	"github.com/crmarques/bootwright/internal/host/localroot"
 )
 
+// testIndex wraps a single Environment plus its now-first-class Secrets into the
+// resolution Index the Resolve* functions take.
+func testIndex(env *v1alpha1.Environment, secrets ...v1alpha1.Secret) Index {
+	return NewIndex(v1alpha1.State{Environments: []v1alpha1.Environment{*env}, Secrets: secrets})
+}
+
 func TestResolveKeyFilePathUsesInternalCallerHome(t *testing.T) {
 	t.Setenv(localroot.InternalEnv, "1")
 	t.Setenv(InternalCallerHomeEnv, "/home/operator")
@@ -59,22 +65,18 @@ func TestResolveKeyFilePathUsesProcessHomeWithoutInternalCaller(t *testing.T) {
 }
 
 func TestResolveSSHKeyPairMaterialPaths(t *testing.T) {
-	env := &v1alpha1.Environment{
-		Spec: v1alpha1.EnvironmentSpec{
-			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"cluster-admin-ssh-key": {
-					Generated: &v1alpha1.EnvironmentSecretGenerated{
-						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
-					},
-				},
-			},
+	idx := testIndex(&v1alpha1.Environment{}, v1alpha1.Secret{
+		Metadata: v1alpha1.Metadata{Name: "cluster-admin-ssh-key"},
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeSSHKeyPair,
+			Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
 		},
-	}
+	})
 	secretsDir := filepath.Join("context", "secrets")
-	if got := ResolveSSHPrivateKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key") {
+	if got := ResolveSSHPrivateKeyPath("cluster-admin-ssh-key", idx, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key") {
 		t.Fatalf("private path = %q", got)
 	}
-	if got := ResolveSSHPublicKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key.pub") {
+	if got := ResolveSSHPublicKeyPath("cluster-admin-ssh-key", idx, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key.pub") {
 		t.Fatalf("public path = %q", got)
 	}
 }
@@ -84,19 +86,24 @@ func TestResolveContextStorageSSHFileSourcePaths(t *testing.T) {
 		SourcePath: filepath.Join("/input", "environment.yaml"),
 		Spec: v1alpha1.EnvironmentSpec{
 			SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
-			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"cluster-admin-ssh-key": {File: "keys/admin"},
-			},
 		},
 	}
+	idx := testIndex(env, v1alpha1.Secret{
+		Metadata:   v1alpha1.Metadata{Name: "cluster-admin-ssh-key"},
+		SourcePath: filepath.Join("/input", "environment.yaml"),
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeSSHKeyPair,
+			Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: "keys/admin"}},
+		},
+	})
 	secretsDir := filepath.Join("context", "secrets")
-	if got := ResolveSSHPrivateKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key") {
+	if got := ResolveSSHPrivateKeyPath("cluster-admin-ssh-key", idx, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key") {
 		t.Fatalf("context private path = %q", got)
 	}
-	if got := ResolveSSHPublicKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key.pub") {
+	if got := ResolveSSHPublicKeyPath("cluster-admin-ssh-key", idx, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key.pub") {
 		t.Fatalf("context public path = %q", got)
 	}
-	if got := ResolveSourceMaterialPath("cluster-admin-ssh-key", env, MaterialSSHPublic); got != filepath.Join("/input", "keys", "admin.pub") {
+	if got := ResolveSourceMaterialPath("cluster-admin-ssh-key", idx, MaterialSSHPublic); got != filepath.Join("/input", "keys", "admin.pub") {
 		t.Fatalf("source public path = %q", got)
 	}
 }
@@ -104,23 +111,29 @@ func TestResolveContextStorageSSHFileSourcePaths(t *testing.T) {
 func TestMaterialPathUsesExternalSource(t *testing.T) {
 	env := &v1alpha1.Environment{
 		SourcePath: filepath.Join("/input", "environment.yaml"),
-		Spec: v1alpha1.EnvironmentSpec{
-			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"pull-secret": {File: "pull-secret.json"},
-				"api-tls":     {File: "api.crt", KeyFile: "api.key"},
-			},
+	}
+	secrets := []v1alpha1.Secret{
+		{
+			Metadata:   v1alpha1.Metadata{Name: "pull-secret"},
+			SourcePath: filepath.Join("/input", "environment.yaml"),
+			Spec:       v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON, Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "pull-secret.json"}}},
+		},
+		{
+			Metadata:   v1alpha1.Metadata{Name: "api-tls"},
+			SourcePath: filepath.Join("/input", "environment.yaml"),
+			Spec:       v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate, Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Cert: "api.crt", Key: "api.key"}}},
 		},
 	}
-	if !MaterialPathUsesExternalSource("pull-secret", env, MaterialPrimary) {
+	if !MaterialPathUsesExternalSource("pull-secret", testIndex(env, secrets...), MaterialPrimary) {
 		t.Fatal("source-mode file secret should use external source reads")
 	}
-	if !MaterialPathUsesExternalSource("api-tls", env, MaterialTLSKey) {
+	if !MaterialPathUsesExternalSource("api-tls", testIndex(env, secrets...), MaterialTLSKey) {
 		t.Fatal("source-mode keyFile should use external source reads")
 	}
 
 	contextEnv := *env
 	contextEnv.Spec.SecretStorage.Mode = v1alpha1.SecretStorageModeContext
-	if MaterialPathUsesExternalSource("pull-secret", &contextEnv, MaterialPrimary) {
+	if MaterialPathUsesExternalSource("pull-secret", testIndex(&contextEnv, secrets...), MaterialPrimary) {
 		t.Fatal("context-mode file secret should use context-local reads")
 	}
 }

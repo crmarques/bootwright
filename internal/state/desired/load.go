@@ -190,7 +190,8 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.ClusterAddons) == 0 &&
 		len(state.ClusterAddonProfiles) == 0 &&
 		len(state.ClusterAddonBindings) == 0 &&
-		len(state.ProvisioningPlaybooks) == 0 {
+		len(state.ProvisioningPlaybooks) == 0 &&
+		len(state.Secrets) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
 	}
 	sortState(&state)
@@ -474,6 +475,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.ProvisioningPlaybooks = append(state.ProvisioningPlaybooks, item)
+		case v1alpha1.KindSecret:
+			var item v1alpha1.Secret
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.Secrets = append(state.Secrets, item)
 		case "":
 			return fmt.Errorf("decode %s document %d: kind is required", path, index)
 		default:
@@ -653,6 +661,12 @@ func sortState(state *v1alpha1.State) {
 			return state.ProvisioningPlaybooks[i].SourcePath < state.ProvisioningPlaybooks[j].SourcePath
 		}
 		return state.ProvisioningPlaybooks[i].Metadata.Name < state.ProvisioningPlaybooks[j].Metadata.Name
+	}))
+	sort.SliceStable(state.Secrets, sortByName(func(i, j int) bool {
+		if state.Secrets[i].Metadata.Name == state.Secrets[j].Metadata.Name {
+			return state.Secrets[i].SourcePath < state.Secrets[j].SourcePath
+		}
+		return state.Secrets[i].Metadata.Name < state.Secrets[j].Metadata.Name
 	}))
 }
 

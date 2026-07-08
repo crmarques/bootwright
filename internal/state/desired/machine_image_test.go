@@ -160,13 +160,13 @@ func TestMachineImagePackageSourceRedhatCDNRequiresEntitlementRef(t *testing.T) 
 
 func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 	errs := validateSecretReferences(v1alpha1.State{
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "redhat-org"},
+			Spec:     v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque},
+		}},
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: v1alpha1.EnvironmentSecrets{
-					"redhat-org": {},
-				},
-			},
+			Spec:     v1alpha1.EnvironmentSpec{},
 		}},
 		Entitlements: []v1alpha1.Entitlement{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},

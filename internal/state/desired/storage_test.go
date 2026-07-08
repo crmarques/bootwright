@@ -342,6 +342,18 @@ spec:
 	}
 }
 
+// cephNodeSSHSecretYAML is the first-class Secret the storage-node Machines
+// reference by keyRef, declared as a generated sshKeyPair.
+const cephNodeSSHSecretYAML = `apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: { name: ceph-node-ssh }
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      comment: bootwright-ceph-node
+`
+
 // TestStorageCephRoleVocabularyAuthorableFromYAML guards the one role
 // vocabulary end-to-end: an authored host carrying a monitoring role plus the
 // matching monitoring service block must pass validation (placement derives
@@ -354,11 +366,6 @@ metadata:
   name: env
 spec:
   baseDomain: bootwright.test
-  secrets:
-    - ceph-node-ssh:
-        generated:
-          sshKeyPair:
-            comment: bootwright-ceph-node
 `
 	const machine = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -414,6 +421,7 @@ spec:
 			dir := t.TempDir()
 			writeFiles(t, dir, map[string]string{
 				"environment.yaml": environment,
+				"secrets.yaml":     cephNodeSSHSecretYAML,
 				"machine.yaml":     machine,
 				"storage.yaml":     strings.ReplaceAll(storage, "ROLES", tc.roles),
 			})
@@ -445,11 +453,6 @@ metadata:
   name: env
 spec:
   baseDomain: bootwright.test
-  secrets:
-    - ceph-node-ssh:
-        generated:
-          sshKeyPair:
-            comment: bootwright-ceph-node
 `
 	const machine = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -505,6 +508,7 @@ MONITORING
 			dir := t.TempDir()
 			writeFiles(t, dir, map[string]string{
 				"environment.yaml": environment,
+				"secrets.yaml":     cephNodeSSHSecretYAML,
 				"machine.yaml":     machine,
 				"storage.yaml":     strings.Replace(storage, "MONITORING\n", tc.monitoring, 1),
 			})
@@ -994,9 +998,11 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 func TestStorageManagementAuthGate(t *testing.T) {
 	on := true
 	off := false
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-		"cert": {}, "key": {}, "client": {},
-	}}}
+	state := v1alpha1.State{Secrets: []v1alpha1.Secret{
+		{Metadata: v1alpha1.Metadata{Name: "cert"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+		{Metadata: v1alpha1.Metadata{Name: "key"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+		{Metadata: v1alpha1.Metadata{Name: "client"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeToken}},
+	}}
 	clusterWith := func(mgmt *v1alpha1.StorageCephManagement) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Management: mgmt,
@@ -1014,11 +1020,11 @@ func TestStorageManagementAuthGate(t *testing.T) {
 		{name: "auth-without-oauth2", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &on, Ingress: baseIngress}, want: "enableAuth requires oauth2Proxy"},
 		{name: "oauth2-without-auth", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &off, OAuth2Proxy: validOAuth, Ingress: baseIngress}, want: "oauth2Proxy requires enableAuth"},
 		{name: "valid-auth", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &on, OAuth2Proxy: validOAuth, Ingress: baseIngress}},
-		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", TLS: &v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" does not match`},
+		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", TLS: &v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" is not a declared Secret`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := strings.Join(validateStorageCephManagement("spec.ceph.management", clusterWith(tc.mgmt), env), "; ")
+			got := strings.Join(validateStorageCephManagement("spec.ceph.management", clusterWith(tc.mgmt), state), "; ")
 			if tc.want == "" {
 				if got != "" {
 					t.Fatalf("unexpected errors: %s", got)
@@ -1351,8 +1357,7 @@ func TestStorageValidationAcceptsManagedGeneratedExternalDetailsDefault(t *testi
 
 func TestExternalStorageValidationAcceptsSSHExecution(t *testing.T) {
 	state := externalStorageValidationState()
-	state.Environments[0].Spec.Secrets["ceph-admin-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["ceph-admin-ssh"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Secrets = append(state.Secrets, opaqueSecret("ceph-admin-known-hosts"), opaqueSecret("ceph-admin-ssh"))
 	state.Machines = []v1alpha1.Machine{storageValidationAdminMachine("ceph-admin-01")}
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
@@ -1373,11 +1378,8 @@ func TestExternalStorageValidationAcceptsSSHExecution(t *testing.T) {
 
 func TestManagedStorageValidationAcceptsSSHExecutionWithoutHostRefs(t *testing.T) {
 	state := storageValidationState()
-	state.Environments = []v1alpha1.Environment{{
-		Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-			"ceph-admin-known-hosts": {},
-		}},
-	}}
+	state.Environments = []v1alpha1.Environment{{}}
+	state.Secrets = []v1alpha1.Secret{opaqueSecret("ceph-admin-known-hosts")}
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
 			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
@@ -1484,7 +1486,7 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 		{
 			name: "external-ssh-host-without-ceph-admin-capability",
 			edit: func(state *v1alpha1.State) {
-				state.Environments[0].Spec.Secrets["ceph-admin-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
+				state.Secrets = append(state.Secrets, opaqueSecret("ceph-admin-known-hosts"))
 				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 					SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
 						MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
@@ -1574,7 +1576,7 @@ func TestStorageExportFromSecretRefWalksEnvironmentSecrets(t *testing.T) {
 		{
 			name: "undeclared",
 			ref:  "missing-details",
-			want: `StorageExport/export spec.externalDetails.fromSecretRef "missing-details" is not declared in Environment/env spec.secrets`,
+			want: `StorageExport/export spec.externalDetails.fromSecretRef "missing-details" is not a declared Secret`,
 		},
 		{
 			name: "not-a-dns-label",
@@ -1775,13 +1777,16 @@ func storageValidationCephNode(name, site string, roles []string) v1alpha1.Stora
 	return node
 }
 
+// opaqueSecret is a first-class opaque Secret declaration, the shape the
+// storage external-details / SSH-execution refs resolve against.
+func opaqueSecret(name string) v1alpha1.Secret {
+	return v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: name}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}}
+}
+
 func externalStorageValidationState() v1alpha1.State {
 	return v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"shared-ceph-external-details": {},
-			}},
-		}},
+		Environments: []v1alpha1.Environment{{}},
+		Secrets:      []v1alpha1.Secret{opaqueSecret("shared-ceph-external-details")},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
 		}},

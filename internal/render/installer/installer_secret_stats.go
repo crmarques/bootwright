@@ -20,7 +20,8 @@ type InstallerSecretInputStat struct {
 
 func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
 	env := stateview.Environment(state)
-	resolver := secret.NewResolver(contextName, secretsDir, env)
+	idx := secret.NewIndex(state)
+	resolver := secret.NewResolver(contextName, secretsDir, idx)
 	refs := installerSecretRefs(state, ocp, env)
 	out := make([]InstallerSecretInputStat, 0, len(refs))
 	seen := map[string]bool{}
@@ -28,12 +29,12 @@ func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.Stat
 		if ref.name == "" {
 			continue
 		}
-		path := secret.ResolvePath(ref.name, env, secretsDir)
+		path := secret.ResolvePath(ref.name, idx, secretsDir)
 		if ref.tlsKey {
-			path = secret.ResolveTLSKeyPath(ref.name, env, secretsDir)
+			path = secret.ResolveTLSKeyPath(ref.name, idx, secretsDir)
 		}
 		if ref.sshPublic {
-			path = secret.ResolveSSHPublicKeyPath(ref.name, env, secretsDir)
+			path = secret.ResolveSSHPublicKeyPath(ref.name, idx, secretsDir)
 		}
 		key := ref.label + "\x00" + ref.name + "\x00" + path
 		if seen[key] {

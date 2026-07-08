@@ -608,11 +608,16 @@ func importedDataFoundationRenderState(secretFile, envPath string) v1alpha1.Stat
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			SourcePath: envPath,
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"shared-ceph-external-details": {File: secretFile},
-				},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-external-details"},
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeOpaque,
+				Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: secretFile}},
 			},
+			// Relative file paths resolve against the Secret's own file, so the
+			// external-details JSON alongside the environment resolves here.
+			SourcePath: envPath,
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph"},

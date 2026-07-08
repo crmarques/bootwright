@@ -489,7 +489,7 @@ spec:
 `)
 				return files
 			},
-			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialsRef "missing-secret" is not declared in Environment/env spec.secrets`,
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialsRef "missing-secret" is not a declared Secret`,
 		},
 		{
 			name: "ref-kind-value-must-exist",

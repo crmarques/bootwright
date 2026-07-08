@@ -32,13 +32,15 @@ func TestResolveInstallerRendersTrustBundleAndServingCertificateManifests(t *tes
 	}
 	clusterName := state.ContainerClusters[0].Metadata.Name
 	baseDomain := state.Environments[0].Spec.BaseDomain
-	state.Environments[0].Spec.Secrets["pull"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["ssh"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["env-ca"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["mirror-ca"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["cluster-ca"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["ingress-tls"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Secrets = append(state.Secrets,
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "pull"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "env-ca"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeCABundle}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "mirror-ca"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeCABundle}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "cluster-ca"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeCABundle}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "api-tls"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ingress-tls"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+	)
 	state.Environments[0].Spec.InstallTrust = &v1alpha1.EnvironmentInstallTrustSpec{
 		CABundleRefs: []v1alpha1.SecretRef{{Name: "env-ca"}},
 	}
@@ -136,7 +138,9 @@ func TestPlaceholderInstallerRendersRedactedServingCertificateManifests(t *testi
 	}
 	clusterName := state.ContainerClusters[0].Metadata.Name
 	baseDomain := state.Environments[0].Spec.BaseDomain
-	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Secrets = append(state.Secrets,
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "api-tls"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+	)
 	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{
 		APIServer: &v1alpha1.APIServerServingCertificateSpec{
 			NamedCertificates: []v1alpha1.APIServerNamedCertificateSpec{{
@@ -166,9 +170,11 @@ func TestResolveInstallerRejectsServingCertificateMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets["pull"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["ssh"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["ingress-tls"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Secrets = append(state.Secrets,
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "pull"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
+		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ingress-tls"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+	)
 	state.ContainerClusters[0].Spec.Install.PullSecretRef = v1alpha1.SecretRef{Name: "pull"}
 	state.ContainerClusters[0].Spec.Install.NodeSSH = v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}}
 	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{

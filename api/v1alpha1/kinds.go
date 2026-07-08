@@ -81,6 +81,9 @@ func AuthoredKindAccessors() []KindAccessor {
 		{KindProvisioningPlaybook, "ProvisioningPlaybooks", func(s State) []string {
 			return metadataNames(s.ProvisioningPlaybooks, func(o ProvisioningPlaybook) Metadata { return o.Metadata })
 		}},
+		{KindSecret, "Secrets", func(s State) []string {
+			return metadataNames(s.Secrets, func(o Secret) Metadata { return o.Metadata })
+		}},
 	}
 }
 

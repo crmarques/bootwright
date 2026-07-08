@@ -102,12 +102,12 @@ func buildMachineSSHInvocation(state v1alpha1.State, ctx workspace.Context, name
 	if address == "" {
 		return sshInvocation{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
 	}
-	env := stateview.Environment(state)
+	idx := secret.NewIndex(state)
 	args := []string{"ssh"}
-	if keyPath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, ctx.SecretsDir); keyPath != "" {
+	if keyPath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, idx, ctx.SecretsDir); keyPath != "" {
 		args = append(args, "-i", keyPath, "-o", "IdentitiesOnly=yes")
 	}
-	if knownHosts := machineSSHKnownHostsPath(machine, env, ctx); knownHosts != "" {
+	if knownHosts := machineSSHKnownHostsPath(machine, idx, ctx); knownHosts != "" {
 		args = append(args, "-o", "UserKnownHostsFile="+knownHosts, "-o", "StrictHostKeyChecking=accept-new")
 	}
 	target := address
@@ -135,6 +135,6 @@ func machineSSHUser(machine v1alpha1.Machine) string {
 // the inventory renderer through sshtrust.MachineKnownHostsPath so both verify
 // against the same recorded keys; only the managed-store location differs (a live
 // context here, render's PathOptions there).
-func machineSSHKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, ctx workspace.Context) string {
-	return sshtrust.MachineKnownHostsPath(machine, env, ctx.SecretsDir, sshtrust.KnownHostsPathForContext(ctx.BaseDir))
+func machineSSHKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, ctx workspace.Context) string {
+	return sshtrust.MachineKnownHostsPath(machine, idx, ctx.SecretsDir, sshtrust.KnownHostsPathForContext(ctx.BaseDir))
 }

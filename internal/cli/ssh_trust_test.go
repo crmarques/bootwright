@@ -146,9 +146,16 @@ metadata:
   name: lab
 spec:
   baseDomain: example.test
-  secrets:
-    - bastion-host-ssh:
-        file: ~/.ssh/bootwright-ssh-key
+`,
+		"secrets.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bastion-host-ssh
+spec:
+  type: sshKeyPair
+  source:
+    file:
+      privateKey: ~/.ssh/bootwright-ssh-key
 `,
 		"service-machine.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Machine

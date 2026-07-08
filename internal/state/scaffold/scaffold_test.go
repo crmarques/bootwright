@@ -44,16 +44,16 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 // downstream init.go's `os.WriteFile` directory layout doesn't drift.
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	defaultNames := []string{
-		"environment.yaml", "infra/providers/provider.yaml", "infra/networkconfigs/networks.yaml",
+		"environment.yaml", "secrets.yaml", "infra/providers/provider.yaml", "infra/networkconfigs/networks.yaml",
 		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
 	}
 	baremetalNames := []string{
-		"environment.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
+		"environment.yaml", "secrets.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
 		"infra/networkconfigs/networks.yaml", "infra/components/artifact-server.yaml",
 		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
 	}
 	emulatedNames := []string{
-		"environment.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
+		"environment.yaml", "secrets.yaml", "infra/providers/provider.yaml", "infra/machines/bastion.yaml",
 		"infra/networkconfigs/networks.yaml", "infra/components/load-balancer.yaml",
 		"infra/components/name-resolution.yaml", "infra/components/ntp-server.yaml",
 		"clusters/container/cluster-a/cluster.yaml", "clusters/container/cluster-a/cluster-machines.yaml",
@@ -180,21 +180,25 @@ func TestWorkspaceUsesContextSecretDeclaration(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Workspace(%q): %v", p, err)
 			}
+			var secretsBody string
 			for _, f := range files {
-				if f.Name != "environment.yaml" {
-					continue
+				if f.Name == "secrets.yaml" {
+					secretsBody = f.Body
 				}
 				for _, forbidden := range []string{"file: ./pull-secret.json", "file: ./vcenter-credentials"} {
 					if strings.Contains(f.Body, forbidden) {
 						t.Fatalf("%s contains repo-local secret example %q:\n%s", f.Name, forbidden, f.Body)
 					}
 				}
-				if !strings.Contains(f.Body, "    - openshift-pull-secret\n") {
-					t.Fatalf("%s missing context pull secret declaration:\n%s", f.Name, f.Body)
-				}
-				if strings.Contains(f.Body, "file: ../secrets/openshift-pull-secret") {
-					t.Fatalf("%s should declare pull secret as context-local material:\n%s", f.Name, f.Body)
-				}
+			}
+			if secretsBody == "" {
+				t.Fatalf("no secrets.yaml generated for %q", p)
+			}
+			if !strings.Contains(secretsBody, "name: openshift-pull-secret") {
+				t.Fatalf("secrets.yaml missing pull secret declaration:\n%s", secretsBody)
+			}
+			if strings.Contains(secretsBody, "path: ../secrets/openshift-pull-secret") {
+				t.Fatalf("pull secret should be declared as context-local material:\n%s", secretsBody)
 			}
 		})
 	}

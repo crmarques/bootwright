@@ -18,6 +18,7 @@ func ResolveEnvForContext(contextName string, state v1alpha1.State, secretsDir s
 	if IsManaged(state) {
 		return nil, nil
 	}
+	idx := secret.NewIndex(state)
 	for i := range state.Environments {
 		env := state.Environments[i]
 		eff := Resolve(state, &env)
@@ -26,7 +27,7 @@ func ResolveEnvForContext(contextName string, state v1alpha1.State, secretsDir s
 		}
 		authority := ""
 		if effectiveProxyEnvUsesCredentials(eff) {
-			resolver := secret.NewResolver(contextName, secretsDir, &env)
+			resolver := secret.NewResolver(contextName, secretsDir, idx)
 			creds, err := resolver.ReadUserPasswordMaterial(eff.Auth.Name, secret.MaterialPrimary, "proxy credentials")
 			if err != nil {
 				return nil, err

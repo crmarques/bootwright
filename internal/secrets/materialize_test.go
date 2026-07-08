@@ -11,21 +11,19 @@ import (
 
 func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 	secretsDir := t.TempDir()
-	state := v1alpha1.State{Environments: []v1alpha1.Environment{{
-		Metadata: v1alpha1.Metadata{Name: "env"},
-		Spec: v1alpha1.EnvironmentSpec{
-			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"demo-cluster-admin-ssh-key": {
-					Generated: &v1alpha1.EnvironmentSecretGenerated{
-						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{
-							Type:    v1alpha1.SSHKeyPairTypeEd25519,
-							Comment: "bootwright-demo-cluster-admin",
-						},
-					},
-				},
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "demo-cluster-admin-ssh-key"},
+			Spec: v1alpha1.SecretSpec{
+				Type: v1alpha1.SecretTypeSSHKeyPair,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{
+					KeyType: v1alpha1.SSHKeyPairTypeEd25519,
+					Comment: "bootwright-demo-cluster-admin",
+				}},
 			},
-		},
-	}}}
+		}},
+	}
 
 	results, err := MaterializeForContext("test", secretsDir, state, MaterializeOptions{Generated: true})
 	if err != nil {
@@ -76,10 +74,12 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
 			Spec: v1alpha1.EnvironmentSpec{
 				SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-cluster-admin-ssh-key": {File: privateSource},
-				},
 			},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata:   v1alpha1.Metadata{Name: "cluster-cluster-admin-ssh-key"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec:       v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair, Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: privateSource}}},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
@@ -123,12 +123,20 @@ func TestMaterializeCopiesSplitNodeSSHFileSources(t *testing.T) {
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
 			Spec: v1alpha1.EnvironmentSpec{
 				SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-admin-public":  {File: publicSource},
-					"cluster-admin-private": {File: privateSource},
-				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{
+				Metadata:   v1alpha1.Metadata{Name: "cluster-admin-public"},
+				SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+				Spec:       v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair, Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PublicKey: publicSource}}},
+			},
+			{
+				Metadata:   v1alpha1.Metadata{Name: "cluster-admin-private"},
+				SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+				Spec:       v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair, Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: privateSource}}},
+			},
+		},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
 			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{

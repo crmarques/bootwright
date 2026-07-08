@@ -81,16 +81,15 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"pull": {},
-					"ssh": {
-						Generated: &v1alpha1.EnvironmentSecretGenerated{
-							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
-						},
-					},
-				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "pull"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON}},
+			{Metadata: v1alpha1.Metadata{Name: "ssh"}, Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeSSHKeyPair,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
+			}},
+		},
 		Machines: []v1alpha1.Machine{installerNodeMachine("master-0")},
 	}
 	ocp := v1alpha1.ContainerCluster{
@@ -135,13 +134,27 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"pull":            {},
-					"cluster-public":  {File: "admin.pub"},
-					"cluster-private": {File: "admin"},
-				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "pull"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON}},
+			{
+				Metadata:   v1alpha1.Metadata{Name: "cluster-public"},
+				SourcePath: filepath.Join(sourceDir, "secrets.yaml"),
+				Spec: v1alpha1.SecretSpec{
+					Type:   v1alpha1.SecretTypeSSHKeyPair,
+					Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PublicKey: "admin.pub"}},
+				},
+			},
+			{
+				Metadata:   v1alpha1.Metadata{Name: "cluster-private"},
+				SourcePath: filepath.Join(sourceDir, "secrets.yaml"),
+				Spec: v1alpha1.SecretSpec{
+					Type:   v1alpha1.SecretTypeSSHKeyPair,
+					Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: "admin"}},
+				},
+			},
+		},
 		Machines: []v1alpha1.Machine{installerNodeMachine("master-0")},
 	}
 	ocp := v1alpha1.ContainerCluster{
@@ -416,13 +429,14 @@ func TestLoadInstallerSecretsOKDRendersFakePullSecret(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"ssh": {Generated: &v1alpha1.EnvironmentSecretGenerated{
-						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
-					}},
-				},
 			},
 		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "ssh"}, Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeSSHKeyPair,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
+			}},
+		},
 		Machines: []v1alpha1.Machine{installerNodeMachine("master-0")},
 	}
 	ocp := v1alpha1.ContainerCluster{

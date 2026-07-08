@@ -337,11 +337,13 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets["mirror-trust"] = v1alpha1.EnvironmentSecretSpec{
-		Generated: &v1alpha1.EnvironmentSecretGenerated{
-			SelfSignedCertificate: &v1alpha1.SelfSignedCertificateSpec{CommonName: "bastion"},
+	state.Secrets = append(state.Secrets, v1alpha1.Secret{
+		Metadata: v1alpha1.Metadata{Name: "mirror-trust"},
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeCABundle,
+			Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{CommonName: "bastion"}},
 		},
-	}
+	})
 	state.Environments[0].Spec.Registries = &v1alpha1.EnvironmentRegistriesSpec{Mirror: &v1alpha1.EnvironmentRegistryMirrorSpec{
 		TrustBundleRef: v1alpha1.SecretRef{Name: "mirror-trust"},
 	}}

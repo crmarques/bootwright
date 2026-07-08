@@ -12,22 +12,9 @@ spec:
         endpointRef: bmc
 
   resources:
+    - secrets.yaml
     - infra
     - clusters
-
-  secrets:
-    - openshift-pull-secret
-    - dc1-ocp-cluster-admin-ssh-key:
-        generated:
-          sshKeyPair:
-            comment: bootwright-dc1-ocp-cluster-admin
-    - dc2-ocp-cluster-admin-ssh-key:
-        generated:
-          sshKeyPair:
-            comment: bootwright-dc2-ocp-cluster-admin
-    - bastion-host-ssh:
-        file: ~/.ssh/bootwright-ssh-key
-    - bmc-credentials
 
   infraComponents:
     artifactServers:

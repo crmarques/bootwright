@@ -15,6 +15,15 @@ func ContainerCluster(state v1alpha1.State, name string) (v1alpha1.ContainerClus
 	return v1alpha1.ContainerCluster{}, false
 }
 
+func Secret(state v1alpha1.State, name string) (v1alpha1.Secret, bool) {
+	for _, secret := range state.Secrets {
+		if secret.Metadata.Name == name {
+			return secret, true
+		}
+	}
+	return v1alpha1.Secret{}, false
+}
+
 func MachineImage(state v1alpha1.State, name string) (v1alpha1.MachineImage, bool) {
 	for _, image := range state.MachineImages {
 		if image.Metadata.Name == name {

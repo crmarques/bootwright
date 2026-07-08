@@ -4,27 +4,25 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 type Resolver struct {
 	Store      *ContextStore
-	Env        *v1alpha1.Environment
+	Index      Index
 	SecretsDir string
 }
 
-func NewResolver(contextName, secretsDir string, env *v1alpha1.Environment) Resolver {
+func NewResolver(contextName, secretsDir string, idx Index) Resolver {
 	return Resolver{
 		Store:      NewContextStore(contextName, secretsDir),
-		Env:        env,
+		Index:      idx,
 		SecretsDir: secretsDir,
 	}
 }
 
 func (r Resolver) ReadMaterial(name string, role MaterialRole) ([]byte, error) {
-	if MaterialPathUsesExternalSource(name, r.Env, role) {
-		path := ResolveSourceMaterialPath(name, r.Env, role)
+	if MaterialPathUsesExternalSource(name, r.Index, role) {
+		path := ResolveSourceMaterialPath(name, r.Index, role)
 		if path == "" {
 			return nil, fmt.Errorf("secret %q %s source path is empty", name, role)
 		}
@@ -44,7 +42,7 @@ func (r Resolver) ReadMaterial(name string, role MaterialRole) ([]byte, error) {
 // it, returning the path alongside the trailing-newline-trimmed content so
 // callers can report where the material came from.
 func (r Resolver) ReadMaterialWithPath(name string, role MaterialRole, kind string) (string, string, error) {
-	path := ResolveMaterialPath(name, r.Env, r.SecretsDir, role)
+	path := ResolveMaterialPath(name, r.Index, r.SecretsDir, role)
 	if path == "" {
 		return "", "", fmt.Errorf("%s path is empty", kind)
 	}
@@ -68,14 +66,14 @@ func (r Resolver) ReadUserPasswordMaterial(name string, role MaterialRole, kind 
 }
 
 func (r Resolver) StatMaterial(name string, role MaterialRole) (os.FileInfo, error) {
-	if MaterialPathUsesExternalSource(name, r.Env, role) {
-		path := ResolveSourceMaterialPath(name, r.Env, role)
+	if MaterialPathUsesExternalSource(name, r.Index, role) {
+		path := ResolveSourceMaterialPath(name, r.Index, role)
 		if path == "" {
 			return nil, fmt.Errorf("secret %q %s source path is empty", name, role)
 		}
 		return StatExternalFile(path)
 	}
-	path := ResolveMaterialPath(name, r.Env, r.SecretsDir, role)
+	path := ResolveMaterialPath(name, r.Index, r.SecretsDir, role)
 	status, err := r.Store.Inspect(MaterialKey{Name: name, Role: role})
 	if err != nil {
 		return nil, err

@@ -22,10 +22,14 @@ func vsphereCheckTestState(t *testing.T) (v1alpha1.State, string) {
 		Environments: []v1alpha1.Environment{{
 			Metadata:   v1alpha1.Metadata{Name: "env"},
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"vcenter-credentials": {File: "vcenter-credentials"},
-				},
+			Spec:       v1alpha1.EnvironmentSpec{},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata:   v1alpha1.Metadata{Name: "vcenter-credentials"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeUsernamePassword,
+				Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "vcenter-credentials"}},
 			},
 		}},
 		InfraProviders: []v1alpha1.InfraProvider{{
@@ -117,10 +121,8 @@ func TestVSphereVCenterSessionCheck(t *testing.T) {
 // does instead of raw-reading the envelope file.
 func TestVSphereVCenterSessionCheckReadsContextStoreMaterial(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
-	state.Environments[0].Spec.Secrets["vcenter-credentials"] = v1alpha1.EnvironmentSecretSpec{
-		Generated: &v1alpha1.EnvironmentSecretGenerated{
-			Credentials: &v1alpha1.GeneratedCredentialsSpec{Username: "administrator@vsphere.local"},
-		},
+	state.Secrets[0].Spec.Source = v1alpha1.SecretSource{
+		Generated: &v1alpha1.SecretGeneratedSource{Username: "administrator@vsphere.local"},
 	}
 	store := secretstore.NewContextStore("test", secretsDir)
 	if err := store.Write(secretstore.MaterialKey{Name: "vcenter-credentials", Role: secretstore.MaterialPrimary}, []byte("administrator@vsphere.local:vc-password\n")); err != nil {
@@ -143,7 +145,7 @@ func TestVSphereVCenterSessionCheckReadsContextStoreMaterial(t *testing.T) {
 // because the secret-material checks already fail loudly.
 func TestVSphereVCenterSessionCheckWarnsWithoutMaterial(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
-	state.Environments[0].Spec.Secrets["vcenter-credentials"] = v1alpha1.EnvironmentSecretSpec{File: "missing-file"}
+	state.Secrets[0].Spec.Source = v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "missing-file"}}
 	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
 		t.Fatal("probe must not run without credential material")
 		return nil, nil
@@ -190,7 +192,14 @@ func TestVSphereVCenterInsecureTLSWarns(t *testing.T) {
 // credential surfaces at preflight rather than mid-convergence.
 func TestVSphereVCenterDedupesByCredentials(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
-	state.Environments[0].Spec.Secrets["vcenter-credentials-2"] = v1alpha1.EnvironmentSecretSpec{File: "vcenter-credentials"}
+	state.Secrets = append(state.Secrets, v1alpha1.Secret{
+		Metadata:   v1alpha1.Metadata{Name: "vcenter-credentials-2"},
+		SourcePath: state.Environments[0].SourcePath,
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeUsernamePassword,
+			Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "vcenter-credentials"}},
+		},
+	})
 	state.InfraProviders = append(state.InfraProviders, v1alpha1.InfraProvider{
 		Metadata: v1alpha1.Metadata{Name: "lab-vsphere-2"},
 		Spec: v1alpha1.InfraProviderSpec{

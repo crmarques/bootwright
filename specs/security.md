@@ -5,14 +5,15 @@ path, but never carries secret bytes.
 
 ## Secret Ownership
 
-`Environment.spec.secrets` declares every secret source used by the loaded
-state. A scalar list item, or a single-key list item with an omitted/null
-value, is context-local material written through the encrypted context secret
-store under the current context secrets directory. `file:` points at
-operator-owned local material, and `generated:` describes material Bootwright
-can create under the encrypted context store. `Environment.spec.secretStorage.mode`
-defaults to `source`; `context` requires `bootwright secret generate` before
-workflows read encrypted context-local copies of file-sourced entries.
+A `Secret` object declares every secret source used by the loaded state — each
+with a `spec.type` (what the material is) and an optional `spec.source` (how it
+is obtained). Omitting `spec.source` selects context-local material written
+through the encrypted context secret store under the current context secrets
+directory. `source.file` points at operator-owned local material, and
+`source.generated` describes material Bootwright can create under the encrypted
+context store. `Environment.spec.secretStorage.mode` defaults to `source`;
+`context` requires `bootwright secret generate` before workflows read encrypted
+context-local copies of file-sourced entries.
 
 The context secret store preserves the SecretRef/name UX and logical material
 paths (`<name>`, `<name>.key`, `<name>.pub`) but stores AES-256-GCM envelopes
@@ -32,8 +33,8 @@ CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
 desired state.
 
 Machine SSH follows the same boundary. Durable SSH connection details live on
-`Machine.spec.access.ssh`. `keyRef` and `knownHostsRef` reference
-`Environment.spec.secrets`; when `knownHostsRef` is omitted, Bootwright records
+`Machine.spec.access.ssh`. `keyRef` and `knownHostsRef` reference `Secret`
+objects by name; when `knownHostsRef` is omitted, Bootwright records
 server keys under context-managed SSH trust state. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.
 Trust is recorded either by `bootwright host trust` or on first use during an
@@ -47,7 +48,7 @@ verifies the new fingerprint and records it deliberately with
 
 KubeVirt child-cluster profiles also follow the same boundary. `hostClusterRef`
 resolves to a generated kubeconfig already stored under Bootwright cluster
-secrets state, and `kubeconfigRef` resolves through `Environment.spec.secrets`
+secrets state, and `kubeconfigRef` resolves through a `Secret` object
 for external virtualization clusters. Desired state records only reference
 names, never kubeconfig bytes.
 

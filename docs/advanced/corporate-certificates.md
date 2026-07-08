@@ -124,10 +124,10 @@ spec:
 
 ## Supplying the bytes
 
-Each `secretRef` / `caBundleRef` names a secret declared in
-`Environment.spec.secrets`; the operator supplies the bytes through the local
-context, never checked in. Serving certificates are a TLS certificate-and-key
-pair; a CA bundle is raw PEM:
+Each `secretRef` / `caBundleRef` names a `kind: Secret` object; the operator
+supplies the bytes through the local context, never checked in. Serving
+certificates are a `tlsCertificate` secret (certificate-and-key pair); a CA
+bundle is a `caBundle` secret (raw PEM):
 
 ```text
 bootwright secret set --name corporate-ca       --raw-file ./corp-ca.pem
@@ -135,7 +135,8 @@ bootwright secret set --name api-serving-tls     --tls-cert ./api.crt     --tls-
 bootwright secret set --name ingress-serving-tls --tls-cert ./ingress.crt --tls-key ./ingress.key
 ```
 
-For a self-contained lab the example declares these as
-`generated: selfSignedCertificate` instead, so `bootwright secret generate`
-materializes them with no external PKI. See [Secrets](../concepts/secrets.md) for
-the full secret workflow and the generated-material shapes.
+For a self-contained lab the example declares these as `generated` secrets
+instead (self-signed `tlsCertificate` serving certs and a `caBundle` trust
+anchor), so `bootwright secret generate` materializes them with no external PKI.
+See [Secrets](../concepts/secrets.md) for the full secret workflow and the
+generated-material shapes.

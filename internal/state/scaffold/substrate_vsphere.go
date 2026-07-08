@@ -3,8 +3,16 @@ package scaffold
 var vSphereSubstrate = Substrate{
 	ProviderNameSuffix: "vsphere",
 	NetworkNameSuffix:  "portgroup",
-	EnvExtraSecrets: `    - vcenter-credentials:
-        file: ../secrets/vcenter-credentials
+	EnvExtraSecrets: `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: vcenter-credentials
+spec:
+  type: usernamePassword
+  source:
+    file:
+      path: ../secrets/vcenter-credentials
 `,
 	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine

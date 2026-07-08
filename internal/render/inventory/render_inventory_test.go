@@ -296,11 +296,10 @@ func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets["bastion-host-ssh"] = v1alpha1.EnvironmentSecretSpec{
-		Generated: &v1alpha1.EnvironmentSecretGenerated{
-			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
-		},
-	}
+	upsertSecret(&state, "bastion-host-ssh", v1alpha1.SecretSpec{
+		Type:   v1alpha1.SecretTypeSSHKeyPair,
+		Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
+	}, "")
 	secretsDir := t.TempDir()
 	inv := inventoryWithLocalityPolicy(state, secretsDir, locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {

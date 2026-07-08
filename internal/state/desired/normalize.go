@@ -30,6 +30,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.Entitlements {
 		normalizeEntitlementSatellite(state.Entitlements[i].Spec.RHSM)
 	}
+	normalizeSecrets(state)
 	for i := range state.Machines {
 		normalizeMachine(&state.Machines[i])
 	}
@@ -148,20 +149,31 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 	if env.Spec.SecretStorage.Mode == "" {
 		env.Spec.SecretStorage.Mode = v1alpha1.SecretStorageModeSource
 	}
-	for name, secret := range env.Spec.Secrets {
-		if secret.Generated == nil {
+}
+
+// normalizeSecrets defaults the generated parameters of each Secret according
+// to its type: certificate validity, the credential username, and the SSH key
+// algorithm.
+func normalizeSecrets(state *v1alpha1.State) {
+	for i := range state.Secrets {
+		gen := state.Secrets[i].Spec.Source.Generated
+		if gen == nil {
 			continue
 		}
-		if cert := secret.Generated.SelfSignedCertificate; cert != nil && cert.ValidityDays == 0 {
-			cert.ValidityDays = v1alpha1.DefaultCertificateDays
+		switch state.Secrets[i].Spec.Type {
+		case v1alpha1.SecretTypeTLSCertificate, v1alpha1.SecretTypeCABundle:
+			if gen.ValidityDays == 0 {
+				gen.ValidityDays = v1alpha1.DefaultCertificateDays
+			}
+		case v1alpha1.SecretTypeUsernamePassword:
+			if gen.Username == "" {
+				gen.Username = "admin"
+			}
+		case v1alpha1.SecretTypeSSHKeyPair:
+			if gen.KeyType == "" {
+				gen.KeyType = v1alpha1.SSHKeyPairTypeEd25519
+			}
 		}
-		if creds := secret.Generated.Credentials; creds != nil && creds.Username == "" {
-			creds.Username = "admin"
-		}
-		if keyPair := secret.Generated.SSHKeyPair; keyPair != nil && keyPair.Type == "" {
-			keyPair.Type = v1alpha1.SSHKeyPairTypeEd25519
-		}
-		env.Spec.Secrets[name] = secret
 	}
 }
 

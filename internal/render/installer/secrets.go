@@ -46,7 +46,7 @@ type InstallerUserPass struct {
 
 func LoadInstallerSecretsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) (InstallerSecrets, error) {
 	env := stateview.Environment(state)
-	resolver := secret.NewResolver(contextName, secretsDir, env)
+	resolver := secret.NewResolver(contextName, secretsDir, secret.NewIndex(state))
 	var out InstallerSecrets
 
 	pullName := ocp.Spec.Install.PullSecretRef.Name

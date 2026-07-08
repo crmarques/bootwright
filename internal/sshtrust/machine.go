@@ -12,12 +12,12 @@ import (
 // context) locate that store through different roots, so the managed fallback
 // path is a parameter rather than resolved here; only the ref-vs-managed
 // decision is shared, which is the part that must not drift between them.
-func MachineKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, secretsDir, managedKnownHostsPath string) string {
+func MachineKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, secretsDir, managedKnownHostsPath string) string {
 	if machine.Spec.Access.SSH == nil {
 		return ""
 	}
 	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, env, secretsDir)
+		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, idx, secretsDir)
 	}
 	return managedKnownHostsPath
 }

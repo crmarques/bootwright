@@ -1,102 +1,175 @@
 ---
 title: Secrets and entitlements
-description: How desired state names secret material without carrying bytes — declaration grammar, consumer references, storage modes, node SSH, the secret CLI, and vendor entitlements.
+description: How desired state names secret material without carrying bytes — the Secret kind and its type/source axes, consumer references, storage modes, node SSH, the secret CLI, and vendor entitlements.
 ---
 
 # Secrets and entitlements
 
 Desired state references secret material **by name only** — it never carries
-bytes, so it is safe to commit. A reference names an entry in
-[`Environment.spec.secrets`](environment.md); the bytes live in the per-context
+bytes, so it is safe to commit. A reference names a
+[`kind: Secret`](#the-secret-object) object; the bytes live in the per-context
 secret store or in operator-owned local files. The same is true of vendor
 entitlements: an entitlement declares *named* access to a subscription or
-registry, and the credentials behind it are themselves secrets.
+registry, and the credentials behind it are themselves `Secret` objects.
 
 This page is both the concept and the field reference for secrets and
 entitlements. See [conventions](index.md) for the object envelope and the
 Required/Default field-table convention.
 
-## Declaration grammar
+## The Secret object
 
-`Environment.spec.secrets[]` is the API's one bespoke collection codec: it is
-*authored as a list* of scalar names or single-key objects, and decodes into a
-name-keyed map. It is neither a plain list nor a plain map. Entry names must be
-DNS labels. Each name resolves to exactly one of three source arms:
+A `Secret` is a first-class authored object — the promoted form of the removed
+`Environment.spec.secrets[]` list. Every `...Ref` in the fleet (a
+[SecretRef](#how-consumers-reference-names)) resolves to a `Secret` by
+`metadata.name`, which must be a DNS label. A `Secret` never carries material
+bytes, so it is safe to commit; it declares two axes:
 
-- **Context-local** — a scalar list item, or a single-key item with an
-  omitted/null value. Bytes are written with `bootwright secret set` into the
-  encrypted current-context secret store, or minted by `bootwright secret
-  generate`.
-- **`file:`** — operator-owned local material that already exists at a declared
-  path. The path is resolved on the machine running Bootwright (the control
-  node); with the default `secretStorage.mode: source` it is read in place.
-- **`generated:`** — bytes Bootwright produces during `bootwright secret
-  generate` (context-local credentials, self-signed certificates, and SSH key
-  pairs).
-
-An object item has **at most one** of `file:` or `generated:`; `keyFile:`
-requires `file:`; and a `generated:` block sets exactly one of `credentials`,
-`selfSignedCertificate`, or `sshKeyPair`.
+- **`spec.type`** (required) says what the material *is*. It fixes the material
+  roles the secret carries, which source arms are legal, and the shape of any
+  generated parameters. There is no inference — every `Secret` states its type.
+- **`spec.source`** says *how* the material is obtained: the per-context
+  encrypted store (`contextStore`, the default), operator-owned files (`file`),
+  or generation (`generated`). Omit `spec.source` entirely for the common
+  context-local case; at most one arm may be set, and the legal arms are scoped
+  by `type`.
 
 ```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: openshift-pull-secret
 spec:
-  secrets:
-    - openshift-pull-secret
-    - lab-ocp-cluster-admin-ssh-key:
-        generated:
-          sshKeyPair:
-            comment: bootwright-lab-ocp-cluster-admin
-    - bastion-host-ssh:
-        file: ~/.ssh/bootwright-ssh-key
-    - bmc-credentials:
-    - proxy-credentials:
-        generated:
-          credentials:
-            username: proxy
-    - mirror-registry-trust-bundle:
-        generated:
-          selfSignedCertificate:
-            commonName: registry.lab.bootwright.test
-    - api-serving-tls:
-        file: ../secrets/api-serving.crt
-        keyFile: ../secrets/api-serving.key
-    - ingress-serving-tls
+  type: dockerConfigJson       # context-local: bytes set via `bootwright secret set`
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-ocp-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      comment: bootwright-lab-ocp-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bastion-host-ssh
+spec:
+  type: sshKeyPair
+  source:
+    file:
+      privateKey: ~/.ssh/bootwright-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: proxy-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: proxy
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-registry-trust-bundle
+spec:
+  type: caBundle
+  source:
+    generated:
+      commonName: registry.lab.bootwright.test
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: api-serving-tls
+spec:
+  type: tlsCertificate
+  source:
+    file:
+      cert: ../secrets/api-serving.crt
+      key: ../secrets/api-serving.key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ingress-serving-tls
+spec:
+  type: tlsCertificate         # context-local: `bootwright secret set --tls-cert … --tls-key …`
 ```
 
-### Source-arm fields
+Author one `Secret` per file, named for its `metadata.name`, the same
+one-object-per-file layout as every other kind. Paths under `source.file`
+resolve against the `Secret`'s own file.
 
-| Shape | Required parts | Meaning |
+### The seven secret types
+
+`spec.type` is required and is one of:
+
+| `type` | Material | Typical consumers |
 | --- | --- | --- |
-| `- name` | name | Context-local material (encrypted context store). |
-| `- name:` | name | Same as scalar context-local material. |
-| `- name: {file: <path>}` | `file` | Operator-owned local source file. |
-| `- name: {file: <path>, keyFile: <path>}` | `file` (and `keyFile`) | TLS or paired material with a key file; `keyFile` requires `file`. |
-| `- name: {generated: {credentials: ...}}` | `generated.credentials` | Generated username/password-style credentials. |
-| `- name: {generated: {selfSignedCertificate: ...}}` | `generated.selfSignedCertificate` | Generated cert/key pair. |
-| `- name: {generated: {sshKeyPair: ...}}` | `generated.sshKeyPair` | Generated SSH key pair. |
+| `opaque` | Arbitrary externally-supplied blob the system never mints | kubeconfig, `known_hosts`, RHSM org ID / activation key, external Ceph details, boot-media headers, playbook secrets |
+| `token` | A single secret string the system may mint | Ceph mgmt-gateway oauth2 client / cookie secrets |
+| `usernamePassword` | One-line `username:password` credential | BMC, vCenter, registry, mirror, proxy credentials |
+| `dockerConfigJson` | A docker `config.json` with an `.auths` object | the OpenShift pull secret |
+| `caBundle` | `CERTIFICATE`-only PEM trust-anchor set | every trust bundle / CA |
+| `tlsCertificate` | Serving identity: cert PEM + private key PEM | API-server named certs, ingress default, Ceph mgmt-gateway |
+| `sshKeyPair` | An SSH key pair | cluster node SSH, machine host access, cephadm cluster identity |
 
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `generated.credentials.username` | No | — | Generated credential username (no whitespace, colon, or newlines). |
-| `generated.selfSignedCertificate.commonName` | Yes | — | Certificate common name. Required when `selfSignedCertificate` is used. |
-| `generated.selfSignedCertificate.dnsNames[]` | No | — | DNS SANs. |
-| `generated.selfSignedCertificate.ipAddresses[]` | No | — | IP SANs. |
-| `generated.selfSignedCertificate.validityDays` | No | — | Validity period; must not be negative. |
-| `generated.sshKeyPair.type` | No | `ed25519` | Key type: `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. Use `rsa` or ECDSA on FIPS-enforced control nodes. |
-| `generated.sshKeyPair.comment` | No | — | Public key comment (no leading/trailing whitespace or newlines). |
+### The source union
+
+Omit `spec.source` (or set an empty `source: {}`) for context-local material —
+the default. Otherwise set exactly **one** arm:
+
+| `source` arm | Meaning |
+| --- | --- |
+| `contextStore: {}` | Bytes live only in the encrypted per-context store, written by `bootwright secret set` or minted by `bootwright secret generate`. This is the default; usually just omit `source`. |
+| `file:` | Operator-owned file(s) that already exist. With the default `secretStorage.mode: source` they are read in place; `mode: context` copies them into the context store. |
+| `generated:` | Bootwright mints the material during `bootwright secret generate`. Legal only for `token`, `usernamePassword`, `tlsCertificate`, `caBundle`, and `sshKeyPair`. |
+
+#### `source.file` keys by type
+
+The populated file keys are scoped by `spec.type`; a key the type does not
+consume is rejected. Paths are relative to the `Secret`'s file, absolute, or
+`~`-rooted.
+
+| Type | File keys |
+| --- | --- |
+| `opaque`, `token`, `usernamePassword`, `dockerConfigJson`, `caBundle` | `path` — the single material file. |
+| `tlsCertificate` | `cert` + `key` — both required. |
+| `sshKeyPair` | `privateKey` (required) + optional `publicKey` (derived from the private key when omitted). |
+
+#### `source.generated` parameters by type
+
+The generated parameters are flat and scoped by `spec.type`; a parameter the
+type does not consume is rejected. `caBundle` and `tlsCertificate` both mint a
+self-signed certificate (a `caBundle` acts as its own trust anchor).
+
+| Field | Type(s) | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `username` | `usernamePassword` | No | `admin` | Generated credential username (no whitespace, colon, or newlines). The password is random. |
+| `commonName` | `tlsCertificate`, `caBundle` | Yes | — | Certificate common name. |
+| `dnsNames[]` | `tlsCertificate`, `caBundle` | No | — | DNS SANs. |
+| `ipAddresses[]` | `tlsCertificate`, `caBundle` | No | — | IP SANs. |
+| `validityDays` | `tlsCertificate`, `caBundle` | No | — | Validity period; must not be negative. |
+| `keyType` | `sshKeyPair` | No | `ed25519` | Key algorithm: `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. Use `rsa` or ECDSA on FIPS-enforced control nodes. |
+| `comment` | `sshKeyPair` | No | — | Public key comment (no leading/trailing whitespace or newlines). |
+| `bytes` | `token` | No | `32` | Entropy of the generated token, in bytes; must not be negative. |
 
 !!! note "`secret set --generate` is for test fixtures only"
     `bootwright secret set --generate` mints a random password (default username
     `admin`) and is intended for test fixtures, not production credential
     provisioning. Production generated material comes from `bootwright secret
-    generate` materializing the `generated:` declarations.
+    generate` materializing the `source.generated` declarations.
 
 ## How consumers reference names
 
-Every kind references a secret by name. A scalar item, or an object item with an
-omitted/null value, resolves to
-`/var/lib/bootwright/contexts/<context>/secrets/<name>`. The reference fields
-across the API include:
+Every kind references a secret by a bare name — a `SecretRef` — that resolves to
+the `Secret` of that `metadata.name`. A context-local (`contextStore`) secret's
+bytes resolve to `/var/lib/bootwright/contexts/<context>/secrets/<name>`. The
+reference fields across the API include:
 
 | Reference | Consumer |
 | --- | --- |
@@ -222,22 +295,22 @@ operator-owned files at their declared paths.
 
 The flow is:
 
-1. Declare secret names in `Environment.spec.secrets`.
+1. Declare one `kind: Secret` object per secret.
 2. `bootwright secret set` writes context-local bytes through the local user
    (it does **not** re-exec as root; you need write access to the context
    secrets directory). Replacing an existing context-local secret prompts unless
    `--yes` is passed.
-3. `bootwright secret generate` creates missing `generated:` entries and, when
-   `secretStorage.mode: context`, copies external `file:` entries into the
-   context store; `--renew` regenerates every `generated:` secret.
+3. `bootwright secret generate` creates missing `source.generated` secrets and,
+   when `secretStorage.mode: context`, copies `source.file` material into the
+   context store; `--renew` regenerates every generated secret.
 4. `bootwright secret check` is the read-only gate: it reports declared secrets
    that still need `bootwright secret set` and exits non-zero while any remain
-   missing. External `file:` entries must already exist at their declared paths.
+   missing. `source.file` material must already exist at its declared paths.
 
 The other secret subcommands (`secret generate`, `secret check`, `secret
 delete`, and the `secret encryption` family) operate on the root-managed context
 store. `bootwright secret show` reads only context-local secret files (never
-external `file:` sources) and decrypts only the requested material.
+`source.file` material) and decrypts only the requested material.
 
 !!! note "Install secrets and access"
     After a successful cluster install, the kubeadmin password is stored at
@@ -308,7 +381,7 @@ separate `redhat-rhel` entitlement named via `rhelEntitlementRef` — an inline
 stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
 tools repo, so its own `rhsm` arm covers both.)
 
-A Red Hat Ceph entitlement, with the secrets it names:
+A Red Hat Ceph entitlement, with the `Secret` objects it names:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -317,14 +390,6 @@ metadata:
   name: ceph-distribution-redhat
 spec:
   baseDomain: bootwright.test
-  secrets:
-    - ceph-node-ssh:
-        generated:
-          sshKeyPair:
-            comment: bootwright-ceph-node
-    - redhat-org
-    - redhat-activation-key
-    - redhat-registry-credentials
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
@@ -337,6 +402,37 @@ spec:
     activationKeyRef: redhat-activation-key
   registry:
     credentialsRef: redhat-registry-credentials
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-node-ssh
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      comment: bootwright-ceph-node
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: redhat-org
+spec:
+  type: opaque
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: redhat-activation-key
+spec:
+  type: opaque
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: redhat-registry-credentials
+spec:
+  type: usernamePassword
 ```
 
 ### Corporate Satellite
@@ -358,10 +454,6 @@ metadata:
   name: corp
 spec:
   baseDomain: corp.example.com
-  secrets:
-    - corp-satellite-ca
-    - rhel-org
-    - rhel-activation-key
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
@@ -376,6 +468,27 @@ spec:
     satellite:
       hostname: satellite.corp.example.com
       trustBundleRef: corp-satellite-ca
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: corp-satellite-ca
+spec:
+  type: caBundle
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhel-org
+spec:
+  type: opaque
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhel-activation-key
+spec:
+  type: opaque
 ```
 
 The `rhsm` kickstart command is supported on Red Hat Enterprise Linux only
@@ -389,5 +502,5 @@ OpenShift/RHCOS agent-install nodes do not use Satellite.
   workflow inside a first apply.
 - [Disconnected and proxied installs](../advanced/disconnected-proxy.md) — trust
   bundles, mirror credentials, and RHSM in disconnected and proxied environments.
-- [Environment](environment.md) — the full `spec.secrets` and proxy/registry
-  surface, and the field reference for the first-class `Entitlement` kind.
+- [Environment](environment.md) — the `spec.secretStorage`, proxy, and registry
+  surface; the `Secret` and `Entitlement` kinds are their own field references.

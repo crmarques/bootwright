@@ -56,22 +56,22 @@ func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, 
 	if len(inScope) == 0 {
 		return nil
 	}
-	env := environmentForChecks(state)
+	idx := secret.NewIndex(state)
 	var checks []Check
 	if needsSecretsDir {
 		checks = append(checks, secretsDirCheck(secretsDir, deps))
 	}
 	for _, req := range inScope {
 		if req.tlsPair {
-			checks = append(checks, tlsSecretFileChecks(req, env, secretsDir, deps)...)
+			checks = append(checks, tlsSecretFileChecks(req, idx, secretsDir, deps)...)
 			continue
 		}
 		if req.sshPair {
-			checks = append(checks, sshKeyPairFileChecks(req, env, secretsDir, deps)...)
+			checks = append(checks, sshKeyPairFileChecks(req, idx, secretsDir, deps)...)
 			continue
 		}
 		if req.source == secretRefSourceGenerated && req.generatedKind == "sshKeyPair" {
-			checks = append(checks, generatedSSHKeyPairChecks(req, env, secretsDir, deps)...)
+			checks = append(checks, generatedSSHKeyPairChecks(req, idx, secretsDir, deps)...)
 			continue
 		}
 		if req.source == secretRefSourceGenerated {
@@ -79,8 +79,8 @@ func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, 
 			checks = append(checks, generatedSecretCheck(req.refName, path, req.label, req.generatedKind, deps))
 			continue
 		}
-		path := secret.ResolveMaterialPath(req.refName, env, secretsDir, req.role)
-		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, secret.MaterialPathUsesExternalSource(req.refName, env, req.role), deps))
+		path := secret.ResolveMaterialPath(req.refName, idx, secretsDir, req.role)
+		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, secret.MaterialPathUsesExternalSource(req.refName, idx, req.role), deps))
 	}
 	return checks
 }
@@ -266,24 +266,22 @@ func environmentForChecks(state v1alpha1.State) *v1alpha1.Environment {
 }
 
 func resolveSecretRequirementSources(state v1alpha1.State, requirements []secretRefRequirement) []secretRefRequirement {
-	declared := map[string]v1alpha1.EnvironmentSecretSpec{}
-	env := stateview.Environment(state)
-	if env != nil {
-		for name, spec := range env.Spec.Secrets {
-			declared[name] = spec
-		}
+	mode := ""
+	if env := environmentForChecks(state); env != nil {
+		mode = env.Spec.SecretStorage.Mode
 	}
 	for i := range requirements {
-		spec, ok := declared[requirements[i].refName]
+		s, ok := stateview.Secret(state, requirements[i].refName)
 		if !ok {
 			requirements[i].source = secretRefSourceFile
 			continue
 		}
+		src := s.Spec.Source
 		switch {
-		case spec.Generated != nil:
+		case src.Generated != nil:
 			requirements[i].source = secretRefSourceGenerated
-			requirements[i].generatedKind = generatedSecretKind(spec)
-		case spec.File == "" || env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext:
+			requirements[i].generatedKind = generatedSecretKind(s)
+		case src.File == nil || mode == v1alpha1.SecretStorageModeContext:
 			requirements[i].source = secretRefSourceContext
 		default:
 			requirements[i].source = secretRefSourceFile
@@ -292,28 +290,32 @@ func resolveSecretRequirementSources(state v1alpha1.State, requirements []secret
 	return requirements
 }
 
-func generatedSecretKind(spec v1alpha1.EnvironmentSecretSpec) string {
-	if spec.Generated == nil {
+// generatedSecretKind maps a generated Secret's type onto the legacy generated
+// kind labels the preflight material checks branch on.
+func generatedSecretKind(s v1alpha1.Secret) string {
+	if s.Spec.Source.Generated == nil {
 		return ""
 	}
-	switch {
-	case spec.Generated.Credentials != nil:
+	switch s.Spec.Type {
+	case v1alpha1.SecretTypeUsernamePassword:
 		return "credentials"
-	case spec.Generated.SelfSignedCertificate != nil:
+	case v1alpha1.SecretTypeTLSCertificate:
 		return "selfSignedCertificate"
-	case spec.Generated.SSHKeyPair != nil:
+	case v1alpha1.SecretTypeSSHKeyPair:
 		return "sshKeyPair"
+	case v1alpha1.SecretTypeToken:
+		return "token"
 	default:
 		return ""
 	}
 }
 
-func tlsSecretFileChecks(req secretRefRequirement, env *v1alpha1.Environment, secretsDir string, deps Deps) []Check {
-	certPath := secret.ResolvePath(req.refName, env, secretsDir)
-	keyPath := secret.ResolveTLSKeyPath(req.refName, env, secretsDir)
+func tlsSecretFileChecks(req secretRefRequirement, idx secret.Index, secretsDir string, deps Deps) []Check {
+	certPath := secret.ResolvePath(req.refName, idx, secretsDir)
+	keyPath := secret.ResolveTLSKeyPath(req.refName, idx, secretsDir)
 	return []Check{
-		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, secret.MaterialPathUsesExternalSource(req.refName, env, secret.MaterialPrimary), deps),
-		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, secret.MaterialPathUsesExternalSource(req.refName, env, secret.MaterialTLSKey), deps),
+		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, secret.MaterialPathUsesExternalSource(req.refName, idx, secret.MaterialPrimary), deps),
+		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, secret.MaterialPathUsesExternalSource(req.refName, idx, secret.MaterialTLSKey), deps),
 	}
 }
 

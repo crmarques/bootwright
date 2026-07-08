@@ -3,9 +3,23 @@ package scaffold
 var bareMetalSubstrate = Substrate{
 	ProviderNameSuffix: "bare-metal",
 	NetworkNameSuffix:  "vlan",
-	EnvExtraSecrets: `    - bastion-host-ssh:
-        file: ~/.ssh/bootwright-ssh-key
-    - bmc-credentials
+	EnvExtraSecrets: `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bastion-host-ssh
+spec:
+  type: sshKeyPair
+  source:
+    file:
+      privateKey: ~/.ssh/bootwright-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bmc-credentials
+spec:
+  type: usernamePassword
 `,
 	BastionMachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine

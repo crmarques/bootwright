@@ -51,7 +51,6 @@ means there is no default — an omitted optional field stays unset.
 | `spec.infraComponents` | No | — | Catalog of external or managed service access entries. See [Infra-component catalog](#infra-component-catalog). |
 | `spec.registries` | No | — | Disconnected mirror and image digest source settings. See [Registries](#registries). |
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
-| `spec.secrets[]` | No | — | Secret declarations by name, never secret bytes. See [Secrets](#secrets). |
 | `spec.componentImages` | No | — | Managed service image pins by component type and implementation. See [Component images](#component-images). |
 
 ## Artifact access
@@ -133,42 +132,19 @@ end-to-end mirror workflow.
 
 ## Secrets
 
-`spec.secrets[]` declares secret *names*, never bytes. It is the API's one
-bespoke collection codec: authored as a list of scalar names or single-key
-objects, it decodes into a name-keyed map. Entry names must be DNS labels.
-Scalar and null-valued items declare context-local material — generated or
-operator-supplied material written through the encrypted context secret store.
-`file` and `generated` are mutually exclusive; `keyFile` requires `file`.
-
-| Shape | Required parts | Meaning |
-| --- | --- | --- |
-| `- name` | name | Context-local material (encrypted context store). |
-| `- name:` | name | Same as scalar context-local material. |
-| `- name: {file: <path>}` | `file` | Operator-owned local source file. |
-| `- name: {file: <path>, keyFile: <path>}` | `file` (and `keyFile`) | TLS or paired material with a key file; `keyFile` requires `file`. |
-| `- name: {generated: {credentials: ...}}` | `generated.credentials` | Generated username/password-style credentials. |
-| `- name: {generated: {selfSignedCertificate: ...}}` | `generated.selfSignedCertificate` | Generated cert/key pair. |
-| `- name: {generated: {sshKeyPair: ...}}` | `generated.sshKeyPair` | Generated SSH key pair. |
-
-The object form requires `file`, `keyFile`, or `generated`; use a scalar item
-(or an omitted/null value) for context-local material. A `generated:` block must
-set exactly one of `credentials`, `selfSignedCertificate`, or `sshKeyPair`.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `generated.credentials.username` | No | — | Generated credential username (no whitespace, colon, or newlines). |
-| `generated.selfSignedCertificate.commonName` | Yes | — | Certificate common name. Required when `selfSignedCertificate` is used. |
-| `generated.selfSignedCertificate.dnsNames[]` | No | — | DNS SANs. |
-| `generated.selfSignedCertificate.ipAddresses[]` | No | — | IP SANs. |
-| `generated.selfSignedCertificate.validityDays` | No | — | Validity period; must not be negative. |
-| `generated.sshKeyPair.type` | No | `ed25519` | Key type: `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. Use `rsa` or ECDSA on FIPS-enforced control nodes. |
-| `generated.sshKeyPair.comment` | No | — | Public key comment (no leading/trailing whitespace or newlines). |
+Secrets are **not** an `Environment` field. Each secret is its own first-class
+[`kind: Secret`](secrets.md#the-secret-object) object with a `spec.type` (what
+the material is) and an optional `spec.source` (how it is obtained), and every
+`...Ref` in the fleet resolves to one by `metadata.name`. The only secret-related
+`Environment` field is `spec.secretStorage.mode` (see the [Fields](#fields)
+table), which governs whether `file`-sourced material is read in place (`source`,
+the default) or copied into the encrypted context store (`context`).
 
 !!! note "Names only — never bytes"
     Desired state references secrets by name only. Generated material is created
-    during apply; operator-owned `file:` material stays outside versioned state.
-    The full source/context storage model and the secret-declaration grammar
-    live on [Secrets & entitlements](secrets.md).
+    during apply; operator-owned `source.file` material stays outside versioned
+    state. The full `type`/`source` model and the storage modes live on
+    [Secrets & entitlements](secrets.md).
 
 ## Entitlements
 
@@ -251,10 +227,6 @@ metadata:
   name: corp
 spec:
   baseDomain: corp.example.com
-  secrets:
-    - corp-satellite-ca       # bootwright secret set --name corp-satellite-ca --from-file satellite-ca.pem
-    - rhel-org
-    - rhel-activation-key
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
@@ -270,6 +242,27 @@ spec:
       hostname: satellite.corp.example.com
       trustBundleRef: corp-satellite-ca
       # contentBaseURL defaults to https://satellite.corp.example.com/pulp/content
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: corp-satellite-ca      # bootwright secret set --name corp-satellite-ca --from-file satellite-ca.pem
+spec:
+  type: caBundle
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhel-org
+spec:
+  type: opaque
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhel-activation-key
+spec:
+  type: opaque
 ```
 
 The `rhsm` kickstart command Bootwright emits is supported on Red Hat Enterprise
@@ -321,6 +314,6 @@ Beyond the per-field rules above, the validator enforces:
   credentials.
 
 See [The desired-state model](index.md) for the conventions every field table
-shares, [Secrets & entitlements](secrets.md) for the secret-declaration grammar,
+shares, [Secrets & entitlements](secrets.md) for the `kind: Secret` object,
 and [Disconnected & proxied installs](../advanced/disconnected-proxy.md) for the
 proxy and mirror how-to.

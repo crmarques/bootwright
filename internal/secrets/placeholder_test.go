@@ -38,15 +38,15 @@ func TestResolveMaterialPathPlaceholderMode(t *testing.T) {
 		{MaterialSSHPublic, "{{ secret api-tls.ssh-public }}"},
 	}
 	for _, c := range cases {
-		if got := ResolveMaterialPath("api-tls", nil, PlaceholderSecretsDir, c.role); got != c.want {
+		if got := ResolveMaterialPath("api-tls", Index{}, PlaceholderSecretsDir, c.role); got != c.want {
 			t.Errorf("ResolveMaterialPath role=%s = %q want %q", c.role, got, c.want)
 		}
 	}
-	if got := ResolveMaterialPath("", nil, PlaceholderSecretsDir, MaterialPrimary); got != "" {
+	if got := ResolveMaterialPath("", Index{}, PlaceholderSecretsDir, MaterialPrimary); got != "" {
 		t.Errorf("empty name = %q want \"\"", got)
 	}
 	// The typed wrappers inherit the sentinel behavior through ResolveMaterialPath.
-	if got := ResolveSSHPublicKeyPath("k", nil, PlaceholderSecretsDir); got != "{{ secret k.ssh-public }}" {
+	if got := ResolveSSHPublicKeyPath("k", Index{}, PlaceholderSecretsDir); got != "{{ secret k.ssh-public }}" {
 		t.Errorf("ResolveSSHPublicKeyPath = %q", got)
 	}
 }
@@ -55,15 +55,15 @@ func TestResolveMaterialPathPlaceholderMode(t *testing.T) {
 // mode short-circuits BEFORE the external-source branch, so a portable bundle
 // never leaks the operator's local source-file path for a file-sourced secret.
 func TestResolveMaterialPathPlaceholderBypassesExternalSource(t *testing.T) {
-	env := &v1alpha1.Environment{
-		SourcePath: filepath.Join("/input", "environment.yaml"),
-		Spec: v1alpha1.EnvironmentSpec{
-			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"pull-secret": {File: "pull-secret.json"},
-			},
-		},
-	}
-	if got := ResolveMaterialPath("pull-secret", env, PlaceholderSecretsDir, MaterialPrimary); got != "{{ secret pull-secret }}" {
+	idx := NewIndex(v1alpha1.State{
+		Environments: []v1alpha1.Environment{{SourcePath: filepath.Join("/input", "environment.yaml")}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata:   v1alpha1.Metadata{Name: "pull-secret"},
+			SourcePath: filepath.Join("/input", "environment.yaml"),
+			Spec:       v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON, Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "pull-secret.json"}}},
+		}},
+	})
+	if got := ResolveMaterialPath("pull-secret", idx, PlaceholderSecretsDir, MaterialPrimary); got != "{{ secret pull-secret }}" {
 		t.Fatalf("external-source secret in placeholder mode = %q, want a token (no source path)", got)
 	}
 }

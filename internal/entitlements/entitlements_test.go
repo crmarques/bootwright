@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
 // TestResolveFollowsRHELEntitlementRef verifies that an ibm-storage-ceph
@@ -35,7 +36,7 @@ func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 		},
 	}
 
-	resolved, ok := Resolve(ents, nil, "ibm-ceph", "cp.icr.io/cp", "/secrets")
+	resolved, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(ibm-ceph) not found")
 	}
@@ -50,7 +51,7 @@ func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 	}
 
 	// The referenced redhat-rhel entitlement still resolves its rhsm inline.
-	rhel, ok := Resolve(ents, nil, "rhel", "registry.redhat.io", "/secrets")
+	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(rhel) not found")
 	}
@@ -90,7 +91,7 @@ func TestResolveCarriesSatellite(t *testing.T) {
 		},
 	}
 
-	rhel, ok := Resolve(ents, nil, "rhel", "registry.redhat.io", "/secrets")
+	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(rhel) not found")
 	}
@@ -100,7 +101,7 @@ func TestResolveCarriesSatellite(t *testing.T) {
 		t.Fatalf("rhel satellite = %#v", rhel.RHSM.Satellite)
 	}
 
-	ibm, ok := Resolve(ents, nil, "ibm-ceph", "cp.icr.io/cp", "/secrets")
+	ibm, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(ibm-ceph) not found")
 	}
@@ -119,7 +120,7 @@ func TestResolveCarriesSatellite(t *testing.T) {
 			},
 		},
 	}}
-	resolved, ok := Resolve(bare, nil, "rhel", "registry.redhat.io", "/secrets")
+	resolved, ok := Resolve(bare, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(bare rhel) not found")
 	}

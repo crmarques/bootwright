@@ -42,9 +42,9 @@ func TestInstallStructuralHashRoleProjection(t *testing.T) {
 }
 
 // Ceph day-2 reconfigures (config keys, mgr modules, monitoring tuning) and fabric
-// edits (a node's BMC address, an unrelated Environment secret) must not move the
-// StorageCluster structural hash — none re-bootstraps a running cluster. A change to
-// real cluster identity (the seed host) must move it.
+// edits (a node's BMC address) must not move the StorageCluster structural hash —
+// none re-bootstraps a running cluster. A change to real cluster identity (the seed
+// host) must move it.
 func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	base := func() v1alpha1.State {
 		return v1alpha1.State{
@@ -66,7 +66,6 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	cfg := base()
 	cfg.StorageClusters[0].Spec.Ceph.Config["global"]["mon_max_pg_per_osd"] = "400"
 	cfg.StorageClusters[0].Spec.Ceph.MgrModules = []string{"dashboard", "balancer"}
-	cfg.Environments[0].Spec.Secrets = v1alpha1.EnvironmentSecrets{"extra": {}}
 	cfg.Machines[0].Spec.Hardware.Management.BMC.Address = "10.9.9.9"
 	if got := structuralJSON(t, storageClusterStructuralHashVars(cfg, "ceph")); got != want {
 		t.Fatalf("ceph reconfigure/fabric edit must not move the structural hash:\n base=%s\n edit=%s", want, got)

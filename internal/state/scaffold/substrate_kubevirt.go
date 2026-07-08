@@ -3,8 +3,16 @@ package scaffold
 var kubeVirtSubstrate = Substrate{
 	ProviderNameSuffix: "kubevirt",
 	NetworkNameSuffix:  "nad",
-	EnvExtraSecrets: `    - cnv-cluster-kubeconfig:
-        file: ~/.kube/cnv-cluster.kubeconfig
+	EnvExtraSecrets: `---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: cnv-cluster-kubeconfig
+spec:
+  type: opaque
+  source:
+    file:
+      path: ~/.kube/cnv-cluster.kubeconfig
 `,
 	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine

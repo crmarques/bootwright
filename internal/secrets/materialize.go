@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 // Materialization builds the list of secret work items from loaded state
@@ -27,34 +26,42 @@ type MaterializeResult struct {
 }
 
 // GeneratedSelfSignedRequest is one generated self-signed certificate work
-// item derived from Environment.spec.secrets; preflight drift checks consume
-// the same derivation that materialization applies.
+// item derived from the declared Secrets; preflight drift checks consume the
+// same derivation that materialization applies.
 type GeneratedSelfSignedRequest struct {
 	Name        string
 	Certificate v1alpha1.SelfSignedCertificateSpec
 }
 
 func GeneratedSelfSignedRequests(state v1alpha1.State) ([]GeneratedSelfSignedRequest, error) {
-	env := stateview.Environment(state)
-	if env == nil {
-		return nil, nil
-	}
-	names := make([]string, 0, len(env.Spec.Secrets))
-	for name, s := range env.Spec.Secrets {
-		if s.Generated == nil || s.Generated.SelfSignedCertificate == nil {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	result := make([]GeneratedSelfSignedRequest, 0, len(names))
-	for _, name := range names {
-		cert := *env.Spec.Secrets[name].Generated.SelfSignedCertificate
+	secrets := generatedSecrets(state, v1alpha1.SecretTypeSelfSigned)
+	result := make([]GeneratedSelfSignedRequest, 0, len(secrets))
+	for _, s := range secrets {
+		cert := s.Spec.Source.Generated.SelfSignedCertificate()
 		cert.DNSNames = append([]string(nil), cert.DNSNames...)
 		cert.IPAddresses = append([]string(nil), cert.IPAddresses...)
-		result = append(result, GeneratedSelfSignedRequest{Name: name, Certificate: cert})
+		result = append(result, GeneratedSelfSignedRequest{Name: s.Metadata.Name, Certificate: cert})
 	}
 	return result, nil
+}
+
+// generatedSecretsOfType returns the declared Secrets of the given type whose
+// source is generated.
+func generatedSecretsOfType(state v1alpha1.State, secretType string) []v1alpha1.Secret {
+	return generatedSecrets(state, func(t string) bool { return t == secretType })
+}
+
+// generatedSecrets returns the generated-source Secrets whose type satisfies
+// match, sorted by name so materialization is deterministic.
+func generatedSecrets(state v1alpha1.State, match func(string) bool) []v1alpha1.Secret {
+	var out []v1alpha1.Secret
+	for _, s := range state.Secrets {
+		if s.Spec.Source.Generated != nil && match(s.Spec.Type) {
+			out = append(out, s)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Metadata.Name < out[j].Metadata.Name })
+	return out
 }
 
 type generatedCredentialsRequest struct {
@@ -63,21 +70,10 @@ type generatedCredentialsRequest struct {
 }
 
 func generatedCredentialsRequestsFor(state v1alpha1.State) []generatedCredentialsRequest {
-	env := stateview.Environment(state)
-	if env == nil {
-		return nil
-	}
-	names := make([]string, 0, len(env.Spec.Secrets))
-	for name, s := range env.Spec.Secrets {
-		if s.Generated == nil || s.Generated.Credentials == nil {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	out := make([]generatedCredentialsRequest, 0, len(names))
-	for _, name := range names {
-		out = append(out, generatedCredentialsRequest{name: name, credentials: *env.Spec.Secrets[name].Generated.Credentials})
+	secrets := generatedSecretsOfType(state, v1alpha1.SecretTypeUsernamePassword)
+	out := make([]generatedCredentialsRequest, 0, len(secrets))
+	for _, s := range secrets {
+		out = append(out, generatedCredentialsRequest{name: s.Metadata.Name, credentials: s.Spec.Source.Generated.GeneratedCredentials()})
 	}
 	return out
 }
@@ -88,21 +84,10 @@ type generatedSSHKeyPairRequest struct {
 }
 
 func generatedSSHKeyPairRequestsFor(state v1alpha1.State) []generatedSSHKeyPairRequest {
-	env := stateview.Environment(state)
-	if env == nil {
-		return nil
-	}
-	names := make([]string, 0, len(env.Spec.Secrets))
-	for name, s := range env.Spec.Secrets {
-		if s.Generated == nil || s.Generated.SSHKeyPair == nil {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	out := make([]generatedSSHKeyPairRequest, 0, len(names))
-	for _, name := range names {
-		out = append(out, generatedSSHKeyPairRequest{name: name, keyPair: *env.Spec.Secrets[name].Generated.SSHKeyPair})
+	secrets := generatedSecretsOfType(state, v1alpha1.SecretTypeSSHKeyPair)
+	out := make([]generatedSSHKeyPairRequest, 0, len(secrets))
+	for _, s := range secrets {
+		out = append(out, generatedSSHKeyPairRequest{name: s.Metadata.Name, keyPair: s.Spec.Source.Generated.GeneratedSSHKeyPair()})
 	}
 	return out
 }
@@ -288,22 +273,22 @@ type fileSecretCopyRequest struct {
 }
 
 func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecretCopyRequest {
-	env := stateview.Environment(state)
-	if env == nil || env.Spec.SecretStorage.Mode != v1alpha1.SecretStorageModeContext {
+	if len(state.Environments) == 0 || state.Environments[0].Spec.SecretStorage.Mode != v1alpha1.SecretStorageModeContext {
 		return nil
 	}
-	names := make([]string, 0, len(env.Spec.Secrets))
-	for name, spec := range env.Spec.Secrets {
-		if spec.File != "" {
-			names = append(names, name)
+	fileSecrets := make([]v1alpha1.Secret, 0, len(state.Secrets))
+	for _, s := range state.Secrets {
+		if s.Spec.Source.File != nil {
+			fileSecrets = append(fileSecrets, s)
 		}
 	}
-	sort.Strings(names)
+	sort.Slice(fileSecrets, func(i, j int) bool { return fileSecrets[i].Metadata.Name < fileSecrets[j].Metadata.Name })
+	idx := NewIndex(state)
 	var out []fileSecretCopyRequest
 	seen := map[string]bool{}
 	add := func(name string, role MaterialRole) {
-		sourcePath := ResolveSourceMaterialPath(name, env, role)
-		targetPath := ResolveMaterialPath(name, env, secretsDir, role)
+		sourcePath := ResolveSourceMaterialPath(name, idx, role)
+		targetPath := ResolveMaterialPath(name, idx, secretsDir, role)
 		if sourcePath == "" || targetPath == "" {
 			return
 		}
@@ -314,7 +299,8 @@ func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecre
 		seen[key] = true
 		out = append(out, fileSecretCopyRequest{name: name, role: role, source: sourcePath, target: targetPath})
 	}
-	for _, name := range names {
+	for _, s := range fileSecrets {
+		name := s.Metadata.Name
 		added := false
 		if ConsumedAsTLS(name, state) {
 			add(name, MaterialPrimary)
@@ -332,7 +318,7 @@ func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecre
 		if !added {
 			add(name, MaterialPrimary)
 		}
-		if env.Spec.Secrets[name].KeyFile != "" {
+		if s.Spec.Type == v1alpha1.SecretTypeTLSCertificate && s.Spec.Source.File.Key != "" {
 			add(name, MaterialTLSKey)
 		}
 	}

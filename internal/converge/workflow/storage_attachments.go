@@ -199,7 +199,7 @@ func executeStorageExportSSHExternalDetails(ctx context.Context, state v1alpha1.
 }
 
 func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alpha1.StorageCluster, secretsDir, trustSecretsDir string, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) ([]externalDetailsSSHTarget, error) {
-	env := workflowPrimaryEnvironment(state)
+	idx := secret.NewIndex(state)
 	if len(ssh.MachineRefs) > 0 {
 		machines := map[string]v1alpha1.Machine{}
 		for _, machine := range state.Machines {
@@ -223,8 +223,8 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 				inventoryName:  "external_details_" + strconv.Itoa(len(targets)),
 				address:        address,
 				user:           machine.Spec.Access.SSH.User,
-				keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
-				knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir, trustSecretsDir),
+				keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, idx, secretsDir),
+				knownHostsPath: workflowMachineKnownHostsPath(machine, idx, secretsDir, trustSecretsDir),
 			})
 		}
 		return targets, nil
@@ -253,17 +253,17 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 		inventoryName:  "external_details_0",
 		address:        address,
 		user:           machine.Spec.Access.SSH.User,
-		keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
-		knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir, trustSecretsDir),
+		keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, idx, secretsDir),
+		knownHostsPath: workflowMachineKnownHostsPath(machine, idx, secretsDir, trustSecretsDir),
 	}}, nil
 }
 
-func workflowMachineKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, secretsDir, trustSecretsDir string) string {
+func workflowMachineKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, secretsDir, trustSecretsDir string) string {
 	if machine.Spec.Access.SSH == nil {
 		return ""
 	}
 	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, env, secretsDir)
+		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, idx, secretsDir)
 	}
 	if trustSecretsDir == "" {
 		trustSecretsDir = secretsDir
@@ -394,13 +394,6 @@ func storageExportSSHTimeout(value string) (time.Duration, error) {
 		return 0, fmt.Errorf("parse externalDetails.sshExecution.timeout %q: %w", value, err)
 	}
 	return timeout, nil
-}
-
-func workflowPrimaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
-	if len(state.Environments) == 0 {
-		return nil
-	}
-	return &state.Environments[0]
 }
 
 func writeStorageAttachmentYAML(path string, value any, mode os.FileMode) error {

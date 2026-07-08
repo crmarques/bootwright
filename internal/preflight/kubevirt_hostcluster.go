@@ -7,7 +7,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	secret "github.com/crmarques/bootwright/internal/secrets"
-	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir, secretsDir string, deps Deps) []Check {
@@ -63,7 +62,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 	// missing or malformed file is already reported by the secret-material
 	// checks, so skip the probe when the file is absent to avoid a duplicate
 	// FAIL; when it is present, gate the KubeVirt API the same as the host arm.
-	env := stateview.Environment(state)
+	idx := secret.NewIndex(state)
 	for _, p := range state.InfraProviders {
 		k := p.Spec.KubeVirt
 		if k == nil || k.KubeconfigRef == nil || k.KubeconfigRef.Name == "" {
@@ -77,8 +76,8 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			continue
 		}
 		seen["kc:"+refName] = true
-		path := secret.ResolveMaterialPath(refName, env, secretsDir, secret.MaterialPrimary)
-		externalSource := secret.MaterialPathUsesExternalSource(refName, env, secret.MaterialPrimary)
+		path := secret.ResolveMaterialPath(refName, idx, secretsDir, secret.MaterialPrimary)
+		externalSource := secret.MaterialPathUsesExternalSource(refName, idx, secret.MaterialPrimary)
 		info, err := deps.statSecretPath(path, externalSource)
 		if err != nil || info.IsDir() {
 			continue

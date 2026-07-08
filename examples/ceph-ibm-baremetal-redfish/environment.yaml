@@ -26,36 +26,6 @@ spec:
   # See the README for the exact set commands.
   # ---------------------------------------------------------------------------
 
-  secrets:
-    # Operator-owned SSH key Bootwright uses to reach the bastion/artifact host.
-    - bastion-host-ssh:
-        file: ~/.ssh/bootwright-ssh-key
-
-    # SSH key pair Bootwright/cephadm use to reach the Ceph nodes. Auto-generated
-    # at `secret generate`, authorized for root by the install profile.
-    - ceph-node-ssh:
-        generated:
-          sshKeyPair:
-            type: ed25519
-            comment: bootwright-ceph-ibm-baremetal
-
-    # Real Redfish BMC username/password (iDRAC/iLO/etc.). Operator-provided,
-    # context-local — Bootwright does not generate credentials for physical BMCs.
-    - bmc-credentials
-
-    # Red Hat subscription (RHSM) organization ID — context-local, set via raw-file.
-    - rhel-org
-
-    # Red Hat subscription (RHSM) activation key — context-local, set via raw-file.
-    - rhel-activation-key
-
-    # IBM entitlement key for the cp.icr.io registry — username "cp", key as password.
-    - ibm-ceph-registry
-
-    # Corporate proxy username/password — context-local. Drop this secret and the
-    # `auth` block below if your proxy does not require authentication.
-    - proxy-credentials
-
   # ---------------------------------------------------------------------------
   # Two entitlements, decoupled by concern, now first-class objects under
   # infra/entitlements/. IBM Storage Ceph runs on RHEL it does not itself

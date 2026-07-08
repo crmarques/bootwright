@@ -1338,11 +1338,12 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 	if err := os.WriteFile(secretPath, []byte(secretJSON), 0o600); err != nil {
 		t.Fatalf("write secret: %v", err)
 	}
-	state.Environments = []v1alpha1.Environment{{
-		SourcePath: filepath.Join(t.TempDir(), "environment.yaml"),
-		Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-			"shared-ceph-external-details": {File: secretPath},
-		}},
+	state.Secrets = []v1alpha1.Secret{{
+		Metadata: v1alpha1.Metadata{Name: "shared-ceph-external-details"},
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeOpaque,
+			Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: secretPath}},
+		},
 	}}
 	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
 	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
@@ -1370,12 +1371,10 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 
 func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 	state := storageAttachmentPlanningState()
-	state.Environments = []v1alpha1.Environment{{
-		Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-			"ceph-known-hosts": {},
-			"ceph-node-ssh":    {},
-		}},
-	}}
+	state.Secrets = []v1alpha1.Secret{
+		{Metadata: v1alpha1.Metadata{Name: "ceph-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+		{Metadata: v1alpha1.Metadata{Name: "ceph-node-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
+	}
 	state.StorageExports[0].Spec.Type = v1alpha1.StorageExportTypeDataFoundation
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
@@ -1490,12 +1489,10 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 
 func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 	state := v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"ceph-admin-ssh":         {},
-				"ceph-admin-known-hosts": {},
-			}},
-		}},
+		Secrets: []v1alpha1.Secret{
+			{Metadata: v1alpha1.Metadata{Name: "ceph-admin-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph-admin-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
+		},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
 			Spec: v1alpha1.MachineSpec{

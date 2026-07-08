@@ -34,6 +34,7 @@ const (
 	KindClusterAddonProfile    = "ClusterAddonProfile"
 	KindClusterAddonBinding    = "ClusterAddonBinding"
 	KindProvisioningPlaybook   = "ProvisioningPlaybook"
+	KindSecret                 = "Secret"
 
 	// Provisioner kinds (machine production).
 	ProvisionerLibvirt   = "libvirt"
@@ -429,6 +430,7 @@ type State struct {
 	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`
 	ClusterAddonBindings     []ClusterAddonBinding    `yaml:"clusterAddonBindings,omitempty" json:"clusterAddonBindings,omitempty"`
 	ProvisioningPlaybooks    []ProvisioningPlaybook   `yaml:"provisioningPlaybooks,omitempty" json:"provisioningPlaybooks,omitempty"`
+	Secrets                  []Secret                 `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 }
 
 type TypeMeta struct {

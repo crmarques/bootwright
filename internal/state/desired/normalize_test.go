@@ -536,13 +536,13 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-a-cluster-admin-ssh-key": {
-						Generated: &v1alpha1.EnvironmentSecretGenerated{
-							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{},
-						},
-					},
-				},
+			},
+		}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "cluster-a-cluster-admin-ssh-key"},
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeSSHKeyPair,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{}},
 			},
 		}},
 	}
@@ -553,8 +553,8 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	if got := env.Spec.SecretStorage.Mode; got != v1alpha1.SecretStorageModeSource {
 		t.Fatalf("SecretStorage.Mode = %q, want %q", got, v1alpha1.SecretStorageModeSource)
 	}
-	if got := env.Spec.Secrets["cluster-a-cluster-admin-ssh-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
-		t.Fatalf("SSHKeyPair.Type = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
+	if got := state.Secrets[0].Spec.Source.Generated.KeyType; got != v1alpha1.SSHKeyPairTypeEd25519 {
+		t.Fatalf("SSHKeyPair keyType = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
 	}
 }
 

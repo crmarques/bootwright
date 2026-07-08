@@ -264,7 +264,7 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					}
 					if k.KubeconfigRef != nil {
 						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name
-						if path := secret.ResolvePath(k.KubeconfigRef.Name, stateview.Environment(state), secretsDir); path != "" {
+						if path := secret.ResolvePath(k.KubeconfigRef.Name, secret.NewIndex(state), secretsDir); path != "" {
 							out["kubevirt"].(map[string]any)["kubeconfig"] = path
 						}
 					}

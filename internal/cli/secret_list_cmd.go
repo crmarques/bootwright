@@ -13,7 +13,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/secrets"
-	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/status"
 )
 
@@ -78,26 +77,21 @@ func newSecretListCmd(stdout io.Writer) *cobra.Command {
 }
 
 func declaredSecretEntriesForContext(contextName, secretsDir string, state v1alpha1.State) ([]secretListEntry, error) {
-	env := stateview.Environment(state)
-	if env == nil || len(env.Spec.Secrets) == 0 {
+	if len(state.Secrets) == 0 {
 		return nil, nil
 	}
 	store := secret.NewContextStore(contextName, secretsDir)
-	names := make([]string, 0, len(env.Spec.Secrets))
-	for name := range env.Spec.Secrets {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	entries := make([]secretListEntry, 0, len(names))
-	for _, name := range names {
-		spec := env.Spec.Secrets[name]
-		typ := secretSpecType(name, spec, state)
-		pathEntries := secretSpecPathEntries(name, spec, env, secretsDir, state)
+	secrets := append([]v1alpha1.Secret(nil), state.Secrets...)
+	sort.Slice(secrets, func(i, j int) bool { return secrets[i].Metadata.Name < secrets[j].Metadata.Name })
+	idx := secret.NewIndex(state)
+	entries := make([]secretListEntry, 0, len(secrets))
+	for _, s := range secrets {
+		pathEntries := secretPathEntriesForSecret(s, idx, secretsDir)
 		paths := secretPathEntryPaths(pathEntries)
 		present, detail := secretPathsPresent(store, pathEntries)
 		entries = append(entries, secretListEntry{
-			Name:    name,
-			Type:    typ,
+			Name:    s.Metadata.Name,
+			Type:    secretTypeLabel(s),
 			Paths:   paths,
 			Present: present,
 			Detail:  detail,
@@ -113,61 +107,39 @@ type secretPathEntry struct {
 	externalSource bool
 }
 
-func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1alpha1.State) string {
+// secretTypeLabel is the "<source>:<type>" display label for a declared Secret.
+func secretTypeLabel(s v1alpha1.Secret) string {
+	source := "context"
 	switch {
-	case secret.ConsumedAsTLS(name, state):
-		if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil {
-			return "generated:selfSignedCertificate"
-		}
-		if spec.File != "" {
-			return "file:tls"
-		}
-		return "context:tls"
-	case spec.Generated != nil && spec.Generated.SSHKeyPair != nil:
-		return "generated:sshKeyPair"
-	case spec.File != "":
-		return "file"
-	case spec.Generated != nil && spec.Generated.Credentials != nil:
-		return "generated:credentials"
-	case spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil:
-		return "generated:selfSignedCertificate"
-	default:
-		return "context"
+	case s.Spec.Source.Generated != nil:
+		source = "generated"
+	case s.Spec.Source.File != nil:
+		source = "file"
 	}
+	return source + ":" + s.Spec.Type
 }
 
-func secretSpecPathEntries(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string, state v1alpha1.State) []secretPathEntry {
+// secretPathEntriesForSecret lists the material roles a Secret carries, keyed by
+// its type: sshKeyPair carries a private and public half, tlsCertificate a cert
+// and key, every other type a single primary material.
+func secretPathEntriesForSecret(s v1alpha1.Secret, idx secret.Index, secretsDir string) []secretPathEntry {
+	name := s.Metadata.Name
 	entry := func(role secret.MaterialRole) secretPathEntry {
 		return secretPathEntry{
 			name:           name,
 			role:           role,
-			path:           secret.ResolveMaterialPath(name, env, secretsDir, role),
-			externalSource: secret.MaterialPathUsesExternalSource(name, env, role),
+			path:           secret.ResolveMaterialPath(name, idx, secretsDir, role),
+			externalSource: secret.MaterialPathUsesExternalSource(name, idx, role),
 		}
 	}
-	if spec.Generated != nil && spec.Generated.SSHKeyPair != nil {
-		return []secretPathEntry{
-			entry(secret.MaterialSSHPrivate),
-			entry(secret.MaterialSSHPublic),
-		}
+	switch s.Spec.Type {
+	case v1alpha1.SecretTypeSSHKeyPair:
+		return []secretPathEntry{entry(secret.MaterialSSHPrivate), entry(secret.MaterialSSHPublic)}
+	case v1alpha1.SecretTypeTLSCertificate:
+		return []secretPathEntry{entry(secret.MaterialPrimary), entry(secret.MaterialTLSKey)}
+	default:
+		return []secretPathEntry{entry(secret.MaterialPrimary)}
 	}
-	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secret.ConsumedAsTLS(name, state) {
-		return []secretPathEntry{
-			entry(secret.MaterialPrimary),
-			entry(secret.MaterialTLSKey),
-		}
-	}
-	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secret.ConsumedAsClusterSSH(name, state) || secret.ConsumedAsStorageSSH(name, state) || secret.ConsumedAsHostSSH(name, state)) {
-		var paths []secretPathEntry
-		if secret.ConsumedAsClusterSSHPrivate(name, state) || secret.ConsumedAsStorageSSHPrivate(name, state) || secret.ConsumedAsHostSSH(name, state) {
-			paths = append(paths, entry(secret.MaterialSSHPrivate))
-		}
-		if secret.ConsumedAsClusterSSHPublic(name, state) || secret.ConsumedAsStorageSSHPublic(name, state) {
-			paths = append(paths, entry(secret.MaterialSSHPublic))
-		}
-		return paths
-	}
-	return []secretPathEntry{entry(secret.MaterialPrimary)}
 }
 
 func secretPathEntryPaths(entries []secretPathEntry) []string {

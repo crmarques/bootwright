@@ -113,11 +113,11 @@ func TestValidateManagementIngressStretchCoverage(t *testing.T) {
 		}
 	}
 	cluster.Spec.Ceph.Management = mgmtWith([]string{"dc1"})
-	if got := strings.Join(validateStorageCephManagement("spec.ceph.management", cluster, nil), "; "); !strings.Contains(got, "data site \"dc2\"") {
+	if got := strings.Join(validateStorageCephManagement("spec.ceph.management", cluster, v1alpha1.State{}), "; "); !strings.Contains(got, "data site \"dc2\"") {
 		t.Fatalf("mgmt ingress narrowed to one site should fail stretch coverage, got %q", got)
 	}
 	cluster.Spec.Ceph.Management = mgmtWith([]string{"dc1", "dc2"})
-	if got := validateStorageCephManagement("spec.ceph.management", cluster, nil); len(got) != 0 {
+	if got := validateStorageCephManagement("spec.ceph.management", cluster, v1alpha1.State{}); len(got) != 0 {
 		t.Fatalf("mgmt ingress covering both data sites must pass, got %v", got)
 	}
 }

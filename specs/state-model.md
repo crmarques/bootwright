@@ -95,20 +95,12 @@ Rules:
   one of `local` or `public`, and every reference must pin an explicit version
   tag or a `sha256:` digest; mutable references such as `:latest` or an omitted
   tag are rejected.
-- `secrets[]` declares secret names, never bytes. Each item is exactly one of: a
-  scalar secret name; or a single-key map whose value is `null`/omitted
-  (context-local material), `{file: <path>}` (operator-owned local material,
-  with an optional `keyFile: <path>` that requires `file`), or `{generated:
-  ...}`. A `generated` value sets exactly one of `credentials` (optional
-  `username`), `selfSignedCertificate` (required `commonName`; optional
-  `dnsNames[]`, `ipAddresses[]`, `validityDays`), or `sshKeyPair` (optional
-  `type`, default `ed25519`, accepted values `ed25519`, `rsa`, `ecdsa-p256`,
-  `ecdsa-p384`, `ecdsa-p521`; optional `comment`). `file` and `generated` are
-  mutually exclusive.
-  Any other shape is rejected naming `Environment.spec.secrets`.
+- Secret material is no longer an `Environment` field. The former `secrets[]`
+  list was removed and promoted to a first-class [`Secret`](#secret) kind; the
+  only secret-related `Environment` field is `secretStorage.mode`.
 - Entitlements are their own first-class `Entitlement` kind (one object per
-  file), not an `Environment` field; the secret material they name still lives in
-  `Environment.spec.secrets`. Each `Entitlement` declares named subscription,
+  file), not an `Environment` field; the secret material they name is declared
+  as [`Secret`](#secret) objects. Each `Entitlement` declares named subscription,
   registry entitlement, and license references for products that need
   vendor-controlled access. `spec.type` is the discriminator, from this set;
   other values are rejected:
@@ -123,7 +115,8 @@ Rules:
   `registry.credentialsRef`. An `ibm-storage-ceph` entitlement requires
   `registry.credentialsRef`, `license.accept: true`, and `rhelEntitlementRef`
   naming a `redhat-rhel` entitlement for the RHEL subscription it runs on; it
-  takes no inline `rhsm` arm.
+  takes no inline `rhsm` arm. Referenced secret material is declared as
+  [`Secret`](#secret) objects.
 
 Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
@@ -291,7 +284,7 @@ Rules:
   RHCOS ISO fields may use `local-media:<key>`, but RHCOS rootfs, kernel,
   initramfs, and release image content must not use the ISO media store.
 - `checksum`, `trustRefs[]`, and `headersRefs[]` are optional.
-- Secret refs point to `Environment.spec.secrets` entries.
+- Secret refs point to `Secret` objects by `metadata.name`.
 
 ## MachineInstallProfile
 
@@ -885,8 +878,7 @@ Rules:
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
 - `spec.externalDetails` must set exactly one of `fromSecretRef`, `generated`,
-  or `sshExecution`. `fromSecretRef` must be declared in
-  `Environment.spec.secrets`.
+  or `sshExecution`. `fromSecretRef` must resolve to a declared `Secret`.
   `generated` is rejected for external clusters. `sshExecution` requires
   `machineRefs[]` to `ceph-admin` `Machine`s with SSH (for external clusters),
   `exporter.source: boundDataFoundationAddon`, and `config.rbdDataPoolName`;
@@ -967,8 +959,7 @@ Rules:
   `spec.accepts.inputs`, have unique names, and satisfy the input schema's
   required values.
 - Input values for `refKind` schema properties must name a loaded object of
-  that kind; values for `secret` properties must be declared in
-  `Environment` `spec.secrets`.
+  that kind; values for `secret` properties must resolve to a declared `Secret`.
 
 ## ProvisioningPlaybook
 
@@ -1025,7 +1016,7 @@ Rules:
   `(stage, timing)` bucket: every `requires` must be met by another enabled
   playbook's `provides` in the same bucket, `provides` are unique, and the graph
   is acyclic. `spec.order` tie-breaks within a bucket.
-- `spec.secretRefs` must be declared in `Environment` `spec.secrets`; the playbook
+- `spec.secretRefs` must resolve to declared `Secret` objects; the playbook
   reads them from `{{ bootwright_secrets_dir }}/<name>` (never the argv).
 - `spec.run` selects re-run behaviour: `onChange` (default) skips a run whose
   declared inputs — spec plus a content digest of the playbook and vendored trees
@@ -1043,6 +1034,54 @@ itself lands after the previous stage. Playbooks flow through `apply`, `plan`,
 is no dedicated CLI verb. Because a playbook is opaque, `state-check` reports it
 as `match` (declared inputs unchanged) or `drift` (changed, will re-run) from the
 input hash only — it never observes node reality.
+
+## Secret
+
+`Secret` declares one named piece of sensitive material and how Bootwright
+obtains it. It is the promoted, first-class form of the removed
+`Environment.spec.secrets[]` entries: every `SecretRef` in the fleet resolves to
+a `Secret` by `metadata.name`. A `Secret` never carries material bytes in desired
+state, so it is safe to commit.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: proxy-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: proxy
+```
+
+Rules:
+
+- `spec.type` is required and is one of `opaque`, `token`, `usernamePassword`,
+  `dockerConfigJson`, `caBundle`, `tlsCertificate`, or `sshKeyPair`. There is no
+  inference. The type fixes the material roles the secret carries, which source
+  arms are legal, and the shape of any generated parameters.
+- `spec.source` says how the material is obtained. Omitting it (or setting an
+  empty block) selects `contextStore`; at most one of `contextStore`, `file`, or
+  `generated` may be set.
+  - `contextStore` keeps the material only in the per-context AES-256-GCM store,
+    populated by `bootwright secret set`/`generate`. It carries no parameters.
+  - `file` names operator-owned file(s), scoped by type: single-file types use
+    `path`; `tlsCertificate` uses `cert`+`key`; `sshKeyPair` uses `privateKey`
+    (+ optional `publicKey`). A file key the type does not consume is rejected.
+    Paths resolve against the `Secret`'s own file, or are absolute or `~`-rooted.
+    `Environment.spec.secretStorage.mode` governs whether file material is read
+    in place (`source`) or copied into the context store (`context`).
+  - `generated` has Bootwright mint the material and is legal only for `token`,
+    `usernamePassword`, `tlsCertificate`, `caBundle`, and `sshKeyPair`. Its
+    parameters are flat and scoped by type: `usernamePassword` takes `username`
+    (default `admin`); `tlsCertificate`/`caBundle` take `commonName` (required),
+    `dnsNames[]`, `ipAddresses[]`, `validityDays` (self-signed); `sshKeyPair`
+    takes `keyType` (default `ed25519`, one of `ed25519`, `rsa`, `ecdsa-p256`,
+    `ecdsa-p384`, `ecdsa-p521`) and `comment`; `token` takes `bytes`
+    (default `32`). A parameter the type does not consume is rejected.
+- Authored input keeps one `Secret` per file, named for its `metadata.name`, in a
+  fleet-global `secrets/` grouping or beside `environment.yaml`.
 
 ## Rendering Contract
 
@@ -1107,7 +1146,7 @@ input hash only — it never observes node reality.
   configured boot method.
 - KubeVirt `hostClusterRef` dependencies must be acyclic. A cluster cannot
   host itself directly or indirectly.
-- Secret references must resolve to `Environment.spec.secrets`.
+- Secret references must resolve to a declared `Secret` object.
 
 ## CLI Contract
 

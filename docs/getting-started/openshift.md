@@ -55,26 +55,29 @@ be a lowercase DNS label.
 
 ## Understand The Input Objects
 
-This lab uses six of bootwright's authored kinds. Read them in dependency order;
-each owns exactly one slice of the truth.
+This lab uses seven of bootwright's authored kinds. Read them in dependency
+order; each owns exactly one slice of the truth.
 
 ### Environment (`environment.yaml`)
 
 Fleet-wide defaults and the catalog that ties the tree together. For this lab it
-sets `spec.baseDomain` (the DNS domain your cluster lives under), selects the
+sets `spec.baseDomain` (the DNS domain your cluster lives under) and selects the
 managed shared services by reference under `spec.infraComponents` (name
-resolution and NTP here), and **names** the secrets the workflow needs under
-`spec.secrets`. Naming is the key idea: the YAML declares secret *names*, while
-the bytes live in the local context.
+resolution and NTP here).
 
-The scaffold declares four secrets:
+### Secret (`secrets.yaml`)
 
-| Secret name | Purpose | How it is supplied |
+The secrets the workflow needs, each a `kind: Secret` object with a `spec.type`
+(what the material is) and an optional `spec.source` (how it is obtained). Naming
+is the key idea: the YAML declares secret *names*, while the bytes live in the
+local context. The scaffold declares four secrets:
+
+| Secret (`type`) | Purpose | How it is supplied |
 | --- | --- | --- |
-| `openshift-pull-secret` | OpenShift pull secret | You set it: `bootwright secret set` |
-| `my-sno-lab-cluster-admin-ssh-key` | Node (core user) SSH key pair | Generated for you: `bootwright secret generate` |
-| `bastion-host-ssh` | SSH private key to reach the bastion | `file:` reference to a key you create — see [Installation](installation.md#the-bastion-ssh-key) |
-| `bmc-credentials` | Credentials for the emulated Redfish BMC | Generated for you: `bootwright secret generate` (bootwright configures the emulator) |
+| `openshift-pull-secret` (`dockerConfigJson`) | OpenShift pull secret | You set it: `bootwright secret set` |
+| `my-sno-lab-cluster-admin-ssh-key` (`sshKeyPair`) | Node (core user) SSH key pair | Generated for you: `bootwright secret generate` |
+| `bastion-host-ssh` (`sshKeyPair`) | SSH private key to reach the bastion | `source.file` reference to a key you create — see [Installation](installation.md#the-bastion-ssh-key) |
+| `bmc-credentials` (`usernamePassword`) | Credentials for the emulated Redfish BMC | Generated for you: `bootwright secret generate` (bootwright configures the emulator) |
 
 ### Machine (`infra/machines/bastion.yaml`, `clusters/container/my-sno-lab/cluster-machines.yaml`)
 
@@ -142,7 +145,7 @@ Open the scaffold and adjust these for your host. The defaults form a working
 | File | Field | Set it to |
 | --- | --- | --- |
 | `environment.yaml` | `spec.baseDomain` | A DNS base domain you control or route in the lab (default `example.test`). |
-| `environment.yaml` | `spec.secrets` `bastion-host-ssh` (`file:`) | Path to the SSH key that reaches the bastion (default `~/.ssh/bootwright-ssh-key`); create it first — see [Installation](installation.md#the-bastion-ssh-key). |
+| `secrets.yaml` | `Secret/bastion-host-ssh` `spec.source.file.privateKey` | Path to the SSH key that reaches the bastion (default `~/.ssh/bootwright-ssh-key`); create it first — see [Installation](installation.md#the-bastion-ssh-key). |
 | `infra/machines/bastion.yaml` | `Machine/bastion` `spec.addresses` (`ssh`) | The address bootwright uses to SSH to the bastion (default `192.168.10.11`). |
 | `clusters/container/my-sno-lab/cluster-machines.yaml` | `Machine/my-sno-lab-master-0` `spec.addresses` (`ip`) | The node's static IP on the machine network (default `192.168.130.20`). |
 | `infra/networkconfigs/networks.yaml` | `spec.machineNetwork[].cidr` | The cluster machine network CIDR (default `192.168.130.0/24`). |
@@ -152,7 +155,7 @@ Open the scaffold and adjust these for your host. The defaults form a working
 | `infra/components/load-balancer.yaml` | `InfraComponent/load-balancer` `spec.loadBalancer.bindAddresses[]` | The `control-plane` VIP (`192.168.130.10`) and `apps` VIP (`192.168.130.11`). |
 | `clusters/container/my-sno-lab/cluster.yaml` | `spec.distribution.release.version` | The OpenShift release to install (default `4.21.15`). |
 
-Leave `spec.secrets` as names only. Then validate the tree offline (no host
+Leave the `Secret` objects as names only. Then validate the tree offline (no host
 contact, no context needed):
 
 ```bash

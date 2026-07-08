@@ -56,11 +56,10 @@ func Find(ents []v1alpha1.Entitlement, name string) (v1alpha1.Entitlement, bool)
 
 // Resolve materializes the Entitlement named name into subscription, registry
 // and license facts with secret material resolved to on-disk paths. ents is the
-// lookup and rhelEntitlementRef-follow domain; env is needed only to resolve
-// secret material (secrets live on Environment.spec.secrets), keeping the
-// secret-by-name invariant. provider/product are derived from spec.type so the
-// day-2 cephadm render is unchanged.
-func Resolve(ents []v1alpha1.Entitlement, env *v1alpha1.Environment, name, defaultRegistryURL, secretsDir string) (Resolved, bool) {
+// lookup and rhelEntitlementRef-follow domain; idx resolves secret material to
+// on-disk paths, keeping the secret-by-name invariant. provider/product are
+// derived from spec.type so the day-2 cephadm render is unchanged.
+func Resolve(ents []v1alpha1.Entitlement, idx secret.Index, name, defaultRegistryURL, secretsDir string) (Resolved, bool) {
 	entitlement, ok := Find(ents, name)
 	if !ok {
 		return Resolved{}, false
@@ -83,23 +82,23 @@ func Resolve(ents []v1alpha1.Entitlement, env *v1alpha1.Environment, name, defau
 	}
 	if rhsm != nil {
 		out.RHSM = RHSM{
-			OrganizationPath:  secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, env, secretsDir, secret.MaterialPrimary),
-			ActivationKeyPath: secret.ResolveMaterialPath(rhsm.ActivationKeyRef.Name, env, secretsDir, secret.MaterialPrimary),
+			OrganizationPath:  secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, idx, secretsDir, secret.MaterialPrimary),
+			ActivationKeyPath: secret.ResolveMaterialPath(rhsm.ActivationKeyRef.Name, idx, secretsDir, secret.MaterialPrimary),
 			ConnectToInsights: rhsm.ConnectToInsights,
 		}
 		if rhsm.Satellite != nil {
 			out.RHSM.Satellite = RHSMSatellite{
 				Hostname:        rhsm.Satellite.Hostname,
 				ContentBaseURL:  rhsm.Satellite.ContentBaseURL,
-				TrustBundlePath: secret.ResolveMaterialPath(rhsm.Satellite.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary),
+				TrustBundlePath: secret.ResolveMaterialPath(rhsm.Satellite.TrustBundleRef.Name, idx, secretsDir, secret.MaterialPrimary),
 			}
 		}
 	}
 	if entitlement.Spec.Registry != nil {
 		out.Registry = Registry{
 			URL:             entitlement.Spec.Registry.URL,
-			CredentialsPath: secret.ResolveMaterialPath(entitlement.Spec.Registry.CredentialsRef.Name, env, secretsDir, secret.MaterialPrimary),
-			TrustBundlePath: secret.ResolveMaterialPath(entitlement.Spec.Registry.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary),
+			CredentialsPath: secret.ResolveMaterialPath(entitlement.Spec.Registry.CredentialsRef.Name, idx, secretsDir, secret.MaterialPrimary),
+			TrustBundlePath: secret.ResolveMaterialPath(entitlement.Spec.Registry.TrustBundleRef.Name, idx, secretsDir, secret.MaterialPrimary),
 		}
 	}
 	if out.Registry.URL == "" {

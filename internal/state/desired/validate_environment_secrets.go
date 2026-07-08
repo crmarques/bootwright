@@ -17,23 +17,145 @@ func validateEnvironmentSecretStorage(env v1alpha1.Environment) []string {
 	}
 }
 
-func validateEnvironmentSecrets(env v1alpha1.Environment) []string {
+// validateSecrets checks each declared Secret in isolation: a known type, at
+// most one source arm, and type-scoped file/generated parameters.
+func validateSecrets(state v1alpha1.State) []string {
 	var errs []string
-	for name, secret := range env.Spec.Secrets {
-		if !dnsLabel.MatchString(name) {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets entry %q is not a DNS label", env.Metadata.Name, name))
+	for _, s := range state.Secrets {
+		if e := validateName(v1alpha1.KindSecret, s.Metadata.Name); e != "" {
+			errs = append(errs, e)
 			continue
 		}
-		hasFile := secret.File != ""
-		hasGenerated := secret.Generated != nil
-		switch {
-		case secret.KeyFile != "" && !hasFile:
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].keyFile requires file", env.Metadata.Name, name))
-		case hasFile && hasGenerated:
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s] sets both file and generated; pick at most one source", env.Metadata.Name, name))
-		case hasGenerated:
-			errs = append(errs, validateGeneratedSecret(env.Metadata.Name, name, secret.Generated)...)
+		prefix := fmt.Sprintf("Secret/%s spec", s.Metadata.Name)
+		if s.Spec.Type == "" {
+			errs = append(errs, prefix+".type is required")
+			continue
 		}
+		if !validSecretType(s.Spec.Type) {
+			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s}", prefix, s.Spec.Type, strings.Join(v1alpha1.SecretTypes(), ", ")))
+			continue
+		}
+		src := s.Spec.Source
+		arms := 0
+		for _, set := range []bool{src.ContextStore != nil, src.File != nil, src.Generated != nil} {
+			if set {
+				arms++
+			}
+		}
+		if arms > 1 {
+			errs = append(errs, prefix+".source sets more than one of {contextStore, file, generated}; pick at most one")
+			continue
+		}
+		if src.File != nil {
+			errs = append(errs, validateSecretFileSource(prefix, s.Spec.Type, src.File)...)
+		}
+		if src.Generated != nil {
+			errs = append(errs, validateSecretGenerated(prefix, s.Spec.Type, src.Generated)...)
+		}
+	}
+	return errs
+}
+
+func validSecretType(secretType string) bool {
+	for _, t := range v1alpha1.SecretTypes() {
+		if secretType == t {
+			return true
+		}
+	}
+	return false
+}
+
+// validateSecretFileSource enforces that only the file keys the type consumes
+// are set: tlsCertificate uses cert+key, sshKeyPair uses privateKey(+publicKey),
+// every other type uses path.
+func validateSecretFileSource(prefix, secretType string, f *v1alpha1.SecretFileSource) []string {
+	var errs []string
+	foreign := func(field, value string) {
+		if value != "" {
+			errs = append(errs, fmt.Sprintf("%s.source.file.%s is not valid for a %s secret", prefix, field, secretType))
+		}
+	}
+	switch secretType {
+	case v1alpha1.SecretTypeTLSCertificate:
+		if f.Cert == "" {
+			errs = append(errs, prefix+".source.file.cert is required for a tlsCertificate secret")
+		}
+		if f.Key == "" {
+			errs = append(errs, prefix+".source.file.key is required for a tlsCertificate secret")
+		}
+		foreign("path", f.Path)
+		foreign("privateKey", f.PrivateKey)
+		foreign("publicKey", f.PublicKey)
+	case v1alpha1.SecretTypeSSHKeyPair:
+		if f.PrivateKey == "" {
+			errs = append(errs, prefix+".source.file.privateKey is required for an sshKeyPair secret")
+		}
+		foreign("path", f.Path)
+		foreign("cert", f.Cert)
+		foreign("key", f.Key)
+	default:
+		if f.Path == "" {
+			errs = append(errs, fmt.Sprintf("%s.source.file.path is required for a %s secret", prefix, secretType))
+		}
+		foreign("cert", f.Cert)
+		foreign("key", f.Key)
+		foreign("privateKey", f.PrivateKey)
+		foreign("publicKey", f.PublicKey)
+	}
+	return errs
+}
+
+// validateSecretGenerated enforces that the type can be generated and that only
+// the generation parameters the type consumes are set.
+func validateSecretGenerated(prefix, secretType string, gen *v1alpha1.SecretGeneratedSource) []string {
+	if !v1alpha1.SecretTypeGeneratable(secretType) {
+		return []string{fmt.Sprintf("%s.source.generated is not valid for a %s secret", prefix, secretType)}
+	}
+	var errs []string
+	foreignStr := func(field, value string) {
+		if value != "" {
+			errs = append(errs, fmt.Sprintf("%s.source.generated.%s is not valid for a %s secret", prefix, field, secretType))
+		}
+	}
+	switch secretType {
+	case v1alpha1.SecretTypeUsernamePassword:
+		username := gen.Username
+		if strings.TrimSpace(username) != username {
+			errs = append(errs, prefix+".source.generated.username must not contain leading or trailing whitespace")
+		}
+		if strings.ContainsAny(username, ":\r\n\t ") {
+			errs = append(errs, prefix+".source.generated.username must not contain whitespace, colon, or newlines")
+		}
+		foreignStr("commonName", gen.CommonName)
+		foreignStr("keyType", gen.KeyType)
+	case v1alpha1.SecretTypeTLSCertificate, v1alpha1.SecretTypeCABundle:
+		if gen.CommonName == "" {
+			errs = append(errs, prefix+".source.generated.commonName is required")
+		}
+		if gen.ValidityDays < 0 {
+			errs = append(errs, prefix+".source.generated.validityDays must not be negative")
+		}
+		foreignStr("username", gen.Username)
+		foreignStr("keyType", gen.KeyType)
+	case v1alpha1.SecretTypeSSHKeyPair:
+		if !validSSHKeyPairType(gen.KeyType) {
+			errs = append(errs, fmt.Sprintf("%s.source.generated.keyType %q must be one of {%s}", prefix, gen.KeyType, strings.Join(allowedSSHKeyPairTypes(), ", ")))
+		}
+		if strings.TrimSpace(gen.Comment) != gen.Comment {
+			errs = append(errs, prefix+".source.generated.comment must not contain leading or trailing whitespace")
+		}
+		if strings.ContainsAny(gen.Comment, "\r\n") {
+			errs = append(errs, prefix+".source.generated.comment must not contain newlines")
+		}
+		foreignStr("username", gen.Username)
+		foreignStr("commonName", gen.CommonName)
+	case v1alpha1.SecretTypeToken:
+		if gen.Bytes < 0 {
+			errs = append(errs, prefix+".source.generated.bytes must not be negative")
+		}
+		foreignStr("username", gen.Username)
+		foreignStr("commonName", gen.CommonName)
+		foreignStr("keyType", gen.KeyType)
 	}
 	return errs
 }
@@ -55,53 +177,6 @@ func validateEnvironmentInstallTrust(env v1alpha1.Environment) []string {
 			continue
 		}
 		seen[ref.Name] = true
-	}
-	return errs
-}
-
-func validateGeneratedSecret(envName, secretName string, gen *v1alpha1.EnvironmentSecretGenerated) []string {
-	var errs []string
-	kinds := 0
-	if gen.Credentials != nil {
-		kinds++
-	}
-	if gen.SelfSignedCertificate != nil {
-		kinds++
-	}
-	if gen.SSHKeyPair != nil {
-		kinds++
-	}
-	switch {
-	case kinds > 1:
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated sets more than one generated kind; pick exactly one of {credentials, selfSignedCertificate, sshKeyPair}", envName, secretName))
-	case kinds == 0:
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated requires one of {credentials, selfSignedCertificate, sshKeyPair}", envName, secretName))
-	case gen.SelfSignedCertificate != nil:
-		if gen.SelfSignedCertificate.CommonName == "" {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.selfSignedCertificate.commonName is required", envName, secretName))
-		}
-		if gen.SelfSignedCertificate.ValidityDays < 0 {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.selfSignedCertificate.validityDays must not be negative", envName, secretName))
-		}
-	case gen.Credentials != nil:
-		username := gen.Credentials.Username
-		if username != "" && strings.TrimSpace(username) != username {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.credentials.username must not contain leading or trailing whitespace", envName, secretName))
-		}
-		if strings.ContainsAny(username, ":\r\n\t ") {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.credentials.username must not contain whitespace, colon, or newlines", envName, secretName))
-		}
-	case gen.SSHKeyPair != nil:
-		keyType := gen.SSHKeyPair.Type
-		if !validSSHKeyPairType(keyType) {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.type %q must be one of {%s}", envName, secretName, keyType, strings.Join(allowedSSHKeyPairTypes(), ", ")))
-		}
-		if strings.TrimSpace(gen.SSHKeyPair.Comment) != gen.SSHKeyPair.Comment {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.comment must not contain leading or trailing whitespace", envName, secretName))
-		}
-		if strings.ContainsAny(gen.SSHKeyPair.Comment, "\r\n") {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.comment must not contain newlines", envName, secretName))
-		}
 	}
 	return errs
 }

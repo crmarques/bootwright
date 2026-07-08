@@ -392,8 +392,8 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
+	upsertSecret(&state, "redhat-org", v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}, "")
+	upsertSecret(&state, "redhat-activation-key", v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}, "")
 	state.Entitlements = append(state.Entitlements, v1alpha1.Entitlement{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.EntitlementSpec{
@@ -436,9 +436,9 @@ func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadNormalizeValidate: %v", err)
 		}
-		state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
-		state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
-		state.Environments[0].Spec.Secrets["corp-satellite-ca"] = v1alpha1.EnvironmentSecretSpec{}
+		upsertSecret(&state, "redhat-org", v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}, "")
+		upsertSecret(&state, "redhat-activation-key", v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}, "")
+		upsertSecret(&state, "corp-satellite-ca", v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeCABundle}, "")
 		state.Entitlements = append(state.Entitlements, v1alpha1.Entitlement{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
 			Spec: v1alpha1.EntitlementSpec{
@@ -501,7 +501,7 @@ func TestManagedOSInstallRoutesThroughMachineOSInstallProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets["proxy-credentials"] = v1alpha1.EnvironmentSecretSpec{}
+	upsertSecret(&state, "proxy-credentials", v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeUsernamePassword}, "")
 	state.Environments[0].Spec.InfraComponents.Proxies = append(state.Environments[0].Spec.InfraComponents.Proxies, v1alpha1.EnvironmentProxyComponent{
 		Name:       "corp",
 		Management: v1alpha1.EnvironmentComponentExternal,

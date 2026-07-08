@@ -171,18 +171,8 @@ func newSecretEncryptionRotateCmd(stdin io.Reader, stdout io.Writer) *cobra.Comm
 
 func migrationPrimaryRoleForState(state v1alpha1.State) func(string) secret.MaterialRole {
 	return func(name string) secret.MaterialRole {
-		if secret.ConsumedAsTLS(name, state) {
-			return secret.MaterialPrimary
-		}
-		env := stateview.Environment(state)
-		if env != nil {
-			spec, ok := env.Spec.Secrets[name]
-			if ok && spec.Generated != nil {
-				if spec.Generated.SSHKeyPair != nil {
-					return secret.MaterialSSHPrivate
-				}
-				return secret.MaterialPrimary
-			}
+		if s, ok := stateview.Secret(state, name); ok && s.Spec.Type == v1alpha1.SecretTypeSSHKeyPair {
+			return secret.MaterialSSHPrivate
 		}
 		if secret.ConsumedAsClusterSSHPrivate(name, state) || secret.ConsumedAsStorageSSHPrivate(name, state) || secret.ConsumedAsHostSSH(name, state) {
 			return secret.MaterialSSHPrivate

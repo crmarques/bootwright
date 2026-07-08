@@ -61,7 +61,7 @@ func vSphereMachineVars(state v1alpha1.State, provider v1alpha1.InfraProvider, p
 	if profile.Template != "" {
 		out["template"] = profile.Template
 	}
-	if path := secret.ResolvePath(vc.CredentialsRef.Name, stateview.Environment(state), secretsDir); path != "" {
+	if path := secret.ResolvePath(vc.CredentialsRef.Name, secret.NewIndex(state), secretsDir); path != "" {
 		out["credentialsPath"] = path
 	}
 	return out

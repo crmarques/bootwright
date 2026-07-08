@@ -40,6 +40,7 @@ func InventoryWithOwnershipRecordsAndPathOptions(state v1alpha1.State, paths Pat
 }
 
 func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1.State, paths PathOptions, localPolicy locality.Policy, records []ownership.ResourceRecord) map[string]any {
+	paths.SecretIndex = secret.NewIndex(state)
 	infraHostSet := infraReferencedHosts(state)
 	providerHostSet := providerReferencedHosts(state)
 	infraComponentHostSet := infraComponentReferencedHosts(state)
@@ -188,17 +189,17 @@ func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, paths 
 	if h.Spec.Access.SSH.User != "" {
 		entry["ansible_user"] = h.Spec.Access.SSH.User
 	}
-	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir); path != "" {
+	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
-	if path := machineKnownHostsPath(h, env, paths); path != "" {
+	if path := machineKnownHostsPath(h, paths); path != "" {
 		entry["ansible_ssh_common_args"] = sshCommonArgs(path)
 	}
 	return entry
 }
 
-func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, paths PathOptions) string {
-	return sshtrust.MachineKnownHostsPath(h, env, paths.SecretsDir, sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()))
+func machineKnownHostsPath(h v1alpha1.Machine, paths PathOptions) string {
+	return sshtrust.MachineKnownHostsPath(h, paths.SecretIndex, paths.SecretsDir, sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()))
 }
 
 func sshCommonArgs(knownHostsPath string) string {

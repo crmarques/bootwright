@@ -11,6 +11,26 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
+// upsertSecret replaces (or appends) a first-class State.Secrets entry by name,
+// mirroring the map-set semantics these tests relied on before secrets were
+// promoted out of Environment.spec.secrets. sourcePath sets Secret.SourcePath,
+// which scopes relative file-source paths (pass "" for context/generated
+// secrets that never resolve against a file).
+func upsertSecret(state *v1alpha1.State, name string, spec v1alpha1.SecretSpec, sourcePath string) {
+	for i := range state.Secrets {
+		if state.Secrets[i].Metadata.Name == name {
+			state.Secrets[i].Spec = spec
+			state.Secrets[i].SourcePath = sourcePath
+			return
+		}
+	}
+	state.Secrets = append(state.Secrets, v1alpha1.Secret{
+		Metadata:   v1alpha1.Metadata{Name: name},
+		Spec:       spec,
+		SourcePath: sourcePath,
+	})
+}
+
 func TestComponentPinsIncludeManagedDNSImage(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -102,9 +122,12 @@ func TestVarsProjectNodeSSHPrivateKeyPath(t *testing.T) {
 	sourceDir := t.TempDir()
 	state.Environments[0].SourcePath = filepath.Join(sourceDir, "environment.yaml")
 	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
-	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
-		File: "keys/admin.pub",
-	}
+	// Combined KeyPairRef sourced from an operator file: the private half lives at
+	// keys/admin (its .pub is derived), resolving against the secret's own file.
+	upsertSecret(&state, keyName, v1alpha1.SecretSpec{
+		Type:   v1alpha1.SecretTypeSSHKeyPair,
+		Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: "keys/admin"}},
+	}, state.Environments[0].SourcePath)
 	vars := VarsWithSecretsDir(state, t.TempDir())
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	want := filepath.Join(sourceDir, "keys", "admin")
@@ -119,11 +142,10 @@ func TestVarsProjectGeneratedNodeSSHPrivateKeyPath(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
-	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
-		Generated: &v1alpha1.EnvironmentSecretGenerated{
-			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
-		},
-	}
+	upsertSecret(&state, keyName, v1alpha1.SecretSpec{
+		Type:   v1alpha1.SecretTypeSSHKeyPair,
+		Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{KeyType: v1alpha1.SSHKeyPairTypeEd25519}},
+	}, "")
 	secretsDir := t.TempDir()
 	vars := VarsWithSecretsDir(state, secretsDir)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
@@ -142,10 +164,16 @@ func TestVarsProjectSplitNodeSSHPrivateKeyPath(t *testing.T) {
 		PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-admin-public"},
 		PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-admin-private"},
 	}
-	state.Environments[0].Spec.Secrets["cluster-admin-public"] = v1alpha1.EnvironmentSecretSpec{File: "keys/admin.pub"}
-	state.Environments[0].Spec.Secrets["cluster-admin-private"] = v1alpha1.EnvironmentSecretSpec{File: "keys/admin"}
 	sourceDir := t.TempDir()
 	state.Environments[0].SourcePath = filepath.Join(sourceDir, "environment.yaml")
+	upsertSecret(&state, "cluster-admin-public", v1alpha1.SecretSpec{
+		Type:   v1alpha1.SecretTypeSSHKeyPair,
+		Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PublicKey: "keys/admin.pub"}},
+	}, state.Environments[0].SourcePath)
+	upsertSecret(&state, "cluster-admin-private", v1alpha1.SecretSpec{
+		Type:   v1alpha1.SecretTypeSSHKeyPair,
+		Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: "keys/admin"}},
+	}, state.Environments[0].SourcePath)
 	vars := VarsWithSecretsDir(state, t.TempDir())
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	want := filepath.Join(sourceDir, "keys", "admin")

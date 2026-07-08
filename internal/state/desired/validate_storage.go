@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -92,7 +93,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephFIPS(cluster, machines, installProfiles)...)
-	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, env)...)
+	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, state)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.publicCIDRs[%d]", prefix, i), cidr)...)
 	}
@@ -102,7 +103,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
-	errs = append(errs, validateStorageCephManagement(prefix+".management", cluster, env)...)
+	errs = append(errs, validateStorageCephManagement(prefix+".management", cluster, state)...)
 	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines, storageSiteRequirement(state, cluster))...)
 	errs = append(errs, validateStorageCephOSDDrivegroups(prefix+".topology.osdDrivegroups", cluster)...)
@@ -138,7 +139,7 @@ func validateStorageCephSingleHostDefaults(prefix string, cluster v1alpha1.Stora
 	return errs
 }
 
-func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, env *v1alpha1.Environment) []string {
+func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, state v1alpha1.State) []string {
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.Host == "" {
@@ -148,30 +149,25 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 	} else {
 		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.addressRef", cluster, adm.Bootstrap.Host, adm.Bootstrap.AddressRef.Name, machines, adm.AddressRef.Name)...)
 	}
-	if ref := adm.ClusterSSHKeyRef.Name; ref != "" && env != nil {
-		// The cephadm cluster identity must be a declared SSH key pair: a
-		// generated.sshKeyPair, or a file-sourced/context-local key pair the
-		// operator provides. A generated secret of any other kind is rejected.
-		if spec, ok := env.Spec.Secrets[ref]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q does not match any Environment.spec.secrets[] entry", prefix, ref))
-		} else if spec.Generated != nil && spec.Generated.SSHKeyPair == nil {
-			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q must reference an sshKeyPair secret", prefix, ref))
+	if ref := adm.ClusterSSHKeyRef.Name; ref != "" {
+		// The cephadm cluster identity must be a declared sshKeyPair Secret.
+		if s, ok := stateview.Secret(state, ref); !ok {
+			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q is not a declared Secret", prefix, ref))
+		} else if s.Spec.Type != v1alpha1.SecretTypeSSHKeyPair {
+			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q must reference an sshKeyPair Secret", prefix, ref))
 		}
 	}
 	return errs
 }
 
-// validateStorageSecretRef checks that a required secret ref is set and, when
-// the Environment is available, resolves to a declared secret.
-func validateStorageSecretRef(owner, ref string, env *v1alpha1.Environment) []string {
+// validateStorageSecretRef checks that a required secret ref is set and
+// resolves to a declared Secret.
+func validateStorageSecretRef(owner, ref string, state v1alpha1.State) []string {
 	if ref == "" {
 		return []string{owner + " is required"}
 	}
-	if env == nil {
-		return nil
-	}
-	if _, ok := env.Spec.Secrets[ref]; !ok {
-		return []string{fmt.Sprintf("%s %q does not match any Environment.spec.secrets[] entry", owner, ref)}
+	if _, ok := stateview.Secret(state, ref); !ok {
+		return []string{fmt.Sprintf("%s %q is not a declared Secret", owner, ref)}
 	}
 	return nil
 }
@@ -459,7 +455,7 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 // placement resolves to ingress-role hosts (the same rules as the RGW ingress),
 // and the TLS/oauth2-proxy auth surface (enableAuth and oauth2Proxy are paired,
 // and every secret ref resolves).
-func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment) []string {
+func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	mgmt := cluster.Spec.Ceph.Management
 	if mgmt == nil {
 		return nil
@@ -485,8 +481,8 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress)...)
 	}
 	if mgmt.TLS != nil {
-		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, env)...)
-		errs = append(errs, validateStorageSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, env)...)
+		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
+		errs = append(errs, validateStorageSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, state)...)
 	}
 	// enableAuth and oauth2Proxy are paired: the mgmt-gateway delegates auth to a
 	// deployed oauth2-proxy, so enableAuth without it emits a flag whose daemon
@@ -509,9 +505,9 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 		if o.OIDCIssuerURL == "" {
 			errs = append(errs, prefix+".oauth2Proxy.oidcIssuerUrl is required")
 		}
-		errs = append(errs, validateStorageSecretRef(prefix+".oauth2Proxy.clientSecretRef", o.ClientSecretRef.Name, env)...)
+		errs = append(errs, validateStorageSecretRef(prefix+".oauth2Proxy.clientSecretRef", o.ClientSecretRef.Name, state)...)
 		if o.CookieSecretRef.Name != "" {
-			errs = append(errs, validateStorageSecretRef(prefix+".oauth2Proxy.cookieSecretRef", o.CookieSecretRef.Name, env)...)
+			errs = append(errs, validateStorageSecretRef(prefix+".oauth2Proxy.cookieSecretRef", o.CookieSecretRef.Name, state)...)
 		}
 	}
 	return errs

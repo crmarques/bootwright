@@ -102,10 +102,11 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 
 func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	env := stateview.Environment(state)
+	idx := secret.NewIndex(state)
 	var out []any
 	for _, cluster := range ManagedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
-		provider := cephprovider.Select(cluster, state.Entitlements, env, paths.SecretsDir)
+		provider := cephprovider.Select(cluster, state.Entitlements, idx, paths.SecretsDir)
 		asset := cephrender.StorageAssets("{{ bootwright_rendered_dir }}", v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}})[0]
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
@@ -161,10 +162,10 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		if user := cluster.Spec.Ceph.Cephadm.ClusterSSHUser; user != "" {
 			out["user"] = user
 		}
-		if privatePath := secret.ResolveSSHPrivateKeyPath(ref, env, paths.SecretsDir); privatePath != "" {
+		if privatePath := secret.ResolveSSHPrivateKeyPath(ref, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 			out["privateKeyPath"] = privatePath
 		}
-		if publicPath := secret.ResolveSSHPublicKeyPath(ref, env, paths.SecretsDir); publicPath != "" {
+		if publicPath := secret.ResolveSSHPublicKeyPath(ref, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
 			out["publicKeyPath"] = publicPath
 		}
 		if knownHostsPath := sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()); knownHostsPath != "" {
@@ -180,13 +181,13 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if machine.Spec.Access.SSH.User != "" {
 		out["user"] = machine.Spec.Access.SSH.User
 	}
-	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir); privatePath != "" {
+	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 		out["privateKeyPath"] = privatePath
 	}
-	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir); publicPath != "" {
+	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
 		out["publicKeyPath"] = publicPath
 	}
-	if knownHostsPath := machineKnownHostsPath(machine, env, paths); knownHostsPath != "" {
+	if knownHostsPath := machineKnownHostsPath(machine, paths); knownHostsPath != "" {
 		out["knownHostsPath"] = knownHostsPath
 	}
 	return out
@@ -223,8 +224,8 @@ func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Enviro
 	}
 	if mgmt.TLS != nil {
 		out["tls"] = map[string]any{
-			"certificatePath": secret.ResolvePath(mgmt.TLS.CertificateRef.Name, env, paths.SecretsDir),
-			"keyPath":         secret.ResolveTLSKeyPath(mgmt.TLS.KeyRef.Name, env, paths.SecretsDir),
+			"certificatePath": secret.ResolvePath(mgmt.TLS.CertificateRef.Name, paths.SecretIndex, paths.SecretsDir),
+			"keyPath":         secret.ResolveTLSKeyPath(mgmt.TLS.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
 		}
 	}
 	if o := mgmt.OAuth2Proxy; o != nil {
@@ -232,7 +233,7 @@ func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Enviro
 			"providerDisplayName": o.ProviderDisplayName,
 			"clientId":            o.ClientID,
 			"oidcIssuerURL":       o.OIDCIssuerURL,
-			"clientSecretPath":    secret.ResolvePath(o.ClientSecretRef.Name, env, paths.SecretsDir),
+			"clientSecretPath":    secret.ResolvePath(o.ClientSecretRef.Name, paths.SecretIndex, paths.SecretsDir),
 		}
 		if o.RedirectURL != "" {
 			oauth["redirectURL"] = o.RedirectURL
@@ -244,7 +245,7 @@ func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Enviro
 			oauth["allowlistDomains"] = append([]string(nil), o.AllowlistDomains...)
 		}
 		if o.CookieSecretRef.Name != "" {
-			oauth["cookieSecretPath"] = secret.ResolvePath(o.CookieSecretRef.Name, env, paths.SecretsDir)
+			oauth["cookieSecretPath"] = secret.ResolvePath(o.CookieSecretRef.Name, paths.SecretIndex, paths.SecretsDir)
 		}
 		out["oauth2Proxy"] = oauth
 	}

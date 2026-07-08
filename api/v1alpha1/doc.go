@@ -32,10 +32,7 @@
 // machine addresses, networkAttachments, machineProfiles, ...). Name-keyed
 // maps appear only where the key set is a closed, validated vocabulary:
 // ContainerCluster install.endpoints (api, api-int, ingress) and Environment
-// spec.componentImages (the componentType/implementation catalog). The one
-// bespoke codec is Environment spec.secrets (EnvironmentSecrets), authored
-// as a list of scalar names or single-key objects and decoded into a
-// name-keyed map.
+// spec.componentImages (the componentType/implementation catalog).
 //
 // Enable/disable. Optional feature blocks are presence-managed: omitting the
 // block keeps the upstream tool's default behavior, whether that default is

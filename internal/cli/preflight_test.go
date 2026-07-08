@@ -13,7 +13,7 @@ func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
 	if err := os.WriteFile(secretPath, []byte("[]\n"), 0o600); err != nil {
 		t.Fatalf("write secret: %v", err)
 	}
-	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{File: secretPath})
+	state := importedCephSecretState(v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: secretPath}})
 	entries, err := declaredSecretEntriesForContext("test", t.TempDir(), state)
 	if err != nil {
 		t.Fatalf("declaredSecretEntries: %v", err)
@@ -22,7 +22,7 @@ func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
 		t.Fatalf("entries = %+v, want one", entries)
 	}
 	entry := entries[0]
-	if entry.Name != "shared-ceph-external-details" || entry.Type != "file" || !entry.Present {
+	if entry.Name != "shared-ceph-external-details" || entry.Type != "file:opaque" || !entry.Present {
 		t.Fatalf("secret list entry = %+v", entry)
 	}
 	if len(entry.Paths) != 1 || entry.Paths[0] != secretPath {
@@ -30,12 +30,11 @@ func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
 	}
 }
 
-func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1.State {
+func importedCephSecretState(source v1alpha1.SecretSource) v1alpha1.State {
 	return v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"shared-ceph-external-details": secretSpec,
-			}},
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-external-details"},
+			Spec:     v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque, Source: source},
 		}},
 		StorageExports: []v1alpha1.StorageExport{{
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},

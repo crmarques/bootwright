@@ -16,19 +16,23 @@ func setArbiterAccessKey(state *v1alpha1.State, keyRef string) {
 	}
 }
 
-func envWithSecrets(secrets v1alpha1.EnvironmentSecrets) []v1alpha1.Environment {
-	return []v1alpha1.Environment{{
-		Metadata: v1alpha1.Metadata{Name: "env"},
-		Spec:     v1alpha1.EnvironmentSpec{Secrets: secrets},
-	}}
+// clusterSSHSecret builds a first-class Secret of the given type carrying a
+// generated source, the shape the cephadm cluster-identity ref resolves to.
+func clusterSSHSecret(name, secretType string) v1alpha1.Secret {
+	return v1alpha1.Secret{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.SecretSpec{
+			Type:   secretType,
+			Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{}},
+		},
+	}
 }
 
 func TestStorageClusterSSHKeyRefRelaxesUniformAccessKey(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSHKeyRef = v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"}
-	state.Environments = envWithSecrets(v1alpha1.EnvironmentSecrets{
-		"ceph-cluster-key": {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
-	})
+	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
+	state.Secrets = []v1alpha1.Secret{clusterSSHSecret("ceph-cluster-key", v1alpha1.SecretTypeSSHKeyPair)}
 	setArbiterAccessKey(&state, "ceph-arbiter-ssh")
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("clusterSSHKeyRef should permit per-node access keys, got errors: %v", errs)
@@ -47,11 +51,10 @@ func TestStorageDivergentAccessKeyRejectedWithoutClusterSSHKeyRef(t *testing.T) 
 func TestStorageClusterSSHKeyRefMustBeSSHKeyPair(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSHKeyRef = v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"}
-	state.Environments = envWithSecrets(v1alpha1.EnvironmentSecrets{
-		"ceph-cluster-key": {Generated: &v1alpha1.EnvironmentSecretGenerated{Credentials: &v1alpha1.GeneratedCredentialsSpec{}}},
-	})
+	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
+	state.Secrets = []v1alpha1.Secret{clusterSSHSecret("ceph-cluster-key", v1alpha1.SecretTypeUsernamePassword)}
 	errs := validateStorage(state)
-	if !containsSubstring(errs, "must reference an sshKeyPair secret") {
+	if !containsSubstring(errs, "must reference an sshKeyPair Secret") {
 		t.Fatalf("expected sshKeyPair error for a credentials secret, got: %v", errs)
 	}
 }
@@ -59,9 +62,9 @@ func TestStorageClusterSSHKeyRefMustBeSSHKeyPair(t *testing.T) {
 func TestStorageClusterSSHKeyRefMustBeDeclared(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSHKeyRef = v1alpha1.LocalObjectReference{Name: "missing-key"}
-	state.Environments = envWithSecrets(v1alpha1.EnvironmentSecrets{})
+	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
 	errs := validateStorage(state)
-	if !containsSubstring(errs, "does not match any Environment.spec.secrets") {
+	if !containsSubstring(errs, "is not a declared Secret") {
 		t.Fatalf("expected undeclared-secret error, got: %v", errs)
 	}
 }

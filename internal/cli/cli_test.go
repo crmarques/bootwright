@@ -1698,7 +1698,7 @@ func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 	}
 
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
-	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  retiredField: true\n\n  secrets:\n")
+	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  baseDomain: bootwright.test\n", "  baseDomain: bootwright.test\n  retiredField: true\n")
 	stdout, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", replacement, "--yes")
 	if code == 0 {
 		t.Fatalf("context init --yes unexpectedly accepted invalid replacement:\n%s", stdout)
@@ -2228,10 +2228,10 @@ func TestSecretListJSONReportsDeclaredStatus(t *testing.T) {
 	for _, entry := range report.Secrets {
 		byName[entry.Name] = entry
 	}
-	if got := byName["bmc-credentials"]; got.Type != "generated:credentials" || !got.Present {
+	if got := byName["bmc-credentials"]; got.Type != "generated:usernamePassword" || !got.Present {
 		t.Fatalf("bmc-credentials status = %+v", got)
 	}
-	if got := byName["openshift-pull-secret"]; got.Type != "context" || got.Present {
+	if got := byName["openshift-pull-secret"]; got.Type != "context:dockerConfigJson" || got.Present {
 		t.Fatalf("openshift-pull-secret status = %+v", got)
 	}
 }
@@ -2255,13 +2255,12 @@ func TestSecretListReportsUnreadableFileAsFailedEntry(t *testing.T) {
 	defer os.Chmod(blocked, 0o700)
 
 	state := v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			Metadata:   v1alpha1.Metadata{Name: "lab"},
+		Secrets: []v1alpha1.Secret{{
+			Metadata:   v1alpha1.Metadata{Name: "blocked-secret"},
 			SourcePath: filepath.Join(dir, "environment.yaml"),
-			Spec: v1alpha1.EnvironmentSpec{
-				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"blocked-secret": {File: path},
-				},
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeOpaque,
+				Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: path}},
 			},
 		}},
 	}
@@ -3398,6 +3397,7 @@ func addFixtureResourceSelection(t *testing.T, dir string) {
 	replaceInFile(t, filepath.Join(dir, "environment.yaml"), "  baseDomain: bootwright.test\n\n", `  baseDomain: bootwright.test
 
   resources:
+    - secrets.yaml
     - service-machines.yaml
     - networks.yaml
     - provider.yaml
