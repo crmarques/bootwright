@@ -237,7 +237,29 @@ func (s *ContextStore) Rotate() error {
 	return s.removeUnusedKeys(metadata.ActiveKeyID)
 }
 
+// MaterializeSelected materializes only the named materials into targetDir,
+// otherwise identical to MaterializeRuntime. It is the scoped-secrets primitive
+// for ClusterAddon hook runs: a hook receives only its declared secretRefs (and,
+// for its connection dir, only the target machines' SSH key material), never the
+// whole store. Names not present in the store are silently skipped (a missing
+// secret is reported by preflight, not here).
+func (s *ContextStore) MaterializeSelected(targetDir string, names []string) (err error) {
+	want := map[string]bool{}
+	for _, name := range names {
+		if name != "" {
+			want[name] = true
+		}
+	}
+	return s.materialize(targetDir, func(material MaterialStatus) bool {
+		return want[material.Key.Name]
+	})
+}
+
 func (s *ContextStore) MaterializeRuntime(targetDir string) (err error) {
+	return s.materialize(targetDir, func(MaterialStatus) bool { return true })
+}
+
+func (s *ContextStore) materialize(targetDir string, include func(MaterialStatus) bool) (err error) {
 	materials, err := s.ListMaterial()
 	if err != nil {
 		return err
@@ -261,7 +283,7 @@ func (s *ContextStore) MaterializeRuntime(targetDir string) (err error) {
 		}
 	}()
 	for _, material := range materials {
-		if material.State == MaterialStateMissing {
+		if material.State == MaterialStateMissing || !include(material) {
 			continue
 		}
 		if material.State != MaterialStateEncrypted {

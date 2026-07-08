@@ -40,6 +40,7 @@ func validateClusterAddons(state v1alpha1.State) []string {
 		errs = append(errs, validateClusterAddonProvides(extension)...)
 		errs = append(errs, validateClusterAddonRequires(extension)...)
 		errs = append(errs, validateClusterAddonAccepts(extension)...)
+		errs = append(errs, validateClusterAddonHooks(state, extension)...)
 	}
 	return errs
 }
@@ -159,19 +160,16 @@ func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterA
 	return errs
 }
 
-// clusterAddonCapabilities is the closed vocabulary shared by spec.provides and
-// spec.requires. capabilityVocabulary renders it for error messages.
-func knownClusterAddonCapability(capability string) bool {
-	switch capability {
-	case v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState:
-		return true
-	default:
-		return false
-	}
-}
-
-func capabilityVocabulary() string {
-	return fmt.Sprintf("{%s, %s, %s}", v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState)
+// clusterAddonCapabilityValid reports whether a spec.provides/spec.requires
+// capability is a valid token. The vocabulary is open — a capability is any
+// token-shaped string — so add-on content (not just compiled bootwright) can
+// declare and order on its own capabilities. Three names carry reserved
+// planning semantics in core: kubevirt (host-cluster provisioning of
+// KubeVirt-backed nodes) and dataFoundation (the storage-export attachment
+// effect provider); nmstate is ordering-only. Reserved names are still just
+// tokens here — their special handling lives in the planner, not this validator.
+func clusterAddonCapabilityValid(capability string) bool {
+	return provisioningTokenRe.MatchString(capability)
 }
 
 func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
@@ -184,8 +182,8 @@ func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
 			errs = append(errs, owner+" must not be empty")
 			continue
 		}
-		if !knownClusterAddonCapability(capability) {
-			errs = append(errs, fmt.Sprintf("%s %q must be one of %s", owner, capability, capabilityVocabulary()))
+		if !clusterAddonCapabilityValid(capability) {
+			errs = append(errs, fmt.Sprintf("%s %q is not a valid capability token", owner, capability))
 			continue
 		}
 		if seen[capability] {
@@ -215,8 +213,8 @@ func validateClusterAddonRequires(extension v1alpha1.ClusterAddon) []string {
 			errs = append(errs, owner+" must not be empty")
 			continue
 		}
-		if !knownClusterAddonCapability(capability) {
-			errs = append(errs, fmt.Sprintf("%s %q must be one of %s", owner, capability, capabilityVocabulary()))
+		if !clusterAddonCapabilityValid(capability) {
+			errs = append(errs, fmt.Sprintf("%s %q is not a valid capability token", owner, capability))
 			continue
 		}
 		if seen[capability] {
@@ -618,7 +616,7 @@ func validateBindingCapabilityOrdering(binding v1alpha1.ClusterAddonBinding, add
 		linked := map[int]bool{}
 		seen := map[string]bool{}
 		for _, capability := range caps {
-			if capability == "" || !knownClusterAddonCapability(capability) || seen[capability] {
+			if capability == "" || !clusterAddonCapabilityValid(capability) || seen[capability] {
 				continue
 			}
 			seen[capability] = true

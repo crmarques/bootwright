@@ -154,18 +154,18 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			wantSubstring: `spec.type "helm" must be one of {olm, manifestSet}`,
 		},
 		{
-			name: "unsupported-provided-capability",
+			name: "malformed-provided-capability",
 			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - storage\n", 1),
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - \"bad cap\"\n", 1),
 			},
-			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, dataFoundation, nmstate}`,
+			wantSubstring: `spec.provides[0] "bad cap" is not a valid capability token`,
 		},
 		{
-			name: "unsupported-required-capability",
+			name: "malformed-required-capability",
 			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  requires:\n    - storage\n", 1),
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  requires:\n    - \"bad cap\"\n", 1),
 			},
-			wantSubstring: `spec.requires[0] "storage" must be one of {kubevirt, dataFoundation, nmstate}`,
+			wantSubstring: `spec.requires[0] "bad cap" is not a valid capability token`,
 		},
 		{
 			name: "duplicated-provided-capability",

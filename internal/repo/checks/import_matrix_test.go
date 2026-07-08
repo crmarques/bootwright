@@ -26,7 +26,7 @@ var allowedImports = map[string][]string{
 	"internal/cli/output": {},
 
 	// Desired state: load/validate, point lookups, service graph, examples.
-	"internal/state/desired":  {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
+	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 	"internal/state/graph":    {"api/v1alpha1", "internal/addons/inputs", "internal/infra/artifacts", "internal/roles", "internal/state/view"},
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},
@@ -74,7 +74,7 @@ var allowedImports = map[string][]string{
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
 	"internal/converge/bastion":           {"api/v1alpha1", "internal/host/execution", "internal/render", "internal/roles"},
 	"internal/converge/bundle":            {},
-	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
 
 	// Storage and addons.
 	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view", "internal/storage/datafoundation"},
@@ -85,11 +85,12 @@ var allowedImports = map[string][]string{
 	"internal/storage/datafoundation": {"api/v1alpha1", "internal/secrets", "internal/state/view", "internal/storage/topology"},
 	"internal/storage/topology":       {"api/v1alpha1", "internal/state/view"},
 	"internal/addons":                 {},
+	"internal/addons/hooks":           {"api/v1alpha1", "internal/addons/inputs"},
 	"internal/addons/inputs":          {"api/v1alpha1"},
-	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
+	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/hooks", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
 	"internal/addons/plan":            {"api/v1alpha1", "internal/addons", "internal/addons/render"},
 	"internal/addons/records":         {"internal/host/safefs"},
-	"internal/addons/render":          {"api/v1alpha1", "internal/addons"},
+	"internal/addons/render":          {"api/v1alpha1", "internal/addons", "internal/addons/hooks"},
 
 	// Operator-facing application services. They return plain data; cli
 	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).

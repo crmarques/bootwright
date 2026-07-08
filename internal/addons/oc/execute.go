@@ -11,10 +11,35 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
+	"github.com/crmarques/bootwright/internal/addons/hooks"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
 )
+
+// HookRunner executes an add-on's hooks at a lifecycle point. The add-on apply
+// engine calls it at preApply, postOperatorReady, and postReady; the concrete
+// implementation lives in internal/converge/workflow (it needs ansible, secrets,
+// and state). A nil HookRunner is a no-op, so add-ons without hooks and unit
+// tests need not wire one.
+type HookRunner interface {
+	Run(ctx context.Context, lifecycle string) error
+}
+
+// HookError marks a hook run failure so the caller records a hook-specific,
+// non-secret summary rather than naming an oc apply target. Detail must hold no
+// secret bytes.
+type HookError struct {
+	Hook      string
+	Lifecycle string
+	Detail    string
+}
+
+func (e *HookError) Error() string {
+	return fmt.Sprintf("hook %q (%s) failed: %s", e.Hook, e.Lifecycle, e.Detail)
+}
+
+func (e *HookError) summary() string { return e.Error() }
 
 type TaskResult struct {
 	Skipped bool
@@ -32,6 +57,9 @@ type RunConfig struct {
 	// matches for kind" output stays off the console. The mutating oc apply
 	// always uses the runner passed to Apply. Nil falls back to that runner.
 	ReadRunner OCRunner
+	// Hooks, when set, executes the add-on's lifecycle hooks (preApply,
+	// postOperatorReady, postReady). Nil disables hooks.
+	Hooks HookRunner
 }
 
 func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
@@ -39,6 +67,15 @@ func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
 		return c.ReadRunner
 	}
 	return fallback
+}
+
+// runHooks executes the add-on's hooks at the lifecycle, or no-ops when no
+// executor is wired (add-ons without hooks, unit tests).
+func (c RunConfig) runHooks(ctx context.Context, lifecycle string) error {
+	if c.Hooks == nil {
+		return nil
+	}
+	return c.Hooks.Run(ctx, lifecycle)
 }
 
 func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (TaskResult, error) {
@@ -52,8 +89,12 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	// Only a check-backed Ready() is evidence the add-on is still live on-cluster.
 	// With no declared checks Ready() is vacuously true, so a matching record would
 	// skip forever even after someone deletes the add-on's resources with oc. Fall
-	// through and re-apply (oc apply is idempotent) when there are no checks.
-	if len(plan.Extension.Spec.Readiness.Checks) > 0 {
+	// through and re-apply (oc apply is idempotent) when there are no checks. A
+	// run: always hook at preApply/postOperatorReady must run every apply, so it
+	// blocks the pre-check short-circuit (applyExtension re-runs, idempotently, and
+	// the executor skips unchanged onChange hooks by their own per-hook digest).
+	if len(plan.Extension.Spec.Readiness.Checks) > 0 &&
+		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) {
 		if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
 			record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 			if err != nil {
@@ -93,9 +134,13 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		// it gets its own summary rather than naming the already-applied
 		// Subscription as a failed apply target.
 		var gate *csvGateError
-		if errors.As(err, &gate) {
+		var hookErr *HookError
+		switch {
+		case errors.As(err, &gate):
 			record.LastObserved = gate.summary()
-		} else {
+		case errors.As(err, &hookErr):
+			record.LastObserved = hookErr.summary()
+		default:
 			record.LastObserved = applyFailureSummary(failedID)
 		}
 		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
@@ -124,7 +169,8 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err != nil {
 		return TaskResult{}, err
 	}
-	if found && record.DesiredHash == hash && record.Status == extensionrecords.RecordStatusReady {
+	if found && record.DesiredHash == hash && record.Status == extensionrecords.RecordStatusReady &&
+		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPostReady) {
 		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {
 			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
@@ -155,6 +201,19 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		}
 		return TaskResult{}, err
 	}
+	// postReady hooks run once the add-on's readiness checks pass (e.g. a day-2
+	// registration). A hookErr from a fail-mode hook fails the task.
+	if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostReady); err != nil {
+		record.Status = extensionrecords.RecordStatusFailed
+		var hookErr *HookError
+		if errors.As(err, &hookErr) {
+			record.LastObserved = hookErr.summary()
+		}
+		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
+			err = errors.Join(err, saveErr)
+		}
+		return TaskResult{}, err
+	}
 	record.Status = extensionrecords.RecordStatusReady
 	record.Phase = extensionrecords.RecordPhaseComplete
 	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
@@ -175,6 +234,9 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 // "no matches for kind", forcing the operator to re-run apply to converge.
 func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
 	kubeconfig := cfg.Kubeconfig
+	if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPreApply); err != nil {
+		return observed, "", err
+	}
 	switch plan.Extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLM:
 		operator, err := extensionrender.OperatorResources(plan.Extension)
@@ -189,12 +251,19 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		if err != nil {
 			return observed, "", err
 		}
-		if len(custom) > 0 {
+		// The CSV gate runs when there are custom resources OR a postOperatorReady
+		// hook: both need the operator's CRDs established (a hook that produces the
+		// external-cluster Secret + StorageCluster runs after the operator is ready).
+		hasPostOperatorReady := hooks.HasLifecycle(plan.Extension, v1alpha1.ClusterAddonHookPostOperatorReady)
+		if len(custom) > 0 || hasPostOperatorReady {
 			olm := plan.Extension.Spec.OLM
 			// A gate timeout returns a typed csvGateError (handled by the caller),
 			// so failedID stays empty: the operator resources applied successfully
 			// and naming the Subscription as a failed apply target would be wrong.
 			if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, olm.Namespace.Name, olm.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
+				return observed, "", err
+			}
+			if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady); err != nil {
 				return observed, "", err
 			}
 			observed, failedID, err = applyResources(ctx, runner, kubeconfig, plan.Policy, custom, observed)

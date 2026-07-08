@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
+	"github.com/crmarques/bootwright/internal/addons/hooks"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -125,6 +126,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 		Policy     desiredHashPolicy     `json:"policy"`
 		Resources  []map[string]any      `json:"resources,omitempty"`
 		Manifests  []manifestFile        `json:"manifests,omitempty"`
+		HookDigest string                `json:"hookDigest,omitempty"`
 	}{
 		APIVersion: v1alpha1.APIVersion,
 		Extension:  extension,
@@ -134,6 +136,11 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 			Prune:           policy.Prune,
 			ContinueOnError: policy.ContinueOnError,
 		},
+		// The Extension field already serializes the hook specs; HookDigest folds
+		// in the shipped content (playbook, vendored trees, manifest templates) so
+		// editing a shipped playbook without touching the add-on YAML still moves
+		// the desired hash and re-runs the add-on.
+		HookDigest: hookContentDigest(extension),
 	}
 	switch extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLM:
@@ -213,6 +220,23 @@ func cloneAnyMap(in map[string]any) map[string]any {
 func stringValue(value any) string {
 	s, _ := value.(string)
 	return s
+}
+
+// hookContentDigest folds every hook's shipped-content digest into one value for
+// the add-on desired hash, so a change to any hook's playbook, vendored tree, or
+// manifest template re-runs the add-on. Order follows spec.hooks.
+func hookContentDigest(extension v1alpha1.ClusterAddon) string {
+	if len(extension.Spec.Hooks) == 0 {
+		return ""
+	}
+	sum := sha256.New()
+	for _, hook := range extension.Spec.Hooks {
+		sum.Write([]byte(hook.Name))
+		sum.Write([]byte{0})
+		sum.Write([]byte(hooks.ContentDigest(extension.SourcePath, hook)))
+		sum.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
 
 func ManifestPath(extension v1alpha1.ClusterAddon, manifest v1alpha1.ClusterAddonManifestRef) string {

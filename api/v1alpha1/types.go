@@ -275,6 +275,25 @@ const (
 	ClusterAddonInputSchemaTypeObject               = "object"
 	ClusterAddonInputEffectStorageExportAttachment  = "storageExportAttachment"
 
+	// ClusterAddonHook lifecycle vocabulary — the points in the add-on apply a
+	// hook may anchor to. ClusterAddonHookLifecycles() is the ordered accessor.
+	ClusterAddonHookPreApply          = "preApply"
+	ClusterAddonHookPostOperatorReady = "postOperatorReady"
+	ClusterAddonHookPostReady         = "postReady"
+
+	// ClusterAddonHook target limit: run against the first reachable resolved
+	// machine (default) or all of them.
+	ClusterAddonHookTargetLimitFirstReachable = "firstReachable"
+	ClusterAddonHookTargetLimitAll            = "all"
+
+	// ClusterAddonHook output format: text (default, raw) or json (captured bytes
+	// must parse as JSON).
+	ClusterAddonHookOutputFormatText = "text"
+	ClusterAddonHookOutputFormatJSON = "json"
+
+	// DefaultClusterAddonHookTimeout bounds a hook playbook run when unset.
+	DefaultClusterAddonHookTimeout = "10m"
+
 	StorageClusterTypeCeph = "ceph"
 
 	StorageClusterManagementManaged  = "managed"

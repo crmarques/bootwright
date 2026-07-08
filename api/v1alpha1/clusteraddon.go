@@ -16,6 +16,9 @@ type ClusterAddonSpec struct {
 	OLM         *ClusterAddonOLMSpec     `yaml:"olm,omitempty" json:"olm,omitempty"`
 	ManifestSet *ClusterAddonManifestSet `yaml:"manifestSet,omitempty" json:"manifestSet,omitempty"`
 	Readiness   ClusterAddonReadiness    `yaml:"readiness,omitempty" json:"readiness,omitempty"`
+	// Hooks are addon-shipped Ansible playbooks and/or templated manifests run at
+	// lifecycle points of the add-on apply. See ClusterAddonHook.
+	Hooks []ClusterAddonHook `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 }
 
 type ClusterAddonAccepts struct {

@@ -85,7 +85,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 
 	if phaseSet[ApplyPhaseAddons] {
-		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseBase]); err != nil {
+		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
 			return nil, err
 		}
 		if err := planStorageAttachmentActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
@@ -104,7 +104,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	return graph.Lower()
 }
 
-func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool) error {
+func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
 		return err
@@ -123,10 +123,16 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			// to report ready; it provides the capabilities downstream tasks need.
 			id := "addon." + binding.Cluster + "." + extension.Name
 			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
+			// A hook that targets another cluster (its own Ceph nodes, or another
+			// container cluster) must run after that cluster is provisioned. Add the
+			// storage.<ceph> / wait.<ocp> edges the hook's fromInput chain resolves
+			// to, mirroring planStorageAttachmentActivities' dependency shape.
+			hookDeps := hookCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
+			addonDeps := appendUniqueStrings(append([]string(nil), deps...), hookDeps...)
 			if err := graph.Add(Activity{
 				ID:                   id,
 				Provides:             provides,
-				ExplicitDependencies: append([]string(nil), deps...),
+				ExplicitDependencies: addonDeps,
 				Task: ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:          id,

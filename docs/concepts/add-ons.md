@@ -321,6 +321,131 @@ The required fields depend on the check `type`:
 | `condition` | `apiVersion`, `kind`, `name`, `condition.type`, `condition.status` | `subscription` |
 | `resourceExists` | `apiVersion`, `kind`, `name` | `subscription`, `condition` |
 
+### Hooks
+
+`spec.hooks` let an add-on ship its own imperative integration logic — Ansible
+playbooks and/or templated Kubernetes manifests — instead of that logic being
+compiled into Bootwright. A hook runs at a lifecycle point of the add-on apply,
+optionally against fleet machines resolved from a binding input, captures
+declared outputs, and applies templated manifests to the bound cluster. This is
+how, for example, the OpenShift Data Foundation add-on gathers external Ceph
+cluster details and applies the Rook `Secret` + `StorageCluster` itself.
+
+The add-on directory is self-contained: the add-on YAML plus `playbooks/`,
+`roles/`, `collections/`, and `manifests/` subtrees. Hook paths are relative to
+the add-on file and travel with the input tree through `context init`.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `hooks[].name` | Yes | — | Hook name, unique within the add-on. |
+| `hooks[].lifecycle` | Yes | — | `preApply` (before the operator install), `postOperatorReady` (after the operator CSV reaches Succeeded, before `olm.customResources`; olm add-ons only), or `postReady` (after readiness checks pass). |
+| `hooks[].playbook` | One of playbook/manifests | — | Entry playbook, relative to the add-on file. |
+| `hooks[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
+| `hooks[].target` | For a playbook hook | — | Machines the playbook runs against (see below). |
+| `hooks[].secretRefs[]` | No | — | `Secret` names materialized into the hook's scoped secrets directory — only these, never the whole store. |
+| `hooks[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. |
+| `hooks[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
+| `hooks[].run` | No | `onChange` | `onChange` skips a hook whose content and inputs are unchanged; `always` re-runs every apply. |
+| `hooks[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |
+| `hooks[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. |
+| `hooks[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
+
+The `target` selects machines a playbook runs against — exactly one of
+`boundCluster` (the bound container cluster's nodes), `fromInput` (dereference a
+binding input's `refKind` property to its object, then to that object's nodes —
+a `StorageExport` resolves through its `storageClusterRef` to the Ceph nodes), or
+a static `clusters`/`machines` list. `target.limit` is `firstReachable`
+(default) or `all`. A hook can never target the controller/localhost.
+
+A hook run receives scoped variables: `bootwright_bound_cluster`,
+`bootwright_hook_outputs_dir`, `bootwright_hook_secrets_dir` (only the declared
+`secretRefs`), `bootwright_hook_inputs`, and `bootwright_hook_refs` (the resolved
+ref objects, so a playbook can read e.g. `exportRef.spec.dataFoundation`).
+
+Manifest templates use whole-scalar tokens: `{{ cluster }}`,
+`{{ output <name> }}`, `{{ input <in>.<prop> }}`, `{{ secret <name> }}`, and
+`{{ exportDetails <in>.<prop> }}` (the core-produced external-cluster-details
+payload for a referenced `StorageExport`). Each token must be an entire YAML
+scalar value.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-data-foundation
+spec:
+  type: olm
+  provides: [dataFoundation]
+  accepts:
+    inputs:
+      - name: external-storage
+        schema:
+          type: object
+          required: [exportRef]
+          properties:
+            exportRef:
+              refKind: StorageExport
+  olm:
+    namespace:
+      name: openshift-storage
+      create: true
+    operatorGroup:
+      name: openshift-storage
+      targetNamespaces: [openshift-storage]
+    subscription:
+      name: odf-operator
+      package: odf-operator
+      channel: stable-4.21
+      source: redhat-operators
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+  hooks:
+    - name: gather-external-details
+      lifecycle: postOperatorReady
+      target:
+        fromInput:
+          input: external-storage
+          property: exportRef
+      playbook: playbooks/export-external-details.yml
+      outputs:
+        - name: externalDetails
+          file: external-cluster-details.json
+          secret: true
+          format: json
+      manifests:
+        - path: manifests/rook-external-details-secret.yaml
+          reclaimRendered: true
+        - path: manifests/storage-cluster.yaml
+        - path: manifests/storage-system.yaml
+  readiness:
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-storage
+        subscription: odf-operator
+```
+
+A shipped manifest template embeds the captured output as a whole scalar:
+
+```text
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rook-ceph-external-cluster-details
+  namespace: openshift-storage
+  annotations:
+    bootwright.io/container-cluster-ref: "{{ cluster }}"
+type: Opaque
+stringData:
+  external_cluster_details: "{{ output externalDetails }}"
+```
+
+A hook that ships no playbook (`manifests` only) applies templated manifests
+using values already available — binding inputs, the `{{ exportDetails … }}`
+payload core produced — without running anything on a machine.
+
+For imperative work that is not tied to an add-on's lifecycle, use a
+[provisioning playbook](provisioning-playbooks.md) instead.
+
 ## ClusterAddonProfile
 
 `ClusterAddonProfile` declares an ordered, reusable group of add-ons and nested

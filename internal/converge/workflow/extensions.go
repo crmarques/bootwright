@@ -9,7 +9,7 @@ import (
 	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
 )
 
-func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
+func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
 	if task.Extension == nil {
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("add-on task %s has no add-on plan", task.Entry.ID)}
 	}
@@ -32,6 +32,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 		StartedAt:    time.Now(),
 		PollInterval: 0,
 		ReadRunner:   readRunner,
+		Hooks:        newAddonHookExecutor(stdout, stderr, runsDir, runID, opts, task, runnerFactory),
 	}
 	var result extensionoc.TaskResult
 	var err error

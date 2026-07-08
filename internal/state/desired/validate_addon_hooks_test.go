@@ -1,0 +1,142 @@
+package desiredstate
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+func hookAddon(dir string, hook v1alpha1.ClusterAddonHook) v1alpha1.ClusterAddon {
+	return v1alpha1.ClusterAddon{
+		Metadata:   v1alpha1.Metadata{Name: "odf"},
+		SourcePath: filepath.Join(dir, "odf.yaml"),
+		Spec: v1alpha1.ClusterAddonSpec{
+			Type: v1alpha1.ClusterAddonTypeOLM,
+			Accepts: v1alpha1.ClusterAddonAccepts{
+				Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
+					Name: "external-storage",
+					Schema: v1alpha1.ClusterAddonInputSchema{
+						Properties: map[string]v1alpha1.ClusterAddonInputProperty{
+							"exportRef": {RefKind: v1alpha1.KindStorageExport},
+						},
+					},
+				}},
+			},
+			Hooks: []v1alpha1.ClusterAddonHook{hook},
+		},
+	}
+}
+
+func hookErrsContain(t *testing.T, errs []string, want string) {
+	t.Helper()
+	for _, e := range errs {
+		if strings.Contains(e, want) {
+			return
+		}
+	}
+	t.Fatalf("errors %v do not contain %q", errs, want)
+}
+
+func TestValidateHookLifecycleOnManifestSet(t *testing.T) {
+	dir := t.TempDir()
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
+	})
+	addon.Spec.Type = v1alpha1.ClusterAddonTypeManifestSet
+	errs := validateClusterAddonHooks(v1alpha1.State{}, addon)
+	hookErrsContain(t, errs, "postOperatorReady is only valid for spec.type=olm")
+}
+
+func TestValidateHookTargetModes(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	// playbook set but no target mode.
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
+		Playbook:  "playbooks/p.yml",
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "target must select")
+
+	// two target modes.
+	addon = hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
+		Playbook:  "playbooks/p.yml",
+		Target: v1alpha1.ClusterAddonHookTarget{
+			BoundCluster: true,
+			FromInput:    &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"},
+		},
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "exactly one of")
+}
+
+func TestValidateHookFromInputUnknownInput(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
+		Playbook:  "playbooks/p.yml",
+		Target: v1alpha1.ClusterAddonHookTarget{
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "nope", Property: "exportRef"},
+		},
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), `input "nope" does not name`)
+}
+
+func TestValidateHookManifestUndeclaredOutput(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  x: \"{{ output missing }}\"\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), `undeclared output "missing"`)
+}
+
+func TestValidateHookManifestOnlyValid(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  x: \"{{ exportDetails external-storage.exportRef }}\"\n  c: \"{{ cluster }}\"\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "attach",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
+	})
+	if errs := validateClusterAddonHooks(v1alpha1.State{}, addon); len(errs) != 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+}
+
+func TestValidateHookOutputConsumerMustFail(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  x: \"{{ output d }}\"\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:        "h",
+		Lifecycle:   v1alpha1.ClusterAddonHookPostOperatorReady,
+		Playbook:    "playbooks/p.yml",
+		FailureMode: v1alpha1.ProvisioningPlaybookFailureContinue,
+		Target:      v1alpha1.ClusterAddonHookTarget{BoundCluster: true},
+		Outputs:     []v1alpha1.ClusterAddonHookOutput{{Name: "d", File: "d.json"}},
+		Manifests:   []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "failureMode must be fail")
+}
+
+func writeHookFile(t *testing.T, dir, rel, body string) {
+	t.Helper()
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
