@@ -271,6 +271,107 @@ func TestManagedProxyURLErrors(t *testing.T) {
 	}
 }
 
+func TestBypasses(t *testing.T) {
+	eff := &Effective{NoProxy: []string{".corp.internal", "example.com", "10.0.0.0/8", "192.168.1.5"}}
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"sat.corp.internal", true},              // subdomain of leading-dot domain
+		{"corp.internal", true},                  // the domain itself
+		{"a.b.example.com", true},                // subdomain of bare domain
+		{"example.com", true},                    // bare domain exact
+		{"notexample.com", false},                // not a subdomain
+		{"SAT.CORP.INTERNAL", true},              // case-insensitive
+		{"10.1.2.3", true},                       // inside CIDR
+		{"11.1.2.3", false},                      // outside CIDR
+		{"192.168.1.5", true},                    // exact IP literal
+		{"192.168.1.6", false},                   // different IP
+		{"https://sat.corp.internal/pulp", true}, // URL authority input
+		{"sat.corp.internal:8443", true},         // host:port input
+		{"", false},                              // empty host
+	}
+	for _, c := range cases {
+		if got := Bypasses(eff, c.host); got != c.want {
+			t.Errorf("Bypasses(%q) = %v, want %v", c.host, got, c.want)
+		}
+	}
+	if Bypasses(nil, "x.corp.internal") {
+		t.Error("Bypasses(nil eff) = true")
+	}
+	if Bypasses(&Effective{}, "x.corp.internal") {
+		t.Error("Bypasses(empty noProxy) = true")
+	}
+	if !Bypasses(&Effective{NoProxy: []string{"*"}}, "anything.example.org") {
+		t.Error("\"*\" should bypass everything")
+	}
+}
+
+func TestNoProxyForLiteralMatchers(t *testing.T) {
+	eff := &Effective{NoProxy: []string{".corp.internal", "10.0.0.0/8", "10.1.2.3", "192.168.0.0/16", "example.com"}}
+	got := NoProxyForLiteralMatchers(eff)
+	for _, want := range []string{".corp.internal", "10.1.2.3", "example.com"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("literal matchers missing %q; got %v", want, got)
+		}
+	}
+	for _, cidr := range []string{"10.0.0.0/8", "192.168.0.0/16"} {
+		if slices.Contains(got, cidr) {
+			t.Errorf("raw CIDR %q should be dropped; got %v", cidr, got)
+		}
+	}
+	if NoProxyForLiteralMatchers(nil) != nil {
+		t.Error("NoProxyForLiteralMatchers(nil) should be nil")
+	}
+}
+
+// TestResolveNoProxyExpandsCIDRForInternalServiceIPs is the regression for the
+// reported rhsm.conf bug: an internal service (mirror/artifact server/Satellite)
+// reachable at an IP inside a no_proxy CIDR must be pinned as a concrete literal
+// so a bypass matcher that cannot handle CIDRs still bypasses it.
+func TestResolveNoProxyExpandsCIDRForInternalServiceIPs(t *testing.T) {
+	env := envWithExternalProxy()
+	env.Spec.InfraComponents.Proxies[0].Connection.NoProxy = []string{"10.0.0.0/8"}
+	env.Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
+		Name: "mirror", Management: v1alpha1.EnvironmentComponentExternal, URL: "https://10.4.5.6:5000",
+	}}
+	env.Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
+		Name: "artifacts", Management: v1alpha1.EnvironmentComponentExternal,
+		Endpoints: []v1alpha1.EnvironmentArtifactServerEndpoint{{Name: "http", URL: "http://10.7.8.9:8080"}},
+	}}
+	env.Spec.InfraComponents.NTP = []v1alpha1.EnvironmentNTPComponent{{
+		Name: "ntp", Management: v1alpha1.EnvironmentComponentExternal, Address: "10.3.3.3",
+	}}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{*env},
+		Entitlements: []v1alpha1.Entitlement{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{RHSM: &v1alpha1.EntitlementRHSM{
+				Satellite: &v1alpha1.EntitlementRHSMSatellite{ContentBaseURL: "https://10.11.12.13/pulp"},
+			}},
+		}},
+	}
+	got := Resolve(state, env)
+	if got == nil {
+		t.Fatal("Resolve returned nil")
+	}
+	for _, want := range []string{"10.0.0.0/8", "10.4.5.6", "10.7.8.9", "10.3.3.3", "10.11.12.13"} {
+		if !slices.Contains(got.NoProxy, want) {
+			t.Errorf("NoProxy missing pinned literal %q; got %v", want, got.NoProxy)
+		}
+	}
+	// And the literal-only variant keeps those pins but drops the raw CIDR.
+	literal := NoProxyForLiteralMatchers(got)
+	if slices.Contains(literal, "10.0.0.0/8") {
+		t.Errorf("literal variant must not contain the raw CIDR; got %v", literal)
+	}
+	for _, want := range []string{"10.4.5.6", "10.11.12.13"} {
+		if !slices.Contains(literal, want) {
+			t.Errorf("literal variant missing pinned host %q; got %v", want, literal)
+		}
+	}
+}
+
 func TestMirrorHost(t *testing.T) {
 	cases := map[string]string{
 		"registry.local:5000":              "registry.local",

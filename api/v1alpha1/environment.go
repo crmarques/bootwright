@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"bytes"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -69,16 +70,75 @@ type EnvironmentInstallDefaultsSpec struct {
 	NodeSSH       NodeSSHSpec `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
 }
 
+// EnvironmentProxyForSpec overrides, per consumer, which proxy from
+// spec.infraComponents.proxies applies. Each field is either a proxy name (an
+// override), the sentinel "none" (opt that consumer out), or empty (inherit the
+// proxy marked default: true). With one default proxy and no overrides, all
+// three consumers route through it. The consumer set is closed.
 type EnvironmentProxyForSpec struct {
-	Bootwright              string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
+	// Bootwright is the proxy Bootwright's own node-side runtime actions
+	// (package managers, downloads, host tooling) egress through. Empty inherits
+	// the default proxy; "none" opts out. It may be managed or external — these
+	// actions run after infra provisioning, when a managed proxy exists.
+	Bootwright string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
+	// ContainerClusterInstall is the proxy rendered into the OpenShift/OKD
+	// installer input. Empty inherits the default proxy; "none" opts out. It may
+	// be managed or external.
 	ContainerClusterInstall string `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
-	// MachineOSInstall names the proxy the managed-OS (Anaconda) install
-	// fetch routes through: a boot ISO carries no packages, so Anaconda
-	// reaches the install tree or the Red Hat CDN over the network during
-	// install, which on a proxied estate must go through this proxy. Only an
-	// external proxy applies — the node installs before any managed proxy
-	// could exist. Empty or "none" installs with no proxy.
+	// MachineOSInstall is the proxy the managed-OS (Anaconda) install fetch
+	// routes through: a boot ISO carries no packages, so Anaconda reaches the
+	// install tree or the Red Hat CDN over the network during install, which on
+	// a proxied estate must go through this proxy. Empty inherits the default
+	// proxy; "none" opts out. Only an external proxy applies — the node installs
+	// before any managed proxy could exist — so a managed value or a managed
+	// inherited default is rejected at validation.
 	MachineOSInstall string `yaml:"machineOSInstall,omitempty" json:"machineOSInstall,omitempty"`
+}
+
+// Proxy consumers: the closed set of components that route through a proxy. Each
+// names a field of EnvironmentProxyForSpec.
+const (
+	ProxyConsumerBootwright              = "bootwright"
+	ProxyConsumerContainerClusterInstall = "containerClusterInstall"
+	ProxyConsumerMachineOSInstall        = "machineOSInstall"
+)
+
+// DefaultProxyName returns the name of the proxy marked default: true, or "" if
+// none is. At most one proxy may be default (enforced by validation); the first
+// is returned defensively.
+func (s EnvironmentSpec) DefaultProxyName() string {
+	for _, entry := range s.InfraComponents.Proxies {
+		if entry.Default {
+			return entry.Name
+		}
+	}
+	return ""
+}
+
+// ProxyNameFor resolves the proxy name a consumer routes through: an explicit
+// override, "" for "none" (opt out), or the default proxy when the slot is
+// empty (inherit). An unknown consumer resolves to "". The returned name is fed
+// to the proxy resolver; "" means no proxy.
+func (s EnvironmentSpec) ProxyNameFor(consumer string) string {
+	var slot string
+	switch consumer {
+	case ProxyConsumerBootwright:
+		slot = s.ProxyFor.Bootwright
+	case ProxyConsumerContainerClusterInstall:
+		slot = s.ProxyFor.ContainerClusterInstall
+	case ProxyConsumerMachineOSInstall:
+		slot = s.ProxyFor.MachineOSInstall
+	default:
+		return ""
+	}
+	slot = strings.TrimSpace(slot)
+	if slot == EnvironmentComponentNone {
+		return ""
+	}
+	if slot != "" {
+		return slot
+	}
+	return s.DefaultProxyName()
 }
 
 type EnvironmentSecretStorageSpec struct {
@@ -99,7 +159,15 @@ type EnvironmentInfraComponentsSpec struct {
 }
 
 type EnvironmentProxyComponent struct {
-	Name         string               `yaml:"name" json:"name"`
+	Name string `yaml:"name" json:"name"`
+	// Default marks the proxy every consumer (bootwright,
+	// containerClusterInstall, machineOSInstall) routes through unless the
+	// consumer names another proxy or opts out with "none" in spec.proxyFor. At
+	// most one proxy may be default. A managed default is rejected for
+	// machineOSInstall (the node installs before any managed proxy exists), so
+	// with a managed default set, machineOSInstall must be given explicitly — an
+	// external proxy or "none".
+	Default      bool                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Management   string               `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	// EndpointRef names an endpoints[] entry on the managed component

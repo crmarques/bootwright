@@ -135,15 +135,18 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	if len(env.Spec.ContainerClusters) > 0 {
 		out["containerClusters"] = stringSliceAny(env.Spec.ContainerClusters)
 	}
+	// Echo the resolved (post-default, post-opt-out) proxy each consumer routes
+	// through, not the raw authored slot: an omitted-but-inherited consumer shows
+	// the default proxy's name, and a "none" opt-out shows nothing.
 	proxyFor := map[string]any{}
-	if env.Spec.ProxyFor.Bootwright != "" {
-		proxyFor["bootwright"] = env.Spec.ProxyFor.Bootwright
-	}
-	if env.Spec.ProxyFor.ContainerClusterInstall != "" {
-		proxyFor["containerClusterInstall"] = env.Spec.ProxyFor.ContainerClusterInstall
-	}
-	if env.Spec.ProxyFor.MachineOSInstall != "" {
-		proxyFor["machineOSInstall"] = env.Spec.ProxyFor.MachineOSInstall
+	for _, consumer := range []string{
+		v1alpha1.ProxyConsumerBootwright,
+		v1alpha1.ProxyConsumerContainerClusterInstall,
+		v1alpha1.ProxyConsumerMachineOSInstall,
+	} {
+		if name := env.Spec.ProxyNameFor(consumer); name != "" {
+			proxyFor[consumer] = name
+		}
 	}
 	if len(proxyFor) > 0 {
 		out["proxyFor"] = proxyFor
@@ -265,6 +268,14 @@ func effectiveProxyVars(eff *proxy.Effective) map[string]any {
 		sorted := append([]string(nil), eff.NoProxy...)
 		sort.SliceStable(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
 		out["noProxy"] = sorted
+		// noProxyLiteral drops raw CIDR entries that python-rhsm's proxy bypass
+		// cannot match; rhsm.conf's [server] no_proxy is fed from this. CIDR-covered
+		// internal hosts already survive as pinned literals (see ResolveNoProxy).
+		if literal := proxy.NoProxyForLiteralMatchers(eff); len(literal) > 0 {
+			sortedLiteral := append([]string(nil), literal...)
+			sort.SliceStable(sortedLiteral, func(i, j int) bool { return sortedLiteral[i] < sortedLiteral[j] })
+			out["noProxyLiteral"] = sortedLiteral
+		}
 	}
 	if eff.Auth.Name != "" {
 		out["auth"] = map[string]any{"proxyAuthRef": eff.Auth.Name}

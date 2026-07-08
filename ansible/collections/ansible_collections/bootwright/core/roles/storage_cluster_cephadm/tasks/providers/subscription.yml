@@ -59,6 +59,43 @@
     disable_gpg_check: true
   when: bootwright_ceph_rhsm_satellite_hostname | length > 0
 
+# noProxy honouring for rhsm.conf has one gap the other consumers do not: python-rhsm's
+# [server] no_proxy cannot match a CIDR entry (10.0.0.0/8), only a hostname or a
+# domain suffix. Render handles the matchable cases — it feeds rhsm.conf the
+# CIDR-stripped bootwright_proxy_no_literal (domains + concrete IP literals, with the
+# internal hosts a CIDR covers already pinned as literals). What render cannot do is
+# resolve a Satellite named only by FQDN and bypassed only by a CIDR, because it does
+# no DNS. So do that here on the node: getent-resolve the Satellite and, if its address
+# falls inside a no_proxy CIDR, mark it bypassed so the proxy is left out of rhsm.conf
+# entirely (registering direct). bootwright_ceph_rhsm_server_bypassed defaults false, so
+# the public Red Hat CDN and a proxied Satellite are unaffected.
+- name: Resolve corporate Satellite address for the no_proxy CIDR bypass check
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ bootwright_ceph_rhsm_satellite_hostname }}"
+  register: bootwright_ceph_rhsm_satellite_resolve
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_proxy_enabled | default(false) | bool
+    - bootwright_ceph_rhsm_satellite_hostname | length > 0
+    - (((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list | length) > 0
+
+- name: Determine whether the Satellite egress is bypassed by a no_proxy CIDR
+  ansible.builtin.set_fact:
+    bootwright_ceph_rhsm_server_bypassed: "{{ (bootwright_ceph_rhsm_server_bypassed | default(false)) or ((bootwright_ceph_rhsm_satellite_ips | ansible.utils.ipaddr(item)) | length > 0) }}"
+  loop: "{{ ((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  vars:
+    bootwright_ceph_rhsm_satellite_ips: "{{ (bootwright_ceph_rhsm_satellite_resolve.stdout_lines | default([])) | map('split') | map('first') | unique | list }}"
+  when:
+    - bootwright_proxy_enabled | default(false) | bool
+    - bootwright_ceph_rhsm_satellite_hostname | length > 0
+    - (bootwright_ceph_rhsm_satellite_resolve.stdout_lines | default([]) | length) > 0
+
 # Point subscription-manager at the egress proxy through /etc/rhsm/rhsm.conf, not
 # just the http(s)_proxy task environment. subscription-manager and the RHSM dnf
 # plugin drive the certificate-based RHEL repos in /etc/yum.repos.d/redhat.repo
@@ -69,13 +106,14 @@
 # third-party vendor .repo still succeeds over the environment proxy. Writing the
 # proxy here fixes both registration and RHEL content fetches; the subsequent
 # refresh regenerates redhat.repo so the proxy takes effect before the vendor
-# license package pulls RHEL dependencies. noProxy hosts (an internal Satellite)
-# are honoured via server.no_proxy. Credentials land in root-owned rhsm.conf,
-# tightened to 0600 so the proxy password is not world-readable.
+# license package pulls RHEL dependencies. noProxy hosts are honoured via
+# server.no_proxy (the CIDR-stripped literal list; see the CIDR-bypass note above).
+# Credentials land in root-owned rhsm.conf, tightened to 0600 so the proxy password
+# is not world-readable.
 #
-# The task always runs and converges the [server] proxy to its desired state:
-# the effective proxy when one is declared, blanked otherwise. Blanking a
-# now-absent proxy matters — a stale proxy left in rhsm.conf would force a
+# The task always runs and converges the [server] proxy to its desired state: the
+# effective proxy when one is declared and the RHSM server is not bypassed, blanked
+# otherwise. Blanking matters — a stale proxy left in rhsm.conf would force a
 # now-direct node through a dead proxy — and a change either way triggers the
 # refresh below so redhat.repo is regenerated to match.
 - name: Configure subscription-manager egress proxy
@@ -93,7 +131,7 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url }}"
   register: bootwright_ceph_rhsm_proxy
   vars:
-    bootwright_ceph_rhsm_proxy_on: "{{ bootwright_proxy_enabled | default(false) | bool }}"
+    bootwright_ceph_rhsm_proxy_on: "{{ (bootwright_proxy_enabled | default(false) | bool) and not (bootwright_ceph_rhsm_server_bypassed | default(false) | bool) }}"
     bootwright_ceph_rhsm_proxy_creds: "{{ bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url }}"
     bootwright_ceph_rhsm_proxy_url: >-
       {{ bootwright_proxy_https if (bootwright_proxy_https | length) > 0 else bootwright_proxy_http }}
@@ -105,7 +143,7 @@
       - option: proxy_port
         value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('port')) if bootwright_ceph_rhsm_proxy_on else '' }}"
       - option: no_proxy
-        value: "{{ bootwright_proxy_no if bootwright_ceph_rhsm_proxy_on else '' }}"
+        value: "{{ bootwright_proxy_no_literal if bootwright_ceph_rhsm_proxy_on else '' }}"
       - option: proxy_user
         value: "{{ bootwright_proxy_credentials.username if bootwright_ceph_rhsm_proxy_creds else '' }}"
       - option: proxy_password

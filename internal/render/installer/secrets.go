@@ -208,7 +208,7 @@ func additionalTrustBundleRefs(state v1alpha1.State, ocp v1alpha1.ContainerClust
 		// so that CA must land in additionalTrustBundle (mirroring the mirror-CA
 		// fold) or the install trusts the mirror but not the proxy it egresses
 		// through.
-		if eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.ContainerClusterInstall); eff != nil && eff.TrustBundle.Name != "" {
+		if eff := proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerContainerClusterInstall)); eff != nil && eff.TrustBundle.Name != "" {
 			refs = append(refs, eff.TrustBundle)
 		}
 	}

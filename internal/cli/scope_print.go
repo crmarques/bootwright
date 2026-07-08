@@ -118,9 +118,9 @@ func environmentUsesManagedProxy(state v1alpha1.State) bool {
 		return false
 	}
 	selected := map[string]bool{
-		env.Spec.ProxyFor.Bootwright:              true,
-		env.Spec.ProxyFor.ContainerClusterInstall: true,
-		env.Spec.ProxyFor.MachineOSInstall:        true,
+		env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerBootwright):              true,
+		env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerContainerClusterInstall): true,
+		env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall):        true,
 	}
 	for _, entry := range env.Spec.InfraComponents.Proxies {
 		if selected[entry.Name] && entry.Management == v1alpha1.EnvironmentComponentManaged {

@@ -26,7 +26,7 @@ func IsManaged(state v1alpha1.State) bool {
 	if env == nil {
 		return false
 	}
-	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.Bootwright)
+	entry, ok := SelectedProxy(*env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerBootwright))
 	return ok && entry.Management == v1alpha1.EnvironmentComponentManaged
 }
 
@@ -34,7 +34,7 @@ func Resolve(state v1alpha1.State, env *v1alpha1.Environment) *Effective {
 	if env == nil {
 		return nil
 	}
-	return ResolveFor(state, env, env.Spec.ProxyFor.Bootwright)
+	return ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerBootwright))
 }
 
 func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *Effective {
@@ -86,7 +86,7 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInstall) (string, 
 	if env == nil {
 		return "", nil
 	}
-	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.ContainerClusterInstall)
+	entry, ok := SelectedProxy(*env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerContainerClusterInstall))
 	if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged {
 		return "", nil
 	}
@@ -219,12 +219,129 @@ func noProxyCIDRs(entries []string) []netip.Prefix {
 	return out
 }
 
+// noProxyTargets is the set of known internal endpoint addresses that a CIDR
+// no_proxy entry may cover. expandCIDRNoProxy keeps only the IP-parseable ones
+// and pins each that falls inside a declared CIDR as a concrete literal, so a
+// bypass implementation that cannot match a CIDR (python-rhsm, and the Ansible
+// uri module) still bypasses the host. It must span every internal service the
+// estate talks to — not just BMCs — or a Satellite/mirror/registry reachable
+// only through a no_proxy CIDR is silently proxied.
 func noProxyTargets(state v1alpha1.State) []string {
 	var out []string
 	for _, machine := range state.Machines {
 		if host := hostFromAddress(machine.Spec.Hardware.Management.BMC.Address); host != "" {
 			out = append(out, host)
 		}
+		for _, address := range machine.Spec.Addresses {
+			if address.Address != "" {
+				out = append(out, address.Address)
+			}
+		}
+	}
+	if env := stateview.Environment(state); env != nil {
+		ic := env.Spec.InfraComponents
+		for _, server := range ic.ArtifactServers {
+			for _, endpoint := range server.Endpoints {
+				if host := hostFromAddress(endpoint.URL); host != "" {
+					out = append(out, host)
+				}
+			}
+		}
+		for _, registry := range ic.Registries {
+			if host := hostFromAddress(registry.URL); host != "" {
+				out = append(out, host)
+			}
+		}
+		for _, resolver := range ic.NameResolution {
+			if resolver.Address != "" {
+				out = append(out, resolver.Address)
+			}
+			out = append(out, resolver.AdditionalIngressHosts...)
+		}
+		for _, ntp := range ic.NTP {
+			if ntp.Address != "" {
+				out = append(out, ntp.Address)
+			}
+		}
+		if env.Spec.Registries != nil && env.Spec.Registries.Mirror != nil {
+			if host := hostFromAddress(env.Spec.Registries.Mirror.URL); host != "" {
+				out = append(out, host)
+			}
+		}
+	}
+	for _, entitlement := range state.Entitlements {
+		if entitlement.Spec.RHSM == nil || entitlement.Spec.RHSM.Satellite == nil {
+			continue
+		}
+		satellite := entitlement.Spec.RHSM.Satellite
+		if satellite.Hostname != "" {
+			out = append(out, satellite.Hostname)
+		}
+		if host := hostFromAddress(satellite.ContentBaseURL); host != "" {
+			out = append(out, host)
+		}
+	}
+	return out
+}
+
+// Bypasses reports whether host would be sent direct (not through the proxy)
+// under the effective no_proxy list. host may be a bare hostname, an IP literal,
+// or a URL / host:port authority — it is reduced to a host first. Matching:
+// "*" bypasses everything; a domain entry (".example.com" or "example.com")
+// matches the domain and its subdomains case-insensitively; a CIDR entry matches
+// when host is an IP inside the prefix. An empty no_proxy never bypasses.
+func Bypasses(eff *Effective, host string) bool {
+	if eff == nil {
+		return false
+	}
+	host = hostFromAddress(host)
+	if host == "" {
+		return false
+	}
+	addr, isIP := noProxyTargetAddr(host)
+	for _, entry := range eff.NoProxy {
+		if matchNoProxyEntry(entry, host, addr, isIP) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchNoProxyEntry(entry, host string, addr netip.Addr, isIP bool) bool {
+	entry = strings.TrimSpace(entry)
+	if entry == "" {
+		return false
+	}
+	if entry == "*" {
+		return true
+	}
+	if prefix, err := netip.ParsePrefix(entry); err == nil {
+		return isIP && prefix.Contains(addr)
+	}
+	// Domain / host entry: a leading-dot form (".example.com") and the bare form
+	// ("example.com") both match the domain itself and any subdomain.
+	suffix := strings.ToLower(strings.TrimPrefix(entry, "."))
+	lowered := strings.ToLower(host)
+	return lowered == suffix || strings.HasSuffix(lowered, "."+suffix)
+}
+
+// NoProxyForLiteralMatchers returns eff.NoProxy with raw CIDR entries dropped,
+// keeping domains, wildcards, and concrete host/IP literals. python-rhsm's proxy
+// bypass (and other suffix/host matchers) silently ignore a CIDR entry like
+// 10.0.0.0/8, so writing one into rhsm.conf's [server] no_proxy leaves hosts in
+// that range proxied. ResolveNoProxy already expands each CIDR to the concrete
+// internal IPs it covers (see noProxyTargets), so those survive here as literals
+// while the unmatchable CIDR string is removed.
+func NoProxyForLiteralMatchers(eff *Effective) []string {
+	if eff == nil {
+		return nil
+	}
+	out := make([]string, 0, len(eff.NoProxy))
+	for _, entry := range eff.NoProxy {
+		if _, err := netip.ParsePrefix(strings.TrimSpace(entry)); err == nil {
+			continue
+		}
+		out = append(out, entry)
 	}
 	return out
 }

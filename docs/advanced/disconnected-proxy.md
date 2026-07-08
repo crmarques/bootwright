@@ -20,7 +20,8 @@ managed mirror registry and artifact server behind an external proxy) and
 
 A proxy entry lives under `Environment.spec.infraComponents.proxies[]`.
 `management: external` describes a proxy Bootwright only consumes; you supply its
-URLs inline. `spec.proxyFor` then routes each proxy target to a named entry:
+URLs inline. Mark one entry `default: true` and **every** proxy consumer routes
+through it — no `proxyFor` block is needed:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -32,6 +33,7 @@ spec:
   infraComponents:
     proxies:
       - name: default
+        default: true
         management: external
         connection:
           httpProxy: http://proxy.example.test:3128
@@ -41,23 +43,33 @@ spec:
             - 192.168.133.0/24
           auth:
             proxyAuthRef: proxy-credentials
-  proxyFor:
-    bootwright: default
-    containerClusterInstall: default
-    machineOSInstall: default
 ```
 
-## The three proxy targets
+## The three proxy targets and `proxyFor`
 
-`spec.proxyFor` has three independent slots, each naming a `proxies[]` entry.
-Omitting a value — or setting the reserved value `none` — disables proxy use for
-that target.
+There are three proxy consumers. Each routes through the `default: true` proxy
+unless `spec.proxyFor` says otherwise. `spec.proxyFor` is an **override** map with
+one slot per consumer; each slot is either a `proxies[]` name (send this consumer
+through that proxy), the reserved value `none` (opt this consumer out), or empty
+(inherit the default). So the common case — one proxy for everything — needs no
+`proxyFor` at all; you reach for it only to exempt or redirect a consumer:
+
+```yaml
+spec:
+  proxyFor:
+    machineOSInstall: none   # everything except the OS install uses the default
+    containerClusterInstall: lab   # this one consumer uses a different proxy
+```
 
 | Target | Routes the proxy through to… |
 | --- | --- |
 | `proxyFor.bootwright` | Bootwright's own runtime actions (package managers, downloads, host-side tooling). |
 | `proxyFor.containerClusterInstall` | The OpenShift/OKD installer input — rendered into `install-config.yaml`. |
 | `proxyFor.machineOSInstall` | The managed-OS (Anaconda) install fetch — the `rhsm`/`url`/`repo` Kickstart directives. |
+
+With no proxy marked `default: true`, an empty slot means *no proxy for that
+consumer* (the pre-default behaviour) — you then name a proxy in each slot that
+should be proxied, exactly as an override.
 
 A managed-OS boot ISO carries no packages, so the node reaches its install tree
 or the Red Hat CDN over the network during install; on a proxied estate that
@@ -75,11 +87,20 @@ media and endpoint wiring.
 
 !!! warning "machineOSInstall must be an external proxy"
     The managed OS is installed *before* any Bootwright-managed proxy could
-    exist, so `machineOSInstall` only takes effect for an `external` proxy entry
-    (one carrying `connection`). A managed selection renders no install proxy.
-    When the proxy entry carries `auth.proxyAuthRef`, the credentials are baked
-    into the `--proxy=` Kickstart directives at install time and the per-machine
-    install ISO is tightened to `0600`.
+    exist, so `machineOSInstall` only accepts an `external` proxy entry (one
+    carrying `connection`). A managed selection — named directly, or inherited
+    from a managed `default: true` proxy — is **rejected at validation**; set
+    `proxyFor.machineOSInstall` to an external proxy or `none`. When the proxy
+    entry carries `auth.proxyAuthRef`, the credentials are baked into the
+    `--proxy=` Kickstart directives at install time and the per-machine install
+    ISO is tightened to `0600`.
+
+    Each install fetch honours `noProxy` independently: Bootwright applies
+    `--proxy=` to the `rhsm`, `url`, and `repo` Kickstart directives only when
+    that directive's host is not bypassed. An internal Satellite, install tree, or
+    mirror listed in `noProxy` is fetched directly even while the CDN goes through
+    the proxy — Anaconda has no `no_proxy` directive of its own, so Bootwright
+    makes the per-target decision at render time.
 
 ## Managed vs external proxies
 
@@ -103,8 +124,9 @@ spec:
     cannot depend on a managed `proxyFor.bootwright` selection: the proxy does
     not exist yet when the bastion is prepared. Use an external proxy for
     bootstrap, or expect Bootwright to skip managed-proxy use for its own runtime
-    actions until after the proxy component has converged. For the same reason,
-    `proxyFor.machineOSInstall` ignores a managed selection entirely.
+    actions until after the proxy component has converged. `machineOSInstall`
+    never runs after convergence, so a managed selection there is rejected at
+    validation rather than silently skipped (see above).
 
 ### Package managers and `noProxy`
 
@@ -124,6 +146,18 @@ the effective proxy (host, port, credentials, and `noProxy`) into rhsm.conf's
 `[server]` section before registering, and `subscription-manager` stamps it into
 each RHEL repo. Without this the RHSM plugin marks those repos `proxy = _none_`
 and dnf reaches the Red Hat CDN directly, which fails on a proxied estate.
+
+`python-rhsm`'s `no_proxy` matcher understands hostnames and domain suffixes but
+**not** CIDR entries, so a plain `10.0.0.0/8` in `noProxy` would leave an internal
+host in that range proxied. Bootwright handles this two ways. It feeds rhsm.conf a
+CIDR-stripped `no_proxy` (domains plus concrete IP literals — the internal hosts a
+CIDR covers are already pinned as literals from the estate's known addresses). And
+because that pinning cannot resolve a Satellite named only by FQDN, when the
+entitlement names a Satellite the node also resolves it (`getent`) and, if its
+address falls inside a `noProxy` CIDR, drops the proxy from rhsm.conf entirely so
+the internal Satellite is reached directly. To bypass an internal Satellite, list
+its domain or hostname in `noProxy` — a CIDR alone is now handled too, but a
+domain/host entry is the most direct.
 
 ### TLS-inspecting proxies
 

@@ -1997,7 +1997,7 @@ func TestEnvironmentProxyOldSpecRejectsStrictDecode(t *testing.T) {
 	}
 }
 
-func TestEnvironmentProxyDefaultRejected(t *testing.T) {
+func TestEnvironmentProxySingleDefaultAccepted(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
@@ -2009,11 +2009,66 @@ func TestEnvironmentProxyDefaultRejected(t *testing.T) {
     artifactServers:
 `, 1)
 	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("single default proxy should be accepted, got %v", err)
+	}
+}
+
+func TestEnvironmentProxyTwoDefaultsRejected(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
+      - name: primary
+        default: true
+        management: external
+        connection:
+          httpProxy: http://proxy.bootwright.test:3128
+      - name: secondary
+        default: true
+        management: external
+        connection:
+          httpProxy: http://proxy2.bootwright.test:3128
+    artifactServers:
+`, 1)
+	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected proxy default decode error, got nil")
+		t.Fatal("expected two-default proxy rejection, got nil")
 	}
-	want := "field default not found"
+	want := "must not mark more than one entry default"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestEnvironmentProxyMachineOSInstallManagedDefaultRejected(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	// A managed proxy marked default fans out to machineOSInstall by inheritance,
+	// which the node cannot use (it installs before any managed proxy exists).
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
+      - name: squid
+        default: true
+        management: managed
+        componentRef: squid-proxy
+    artifactServers:
+`, 1)
+	files["infra-component.yaml"] = files["infra-component.yaml"] + `---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: squid-proxy }
+spec:
+  type: proxy
+  proxy:
+    implementation: squid
+    machineRef: services-host
+`
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected machineOSInstall managed-default rejection, got nil")
+	}
+	want := "spec.proxyFor.machineOSInstall resolves to managed proxy"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}

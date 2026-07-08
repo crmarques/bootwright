@@ -45,9 +45,9 @@ means there is no default — an omitted optional field stays unset.
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
 | `spec.defaults.virtctlMirror` | No | — | HTTP(S) base URL for a mirrored, version-matched `virtctl`. Empty means fetch from each KubeVirt host cluster's OpenShift Virtualization ConsoleCLIDownload; set it for disconnected labs. Validated as an `http(s)` URL when set. |
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
-| `spec.proxyFor.bootwright` | No | — | Proxy catalog entry used by Bootwright runtime actions; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
-| `spec.proxyFor.containerClusterInstall` | No | — | Proxy catalog entry rendered into cluster install input; empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
-| `spec.proxyFor.machineOSInstall` | No | — | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. Only an **external** proxy applies (the node installs before any managed proxy exists); empty or `none` disables. Must name a declared `infraComponents.proxies[]` entry or `none`. |
+| `spec.proxyFor.bootwright` | No | inherit default | Proxy used by Bootwright runtime actions. A `proxies[]` name overrides; `none` opts out; empty inherits the `default: true` proxy. |
+| `spec.proxyFor.containerClusterInstall` | No | inherit default | Proxy rendered into cluster install input. A `proxies[]` name overrides; `none` opts out; empty inherits the `default: true` proxy. |
+| `spec.proxyFor.machineOSInstall` | No | inherit default | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. Only an **external** proxy applies (the node installs before any managed proxy exists), so a managed value or a managed inherited default is rejected. A `proxies[]` name overrides; `none` opts out; empty inherits the `default: true` proxy. |
 | `spec.infraComponents` | No | — | Catalog of external or managed service access entries. See [Infra-component catalog](#infra-component-catalog). |
 | `spec.registries` | No | — | Disconnected mirror and image digest source settings. See [Registries](#registries). |
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
@@ -82,6 +82,7 @@ managed-only are rejected on external entries and vice versa.
 | Field | Required | Description |
 | --- | --- | --- |
 | `proxies[].name` | Yes | DNS-label entry name (not `none`). |
+| `proxies[].default` | No | Marks the proxy every consumer inherits when its `proxyFor` slot is empty. At most one `proxies[]` entry may set it. |
 | `proxies[].management` | Yes | `external` or `managed`. |
 | `proxies[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.proxy`. Rejected on external entries. |
 | `proxies[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
@@ -303,6 +304,11 @@ Beyond the per-field rules above, the validator enforces:
 - `spec.proxyFor.bootwright`, `spec.proxyFor.containerClusterInstall`, and
   `spec.proxyFor.machineOSInstall` must each name a declared
   `spec.infraComponents.proxies[]` entry, or be empty or the literal `none`.
+  Empty inherits the `default: true` proxy; `none` opts the consumer out.
+- At most one `spec.infraComponents.proxies[]` entry may set `default: true`.
+- `spec.proxyFor.machineOSInstall` must not resolve — named directly or by
+  inheriting a managed default — to a `managed` proxy (the node installs before
+  any managed proxy exists); use an external proxy or `none`.
 - `spec.containerClusters[]` / `spec.storageClusters[]` entries must be unique
   and match a loaded `ContainerCluster` / `StorageCluster`.
 - `spec.resources[]`, when set, must list at least one non-empty path that is

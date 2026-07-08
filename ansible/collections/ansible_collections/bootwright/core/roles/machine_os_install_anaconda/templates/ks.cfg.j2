@@ -37,13 +37,19 @@ reboot
    (e.g. `rhsm ... --proxy=...:8080lang en_US.UTF-8`). Precompute the optional
    flags so each command line ends in a {{ expression }} and keeps its newline. #}
 {% set proxy_flag = (' --proxy=' ~ proxy_url) if (proxy_url | length > 0) else '' %}
+{# Anaconda's rhsm/url/repo commands have no no_proxy directive, so Bootwright
+   decides per directive at render time whether its target host is bypassed. A
+   directive gets --proxy= only when its per-target *.proxied flag is set; an
+   internal Satellite, install tree, or mirror in no_proxy is fetched direct. #}
+{% set rhsm_proxy_flag = proxy_flag if (rhsm.proxied | default(false)) else '' %}
+{% set url_proxy_flag = proxy_flag if (installer.sourceProxied | default(false)) else '' %}
 {% if rhsm.enabled | default(false) %}
 {% set sat_flag = '' %}
 {% if sat_enabled %}{% set sat_flag = ' --server-hostname=' ~ satellite.hostname %}{% if satellite.contentBaseURL | default('') | length > 0 %}{% set sat_flag = sat_flag ~ ' --rhsm-baseurl=' ~ satellite.contentBaseURL %}{% endif %}{% endif %}
 {% set insights_flag = ' --connect-to-insights' if (rhsm.connectToInsights | default(false)) else '' %}
-rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{{ sat_flag }}{{ proxy_flag }}{{ insights_flag }}
+rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{{ sat_flag }}{{ rhsm_proxy_flag }}{{ insights_flag }}
 {% elif installer.sourceURL | default('') | length > 0 %}
-url --url={{ installer.sourceURL }}{{ proxy_flag }}
+url --url={{ installer.sourceURL }}{{ url_proxy_flag }}
 {% else %}
 cdrom
 {% endif %}
@@ -83,7 +89,8 @@ network --device={{ net.device | default('link') }}{% if net.mtu is defined %} -
 {% endif %}
 
 {% for repo in installer.repositories | default([]) %}
-repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}{{ proxy_flag }}
+{% set repo_proxy_flag = proxy_flag if (repo.proxied | default(false)) else '' %}
+repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}{{ repo_proxy_flag }}
 {% endfor %}
 
 {% set storage = ks.storage | default({}) %}

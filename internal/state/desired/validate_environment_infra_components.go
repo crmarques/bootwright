@@ -118,8 +118,10 @@ func validateEnvironmentProxyConnection(envName, owner string, p *v1alpha1.Envir
 func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
 	var errs []string
 	names := map[string]bool{v1alpha1.EnvironmentComponentNone: true}
+	management := map[string]string{}
 	for _, entry := range env.Spec.InfraComponents.Proxies {
 		names[entry.Name] = true
+		management[entry.Name] = entry.Management
 	}
 	for _, field := range []struct {
 		name  string
@@ -136,15 +138,26 @@ func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.proxyFor.%s %q does not match any spec.infraComponents.proxies[].name", env.Metadata.Name, field.name, field.value))
 		}
 	}
+	// machineOSInstall cannot use a managed proxy — the node installs before any
+	// bootwright-managed proxy exists. This rejects both an explicit managed name
+	// and inheriting a managed default; bootwright and containerClusterInstall run
+	// after infra provisioning and may use a managed proxy freely.
+	if resolved := env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall); resolved != "" && management[resolved] == v1alpha1.EnvironmentComponentManaged {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.proxyFor.machineOSInstall resolves to managed proxy %q; it must name an external proxy or %q (a managed proxy does not exist during node install)", env.Metadata.Name, resolved, v1alpha1.EnvironmentComponentNone))
+	}
 	return errs
 }
 
 func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	seen := map[string]bool{}
+	defaults := 0
 	for i, entry := range env.Spec.InfraComponents.Proxies {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		if entry.Default {
+			defaults++
+		}
 		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			errs = append(errs, validateEnvironmentProxyConnection(env.Metadata.Name, owner+".connection", entry.Connection)...)
@@ -161,6 +174,9 @@ func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map
 		default:
 			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
+	}
+	if defaults > 1 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.proxies must not mark more than one entry default", env.Metadata.Name))
 	}
 	return errs
 }

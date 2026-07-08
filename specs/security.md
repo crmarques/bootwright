@@ -127,13 +127,18 @@ convenience that must stay on a trusted management segment.
 
 ## Proxy Boundaries
 
-`Environment.spec.infraComponents.proxies[]` declares proxy access entries.
-`Environment.spec.proxyFor.bootwright`,
+`Environment.spec.infraComponents.proxies[]` declares proxy access entries; one
+may set `default: true`. `Environment.spec.proxyFor.bootwright`,
 `Environment.spec.proxyFor.containerClusterInstall`, and
-`Environment.spec.proxyFor.machineOSInstall` select which proxy each consumer
-uses; omitted values and `none` disable proxy use. `machineOSInstall` routes the
-managed-OS (Anaconda) install fetch and takes effect only for an external proxy
-entry, since the node installs before any managed proxy exists.
+`Environment.spec.proxyFor.machineOSInstall` override which proxy each consumer
+uses: a name selects an entry, `none` opts the consumer out, and an empty slot
+inherits the default proxy. `machineOSInstall` routes the managed-OS (Anaconda)
+install fetch and takes effect only for an external proxy entry, since the node
+installs before any managed proxy exists; a managed selection (direct or
+inherited) is rejected. Each install fetch and the RHSM `no_proxy` honour the
+proxy's `noProxy` list, including CIDR entries — CIDR-covered internal hosts are
+pinned to concrete literals so bypass matchers that cannot parse a CIDR still
+route them direct.
 
 External proxy entries carry direct URLs and optional auth refs. Managed proxy
 entries reference an `InfraComponent` with `spec.proxy`, and the runtime URL is

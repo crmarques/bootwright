@@ -42,7 +42,15 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	env := stateview.Environment(state)
 	idx := secret.NewIndex(state)
-	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, state.Entitlements, idx, paths.SecretsDir)
+	// Resolve the machineOSInstall proxy once. Each install fetch (rhsm, the
+	// install-tree url, each repo) is proxied only when its target host is not
+	// bypassed by no_proxy — Anaconda has no no_proxy directive, so the bypass
+	// decision is made here at render time and threaded down per directive.
+	var eff *proxy.Effective
+	if env != nil {
+		eff = proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall))
+	}
+	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.PackageSource, state.Entitlements, idx, paths.SecretsDir, eff)
 	// hostedTree overrides the package source: bootwright extracts fromMedia (a
 	// DVD) into the cluster artifact server and the installing node fetches
 	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
@@ -63,11 +71,20 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	if sourceURL != "" {
 		installer["sourceURL"] = sourceURL
+		if installTargetProxied(eff, sourceURL) {
+			installer["sourceProxied"] = true
+		}
 	}
 	if len(rhsm) > 0 {
+		// The rhsm registration and content fetch target the Satellite (when set)
+		// or the public Red Hat CDN; proxy them only when that host is not bypassed
+		// by no_proxy, so an internal Satellite in no_proxy registers directly.
+		if installTargetProxied(eff, rhsmRegistrationHost(rhsm)) {
+			rhsm["proxied"] = true
+		}
 		installer["rhsm"] = rhsm
 	}
-	if proxyVars := managedOSInstallProxyVars(state, env, paths.SecretsDir); len(proxyVars) > 0 {
+	if proxyVars := managedOSInstallProxyVars(eff, state, paths.SecretsDir); len(proxyVars) > 0 {
 		installer["proxy"] = proxyVars
 	}
 	sshUser := managedOSSSHUser(machine)
@@ -249,17 +266,17 @@ func machineOSMediaType(source *v1alpha1.MachinePackageSource) string {
 // BaseURL + repo entries; redhatCDN → resolved rhsm; nil (a full DVD) and
 // hostedTree both return empty (nil installs via cdrom, and the caller overlays
 // the derived tree URL for hostedTree).
-func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string) (string, []any, map[string]any) {
+func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string, eff *proxy.Effective) (string, []any, map[string]any) {
 	rhsm := map[string]any{}
 	if source == nil {
-		return "", machineInstallRepositoryVars(nil), rhsm
+		return "", machineInstallRepositoryVars(nil, eff), rhsm
 	}
 	if m := source.Mirror; m != nil {
-		return m.BaseURL, machineInstallRepositoryVars(m.Repositories), rhsm
+		return m.BaseURL, machineInstallRepositoryVars(m.Repositories, eff), rhsm
 	}
 	cdn := source.RedhatCDN
 	if cdn == nil || cdn.EntitlementRef.Name == "" {
-		return "", machineInstallRepositoryVars(nil), rhsm
+		return "", machineInstallRepositoryVars(nil, eff), rhsm
 	}
 	resolved, ok := entitlements.Resolve(ents, idx, cdn.EntitlementRef.Name, "", secretsDir)
 	if !ok {
@@ -273,39 +290,6 @@ func machineImageInstallSourceVars(source *v1alpha1.MachinePackageSource, ents [
 		rhsm["satellite"] = satellite
 	}
 	return "", nil, rhsm
-}
-
-// managedOSInstallProxyVars resolves the environment proxy named by
-// spec.proxyFor.machineOSInstall into the kickstart proxy inputs. A boot ISO
-// fetches packages (or registers against the Red Hat CDN) over the network
-// during install, so on a proxied estate that traffic must traverse this
-// proxy. Only an external proxy applies — the node installs before any managed
-// proxy could exist — so a managed or unset selection emits nothing. The
-// credentialed proxy URL is assembled in the kickstart from this
-// (unauthenticated) url plus the proxy credentials file, keeping the proxy
-// password out of vars.yaml the same way rhsm secrets stay out of it.
-func managedOSInstallProxyVars(state v1alpha1.State, env *v1alpha1.Environment, secretsDir string) map[string]any {
-	if env == nil {
-		return nil
-	}
-	eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.MachineOSInstall)
-	if eff == nil {
-		return nil
-	}
-	url := eff.HTTPS
-	if url == "" {
-		url = eff.HTTP
-	}
-	if url == "" {
-		return nil
-	}
-	out := map[string]any{"url": url}
-	if eff.Auth.Name != "" {
-		if path := secret.ResolveMaterialPath(eff.Auth.Name, secret.NewIndex(state), secretsDir, secret.MaterialPrimary); path != "" {
-			out["credentialsPath"] = path
-		}
-	}
-	return out
 }
 
 // rhsmSatelliteVars projects a resolved corporate Satellite redirect into the
@@ -326,13 +310,19 @@ func rhsmSatelliteVars(satellite entitlements.RHSMSatellite) map[string]any {
 	return out
 }
 
-func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository) []any {
+func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository, eff *proxy.Effective) []any {
 	out := make([]any, 0, len(repos))
 	for _, repo := range repos {
-		out = append(out, map[string]any{
+		entry := map[string]any{
 			"id":      repo.ID,
 			"baseURL": repo.BaseURL,
-		})
+		}
+		// Omit proxied when the repo host is bypassed (or there is no proxy) so a
+		// no-proxy render stays byte-identical; the kickstart defaults it to false.
+		if installTargetProxied(eff, repo.BaseURL) {
+			entry["proxied"] = true
+		}
+		out = append(out, entry)
 	}
 	return out
 }

@@ -469,3 +469,18 @@ bootwright_proxy:
         - ::1
         - bastion.bootwright.test
         - localhost
+    noProxyLiteral:
+        - .3-nodes-ocp-baremetal.bootwright.test
+        - .bootwright.test
+        - .cluster.local
+        - .svc
+        - 127.0.0.1
+        - 192.168.140.10
+        - 192.168.140.11
+        - 192.168.140.20
+        - 192.168.140.21
+        - 192.168.140.22
+        - 192.168.140.5
+        - ::1
+        - bastion.bootwright.test
+        - localhost

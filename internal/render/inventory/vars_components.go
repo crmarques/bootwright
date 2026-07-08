@@ -93,7 +93,7 @@ func proxyComponentsForCluster(state v1alpha1.State) []selectedProxyComponent {
 	}
 	seen := map[string]bool{}
 	out := []selectedProxyComponent{}
-	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ContainerClusterInstall} {
+	for _, name := range []string{env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerBootwright), env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerContainerClusterInstall)} {
 		entry, ok := proxy.SelectedProxy(*env, name)
 		if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 			continue

@@ -60,7 +60,7 @@ func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, 
 	if err != nil {
 		return nil, "", err
 	}
-	eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.ContainerClusterInstall)
+	eff := proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerContainerClusterInstall))
 	if eff == nil && managedURL != "" {
 		eff = &proxy.Effective{NoProxy: proxy.ResolveNoProxy(state, env, nil)}
 	}

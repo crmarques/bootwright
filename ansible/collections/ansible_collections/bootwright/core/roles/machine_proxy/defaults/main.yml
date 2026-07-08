@@ -7,6 +7,12 @@
 bootwright_proxy_http: "{{ (bootwright_proxy | default({})).http | default('') }}"
 bootwright_proxy_https: "{{ (bootwright_proxy | default({})).https | default('') }}"
 bootwright_proxy_no: "{{ (bootwright_proxy | default({})).noProxy | default([]) | join(',') }}"
+# CIDR-stripped no_proxy for consumers whose bypass matcher cannot handle a CIDR
+# entry (python-rhsm's rhsm.conf [server] no_proxy). Render supplies noProxyLiteral
+# (domains + concrete IPs, raw CIDRs dropped); CIDR-covered internal hosts already
+# survive in it as pinned literals. Falls back to the full list when render did not
+# emit a literal variant (nothing to strip).
+bootwright_proxy_no_literal: "{{ (bootwright_proxy | default({})).noProxyLiteral | default((bootwright_proxy | default({})).noProxy | default([])) | join(',') }}"
 bootwright_proxy_credentials_name: "{{ ((bootwright_proxy | default({})).auth | default({})).proxyAuthRef | default('') }}"
 # Resolved file path of the proxy credential, when set. Roles slurp
 # this from localhost; the file must exist with mode 0600.
