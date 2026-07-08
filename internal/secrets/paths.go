@@ -171,13 +171,6 @@ func fallbackRole(role MaterialRole) MaterialRole {
 	}
 }
 
-func sshPrivatePath(path string) string {
-	if strings.HasSuffix(path, ".pub") {
-		return strings.TrimSuffix(path, ".pub")
-	}
-	return path
-}
-
 func sshPublicPath(path string) string {
 	if strings.HasSuffix(path, ".pub") {
 		return path

@@ -98,10 +98,6 @@ func indexStorageExports(items []v1alpha1.StorageExport) map[string]v1alpha1.Sto
 	return indexByName(items, func(e v1alpha1.StorageExport) string { return e.Metadata.Name })
 }
 
-func indexSecrets(items []v1alpha1.Secret) map[string]v1alpha1.Secret {
-	return indexByName(items, func(s v1alpha1.Secret) string { return s.Metadata.Name })
-}
-
 func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfile, bool) {
 	return stateview.MachineProfile(p, name)
 }
