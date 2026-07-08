@@ -35,7 +35,7 @@ func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vMediaPort 
 }
 
 func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
-	return machineBootVarsWithISO(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName))
+	return machineBootVarsWithISO(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName), ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint)
 }
 
 // sshReadinessVars is the shared post-boot readiness probe every substrate uses:
@@ -50,7 +50,7 @@ func sshReadinessVars() map[string]any {
 	}
 }
 
-func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string) map[string]any {
+func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef) map[string]any {
 	provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
@@ -77,7 +77,7 @@ func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m 
 		if server.Spec.Hardware.Management.BMC.Address == "" {
 			return nil
 		}
-		return baremetalBootVars(state, ci, server, isoBasename)
+		return baremetalBootVars(state, redfishVirtualMedia, server, isoBasename)
 	}
 	return nil
 }
@@ -175,10 +175,10 @@ func vsphereBootVars(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.Machi
 	}
 }
 
-func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server v1alpha1.Machine, isoBasename string) map[string]any {
+func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, server v1alpha1.Machine, isoBasename string) map[string]any {
 	bmc := server.Spec.Hardware.Management.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
-	stageHost, stagePath, fetchURL, fetchBase := baremetalAgentISOTarget(state, ci, isoBasename)
+	stageHost, stagePath, fetchURL, fetchBase := baremetalAgentISOTarget(state, redfishVirtualMedia, isoBasename)
 	origin, _ := url.Parse(fetchBase)
 
 	redfish := map[string]any{
@@ -232,13 +232,13 @@ func artifactCertificatePort(origin *url.URL) string {
 	return "443"
 }
 
-func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInstall, isoBasename string) (stageHost, stagePath, fetchURL, fetchBase string) {
-	server, endpoint, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia)
+func baremetalAgentISOTarget(state v1alpha1.State, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, isoBasename string) (stageHost, stagePath, fetchURL, fetchBase string) {
+	server, endpoint, ok := artifacts.ResolveEndpointRef(state, redfishVirtualMedia)
 	if !ok {
 		return "", "", "", ""
 	}
 	fetchBase = installer.ArtifactServerEndpointURL(state, server, endpoint)
-	fetchURL = artifactEndpointFetchURL(state, server, endpoint, agentISOPublishTokenExpr, isoBasename)
+	fetchURL = artifactServerEndpointFetchURL(state, server, endpoint, agentISOPublishTokenExpr, isoBasename)
 	if fetchURL == "" || server.Config == nil {
 		return "", "", fetchURL, fetchBase
 	}

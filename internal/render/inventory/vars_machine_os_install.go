@@ -53,15 +53,15 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	packageSource := profile.Spec.Installer.Anaconda.PackageSource
 	sourceURL, imageRepositories, rhsm := machineInstallPackageSourceVars(packageSource, state.Entitlements, idx, paths.SecretsDir, eff)
 	// hostedTree overrides the package source: bootwright extracts fromMedia (a
-	// DVD) into the cluster artifact server and the installing node fetches
-	// GPG-signed packages from that tree over the machineBoot endpoint. The DVD
-	// .treeinfo already advertises BaseOS + AppStream, so one tree URL replaces
-	// any repositories. An unresolvable tree leaves sourceURL empty so the boot
-	// ISO install fails loudly (cdrom on a package-less ISO) instead of
-	// mis-installing; the cluster-install validator rejects that up front.
+	// DVD) into the selected artifact server and the installing node fetches
+	// GPG-signed packages from that tree over hostedTree.artifactServerEndpoint.
+	// The DVD .treeinfo already advertises BaseOS + AppStream, so one tree URL
+	// replaces any repositories. An unresolvable tree leaves sourceURL empty so
+	// the boot ISO install fails loudly (cdrom on a package-less ISO) instead of
+	// mis-installing; validation rejects that up front.
 	var hostedTree map[string]any
 	if packageSource.GetHostedTree() != nil {
-		treeURL, tree, _ := machineOSHostedTreeVars(state, ci, packageSource)
+		treeURL, tree, _ := machineOSHostedTreeVars(state, packageSource)
 		sourceURL, imageRepositories, hostedTree = treeURL, nil, tree
 	}
 	installer := map[string]any{

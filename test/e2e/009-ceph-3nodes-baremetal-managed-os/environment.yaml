@@ -16,7 +16,4 @@ spec:
         componentRef: artifact-server
 
   defaults:
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: bmc
+    artifactServerRef: default

@@ -5,6 +5,9 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
+  defaults:
+    artifactServerRef: default
+
   infraComponents:
     artifactServers:
       - name: default

@@ -109,13 +109,13 @@ func TestEnvironmentVirtctlMirrorValidation(t *testing.T) {
 			Spec:     v1alpha1.EnvironmentSpec{Defaults: v1alpha1.EnvironmentDefaultsSpec{VirtctlMirror: url}},
 		}
 	}
-	if errs := validateEnvironmentDefaults(mk("https://mirror.example/virtctl"), nil); len(errs) != 0 {
+	if errs := validateEnvironmentDefaults(mk("https://mirror.example/virtctl")); len(errs) != 0 {
 		t.Fatalf("valid virtctlMirror rejected: %v", errs)
 	}
-	if errs := validateEnvironmentDefaults(mk(""), nil); len(errs) != 0 {
+	if errs := validateEnvironmentDefaults(mk("")); len(errs) != 0 {
 		t.Fatalf("empty virtctlMirror rejected: %v", errs)
 	}
-	errs := validateEnvironmentDefaults(mk("not-a-url"), nil)
+	errs := validateEnvironmentDefaults(mk("not-a-url"))
 	found := false
 	for _, e := range errs {
 		if strings.Contains(e, "virtctlMirror") && strings.Contains(e, "http(s) URL") {
@@ -441,7 +441,7 @@ func TestProviderMachineLabelsValidation(t *testing.T) {
 	}
 }
 
-func TestArtifactAccessEndpointNamesSelectInfraEndpoint(t *testing.T) {
+func TestArtifactServerEndpointNamesSelectInfraEndpoint(t *testing.T) {
 	files := newBaselineFiles()
 	files["service-machines.yaml"] = strings.Replace(files["service-machines.yaml"],
 		"    - name: bmc-lan\n      address: 192.168.132.1",
@@ -460,44 +460,37 @@ func TestArtifactAccessEndpointNamesSelectInfraEndpoint(t *testing.T) {
 	}
 }
 
-func TestEnvironmentArtifactAccessDefaultsValidateInheritedEndpoint(t *testing.T) {
+func TestEnvironmentArtifactServerRefDefaultSelectsConsumerServer(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
-		"  baseDomain: bootwright.test\n",
-		`  baseDomain: bootwright.test
-  defaults:
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: missing
-`, 1)
-	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], `    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: bmc
-`, "", 1)
+		"componentRef: artifact-server",
+		"componentRef: alternate-artifact-server", 1)
+	files["infra-component.yaml"] += `---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: alternate-artifact-server }
+spec:
+  type: artifactServer
+  artifactServer:
+    machineRef: services-host
+    listeners:
+      - name: http
+        protocol: http
+        port: 8080
+    endpoints:
+      - name: bmc
+        listenerRef: http
+        addressRef: bmc-lan
+`
 
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
-	_, err := LoadNormalizeValidate([]string{dir})
-	if err == nil {
-		t.Fatal("LoadNormalizeValidate: expected inherited artifact endpoint error")
-	}
-	wants := []string{
-		// The dangling default fails at its declaration site...
-		`Environment/env spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints`,
-		// ...and the per-cluster check says the injected value was defaulted,
-		// since it appears nowhere in the cluster author's file.
-		`ContainerCluster/sno spec.install.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints (defaulted from Environment/env spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef)`,
-	}
-	for _, want := range wants {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error %q does not contain %q", err, want)
-		}
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 }
 
-func TestEnvironmentArtifactAccessDefaultsValidateAtDeclarationSite(t *testing.T) {
+func TestEnvironmentArtifactServerRefDefaultValidatesDeclaration(t *testing.T) {
 	cases := []struct {
 		name          string
 		defaults      string
@@ -506,46 +499,23 @@ func TestEnvironmentArtifactAccessDefaultsValidateAtDeclarationSite(t *testing.T
 		{
 			name: "dangling-server-ref",
 			defaults: `  defaults:
-    artifactAccess:
-      serverRef: missing
+    artifactServerRef: missing
 `,
-			wantSubstring: `Environment/env spec.defaults.artifactAccess.serverRef "missing" does not resolve to Environment/env spec.infraComponents.artifactServers[].name`,
-		},
-		{
-			name: "dangling-endpoint-ref",
-			defaults: `  defaults:
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: missing
-`,
-			wantSubstring: `Environment/env spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints`,
-		},
-		{
-			name: "endpoint-refs-without-server-ref",
-			defaults: `  defaults:
-    artifactAccess:
-      containerClusterInstall:
-        endpointRef: bmc
-`,
-			wantSubstring: `Environment/env spec.defaults.artifactAccess.serverRef is required when artifactAccess endpoints are set`,
+			wantSubstring: `Environment/env spec.defaults.artifactServerRef "missing" does not resolve to spec.infraComponents.artifactServers[].name`,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// The baseline cluster authors its own artifactAccess, so nothing
-			// consumes the Environment default; the dangling name must still
-			// fail where it was written.
 			files := newBaselineFiles()
 			files["environment.yaml"] = strings.Replace(files["environment.yaml"],
-				"  baseDomain: bootwright.test\n",
-				"  baseDomain: bootwright.test\n"+tc.defaults, 1)
+				"  defaults:\n    artifactServerRef: default\n",
+				tc.defaults, 1)
 
 			dir := t.TempDir()
 			writeFiles(t, dir, files)
 			_, err := LoadNormalizeValidate([]string{dir})
 			if err == nil {
-				t.Fatal("LoadNormalizeValidate: expected declaration-site artifactAccess error")
+				t.Fatal("LoadNormalizeValidate: expected artifactServerRef error")
 			}
 			if !strings.Contains(err.Error(), tc.wantSubstring) {
 				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
@@ -686,8 +656,8 @@ spec:
 		{
 			name: "environment-default-clusteradminssh-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  baseDomain: bootwright.test\n",
-				"  baseDomain: bootwright.test\n  defaults:\n    install:\n      clusterAdminSSH:\n        keyPairRef: sno-cluster-admin-ssh-key\n", 1)},
+				"  defaults:\n    artifactServerRef: default\n",
+				"  defaults:\n    artifactServerRef: default\n    install:\n      clusterAdminSSH:\n        keyPairRef: sno-cluster-admin-ssh-key\n", 1)},
 			wantSubstring: "field clusterAdminSSH not found",
 		},
 		{
@@ -743,7 +713,21 @@ spec:
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)},
-			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
+			wantSubstring: `spec.defaults.artifactServerRef "default" does not resolve`,
+		},
+		{
+			name: "baremetal-redfish-artifact-server-endpoint-required",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    agent:\n      redfishVirtualMedia:\n        artifactServerEndpoint:\n          endpointRef: bmc\n",
+				"", 1)},
+			wantSubstring: "spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef is required",
+		},
+		{
+			name: "disconnected-boot-artifacts-artifact-server-endpoint-required",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"mode: connected",
+				"mode: disconnected", 1)},
+			wantSubstring: "spec.install.agent.bootArtifacts.artifactServerEndpoint.endpointRef is required",
 		},
 		{
 			name: "environment-top-level-ntpsources-rejected",
@@ -818,18 +802,18 @@ spec:
 			wantSubstring: "spec.artifactServer.tls is set but no https listener",
 		},
 		{
-			name: "artifact-access-endpoint-rejected",
+			name: "artifact-server-endpoint-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"endpointRef: bmc",
 				"endpointRef: missing", 1)},
-			wantSubstring: `spec.install.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints`,
+			wantSubstring: `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef "missing" does not resolve to the selected artifact server endpoints`,
 		},
 		{
-			name: "artifact-access-server-ref-rejected",
+			name: "artifact-server-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"    artifactAccess:\n      serverRef: default",
-				"    artifactAccess:\n      serverRef: missing", 1)},
-			wantSubstring: `spec.install.artifactAccess.serverRef "missing" does not resolve to Environment/env spec.infraComponents.artifactServers[].name`,
+				"        artifactServerEndpoint:\n          endpointRef: bmc",
+				"        artifactServerEndpoint:\n          serverRef: missing\n          endpointRef: bmc", 1)},
+			wantSubstring: `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef "missing" does not resolve to Environment/env spec.infraComponents.artifactServers[].name`,
 		},
 		{
 			name: "environment-artifact-server-routes-rejected",
@@ -1096,7 +1080,14 @@ func TestSchemaCompatibilityValidationRejectsKnownIncompatibleFields(t *testing.
 			mutate: func(files map[string]string) {
 				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "  baremetal: {}\n", "  baremetal: {}\n  artifactAccess:\n    serverRef: default\n", 1)
 			},
-			wantSubstring: "InfraProvider/rack spec.artifactAccess is not valid on InfraProvider",
+			wantSubstring: "field artifactAccess not found",
+		},
+		{
+			name: "artifact-server-endpoint-serves",
+			mutate: func(files map[string]string) {
+				files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"], "        addressRef: bmc-lan\n", "        addressRef: bmc-lan\n        serves: [redfishVirtualMedia]\n", 1)
+			},
+			wantSubstring: "field serves not found",
 		},
 		{
 			name: "provider-network-attachment-arm",
@@ -1135,18 +1126,18 @@ spec:
 			wantSubstring: "field packageSource not found",
 		},
 		{
-			name: "cluster-artifact-access-provider-ref",
+			name: "cluster-artifact-access-consumer-slots",
 			mutate: func(files map[string]string) {
-				files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "    artifactAccess:\n", "    artifactAccess:\n      providerRef: rack\n", 1)
+				files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "    agent:\n", "    artifactAccess:\n      serverRef: default\n      redfishVirtualMedia:\n        endpointRef: bmc\n      machineBoot:\n        endpointRef: bmc\n      containerClusterInstall:\n        endpointRef: bmc\n      osInstall:\n        endpointRef: bmc\n    agent:\n", 1)
 			},
-			wantSubstring: "ContainerCluster/sno spec.install.artifactAccess.providerRef is not valid",
+			wantSubstring: "field artifactAccess not found",
 		},
 		{
-			name: "environment-artifact-access-provider-ref",
+			name: "environment-artifact-access-consumer-slots",
 			mutate: func(files map[string]string) {
-				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", "  defaults:\n    artifactAccess:\n      providerRef: rack\n\n  infraComponents:\n", 1)
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  defaults:\n    artifactServerRef: default\n", "  defaults:\n    artifactAccess:\n      serverRef: default\n      redfishVirtualMedia:\n        endpointRef: bmc\n      machineBoot:\n        endpointRef: bmc\n      containerClusterInstall:\n        endpointRef: bmc\n      osInstall:\n        endpointRef: bmc\n", 1)
 			},
-			wantSubstring: "Environment/env spec.defaults.artifactAccess.providerRef is not valid",
+			wantSubstring: "field artifactAccess not found",
 		},
 		{
 			name: "external-name-resolution-endpoint",
@@ -2493,6 +2484,7 @@ func TestEnvironmentStorageClusterSelectionOmitsContainerRoots(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  infraComponents:\n", "  storageClusters:\n    - imported-ceph\n\n  infraComponents:\n", 1)
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  defaults:\n    artifactServerRef: default\n", "", 1)
 	delete(files, "infra-component.yaml")
 	files["storage.yaml"] = `apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
@@ -4320,6 +4312,8 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
+  defaults:
+    artifactServerRef: default
   infraComponents:
     artifactServers:
       - name: default
@@ -4335,6 +4329,8 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
+  defaults:
+    artifactServerRef: default
   infraComponents:
     artifactServers:
       - name: default
@@ -4525,10 +4521,10 @@ spec:
         address: 192.168.132.11
         source:
           type: external
-    artifactAccess:
-      serverRef: default
+    agent:
       redfishVirtualMedia:
-        endpointRef: bmc
+        artifactServerEndpoint:
+          endpointRef: bmc
     method: agent
     mode: connected
     pullSecretRef: openshift-pull-secret
@@ -4545,52 +4541,3 @@ spec:
       role: master
       machineRef: srv1
 `
-
-// clusterInstallUsesHostedTree must resolve the OS install profile through the
-// Machine's spec.os.installProfileRef — not the substrate machineProfile that
-// InstallMachine.Source.ProfileRef carries — so the hostedTree machineBoot
-// fail-closed validators actually fire. The bug read Source.ProfileRef (the
-// substrate profile, empty on bare metal), so the guard never triggered.
-func TestClusterInstallUsesHostedTreeResolvesOSInstallProfile(t *testing.T) {
-	machine := v1alpha1.Machine{Metadata: v1alpha1.Metadata{Name: "srv"}}
-	machine.Spec.OS.InstallProfileRef = v1alpha1.LocalObjectReference{Name: "rhel-hosted"}
-	// Substrate profileRef deliberately differs from the OS install profile; the
-	// bug keyed off this and missed the hostedTree source below.
-	machine.Spec.Substrate.ProfileRef = v1alpha1.LocalObjectReference{Name: "bm-profile"}
-
-	profile := v1alpha1.MachineInstallProfile{Metadata: v1alpha1.Metadata{Name: "rhel-hosted"}}
-	profile.Spec.Installer.Anaconda = &v1alpha1.MachineInstallAnaconda{
-		ImageRef: v1alpha1.LocalObjectReference{Name: "rhel-img"},
-		PackageSource: &v1alpha1.MachineInstallPackageSource{
-			HostedTree: &v1alpha1.MachineInstallPackageHostedTree{FromMedia: "local-media:rhel-9.7-x86_64-dvd.iso"},
-		},
-	}
-
-	image := v1alpha1.MachineImage{Metadata: v1alpha1.Metadata{Name: "rhel-img"}}
-	image.Spec.BootMedia = "local-media:rhel-9.7-x86_64-boot.iso"
-
-	state := v1alpha1.State{
-		Machines:               []v1alpha1.Machine{machine},
-		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{profile},
-		MachineImages:          []v1alpha1.MachineImage{image},
-	}
-	ci := v1alpha1.ClusterInstall{Machines: []v1alpha1.InstallMachine{{
-		Name: "srv",
-		Source: v1alpha1.InstallMachineSource{
-			MachineRef: v1alpha1.LocalObjectReference{Name: "srv"},
-			ProfileRef: v1alpha1.LocalObjectReference{Name: "bm-profile"},
-		},
-	}}}
-
-	if !clusterInstallUsesHostedTree(state, ci) {
-		t.Fatal("hostedTree install profile resolved via os.installProfileRef must be detected")
-	}
-
-	profile.Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
-		Mirror: &v1alpha1.MachineInstallPackageMirror{BaseURL: "https://mirror.example.test/rhel/9/BaseOS/x86_64/os/"},
-	}
-	state.MachineInstallProfiles = []v1alpha1.MachineInstallProfile{profile}
-	if clusterInstallUsesHostedTree(state, ci) {
-		t.Fatal("non-hostedTree install source must not be detected as hostedTree")
-	}
-}

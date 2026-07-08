@@ -51,6 +51,39 @@ func TestMachineImageBootMediaRejectsRetiredMediaReference(t *testing.T) {
 
 func machineInstallPackageSourceState(source *v1alpha1.MachineInstallPackageSource) v1alpha1.State {
 	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				Defaults: v1alpha1.EnvironmentDefaultsSpec{
+					ArtifactServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+				},
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					ArtifactServers: []v1alpha1.EnvironmentArtifactServerComponent{{
+						Name:         "default",
+						Management:   v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+					}},
+				},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "artifact-server"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotArtifactServer,
+				ArtifactServer: &v1alpha1.ArtifactServerComponent{
+					Listeners: []v1alpha1.ArtifactServerListener{{
+						Name:     "http",
+						Protocol: v1alpha1.ArtifactServerProtocolHTTP,
+						Port:     8080,
+					}},
+					Endpoints: []v1alpha1.ArtifactServerEndpoint{{
+						Name:        "tree",
+						ListenerRef: v1alpha1.LocalObjectReference{Name: "http"},
+						AddressRef:  v1alpha1.LocalObjectReference{Name: "artifact"},
+					}},
+				},
+			},
+		}},
 		MachineImages: []v1alpha1.MachineImage{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
 			Spec: v1alpha1.MachineImageSpec{

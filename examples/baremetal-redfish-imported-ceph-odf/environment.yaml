@@ -6,10 +6,7 @@ spec:
   baseDomain: bootwright.test
 
   defaults:
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: bmc
+    artifactServerRef: default
 
   resources:
     - secrets.yaml

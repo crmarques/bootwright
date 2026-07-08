@@ -11,6 +11,9 @@ spec:
   installer:
     anaconda:
       imageRef: rhel-9-x86-64-dvd
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          endpointRef: bmc
 
   customizations:
     hostname:

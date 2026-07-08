@@ -80,7 +80,7 @@ spec:
 {{.Substrate.PlatformYAML}}
     endpoints:
 {{.Substrate.EndpointsYAML}}
-{{.Substrate.ClusterArtifactAccess}}
+{{.Substrate.ClusterAgentArtifactServer}}
     nodeSSH:
       keyPairRef: {{.Cluster}}-cluster-admin-ssh-key
 

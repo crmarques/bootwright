@@ -104,7 +104,8 @@ a channel feed.
 | `install.mode` | No | `connected` | `connected` or `disconnected`. |
 | `install.platform` | No | Derived (see [Platform](#platform)) | Installer platform render mode. |
 | `install.endpoints` | No | — | Closed map keyed by `api`, `api-int`, and `ingress`; see [Endpoints](#endpoints). |
-| `install.artifactAccess` | No | Partly defaultable (see [Artifact access](#artifact-access)) | Artifact server and endpoint selectors for substrate boot and media flows. |
+| `install.agent.redfishVirtualMedia.artifactServerEndpoint` | Required for bare-metal nodes | `serverRef` may use `Environment.spec.defaults.artifactServerRef` | Artifact server endpoint the Redfish BMC fetches the agent ISO from. |
+| `install.agent.bootArtifacts.artifactServerEndpoint` | Required for disconnected installs | `serverRef` may use `Environment.spec.defaults.artifactServerRef` | Artifact server endpoint that publishes disconnected agent boot artifacts. |
 | `install.pullSecretRef` | Required for OpenShift | Environment default, else `openshift-pull-secret` | Pull secret name. |
 | `install.nodeSSH` | No | Generated `<cluster-name>-cluster-admin-ssh-key` | Node SSH material; see [Node SSH](#node-ssh). |
 | `install.additionalTrustBundleRefs[]` | No | — | Cluster-scoped install CA bundle secret names. |
@@ -114,8 +115,8 @@ a channel feed.
     `install.mode: disconnected` requires `Environment.spec.registries.mirror`
     with a `trustBundleRef` and either an external mirror `url` or a managed
     registry `InfraComponent`. It also requires
-    `install.artifactAccess.containerClusterInstall.endpointRef` to resolve on
-    the selected artifact server. See
+    `install.agent.bootArtifacts.artifactServerEndpoint.endpointRef` to resolve
+    on a managed artifact server. See
     [Disconnected and proxied installs](../advanced/disconnected-proxy.md).
 
 ### Node SSH
@@ -261,31 +262,26 @@ keys are accepted. Omitting an endpoint's `source.type` normalizes it to
     load balancers wire together, see
     [Networking](../advanced/networking.md).
 
-## Artifact access
+## Artifact Server Endpoints
 
-`install.artifactAccess` selects the artifact server and the per-flow endpoints
-that boot and install media use. It carries two top-level references and four
-endpoint selectors that each hold an `endpointRef`.
+Agent install consumers own the artifact server endpoint they use. The reusable
+selector shape is:
+
+```yaml
+artifactServerEndpoint:
+  serverRef: default   # optional when Environment.spec.defaults.artifactServerRef is set
+  endpointRef: bmc
+```
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `artifactAccess.providerRef` | No | — | `InfraProvider` that publishes artifacts for this cluster. |
-| `artifactAccess.serverRef` | No | Environment artifact-access default when any endpoint is set | `InfraComponent` artifact server hosting the published media. |
-| `artifactAccess.redfishVirtualMedia.endpointRef` | Required for bare-metal nodes | Environment default | Artifact-server endpoint the Redfish BMC fetches the agent ISO from. |
-| `artifactAccess.machineBoot.endpointRef` | No | — | Artifact-server endpoint for generic machine boot media. |
-| `artifactAccess.containerClusterInstall.endpointRef` | Required for disconnected installs | Environment default | Artifact-server endpoint that publishes the agent install ISO. |
-| `artifactAccess.osInstall.endpointRef` | No | — | Artifact-server endpoint for managed-OS install media. |
+| `install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef` | Required for bare-metal nodes | — | Endpoint the Redfish BMC fetches the agent ISO from. |
+| `install.agent.bootArtifacts.artifactServerEndpoint.endpointRef` | Required for disconnected installs | — | Endpoint that publishes agent boot artifacts and becomes `bootArtifactsBaseURL`. |
+| `artifactServerEndpoint.serverRef` | No | `Environment.spec.defaults.artifactServerRef` | Names an `Environment.spec.infraComponents.artifactServers[].name`. |
 
-!!! note "What normalize defaults, and what stays author-owned"
-    Normalize copies `Environment.spec.defaults.artifactAccess` into the
-    selectors a cluster actually consumes: `redfishVirtualMedia` when the
-    cluster binds a bare-metal machine, `containerClusterInstall` when
-    `install.mode: disconnected`, and `serverRef` whenever any of those endpoint
-    selectors resolves to a name. `providerRef`, `machineBoot.endpointRef`, and
-    `osInstall.endpointRef` are not Environment-defaulted — author them when a
-    flow needs them. When validation reports a dangling defaulted reference, it
-    states that the value was injected from `Environment` defaults rather than
-    authored, so you know where to fix it.
+`endpointRef` is never defaulted globally. A new consumer adds its own
+`artifactServerEndpoint` field instead of adding a slot to `InfraComponent` or
+`Environment`.
 
 ## Networking
 

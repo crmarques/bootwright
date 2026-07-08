@@ -156,8 +156,9 @@ func artifactServerComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstal
 		out["realisation"] = v1alpha1.ArtifactServerProtocolHTTP
 		out["tls"] = artifactServerTLSVars(state, server)
 		out["image"] = managedArtifactsHTTPImage(state)
-		if endpoint := artifacts.ConsumerEndpointName(ci, v1alpha1.ArtifactConsumerContainerClusterInstall); endpoint != "" {
-			if url := installer.ArtifactServerEndpointURL(state, server, endpoint); url != "" {
+		bootArtifacts := artifacts.EffectiveEndpointRef(state, ci.Agent.BootArtifacts.ArtifactServerEndpoint)
+		if bootArtifacts.ServerRef.Name == server.Entry.Name && bootArtifacts.EndpointRef.Name != "" {
+			if url := installer.ArtifactServerEndpointURL(state, server, bootArtifacts.EndpointRef.Name); url != "" {
 				out["url"] = url
 			}
 		}
@@ -251,7 +252,7 @@ func artifactServerTLSHosts(state v1alpha1.State, server artifacts.Server) []str
 	return hosts
 }
 
-func artifactEndpointFetchURL(state v1alpha1.State, server artifacts.Server, endpointName string, pathParts ...string) string {
+func artifactServerEndpointFetchURL(state v1alpha1.State, server artifacts.Server, endpointName string, pathParts ...string) string {
 	base := installer.ArtifactServerEndpointURL(state, server, endpointName)
 	if base == "" {
 		return ""

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -39,7 +40,24 @@ func validateContainerClusters(state v1alpha1.State) []string {
 		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
 		if ok {
 			errs = append(errs, validateClusterEndpoints(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ci, components, networkConfigs, true)...)
-			errs = append(errs, validateClusterArtifactAccess(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ocp.Spec.Install.ArtifactAccess, ocp.DefaultedRefs, env, components)...)
+			if artifacts.ClusterUsesBareMetalMachine(state, ci) {
+				errs = append(errs, validateArtifactServerEndpointRef(
+					fmt.Sprintf("ContainerCluster/%s spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", ocp.Metadata.Name),
+					ocp.Spec.Install.Agent.RedfishVirtualMedia.ArtifactServerEndpoint,
+					env,
+					components,
+					artifactServerEndpointValidation{Required: true, RequireManaged: true},
+				)...)
+			}
+			if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
+				errs = append(errs, validateArtifactServerEndpointRef(
+					fmt.Sprintf("ContainerCluster/%s spec.install.agent.bootArtifacts.artifactServerEndpoint", ocp.Metadata.Name),
+					ocp.Spec.Install.Agent.BootArtifacts.ArtifactServerEndpoint,
+					env,
+					components,
+					artifactServerEndpointValidation{Required: true, RequireManaged: true},
+				)...)
+			}
 			errs = append(errs, validateMachineNetworkBindings(ci, providers, networkConfigs)...)
 			errs = append(errs, validateContainerEndpointRefs(ocp, ci)...)
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)

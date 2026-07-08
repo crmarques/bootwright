@@ -195,7 +195,7 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 	if err != nil {
 		return nil
 	}
-	server, endpoint, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerContainerClusterInstall)
+	server, endpoint, ok := artifacts.ResolveEndpointRef(state, ci.Agent.BootArtifacts.ArtifactServerEndpoint)
 	if !ok {
 		return nil
 	}

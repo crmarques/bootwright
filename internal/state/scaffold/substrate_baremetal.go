@@ -82,7 +82,10 @@ spec:
     - name: ip
       address: 192.168.130.20
 `,
-	EnvArtifactServer: `  infraComponents:
+	EnvArtifactServer: `  defaults:
+    artifactServerRef: default
+
+  infraComponents:
     artifactServers:
       - name: default
         management: managed
@@ -103,10 +106,10 @@ spec:
       baremetal:
         vlan: 0
 `,
-	ClusterArtifactAccess: `    artifactAccess:
-      serverRef: default
+	ClusterAgentArtifactServer: `    agent:
       redfishVirtualMedia:
-        endpointRef: bmc
+        artifactServerEndpoint:
+          endpointRef: bmc
 `,
 	InfraComponentYAML: `apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent

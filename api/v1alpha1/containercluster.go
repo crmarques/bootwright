@@ -21,11 +21,8 @@ type ContainerCluster struct {
 // filled in. Each flag covers the named field; validation appends a
 // defaulted-from note when the injected reference fails to resolve.
 type ContainerClusterDefaultedRefs struct {
-	PullSecretRef                         bool
-	NodeSSH                               bool
-	ArtifactAccessServerRef               bool
-	ArtifactAccessRedfishVirtualMedia     bool
-	ArtifactAccessContainerClusterInstall bool
+	PullSecretRef bool
+	NodeSSH       bool
 }
 
 type ContainerClusterSpec struct {
@@ -58,15 +55,24 @@ type ContainerClusterFIPS struct {
 }
 
 type OCPInstallSpec struct {
-	Method                    string                   `yaml:"method,omitempty" json:"method,omitempty"`
-	Mode                      string                   `yaml:"mode,omitempty" json:"mode,omitempty"`
-	Platform                  InstallPlatform          `yaml:"platform,omitempty" json:"platform,omitempty"`
-	Endpoints                 map[string]Endpoint      `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
-	ArtifactAccess            ClusterArtifactAccess    `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
-	PullSecretRef             SecretRef                `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
-	NodeSSH                   NodeSSHSpec              `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
-	AdditionalTrustBundleRefs []SecretRef              `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
-	ServingCertificates       *ServingCertificatesSpec `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
+	Method                    string                    `yaml:"method,omitempty" json:"method,omitempty"`
+	Mode                      string                    `yaml:"mode,omitempty" json:"mode,omitempty"`
+	Platform                  InstallPlatform           `yaml:"platform,omitempty" json:"platform,omitempty"`
+	Endpoints                 map[string]Endpoint       `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	Agent                     ContainerClusterAgentSpec `yaml:"agent,omitempty" json:"agent,omitempty"`
+	PullSecretRef             SecretRef                 `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
+	NodeSSH                   NodeSSHSpec               `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
+	AdditionalTrustBundleRefs []SecretRef               `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
+	ServingCertificates       *ServingCertificatesSpec  `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
+}
+
+type ContainerClusterAgentSpec struct {
+	RedfishVirtualMedia ArtifactServerEndpointConsumer `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
+	BootArtifacts       ArtifactServerEndpointConsumer `yaml:"bootArtifacts,omitempty" json:"bootArtifacts,omitempty"`
+}
+
+type ArtifactServerEndpointConsumer struct {
+	ArtifactServerEndpoint ArtifactServerEndpointRef `yaml:"artifactServerEndpoint,omitempty" json:"artifactServerEndpoint,omitempty"`
 }
 
 type NodeSSHSpec struct {

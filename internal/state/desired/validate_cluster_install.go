@@ -281,53 +281,55 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 	return errs
 }
 
-// validateClusterArtifactAccess checks one artifactAccess block. It runs at
-// two sites: the Environment spec.defaults declaration (zero defaulted flags)
-// and each ContainerCluster spec.install, where defaulted flags mark the
-// fields normalize injected from Environment defaults so the diagnostic can
-// say the dangling value is not in the cluster author's file.
-func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifactAccess, defaulted v1alpha1.ContainerClusterDefaultedRefs, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
-	if access.ProviderRef.Name != "" {
-		return []string{owner + ".artifactAccess.providerRef is not valid; select artifact servers with serverRef"}
-	}
-	if access.ServerRef.Name == "" &&
-		access.RedfishVirtualMedia.EndpointRef.Name == "" &&
-		access.ContainerClusterInstall.EndpointRef.Name == "" &&
-		access.MachineBoot.EndpointRef.Name == "" &&
-		access.OSInstall.EndpointRef.Name == "" {
+type artifactServerEndpointValidation struct {
+	Required       bool
+	RequireManaged bool
+	RequireHTTP    bool
+}
+
+func validateArtifactServerEndpointRef(owner string, ref v1alpha1.ArtifactServerEndpointRef, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent, opts artifactServerEndpointValidation) []string {
+	if ref.IsZero() && !opts.Required {
 		return nil
 	}
-	note := func(injected bool, field string) string {
-		if !injected || env == nil {
-			return ""
-		}
-		return fmt.Sprintf(" (defaulted from Environment/%s spec.defaults.artifactAccess.%s)", env.Metadata.Name, field)
-	}
-	prefix := owner + ".artifactAccess"
 	var errs []string
-	if access.ServerRef.Name == "" {
-		msg := prefix + ".serverRef is required when artifactAccess endpoints are set"
-		if env != nil && (defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall) {
-			msg += fmt.Sprintf(" (endpoint refs defaulted from Environment/%s spec.defaults.artifactAccess)", env.Metadata.Name)
-		}
-		return []string{msg}
+	if ref.EndpointRef.Name == "" {
+		errs = append(errs, owner+".endpointRef is required")
 	}
 	if env == nil {
-		return []string{prefix + ".serverRef requires an Environment with spec.infraComponents.artifactServers"}
+		errs = append(errs, owner+".serverRef requires an Environment with spec.infraComponents.artifactServers")
+		return errs
 	}
-	serverRefNote := note(defaulted.ArtifactAccessServerRef, "serverRef")
-	entry, ok := environmentArtifactServerByName(env, access.ServerRef.Name)
+	serverRef := ref.ServerRef.Name
+	if serverRef == "" {
+		serverRef = env.Spec.Defaults.ArtifactServerRef.Name
+	}
+	if serverRef == "" {
+		errs = append(errs, owner+".serverRef is required or Environment.spec.defaults.artifactServerRef must be set")
+		return errs
+	}
+	entry, ok := environmentArtifactServerByName(env, serverRef)
 	if !ok {
-		return []string{fmt.Sprintf("%s.serverRef %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name%s", prefix, access.ServerRef.Name, env.Metadata.Name, serverRefNote)}
+		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name", owner, serverRef, env.Metadata.Name))
+		return errs
+	}
+	if opts.RequireManaged && entry.Management != v1alpha1.EnvironmentComponentManaged {
+		errs = append(errs, fmt.Sprintf("%s.serverRef %q must select a managed artifact server", owner, serverRef))
+		return errs
 	}
 	endpoints := artifactServerEndpointNames(entry, components)
 	if entry.Management == v1alpha1.EnvironmentComponentManaged && len(endpoints) == 0 {
-		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to managed artifact server endpoints%s", prefix, access.ServerRef.Name, serverRefNote))
+		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to managed artifact server endpoints", owner, serverRef))
 	}
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef", access.RedfishVirtualMedia.EndpointRef.Name, endpoints, note(defaulted.ArtifactAccessRedfishVirtualMedia, "redfishVirtualMedia.endpointRef"))...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".containerClusterInstall.endpointRef", access.ContainerClusterInstall.EndpointRef.Name, endpoints, note(defaulted.ArtifactAccessContainerClusterInstall, "containerClusterInstall.endpointRef"))...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".machineBoot.endpointRef", access.MachineBoot.EndpointRef.Name, endpoints, "")...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".osInstall.endpointRef", access.OSInstall.EndpointRef.Name, endpoints, "")...)
+	if ref.EndpointRef.Name != "" && !endpoints[ref.EndpointRef.Name] {
+		errs = append(errs, fmt.Sprintf("%s.endpointRef %q does not resolve to the selected artifact server endpoints", owner, ref.EndpointRef.Name))
+		return errs
+	}
+	if opts.RequireHTTP {
+		protocol := artifactServerEndpointProtocol(entry, components, ref.EndpointRef.Name)
+		if protocol != "" && protocol != v1alpha1.ArtifactServerProtocolHTTP {
+			errs = append(errs, fmt.Sprintf("%s.endpointRef %q must select an http artifact server endpoint", owner, ref.EndpointRef.Name))
+		}
+	}
 	return errs
 }
 
@@ -359,14 +361,24 @@ func artifactServerEndpointNames(entry v1alpha1.EnvironmentArtifactServerCompone
 	return out
 }
 
-func validateClusterArtifactEndpointRef(owner, name string, endpoints map[string]bool, note string) []string {
-	if name == "" {
-		return nil
+func artifactServerEndpointProtocol(entry v1alpha1.EnvironmentArtifactServerComponent, components map[string]v1alpha1.InfraComponent, name string) string {
+	if entry.Management != v1alpha1.EnvironmentComponentManaged {
+		return ""
 	}
-	if !endpoints[name] {
-		return []string{fmt.Sprintf("%s %q does not resolve to the selected artifact server endpoints%s", owner, name, note)}
+	component, ok := components[entry.ComponentRef.Name]
+	if !ok || component.Spec.ArtifactServer == nil {
+		return ""
 	}
-	return nil
+	listeners := map[string]string{}
+	for _, listener := range component.Spec.ArtifactServer.Listeners {
+		listeners[listener.Name] = listener.Protocol
+	}
+	for _, endpoint := range component.Spec.ArtifactServer.Endpoints {
+		if endpoint.Name == name {
+			return listeners[endpoint.ListenerRef.Name]
+		}
+	}
+	return ""
 }
 
 func validateMachineNetworkBindings(ci v1alpha1.ClusterInstall, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {

@@ -80,9 +80,10 @@ For a fully air-gapped estate that has a RHEL DVD but no package mirror or
 reachable CDN, the install profile's
 `installer.anaconda.packageSource.hostedTree` is the self-contained option:
 Bootwright extracts the DVD once into the artifact server and each node installs
-GPG-signed packages from that local tree over the `machineBoot` http endpoint —
-no external mirror, CDN, or proxy at install time. The node's package fetch is
-local, so it is **not** routed through `proxyFor.machineOSInstall`. See
+GPG-signed packages from that local tree over the
+`hostedTree.artifactServerEndpoint` HTTP endpoint — no external mirror, CDN, or
+proxy at install time. The node's package fetch is local, so it is **not**
+routed through `proxyFor.machineOSInstall`. See
 [hostedTree](managed-os.md#package-source-mirror-redhatcdn-or-hostedtree) for
 the media and endpoint wiring.
 
@@ -285,28 +286,29 @@ for those boot artifacts, so Bootwright renders a **minimal ISO** that fetches
 them at boot from the managed artifact server over HTTP. The artifact server's
 endpoint URL becomes the installer's `bootArtifactsBaseURL`.
 
-This requires an artifact endpoint binding: the cluster's effective
-`artifactAccess.containerClusterInstall.endpointRef` must resolve to an endpoint
-on a declared artifact server. A fleet can declare the binding once as an
-environment default so every disconnected cluster inherits it:
+This requires an artifact server endpoint binding: the cluster's
+`install.agent.bootArtifacts.artifactServerEndpoint.endpointRef` must resolve
+to an endpoint on a managed artifact server. The environment may default only
+the `serverRef`; the disconnected cluster declares the endpoint it consumes:
 
 ```yaml
 spec:
-  defaults:
-    artifactAccess:
-      serverRef: default
-      containerClusterInstall:
-        endpointRef: cluster
+  install:
+    mode: disconnected
+    agent:
+      bootArtifacts:
+        artifactServerEndpoint:
+          endpointRef: cluster
 ```
 
 !!! note "minimal ISO and bootArtifactsBaseURL are disconnected-only"
     Bootwright renders `minimalISO: true` and an endpoint-derived
     `bootArtifactsBaseURL` into `agent-config.yaml` only for a cluster whose
     `install.mode` is `disconnected` **and** whose effective
-    `artifactAccess.containerClusterInstall` resolves an artifact-server
-    endpoint. A connected cluster never gets these keys, even if it has an
-    artifact endpoint bound for other reasons (for example Redfish virtual
-    media).
+    `install.agent.bootArtifacts.artifactServerEndpoint` resolves an
+    artifact-server endpoint. A connected cluster never gets these keys, even if
+    it has an artifact endpoint bound for other reasons (for example Redfish
+    virtual media).
 
 ## RHSM and Satellite redirect
 

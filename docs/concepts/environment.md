@@ -41,7 +41,7 @@ means there is no default — an omitted optional field stays unset.
 | `spec.storageClusters[]` | No | All loaded | Active `StorageCluster` selection list. When set, loaded storage clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.defaults.install.pullSecretRef` | No | — | Default pull secret for clusters that omit `install.pullSecretRef`. |
 | `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [Container clusters](container-clusters.md)). |
-| `spec.defaults.artifactAccess` | No | — | Default artifact endpoint binding for active artifact consumers. See [Artifact access](#artifact-access). |
+| `spec.defaults.artifactServerRef` | No | — | Default artifact server name for consumer-owned `artifactServerEndpoint.serverRef` fields. |
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
 | `spec.defaults.virtctlMirror` | No | — | HTTP(S) base URL for a mirrored, version-matched `virtctl`. Empty means fetch from each KubeVirt host cluster's OpenShift Virtualization ConsoleCLIDownload; set it for disconnected labs. Validated as an `http(s)` URL when set. |
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
@@ -53,20 +53,22 @@ means there is no default — an omitted optional field stays unset.
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
 | `spec.componentImages` | No | — | Managed service image pins by component type and implementation. See [Component images](#component-images). |
 
-## Artifact access
+## Artifact Server Default
 
-`defaults.artifactAccess` and the cluster artifact access block share this
-shape. All fields are optional name references; the names are validated at the
-declaration site even when no cluster currently consumes them.
+`defaults.artifactServerRef` names a catalog entry in
+`spec.infraComponents.artifactServers[]`. It defaults only the server selector:
+consumers still declare their own `artifactServerEndpoint.endpointRef`, because
+endpoint purpose belongs to the consumer.
 
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `serverRef` | No | — | Names an `Environment.spec.infraComponents.artifactServers[].name`. |
-| `providerRef` | No | — | Provider-scoped artifact server selector where supported. |
-| `redfishVirtualMedia.endpointRef` | No | — | Endpoint used by BMCs fetching virtual media. |
-| `machineBoot.endpointRef` | No | — | Endpoint used by machine boot flows. |
-| `containerClusterInstall.endpointRef` | No | — | Endpoint used for disconnected or minimal ISO cluster install artifacts. |
-| `osInstall.endpointRef` | No | — | Endpoint used by managed machine OS install artifacts. |
+```yaml
+spec:
+  defaults:
+    artifactServerRef: default
+```
+
+Consumers may override the server by setting
+`artifactServerEndpoint.serverRef`; otherwise Bootwright applies this default
+when resolving the endpoint.
 
 ## Infra-component catalog
 

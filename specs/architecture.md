@@ -97,8 +97,8 @@ boundaries drive rendering:
   attachments from `Machine.spec.network.config.attachmentRef` to
   `InfraProvider.spec.networkAttachments[]`.
 - Global boot-artifact and time-source fields are rendered from disconnected
-  install mode, `ContainerCluster.spec.install.artifactAccess`, and resolved
-  environment NTP source entries.
+  install mode, `ContainerCluster.spec.install.agent.bootArtifacts`, and
+  resolved environment NTP source entries.
 - Infra component variables are rendered from `InfraComponent` services
   referenced by cluster endpoints, environment catalog entries, and
   `NetworkConfig.spec.nameResolutionRefs[]`.

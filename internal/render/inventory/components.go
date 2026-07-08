@@ -251,21 +251,39 @@ func usesManagedArtifacts(state v1alpha1.State) bool {
 		if err != nil {
 			continue
 		}
-		server, ok := artifacts.Select(state, ci)
-		if ok && server.Config != nil && artifacts.ClusterNeedsPublication(state, ci, ocp) {
+		if len(artifactServersForContainerCluster(state, ci, ocp)) > 0 {
 			return true
 		}
 	}
-	// A bare-metal storage cluster publishes its managed-OS install ISO through
-	// the artifact server for Redfish virtual media, so the server must run even
-	// when no container cluster consumes it.
 	for _, cluster := range ManagedStorageClusters(state) {
 		ci, ok := stateview.StorageClusterArtifactInstall(state, cluster)
 		if !ok {
 			continue
 		}
-		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
+		if storageUsesManagedArtifacts(state, ci) {
 			return true
+		}
+	}
+	return false
+}
+
+func storageUsesManagedArtifacts(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
+	for _, m := range ci.Machines {
+		machine, ok := stateview.Machine(state, m.Source.MachineRef.Name)
+		if !ok || !v1alpha1.MachineInstallsOS(machine) {
+			continue
+		}
+		profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+		if !ok || profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		if server, _, ok := artifacts.ResolveEndpointRef(state, profile.Spec.Installer.Anaconda.RedfishVirtualMedia.ArtifactServerEndpoint); ok && server.Config != nil {
+			return true
+		}
+		if hostedTree := profile.Spec.Installer.Anaconda.PackageSource.GetHostedTree(); hostedTree != nil {
+			if server, _, ok := artifacts.ResolveEndpointRef(state, hostedTree.ArtifactServerEndpoint); ok && server.Config != nil {
+				return true
+			}
 		}
 	}
 	return false

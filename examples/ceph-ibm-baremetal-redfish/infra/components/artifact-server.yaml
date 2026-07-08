@@ -8,8 +8,8 @@ spec:
   artifactServer:
     # Runs on the bastion. The `bmc` endpoint is what each Machine's BMC connects
     # to (over HTTPS, on the bastion's `lan` address) to mount the RHEL ISO as
-    # virtual media. environment.yaml wires it via
-    # defaults.artifactAccess.redfishVirtualMedia.endpointRef: bmc.
+    # virtual media. The Anaconda install profile wires it through
+    # redfishVirtualMedia.artifactServerEndpoint.endpointRef: bmc.
     machineRef: bastion
     endpoints:
       - name: bmc

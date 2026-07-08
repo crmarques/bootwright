@@ -165,10 +165,8 @@ func TestManagedOSInstallVarsFromCephBaremetalFixture(t *testing.T) {
 
 		// A bare-metal node mounts its managed-OS install ISO over the BMC, so
 		// the install ISO is published through the artifact server for Redfish
-		// virtual media. A StorageCluster cannot author spec.install.artifactAccess,
-		// so this access is derived from the Environment defaults; without it the
-		// boot.agentIso stage path resolves empty and the install role fails on
-		// `dirname("")` with "No such file or directory: b''".
+		// virtual media. A StorageCluster cannot author this endpoint, so the
+		// renderer reads it from the MachineInstallProfile Anaconda consumer.
 		boot, ok := component["boot"].(map[string]any)
 		if !ok {
 			t.Fatalf("component %v missing boot block", component["name"])

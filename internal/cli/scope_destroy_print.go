@@ -246,20 +246,42 @@ func artifactServerClusterConsumers(state v1alpha1.State) map[string]artifactSer
 		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
-		server, ok := artifacts.Select(state, ci)
-		if !ok || server.Config == nil {
-			continue
+		for _, ref := range clusterArtifactServerEndpointRefs(state, ci, ocp) {
+			server, ok := artifacts.Select(state, ref)
+			if !ok || server.Config == nil {
+				continue
+			}
+			usage := out[server.Component.Metadata.Name]
+			usage.machineRef = server.Config.MachineRef.Name
+			usage.clusters = appendUniqueString(usage.clusters, ocp.Metadata.Name)
+			out[server.Component.Metadata.Name] = usage
 		}
-		usage := out[server.Component.Metadata.Name]
-		usage.machineRef = server.Config.MachineRef.Name
-		usage.clusters = append(usage.clusters, ocp.Metadata.Name)
-		out[server.Component.Metadata.Name] = usage
 	}
 	for name, usage := range out {
 		sort.Strings(usage.clusters)
 		out[name] = usage
 	}
 	return out
+}
+
+func clusterArtifactServerEndpointRefs(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) []v1alpha1.ArtifactServerEndpointRef {
+	var refs []v1alpha1.ArtifactServerEndpointRef
+	if artifacts.ClusterUsesBareMetalMachine(state, ci) {
+		refs = append(refs, ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint)
+	}
+	if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
+		refs = append(refs, ci.Agent.BootArtifacts.ArtifactServerEndpoint)
+	}
+	return refs
+}
+
+func appendUniqueString(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 func containerClusterByName(state v1alpha1.State, name string) (v1alpha1.ContainerCluster, bool) {
@@ -289,9 +311,19 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInstall) st
 		parts = append(parts, "registry")
 	}
 	if ocp, ok := stategraph.SelectedClusterForInstall(state.ContainerClusters, ci.Metadata.Name); ok && artifacts.ClusterNeedsPublication(state, ci, ocp) {
-		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
+		if clusterUsesManagedArtifactServerEndpoint(state, ci, ocp) {
 			parts = append(parts, "artifacts")
 		}
 	}
 	return strings.Join(parts, ", ")
+}
+
+func clusterUsesManagedArtifactServerEndpoint(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) bool {
+	for _, ref := range clusterArtifactServerEndpointRefs(state, ci, ocp) {
+		server, ok := artifacts.Select(state, ref)
+		if ok && server.Config != nil {
+			return true
+		}
+	}
+	return false
 }

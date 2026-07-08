@@ -13,6 +13,9 @@ spec:
     # Anaconda installs RHEL onto each node from the DVD ISO BEFORE cephadm runs.
     anaconda:
       imageRef: rhel-9-7-dvd
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          endpointRef: bmc
 
   customizations:
     hostname:

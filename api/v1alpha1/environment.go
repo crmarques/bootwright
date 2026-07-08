@@ -51,13 +51,9 @@ type EnvironmentSafetySpec struct {
 }
 
 type EnvironmentDefaultsSpec struct {
-	Install EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
-	// ArtifactAccess fills omitted ContainerCluster
-	// spec.install.artifactAccess fields for active artifact consumers. Its
-	// serverRef and endpointRef names are validated here, at the declaration
-	// site, regardless of whether any cluster currently consumes them.
-	ArtifactAccess ClusterArtifactAccess `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
-	ClientsMirror  string                `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
+	Install           EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
+	ArtifactServerRef LocalObjectReference           `yaml:"artifactServerRef,omitempty" json:"artifactServerRef,omitempty"`
+	ClientsMirror     string                         `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
 	// VirtctlMirror overrides where the controller fetches the version-matched
 	// virtctl for KubeVirt host clusters. Empty means fetch from each host
 	// cluster's OpenShift Virtualization ConsoleCLIDownload; a disconnected lab

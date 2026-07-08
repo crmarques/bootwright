@@ -173,10 +173,9 @@ lever the tip above describes, taken all the way.
     so the DVD is verified in the store before it is served, and it must differ
     from the referenced image's `bootMedia`.
 
-2. **A node-reachable `machineBoot` HTTP endpoint.** The tree is served over the
-   cluster's `machineBoot` artifact endpoint, so the artifact server needs an
-   `http` listener and the endpoint must be bound (on the cluster's
-   `install.artifactAccess` or an `Environment` default):
+2. **A node-reachable hosted-tree HTTP endpoint.** The tree is served from the
+   `hostedTree.artifactServerEndpoint`, so the artifact server needs an `http`
+   listener and the endpoint must be declared by the hosted-tree consumer:
 
     ```yaml
     spec:                     # InfraComponent: the artifact server
@@ -189,18 +188,21 @@ lever the tip above describes, taken all the way.
     ```
 
     ```yaml
-    spec:                     # Environment defaults (or a cluster's install.artifactAccess)
-      defaults:
-        artifactAccess:
-          machineBoot:
-            endpointRef: tree
+    spec:                     # MachineInstallProfile
+      installer:
+        anaconda:
+          packageSource:
+            hostedTree:
+              fromMedia: local-media:rhel-9.6-x86_64-dvd.iso
+              artifactServerEndpoint:
+                endpointRef: tree
     ```
 
-    Serve `machineBoot` over **http**. The Anaconda installer verifies TLS and
-    would reject the artifact server's self-signed certificate; packages stay Red
-    Hat GPG-signed, so plain http is content-safe (a tampered tree cannot install
-    an unsigned package). The BMC still fetches the boot ISO over HTTPS as before —
-    only the package fetch moves to the node.
+    Serve the hosted tree over **http**. The Anaconda installer verifies TLS and
+    would reject the artifact server's self-signed certificate; packages stay
+    Red Hat GPG-signed, so plain http is content-safe (a tampered tree cannot
+    install an unsigned package). The BMC can still fetch the boot ISO over
+    HTTPS through `redfishVirtualMedia.artifactServerEndpoint`.
 
 !!! note "Trust: as safe as a sealed per-node ISO"
     The DVD is sha256-verified in the media store, extracted faithfully (Red Hat's

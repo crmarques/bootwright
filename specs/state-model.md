@@ -51,12 +51,10 @@ Rules:
   validation naming the object and the allowed set.
 - `defaults.install.pullSecretRef` and `defaults.install.nodeSSH` fill omitted
   cluster install values only.
-- `defaults.artifactAccess`, when set, is copied into selected
-  `ContainerCluster.spec.install.artifactAccess` fields only for active
-  artifact consumers. Its `serverRef` and `endpointRef` names are validated
-  at the declaration site regardless of current consumers, so a typo fails
-  when it is written; a per-cluster diagnostic on a normalize-injected value
-  additionally names the Environment default it came from.
+- `defaults.artifactServerRef`, when set, is the fleet-wide default artifact
+  server selector. It supplies only `serverRef` for consumer-owned
+  `artifactServerEndpoint` fields; every consumer still authors its own
+  `endpointRef`.
 - `defaults.clientsMirror`, when set, must be an `http(s)` URL. It overrides the
   base URL Bootwright downloads the OpenShift clients (`oc`,
   `openshift-install`) from, for disconnected or mirrored labs.
@@ -334,9 +332,10 @@ Rules:
   `redhat-rhel` `Entitlement`. RHSM organization and activation key secret refs
   are owned by that entitlement.
 - `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
-  once and serves from the cluster artifact server. It must reference local
-  media (`local-media:` or `file://`, not a URL) and must differ from the
-  referenced `MachineImage.spec.bootMedia`.
+  once and serves from the selected managed artifact server. It must reference
+  local media (`local-media:` or `file://`, not a URL), must differ from the
+  referenced `MachineImage.spec.bootMedia`, and must declare an
+  `artifactServerEndpoint.endpointRef` that resolves to an HTTP endpoint.
 - `packageSource` affects only the Anaconda installation transaction.
   Bootwright does not render persistent repo files or `repo --install` from it;
   future updates use the installed system's normal Red Hat/RHSM repositories or
@@ -486,10 +485,10 @@ spec:
         address: 192.0.2.11
         source:
           type: external
-    artifactAccess:
-      serverRef: default
+    agent:
       redfishVirtualMedia:
-        endpointRef: bmc
+        artifactServerEndpoint:
+          endpointRef: bmc
     nodeSSH:
       keyPairRef: ocp-3node-cluster-admin-ssh-key
   hosts:

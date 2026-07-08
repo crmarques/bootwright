@@ -37,7 +37,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
 		errs = append(errs, validateEnvironmentSafety(env)...)
-		errs = append(errs, validateEnvironmentDefaults(env, indexInfraComponents(state.InfraComponents))...)
+		errs = append(errs, validateEnvironmentDefaults(env)...)
 		errs = append(errs, validateEnvironmentSecretStorage(env)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
 		errs = append(errs, validateEnvironmentContainerClusters(env, state)...)
@@ -73,19 +73,13 @@ func validateEnvironmentSafety(env v1alpha1.Environment) []string {
 	return errs
 }
 
-func validateEnvironmentDefaults(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
 	var errs []string
-	// Declaration-site check: defaults.artifactAccess names must resolve even
-	// when no cluster currently consumes them, so a typo fails when it is
-	// written rather than when a consumer (baremetal node, disconnected
-	// install) appears later and inherits the dangling value.
-	errs = append(errs, validateClusterArtifactAccess(
-		fmt.Sprintf("Environment/%s spec.defaults", env.Metadata.Name),
-		env.Spec.Defaults.ArtifactAccess,
-		v1alpha1.ContainerClusterDefaultedRefs{},
-		&env,
-		components,
-	)...)
+	if ref := env.Spec.Defaults.ArtifactServerRef.Name; ref != "" {
+		if _, ok := environmentArtifactServerByName(&env, ref); !ok {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.artifactServerRef %q does not resolve to spec.infraComponents.artifactServers[].name", env.Metadata.Name, ref))
+		}
+	}
 	if mirror := strings.TrimSpace(env.Spec.Defaults.ClientsMirror); mirror != "" && !isHTTPURL(mirror) {
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.clientsMirror %q must be an http(s) URL", env.Metadata.Name, env.Spec.Defaults.ClientsMirror))
 	}

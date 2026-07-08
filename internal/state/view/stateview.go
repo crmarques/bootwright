@@ -141,7 +141,7 @@ func ClusterInstallForContainerCluster(state v1alpha1.State, cluster v1alpha1.Co
 		Metadata:        v1alpha1.Metadata{Name: cluster.Metadata.Name},
 		Platform:        cluster.Spec.Install.Platform,
 		Endpoints:       cluster.Spec.Install.Endpoints,
-		ArtifactAccess:  cluster.Spec.Install.ArtifactAccess,
+		Agent:           cluster.Spec.Install.Agent,
 		NetworkBindings: networkBindings,
 		Machines:        nodes,
 	}, len(nodes) > 0 || len(cluster.Spec.Install.Endpoints) > 0 || cluster.Spec.Install.Platform.Type != ""
@@ -151,18 +151,9 @@ func InstallMachineFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine
 	return clusterNodeFromMachine(machine)
 }
 
-// StorageClusterArtifactInstall builds the ClusterInstall view a storage
-// cluster's managed-OS install resolves against: its install machines plus the
-// artifact access taken from the Environment defaults. A StorageCluster cannot
-// author spec.install.artifactAccess (unlike a ContainerCluster), so a bare-metal
-// node whose managed OS installs over the BMC publishes its install ISO through
-// the artifact server named by those defaults. It returns ok=true only when at
-// least one node installs its OS over a bare-metal BMC — the one shape that needs
-// the artifact server for Redfish virtual media. This is the single source of
-// truth shared by the renderer (boot vars), validation, and the apply-scope
-// service graph, so all three agree on which artifact server (and host machine)
-// the install pulls in; a divergence drops the host from a scoped apply and the
-// install ISO stage path renders empty.
+// StorageClusterArtifactInstall builds the ClusterInstall view used by storage
+// managed-OS rendering. Artifact endpoint intent stays on the selected
+// MachineInstallProfile consumers.
 func StorageClusterArtifactInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster) (v1alpha1.ClusterInstall, bool) {
 	if cluster.Spec.Ceph == nil {
 		return v1alpha1.ClusterInstall{}, false
@@ -193,21 +184,6 @@ func StorageClusterArtifactInstall(state v1alpha1.State, cluster v1alpha1.Storag
 	ci := v1alpha1.ClusterInstall{
 		Metadata: v1alpha1.Metadata{Name: cluster.Metadata.Name},
 		Machines: machines,
-	}
-	if env := Environment(state); env != nil {
-		defaults := env.Spec.Defaults.ArtifactAccess
-		ci.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
-			ServerRef:           defaults.ServerRef,
-			RedfishVirtualMedia: defaults.RedfishVirtualMedia,
-			// A hostedTree managed-OS install fetches its packages from the
-			// artifact server's machineBoot endpoint. A StorageCluster cannot
-			// author spec.install.artifactAccess, so carry the Environment
-			// default through or the tree URL never resolves and the node boots
-			// a package-less installer (installer.sourceURL / image.installTree
-			// render empty and the cluster-install validator spuriously demands
-			// a machineBoot ref that is already authored).
-			MachineBoot: defaults.MachineBoot,
-		}
 	}
 	return ci, true
 }

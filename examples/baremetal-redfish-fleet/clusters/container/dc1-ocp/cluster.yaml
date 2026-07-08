@@ -15,6 +15,10 @@ spec:
         address: 192.168.141.10
       ingress:
         address: 192.168.141.11
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          endpointRef: bmc
 
   hosts:
 

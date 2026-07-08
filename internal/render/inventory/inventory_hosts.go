@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
@@ -136,15 +135,10 @@ func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 				out[host] = true
 			}
 		}
-		if !artifacts.ClusterNeedsPublication(state, ci, ocp) {
-			continue
-		}
-		server, ok := artifacts.Select(state, ci)
-		if !ok || server.Config == nil {
-			continue
-		}
-		if host := server.Config.MachineRef.Name; host != "" {
-			out[host] = true
+		for _, server := range artifactServersForContainerCluster(state, ci, ocp) {
+			if host := server.Config.MachineRef.Name; host != "" {
+				out[host] = true
+			}
 		}
 	}
 	return out

@@ -79,12 +79,13 @@ playbooks do not construct role names from those labels:
   backend hook. `bootwright.core.container_cluster_boot_redfish` remains the
   Redfish protocol role for both real BMCs and sushy-emulator.
 - Generated artifact publication resolves to the artifact server selected by
-  `ContainerCluster.spec.install.artifactAccess.serverRef`. For managed
+  the active consumer's `artifactServerEndpoint.serverRef`, falling back to
+  `Environment.spec.defaults.artifactServerRef` when omitted. For managed
   servers, the selected `InfraComponent` `machineRef` gates the rendered
   artifact service and limits it to that machine. The component declares
   listeners, endpoints, and optional bind address. Bare-metal Redfish machines
   and disconnected agent installs bind BMC-specific and cluster-install
-  endpoints through `ContainerCluster.spec.install.artifactAccess`.
+  endpoints through `ContainerCluster.spec.install.agent.*.artifactServerEndpoint`.
 
 `bmcRole` and `bootRole` are independent. BMC-driven substrates use a
 matched pair because the boot path runs through the BMC service

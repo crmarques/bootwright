@@ -196,7 +196,7 @@ Real BMCs must also reach the generated artifact HTTPS endpoint used for the
 agent ISO. If Redfish virtual media insert fails after the bastion can download
 the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
-`ContainerCluster.spec.install.artifactAccess.redfishVirtualMedia.endpointRef`.
+`ContainerCluster.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef`.
 
 If the BMC accepts the `InsertMedia` task but the task then ends in
 `Exception`/`ConnectionFailed` ("Failed to connect to virtual media") — common

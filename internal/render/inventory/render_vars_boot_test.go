@@ -664,7 +664,7 @@ func TestArtifactServerTLSOmittedByDefault(t *testing.T) {
 	}
 }
 
-func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
+func TestBareMetalArtifactFetchURLUsesSelectedArtifactServerEndpoint(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -683,12 +683,9 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 		ListenerRef: v1alpha1.LocalObjectReference{Name: "https"},
 		AddressRef:  v1alpha1.LocalObjectReference{Name: "cluster-lan"},
 	})
-	state.ContainerClusters[0].Spec.Install.ArtifactAccess = v1alpha1.ClusterArtifactAccess{}
-	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
-		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
-		RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
-			EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
-		},
+	state.Environments[0].Spec.Defaults.ArtifactServerRef = v1alpha1.LocalObjectReference{Name: "default"}
+	state.ContainerClusters[0].Spec.Install.Agent.RedfishVirtualMedia.ArtifactServerEndpoint = v1alpha1.ArtifactServerEndpointRef{
+		EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
 	}
 	desiredstate.Normalize(&state)
 
@@ -702,7 +699,7 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 	}
 }
 
-func TestBareMetalArtifactFetchURLUsesExternalArtifactEndpoint(t *testing.T) {
+func TestBareMetalArtifactFetchURLUsesExternalArtifactServerEndpoint(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -715,7 +712,7 @@ func TestBareMetalArtifactFetchURLUsesExternalArtifactEndpoint(t *testing.T) {
 			URL:  "https://artifacts.example.test:9443/vmedia",
 		}},
 	}}
-	state.ContainerClusters[0].Spec.Install.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = "bmc"
+	state.ContainerClusters[0].Spec.Install.Agent.RedfishVirtualMedia.ArtifactServerEndpoint.EndpointRef.Name = "bmc"
 
 	vars := Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)

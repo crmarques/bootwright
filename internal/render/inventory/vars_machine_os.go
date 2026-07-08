@@ -30,7 +30,7 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) 
 			component["machineRef"] = managedOSTaskHost(state, m)
 			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, paths); len(osInstall) > 0 {
 				component["osInstall"] = osInstall
-				boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name))
+				boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name), machineOSRedfishVirtualMediaEndpoint(state, machine))
 				if boot != nil {
 					boot["readiness"] = map[string]any{
 						"type": "none",
@@ -91,13 +91,13 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		NetworkBindings: bindings,
 		Machines:        machines,
 	}
-	// A bare-metal node's managed OS publishes its install ISO through the
-	// artifact server named by the Environment defaults (a StorageCluster cannot
-	// author spec.install.artifactAccess). stateview.StorageClusterArtifactInstall
-	// is the shared source of truth the apply-scope service graph also uses, so a
-	// scoped apply keeps the artifact server's host and the stage path resolves.
-	if artifactCI, ok := stateview.StorageClusterArtifactInstall(state, cluster); ok {
-		ci.ArtifactAccess = artifactCI.ArtifactAccess
-	}
 	return ci, len(machines) > 0
+}
+
+func machineOSRedfishVirtualMediaEndpoint(state v1alpha1.State, machine v1alpha1.Machine) v1alpha1.ArtifactServerEndpointRef {
+	profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+	if !ok || profile.Spec.Installer.Anaconda == nil {
+		return v1alpha1.ArtifactServerEndpointRef{}
+	}
+	return profile.Spec.Installer.Anaconda.RedfishVirtualMedia.ArtifactServerEndpoint
 }

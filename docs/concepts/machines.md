@@ -258,7 +258,7 @@ so there is no `type` field. Set it under
 | --- | --- | --- |
 | `mirror` | `baseURL` (required, `http(s)`), `repositories[]` (`id` + `http(s)` `baseURL`) | Install from an HTTP(S) install tree you host. `baseURL` is the primary tree (BaseOS); `repositories` are additional (e.g. AppStream). |
 | `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. |
-| `hostedTree` | `fromMedia` (required, `local-media:`/`file://`) | Bootwright extracts the DVD named by `fromMedia` once and serves it from the cluster artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from the referenced image's `spec.bootMedia`. |
+| `hostedTree` | `fromMedia` (required, `local-media:`/`file://`), `artifactServerEndpoint` | Bootwright extracts the DVD named by `fromMedia` once and serves it from the selected managed artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from the referenced image's `spec.bootMedia`; `artifactServerEndpoint.endpointRef` must select an HTTP endpoint. |
 
 !!! note "Registering against a corporate Satellite"
     A `redhatCDN` install registers against the public Red Hat CDN unless the
@@ -326,14 +326,14 @@ spec:
 
 A boot ISO with a **self-hosted install tree** (`hostedTree`) is the air-gapped,
 no-mirror case: Bootwright extracts the DVD named by `fromMedia` once into the
-cluster artifact server's document root and the installing node fetches
+selected artifact server's document root and the installing node fetches
 GPG-signed packages from it, so the ~10&nbsp;GB payload lands on disk once per
 `(cluster, image)` instead of inside every per-node ISO. Stage both the small
 boot ISO (`bootMedia`) and the DVD (`fromMedia`) with `bootwright media add` —
-the DVD is checksum-verified there — and bind the cluster's `machineBoot`
-artifact endpoint to an **http** listener (Anaconda verifies TLS and would
-reject a self-signed artifact certificate; the DVD's own `.treeinfo` advertises
-BaseOS and AppStream, so no `repositories` are needed):
+the DVD is checksum-verified there — and bind
+`hostedTree.artifactServerEndpoint` to an **http** listener (Anaconda verifies
+TLS and would reject a self-signed artifact certificate; the DVD's own
+`.treeinfo` advertises BaseOS and AppStream, so no `repositories` are needed):
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -351,6 +351,8 @@ spec:
       packageSource:
         hostedTree:
           fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
+          artifactServerEndpoint:
+            endpointRef: tree
 ```
 
 A full DVD image needs no profile `packageSource` at all:

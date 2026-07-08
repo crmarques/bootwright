@@ -9,7 +9,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/entitlements"
-	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -522,45 +521,8 @@ func selectedManagedRegistry(env *v1alpha1.Environment) *v1alpha1.EnvironmentReg
 
 func validateArtifactServerRequirements(state v1alpha1.State) []string {
 	env := primaryEnvironment(&state)
+	components := indexInfraComponents(state.InfraComponents)
 	var errs []string
-	for _, ocp := range state.ContainerClusters {
-		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
-		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
-			continue
-		}
-		prefix := fmt.Sprintf("ContainerCluster/%s", ocp.Metadata.Name)
-		if env == nil || len(env.Spec.InfraComponents.ArtifactServers) == 0 {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set Environment.spec.infraComponents.artifactServers", prefix))
-			continue
-		}
-		if ci.ArtifactAccess.ServerRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set spec.install.artifactAccess.serverRef", prefix))
-			continue
-		}
-		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
-			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerContainerClusterInstall); !ok {
-				errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires spec.install.artifactAccess.containerClusterInstall.endpointRef to resolve on the selected artifact server",
-					prefix))
-			}
-		}
-		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
-			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
-				errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires spec.install.artifactAccess.redfishVirtualMedia.endpointRef to resolve on the selected artifact server",
-					prefix))
-			}
-		}
-		if clusterInstallUsesHostedTree(state, ci) {
-			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerMachineBoot); !ok {
-				errs = append(errs, fmt.Sprintf("%s installs a node from an Anaconda hostedTree packageSource, so the installer fetches packages from the artifact server; set spec.install.artifactAccess.machineBoot.endpointRef to a resolvable endpoint (serve it over http so the installer does not reject a self-signed certificate)",
-					prefix))
-			}
-		}
-	}
-	// A StorageCluster cannot author spec.install.artifactAccess, so a bare-metal
-	// node whose managed OS installs over the BMC draws its Redfish virtual-media
-	// publication target from the Environment artifact-access defaults. Require
-	// them to resolve here; otherwise the install ISO stage path renders empty and
-	// the managed-OS role fails deep in apply with an opaque empty-path error.
 	for _, cluster := range state.StorageClusters {
 		ci, ok := stateview.StorageClusterArtifactInstall(state, cluster)
 		if !ok {
@@ -568,50 +530,35 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 		}
 		prefix := fmt.Sprintf("StorageCluster/%s", cluster.Metadata.Name)
 		if env == nil || len(env.Spec.InfraComponents.ArtifactServers) == 0 {
-			errs = append(errs, fmt.Sprintf("%s installs a bare-metal node's OS over the BMC, which needs generated artifact publication; set Environment.spec.infraComponents.artifactServers and spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef", prefix))
+			errs = append(errs, fmt.Sprintf("%s installs a bare-metal node's OS over the BMC, which needs generated artifact publication; set Environment.spec.infraComponents.artifactServers and MachineInstallProfile.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint", prefix))
 			continue
 		}
-		if ci.ArtifactAccess.ServerRef.Name == "" || ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s installs a bare-metal node's OS over the BMC; set Environment.spec.defaults.artifactAccess.serverRef and .redfishVirtualMedia.endpointRef so the install ISO can publish for Redfish virtual media", prefix))
-			continue
-		}
-		if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
-			errs = append(errs, fmt.Sprintf("%s bare-metal managed-OS install requires Environment.spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef to resolve on artifact server %q", prefix, ci.ArtifactAccess.ServerRef.Name))
-		}
-		if clusterInstallUsesHostedTree(state, ci) {
-			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerMachineBoot); !ok {
-				errs = append(errs, fmt.Sprintf("%s installs a node from an Anaconda hostedTree packageSource; set Environment.spec.defaults.artifactAccess.machineBoot.endpointRef so the installer can fetch packages from artifact server %q (serve it over http)", prefix, ci.ArtifactAccess.ServerRef.Name))
-			}
-		}
+		errs = append(errs, validateStorageManagedOSArtifactServerEndpoints(state, ci, env, components)...)
 	}
 	return errs
 }
 
-// clusterInstallUsesHostedTree reports whether any machine in ci installs from
-// an Anaconda hostedTree packageSource, so validation can require the
-// node-reachable machineBoot artifact endpoint the installer fetches the tree
-// from.
-func clusterInstallUsesHostedTree(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
+func validateStorageManagedOSArtifactServerEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInstall, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	var errs []string
 	for _, m := range ci.Machines {
-		// The OS install profile is machine.spec.os.installProfileRef, not the
-		// substrate machineProfile that m.Source.ProfileRef carries; resolve the
-		// Machine and read the OS install ref the renderer uses
-		// (vars_machine_os_install.go). Keying off the substrate profile always
-		// missed (bare-metal machines author no substrate profile), so this guard
-		// never fired.
 		machine, ok := stateview.Machine(state, m.Source.MachineRef.Name)
-		if !ok {
+		if !ok || !v1alpha1.MachineInstallsOS(machine) {
 			continue
 		}
 		profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
 		if !ok || profile.Spec.Installer.Anaconda == nil {
 			continue
 		}
-		if profile.Spec.Installer.Anaconda.PackageSource.GetHostedTree() != nil {
-			return true
-		}
+		prefix := fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda", profile.Metadata.Name)
+		errs = append(errs, validateArtifactServerEndpointRef(
+			prefix+".redfishVirtualMedia.artifactServerEndpoint",
+			profile.Spec.Installer.Anaconda.RedfishVirtualMedia.ArtifactServerEndpoint,
+			env,
+			components,
+			artifactServerEndpointValidation{Required: true, RequireManaged: true},
+		)...)
 	}
-	return false
+	return errs
 }
 
 // validateSecretReferences walks every SecretRef in the loaded state

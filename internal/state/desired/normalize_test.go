@@ -156,85 +156,6 @@ func TestNormalizeDoesNotDefaultMachineSSHUser(t *testing.T) {
 	}
 }
 
-func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *testing.T) {
-	state := artifactAccessDefaultState()
-	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack")}
-	state.Machines = []v1alpha1.Machine{bareMetalMachine("server-0", "rack")}
-	state.ContainerClusters = []v1alpha1.ContainerCluster{containerClusterWithMachine("cluster", "server-0")}
-
-	Normalize(&state)
-
-	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
-	if got := access.ServerRef.Name; got != "default" {
-		t.Fatalf("serverRef = %q, want default", got)
-	}
-	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "bmc" {
-		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want bmc", got)
-	}
-	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
-		t.Fatalf("containerClusterInstall.endpointRef = %q, want empty", got)
-	}
-	defaulted := state.ContainerClusters[0].DefaultedRefs
-	if !defaulted.ArtifactAccessServerRef || !defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall {
-		t.Fatalf("DefaultedRefs = %+v, want serverRef and redfishVirtualMedia marked defaulted", defaulted)
-	}
-}
-
-func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t *testing.T) {
-	state := artifactAccessDefaultState()
-	state.Machines = []v1alpha1.Machine{profiledMachine("server-0", "libvirt", v1alpha1.ProvisionerLibvirt)}
-	cluster := containerClusterWithMachine("cluster", "server-0")
-	cluster.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
-	state.ContainerClusters = []v1alpha1.ContainerCluster{cluster}
-
-	Normalize(&state)
-
-	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
-	if got := access.ServerRef.Name; got != "default" {
-		t.Fatalf("serverRef = %q, want default", got)
-	}
-	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "cluster" {
-		t.Fatalf("containerClusterInstall.endpointRef = %q, want cluster", got)
-	}
-	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "" {
-		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want empty", got)
-	}
-	defaulted := state.ContainerClusters[0].DefaultedRefs
-	if !defaulted.ArtifactAccessServerRef || !defaulted.ArtifactAccessContainerClusterInstall || defaulted.ArtifactAccessRedfishVirtualMedia {
-		t.Fatalf("DefaultedRefs = %+v, want serverRef and containerClusterInstall marked defaulted", defaulted)
-	}
-}
-
-func TestNormalizeEnvironmentArtifactAccessDefaultsKeepExplicitValues(t *testing.T) {
-	state := artifactAccessDefaultState()
-	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack")}
-	state.Machines = []v1alpha1.Machine{bareMetalMachine("server-0", "rack")}
-	cluster := containerClusterWithMachine("cluster", "server-0")
-	cluster.Spec.Install.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
-		ServerRef: v1alpha1.LocalObjectReference{Name: "site"},
-		RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
-			EndpointRef: v1alpha1.LocalObjectReference{Name: "oob"},
-		},
-	}
-	state.ContainerClusters = []v1alpha1.ContainerCluster{cluster}
-
-	Normalize(&state)
-
-	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
-	if got := access.ServerRef.Name; got != "site" {
-		t.Fatalf("serverRef = %q, want site", got)
-	}
-	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "oob" {
-		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want oob", got)
-	}
-	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
-		t.Fatalf("containerClusterInstall.endpointRef = %q, want empty", got)
-	}
-	if defaulted := state.ContainerClusters[0].DefaultedRefs; defaulted.ArtifactAccessServerRef || defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall {
-		t.Fatalf("DefaultedRefs = %+v, want explicit artifactAccess left unmarked", defaulted)
-	}
-}
-
 func TestNormalizeDefaultsAPIIntEndpointFromAPI(t *testing.T) {
 	state := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{
@@ -555,28 +476,6 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	}
 	if got := state.Secrets[0].Spec.Source.Generated.KeyType; got != v1alpha1.SSHKeyPairTypeEd25519 {
 		t.Fatalf("SSHKeyPair keyType = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
-	}
-}
-
-func artifactAccessDefaultState() v1alpha1.State {
-	return v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			Metadata: v1alpha1.Metadata{Name: "env"},
-			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
-				Defaults: v1alpha1.EnvironmentDefaultsSpec{
-					ArtifactAccess: v1alpha1.ClusterArtifactAccess{
-						ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
-						RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
-							EndpointRef: v1alpha1.LocalObjectReference{Name: "bmc"},
-						},
-						ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
-							EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
-						},
-					},
-				},
-			},
-		}},
 	}
 }
 

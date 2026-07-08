@@ -5,6 +5,8 @@ environments:
         name: 3-nodes-ocp-baremetal
       spec:
         baseDomain: bootwright.test
+        defaults:
+            artifactServerRef: default
         secretStorage:
             mode: source
         proxyFor:
@@ -306,10 +308,10 @@ containerClusters:
                     address: 192.168.140.11
                     source:
                         type: external
-            artifactAccess:
-                serverRef: default
+            agent:
                 redfishVirtualMedia:
-                    endpointRef: bmc
+                    artifactServerEndpoint:
+                        endpointRef: bmc
             pullSecretRef: openshift-pull-secret
             nodeSSH:
                 keyPairRef: 3-nodes-ocp-baremetal-cluster-admin-ssh-key

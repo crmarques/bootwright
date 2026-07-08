@@ -82,24 +82,29 @@ spec:
         componentRef: artifact-server
 ```
 
-The fleet declares the artifact endpoint binding **once** as an environment
-default, so every cluster inherits it instead of repeating it:
+The fleet may declare the artifact server **once** as an environment default,
+while each cluster still declares the endpoint it consumes:
 
 ```yaml
 spec:
   defaults:
-    artifactAccess:
-      serverRef: default
+    artifactServerRef: default
+```
+
+```yaml
+spec:
+  install:
+    agent:
       redfishVirtualMedia:
-        endpointRef: bmc
+        artifactServerEndpoint:
+          endpointRef: bmc
 ```
 
 The same pattern applies to the other shared services — a `loadBalancer`,
 `nameResolution`, `ntp`, `proxy`, or `registry` component is declared under
 `spec.infraComponents.*[]` and referenced by `componentRef`. A cluster that needs
-a different artifact server or endpoint than the fleet default overrides it on
-its own `ContainerCluster.spec.install.artifactAccess`; everything else falls
-back to the environment default. See
+a different artifact server sets `artifactServerEndpoint.serverRef`; every
+consumer-owned endpoint keeps its own `endpointRef`. See
 [Infrastructure](../concepts/infrastructure.md) for the component and endpoint
 field reference.
 

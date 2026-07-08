@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -46,7 +45,6 @@ func Normalize(state *v1alpha1.State) {
 	}
 	applyClusterPlatformDefaults(state)
 	applyClusterNetworkDefaults(state)
-	applyEnvironmentArtifactAccessDefaults(state, env)
 	applyBareMetalBMCDefaults(state)
 	for i := range state.ClusterAddons {
 		normalizeClusterAddon(&state.ClusterAddons[i])
@@ -307,60 +305,6 @@ func normalizeBMC(b *v1alpha1.BMCSpec) {
 	if b.Address != "" && b.Protocol == "" {
 		b.Protocol = v1alpha1.DefaultBMCProtocol
 	}
-}
-
-func applyEnvironmentArtifactAccessDefaults(state *v1alpha1.State, env *v1alpha1.Environment) {
-	if env == nil {
-		return
-	}
-	defaults := env.Spec.Defaults.ArtifactAccess
-	consumers := clusterInstallArtifactAccessConsumers(*state)
-	for i := range state.ContainerClusters {
-		cluster := &state.ContainerClusters[i]
-		consumer := consumers[cluster.Metadata.Name]
-		access := &cluster.Spec.Install.ArtifactAccess
-		if consumer.RedfishVirtualMedia && access.RedfishVirtualMedia.EndpointRef.Name == "" {
-			access.RedfishVirtualMedia = defaults.RedfishVirtualMedia
-			cluster.DefaultedRefs.ArtifactAccessRedfishVirtualMedia = access.RedfishVirtualMedia.EndpointRef.Name != ""
-		}
-		if consumer.ContainerClusterInstall && access.ContainerClusterInstall.EndpointRef.Name == "" {
-			access.ContainerClusterInstall = defaults.ContainerClusterInstall
-			cluster.DefaultedRefs.ArtifactAccessContainerClusterInstall = access.ContainerClusterInstall.EndpointRef.Name != ""
-		}
-		if access.ServerRef.Name == "" && clusterArtifactAccessHasEndpoint(*access) {
-			access.ServerRef = defaults.ServerRef
-			cluster.DefaultedRefs.ArtifactAccessServerRef = access.ServerRef.Name != ""
-		}
-	}
-}
-
-type artifactAccessConsumers struct {
-	RedfishVirtualMedia     bool
-	ContainerClusterInstall bool
-}
-
-func clusterInstallArtifactAccessConsumers(state v1alpha1.State) map[string]artifactAccessConsumers {
-	out := map[string]artifactAccessConsumers{}
-	for _, ocp := range state.ContainerClusters {
-		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
-		if !ok {
-			continue
-		}
-		consumer := out[ocp.Metadata.Name]
-		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
-			consumer.RedfishVirtualMedia = true
-		}
-		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
-			consumer.ContainerClusterInstall = true
-		}
-		out[ocp.Metadata.Name] = consumer
-	}
-	return out
-}
-
-func clusterArtifactAccessHasEndpoint(access v1alpha1.ClusterArtifactAccess) bool {
-	return access.RedfishVirtualMedia.EndpointRef.Name != "" ||
-		access.ContainerClusterInstall.EndpointRef.Name != ""
 }
 
 func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {

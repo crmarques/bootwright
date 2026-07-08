@@ -172,7 +172,7 @@ func TestHostRouteAddressFallback(t *testing.T) {
 	}
 }
 
-func TestStorageClusterArtifactInstallCarriesMachineBootDefault(t *testing.T) {
+func TestStorageClusterArtifactInstallCarriesMachinesOnly(t *testing.T) {
 	installs := false
 	provider := v1alpha1.InfraProvider{
 		Metadata: v1alpha1.Metadata{Name: "bare-metal"},
@@ -200,19 +200,7 @@ func TestStorageClusterArtifactInstallCarriesMachineBootDefault(t *testing.T) {
 			},
 		},
 	}
-	env := v1alpha1.Environment{
-		Spec: v1alpha1.EnvironmentSpec{
-			Defaults: v1alpha1.EnvironmentDefaultsSpec{
-				ArtifactAccess: v1alpha1.ClusterArtifactAccess{
-					ServerRef:           v1alpha1.LocalObjectReference{Name: "default"},
-					RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{EndpointRef: v1alpha1.LocalObjectReference{Name: "ip"}},
-					MachineBoot:         v1alpha1.ClusterArtifactEndpointRef{EndpointRef: v1alpha1.LocalObjectReference{Name: "tree"}},
-				},
-			},
-		},
-	}
 	state := v1alpha1.State{
-		Environments:    []v1alpha1.Environment{env},
 		InfraProviders:  []v1alpha1.InfraProvider{provider},
 		Machines:        []v1alpha1.Machine{machine},
 		StorageClusters: []v1alpha1.StorageCluster{cluster},
@@ -222,17 +210,8 @@ func TestStorageClusterArtifactInstallCarriesMachineBootDefault(t *testing.T) {
 	if !ok {
 		t.Fatal("StorageClusterArtifactInstall returned false for a bare-metal managed-OS ceph node")
 	}
-	// The hostedTree install resolves its package tree through the machineBoot
-	// endpoint; dropping the Environment default (as the pre-fix code did) leaves
-	// the node booting a package-less installer.
-	if got := ci.ArtifactAccess.MachineBoot.EndpointRef.Name; got != "tree" {
-		t.Fatalf("ci.ArtifactAccess.MachineBoot.EndpointRef.Name = %q, want %q", got, "tree")
-	}
-	if got := ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name; got != "ip" {
-		t.Fatalf("ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = %q, want %q", got, "ip")
-	}
-	if got := ci.ArtifactAccess.ServerRef.Name; got != "default" {
-		t.Fatalf("ci.ArtifactAccess.ServerRef.Name = %q, want %q", got, "default")
+	if len(ci.Machines) != 1 || ci.Machines[0].Name != "srv-0" {
+		t.Fatalf("ci.Machines = %+v, want srv-0", ci.Machines)
 	}
 }
 

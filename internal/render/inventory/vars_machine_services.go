@@ -112,15 +112,30 @@ func loadBalancerMachineServiceVars(state v1alpha1.State, service stategraph.Mac
 }
 
 func artifactMachineServiceVars(state v1alpha1.State, service stategraph.MachineService) (map[string]any, bool) {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil, false
+	}
+	component, ok := stateview.InfraComponent(state, service.Identity.Name)
+	if !ok || component.Spec.ArtifactServer == nil {
+		return nil, false
+	}
+	var entry v1alpha1.EnvironmentArtifactServerComponent
+	for _, candidate := range env.Spec.InfraComponents.ArtifactServers {
+		if candidate.Management == v1alpha1.EnvironmentComponentManaged && candidate.ComponentRef.Name == service.Identity.Name {
+			entry = candidate
+			break
+		}
+	}
+	if entry.Name == "" {
+		return nil, false
+	}
 	for _, consumer := range service.Consumers {
 		ci, ok := clusterInstallByName(state, consumer.ClusterInstall)
 		if !ok {
 			continue
 		}
-		server, ok := artifacts.Select(state, ci)
-		if !ok || server.Component.Metadata.Name != service.Identity.Name || server.Config == nil {
-			continue
-		}
+		server := artifacts.Server{Component: component, Config: component.Spec.ArtifactServer, Entry: entry}
 		return artifactServerComponentVars(state, ci, server), true
 	}
 	return nil, false

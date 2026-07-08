@@ -17,10 +17,10 @@ spec:
         address: 192.168.140.11
         source:
           type: external
-    artifactAccess:
-      serverRef: default
+    agent:
       redfishVirtualMedia:
-        endpointRef: bmc
+        artifactServerEndpoint:
+          endpointRef: bmc
     method: agent
     mode: connected
     nodeSSH:

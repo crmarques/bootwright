@@ -358,9 +358,9 @@ func TestManagedOSInstallUsesImageSourceURL(t *testing.T) {
 }
 
 // TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint pins the fail-closed
-// render path: a hostedTree packageSource whose cluster has no resolvable
-// machineBoot artifact endpoint must leave installer.sourceURL unset (so the
-// boot ISO install fails loudly on a package-less cdrom rather than
+// render path: a hostedTree packageSource with no resolvable
+// artifactServerEndpoint must leave installer.sourceURL unset (so the boot ISO
+// install fails loudly on a package-less cdrom rather than
 // mis-installing) and must not emit image.installTree. The cluster-install
 // validator rejects this configuration up front; the renderer only has to fail
 // safe, not panic.
@@ -381,7 +381,7 @@ func TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint(t *testing.T) {
 	osInstall := first["osInstall"].(map[string]any)
 	installer := osInstall["installer"].(map[string]any)
 	if got, ok := installer["sourceURL"]; ok {
-		t.Fatalf("installer.sourceURL = %v, want unset when the machineBoot endpoint does not resolve", got)
+		t.Fatalf("installer.sourceURL = %v, want unset when the hosted-tree endpoint does not resolve", got)
 	}
 	if _, ok := osInstall["image"].(map[string]any)["installTree"]; ok {
 		t.Fatalf("image.installTree must be absent when the hosted tree cannot resolve")

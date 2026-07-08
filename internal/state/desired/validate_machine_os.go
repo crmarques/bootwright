@@ -31,6 +31,8 @@ func validateMachineImages(state v1alpha1.State) []string {
 func validateMachineInstallProfiles(state v1alpha1.State) []string {
 	var errs []string
 	images := indexMachineImages(state.MachineImages)
+	env := primaryEnvironment(&state)
+	components := indexInfraComponents(state.InfraComponents)
 	for _, profile := range state.MachineInstallProfiles {
 		if e := validateName(v1alpha1.KindMachineInstallProfile, profile.Metadata.Name); e != "" {
 			errs = append(errs, e)
@@ -62,6 +64,24 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 			bootMedia = image.Spec.BootMedia
 		}
 		errs = append(errs, validateMachineInstallPackageSource(prefix+".installer.anaconda", bootMedia, anaconda.PackageSource)...)
+		if !anaconda.RedfishVirtualMedia.ArtifactServerEndpoint.IsZero() {
+			errs = append(errs, validateArtifactServerEndpointRef(
+				prefix+".installer.anaconda.redfishVirtualMedia.artifactServerEndpoint",
+				anaconda.RedfishVirtualMedia.ArtifactServerEndpoint,
+				env,
+				components,
+				artifactServerEndpointValidation{RequireManaged: true},
+			)...)
+		}
+		if hostedTree := anaconda.PackageSource.GetHostedTree(); hostedTree != nil {
+			errs = append(errs, validateArtifactServerEndpointRef(
+				prefix+".installer.anaconda.packageSource.hostedTree.artifactServerEndpoint",
+				hostedTree.ArtifactServerEndpoint,
+				env,
+				components,
+				artifactServerEndpointValidation{Required: true, RequireManaged: true, RequireHTTP: true},
+			)...)
+		}
 		customizations := profile.Spec.Customizations
 		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
 			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))

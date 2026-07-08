@@ -6,10 +6,7 @@ spec:
   baseDomain: bootwright.test
 
   defaults:
-    artifactAccess:
-      serverRef: default
-      containerClusterInstall:
-        endpointRef: cluster
+    artifactServerRef: default
 
   installTrust:
     caBundleRefs:

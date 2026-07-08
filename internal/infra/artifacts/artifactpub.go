@@ -19,8 +19,21 @@ type ResolvedEndpoint struct {
 	Host     string
 }
 
-func Select(state v1alpha1.State, ci v1alpha1.ClusterInstall) (Server, bool) {
-	return SelectByName(state, ci.ArtifactAccess.ServerRef.Name)
+func Select(state v1alpha1.State, ref v1alpha1.ArtifactServerEndpointRef) (Server, bool) {
+	effective := EffectiveEndpointRef(state, ref)
+	return SelectByName(state, effective.ServerRef.Name)
+}
+
+func EffectiveEndpointRef(state v1alpha1.State, ref v1alpha1.ArtifactServerEndpointRef) v1alpha1.ArtifactServerEndpointRef {
+	if ref.ServerRef.Name != "" {
+		return ref
+	}
+	env := stateview.Environment(state)
+	if env == nil || env.Spec.Defaults.ArtifactServerRef.Name == "" {
+		return ref
+	}
+	ref.ServerRef = env.Spec.Defaults.ArtifactServerRef
+	return ref
 }
 
 func SelectByName(state v1alpha1.State, name string) (Server, bool) {
@@ -54,25 +67,13 @@ func artifactServerEntry(entries []v1alpha1.EnvironmentArtifactServerComponent, 
 	return v1alpha1.EnvironmentArtifactServerComponent{}, false
 }
 
-func ConsumerEndpointName(ci v1alpha1.ClusterInstall, consumer string) string {
-	switch consumer {
-	case v1alpha1.ArtifactConsumerRedfishVirtualMedia:
-		return ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name
-	case v1alpha1.ArtifactConsumerContainerClusterInstall:
-		return ci.ArtifactAccess.ContainerClusterInstall.EndpointRef.Name
-	case v1alpha1.ArtifactConsumerMachineBoot:
-		return ci.ArtifactAccess.MachineBoot.EndpointRef.Name
-	default:
-		return ""
-	}
-}
-
-func ResolveConsumerEndpoint(state v1alpha1.State, ci v1alpha1.ClusterInstall, consumer string) (Server, string, bool) {
-	endpointName := ConsumerEndpointName(ci, consumer)
+func ResolveEndpointRef(state v1alpha1.State, ref v1alpha1.ArtifactServerEndpointRef) (Server, string, bool) {
+	effective := EffectiveEndpointRef(state, ref)
+	endpointName := effective.EndpointRef.Name
 	if endpointName == "" {
 		return Server{}, "", false
 	}
-	server, ok := Select(state, ci)
+	server, ok := SelectByName(state, effective.ServerRef.Name)
 	if !ok || !EndpointAvailable(server, endpointName) {
 		return Server{}, "", false
 	}

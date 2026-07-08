@@ -38,7 +38,7 @@ spec:
   # EXTERNAL (existing site infrastructure that Bootwright only consumes):
   #   - artifactServers  managed: Bootwright runs an HTTPS server on the bastion
   #                      that serves the RHEL install media to each BMC over
-  #                      Redfish virtual media (see defaults.artifactAccess).
+  #                      Redfish virtual media (selected by the install profile).
   #   - proxies          external: the corporate forward proxy nodes use to reach
   #                      RHSM, cp.icr.io, and IBM's repo host.
   #   - nameResolution   external: the site DNS resolvers (two, for redundancy).
@@ -91,12 +91,8 @@ spec:
   proxyFor:
     bootwright: default
 
-  # Serve install artifacts from the `default` artifact server and let each
-  # machine's BMC mount the RHEL ISO over Redfish virtual media via the `bmc`
-  # endpoint. This is what makes the bare-metal anaconda install boot.
+  # Default artifact server for consumers. The install profile declares which
+  # endpoint each BMC uses for Redfish virtual media.
 
   defaults:
-    artifactAccess:
-      serverRef: default
-      redfishVirtualMedia:
-        endpointRef: bmc
+    artifactServerRef: default

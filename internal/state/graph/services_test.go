@@ -220,10 +220,7 @@ func bareMetalStorageManagedOSState() v1alpha1.State {
 					}},
 				},
 				Defaults: v1alpha1.EnvironmentDefaultsSpec{
-					ArtifactAccess: v1alpha1.ClusterArtifactAccess{
-						ServerRef:           v1alpha1.LocalObjectReference{Name: "default"},
-						RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"}},
-					},
+					ArtifactServerRef: v1alpha1.LocalObjectReference{Name: "default"},
 				},
 			},
 		}},
@@ -233,6 +230,20 @@ func bareMetalStorageManagedOSState() v1alpha1.State {
 		},
 		InfraProviders:  []v1alpha1.InfraProvider{bareMetalProvider("baremetal")},
 		InfraComponents: []v1alpha1.InfraComponent{artifactServerComponent()},
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
+			Metadata: v1alpha1.Metadata{Name: "rhel-9-ceph"},
+			Spec: v1alpha1.MachineInstallProfileSpec{
+				Installer: v1alpha1.MachineInstallProfileInstaller{
+					Anaconda: &v1alpha1.MachineInstallAnaconda{
+						RedfishVirtualMedia: v1alpha1.ArtifactServerEndpointConsumer{
+							ArtifactServerEndpoint: v1alpha1.ArtifactServerEndpointRef{
+								EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+							},
+						},
+					},
+				},
+			},
+		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
@@ -558,10 +569,12 @@ func containerCluster(name, machineName string) v1alpha1.ContainerCluster {
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
 				Mode: v1alpha1.InstallModeDisconnected,
-				ArtifactAccess: v1alpha1.ClusterArtifactAccess{
-					ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
-					ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
-						EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+				Agent: v1alpha1.ContainerClusterAgentSpec{
+					BootArtifacts: v1alpha1.ArtifactServerEndpointConsumer{
+						ArtifactServerEndpoint: v1alpha1.ArtifactServerEndpointRef{
+							ServerRef:   v1alpha1.LocalObjectReference{Name: "default"},
+							EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+						},
 					},
 				},
 				Endpoints: map[string]v1alpha1.Endpoint{

@@ -9,11 +9,10 @@ import (
 )
 
 // TestValidateArtifactServerRequirementsStorageBareMetalManagedOS guards the
-// fix for the opaque empty-path apply failure (No such file or directory): a storage
-// cluster cannot author artifactAccess, so a bare-metal node whose managed OS
-// installs over the BMC draws its Redfish virtual-media publication target from
-// the Environment defaults. When those are absent the renderer produces an empty
-// stage path; validation must reject it first with an actionable message.
+// fix for the opaque empty-path apply failure (No such file or directory): a
+// bare-metal node whose managed OS installs over the BMC needs the install
+// profile to declare its Redfish virtual-media publication endpoint. When it is
+// absent the renderer would otherwise produce an empty stage path.
 func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.T) {
 	baseState := func() v1alpha1.State {
 		return v1alpha1.State{
@@ -48,6 +47,14 @@ func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.
 					},
 				},
 			}},
+			MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
+				Metadata: v1alpha1.Metadata{Name: "rhel-9-ceph"},
+				Spec: v1alpha1.MachineInstallProfileSpec{
+					Installer: v1alpha1.MachineInstallProfileInstaller{
+						Anaconda: &v1alpha1.MachineInstallAnaconda{},
+					},
+				},
+			}},
 		}
 	}
 
@@ -60,7 +67,7 @@ func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.
 		}
 	})
 
-	t.Run("artifact server present but defaults unset", func(t *testing.T) {
+	t.Run("artifact server present but consumer endpoint unset", func(t *testing.T) {
 		state := baseState()
 		state.Environments = []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -75,8 +82,8 @@ func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.
 			},
 		}}
 		errs := strings.Join(validateArtifactServerRequirements(state), "; ")
-		if !strings.Contains(errs, "spec.defaults.artifactAccess") {
-			t.Fatalf("want a missing-defaults artifact-access error, got %q", errs)
+		if !strings.Contains(errs, "MachineInstallProfile/rhel-9-ceph spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.endpointRef is required") {
+			t.Fatalf("want a missing managed-OS artifact endpoint error, got %q", errs)
 		}
 	})
 

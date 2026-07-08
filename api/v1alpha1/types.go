@@ -237,11 +237,8 @@ const (
 	DefaultNTPPort            = 123
 	DefaultServiceBindAddress = "0.0.0.0"
 
-	ArtifactServerProtocolHTTP              = "http"
-	ArtifactServerProtocolHTTPS             = "https"
-	ArtifactConsumerRedfishVirtualMedia     = "redfishVirtualMedia"
-	ArtifactConsumerMachineBoot             = "machineBoot"
-	ArtifactConsumerContainerClusterInstall = "containerClusterInstall"
+	ArtifactServerProtocolHTTP  = "http"
+	ArtifactServerProtocolHTTPS = "https"
 
 	// TLS protocol version names, lowest to highest, as accepted by
 	// ArtifactServerTLS.minVersion and emitted into nginx ssl_protocols.

@@ -22,6 +22,10 @@ spec:
         address: 192.168.140.20
         source:
           type: external
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          endpointRef: bmc
 
   hosts:
 

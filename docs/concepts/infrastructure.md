@@ -56,14 +56,11 @@ and any other arm must be empty.
 | `spec.kubevirt` | For `type: kubevirt` | — | Host cluster or kubeconfig, namespace, storage class, and VM profiles. |
 | `spec.networkAttachments[]` | No | — | Named substrate network attachment capabilities. |
 
-!!! warning "`spec.artifactAccess` is rejected on InfraProvider"
-    The struct still carries an `artifactAccess` field, but setting it on an
-    `InfraProvider` fails validation:
-    `spec.artifactAccess is not valid on InfraProvider; use
-    Environment.spec.defaults.artifactAccess or
-    ContainerCluster.spec.install.artifactAccess`. Author artifact access on
-    [`Environment`](environment.md#artifact-access) or
-    [`ContainerCluster`](container-clusters.md) instead.
+!!! note "Artifact use belongs to consumers"
+    `InfraProvider` does not declare artifact access. Artifact servers are
+    cataloged on [`Environment`](environment.md#artifact-server-default), and
+    consumers such as cluster agent install or Anaconda hosted-tree sources
+    declare their own `artifactServerEndpoint`.
 
 !!! note "Arm matches `spec.type`"
     Exactly one provider arm is populated and it must match `spec.type`. Setting
@@ -495,11 +492,11 @@ default HTTPS listener on port `8443`.
 
 !!! warning "BMC reachability for virtual media"
     The artifact server endpoint selected by an
-    `artifactAccess.redfishVirtualMedia.endpointRef` should usually resolve to an
-    IP address the BMC network can reach. Many BMCs do not reliably resolve DNS
-    aliases, and Bootwright uses the matched address value directly in the ISO URL
-    sent to Redfish — controller reachability alone is not enough for virtual-media
-    ISO fetches.
+    `redfishVirtualMedia.artifactServerEndpoint.endpointRef` should usually
+    resolve to an IP address the BMC network can reach. Many BMCs do not
+    reliably resolve DNS aliases, and Bootwright uses the matched address value
+    directly in the ISO URL sent to Redfish — controller reachability alone is
+    not enough for virtual-media ISO fetches.
 
 !!! note "Legacy BMC HTTPS virtual media"
     A legacy BMC HTTPS virtual-media client (e.g. Huawei iBMC) can fail to fetch

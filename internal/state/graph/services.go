@@ -268,25 +268,15 @@ func clusterMachineServiceConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 	out = append(out, networkNameResolutionConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedNTPConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedRegistryConsumers(state, infra, cluster)...)
-	if artifacts.ClusterNeedsPublication(state, infra, cluster) {
-		if server, ok := artifacts.Select(state, infra); ok && server.Config != nil {
-			out = append(out, newServiceConsumer(
-				cluster.Metadata.Name,
-				infra.Metadata.Name,
-				fmt.Sprintf("Environment artifactServer InfraComponent/%s", server.Component.Metadata.Name),
-				v1alpha1.ComponentSlotArtifactServer,
-				v1alpha1.KindInfraComponent,
-				server.Component.Metadata.Name,
-				v1alpha1.ArtifactServerProtocolHTTP,
-				map[string]string{
-					"machineRef":  server.Config.MachineRef.Name,
-					"bindAddress": server.Config.BindAddress,
-					"listeners":   artifactListenersKey(server.Config.Listeners),
-					"endpoints":   artifactEndpointsKey(server.Config.Endpoints),
-				},
-				nil,
-			))
-		}
+	if artifacts.ClusterUsesBareMetalMachine(state, infra) {
+		out = append(out, artifactServerConsumersForRefs(state, cluster.Metadata.Name, infra.Metadata.Name, []v1alpha1.ArtifactServerEndpointRef{
+			infra.Agent.RedfishVirtualMedia.ArtifactServerEndpoint,
+		})...)
+	}
+	if v1alpha1.InstallMode(cluster) == v1alpha1.InstallModeDisconnected {
+		out = append(out, artifactServerConsumersForRefs(state, cluster.Metadata.Name, infra.Metadata.Name, []v1alpha1.ArtifactServerEndpointRef{
+			infra.Agent.BootArtifacts.ArtifactServerEndpoint,
+		})...)
 	}
 	return out
 }
@@ -349,29 +339,55 @@ func storageArtifactServerConsumers(state v1alpha1.State, cluster v1alpha1.Stora
 	if !ok {
 		return nil
 	}
-	if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
-		return nil
+	return artifactServerConsumersForRefs(state, cluster.Metadata.Name, cluster.Metadata.Name, storageArtifactServerEndpointRefs(state, ci))
+}
+
+func storageArtifactServerEndpointRefs(state v1alpha1.State, ci v1alpha1.ClusterInstall) []v1alpha1.ArtifactServerEndpointRef {
+	var refs []v1alpha1.ArtifactServerEndpointRef
+	for _, m := range ci.Machines {
+		machine, ok := stateview.Machine(state, m.Source.MachineRef.Name)
+		if !ok || !v1alpha1.MachineInstallsOS(machine) {
+			continue
+		}
+		profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+		if !ok || profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		refs = append(refs, profile.Spec.Installer.Anaconda.RedfishVirtualMedia.ArtifactServerEndpoint)
+		if hostedTree := profile.Spec.Installer.Anaconda.PackageSource.GetHostedTree(); hostedTree != nil {
+			refs = append(refs, hostedTree.ArtifactServerEndpoint)
+		}
 	}
-	server, ok := artifacts.Select(state, ci)
-	if !ok || server.Config == nil {
-		return nil
+	return refs
+}
+
+func artifactServerConsumersForRefs(state v1alpha1.State, clusterName, installName string, refs []v1alpha1.ArtifactServerEndpointRef) []MachineServiceConsumer {
+	seen := map[string]bool{}
+	var out []MachineServiceConsumer
+	for _, ref := range refs {
+		server, _, ok := artifacts.ResolveEndpointRef(state, ref)
+		if !ok || server.Config == nil || seen[server.Component.Metadata.Name] {
+			continue
+		}
+		seen[server.Component.Metadata.Name] = true
+		out = append(out, newServiceConsumer(
+			clusterName,
+			installName,
+			fmt.Sprintf("Environment artifactServer InfraComponent/%s", server.Component.Metadata.Name),
+			v1alpha1.ComponentSlotArtifactServer,
+			v1alpha1.KindInfraComponent,
+			server.Component.Metadata.Name,
+			v1alpha1.ArtifactServerProtocolHTTP,
+			map[string]string{
+				"machineRef":  server.Config.MachineRef.Name,
+				"bindAddress": server.Config.BindAddress,
+				"listeners":   artifactListenersKey(server.Config.Listeners),
+				"endpoints":   artifactServerEndpointsKey(server.Config.Endpoints),
+			},
+			nil,
+		))
 	}
-	return []MachineServiceConsumer{newServiceConsumer(
-		cluster.Metadata.Name,
-		cluster.Metadata.Name,
-		fmt.Sprintf("Environment artifactServer InfraComponent/%s", server.Component.Metadata.Name),
-		v1alpha1.ComponentSlotArtifactServer,
-		v1alpha1.KindInfraComponent,
-		server.Component.Metadata.Name,
-		v1alpha1.ArtifactServerProtocolHTTP,
-		map[string]string{
-			"machineRef":  server.Config.MachineRef.Name,
-			"bindAddress": server.Config.BindAddress,
-			"listeners":   artifactListenersKey(server.Config.Listeners),
-			"endpoints":   artifactEndpointsKey(server.Config.Endpoints),
-		},
-		nil,
-	)}
+	return out
 }
 
 func bmcConsumerForMachine(state v1alpha1.State, clusterName, clusterInstallName, owner string, machine v1alpha1.InstallMachine) (MachineServiceConsumer, bool) {
@@ -632,7 +648,7 @@ func artifactListenersKey(listeners []v1alpha1.ArtifactServerListener) string {
 	return strings.Join(parts, ",")
 }
 
-func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
+func artifactServerEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
 	parts := make([]string, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.ListenerRef.Name, endpoint.AddressRef.Name))

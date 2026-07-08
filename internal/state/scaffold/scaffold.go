@@ -261,7 +261,7 @@ type Substrate struct {
 	ProviderCapabilities       string
 	ProviderNetworkAttachments string
 	InfraComponentYAML         string
-	ClusterArtifactAccess      string
+	ClusterAgentArtifactServer string
 	EndpointsYAML              string
 	PlatformYAML               string
 }

@@ -1,25 +1,21 @@
 package v1alpha1
 
 type ClusterInstall struct {
-	Metadata        Metadata                `yaml:"-" json:"-"`
-	Platform        InstallPlatform         `yaml:"-" json:"-"`
-	Endpoints       map[string]Endpoint     `yaml:"-" json:"-"`
-	ArtifactAccess  ClusterArtifactAccess   `yaml:"-" json:"-"`
-	NetworkBindings []MachineNetworkBinding `yaml:"-" json:"-"`
-	Machines        []InstallMachine        `yaml:"-" json:"-"`
+	Metadata        Metadata                  `yaml:"-" json:"-"`
+	Platform        InstallPlatform           `yaml:"-" json:"-"`
+	Endpoints       map[string]Endpoint       `yaml:"-" json:"-"`
+	Agent           ContainerClusterAgentSpec `yaml:"-" json:"-"`
+	NetworkBindings []MachineNetworkBinding   `yaml:"-" json:"-"`
+	Machines        []InstallMachine          `yaml:"-" json:"-"`
 }
 
-type ClusterArtifactAccess struct {
-	ProviderRef             LocalObjectReference       `yaml:"providerRef,omitempty" json:"providerRef,omitempty"`
-	ServerRef               LocalObjectReference       `yaml:"serverRef,omitempty" json:"serverRef,omitempty"`
-	RedfishVirtualMedia     ClusterArtifactEndpointRef `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
-	MachineBoot             ClusterArtifactEndpointRef `yaml:"machineBoot,omitempty" json:"machineBoot,omitempty"`
-	ContainerClusterInstall ClusterArtifactEndpointRef `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
-	OSInstall               ClusterArtifactEndpointRef `yaml:"osInstall,omitempty" json:"osInstall,omitempty"`
-}
-
-type ClusterArtifactEndpointRef struct {
+type ArtifactServerEndpointRef struct {
+	ServerRef   LocalObjectReference `yaml:"serverRef,omitempty" json:"serverRef,omitempty"`
 	EndpointRef LocalObjectReference `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
+}
+
+func (r ArtifactServerEndpointRef) IsZero() bool {
+	return r.ServerRef.Name == "" && r.EndpointRef.Name == ""
 }
 
 type MachineNetworkBinding struct {

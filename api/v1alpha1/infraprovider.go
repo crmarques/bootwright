@@ -14,15 +14,7 @@ type InfraProviderSpec struct {
 	BareMetal          *InfraProviderBareMetal       `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
 	VSphere            *InfraProviderVSphere         `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
 	KubeVirt           *InfraProviderKubeVirt        `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
-	ArtifactAccess     ProviderArtifactAccess        `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
 	NetworkAttachments []NetworkAttachmentCapability `yaml:"networkAttachments,omitempty" json:"networkAttachments,omitempty"`
-}
-
-type ProviderArtifactAccess struct {
-	ServerRef           LocalObjectReference       `yaml:"serverRef,omitempty" json:"serverRef,omitempty"`
-	RedfishVirtualMedia ClusterArtifactEndpointRef `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
-	MachineBoot         ClusterArtifactEndpointRef `yaml:"machineBoot,omitempty" json:"machineBoot,omitempty"`
-	OSInstall           ClusterArtifactEndpointRef `yaml:"osInstall,omitempty" json:"osInstall,omitempty"`
 }
 
 type InfraProviderLibvirt struct {

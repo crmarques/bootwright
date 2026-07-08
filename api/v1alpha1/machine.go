@@ -207,7 +207,7 @@ type MachineInstallPackageSource struct {
 	// RedhatCDN registers against Red Hat's CDN over an RHSM entitlement.
 	RedhatCDN *MachineInstallPackageRedhatCDN `yaml:"redhatCDN,omitempty" json:"redhatCDN,omitempty"`
 	// HostedTree has bootwright extract a DVD once and serve it from the
-	// cluster artifact server (the air-gapped, no-mirror case).
+	// selected artifact server (the air-gapped, no-mirror case).
 	HostedTree *MachineInstallPackageHostedTree `yaml:"hostedTree,omitempty" json:"hostedTree,omitempty"`
 }
 
@@ -250,17 +250,18 @@ type MachineInstallPackageRedhatCDN struct {
 	EntitlementRef LocalObjectReference `yaml:"entitlementRef" json:"entitlementRef"`
 }
 
-// MachineInstallPackageHostedTree has bootwright extract a DVD into the cluster
-// artifact server and serve it as an install tree over the machineBoot
-// endpoint. The installing node fetches GPG-signed packages from that tree, so
-// the DVD payload lands on disk once per (cluster, image) instead of inside
-// every per-node ISO. Serve machineBoot over HTTP (the installer verifies TLS
-// and would reject a self-signed artifact cert).
+// MachineInstallPackageHostedTree has bootwright extract a DVD into a managed
+// artifact server and serve it as an install tree over the hostedTree
+// artifactServerEndpoint. The installing node fetches GPG-signed packages from
+// that tree, so the DVD payload lands on disk once per (cluster, image) instead
+// of inside every per-node ISO. Serve the endpoint over HTTP (the installer
+// verifies TLS and would reject a self-signed artifact cert).
 type MachineInstallPackageHostedTree struct {
 	// FromMedia references the full DVD ISO to extract, as a "local-media:" or
 	// "file://" reference (not a URL — the DVD is checksum-verified in the media
 	// store). Must differ from the referenced image's bootMedia.
-	FromMedia string `yaml:"fromMedia" json:"fromMedia"`
+	FromMedia              string                    `yaml:"fromMedia" json:"fromMedia"`
+	ArtifactServerEndpoint ArtifactServerEndpointRef `yaml:"artifactServerEndpoint,omitempty" json:"artifactServerEndpoint,omitempty"`
 }
 
 type MachineInstallProfile struct {
@@ -289,8 +290,9 @@ type MachineInstallProfileInstaller struct {
 }
 
 type MachineInstallAnaconda struct {
-	ImageRef      LocalObjectReference         `yaml:"imageRef" json:"imageRef"`
-	PackageSource *MachineInstallPackageSource `yaml:"packageSource,omitempty" json:"packageSource,omitempty"`
+	ImageRef            LocalObjectReference           `yaml:"imageRef" json:"imageRef"`
+	RedfishVirtualMedia ArtifactServerEndpointConsumer `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
+	PackageSource       *MachineInstallPackageSource   `yaml:"packageSource,omitempty" json:"packageSource,omitempty"`
 }
 
 type MachineInstallRepository struct {
