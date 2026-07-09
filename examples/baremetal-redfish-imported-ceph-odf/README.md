@@ -15,9 +15,10 @@ Data Foundation external mode.
   node bindings.
 - `clusters/storage/imported-ceph/*.yaml`: imported storage cluster and
   Data Foundation export surface.
-- `add-ons/openshift-data-foundation.yaml` and
-  `clusters/container/metal-ocp/add-on-binding.yaml`: Data Foundation channel,
-  readiness, storage-export input, and external-details secret binding.
+- `add-ons/openshift-data-foundation/add-on.yaml` (with its `manifests/`
+  subtree) and `clusters/container/metal-ocp/add-on-binding.yaml`: Data
+  Foundation channel, readiness, storage-export input, and external-details
+  secret binding.
 
 ## Validate And Apply
 

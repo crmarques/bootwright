@@ -246,6 +246,7 @@ Each input has a name, an object schema, and optional built-in effects. The
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `accepts.inputs[].name` | Yes | — | Input name. Must be unique within the add-on; bindings reference it by name. |
+| `accepts.inputs[].required` | No | `false` | When `true`, every binding of this add-on must supply the input; validation rejects a binding that omits it. Optional inputs may be omitted, and any effects they carry are skipped. |
 | `accepts.inputs[].schema.type` | No | `object` | Must be `object` (or omitted, which means `object`). No other value is accepted. |
 | `accepts.inputs[].schema.required[]` | No | — | Required property names. Each must be non-empty, unique, and declared in `properties`. |
 | `accepts.inputs[].schema.properties.<name>.refKind` | One of `refKind`/`secret` per property | — | Property value must name a loaded object of this Bootwright kind. |
@@ -337,7 +338,7 @@ add-on to become ready after apply.
 | `readiness.timeout` | No | `30m` | Overall readiness timeout. A Go duration such as `10m`, `30m`, or `1h`. |
 | `readiness.checks[]` | No | — | Readiness checks; required (≥ 1) when `spec.provides[]` is set. |
 | `readiness.checks[].type` | Yes within a check | — | `csvSucceeded`, `condition`, or `resourceExists`. |
-| `readiness.checks[].namespace` | For `csvSucceeded` | — | Target namespace. |
+| `readiness.checks[].namespace` | For `csvSucceeded`; for `condition`/`resourceExists` on namespaced kinds | — | Target namespace. Omit for cluster-scoped kinds. |
 | `readiness.checks[].subscription` | For `csvSucceeded` | — | Subscription name; valid only with `csvSucceeded`. |
 | `readiness.checks[].apiVersion` | For `condition`/`resourceExists` | — | Resource API version. |
 | `readiness.checks[].kind` | For `condition`/`resourceExists` | — | Resource kind. |
@@ -365,7 +366,11 @@ cluster details and applies the Rook `Secret` + `StorageCluster` itself.
 
 The add-on directory is self-contained: the add-on YAML plus `playbooks/`,
 `roles/`, `collections/`, and `manifests/` subtrees. Hook paths are relative to
-the add-on file and travel with the input tree through `context init`.
+the add-on file and travel with the input tree through `context init`. The
+`manifests/` name is load-bearing, not a convention: shipped Kubernetes
+manifests must live under a directory literally named `manifests`, because the
+strict input loader rejects YAML whose `apiVersion` is not Bootwright's
+everywhere else in the input tree.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -389,10 +394,21 @@ a `StorageExport` resolves through its `storageClusterRef` to the Ceph nodes), o
 a static `clusters`/`machines` list. `target.limit` is `firstReachable`
 (default) or `all`. A hook can never target the controller/localhost.
 
-A hook run receives scoped variables: `bootwright_bound_cluster`,
-`bootwright_hook_outputs_dir`, `bootwright_hook_secrets_dir` (only the declared
-`secretRefs`), `bootwright_hook_inputs`, and `bootwright_hook_refs` (the resolved
-ref objects, so a playbook can read e.g. `exportRef.spec.dataFoundation`).
+A hook run receives scoped variables: `bootwright_hook_name`,
+`bootwright_hook_lifecycle`, `bootwright_addon_name`,
+`bootwright_bound_cluster`, `bootwright_hook_outputs_dir`,
+`bootwright_hook_secrets_dir` (only the declared `secretRefs`),
+`bootwright_hook_inputs` (input name → values map), `bootwright_hook_refs`
+(the resolved ref objects, so a playbook can read e.g.
+`exportRef.spec.dataFoundation`), and `bootwright_kubeconfig` (the bound
+cluster's kubeconfig). The play runs against the resolved target machines
+(each inventory host carries its Machine name in `bootwright_host_name`), but
+the outputs directory, secrets directory, and kubeconfig are controller-local
+paths: read and write them from `delegate_to: localhost` tasks. That is also
+how a hook drives the bound cluster's API — the shipped Data Foundation
+add-ons, for example, run `oc --kubeconfig {{ bootwright_kubeconfig }}` on the
+controller to fetch the exporter script the operator publishes before staging
+and running it on a Ceph node.
 
 Manifest templates use whole-scalar tokens: `{{ cluster }}`,
 `{{ output <name> }}`, `{{ input <in>.<prop> }}`, `{{ secret <name> }}`, and
@@ -412,6 +428,7 @@ spec:
   accepts:
     inputs:
       - name: external-storage
+        required: true
         schema:
           type: object
           required: [exportRef]
@@ -449,7 +466,6 @@ spec:
         - path: manifests/rook-external-details-secret.yaml
           reclaimRendered: true
         - path: manifests/storage-cluster.yaml
-        - path: manifests/storage-system.yaml
   readiness:
     checks:
       - type: csvSucceeded
@@ -591,7 +607,9 @@ matches, and clusters only get it when you bind it. `context init`/`update`
 snapshot each referenced registered add-on into the context input (under
 `add-ons/_store/<name>/`), so the context is self-contained — deleting or
 re-registering a store add-on never changes an existing context. An authored
-add-on with the same name always wins over the registered one.
+add-on with the same name always wins over the registered one. Referencing a
+catalog name that is neither authored nor registered fails validation with the
+register remedy in the finding.
 
 !!! note "Rootless validate and the store"
     The store lives under the root-owned Bootwright directory, so a rootless
