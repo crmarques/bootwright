@@ -118,18 +118,20 @@ func summarizeApplyObjects(objs []ObjectClassification) string {
 
 // overrideReconfigureOnlyKinds are the object kinds whose --override rebuild is an
 // idempotent re-apply — a fabric-service reconfigure, a node-config or add-on
-// re-push, a storage attachment refresh — that destroys no data, OS, or VM. Drift
-// on these never crosses the destroy-protection boundary. Every other kind (a
-// container or storage cluster, a managed-OS or substrate machine) is treated as a
-// destructive rebuild. The set is an ALLOWLIST so a kind not classified here is
-// gated by default: a new destructive kind fails safe rather than slipping past.
+// re-push — that destroys no data, OS, or VM. Drift on these never crosses the
+// destroy-protection boundary. Every other kind (a container or storage cluster,
+// a managed-OS or substrate machine) is treated as a destructive rebuild. The
+// set is an ALLOWLIST so a kind not classified here is gated by default: a new
+// destructive kind fails safe rather than slipping past. The retired
+// storageAttachmentApply kind stays reconfigure-only so pre-migration converge
+// records remain inert instead of gating --override.
 var overrideReconfigureOnlyKinds = map[string]bool{
 	ApplyTaskKindProvider:               true,
 	ApplyTaskKindInfraComponentServices: true,
 	ApplyTaskKindNodeConfigApply:        true,
 	ApplyTaskKindHostVirtctl:            true,
 	ApplyTaskKindClusterAddon:           true,
-	ApplyTaskKindStorageAttachmentApply: true,
+	"storageAttachmentApply":            true,
 }
 
 // machineSubstrateKinds are the destructive apply-task kinds whose teardown lives

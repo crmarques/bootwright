@@ -23,7 +23,6 @@ const (
 	ApplyTaskKindNodeBoot               = "nodeBoot"
 	ApplyTaskKindInstallWait            = "installWait"
 	ApplyTaskKindStorageCluster         = "storageCluster"
-	ApplyTaskKindStorageAttachmentApply = "storageAttachmentApply"
 	ApplyTaskKindClusterAddon           = "clusterAddon"
 	ApplyTaskKindNodeConfigApply        = "nodeConfigApply"
 	ApplyTaskKindProvisioningPlaybook   = "provisioningPlaybook"
@@ -40,7 +39,7 @@ const (
 	ApplyPhaseMachines = "machines" // substrate prepare/instantiate/OS/finalize
 	ApplyPhaseDeps     = "deps"     // per-cluster install prereqs: cephadm / agent ISO
 	ApplyPhaseBase     = "base"     // bring control planes up: ceph bootstrap / boot+wait
-	ApplyPhaseAddons   = "add-ons"  // post-install: add-ons + storage attachment
+	ApplyPhaseAddons   = "add-ons"  // post-install: add-ons + node config
 
 	applyProviderPlaybook         = roles.PlaybookTaskProviderServicesApply
 	applyInfraComponentsPlaybook  = roles.PlaybookTaskInfraComponentServicesApply
@@ -130,7 +129,6 @@ type ApplyTask struct {
 	// reconcilable-in-place (a device add) rather than a destructive rebuild.
 	StructuralHashVars any
 	Extension          *extensionplan.ExtensionPlan
-	StorageAttachment  *StorageAttachmentPlan
 }
 
 type applyTaskResult struct {

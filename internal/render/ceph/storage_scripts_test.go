@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/render/ceph"
@@ -107,11 +108,6 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 		"bw_guarded stretch-mode enabled ceph mon enable_stretch_mode",
 		// The standalone RGW admin user is guarded AND redacted (no_log).
 		"bw_guarded_quiet rgw-user bootwright-odf-rgw-admin",
-		// Data-foundation auth keys are captured (sensitive) -> redacted run,
-		// and the caps string with spaces is single-quoted.
-		"bw_run_quiet",
-		"client.bootwright.dc1-metal-ocp.csi-rbd-node",
-		"'profile rbd pool=odf-rbd'",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("apply.sh missing %q", want)
@@ -167,15 +163,24 @@ func TestCephApplyScriptIsValidBash(t *testing.T) {
 // Ceph cluster gets no apply script — there is nothing for bootwright to
 // configure and no bootstrap host to run against.
 func TestCephApplyScriptOmittedForUnmanagedCluster(t *testing.T) {
-	sourceDir := t.TempDir()
-	secretPath := filepath.Join(sourceDir, "shared-ceph-external-cluster-details.json")
-	if err := os.WriteFile(secretPath, []byte(`[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"x"}}]`), 0o600); err != nil {
-		t.Fatalf("write secret: %v", err)
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			SourcePath: filepath.Join(t.TempDir(), "environment.yaml"),
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementExternal,
+			},
+		}},
 	}
-	state := importedDataFoundationRenderState(filepath.Base(secretPath), filepath.Join(sourceDir, "environment.yaml"))
 	result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
 	if err != nil {
 		t.Fatalf("render.All: %v", err)
+	}
+	if len(result.StorageAssets) != 1 {
+		t.Fatalf("storage assets got %d, want 1", len(result.StorageAssets))
 	}
 	if got := result.StorageAssets[0].ApplyScriptPath; got != "" {
 		t.Fatalf("external cluster rendered an apply script: %q", got)

@@ -303,15 +303,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name),
 			v1alpha1.KindStorageExport, addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name)
 	}
-	for _, export := range state.StorageExports {
-		if export.Spec.ExternalDetails == nil || export.Spec.ExternalDetails.SSHExecution == nil {
-			continue
-		}
-		for i, ref := range export.Spec.ExternalDetails.SSHExecution.MachineRefs {
-			require(fmt.Sprintf("StorageExport/%s spec.externalDetails.sshExecution.machineRefs[%d]", export.Metadata.Name, i),
-				v1alpha1.KindMachine, ref.Name)
-		}
-	}
 	for _, cluster := range state.StorageClusters {
 		if cluster.Spec.Ceph == nil {
 			continue

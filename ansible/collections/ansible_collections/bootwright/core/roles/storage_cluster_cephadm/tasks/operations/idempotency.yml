@@ -312,16 +312,15 @@
   register: bootwright_ceph_rgw_user_info
   changed_when: false
   failed_when: false
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_ceph_op_capture | length > 0) or (bootwright_ceph_op_no_log | bool)) }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
   when:
     - bootwright_ceph_op_idempotency_kind == 'rgw-user'
     - bootwright_ceph_op_idempotency_name | length > 0
 
-- name: Reuse existing RGW user output
+- name: Skip existing RGW user operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
-    bootwright_ceph_op_output: "{{ bootwright_ceph_rgw_user_info.stdout | default('') }}"
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_ceph_op_capture | length > 0) or (bootwright_ceph_op_no_log | bool)) }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
   when:
     - bootwright_ceph_op_idempotency_kind == 'rgw-user'
     - bootwright_ceph_rgw_user_info is defined

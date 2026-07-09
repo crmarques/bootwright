@@ -820,8 +820,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		"Copy cephadm registry JSON",
 		"Copy cephadm cluster private SSH key",
 		"Copy cephadm cluster public SSH key",
-		"Capture base Data Foundation external-cluster secrets",
-		"Write captured storage result",
 	} {
 		task := block[findAnsibleTask(t, block, name)]
 		assertRedactsByDefault(t, name, task["no_log"])
@@ -878,23 +876,8 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(block[topologyIdx]["when"]); !strings.Contains(got, "topology") || !strings.Contains(got, "storage") {
 		t.Fatalf("topology/storage operation loop has unexpected when=%v", block[topologyIdx]["when"])
 	}
-	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "object-gateway") || !strings.Contains(got, "data-foundation") {
+	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "object-gateway") {
 		t.Fatalf("late operation loop has unexpected when=%v", block[lateOpsIdx]["when"])
-	}
-
-	write := block[findAnsibleTask(t, block, "Write captured storage result")]
-	copyTask, ok := write["ansible.builtin.copy"].(map[string]any)
-	if !ok {
-		t.Fatalf("Write captured storage result has no copy body")
-	}
-	if got := copyTask["dest"]; !strings.Contains(fmt.Sprint(got), "bootwright_selected_storage_cluster.resultPath") {
-		t.Fatalf("storage result must write to rendered resultPath, got %v", got)
-	}
-	if got := copyTask["mode"]; got != "0600" {
-		t.Fatalf("storage result mode = %v, want 0600", got)
-	}
-	if got := write["delegate_to"]; got != "localhost" {
-		t.Fatalf("storage result must be written locally, got delegate_to=%v", got)
 	}
 
 	cleanup := block[findAnsibleTask(t, block, "Remove managed Ceph work directory")]
@@ -932,7 +915,6 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 		base+"registry_login.yml",
 		base+"dashboard_secret.yml",
 		base+"service_specs.yml",
-		base+"data_foundation_base.yml",
 		base+"topology_operations.yml",
 		base+"late_service_specs.yml",
 		base+"management_services.yml",

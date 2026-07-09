@@ -44,18 +44,19 @@ func ApplyClusterPhases(ledger workflow.RunLedger, cluster string) []ApplyPhase 
 		// One "Infrastructure" phase covers host standup and storage prep. The
 		// previous "Prepare" phase was computed from the identical task filter, so
 		// it could never differ — drop it rather than show two columns that always
-		// move in lockstep.
+		// move in lockstep. Consumption (e.g. a Data Foundation add-on attaching
+		// the exported storage) runs inside the consuming cluster's add-on tasks,
+		// so it reports under that cluster, not here.
 		return []ApplyPhase{
 			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra))},
 			{Label: "Provision", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster))},
-			{Label: "Publish", Status: applyPhaseStatus(applyStoragePublishTasks(ledger, cluster))},
 		}
 	case v1alpha1.KindContainerCluster:
 		return []ApplyPhase{
 			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindMachineInfraFinalize))},
 			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot))},
 			{Label: "Install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindInstallWait))},
-			{Label: "Post-install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindStorageAttachmentApply, workflow.ApplyTaskKindNodeConfigApply))},
+			{Label: "Post-install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindNodeConfigApply))},
 		}
 	default:
 		return []ApplyPhase{{Label: "Work", Status: applyPhaseStatus(tasks)}}
@@ -149,24 +150,6 @@ func filterApplyTasksByKind(tasks []workflow.TaskLedgerEntry, kinds ...string) [
 	for _, task := range tasks {
 		if kindSet[task.Kind] {
 			out = append(out, task)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
-}
-
-func applyStoragePublishTasks(ledger workflow.RunLedger, cluster string) []workflow.TaskLedgerEntry {
-	dependency := "storage." + cluster
-	var out []workflow.TaskLedgerEntry
-	for _, task := range ledger.Tasks {
-		if task.Kind != workflow.ApplyTaskKindStorageAttachmentApply {
-			continue
-		}
-		for _, dep := range task.Dependencies {
-			if dep == dependency {
-				out = append(out, task)
-				break
-			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })

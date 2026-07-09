@@ -885,12 +885,12 @@ Rules:
   same-cluster.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
-- `spec.externalDetails` must set exactly one of `fromSecretRef`, `generated`,
-  or `sshExecution`. `fromSecretRef` must resolve to a declared `Secret`.
-  `generated` is rejected for external clusters. `sshExecution` requires
-  `machineRefs[]` to `ceph-admin` `Machine`s with SSH (for external clusters),
-  `exporter.source: boundDataFoundationAddon`, and `config.rbdDataPoolName`;
-  `config.format`, when set, must be `json`.
+- `spec.externalDetails`, when set, requires `fromSecretRef` (its only arm),
+  which must resolve to a declared `Secret` holding the operator-supplied
+  external-cluster-details JSON. A managed-`StorageCluster` export may omit
+  `externalDetails` entirely: the consuming add-on then produces the payload
+  itself — its hook runs the exporter on a Ceph node of the export's cluster
+  and captures the JSON as a hook output.
 
 ## ClusterAddon
 
@@ -904,14 +904,20 @@ Rules:
   `olm.namespace.name` is required; optional `olm.namespace.create` and
   `olm.namespace.labels` control namespace creation and labels. Optional
   `olm.operatorGroup` sets the OperatorGroup `name` and `targetNamespaces[]`.
+  Optional `olm.catalogSource` ships an operator catalog with the add-on:
+  `name` and `image` are required, `displayName`/`publisher`/`pollInterval` are
+  optional (`pollInterval` is a Go duration), and `subscription.source` must
+  match `catalogSource.name` (normalize defaults it when omitted).
   `olm.subscription` requires `name`, `package`, `channel`, and `source`;
   `sourceNamespace` defaults to `openshift-marketplace` and `installPlanApproval`
   defaults to `Automatic` (both normalize-materialized; `installPlanApproval`
   accepts `Automatic` or `Manual`), and optional `startingCSV` pins the initial
   CSV. Each `olm.customResources[]` entry requires `apiVersion`, `kind`, and
   `metadata.name`; `metadata.namespace` is optional (omitted for cluster-scoped
-  resources). Apply installs the namespace/OperatorGroup/Subscription, waits for
-  the operator's CSV to reach `Succeeded`, then applies the custom resources.
+  resources). Apply installs the shipped CatalogSource first (waiting for its
+  registry to report a READY connection), then the
+  namespace/OperatorGroup/Subscription, waits for the operator's CSV to reach
+  `Succeeded`, then applies the custom resources.
 - `manifestSet` requires `spec.manifestSet.manifests[]` (at least one) and must
   not set `olm`. Each `manifests[].path` is relative to the `ClusterAddon` file,
   ends in `.yaml`/`.yml`, must stay within the file directory, must not be a
@@ -930,12 +936,19 @@ Rules:
 - `spec.accepts.inputs[]` declare binding-scoped inputs. Each input has a `name`,
   an optional `schema` (`type`, `required[]`, and `properties` keyed by property
   name, each property setting exactly one of `refKind` — a known Bootwright
-  kind — or `secret: true`), and optional `effects[]`. Each effect sets a `type`
-  and an optional `provider`; the only supported effect `type` is
-  `storageExportAttachment`, whose `provider` must be `dataFoundation`. A
-  `storageExportAttachment` effect requires the schema to declare exactly one
-  property, literally named `exportRef`, with `refKind: StorageExport` and listed
-  in `required` — the attachment machinery reads that exact value name.
+  kind — or `secret: true`), and optional `effects[]`. Each effect sets a
+  `type`: `storageExportAttachment` or `globalPullSecretMerge`.
+- A `storageExportAttachment` effect requires `provider: dataFoundation` and a
+  schema declaring exactly one property, literally named `exportRef`, with
+  `refKind: StorageExport` and listed in `required` — the scope machinery reads
+  that exact value name to pull the referenced Ceph cluster into the add-on's
+  task state. The attachment itself (the external-details payload and consumer
+  manifests) is applied by the add-on's own hooks.
+- A `globalPullSecretMerge` effect requires `registry` and `username` (and no
+  `provider`), and a schema declaring exactly one property, `secret: true` and
+  listed in `required`. Before the add-on's resources apply, the referenced
+  secret's value is merged into the bound cluster's global pull secret as the
+  `auths[<registry>]` credential.
 
 ## ClusterAddonProfile
 

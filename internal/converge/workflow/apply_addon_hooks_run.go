@@ -16,9 +16,9 @@ import (
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 	secret "github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
-	storageapply "github.com/crmarques/bootwright/internal/storage"
-	"github.com/crmarques/bootwright/internal/storage/datafoundation"
+	"go.yaml.in/yaml/v3"
 )
 
 // runHookPlaybook resolves the hook's target machines, materializes only the
@@ -51,13 +51,13 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	}
 
 	idx := secret.NewIndex(e.state)
-	targets := make([]externalDetailsSSHTarget, 0, len(machines))
+	targets := make([]hookSSHTarget, 0, len(machines))
 	for i, m := range machines {
 		address := v1alpha1.MachineSSHAddress(m.machine)
 		if m.machine.Spec.Access.SSH == nil || address == "" {
 			return nil, fmt.Errorf("hook %s target machine %s has no resolvable SSH access", hook.Name, m.machine.Metadata.Name)
 		}
-		targets = append(targets, externalDetailsSSHTarget{
+		targets = append(targets, hookSSHTarget{
 			label:          m.label,
 			inventoryName:  "hook_" + strconv.Itoa(i),
 			address:        address,
@@ -72,7 +72,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	if err := writeHookInventory(inventoryPath, targets); err != nil {
 		return nil, err
 	}
-	if err := writeStorageAttachmentYAML(varsPath, map[string]any{}, 0o600); err != nil {
+	if err := writeWorkflowYAML(varsPath, map[string]any{}, 0o600); err != nil {
 		return nil, err
 	}
 
@@ -84,7 +84,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	return e.captureHookOutputs(hook, outputsDir)
 }
 
-func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.ClusterAddonHook, inventoryPath, varsPath, hookRoot string, targets []externalDetailsSSHTarget, extraVars []string, timeout time.Duration) error {
+func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.ClusterAddonHook, inventoryPath, varsPath, hookRoot string, targets []hookSSHTarget, extraVars []string, timeout time.Duration) error {
 	runner := ansible.Runner(ansible.CommandRunner{})
 	if e.runnerFactory != nil {
 		runner = e.runnerFactory(e.stdout, e.stderr)
@@ -174,11 +174,12 @@ func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, o
 	return values, nil
 }
 
-// resolveExportDetailsToken loads the core-produced external-cluster-details
-// payload for the StorageExport a fromInput property references. generated-mode
-// exports read the persisted attachment record; fromSecretRef exports read the
-// named secret. This is the seam that keeps the storage-export producer in core
-// while the consumer (Rook Secret manifest) ships as add-on content.
+// resolveExportDetailsToken loads the operator-supplied external-cluster-details
+// payload for the StorageExport a fromInput property references (its
+// externalDetails.fromSecretRef secret). Exports without operator-supplied
+// details are produced by the add-on itself — a hook running the exporter on a
+// Ceph node captures the payload as an output and consumes it via
+// {{ output <name> }} instead.
 func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error) {
 	input, property, ok := hooks.SplitInputProperty(arg)
 	if !ok {
@@ -199,17 +200,20 @@ func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error
 	if !ok {
 		return "", fmt.Errorf("exportDetails references unknown StorageExport %q", exportName)
 	}
-	if fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export); fromSecret != "" {
-		return datafoundation.LoadExternalDetailsSecretJSONForContext(effectiveContextName(e.opts.ContextName), e.state, e.opts.SecretsDir, fromSecret)
+	details := export.Spec.ExternalDetails
+	if details == nil || details.FromSecretRef.Name == "" {
+		return "", fmt.Errorf("StorageExport %q supplies no externalDetails secret; have a hook produce the details and consume them via {{ output <name> }}", exportName)
 	}
-	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, input)
+	store := secret.NewContextStore(effectiveContextName(e.opts.ContextName), e.opts.SecretsDir)
+	data, err := store.Read(secret.MaterialKey{Name: details.FromSecretRef.Name, Role: secret.MaterialPrimary})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read externalDetails secret %q for StorageExport %q: %w", details.FromSecretRef.Name, exportName, err)
 	}
-	if !found {
-		return "", fmt.Errorf("external cluster details for StorageExport %q not found; run bootwright apply --stage base first", exportName)
+	var probe any
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return "", fmt.Errorf("externalDetails secret %q for StorageExport %q is not valid JSON: %w", details.FromSecretRef.Name, exportName, err)
 	}
-	return detailsJSON, nil
+	return string(data), nil
 }
 
 // resolveHookRefs builds bootwright_hook_refs: for each accepted input property
@@ -289,7 +293,7 @@ func hookTimeout(hook v1alpha1.ClusterAddonHook) time.Duration {
 	return d
 }
 
-func writeHookInventory(path string, targets []externalDetailsSSHTarget) error {
+func writeHookInventory(path string, targets []hookSSHTarget) error {
 	hostsMap := map[string]any{}
 	for _, target := range targets {
 		host := map[string]any{
@@ -306,5 +310,43 @@ func writeHookInventory(path string, targets []externalDetailsSSHTarget) error {
 		hostsMap[target.inventoryName] = host
 	}
 	inventory := map[string]any{"all": map[string]any{"hosts": hostsMap}}
-	return writeStorageAttachmentYAML(path, inventory, 0o600)
+	return writeWorkflowYAML(path, inventory, 0o600)
+}
+
+// hookSSHTarget is one resolved hook target machine, flattened to the SSH
+// connection facts the ad-hoc inventory needs.
+type hookSSHTarget struct {
+	label          string
+	inventoryName  string
+	address        string
+	user           string
+	keyPath        string
+	knownHostsPath string
+}
+
+func workflowMachineKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, secretsDir, trustSecretsDir string) string {
+	if machine.Spec.Access.SSH == nil {
+		return ""
+	}
+	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
+		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, idx, secretsDir)
+	}
+	if trustSecretsDir == "" {
+		trustSecretsDir = secretsDir
+	}
+	return sshtrust.KnownHostsPathForSecrets(trustSecretsDir)
+}
+
+func writeWorkflowYAML(path string, value any, mode os.FileMode) error {
+	data, err := yaml.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create %s directory: %w", path, err)
+	}
+	if err := safefs.AtomicWriteFile(path, data, mode); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }

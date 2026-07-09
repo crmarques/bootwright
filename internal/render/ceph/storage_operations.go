@@ -9,9 +9,9 @@ import (
 // CephOperations assembles the StorageOperations document for a managed cluster
 // by appending each operation family in rendered order: the cluster topology
 // (networks/config/stretch), the CRUSH rules, the pools, the filesystems, the
-// mgr-module/logging wiring, the object-gateway realm/zone/admin ops, the NFS
-// exports, and the data-foundation credential captures. Ordering across families
-// is significant — the apply role runs operations in slice order by phase.
+// mgr-module/logging wiring, the object-gateway realm/zone/admin ops, and the
+// NFS exports. Ordering across families is significant — the apply role runs
+// operations in slice order by phase.
 func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]any {
 	var ops []map[string]any
 	ops = append(ops, cephTopologyOperations(cluster)...)
@@ -21,7 +21,6 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	ops = append(ops, cephMgrAndLoggingOperations(cluster)...)
 	ops = append(ops, cephObjectGatewayOperations(state, cluster)...)
 	ops = append(ops, nfsExportOperations(state, cluster)...)
-	ops = append(ops, dataFoundationCredentialOperations(state, cluster)...)
 	return map[string]any{
 		"apiVersion": "bootwright.io/v1alpha1",
 		"kind":       "StorageOperations",

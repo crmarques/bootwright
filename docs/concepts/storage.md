@@ -533,14 +533,18 @@ OpenShift Data Foundation external mode. The export name is what an
 | `spec.type` | Yes | — | Currently `dataFoundation`. |
 | `spec.storageClusterRef` | Yes | — | Imported or managed `StorageCluster`. |
 | `spec.dataFoundation` | When `storageClusterRef` is managed Ceph | — | References managed storage services to export; see [Data Foundation](#data-foundation). |
-| `spec.externalDetails` | When `storageClusterRef` is external Ceph | — | How external-cluster details are supplied; see [External details](#external-details). |
+| `spec.externalDetails` | When `storageClusterRef` is external Ceph | — | Operator-supplied external-cluster details; see [External details](#external-details). |
 
 !!! note "Cross-field rules"
-    - For a **managed** `storageClusterRef`, `dataFoundation` is required.
+    - For a **managed** `storageClusterRef`, `dataFoundation` is required and
+      `externalDetails` may be omitted: the consuming add-on then produces the
+      external-cluster details itself — its hook runs the exporter on a Ceph
+      node of the export's cluster and captures the payload as a hook output.
     - For an **external** `storageClusterRef`, `externalDetails` is required and
       `dataFoundation` must be empty.
 
-A managed export wiring the RBD pool, CephFS filesystem, and RGW gateway:
+A managed export wiring the RBD pool and CephFS filesystem (the consuming
+add-on's exporter hook reads these refs):
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -553,7 +557,6 @@ spec:
   dataFoundation:
     rbdPoolRef: odf-rbd
     filesystemRef: odf-cephfs
-    objectGatewayRef: odf-rgw
 ```
 
 An external export taking operator-supplied details from a secret:
@@ -582,36 +585,15 @@ spec:
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `externalDetails.fromSecretRef` | One of three arms | — | Secret with operator-supplied external-cluster details. |
-| `externalDetails.generated` | One of three arms | — | Generate details for managed storage (empty object; must be empty for external Ceph). |
-| `externalDetails.sshExecution` | One of three arms | — | Gather external details over SSH; see below. |
+| `externalDetails.fromSecretRef` | Yes within `externalDetails` | — | Secret with the operator-supplied external-cluster-details JSON. |
 
-!!! note "Exactly one arm"
-    `externalDetails` must set **exactly one** of `fromSecretRef`, `generated`,
-    or `sshExecution`. For managed clusters, generated details are produced
-    during the storage apply.
-
-`sshExecution` gathers external-cluster details by running an exporter over SSH:
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `sshExecution.machineRefs[]` | When `storageClusterRef` is external Ceph | — | `ceph-admin` machines (with SSH access) used to gather details. |
-| `sshExecution.timeout` | No | — | Go duration such as `10m`, `30m`, or `1h`. |
-| `sshExecution.exporter.source` | Yes | — | Exporter source (the bound Data Foundation add-on). |
-| `sshExecution.config.format` | No | — | Currently `json` when set. |
-| `sshExecution.config.rbdDataPoolName` | Yes | — | RBD data pool name. |
-| `sshExecution.config.radosNamespace` | No | — | RADOS namespace. |
-| `sshExecution.config.rbdMetadataECPoolName` | No | — | RBD metadata EC pool name. |
-| `sshExecution.config.cephfsFilesystemName` | No | — | CephFS filesystem name. |
-| `sshExecution.config.cephfsDataPoolName` | No | — | CephFS data pool name. |
-| `sshExecution.config.cephfsMetadataPoolName` | No | — | CephFS metadata pool name. |
-| `sshExecution.config.rgwEndpoint` | No | — | RGW endpoint. |
-| `sshExecution.config.rgwPoolPrefix` | No | — | RGW pool prefix. |
-| `sshExecution.config.monitoringEndpoint[]` | No | — | Monitoring endpoints (entries must not be empty). |
-| `sshExecution.config.monitoringEndpointPort` | No | — | Monitoring port (0–65535). |
-| `sshExecution.config.clusterName` | When `restrictedAuthPermission` is true | — | Storage cluster name for the exported details. |
-| `sshExecution.config.k8sClusterName` | No | — | Kubernetes cluster name for the exported details. |
-| `sshExecution.config.restrictedAuthPermission` | No | `false` | Restrict the exported auth permission. |
+!!! note "Who produces the details"
+    The export itself never gathers credentials. Either the operator supplies
+    the external-cluster-details JSON as a secret (`fromSecretRef` — the only
+    option for external Ceph, where Bootwright manages no nodes), or the
+    consuming [add-on](add-ons.md) ships a hook that runs Rook's
+    external-cluster-details exporter on a node of the managed Ceph cluster and
+    consumes the captured output. See the add-ons page for the hook shapes.
 
 ## Where to go next
 

@@ -725,50 +725,41 @@ func checkNames(checks []Check) []string {
 	return out
 }
 
-func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
-	state := importedCephSecretState(v1alpha1.SecretSource{})
-	state.Secrets = append(state.Secrets,
-		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ceph-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
-		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ceph-admin-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
-	)
-	state.Machines = []v1alpha1.Machine{{
-		Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
-		Spec: v1alpha1.MachineSpec{
-			Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
-			OS: v1alpha1.MachineOSSpec{
-				Provided: v1alpha1.BoolPtr(true),
-			},
-			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
-			Access: v1alpha1.MachineAccess{
-				SSH: &v1alpha1.MachineSSHSpec{
-					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
-					KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
-					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
-				},
-			},
-		},
-	}}
-	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
-			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
-				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
-			},
-			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
-		},
-	}
-	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", Deps{
+func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
+	deps := Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
 		},
 		StatPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	}, nil, nil)
+	}
+
+	// An add-on shipping a playbook hook makes the add-ons phase run ansible.
+	state := importedCephSecretState(v1alpha1.SecretSource{})
+	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
+		Name:      "attach",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		Playbook:  "playbooks/x.yaml",
+		Target: v1alpha1.ClusterAddonHookTarget{
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"},
+		},
+	}}
+	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
 
 	assertPreflightCheckStatus(t, checks, "oc", "OK")
 	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
 	assertPreflightCheckStatus(t, checks, "python3", "OK")
+
+	// Without playbook hooks (manifest-only add-ons), a scoped add-ons run
+	// needs no controller ansible runtime.
+	state = importedCephSecretState(v1alpha1.SecretSource{})
+	checks = CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	for _, name := range []string{"ansible-playbook", "python3"} {
+		if checkPresent(checks, name) {
+			t.Errorf("add-ons run without playbook hooks must not require %s: %+v", name, checkNames(checks))
+		}
+	}
 }
 
 func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {

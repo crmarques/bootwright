@@ -25,7 +25,7 @@ const (
 // role labels/taints and the infra MachineConfigPool (plus any authored
 // labels/taints). It generates the manifests in-process from the desired host
 // specs and applies them with server-side `oc apply` against the installed
-// cluster's kubeconfig — the same shape as runOneStorageAttachmentTask. The
+// cluster's kubeconfig — the same shape as runOneExtensionTask. The
 // MachineConfigPool roll (which reboots nodes) proceeds asynchronously in the
 // cluster; this task does not block on it.
 func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {

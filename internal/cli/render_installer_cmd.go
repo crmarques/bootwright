@@ -267,9 +267,6 @@ func printToolInputArtifacts(stdout io.Writer, result render.Result, installerLa
 	var storagePaths []string
 	for _, asset := range result.StorageAssets {
 		storagePaths = appendNonEmpty(storagePaths, asset.ApplyScriptPath, asset.ApplyLibPath, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
-		for _, attachment := range asset.Attachments {
-			storagePaths = appendNonEmpty(storagePaths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
-		}
 	}
 	groups := []cliout.ArtifactGroup{
 		{Name: "Bootwright", Paths: []string{result.EffectiveStatePath, result.LockPath}},

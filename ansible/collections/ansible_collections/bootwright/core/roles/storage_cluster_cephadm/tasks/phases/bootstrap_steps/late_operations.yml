@@ -7,4 +7,4 @@
     label: "{{ bootwright_ceph_op.name | default('<unnamed>') }}"
   when:
     - bootwright_ceph_op.command | default([]) | length > 0
-    - bootwright_ceph_op.phase | default('storage') in ['object-gateway', 'data-foundation']
+    - bootwright_ceph_op.phase | default('storage') == 'object-gateway'

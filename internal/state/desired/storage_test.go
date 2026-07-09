@@ -236,7 +236,7 @@ spec:
 			want: "field clusterSSH not found",
 		},
 		{
-			name: "ssh-execution-known-hosts",
+			name: "export-ssh-execution-retired",
 			body: `apiVersion: bootwright.io/v1alpha1
 kind: StorageExport
 metadata: { name: export }
@@ -247,7 +247,7 @@ spec:
     sshExecution:
       knownHostsRef: removed-known-hosts
 `,
-			want: "field knownHostsRef not found",
+			want: "field sshExecution not found",
 		},
 		{
 			name: "community-release-retired",
@@ -1294,8 +1294,8 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	if state.StorageExports[0].Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
 		t.Fatalf("storage export type = %q, want dataFoundation", state.StorageExports[0].Spec.Type)
 	}
-	if state.StorageExports[0].Spec.ExternalDetails == nil || state.StorageExports[0].Spec.ExternalDetails.Generated == nil {
-		t.Fatalf("storage export externalDetails = %#v, want generated default", state.StorageExports[0].Spec.ExternalDetails)
+	if state.StorageExports[0].Spec.ExternalDetails != nil {
+		t.Fatalf("storage export externalDetails = %#v, want nil (the consuming add-on produces the details)", state.StorageExports[0].Spec.ExternalDetails)
 	}
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("validateStorage returned errors after defaults: %v", errs)
@@ -1349,53 +1349,18 @@ func TestExternalStorageValidationRequiresExternalDetailsSource(t *testing.T) {
 	}
 }
 
-func TestStorageValidationAcceptsManagedGeneratedExternalDetailsDefault(t *testing.T) {
+// TestManagedStorageExportOmittedExternalDetailsStaysNil pins the retirement
+// of the generated/sshExecution details arms: a managed-Ceph export may omit
+// spec.externalDetails entirely — the consuming add-on then produces the
+// details itself via its exporter hook — and Normalize must no longer default
+// the field.
+func TestManagedStorageExportOmittedExternalDetailsStaysNil(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementManaged
 	state.StorageExports[0].Spec.ExternalDetails = nil
 	Normalize(&state)
-	if state.StorageExports[0].Spec.ExternalDetails == nil || state.StorageExports[0].Spec.ExternalDetails.Generated == nil {
-		t.Fatalf("managed externalDetails = %#v, want generated default", state.StorageExports[0].Spec.ExternalDetails)
-	}
-	if errs := validateStorage(state); len(errs) != 0 {
-		t.Fatalf("validateStorage returned errors: %v", errs)
-	}
-}
-
-func TestExternalStorageValidationAcceptsSSHExecution(t *testing.T) {
-	state := externalStorageValidationState()
-	state.Secrets = append(state.Secrets, opaqueSecret("ceph-admin-known-hosts"), opaqueSecret("ceph-admin-ssh"))
-	state.Machines = []v1alpha1.Machine{storageValidationAdminMachine("ceph-admin-01")}
-	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
-			Timeout:     "10m",
-			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
-				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
-			},
-			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{
-				RBDDataPoolName: "rbdpool",
-			},
-		},
-	}
-	if errs := validateStorage(state); len(errs) != 0 {
-		t.Fatalf("validateStorage returned errors: %v", errs)
-	}
-}
-
-func TestManagedStorageValidationAcceptsSSHExecutionWithoutHostRefs(t *testing.T) {
-	state := storageValidationState()
-	state.Environments = []v1alpha1.Environment{{}}
-	state.Secrets = []v1alpha1.Secret{opaqueSecret("ceph-admin-known-hosts")}
-	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
-				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
-			},
-			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{
-				RBDDataPoolName: "rbdpool",
-			},
-		},
+	if state.StorageExports[0].Spec.ExternalDetails != nil {
+		t.Fatalf("managed externalDetails = %#v, want nil", state.StorageExports[0].Spec.ExternalDetails)
 	}
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("validateStorage returned errors: %v", errs)
@@ -1477,37 +1442,11 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			want: "ceph must be empty when spec.management=external",
 		},
 		{
-			name: "external-generated-details",
+			name: "external-details-empty-from-secret-ref",
 			edit: func(state *v1alpha1.State) {
-				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{Generated: &v1alpha1.StorageExportExternalDetailsGenerated{}}
+				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{}
 			},
-			want: "spec.externalDetails.generated must be empty when storageClusterRef points to external Ceph",
-		},
-		{
-			name: "multiple-external-details-sources",
-			edit: func(state *v1alpha1.State) {
-				state.StorageExports[0].Spec.ExternalDetails.Generated = &v1alpha1.StorageExportExternalDetailsGenerated{}
-			},
-			want: "spec.externalDetails must set exactly one of fromSecretRef, generated, or sshExecution",
-		},
-		{
-			name: "external-ssh-host-without-ceph-admin-capability",
-			edit: func(state *v1alpha1.State) {
-				state.Secrets = append(state.Secrets, opaqueSecret("ceph-admin-known-hosts"))
-				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-					SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-						MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
-						Exporter: v1alpha1.StorageExportExternalDetailsExporter{
-							Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
-						},
-						Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
-					},
-				}
-				machine := storageValidationAdminMachine("ceph-admin-01")
-				machine.Spec.Capabilities = []string{v1alpha1.MachineCapabilityLibvirt}
-				state.Machines = []v1alpha1.Machine{machine}
-			},
-			want: `must reference a Machine with capability "ceph-admin"`,
+			want: "spec.externalDetails.fromSecretRef is required when externalDetails is set",
 		},
 		{
 			name: "imported-and-managed-refs",
@@ -1744,27 +1683,6 @@ func storageValidationHost(name string) v1alpha1.Machine {
 	}
 }
 
-func storageValidationAdminMachine(name string) v1alpha1.Machine {
-	return v1alpha1.Machine{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.MachineSpec{
-			Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
-			OS: v1alpha1.MachineOSSpec{
-				Provided: v1alpha1.BoolPtr(true),
-			},
-			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: name + ".example.test"}},
-			Access: v1alpha1.MachineAccess{
-				SSH: &v1alpha1.MachineSSHSpec{
-					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
-					User:          "ceph",
-					KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
-					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"},
-				},
-			},
-		},
-	}
-}
-
 func storageValidationCephNode(name, site string, roles []string) v1alpha1.StorageCephHost {
 	node := v1alpha1.StorageCephHost{
 		Hostname: name,
@@ -1785,7 +1703,7 @@ func storageValidationCephNode(name, site string, roles []string) v1alpha1.Stora
 }
 
 // opaqueSecret is a first-class opaque Secret declaration, the shape the
-// storage external-details / SSH-execution refs resolve against.
+// storage external-details fromSecretRef resolves against.
 func opaqueSecret(name string) v1alpha1.Secret {
 	return v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: name}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}}
 }

@@ -396,8 +396,9 @@ ref objects, so a playbook can read e.g. `exportRef.spec.dataFoundation`).
 
 Manifest templates use whole-scalar tokens: `{{ cluster }}`,
 `{{ output <name> }}`, `{{ input <in>.<prop> }}`, `{{ secret <name> }}`, and
-`{{ exportDetails <in>.<prop> }}` (the core-produced external-cluster-details
-payload for a referenced `StorageExport`). Each token must be an entire YAML
+`{{ exportDetails <in>.<prop> }}` (the operator-supplied
+external-cluster-details payload of a referenced `StorageExport` — its
+`externalDetails.fromSecretRef` secret). Each token must be an entire YAML
 scalar value.
 
 ```yaml
@@ -472,8 +473,13 @@ stringData:
 ```
 
 A hook that ships no playbook (`manifests` only) applies templated manifests
-using values already available — binding inputs, the `{{ exportDetails … }}`
-payload core produced — without running anything on a machine.
+using values already available — binding inputs, secrets, the
+`{{ exportDetails … }}` payload the operator supplied — without running
+anything on a machine. The two Data Foundation shapes follow from this: a
+managed-Ceph export uses the exporter-playbook hook above (the add-on produces
+the payload), while an imported-Ceph export with `externalDetails.fromSecretRef`
+uses a manifest-only hook whose Secret template consumes
+`{{ exportDetails external-storage.exportRef }}`.
 
 For imperative work that is not tied to an add-on's lifecycle, use a
 [provisioning playbook](provisioning-playbooks.md) instead.

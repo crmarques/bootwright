@@ -90,9 +90,6 @@ func renderStorageClusters(assets []render.StorageAsset) []renderStorageCluster 
 			OperationsPath:       asset.OperationsPath,
 			LateServicesSpecPath: asset.LateServicesSpecPath,
 		}
-		for _, attachment := range asset.Attachments {
-			entry.Attachments = appendNonEmpty(entry.Attachments, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
-		}
 		clusters = append(clusters, entry)
 	}
 	return clusters
@@ -102,9 +99,6 @@ func printStorageFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.StorageAssets {
 		paths = appendNonEmpty(paths, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
-		for _, attachment := range asset.Attachments {
-			paths = appendNonEmpty(paths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
-		}
 	}
 	p := cliout.NewContinuation(stdout)
 	p.Section("Rendered artifacts")

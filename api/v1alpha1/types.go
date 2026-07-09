@@ -354,8 +354,7 @@ const (
 	StoragePoolCompressionModeForce      = "force"
 
 	// StorageExport union: type value == populated arm key.
-	StorageExportTypeDataFoundation                              = "dataFoundation"
-	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
+	StorageExportTypeDataFoundation = "dataFoundation"
 
 	// ProvisioningPlaybook stage vocabulary — the five provisioning sub-phases a
 	// ProvisioningPlaybook may anchor to, matching the --stage sub-phase names.

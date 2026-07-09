@@ -1,7 +1,6 @@
 package ceph_test
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -19,7 +18,7 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
+func TestStorageExampleRendersCephInputs(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -34,9 +33,6 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	asset := result.StorageAssets[0]
 	if asset.StorageClusterName != "ceph-storage" {
 		t.Fatalf("storage cluster asset = %q, want ceph-storage", asset.StorageClusterName)
-	}
-	if len(asset.Attachments) != 4 {
-		t.Fatalf("storage attachment assets got %d, want 4", len(asset.Attachments))
 	}
 
 	// public_network has no cephadm bootstrap flag; it is seeded via the
@@ -122,42 +118,21 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")
 	assertOperationCommand(t, ops, "create-cephfs-odf-cephfs", []string{"ceph", "fs", "new", "odf-cephfs", "odf-cephfs-metadata", "odf-cephfs-data"})
 	assertOperationCommand(t, ops, "set-cephfs-max-mds-odf-cephfs", []string{"ceph", "fs", "set", "odf-cephfs", "max_mds", "2"})
-	assertOperationPhase(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "data-foundation")
-	assertOperationCommand(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", []string{"ceph", "auth", "get-or-create", "client.bootwright.dc1-metal-ocp.csi-rbd-node", "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool=odf-rbd"})
-	assertOperationCapture(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "ceph-auth-key", "dc1-metal-ocp", "rbdNodeKey")
+	// The compiled data-foundation credential producer is gone: the ODF↔Ceph
+	// integration ships as addon content now, so no data-foundation op family
+	// may render.
+	for _, item := range ops {
+		op := item.(map[string]any)
+		if op["phase"] == "data-foundation" {
+			t.Fatalf("data-foundation credential op %v rendered; the op family was deleted", op["name"])
+		}
+	}
 	assertOperationPhase(t, ops, "create-rgw-admin-user-odf-rgw", "object-gateway")
 	assertOperationIdempotency(t, ops, "create-rgw-admin-user-odf-rgw", "rgw-user", "bootwright-odf-rgw-admin")
 	// The standalone gateway does not capture the admin keys, so the op must
 	// carry an explicit redaction flag to keep `user create`/`user info` output
 	// (keys[].access_key/secret_key) out of the apply logs.
 	assertOperationNoLog(t, ops, "create-rgw-admin-user-odf-rgw")
-
-	attachment := attachmentAsset(t, asset, "dc1-metal-ocp")
-	external := readYAMLDoc(t, attachment.ExternalClusterDetailsPath)
-	if external["kind"] != "Secret" {
-		t.Fatalf("external details kind = %v, want Secret", external["kind"])
-	}
-	stringData := external["stringData"].(map[string]any)
-	detailsJSON := stringData["external_cluster_details"].(string)
-	if strings.Contains(detailsJSON, "PRIVATE KEY") {
-		t.Fatalf("external_cluster_details contains private key material")
-	}
-	if !strings.Contains(detailsJSON, "BOOTWRIGHT_GENERATED_AT_APPLY_TIME") {
-		t.Fatalf("external_cluster_details missing generated-at-apply placeholder")
-	}
-	var details []map[string]any
-	if err := json.Unmarshal([]byte(detailsJSON), &details); err != nil {
-		t.Fatalf("decode external_cluster_details JSON: %v", err)
-	}
-	if !externalDetailContains(details, "ceph-rbd", "pool", "odf-rbd") {
-		t.Fatalf("external_cluster_details missing ceph-rbd pool odf-rbd: %#v", details)
-	}
-	if !externalDetailContains(details, "rook-csi-rbd-node", "userID", "bootwright.dc1-metal-ocp.csi-rbd-node") {
-		t.Fatalf("external_cluster_details missing per-cluster rbd userID: %#v", details)
-	}
-	if !strings.Contains(detailsJSON, "ceph-dc1-0.ceph-storage.bootwright.test=192.168.141.30:6789") {
-		t.Fatalf("external_cluster_details missing mon endpoint: %s", detailsJSON)
-	}
 }
 
 func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
@@ -226,13 +201,13 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := clusterSSH["knownHostsPath"]; got != filepath.Join("/context", "trust", "ssh", "known_hosts") {
 		t.Fatalf("cluster ssh known hosts = %v", got)
 	}
-	bindings := cluster["dataFoundationBindings"].([]any)
-	if len(bindings) != 4 {
-		t.Fatalf("dataFoundationBindings got %d, want 4", len(bindings))
+	// The compiled data-foundation consumer is deleted: the storage cluster
+	// vars must no longer fan bindings or a capture result path to Ansible.
+	if _, ok := cluster["dataFoundationBindings"]; ok {
+		t.Fatalf("storage cluster vars still carry dataFoundationBindings: %#v", cluster["dataFoundationBindings"])
 	}
-	firstBinding := bindings[0].(map[string]any)
-	if firstBinding["addon"] == "" || firstBinding["input"] != "external-storage" {
-		t.Fatalf("dataFoundationBinding identity = %#v, want addon and external-storage input", firstBinding)
+	if _, ok := cluster["resultPath"]; ok {
+		t.Fatalf("storage cluster vars still carry resultPath: %#v", cluster["resultPath"])
 	}
 }
 
@@ -310,46 +285,6 @@ func TestManagedStorageUsesContextManagedTrustPathDuringRuntimeRender(t *testing
 	}
 	if got := ssh["trustDir"]; got != filepath.Dir(contextKnownHosts) {
 		t.Fatalf("managed OS trust dir = %v, want %s", got, filepath.Dir(contextKnownHosts))
-	}
-}
-
-func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecret(t *testing.T) {
-	sourceDir := t.TempDir()
-	secretPath := filepath.Join(sourceDir, "shared-ceph-external-cluster-details.json")
-	secretJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"secret-fsid"}}]`
-	if err := os.WriteFile(secretPath, []byte(secretJSON), 0o600); err != nil {
-		t.Fatalf("write secret: %v", err)
-	}
-	state := importedDataFoundationRenderState(filepath.Base(secretPath), filepath.Join(sourceDir, "environment.yaml"))
-
-	normal, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
-	if err != nil {
-		t.Fatalf("render.All: %v", err)
-	}
-	if len(normal.StorageAssets) != 1 {
-		t.Fatalf("storage assets got %d, want 1", len(normal.StorageAssets))
-	}
-	asset := normal.StorageAssets[0]
-	if asset.BootstrapSpecPath != "" || asset.CoreServicesSpecPath != "" || asset.LateServicesSpecPath != "" || asset.OperationsPath != "" {
-		t.Fatalf("external storage rendered managed Ceph paths: %#v", asset)
-	}
-	attachment := attachmentAsset(t, asset, "dc1-ocp")
-	placeholder := externalDetailsJSON(t, attachment.ExternalClusterDetailsPath)
-	if strings.Contains(placeholder, "secret-fsid") {
-		t.Fatalf("normal render leaked imported external details: %s", placeholder)
-	}
-	if !strings.Contains(placeholder, "BOOTWRIGHT_GENERATED_AT_APPLY_TIME") {
-		t.Fatalf("normal render missing placeholder: %s", placeholder)
-	}
-
-	sensitive, err := render.ToolInputsForContext("test", filepath.Join(t.TempDir(), "sensitive"), t.TempDir(), state)
-	if err != nil {
-		t.Fatalf("render.ToolInputs: %v", err)
-	}
-	attachment = attachmentAsset(t, sensitive.StorageAssets[0], "dc1-ocp")
-	details := externalDetailsJSON(t, attachment.ExternalClusterDetailsPath)
-	if details != secretJSON {
-		t.Fatalf("sensitive external details = %s, want %s", details, secretJSON)
 	}
 }
 
@@ -528,22 +463,6 @@ func assertOperationPhase(t *testing.T, ops []any, name, want string) {
 	t.Fatalf("operation %s not found in %#v", name, ops)
 }
 
-func assertOperationCapture(t *testing.T, ops []any, name, captureType, cluster, field string) {
-	t.Helper()
-	for _, item := range ops {
-		op := item.(map[string]any)
-		if op["name"] != name {
-			continue
-		}
-		capture := op["capture"].(map[string]any)
-		if capture["type"] != captureType || capture["cluster"] != cluster || capture["field"] != field {
-			t.Fatalf("operation %s capture = %#v", name, capture)
-		}
-		return
-	}
-	t.Fatalf("operation %s not found in %#v", name, ops)
-}
-
 func assertOperationNoLog(t *testing.T, ops []any, name string) {
 	t.Helper()
 	for _, item := range ops {
@@ -573,124 +492,6 @@ func assertOperationIdempotency(t *testing.T, ops []any, name, kind, resourceNam
 		return
 	}
 	t.Fatalf("operation %s not found in %#v", name, ops)
-}
-
-func attachmentAsset(t *testing.T, asset render.StorageAsset, cluster string) render.StorageAttachmentAsset {
-	t.Helper()
-	for _, attachment := range asset.Attachments {
-		if attachment.ContainerClusterName == cluster {
-			return attachment
-		}
-	}
-	t.Fatalf("storage attachment asset for %s not found in %#v", cluster, asset.Attachments)
-	return render.StorageAttachmentAsset{}
-}
-
-func externalDetailContains(details []map[string]any, name, key, value string) bool {
-	for _, detail := range details {
-		if detail["name"] != name {
-			continue
-		}
-		data, ok := detail["data"].(map[string]any)
-		return ok && data[key] == value
-	}
-	return false
-}
-
-func externalDetailsJSON(t *testing.T, path string) string {
-	t.Helper()
-	manifest := readYAMLDoc(t, path)
-	stringData := manifest["stringData"].(map[string]any)
-	return stringData["external_cluster_details"].(string)
-}
-
-func importedDataFoundationRenderState(secretFile, envPath string) v1alpha1.State {
-	return v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			SourcePath: envPath,
-		}},
-		Secrets: []v1alpha1.Secret{{
-			Metadata: v1alpha1.Metadata{Name: "shared-ceph-external-details"},
-			Spec: v1alpha1.SecretSpec{
-				Type:   v1alpha1.SecretTypeOpaque,
-				Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: secretFile}},
-			},
-			// Relative file paths resolve against the Secret's own file, so the
-			// external-details JSON alongside the environment resolves here.
-			SourcePath: envPath,
-		}},
-		StorageClusters: []v1alpha1.StorageCluster{{
-			Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
-			Spec: v1alpha1.StorageClusterSpec{
-				Type:       v1alpha1.StorageClusterTypeCeph,
-				Management: v1alpha1.StorageClusterManagementExternal,
-			},
-		}},
-		StorageExports: []v1alpha1.StorageExport{{
-			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
-			Spec: v1alpha1.StorageExportSpec{
-				Type:              v1alpha1.StorageExportTypeDataFoundation,
-				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
-				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
-					FromSecretRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
-				},
-			},
-		}},
-		ClusterAddons: []v1alpha1.ClusterAddon{{
-			Metadata: v1alpha1.Metadata{Name: "odf"},
-			Spec: v1alpha1.ClusterAddonSpec{
-				Type:     v1alpha1.ClusterAddonTypeManifestSet,
-				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
-				Accepts:  dataFoundationAccepts(),
-			},
-		}},
-		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{
-			{
-				Metadata: v1alpha1.Metadata{Name: "shared-ceph-dc1"},
-				Spec: v1alpha1.ClusterAddonBindingSpec{
-					ClusterRef: v1alpha1.LocalObjectReference{Name: "dc1-ocp"},
-					Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
-				},
-			},
-			{
-				Metadata: v1alpha1.Metadata{Name: "shared-ceph-dc2"},
-				Spec: v1alpha1.ClusterAddonBindingSpec{
-					ClusterRef: v1alpha1.LocalObjectReference{Name: "dc2-ocp"},
-					Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
-				},
-			},
-		},
-	}
-}
-
-func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
-	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-		Name: "external-storage",
-		Schema: v1alpha1.ClusterAddonInputSchema{
-			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
-			Required: []string{"exportRef"},
-			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef": {RefKind: v1alpha1.KindStorageExport},
-			},
-		},
-		Effects: []v1alpha1.ClusterAddonInputEffect{{
-			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
-		}},
-	}}}
-}
-
-func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
-	values := map[string]any{
-		"exportRef": export,
-	}
-	return v1alpha1.ClusterAddonBindingAddon{
-		AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
-		Inputs: []v1alpha1.ClusterAddonBindingInput{{
-			Name:   "external-storage",
-			Values: values,
-		}},
-	}
 }
 
 // TestCephadmLateServicesRendersManagementHA covers the native HA management

@@ -2,14 +2,12 @@ package inventory
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	cephrender "github.com/crmarques/bootwright/internal/render/ceph"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/cephprovider"
-	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -114,7 +112,6 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"storageGroup":        StorageClusterGroupName(cluster.Metadata.Name),
 			"provider":            cephprovider.Vars(provider),
 			"remoteWorkDir":       "/tmp/bootwright-storage-" + cluster.Metadata.Name,
-			"resultPath":          "{{ bootwright_ansible_artifacts_dir }}/storage-result.json",
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
 			"hosts":               storageHostsVars(state, cluster),
 			"bootstrap": map[string]any{
@@ -129,8 +126,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 				"lateServicesSpecPath": asset.LateServicesSpecPath,
 				"operationsPath":       asset.OperationsPath,
 			},
-			"dataFoundationBindings": storageDataFoundationBindingsVars(state, cluster.Metadata.Name),
-			"osdReadiness":           storageOSDReadinessVars(cluster),
+			"osdReadiness": storageOSDReadinessVars(cluster),
 		}
 		if !cephrender.MonitoringEnabled(cluster) {
 			entry["skipMonitoringStack"] = true
@@ -267,30 +263,6 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			// reads node.Devices/node.OSD directly.
 			"devices": cephrender.OSDGateDevicePaths(cluster, node),
 		})
-	}
-	return out
-}
-
-func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster string) []any {
-	var out []any
-	for _, effect := range addoninputs.StorageExportAttachments(state) {
-		export := effect.Export
-		if export.Spec.StorageClusterRef.Name != storageCluster || export.Spec.DataFoundation == nil {
-			continue
-		}
-		if cluster, ok := stateview.ClusterByName(state, storageCluster); ok && !datafoundation.ExternalDetailsSourceGenerated(export, cluster) {
-			continue
-		}
-		entry := map[string]any{
-			"cluster": effect.Binding.Spec.ClusterRef.Name,
-			"addon":   effect.Addon.AddonRef.Name,
-			"input":   effect.Input.Name,
-			"export":  export.Metadata.Name,
-		}
-		if export.Spec.DataFoundation != nil && export.Spec.DataFoundation.ObjectGatewayRef.Name != "" {
-			entry["objectGateway"] = export.Spec.DataFoundation.ObjectGatewayRef.Name
-		}
-		out = append(out, entry)
 	}
 	return out
 }

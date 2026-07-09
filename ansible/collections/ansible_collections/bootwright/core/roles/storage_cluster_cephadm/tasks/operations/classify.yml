@@ -1,18 +1,11 @@
 ---
 - name: Classify rendered Ceph operation
   ansible.builtin.set_fact:
-    bootwright_ceph_op_capture: "{{ bootwright_ceph_op.capture | default({}) }}"
     bootwright_ceph_op_no_log: "{{ bootwright_ceph_op.no_log | default(false) }}"
     bootwright_ceph_op_idempotency_kind: "{{ bootwright_ceph_op.idempotency.kind | default('none') }}"
     bootwright_ceph_op_idempotency_name: "{{ bootwright_ceph_op.idempotency.name | default('') }}"
     bootwright_ceph_op_command: "{{ bootwright_ceph_op.command | default([]) }}"
     bootwright_ceph_op_skip: false
-    bootwright_ceph_op_output: ""
-    bootwright_ceph_op_capture_cluster: ""
-    bootwright_ceph_op_capture_field: ""
-    bootwright_ceph_op_key_line: ""
-    bootwright_ceph_op_capture_rgw: false
-    bootwright_ceph_op_rgw_payload: {}
     bootwright_ceph_op_pool_live: {}
     bootwright_ceph_op_pool_recreate: false
     bootwright_ceph_op_fs_live: {}
@@ -23,4 +16,4 @@
     # Reset the per-kind idempotency probe register too: it is registered only
     # for rgw-user ops and would otherwise persist across the operations loop.
     bootwright_ceph_rgw_user_info: {}
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op.capture is defined) }}"
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"

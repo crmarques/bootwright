@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
-	storageapply "github.com/crmarques/bootwright/internal/storage"
 )
 
 func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
@@ -29,9 +28,6 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
 	if task.Entry.Kind == ApplyTaskKindClusterAddon {
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task, runnerFactory)
-	}
-	if task.Entry.Kind == ApplyTaskKindStorageAttachmentApply {
-		return runOneStorageAttachmentTask(ctx, stdout, stderr, runsDir, runID, opts, task, runnerFactory)
 	}
 	if task.Entry.Kind == ApplyTaskKindNodeConfigApply {
 		return runOneNodeConfigTask(ctx, stdout, stderr, runsDir, runID, opts, task)
@@ -99,17 +95,8 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster && !result.Skipped {
 		clusterName := strings.TrimPrefix(task.Entry.ID, "storage.")
-		if err := storageapply.PersistCephApplyResult(storageapply.CephApplyResultOptions{
-			State:              task.State,
-			ClustersDir:        opts.ClustersDir,
-			StorageClusterName: clusterName,
-			ResultPath:         filepath.Join(taskOpts.ArtifactsRoot, "storage-result.json"),
-		}); err != nil {
-			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
-		}
 		// Record each pool/filesystem/gateway/export so the next apply's preflight and
-		// state-check report sub-object drift independently of the cluster. Runs for
-		// every storage cluster, not only those with dataFoundation bindings.
+		// state-check report sub-object drift independently of the cluster.
 		if recordErr := MarkStorageSubObjectsConvergeSafety(runsDir, opts.ContextName, runID, task.State, clusterName, ConvergeSafetyStatusReconciled, now); recordErr != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}

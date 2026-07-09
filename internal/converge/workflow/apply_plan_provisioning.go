@@ -161,7 +161,7 @@ func applyTaskKindPhase(kind string) (string, bool) {
 		return ApplyPhaseDeps, true
 	case ApplyTaskKindStorageCluster, ApplyTaskKindNodeBoot, ApplyTaskKindInstallWait:
 		return ApplyPhaseBase, true
-	case ApplyTaskKindClusterAddon, ApplyTaskKindStorageAttachmentApply, ApplyTaskKindNodeConfigApply:
+	case ApplyTaskKindClusterAddon, ApplyTaskKindNodeConfigApply:
 		return ApplyPhaseAddons, true
 	default:
 		return "", false

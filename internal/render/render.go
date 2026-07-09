@@ -87,7 +87,6 @@ func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, st
 		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
 			return PlaceholderInstallerSecrets(s, ocp), nil
 		},
-		storageOpts: storageAssetWriteOptions{},
 	})
 }
 
@@ -160,7 +159,6 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
 			return installer.LoadInstallerSecretsForContext(contextName, s, ocp, secretsDir)
 		},
-		storageOpts: storageAssetWriteOptions{ContextName: contextName, ExternalDetailsSecretsDir: secretsDir},
 	})
 }
 
@@ -196,7 +194,6 @@ func ToolInputsPortableOn(fs FileSystem, outputDir string, state v1alpha1.State)
 		installerSecrets: func(s v1alpha1.State, ocp v1alpha1.ContainerCluster) (installer.InstallerSecrets, error) {
 			return installer.PortableInstallerSecrets(s, ocp), nil
 		},
-		storageOpts: storageAssetWriteOptions{SecretPlaceholders: true},
 	})
 }
 
@@ -214,9 +211,6 @@ type renderParams struct {
 	// installerSecrets supplies the per-cluster install-config/manifest secrets:
 	// placeholder references, real context material, or portable tokens.
 	installerSecrets func(v1alpha1.State, v1alpha1.ContainerCluster) (installer.InstallerSecrets, error)
-	// storageOpts controls external-cluster-details: a real secrets directory
-	// inlines the imported JSON; an empty value emits the SecretRef placeholder.
-	storageOpts storageAssetWriteOptions
 }
 
 // renderCore is the single render body shared by every mode. baseDir roots the
@@ -286,7 +280,7 @@ func renderCore(fs FileSystem, baseDir string, state v1alpha1.State, params rend
 			return result, err
 		}
 	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state, params.storageOpts); err != nil {
+	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
 		return result, err
 	}
 	return result, nil

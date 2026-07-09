@@ -146,7 +146,7 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 // to the run's genuine work targets, ignoring render-reference pull-ins.
 func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps, hostTrustScope map[string]bool, secretScope *SecretScope) []Check {
 	var checks []Check
-	addonsNeedAnsible := phaseInScope("add-ons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
+	addonsNeedAnsible := phaseInScope("add-ons", selected, hasState) && stateHasAddonPlaybookHooks(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(workspace.AnsibleVenvDir(), "bin")}, "bootwright bastion setup", deps),
@@ -211,10 +211,15 @@ func selectedNeedsAnsible(selected []Phase) bool {
 	return false
 }
 
-func stateNeedsStorageExternalDetailsSSH(state v1alpha1.State) bool {
-	for _, export := range state.StorageExports {
-		if export.Spec.ExternalDetails != nil && export.Spec.ExternalDetails.SSHExecution != nil {
-			return true
+// stateHasAddonPlaybookHooks reports whether any add-on ships a playbook hook —
+// the add-ons phase then runs ansible (e.g. the Data Foundation exporter hook
+// on a Ceph node).
+func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
+	for _, addon := range state.ClusterAddons {
+		for _, hook := range addon.Spec.Hooks {
+			if hook.Playbook != "" {
+				return true
+			}
 		}
 	}
 	return false

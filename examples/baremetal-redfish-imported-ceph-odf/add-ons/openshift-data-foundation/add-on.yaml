@@ -38,8 +38,30 @@ spec:
       channel: stable-4.21
       source: redhat-operators
 
+  hooks:
+    # The imported Ceph cluster's external-cluster-details JSON is supplied by
+    # the operator (the StorageExport's externalDetails.fromSecretRef secret);
+    # a manifest-only hook resolves it via the exportDetails token and applies
+    # the external-mode consumer manifests after the operator's CSV succeeds.
+    - name: attach-external-storage
+      lifecycle: postOperatorReady
+      manifests:
+        - path: manifests/rook-ceph-external-cluster-details.yaml
+          reclaimRendered: true
+        - path: manifests/ocs-external-storagecluster.yaml
+        - path: manifests/ocs-external-storagesystem.yaml
+
   readiness:
+    timeout: 45m
     checks:
       - type: csvSucceeded
         namespace: openshift-storage
         subscription: odf-operator
+      - type: condition
+        apiVersion: ocs.openshift.io/v1
+        kind: StorageCluster
+        namespace: openshift-storage
+        name: ocs-external-storagecluster
+        condition:
+          type: Available
+          status: "True"

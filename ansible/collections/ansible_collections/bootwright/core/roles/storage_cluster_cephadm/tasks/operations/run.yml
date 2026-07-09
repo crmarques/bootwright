@@ -10,6 +10,3 @@
 
 - name: Run Ceph operation command
   ansible.builtin.include_tasks: execute.yml
-
-- name: Capture Ceph operation output
-  ansible.builtin.include_tasks: capture.yml

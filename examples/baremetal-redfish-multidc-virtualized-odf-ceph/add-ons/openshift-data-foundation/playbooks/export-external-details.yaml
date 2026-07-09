@@ -1,0 +1,39 @@
+# Runs Rook's ceph-external-cluster-details-exporter.py on a Ceph node of the
+# StorageExport's cluster (resolved via the hook's fromInput target) and
+# captures its JSON output as the hook's declared externalDetails output. The
+# exporter creates the CSI clients (idempotently) and prints the Rook
+# external-cluster-details payload. The script ships with Rook/ODF; place it on
+# the Ceph admin node or override bootwright_exporter_script with its path.
+- name: Export Data Foundation external cluster details
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    bootwright_exporter_script: ceph-external-cluster-details-exporter.py
+    bootwright_df: "{{ bootwright_hook_refs.exportRef.spec.dataFoundation }}"
+  tasks:
+    - name: Run the Rook external cluster details exporter
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ bootwright_exporter_script }}"
+          - --format
+          - json
+          - --rbd-data-pool-name
+          - "{{ bootwright_df.rbdPoolRef.name }}"
+          - --cephfs-filesystem-name
+          - "{{ bootwright_df.filesystemRef.name }}"
+          - --k8s-cluster-name
+          - "{{ bootwright_bound_cluster }}"
+      register: bootwright_external_details
+      changed_when: true
+      no_log: true
+
+    - name: Capture the declared externalDetails output
+      ansible.builtin.copy:
+        content: "{{ bootwright_external_details.stdout }}"
+        dest: "{{ bootwright_hook_outputs_dir }}/external-cluster-details.json"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true

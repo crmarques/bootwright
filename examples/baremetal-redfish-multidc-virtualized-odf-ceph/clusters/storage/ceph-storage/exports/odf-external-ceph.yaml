@@ -8,4 +8,3 @@ spec:
   dataFoundation:
     rbdPoolRef: odf-rbd
     filesystemRef: odf-cephfs
-    objectGatewayRef: odf-rgw

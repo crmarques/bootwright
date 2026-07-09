@@ -17,7 +17,10 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindNodeConfigApply:        true,
 		ApplyTaskKindHostVirtctl:            true,
 		ApplyTaskKindClusterAddon:           true,
-		ApplyTaskKindStorageAttachmentApply: true,
+		// The retired storageAttachmentApply kind stays reconfigure-only so
+		// pre-migration converge records remain inert (see
+		// overrideReconfigureOnlyKinds); its constant is deleted with the task.
+		"storageAttachmentApply": true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
 		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --override taxonomy", len(overrideReconfigureOnlyKinds), len(want))

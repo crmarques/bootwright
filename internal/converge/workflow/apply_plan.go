@@ -88,9 +88,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
 			return nil, err
 		}
-		if err := planStorageAttachmentActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
-			return nil, err
-		}
 		if err := planNodeConfigActivities(graph, state, phaseSet[ApplyPhaseBase]); err != nil {
 			return nil, err
 		}
@@ -125,8 +122,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
 			// A hook that targets another cluster (its own Ceph nodes, or another
 			// container cluster) must run after that cluster is provisioned. Add the
-			// storage.<ceph> / wait.<ocp> edges the hook's fromInput chain resolves
-			// to, mirroring planStorageAttachmentActivities' dependency shape.
+			// storage.<ceph> / wait.<ocp> edges the hook's fromInput chain resolves to.
 			hookDeps := hookCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
 			addonDeps := appendUniqueStrings(append([]string(nil), deps...), hookDeps...)
 			if err := graph.Add(Activity{

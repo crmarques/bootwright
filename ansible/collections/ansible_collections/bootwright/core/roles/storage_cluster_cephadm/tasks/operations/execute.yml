@@ -4,15 +4,7 @@
     argv: "{{ bootwright_ceph_op_command }}"
   register: bootwright_ceph_op_run
   changed_when: true
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_ceph_op_capture | length > 0) or (bootwright_ceph_op_no_log | bool)) }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
   when:
     - not bootwright_ceph_op_skip | bool
     - bootwright_ceph_op_command | length > 0
-
-- name: Capture Ceph operation output
-  ansible.builtin.set_fact:
-    bootwright_ceph_op_output: "{{ bootwright_ceph_op_run.stdout | default('') }}"
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when:
-    - bootwright_ceph_op_capture | length > 0
-    - bootwright_ceph_op_run is defined

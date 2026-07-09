@@ -1,23 +1,4 @@
 ---
-- name: Create storage task artifact directory
-  ansible.builtin.file:
-    path: "{{ bootwright_ansible_artifacts_dir }}"
-    state: directory
-    mode: "0700"
-  delegate_to: localhost
-  become: false
-  when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
-
-- name: Write captured storage result
-  ansible.builtin.copy:
-    dest: "{{ bootwright_selected_storage_cluster.resultPath }}"
-    content: "{{ {'dataFoundation': bootwright_data_foundation_result | default({})} | to_nice_json }}\n"
-    mode: "0600"
-  delegate_to: localhost
-  become: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
-
 - name: Record storage cluster ownership
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

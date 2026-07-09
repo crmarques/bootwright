@@ -62,9 +62,8 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageObjectGateways {
 		normalizeStorageObjectGateway(&state.StorageObjectGateways[i])
 	}
-	storageClusters := indexStorageClusters(state.StorageClusters)
 	for i := range state.StorageExports {
-		normalizeStorageExport(&state.StorageExports[i], storageClusters)
+		normalizeStorageExport(&state.StorageExports[i])
 	}
 	for i := range state.ProvisioningPlaybooks {
 		normalizeProvisioningPlaybook(&state.ProvisioningPlaybooks[i])
@@ -539,21 +538,12 @@ func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
 	}
 }
 
-func normalizeStorageExport(export *v1alpha1.StorageExport, clusters map[string]v1alpha1.StorageCluster) {
+// normalizeStorageExport defaults the export type. A managed-Ceph export with
+// no externalDetails needs no defaulting: the consuming add-on produces the
+// details itself (its exporter hook).
+func normalizeStorageExport(export *v1alpha1.StorageExport) {
 	if export.Spec.Type == "" && export.Spec.DataFoundation != nil {
 		export.Spec.Type = v1alpha1.StorageExportTypeDataFoundation
-	}
-	cluster, ok := clusters[export.Spec.StorageClusterRef.Name]
-	if !ok {
-		return
-	}
-	switch storageClusterManagement(cluster) {
-	case v1alpha1.StorageClusterManagementManaged:
-		if export.Spec.ExternalDetails == nil {
-			export.Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-				Generated: &v1alpha1.StorageExportExternalDetailsGenerated{},
-			}
-		}
 	}
 }
 

@@ -18,9 +18,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 	secretstore "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
-	storageapply "github.com/crmarques/bootwright/internal/storage"
-	"github.com/crmarques/bootwright/internal/storage/datafoundation"
-	"go.yaml.in/yaml/v3"
 )
 
 type fakeClusterAvailabilityChecker struct {
@@ -34,11 +31,6 @@ func (f *fakeClusterAvailabilityChecker) Available(_ context.Context, kubeconfig
 	return f.available, f.err
 }
 
-type storageResultRunner struct {
-	fakeRunner
-	t *testing.T
-}
-
 type blockingApplyRunner struct {
 	started chan struct{}
 }
@@ -50,45 +42,6 @@ type recordingApplyRunner struct {
 	delay     time.Duration
 	active    int
 	maxActive int
-}
-
-type externalDetailsAnsibleRunner struct {
-	runCalled  bool
-	lastSpec   ansible.RunSpec
-	outputJSON string
-	runErr     error
-}
-
-func (r *storageResultRunner) Run(ctx context.Context, spec ansible.RunSpec) error {
-	if err := r.fakeRunner.Run(ctx, spec); err != nil {
-		return err
-	}
-	resultPath := filepath.Join(spec.ArtifactsDir, "storage-result.json")
-	result := map[string]any{
-		"dataFoundation": map[string]datafoundation.ExternalSecrets{
-			"demo": {
-				AdminSecret:          "admin-key",
-				FSID:                 "fsid-123",
-				MonSecret:            "mon-key",
-				HealthcheckerKey:     "healthchecker-key",
-				RBDNodeKey:           "rbd-node-key",
-				RBDProvisionerKey:    "rbd-provisioner-key",
-				CephFSNodeKey:        "cephfs-node-key",
-				CephFSProvisionerKey: "cephfs-provisioner-key",
-			},
-		},
-	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		r.t.Fatalf("marshal result: %v", err)
-	}
-	if err := os.MkdirAll(spec.ArtifactsDir, 0o700); err != nil {
-		r.t.Fatalf("mkdir storage artifacts: %v", err)
-	}
-	if err := os.WriteFile(resultPath, data, 0o600); err != nil {
-		r.t.Fatalf("write storage result: %v", err)
-	}
-	return nil
 }
 
 func (r *blockingApplyRunner) Run(ctx context.Context, _ ansible.RunSpec) error {
@@ -165,26 +118,6 @@ func (r *cancelOnRunApplyRunner) snapshot() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.calls...)
-}
-
-func (r *externalDetailsAnsibleRunner) Run(_ context.Context, spec ansible.RunSpec) error {
-	r.runCalled = true
-	r.lastSpec = spec
-	if r.runErr != nil {
-		return r.runErr
-	}
-	if err := os.MkdirAll(spec.ArtifactsDir, 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(spec.ArtifactsDir, "external-cluster-details.json"), []byte(r.outputJSON), 0o600)
-}
-
-func (r *externalDetailsAnsibleRunner) Command(spec ansible.RunSpec) []string {
-	executable := spec.Executable
-	if executable == "" {
-		executable = "ansible-playbook"
-	}
-	return []string{executable, "-i", spec.Inventory, spec.Playbook}
 }
 
 func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
@@ -1088,19 +1021,29 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 	assertTaskDeps(t, tasks, "storage.ceph", "storageinfra.ceph")
 	assertTaskDeps(t, tasks, "iso.demo")
 	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
+	// The attachment is owned by the add-on's hooks inside its addon task; no
+	// compiled attachment task exists (see
+	// TestPlanApplyAllPlansNoCompiledAttachmentTask). This hookless add-on has
+	// no fromInput target, so it orders only behind its cluster install wait.
 	assertTaskDeps(t, tasks, "addon.demo.odf", "wait.demo")
-	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf")
 }
 
-func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundation(t *testing.T) {
+// TestPlanApplyAllPlansNoCompiledAttachmentTask pins the migration: the
+// storage-export attachment is applied by the consuming add-on's own hooks
+// inside its addon task, so no separate compiled attachment task is planned.
+func TestPlanApplyAllPlansNoCompiledAttachmentTask(t *testing.T) {
 	state := storageAttachmentPlanningState()
 
 	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-
-	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf")
+	for _, id := range applyTaskIDs(tasks) {
+		if strings.HasPrefix(id, "storageattachment.") {
+			t.Fatalf("compiled attachment task planned: %v", applyTaskIDs(tasks))
+		}
+	}
+	assertTaskPresent(t, tasks, "addon.demo.odf")
 }
 
 func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
@@ -1115,7 +1058,7 @@ func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
 			t.Fatalf("external storage planned storage task: %v", applyTaskIDs(tasks))
 		}
 	}
-	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "addon.demo.odf")
+	assertTaskDeps(t, tasks, "addon.demo.odf", "wait.demo")
 }
 
 func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
@@ -1152,23 +1095,28 @@ func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
 	}
 }
 
-func TestExternalStorageExamplesPlanDataFoundationAttachmentsWithoutCephTask(t *testing.T) {
+// TestDataFoundationExamplesPlanAddonOwnedAttachments pins the migrated shape:
+// no compiled attachment tasks; the exporter-hook add-on (managed Ceph) pulls
+// a storage.<ceph> dependency onto its own addon task via the hook's fromInput
+// target, while the manifest-only add-on (imported Ceph, fromSecretRef) needs
+// no Ceph-side dependency at all.
+func TestDataFoundationExamplesPlanAddonOwnedAttachments(t *testing.T) {
 	cases := []struct {
 		example        string
-		bindings       map[string]string
+		clusters       []string
 		addon          string
 		storageTask    string
 		wantStorageJob bool
 	}{
 		{
 			example:     "baremetal-redfish-imported-ceph-odf",
-			bindings:    map[string]string{"metal-ocp": "metal-ocp-odf"},
+			clusters:    []string{"metal-ocp"},
 			addon:       "openshift-data-foundation",
 			storageTask: "storage.imported-ceph",
 		},
 		{
 			example:        "baremetal-redfish-multidc-virtualized-odf-ceph",
-			bindings:       map[string]string{"dc1-metal-ocp": "dc1-metal-ocp-addons", "dc2-metal-ocp": "dc2-metal-ocp-addons", "dc1-child-ocp": "dc1-child-ocp-addons", "dc2-child-ocp": "dc2-child-ocp-addons"},
+			clusters:       []string{"dc1-metal-ocp", "dc2-metal-ocp", "dc1-child-ocp", "dc2-child-ocp"},
 			addon:          "openshift-data-foundation",
 			storageTask:    "storage.ceph-storage",
 			wantStorageJob: true,
@@ -1189,12 +1137,22 @@ func TestExternalStorageExamplesPlanDataFoundationAttachmentsWithoutCephTask(t *
 			} else {
 				assertTaskMissing(t, tasks, tc.storageTask)
 			}
-			for cluster := range tc.bindings {
-				deps := []string{"wait." + cluster, "addon." + cluster + "." + tc.addon}
-				if tc.wantStorageJob {
-					deps = []string{"wait." + cluster, tc.storageTask, "addon." + cluster + "." + tc.addon}
+			for _, id := range applyTaskIDs(tasks) {
+				if strings.HasPrefix(id, "storageattachment.") {
+					t.Fatalf("compiled attachment task planned: %v", applyTaskIDs(tasks))
 				}
-				assertTaskDeps(t, tasks, "storageattachment."+cluster+"."+tc.addon+".external-storage.apply", deps...)
+			}
+			for _, cluster := range tc.clusters {
+				addonID := "addon." + cluster + "." + tc.addon
+				if tc.wantStorageJob {
+					// The exporter hook's fromInput target pulls the managed
+					// Ceph apply in as a direct dependency of the addon task.
+					assertTaskHasDeps(t, tasks, addonID, tc.storageTask)
+				}
+				// The add-on orders behind its cluster's install readiness —
+				// directly, or through the binding's addon chain (e.g. behind
+				// a preceding openshift-virtualization addon task).
+				assertTaskDependsTransitively(t, tasks, addonID, "wait."+cluster)
 			}
 		})
 	}
@@ -1228,12 +1186,8 @@ func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInstall(t *testin
 	}
 }
 
-func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
+func TestStorageTaskRunsThroughAnsible(t *testing.T) {
 	state := storageAttachmentPlanningState()
-	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
-		RBDPoolRef:    v1alpha1.LocalObjectReference{Name: "rbd"},
-		FilesystemRef: v1alpha1.LocalObjectReference{Name: "cephfs"},
-	}
 	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseBase}, ClusterKind: ApplyClusterKindStorage}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
@@ -1259,7 +1213,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	runner := &storageResultRunner{t: t}
+	runner := &fakeRunner{}
 	_, err = RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
 		State:              state,
 		RenderedDir:        filepath.Join(dir, "rendered"),
@@ -1280,307 +1234,6 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	}
 	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_storage_cluster_apply") {
 		t.Fatalf("storage playbook = %q", runner.lastSpec.Playbook)
-	}
-	if _, err := os.Stat(filepath.Join(runner.lastSpec.ArtifactsDir, "storage-result.json")); !os.IsNotExist(err) {
-		t.Fatalf("storage result was not removed, stat err=%v", err)
-	}
-	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(filepath.Join(dir, "clusters"), "demo", "odf", "external-storage")
-	if err != nil || !found {
-		t.Fatalf("LoadDataFoundationAttachmentDetails found=%v err=%v", found, err)
-	}
-	if !strings.Contains(detailsJSON, "rbd-node-key") {
-		t.Fatalf("external details missing runtime result: %s", detailsJSON)
-	}
-}
-
-func TestWriteStorageAttachmentExternalDetailsUsesRuntimeCredentials(t *testing.T) {
-	state := storageAttachmentPlanningState()
-	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
-		RBDPoolRef:    v1alpha1.LocalObjectReference{Name: "rbd"},
-		FilesystemRef: v1alpha1.LocalObjectReference{Name: "cephfs"},
-	}
-	clustersDir := t.TempDir()
-	runtimeDetailsJSON := `[{"name":"rook-csi-rbd-node","kind":"Secret","data":{"userKey":"rbd-node-key"}}]`
-	if err := storageapply.SaveDataFoundationAttachmentDetails(clustersDir, "demo", "odf", "external-storage", runtimeDetailsJSON); err != nil {
-		t.Fatalf("SaveDataFoundationAttachmentDetails: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
-	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
-		Cluster: "demo",
-		Binding: state.ClusterAddonBindings[0],
-		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
-		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
-	}, storageAttachmentExternalDetailsOptions{ClustersDir: clustersDir, SecretsDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	var manifest map[string]any
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("decode manifest: %v", err)
-	}
-	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
-	if strings.Contains(detailsJSON, datafoundation.GeneratedAtApplyPlaceholder) {
-		t.Fatalf("external_cluster_details still contains placeholder: %s", detailsJSON)
-	}
-	if !strings.Contains(detailsJSON, "rbd-node-key") {
-		t.Fatalf("external_cluster_details missing runtime key: %s", detailsJSON)
-	}
-}
-
-func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
-	state := externalStorageAttachmentPlanningState()
-	secretPath := filepath.Join(t.TempDir(), "external-details.json")
-	secretJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"external-fsid"}}]`
-	if err := os.WriteFile(secretPath, []byte(secretJSON), 0o600); err != nil {
-		t.Fatalf("write secret: %v", err)
-	}
-	state.Secrets = []v1alpha1.Secret{{
-		Metadata: v1alpha1.Metadata{Name: "shared-ceph-external-details"},
-		Spec: v1alpha1.SecretSpec{
-			Type:   v1alpha1.SecretTypeOpaque,
-			Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: secretPath}},
-		},
-	}}
-	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
-	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
-		Cluster: "demo",
-		Binding: state.ClusterAddonBindings[0],
-		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
-		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
-	}, storageAttachmentExternalDetailsOptions{ClustersDir: t.TempDir(), SecretsDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	var manifest map[string]any
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("decode manifest: %v", err)
-	}
-	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
-	if detailsJSON != secretJSON {
-		t.Fatalf("external_cluster_details = %s, want %s", detailsJSON, secretJSON)
-	}
-}
-
-func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
-	state := storageAttachmentPlanningState()
-	state.Secrets = []v1alpha1.Secret{
-		{Metadata: v1alpha1.Metadata{Name: "ceph-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
-		{Metadata: v1alpha1.Metadata{Name: "ceph-node-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
-	}
-	state.StorageExports[0].Spec.Type = v1alpha1.StorageExportTypeDataFoundation
-	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			Timeout: "30s",
-			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
-				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
-			},
-			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{
-				RBDDataPoolName:          "rbdpool",
-				MonitoringEndpoint:       []string{"10.10.10.11", "10.10.10.12"},
-				MonitoringEndpointPort:   9283,
-				ClusterName:              "ceph",
-				RestrictedAuthPermission: true,
-			},
-		},
-	}
-	state.Machines[0].Spec.Access.SSH.User = "operator"
-
-	secretsDir := t.TempDir()
-	exportedJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"ssh-fsid"}}]`
-	ansibleRunner := &externalDetailsAnsibleRunner{outputJSON: exportedJSON}
-
-	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
-	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
-		Cluster: "demo",
-		Binding: state.ClusterAddonBindings[0],
-		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
-		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
-	}, storageAttachmentExternalDetailsOptions{
-		ClustersDir:        t.TempDir(),
-		SecretsDir:         secretsDir,
-		TaskRoot:           t.TempDir(),
-		BundleDir:          "/bundle",
-		AskBecomePass:      true,
-		BecomePasswordFile: "/tmp/bootwright-become",
-		UseControllingTTY:  true,
-		Runner:             ansibleRunner,
-	})
-	if err != nil {
-		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
-	}
-
-	if !ansibleRunner.runCalled {
-		t.Fatal("external details Ansible runner was not invoked")
-	}
-	spec := ansibleRunner.lastSpec
-	if spec.Limit != "external_details_0" {
-		t.Fatalf("Ansible limit = %q, want external_details_0", spec.Limit)
-	}
-	if !spec.AskBecomePass || spec.BecomePasswordFile != "/tmp/bootwright-become" || !spec.UseControllingTTY {
-		t.Fatalf("become options were not propagated: %+v", spec)
-	}
-	inventoryData, err := os.ReadFile(spec.Inventory)
-	if err != nil {
-		t.Fatalf("read generated inventory: %v", err)
-	}
-	var inventory map[string]any
-	if err := yaml.Unmarshal(inventoryData, &inventory); err != nil {
-		t.Fatalf("decode generated inventory: %v", err)
-	}
-	host := inventory["all"].(map[string]any)["hosts"].(map[string]any)["external_details_0"].(map[string]any)
-	if got := host["ansible_host"]; got != "10.10.10.10" {
-		t.Fatalf("ansible_host = %v, want 10.10.10.10", got)
-	}
-	if got := host["ansible_user"]; got != "operator" {
-		t.Fatalf("ansible_user = %v, want operator", got)
-	}
-	if got := host["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-node-ssh") {
-		t.Fatalf("key path = %v", got)
-	}
-	commonArgs, _ := host["ansible_ssh_common_args"].(string)
-	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-known-hosts")) {
-		t.Fatalf("ansible_ssh_common_args = %q, want strict host key checking with Machine knownHostsRef", commonArgs)
-	}
-	if strings.Contains(commonArgs, "/dev/null") {
-		t.Fatalf("ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
-	}
-	playbookData, err := os.ReadFile(spec.Playbook)
-	if err != nil {
-		t.Fatalf("read generated playbook: %v", err)
-	}
-	playbookText := string(playbookData)
-	for _, want := range []string{
-		"become: true",
-		"python3",
-		"ceph-external-cluster-details-exporter.py",
-		"--k8s-cluster-name",
-		"demo",
-		"--restricted-auth-permission",
-	} {
-		if !strings.Contains(playbookText, want) {
-			t.Fatalf("playbook missing %q:\n%s", want, playbookText)
-		}
-	}
-	if strings.Contains(playbookText, "become_user") || strings.Contains(playbookText, "sudo") {
-		t.Fatalf("playbook must rely on Ansible become without explicit sudo/user switching:\n%s", playbookText)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	var manifest map[string]any
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("decode manifest: %v", err)
-	}
-	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
-	if detailsJSON != exportedJSON {
-		t.Fatalf("external_cluster_details = %s, want %s", detailsJSON, exportedJSON)
-	}
-}
-
-func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
-	state := v1alpha1.State{
-		Secrets: []v1alpha1.Secret{
-			{Metadata: v1alpha1.Metadata{Name: "ceph-admin-ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
-			{Metadata: v1alpha1.Metadata{Name: "ceph-admin-known-hosts"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}},
-		},
-		Machines: []v1alpha1.Machine{{
-			Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
-			Spec: v1alpha1.MachineSpec{
-				Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
-				OS: v1alpha1.MachineOSSpec{
-					Provided: v1alpha1.BoolPtr(true),
-				},
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
-				Access: v1alpha1.MachineAccess{
-					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}, User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}, KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"}},
-				},
-			},
-		}},
-	}
-	secretsDir := t.TempDir()
-	ssh := &v1alpha1.StorageExportExternalDetailsSSHExecution{
-		MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
-		Config:      v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
-	}
-
-	targets, err := storageExportSSHExternalDetailsTargets(state, v1alpha1.StorageCluster{
-		Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
-		Spec: v1alpha1.StorageClusterSpec{
-			Type:       v1alpha1.StorageClusterTypeCeph,
-			Management: v1alpha1.StorageClusterManagementExternal,
-		},
-	}, secretsDir, "", ssh)
-	if err != nil {
-		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
-	}
-	want := []externalDetailsSSHTarget{{
-		label:          "Machine/ceph-admin-01",
-		inventoryName:  "external_details_0",
-		address:        "ceph-admin.example.test",
-		user:           "ceph",
-		keyPath:        filepath.Join(secretsDir, "ceph-admin-ssh"),
-		knownHostsPath: filepath.Join(secretsDir, "ceph-admin-known-hosts"),
-	}}
-	if !reflect.DeepEqual(targets, want) {
-		t.Fatalf("targets = %#v, want %#v", targets, want)
-	}
-	root := t.TempDir()
-	if err := writeStorageExportSSHAnsibleFiles(filepath.Join(root, "inventory.yaml"), filepath.Join(root, "vars.yaml"), filepath.Join(root, "playbook.yaml"), targets[0], filepath.Join(root, "details.json"), datafoundation.ExternalDetailsExporterArgs(ssh.Config, "demo")); err != nil {
-		t.Fatalf("writeStorageExportSSHAnsibleFiles: %v", err)
-	}
-	data, err := os.ReadFile(filepath.Join(root, "inventory.yaml"))
-	if err != nil {
-		t.Fatalf("read generated inventory: %v", err)
-	}
-	var inventory map[string]any
-	if err := yaml.Unmarshal(data, &inventory); err != nil {
-		t.Fatalf("decode inventory: %v", err)
-	}
-	host := inventory["all"].(map[string]any)["hosts"].(map[string]any)["external_details_0"].(map[string]any)
-	if got := host["ansible_user"]; got != "ceph" {
-		t.Fatalf("machine ref ansible_user = %v, want ceph", got)
-	}
-	commonArgs, _ := host["ansible_ssh_common_args"].(string)
-	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-admin-known-hosts")) {
-		t.Fatalf("machine ref ansible_ssh_common_args = %q, want strict host key checking with Machine knownHostsRef", commonArgs)
-	}
-	if strings.Contains(commonArgs, "/dev/null") {
-		t.Fatalf("machine ref ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
-	}
-}
-
-func TestStorageExportSSHExternalDetailsTargetsUseContextTrustWhenKnownHostsRefOmitted(t *testing.T) {
-	state := storageAttachmentPlanningState()
-	state.Machines[0].Spec.Access.SSH.KnownHostsRef = v1alpha1.SecretRef{}
-	ssh := &v1alpha1.StorageExportExternalDetailsSSHExecution{
-		Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
-	}
-	secretsDir := filepath.Join(t.TempDir(), "runtime", "secrets")
-	trustSecretsDir := filepath.Join(t.TempDir(), "context", "secrets")
-
-	targets, err := storageExportSSHExternalDetailsTargets(state, state.StorageClusters[0], secretsDir, trustSecretsDir, ssh)
-	if err != nil {
-		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
-	}
-	if len(targets) != 1 {
-		t.Fatalf("targets got %d, want 1", len(targets))
-	}
-	if got := targets[0].keyPath; got != filepath.Join(secretsDir, "ceph-node-ssh") {
-		t.Fatalf("key path = %s, want runtime secret path", got)
-	}
-	wantKnownHosts := filepath.Join(filepath.Dir(trustSecretsDir), "trust", "ssh", "known_hosts")
-	if got := targets[0].knownHostsPath; got != wantKnownHosts {
-		t.Fatalf("known hosts path = %s, want %s", got, wantKnownHosts)
 	}
 }
 
@@ -2062,6 +1715,58 @@ func assertTaskDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) 
 		return
 	}
 	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
+}
+
+// assertTaskHasDeps asserts the named task's dependencies CONTAIN each wanted
+// entry (subset, order-free) — for real-example graphs whose addon tasks also
+// carry capability-ordering edges this test does not pin.
+func assertTaskHasDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.Entry.ID != id {
+			continue
+		}
+		have := map[string]bool{}
+		for _, dep := range task.Entry.Dependencies {
+			have[dep] = true
+		}
+		for _, dep := range want {
+			if !have[dep] {
+				t.Fatalf("%s deps = %v, missing %s", id, task.Entry.Dependencies, dep)
+			}
+		}
+		return
+	}
+	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
+}
+
+// assertTaskDependsTransitively asserts the named task orders behind target
+// through the dependency graph — directly or via intermediate tasks (an addon
+// chain, a capability edge).
+func assertTaskDependsTransitively(t *testing.T, tasks []ApplyTask, id, target string) {
+	t.Helper()
+	deps := map[string][]string{}
+	for _, task := range tasks {
+		deps[task.Entry.ID] = task.Entry.Dependencies
+	}
+	if _, ok := deps[id]; !ok {
+		t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
+	}
+	seen := map[string]bool{}
+	queue := append([]string(nil), deps[id]...)
+	for len(queue) > 0 {
+		next := queue[0]
+		queue = queue[1:]
+		if next == target {
+			return
+		}
+		if seen[next] {
+			continue
+		}
+		seen[next] = true
+		queue = append(queue, deps[next]...)
+	}
+	t.Fatalf("%s does not depend (even transitively) on %s; direct deps = %v", id, target, deps[id])
 }
 
 func assertTaskResourceKeys(t *testing.T, tasks []ApplyTask, id string, want ...string) {

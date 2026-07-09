@@ -2,8 +2,6 @@ package desiredstate
 
 import (
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
@@ -34,7 +32,7 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 		}
 		df := export.Spec.DataFoundation
 		if clusterOK {
-			errs = append(errs, validateStorageExportExternalDetails(export, cluster, machines)...)
+			errs = append(errs, validateStorageExportExternalDetails(export, cluster)...)
 		}
 		if clusterOK && storageClusterExternal(cluster) {
 			if df != nil {
@@ -71,8 +69,12 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 	return errs
 }
 
-func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
-	var errs []string
+// validateStorageExportExternalDetails validates the operator-supplied
+// details arm. A managed-Ceph export may omit externalDetails entirely — the
+// consuming add-on then produces the details itself (a hook running the Rook
+// exporter on a Ceph node). External Ceph has no nodes Bootwright can reach,
+// so operator-supplied details are the only source.
+func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster) []string {
 	prefix := fmt.Sprintf("StorageExport/%s spec.externalDetails", export.Metadata.Name)
 	details := export.Spec.ExternalDetails
 	if details == nil {
@@ -81,79 +83,10 @@ func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster
 		}
 		return nil
 	}
-	sourceCount := 0
-	if details.FromSecretRef.Name != "" {
-		sourceCount++
+	if details.FromSecretRef.Name == "" {
+		return []string{prefix + ".fromSecretRef is required when externalDetails is set"}
 	}
-	if details.Generated != nil {
-		sourceCount++
-	}
-	if details.SSHExecution != nil {
-		sourceCount++
-	}
-	if sourceCount != 1 {
-		errs = append(errs, prefix+" must set exactly one of fromSecretRef, generated, or sshExecution")
-	}
-	if storageClusterExternal(cluster) && details.Generated != nil {
-		errs = append(errs, prefix+".generated must be empty when storageClusterRef points to external Ceph")
-	}
-	if details.SSHExecution != nil {
-		errs = append(errs, validateStorageExportSSHExecution(prefix+".sshExecution", cluster, details.SSHExecution, machines)...)
-	}
-	return errs
-}
-
-func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCluster, spec *v1alpha1.StorageExportExternalDetailsSSHExecution, machines map[string]v1alpha1.Machine) []string {
-	var errs []string
-	if storageClusterExternal(cluster) && len(spec.MachineRefs) == 0 {
-		errs = append(errs, prefix+".machineRefs is required when storageClusterRef points to external Ceph")
-	}
-	for i, ref := range spec.MachineRefs {
-		owner := fmt.Sprintf("%s.machineRefs[%d]", prefix, i)
-		if ref.Name == "" {
-			errs = append(errs, owner+" is required")
-			continue
-		}
-		machine, ok := machines[ref.Name]
-		if !ok {
-			errs = append(errs, fmt.Sprintf("%s %q does not match any Machine", owner, ref.Name))
-			continue
-		}
-		if !machineHasCapability(machine, v1alpha1.MachineCapabilityCephAdmin) {
-			errs = append(errs, fmt.Sprintf("%s %q must reference a Machine with capability %q", owner, ref.Name, v1alpha1.MachineCapabilityCephAdmin))
-		}
-		if machine.Spec.Access.SSH == nil {
-			errs = append(errs, fmt.Sprintf("Machine/%s spec.access.ssh is required for %s", machine.Metadata.Name, owner))
-		}
-	}
-	if spec.Timeout != "" {
-		if _, err := time.ParseDuration(spec.Timeout); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.timeout %q must be a Go duration such as 10m, 30m, or 1h", prefix, spec.Timeout))
-		}
-	}
-	if spec.Exporter.Source == "" {
-		errs = append(errs, prefix+".exporter.source is required")
-	} else if spec.Exporter.Source != v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon {
-		errs = append(errs, fmt.Sprintf("%s.exporter.source %q must be %q", prefix, spec.Exporter.Source, v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon))
-	}
-	if spec.Config.RBDDataPoolName == "" {
-		errs = append(errs, prefix+".config.rbdDataPoolName is required")
-	}
-	if spec.Config.Format != "" && spec.Config.Format != "json" {
-		errs = append(errs, fmt.Sprintf("%s.config.format %q must be %q when set", prefix, spec.Config.Format, "json"))
-	}
-	if spec.Config.RestrictedAuthPermission && spec.Config.ClusterName == "" {
-		errs = append(errs, prefix+".config.clusterName is required when restrictedAuthPermission is true")
-	}
-	for i, endpoint := range spec.Config.MonitoringEndpoint {
-		if strings.TrimSpace(endpoint) == "" {
-			errs = append(errs, fmt.Sprintf("%s.config.monitoringEndpoint[%d] must not be empty", prefix, i))
-		}
-	}
-	if spec.Config.MonitoringEndpointPort < 0 || spec.Config.MonitoringEndpointPort > 65535 {
-		errs = append(errs, fmt.Sprintf("%s.config.monitoringEndpointPort must be between 0 and 65535", prefix))
-	}
-	return errs
+	return nil
 }
 
 func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport) []string {

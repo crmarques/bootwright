@@ -5,7 +5,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -23,56 +22,18 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Hostname, machine.Metadata.Name), []string{"deps", "base"}, machine, true, secretRefOwner{storageCluster: cluster.Metadata.Name})...)
 		}
 	}
-	clusterByName := map[string]v1alpha1.StorageCluster{}
-	for _, cluster := range state.StorageClusters {
-		clusterByName[cluster.Metadata.Name] = cluster
-	}
 	for _, export := range state.StorageExports {
-		if fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export); fromSecret != "" {
-			out = append(out, secretRefRequirement{
-				refName: fromSecret,
-				label:   fmt.Sprintf("StorageExport/%s externalDetails.fromSecretRef", export.Metadata.Name),
-				phases:  []string{"add-ons"},
-				role:    secret.MaterialPrimary,
-			})
-		}
-		ssh := datafoundation.ExternalDetailsSourceSSH(export)
-		if ssh == nil {
+		if export.Spec.ExternalDetails == nil || export.Spec.ExternalDetails.FromSecretRef.Name == "" {
 			continue
 		}
-		for _, ref := range ssh.MachineRefs {
-			machine, ok := machineByName(state, ref.Name)
-			if !ok {
-				continue
-			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"add-ons"}, machine, false, secretRefOwner{})...)
-		}
-		if len(ssh.MachineRefs) == 0 {
-			cluster, ok := clusterByName[export.Spec.StorageClusterRef.Name]
-			if ok && cluster.Spec.Ceph != nil {
-				for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-					if node.Hostname != cluster.Spec.Ceph.Cephadm.Bootstrap.Host {
-						continue
-					}
-					machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
-					if !ok {
-						continue
-					}
-					out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"add-ons"}, machine, false, secretRefOwner{})...)
-				}
-			}
-		}
+		out = append(out, secretRefRequirement{
+			refName: export.Spec.ExternalDetails.FromSecretRef.Name,
+			label:   fmt.Sprintf("StorageExport/%s externalDetails.fromSecretRef", export.Metadata.Name),
+			phases:  []string{"add-ons"},
+			role:    secret.MaterialPrimary,
+		})
 	}
 	return out
-}
-
-func machineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
-	for _, machine := range state.Machines {
-		if machine.Metadata.Name == name {
-			return machine, true
-		}
-	}
-	return v1alpha1.Machine{}, false
 }
 
 func machineSSHSecretRequirements(label string, phases []string, machine v1alpha1.Machine, requirePair bool, owner secretRefOwner) []secretRefRequirement {

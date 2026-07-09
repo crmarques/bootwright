@@ -17,7 +17,7 @@ func TestApplyClusterPhasesAggregateContainerAndStorageStates(t *testing.T) {
 		{ID: "wait.cluster-a", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending},
 		{ID: "storageinfra.ceph-a", Kind: workflow.ApplyTaskKindStorageInfra, Cluster: "ceph-a", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
 		{ID: "storage.ceph-a", Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph-a", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "storageattachment.cluster-a.openshift-data-foundation.external-storage.apply", Kind: workflow.ApplyTaskKindStorageAttachmentApply, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
+		{ID: "addon.cluster-a.openshift-data-foundation", Kind: workflow.ApplyTaskKindClusterAddon, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
 	}, now)
 
 	if kind := ApplyClusterKind(ledger.TasksForCluster("cluster-a")); kind != v1alpha1.KindContainerCluster {
@@ -36,9 +36,13 @@ func TestApplyClusterPhasesAggregateContainerAndStorageStates(t *testing.T) {
 	storage := ApplyClusterPhases(ledger, "ceph-a")
 	requireApplyPhase(t, "ceph-a", storage, "Infrastructure", workflow.TaskStatusOK)
 	requireApplyPhase(t, "ceph-a", storage, "Provision", workflow.TaskStatusOK)
-	requireApplyPhase(t, "ceph-a", storage, "Publish", workflow.TaskStatusBlocked)
 	if phasePresent(storage, "Prepare") {
 		t.Fatalf("storage cluster should not expose a duplicate Prepare phase: %+v", storage)
+	}
+	// Storage-export consumption runs inside the consuming cluster's add-on
+	// task, so the storage cluster no longer reports a Publish phase.
+	if phasePresent(storage, "Publish") {
+		t.Fatalf("storage cluster should not expose a Publish phase: %+v", storage)
 	}
 }
 

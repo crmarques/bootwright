@@ -103,16 +103,17 @@ and machine infrastructure, create the cluster agent ISO with
 `openshift-install`, boot each declared node through its rendered boot adapter as
 parallel node tasks, then run `openshift-install agent wait-for install-complete`
 after **every** node boot task has completed. Post-install add-on apply is
-scheduled after that install wait, and storage attachment tasks in the same
-add-ons phase wait for the selected Data Foundation add-on's readiness before
-applying generated external-mode manifests.
+scheduled after that install wait; an add-on whose hooks target another
+cluster's machines (for example a Data Foundation add-on's exporter hook
+running on a Ceph node) additionally waits on that cluster's provisioning
+task before running.
 
 Storage apply is a **peer phase**, not a sub-step of cluster install. The
 `machine-infra` stage prepares selected machines when needed; the `clusters`
 stage schedules an Ansible storage task against a synthetic seed inventory entry,
 launches `cephadm bootstrap` on the seed node, applies cephadm service specs,
-runs topology and storage operations, and writes Data Foundation attachment
-records. Imported storage clusters skip this storage task entirely.
+and runs topology and storage operations. Imported storage clusters skip this
+storage task entirely.
 
 !!! note "Internal stages versus the `--stage` flag"
     The internal dependency stages above (for example `machine-infra`,

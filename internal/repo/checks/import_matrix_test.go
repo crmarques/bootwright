@@ -63,10 +63,10 @@ var allowedImports = map[string][]string{
 
 	// Render: root is the only published surface; families are fs-free and
 	// one-way (inventory -> installer, inventory -> ceph).
-	"internal/render":           {"api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/infra/media", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/render/inventory", "internal/roles", "internal/secrets", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology"},
-	"internal/render/ceph":      {"api/v1alpha1", "internal/addons/inputs", "internal/host/shellquote", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/render":           {"api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/infra/media", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/render/inventory", "internal/roles", "internal/secrets", "internal/state/view", "internal/storage/topology"},
+	"internal/render/ceph":      {"api/v1alpha1", "internal/addons/inputs", "internal/host/shellquote", "internal/storage/topology"},
 	"internal/render/installer": {"api/v1alpha1", "internal/infra/artifacts", "internal/infra/proxy", "internal/nmstate", "internal/secrets", "internal/state/view"},
-	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
 
 	// Convergence: root orchestrates; subpackages never import the root.
 	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/storage/cephstate", "internal/workspace"},
@@ -74,27 +74,26 @@ var allowedImports = map[string][]string{
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
 	"internal/converge/bastion":           {"api/v1alpha1", "internal/host/execution", "internal/render", "internal/roles"},
 	"internal/converge/bundle":            {},
-	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/topology"},
 
 	// Storage and addons.
-	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view", "internal/storage/datafoundation"},
-	"internal/storage/cephadopt":      {"api/v1alpha1", "internal/storage/cephdiff", "internal/storage/topology", "internal/workspace"},
-	"internal/storage/cephprovider":   {"api/v1alpha1", "internal/entitlements", "internal/secrets"},
-	"internal/storage/cephstate":      {},
-	"internal/storage/cephdiff":       {"api/v1alpha1", "internal/storage/cephstate", "internal/storage/topology"},
-	"internal/storage/datafoundation": {"api/v1alpha1", "internal/secrets", "internal/state/view", "internal/storage/topology"},
-	"internal/storage/topology":       {"api/v1alpha1", "internal/state/view"},
-	"internal/addons":                 {},
-	"internal/addons/hooks":           {"api/v1alpha1", "internal/addons/inputs"},
-	"internal/addons/inputs":          {"api/v1alpha1"},
-	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/hooks", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
-	"internal/addons/plan":            {"api/v1alpha1", "internal/addons", "internal/addons/render"},
-	"internal/addons/records":         {"internal/host/safefs"},
-	"internal/addons/render":          {"api/v1alpha1", "internal/addons", "internal/addons/hooks"},
+	"internal/storage":              {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view"},
+	"internal/storage/cephadopt":    {"api/v1alpha1", "internal/storage/cephdiff", "internal/storage/topology", "internal/workspace"},
+	"internal/storage/cephprovider": {"api/v1alpha1", "internal/entitlements", "internal/secrets"},
+	"internal/storage/cephstate":    {},
+	"internal/storage/cephdiff":     {"api/v1alpha1", "internal/storage/cephstate", "internal/storage/topology"},
+	"internal/storage/topology":     {"api/v1alpha1", "internal/state/view"},
+	"internal/addons":               {},
+	"internal/addons/hooks":         {"api/v1alpha1", "internal/addons/inputs"},
+	"internal/addons/inputs":        {"api/v1alpha1"},
+	"internal/addons/oc":            {"api/v1alpha1", "internal/addons", "internal/addons/hooks", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
+	"internal/addons/plan":          {"api/v1alpha1", "internal/addons", "internal/addons/render"},
+	"internal/addons/records":       {"internal/host/safefs"},
+	"internal/addons/render":        {"api/v1alpha1", "internal/addons", "internal/addons/hooks"},
 
 	// Operator-facing application services. They return plain data; cli
 	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).
-	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology", "internal/workspace"},
+	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/topology", "internal/workspace"},
 	"internal/status":        {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/clusteraccess", "internal/converge/workflow", "internal/ownership", "internal/render", "internal/state/graph", "internal/state/view"},
 	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/host/shellquote", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 }

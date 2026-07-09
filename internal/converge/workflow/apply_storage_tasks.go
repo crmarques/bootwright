@@ -5,54 +5,9 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
-
-type StorageAttachmentPlan struct {
-	Cluster string
-	Binding v1alpha1.ClusterAddonBinding
-	Addon   v1alpha1.ClusterAddonBindingAddon
-	Input   v1alpha1.ClusterAddonBindingInput
-}
-
-func planStorageAttachmentActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
-	for _, effect := range addoninputs.StorageExportAttachments(state) {
-		cluster := effect.Binding.Spec.ClusterRef.Name
-		if !stateHasContainerCluster(state, cluster) {
-			continue
-		}
-		export := effect.Export
-		deps := []string{}
-		if installPhasePlanned {
-			deps = append(deps, "wait."+cluster)
-		}
-		deps = append(deps, storageDepsByCluster[export.Spec.StorageClusterRef.Name]...)
-		deps = append(deps, "addon."+cluster+"."+effect.Addon.AddonRef.Name)
-		id := "storageattachment." + cluster + "." + effect.Addon.AddonRef.Name + "." + effect.Input.Name + ".apply"
-		attachmentPlan := StorageAttachmentPlan{Cluster: cluster, Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input}
-		if err := graph.Add(Activity{
-			ID:                   id,
-			ExplicitDependencies: deps,
-			Task: ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:          id,
-					Kind:        ApplyTaskKindStorageAttachmentApply,
-					Label:       "storage attachment " + cluster + " " + effect.Addon.AddonRef.Name + "/" + effect.Input.Name + " apply",
-					Cluster:     cluster,
-					ClusterKind: ApplyClusterKindContainer,
-					Status:      TaskStatusPending,
-				},
-				State:             stategraph.FilterStateToClusters(state, []string{cluster}),
-				StorageAttachment: &attachmentPlan,
-			},
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	filtered := stategraph.FilterStateToStorageClusters(state, []string{name})

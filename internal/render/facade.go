@@ -20,8 +20,6 @@ type (
 	InstallerSecretInputStat = installer.InstallerSecretInputStat
 	PathOptions              = inventory.PathOptions
 	StorageAsset             = ceph.StorageAsset
-	StorageAttachment        = ceph.StorageAttachment
-	StorageAttachmentAsset   = ceph.StorageAttachmentAsset
 )
 
 // Constants.
@@ -124,10 +122,4 @@ func FabricHostDesiredVars(state v1alpha1.State, host string) []any {
 
 func ProviderDriver(state v1alpha1.State, m v1alpha1.InstallMachine) roles.DispatchSupport {
 	return inventory.ProviderDriver(state, m)
-}
-
-// Ceph and Data Foundation emission.
-
-func DataFoundationExternalDetailsRawJSONManifest(attachment StorageAttachment, detailsJSON string, sourceRef string) map[string]any {
-	return ceph.DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, sourceRef)
 }
