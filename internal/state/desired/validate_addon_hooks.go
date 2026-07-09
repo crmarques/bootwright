@@ -53,6 +53,16 @@ func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterA
 				errs = append(errs, validateContainedDir(prefix+".collectionsPath", baseDir, hook.CollectionsPath)...)
 			}
 			errs = append(errs, validateHookTarget(prefix, extension, hook, machines, containers, storage)...)
+		} else {
+			// Outputs are only captured from a playbook run, and a target only
+			// selects playbook hosts — on a manifest-only hook both would validate
+			// clean and then fail (or silently do nothing) at apply time.
+			if len(hook.Outputs) > 0 {
+				errs = append(errs, prefix+".outputs requires a playbook (only a playbook run can produce outputs)")
+			}
+			if hook.Target.BoundCluster || hook.Target.FromInput != nil || len(hook.Target.Clusters) > 0 || len(hook.Target.Machines) > 0 || hook.Target.Limit != "" {
+				errs = append(errs, prefix+".target requires a playbook (manifests always apply to the bound cluster)")
+			}
 		}
 		errs = append(errs, validateHookOutputs(prefix, hook)...)
 		errs = append(errs, validateHookManifests(prefix, baseDir, extension, hook)...)

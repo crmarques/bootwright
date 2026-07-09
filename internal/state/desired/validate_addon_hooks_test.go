@@ -114,6 +114,21 @@ func TestValidateHookManifestOnlyValid(t *testing.T) {
 	}
 }
 
+func TestValidateManifestOnlyHookRejectsOutputsAndTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  c: \"{{ cluster }}\"\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
+		Outputs:   []v1alpha1.ClusterAddonHookOutput{{Name: "details", File: "d.json"}},
+		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: true},
+	})
+	errs := validateClusterAddonHooks(v1alpha1.State{}, addon)
+	hookErrsContain(t, errs, "outputs requires a playbook")
+	hookErrsContain(t, errs, "target requires a playbook")
+}
+
 func TestValidateHookOutputConsumerMustFail(t *testing.T) {
 	dir := t.TempDir()
 	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
