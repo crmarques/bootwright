@@ -1,7 +1,9 @@
 package desiredstate
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sort"
 
@@ -57,4 +59,36 @@ func resolveRegisteredAddons(state *v1alpha1.State) error {
 		}
 	}
 	return nil
+}
+
+// unresolvedAddonRemedy appends an actionable hint to the unresolved addonRef
+// validation finding when the native catalog ships the referenced name: either
+// register it, or — when the machine store could not even be inspected (a
+// rootless run cannot traverse the root-owned Bootwright dir) — run as root so
+// an already-registered copy can load. Names the catalog does not ship get no
+// hint; they are typos or missing authored add-ons.
+func unresolvedAddonRemedy(name string) string {
+	inCatalog := false
+	if entries, err := nativecatalog.Entries(); err == nil {
+		for _, entry := range entries {
+			if entry.Name == name {
+				inCatalog = true
+				break
+			}
+		}
+	}
+	_, statErr := os.Stat(nativecatalog.InstalledDir(name))
+	return addonRemedyForState(name, inCatalog, statErr)
+}
+
+// addonRemedyForState is the filesystem-free decision, split out so tests need
+// not fake the machine store.
+func addonRemedyForState(name string, inCatalog bool, statErr error) string {
+	if !inCatalog {
+		return ""
+	}
+	if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
+		return fmt.Sprintf("; a registered copy may exist but the add-on store %s is only readable as root — re-run as root, or snapshot the add-on into the input with bootwright context init/update", nativecatalog.StoreDir())
+	}
+	return fmt.Sprintf("; the native catalog ships it — register it with: bootwright add-ons add --name %s", name)
 }

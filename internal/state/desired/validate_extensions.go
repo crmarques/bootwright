@@ -526,7 +526,7 @@ func validateClusterAddonProfiles(state v1alpha1.State) []string {
 			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := addons[ref.Name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, ref.Name))
+				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon%s", owner, ref.Name, unresolvedAddonRemedy(ref.Name)))
 			}
 		}
 	}
@@ -603,7 +603,7 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 			if addon.AddonRef.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := addons[addon.AddonRef.Name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, addon.AddonRef.Name))
+				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon%s", owner, addon.AddonRef.Name, unresolvedAddonRemedy(addon.AddonRef.Name)))
 			}
 			inputNames := map[string]bool{}
 			for j, input := range addon.Inputs {

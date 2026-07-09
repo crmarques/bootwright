@@ -117,7 +117,8 @@ func TestLoadResolvesRegisteredNativeAddons(t *testing.T) {
 }
 
 // TestLoadWithoutStoreKeepsUnresolvedReferenceError pins the rootless / no
-// store behavior: the reference stays unresolved and validation reports it.
+// store behavior: the reference stays unresolved, validation reports it, and
+// the finding carries the register remedy because the catalog ships the name.
 func TestLoadWithoutStoreKeepsUnresolvedReferenceError(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(workspace.SetRootDirForTest(root))
@@ -125,5 +126,32 @@ func TestLoadWithoutStoreKeepsUnresolvedReferenceError(t *testing.T) {
 	_, err := LoadNormalizeValidate([]string{input})
 	if err == nil || !strings.Contains(err.Error(), "does not match any ClusterAddon") {
 		t.Fatalf("err = %v, want unresolved addonRef validation error", err)
+	}
+	if !strings.Contains(err.Error(), "bootwright add-ons add --name openshift-data-foundation") {
+		t.Fatalf("err = %v, want the add-ons add remedy for a catalog-shipped name", err)
+	}
+}
+
+func TestAddonRemedyForState(t *testing.T) {
+	cases := []struct {
+		name      string
+		inCatalog bool
+		statErr   error
+		want      string
+	}{
+		{name: "not in catalog", inCatalog: false, statErr: os.ErrNotExist, want: ""},
+		{name: "catalog name unregistered", inCatalog: true, statErr: os.ErrNotExist, want: "bootwright add-ons add --name openshift-data-foundation"},
+		{name: "catalog name store unreadable", inCatalog: true, statErr: os.ErrPermission, want: "only readable as root"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := addonRemedyForState("openshift-data-foundation", tc.inCatalog, tc.statErr)
+			if tc.want == "" && got != "" {
+				t.Fatalf("remedy = %q, want none", got)
+			}
+			if tc.want != "" && !strings.Contains(got, tc.want) {
+				t.Fatalf("remedy = %q, want it to contain %q", got, tc.want)
+			}
+		})
 	}
 }
