@@ -26,9 +26,13 @@ type ClusterAddonAccepts struct {
 }
 
 type ClusterAddonAcceptedInput struct {
-	Name    string                    `yaml:"name" json:"name"`
-	Schema  ClusterAddonInputSchema   `yaml:"schema,omitempty" json:"schema,omitempty"`
-	Effects []ClusterAddonInputEffect `yaml:"effects,omitempty" json:"effects,omitempty"`
+	Name string `yaml:"name" json:"name"`
+	// Required marks an input every binding of this add-on must supply;
+	// validation rejects a binding that omits it, instead of the omission
+	// surfacing mid-apply as an unresolvable hook target or a skipped effect.
+	Required bool                      `yaml:"required,omitempty" json:"required,omitempty"`
+	Schema   ClusterAddonInputSchema   `yaml:"schema,omitempty" json:"schema,omitempty"`
+	Effects  []ClusterAddonInputEffect `yaml:"effects,omitempty" json:"effects,omitempty"`
 }
 
 type ClusterAddonInputSchema struct {

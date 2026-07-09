@@ -457,6 +457,23 @@ spec:
 			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.targetRef is required`,
 		},
 		{
+			name: "missing-required-input",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: config
+        required: true
+        schema:
+          type: object
+          properties:
+            targetRef:
+              refKind: ContainerCluster
+`)
+				files["binding.yaml"] = bindingWithInputs("")
+				return files
+			},
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt does not supply required input "config"`,
+		},
+		{
 			name: "undeclared-value-property",
 			files: func() map[string]string {
 				files := newBaselineFiles()

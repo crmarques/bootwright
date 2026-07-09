@@ -652,6 +652,11 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 				}
 				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema, loaded)...)
 			}
+			for _, acceptedInput := range extension.Spec.Accepts.Inputs {
+				if acceptedInput.Required && !effectiveInputNames[acceptedInput.Name] {
+					errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s does not supply required input %q", binding.Metadata.Name, addon.AddonRef.Name, acceptedInput.Name))
+				}
+			}
 		}
 		errs = append(errs, validateBindingCapabilityOrdering(binding, addons, state)...)
 	}

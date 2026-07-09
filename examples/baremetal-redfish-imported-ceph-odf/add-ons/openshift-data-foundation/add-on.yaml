@@ -10,7 +10,10 @@ spec:
 
   accepts:
     inputs:
+      # The add-on installs external mode only, so the StorageExport to attach
+      # is not optional: a binding that omits it fails validation.
       - name: external-storage
+        required: true
         schema:
           type: object
           required:
