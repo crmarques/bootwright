@@ -134,10 +134,13 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		// it gets its own summary rather than naming the already-applied
 		// Subscription as a failed apply target.
 		var gate *csvGateError
+		var catalogGate *catalogGateError
 		var hookErr *HookError
 		switch {
 		case errors.As(err, &gate):
 			record.LastObserved = gate.summary()
+		case errors.As(err, &catalogGate):
+			record.LastObserved = catalogGate.summary()
 		case errors.As(err, &hookErr):
 			record.LastObserved = hookErr.summary()
 		default:
@@ -239,9 +242,26 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 	}
 	switch plan.Extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLM:
-		operator, err := extensionrender.OperatorResources(plan.Extension)
+		catalog, err := extensionrender.CatalogResources(plan.Extension)
 		if err != nil {
 			return nil, "", err
+		}
+		observed, failedID, err = applyResources(ctx, runner, kubeconfig, plan.Policy, catalog, observed)
+		if err != nil {
+			return observed, failedID, err
+		}
+		if len(catalog) > 0 {
+			olm := plan.Extension.Spec.OLM
+			// A gate timeout returns a typed catalogGateError: the CatalogSource
+			// applied successfully, only its registry never reported READY, so the
+			// failure summary must not name it as a failed apply target.
+			if err := waitCatalogSourceReady(ctx, cfg.readRunner(runner), kubeconfig, olm.Subscription.SourceNamespace, olm.CatalogSource.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
+				return observed, "", err
+			}
+		}
+		operator, err := extensionrender.OperatorResources(plan.Extension)
+		if err != nil {
+			return observed, "", err
 		}
 		observed, failedID, err = applyResources(ctx, runner, kubeconfig, plan.Policy, operator, observed)
 		if err != nil {
@@ -334,6 +354,70 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 		case <-ticker.C:
 		}
 	}
+}
+
+// waitCatalogSourceReady polls until the shipped CatalogSource's registry
+// reports a READY connection (OLM can then resolve packages from it), bounded
+// by the add-on readiness timeout. Like the CSV gate it takes the read/quiet
+// runner so the expected pre-READY polls stay off the console.
+func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, namespace, name, timeoutStr string, pollInterval time.Duration) error {
+	timeout, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if pollInterval <= 0 {
+		pollInterval = WaitInterval(timeout)
+	}
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	var last string
+	for {
+		ready, detail := catalogSourceReady(ctx, runner, kubeconfig, namespace, name)
+		if ready {
+			return nil
+		}
+		if detail != "" {
+			last = detail
+		}
+		select {
+		case <-ctx.Done():
+			return &catalogGateError{namespace: namespace, name: name, timeout: timeout, lastObserved: last}
+		case <-ticker.C:
+		}
+	}
+}
+
+func catalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, namespace, name string) (bool, string) {
+	obj, err := getNamedResource(ctx, runner, kubeconfig, "catalogsource.operators.coreos.com", namespace, name)
+	if err != nil {
+		return false, fmt.Sprintf("CatalogSource/%s/%s unavailable", namespace, name)
+	}
+	state := nestedString(obj, "status", "connectionState", "lastObservedState")
+	if state != "READY" {
+		return false, fmt.Sprintf("CatalogSource/%s/%s connectionState=%s", namespace, name, state)
+	}
+	return true, fmt.Sprintf("CatalogSource/%s/%s READY", namespace, name)
+}
+
+// catalogGateError marks a catalog-gate timeout: the CatalogSource applied
+// successfully but its registry never reported a READY connection within the
+// readiness timeout. Its strings hold only resource identifiers and connection
+// state — no user manifest bytes — so the summary is safe to persist.
+type catalogGateError struct {
+	namespace    string
+	name         string
+	timeout      time.Duration
+	lastObserved string
+}
+
+func (e *catalogGateError) Error() string {
+	return fmt.Sprintf("CatalogSource/%s/%s did not reach connectionState READY within %s; last observed: %s", e.namespace, e.name, e.timeout, e.lastObserved)
+}
+
+func (e *catalogGateError) summary() string {
+	return fmt.Sprintf("CatalogSource/%s/%s did not reach connectionState READY within %s; see the apply log for details", e.namespace, e.name, e.timeout)
 }
 
 // csvGateError marks a CSV-gate timeout: the operator-install resources applied

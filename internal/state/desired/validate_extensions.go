@@ -246,6 +246,26 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 			}
 		}
 	}
+	if catalog := olm.CatalogSource; catalog != nil {
+		if catalog.Name == "" {
+			errs = append(errs, prefix+".catalogSource.name is required")
+		}
+		if catalog.Image == "" {
+			errs = append(errs, prefix+".catalogSource.image is required")
+		}
+		if catalog.PollInterval != "" {
+			if _, err := time.ParseDuration(catalog.PollInterval); err != nil {
+				errs = append(errs, fmt.Sprintf("%s.catalogSource.pollInterval %q is not a valid duration", prefix, catalog.PollInterval))
+			}
+		}
+		// The catalog gate waits on the shipped catalog before the Subscription
+		// applies, so subscribing to a different catalog would make the gate
+		// meaningless; normalize defaults subscription.source to the shipped
+		// catalog's name when unset.
+		if catalog.Name != "" && olm.Subscription.Source != "" && olm.Subscription.Source != catalog.Name {
+			errs = append(errs, fmt.Sprintf("%s.subscription.source %q must match catalogSource.name %q", prefix, olm.Subscription.Source, catalog.Name))
+		}
+	}
 	sub := olm.Subscription
 	required := []struct {
 		field string

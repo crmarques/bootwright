@@ -161,14 +161,23 @@ spec:
 ### OLM
 
 `spec.olm` is required when `spec.type: olm`. It installs an operator through
-OLM: an optional namespace, an optional OperatorGroup, a Subscription, and
-optional raw custom resources. The namespace, OperatorGroup, and Subscription are
-applied first; Bootwright then waits for the operator's CSV to reach `Succeeded`
-— which establishes the operator's CRDs — before applying the custom resources,
-so they do not race the operator install.
+OLM: an optional shipped CatalogSource, an optional namespace, an optional
+OperatorGroup, a Subscription, and optional raw custom resources. A shipped
+CatalogSource is applied first and Bootwright waits for its registry to report
+a `READY` connection before the operator-install set applies, so OLM
+dependency resolution never races the catalog startup. The namespace,
+OperatorGroup, and Subscription follow; Bootwright then waits for the
+operator's CSV to reach `Succeeded` — which establishes the operator's CRDs —
+before applying the custom resources, so they do not race the operator
+install.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
+| `olm.catalogSource.name` | Yes within `catalogSource` | — | Name of the CatalogSource the add-on ships. `subscription.source` defaults to it. |
+| `olm.catalogSource.image` | Yes within `catalogSource` | — | Catalog index image (e.g. a partner catalog on `icr.io/cpopen`). |
+| `olm.catalogSource.displayName` | No | — | CatalogSource display name. |
+| `olm.catalogSource.publisher` | No | — | CatalogSource publisher. |
+| `olm.catalogSource.pollInterval` | No | — | `updateStrategy.registryPoll.interval` (how often OLM re-pulls the index). |
 | `olm.namespace.name` | Yes | — | Namespace name. |
 | `olm.namespace.create` | No | `false` | Whether Bootwright creates the namespace. When `false`, the namespace must already exist. |
 | `olm.namespace.labels` | No | — | Namespace labels applied when Bootwright creates it. |
@@ -178,10 +187,18 @@ so they do not race the operator install.
 | `olm.subscription.package` | Yes | — | Operator package. |
 | `olm.subscription.channel` | Yes | — | Catalog channel. |
 | `olm.subscription.startingCSV` | No | — | Optional starting CSV. |
-| `olm.subscription.source` | Yes | — | CatalogSource name (e.g. `redhat-operators`). |
-| `olm.subscription.sourceNamespace` | No | `openshift-marketplace` | CatalogSource namespace. |
+| `olm.subscription.source` | Yes | `catalogSource.name` when a catalog is shipped | CatalogSource name (e.g. `redhat-operators`, or the shipped catalog). |
+| `olm.subscription.sourceNamespace` | No | `openshift-marketplace` | CatalogSource namespace. A shipped CatalogSource is created here. |
 | `olm.subscription.installPlanApproval` | No | `Automatic` | `Automatic` or `Manual`. |
 | `olm.customResources[]` | No | — | Raw custom resources applied after the operator's CSV reaches `Succeeded`. |
+
+!!! note "Shipping a catalog"
+    `olm.catalogSource` is for operators that come from a catalog the cluster
+    does not already serve (partner and community indexes). When set,
+    `subscription.source` must match `catalogSource.name` (omit it and the
+    normalize phase fills it in). The registry hosting the index image must be
+    reachable from the cluster — for authenticated registries the pull
+    credentials must already be in the cluster's global pull secret.
 
 !!! note "Required vs defaulted Subscription fields"
     `subscription.sourceNamespace` and `subscription.installPlanApproval` are

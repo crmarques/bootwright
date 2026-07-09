@@ -317,6 +317,12 @@ func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {
 	if extension.Spec.OLM.Subscription.SourceNamespace == "" {
 		extension.Spec.OLM.Subscription.SourceNamespace = "openshift-marketplace"
 	}
+	// An add-on that ships its own catalog almost always subscribes to it;
+	// defaulting the subscription source to the shipped catalog keeps the two
+	// from drifting apart (validation still rejects an explicit mismatch).
+	if extension.Spec.OLM.CatalogSource != nil && extension.Spec.OLM.Subscription.Source == "" {
+		extension.Spec.OLM.Subscription.Source = extension.Spec.OLM.CatalogSource.Name
+	}
 	if extension.Spec.OLM.Subscription.InstallPlanApproval == "" {
 		extension.Spec.OLM.Subscription.InstallPlanApproval = v1alpha1.InstallPlanApprovalAutomatic
 	}

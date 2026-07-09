@@ -24,13 +24,18 @@ type ManifestResource struct {
 }
 
 // OLMResources is the full ordered resource list for an OLM add-on: the
-// operator-install set (Namespace, OperatorGroup, Subscription) followed by the
-// declared custom resources. It is the canonical ordering that DesiredHash
-// folds into the add-on hash, so callers that need the two groups separately
-// (the apply path waits for the operator's CSV to succeed before applying the
-// custom resources) use OperatorResources + CustomResources, whose
-// concatenation is byte-identical to this.
+// shipped CatalogSource (if any), the operator-install set (Namespace,
+// OperatorGroup, Subscription), then the declared custom resources. It is the
+// canonical ordering that DesiredHash folds into the add-on hash, so callers
+// that need the groups separately (the apply path gates on the catalog's
+// READY connection before the Subscription and on the operator's CSV before
+// the custom resources) use CatalogResources + OperatorResources +
+// CustomResources, whose concatenation is byte-identical to this.
 func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
+	catalog, err := CatalogResources(extension)
+	if err != nil {
+		return nil, err
+	}
 	operator, err := OperatorResources(extension)
 	if err != nil {
 		return nil, err
@@ -39,7 +44,44 @@ func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(operator, custom...), nil
+	return append(append(catalog, operator...), custom...), nil
+}
+
+// CatalogResources returns the add-on's shipped CatalogSource (empty when the
+// add-on subscribes to a catalog the cluster already serves). It lands in the
+// subscription's sourceNamespace, ahead of everything else, so the catalog
+// registry can start while the operator-install set applies.
+func CatalogResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
+	if extension.Spec.OLM == nil || extension.Spec.OLM.CatalogSource == nil {
+		return nil, nil
+	}
+	catalog := extension.Spec.OLM.CatalogSource
+	spec := map[string]any{
+		"sourceType": "grpc",
+		"image":      catalog.Image,
+	}
+	if catalog.DisplayName != "" {
+		spec["displayName"] = catalog.DisplayName
+	}
+	if catalog.Publisher != "" {
+		spec["publisher"] = catalog.Publisher
+	}
+	if catalog.PollInterval != "" {
+		spec["updateStrategy"] = map[string]any{
+			"registryPoll": map[string]any{
+				"interval": catalog.PollInterval,
+			},
+		}
+	}
+	return []ManifestResource{mustResource(map[string]any{
+		"apiVersion": "operators.coreos.com/v1alpha1",
+		"kind":       "CatalogSource",
+		"metadata": map[string]any{
+			"name":      catalog.Name,
+			"namespace": extension.Spec.OLM.Subscription.SourceNamespace,
+		},
+		"spec": spec,
+	})}, nil
 }
 
 // OperatorResources returns the operator-install set (Namespace if create,

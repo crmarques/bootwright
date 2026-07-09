@@ -54,8 +54,26 @@ type ClusterAddonInputEffect struct {
 type ClusterAddonOLMSpec struct {
 	Namespace       ClusterAddonOLMNamespace      `yaml:"namespace" json:"namespace"`
 	OperatorGroup   *ClusterAddonOLMOperatorGroup `yaml:"operatorGroup,omitempty" json:"operatorGroup,omitempty"`
+	CatalogSource   *ClusterAddonOLMCatalogSource `yaml:"catalogSource,omitempty" json:"catalogSource,omitempty"`
 	Subscription    ClusterAddonOLMSubscription   `yaml:"subscription" json:"subscription"`
 	CustomResources []map[string]any              `yaml:"customResources,omitempty" json:"customResources,omitempty"`
+}
+
+// ClusterAddonOLMCatalogSource declares an operator catalog the add-on brings
+// with it (a partner or community index the cluster does not already serve).
+// It renders as a grpc CatalogSource in the subscription's sourceNamespace and
+// is applied before the operator-install set; the apply path then waits for
+// the catalog's registry to report a READY connection before applying the
+// Subscription, so OLM dependency resolution never races the catalog startup.
+// When set, subscription.source defaults to this catalog's name.
+type ClusterAddonOLMCatalogSource struct {
+	Name        string `yaml:"name" json:"name"`
+	Image       string `yaml:"image" json:"image"`
+	DisplayName string `yaml:"displayName,omitempty" json:"displayName,omitempty"`
+	Publisher   string `yaml:"publisher,omitempty" json:"publisher,omitempty"`
+	// PollInterval sets updateStrategy.registryPoll.interval (how often OLM
+	// re-pulls the index image for updates). Empty leaves polling unset.
+	PollInterval string `yaml:"pollInterval,omitempty" json:"pollInterval,omitempty"`
 }
 
 type ClusterAddonOLMNamespace struct {
