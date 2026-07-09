@@ -934,10 +934,12 @@ Rules:
   (requires `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
 - `spec.accepts.inputs[]` declare binding-scoped inputs. Each input has a `name`,
-  an optional `schema` (`type`, `required[]`, and `properties` keyed by property
-  name, each property setting exactly one of `refKind` — a known Bootwright
-  kind — or `secret: true`), and optional `effects[]`. Each effect sets a
-  `type`: `storageExportAttachment` or `globalPullSecretMerge`.
+  an optional `required` marker (when `true`, every binding of the add-on must
+  supply the input), an optional `schema` (`type`, `required[]`, and
+  `properties` keyed by property name, each property setting exactly one of
+  `refKind` — a known Bootwright kind — or `secret: true`), and optional
+  `effects[]`. Each effect sets a `type`: `storageExportAttachment` or
+  `globalPullSecretMerge`.
 - A `storageExportAttachment` effect requires `provider: dataFoundation` and a
   schema declaring exactly one property, literally named `exportRef`, with
   `refKind: StorageExport` and listed in `required` — the scope machinery reads
@@ -978,7 +980,8 @@ Rules:
   across all bindings.
 - `spec.addons[].inputs[]` must be declared by the add-on's
   `spec.accepts.inputs`, have unique names, and satisfy the input schema's
-  required values.
+  required values. Every accepted input the add-on marks `required: true` must
+  be supplied.
 - Input values for `refKind` schema properties must name a loaded object of
   that kind; values for `secret` properties must resolve to a declared `Secret`.
 
