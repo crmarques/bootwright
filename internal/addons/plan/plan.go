@@ -51,10 +51,13 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 			Cluster: cluster,
 			Policy:  addons.DefaultPolicy(),
 		}
+		// Appending mirrors inputs.EffectiveBindingAddons, which merges duplicate
+		// addonRef entries — the hash must see the same input list the executor
+		// resolves.
 		inputsByName := map[string][]v1alpha1.ClusterAddonBindingInput{}
 		for _, addon := range binding.Spec.Addons {
 			if addon.AddonRef.Name != "" {
-				inputsByName[addon.AddonRef.Name] = addon.Inputs
+				inputsByName[addon.AddonRef.Name] = append(inputsByName[addon.AddonRef.Name], addon.Inputs...)
 			}
 		}
 		for _, name := range names {

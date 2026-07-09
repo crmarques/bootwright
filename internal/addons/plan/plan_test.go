@@ -239,6 +239,21 @@ func TestBindingPlansCarryBindingInputs(t *testing.T) {
 	if len(inputs) != 1 || inputs[0].Name != "external-storage" || inputs[0].Values["exportRef"] != "ceph" {
 		t.Fatalf("plan inputs = %v, want the binding-supplied external-storage input", inputs)
 	}
+
+	// Duplicate addonRef entries merge their inputs (the executor resolves the
+	// merged list via inputs.EffectiveBindingAddons; the hash must match).
+	state.ClusterAddonBindings[0].Spec.Addons = append(state.ClusterAddonBindings[0].Spec.Addons, v1alpha1.ClusterAddonBindingAddon{
+		AddonRef: v1alpha1.LocalObjectReference{Name: "virt"},
+		Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "tuning", Values: map[string]any{"profileRef": "fast"}}},
+	})
+	plans, err = extensionplan.BindingPlans(state)
+	if err != nil {
+		t.Fatalf("BindingPlans with duplicate addonRef: %v", err)
+	}
+	merged := plans[0].Addons[0].Inputs
+	if len(merged) != 2 || merged[0].Name != "external-storage" || merged[1].Name != "tuning" {
+		t.Fatalf("plan inputs = %v, want the merged inputs of both entries", merged)
+	}
 }
 
 func TestDesiredHashTracksOLMCustomResourceChanges(t *testing.T) {
