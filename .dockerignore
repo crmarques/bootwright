@@ -1,5 +1,5 @@
-# The build COPYs only its real inputs (api, cmd, internal, ansible, scripts,
-# go.mod/go.sum, Makefile, and .git for version stamping). Everything below is
+# The build COPYs only its real inputs (api, cmd, internal, add-ons, ansible,
+# scripts, go.mod/go.sum, Makefile, and .git for version stamping). Everything below is
 # excluded from the build context so it neither slows the context transfer nor
 # invalidates any build layer. .git is deliberately NOT excluded: a raw
 # `docker build` self-stamps version metadata from it in the compile stage, and

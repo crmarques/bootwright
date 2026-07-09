@@ -70,6 +70,7 @@ RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharin
 COPY api api
 COPY cmd cmd
 COPY internal internal
+COPY add-ons add-ons
 COPY ansible ansible
 COPY scripts scripts
 
