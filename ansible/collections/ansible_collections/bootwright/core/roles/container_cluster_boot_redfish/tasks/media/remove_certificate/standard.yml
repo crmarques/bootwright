@@ -1,8 +1,4 @@
 ---
-# Remove the certificate the standard DMTF method imported. Gated on the import
-# having recorded a Certificates-collection reference; tolerant of a 404 (already
-# gone), so it is a no-op when import was skipped or failed. Credentials/TLS/timeout
-# come from the role-wide ansible.builtin.uri module_defaults set in tasks/main.yml.
 - name: Remove imported artifact server certificate from the DMTF VirtualMedia store
   ansible.builtin.uri:
     url: "{{ bootwright_redfish_artifact_cert_ref | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"

@@ -17,8 +17,6 @@ func validateEnvironmentSecretStorage(env v1alpha1.Environment) []string {
 	}
 }
 
-// validateSecrets checks each declared Secret in isolation: a known type, at
-// most one source arm, and type-scoped file/generated parameters.
 func validateSecrets(state v1alpha1.State) []string {
 	var errs []string
 	for _, s := range state.Secrets {
@@ -65,9 +63,6 @@ func validSecretType(secretType string) bool {
 	return false
 }
 
-// validateSecretFileSource enforces that only the file keys the type consumes
-// are set: tlsCertificate uses cert+key, sshKeyPair uses privateKey(+publicKey),
-// every other type uses path.
 func validateSecretFileSource(prefix, secretType string, f *v1alpha1.SecretFileSource) []string {
 	var errs []string
 	foreign := func(field, value string) {
@@ -105,8 +100,6 @@ func validateSecretFileSource(prefix, secretType string, f *v1alpha1.SecretFileS
 	return errs
 }
 
-// validateSecretGenerated enforces that the type can be generated and that only
-// the generation parameters the type consumes are set.
 func validateSecretGenerated(prefix, secretType string, gen *v1alpha1.SecretGeneratedSource) []string {
 	if !v1alpha1.SecretTypeGeneratable(secretType) {
 		return []string{fmt.Sprintf("%s.source.generated is not valid for a %s secret", prefix, secretType)}

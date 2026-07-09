@@ -159,13 +159,8 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	}
 }
 
-// TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig pins the
-// self-substrate fix: when the KubeVirt host cluster is itself a ContainerCluster
-// this run installs (present in the plan state, base phase in scope), a
-// not-yet-produced kubeconfig is expected — the scheduler installs the host before
-// the child boots — so the check is INFO, not a FAIL that blocks a full apply.
 func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T) {
-	clustersDir := t.TempDir() // no kubeconfig on disk: host not installed yet
+	clustersDir := t.TempDir()
 	state := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "metal-ocp"},
@@ -191,10 +186,6 @@ func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T)
 	}
 }
 
-// TestKubeVirtHostClusterExternalStillRequiresKubeconfig pins the other side of
-// the gate: a host cluster that is NOT a ContainerCluster this run installs
-// (external/pre-existing, or a base-out-of-scope run) must still have its
-// kubeconfig on disk, so a missing one stays a FAIL.
 func TestKubeVirtHostClusterExternalStillRequiresKubeconfig(t *testing.T) {
 	clustersDir := t.TempDir()
 	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
@@ -212,10 +203,6 @@ func TestKubeVirtHostClusterExternalStillRequiresKubeconfig(t *testing.T) {
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
 }
 
-// TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig pins
-// that the deferral is tied to the kubeconfig-producing base phase: a machines-only
-// run does not install the host cluster, so its missing kubeconfig stays a FAIL
-// even though the host is a ContainerCluster in state.
 func TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig(t *testing.T) {
 	clustersDir := t.TempDir()
 	state := v1alpha1.State{
@@ -265,19 +252,11 @@ func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
 	}
 }
 
-// TestKubeVirtHostClusterChecksRunAsLocalRoot pins the privilege fix: the host
-// cluster kubeconfig lives in the 0700 root-owned managed workspace, so the
-// probes must run as local root (CommandOutputLocalRoot), not de-escalated to
-// the caller (CommandOutput). A deps whose caller-routed CommandOutput fails but
-// whose local-root CommandOutputLocalRoot succeeds must still produce OK.
 func TestKubeVirtHostClusterChecksRunAsLocalRoot(t *testing.T) {
 	callerDenied := func(_ string, _ ...string) ([]byte, error) {
 		return []byte(`error loading config file "/var/lib/bootwright/.../kubeconfig": permission denied`), errors.New("exit status 1")
 	}
 
-	// The API check now os.Opens the kubeconfig (as local root) before shelling
-	// out, so give it a real readable file; the probe must then still resolve
-	// through CommandOutputLocalRoot, not the de-escalated CommandOutput.
 	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
@@ -305,9 +284,6 @@ func TestKubeVirtHostClusterChecksRunAsLocalRoot(t *testing.T) {
 	}
 }
 
-// TestKubeVirtChecksClassifyUnreadableKubeconfig pins the remediation fix: an
-// EACCES on the kubeconfig must not be misreported as "KubeVirt not ready" or
-// "create the network" — it names the unreadable kubeconfig instead.
 func TestKubeVirtChecksClassifyUnreadableKubeconfig(t *testing.T) {
 	eacces := func(_ string, _ ...string) ([]byte, error) {
 		return []byte(`error loading config file "/var/lib/bootwright/contexts/x/clusters/metal-ocp/secrets/kubeconfig": permission denied`), errors.New("exit status 1")
@@ -337,8 +313,6 @@ func TestKubeVirtChecksClassifyUnreadableKubeconfig(t *testing.T) {
 	}
 }
 
-// TestVSpherePyvmomiCheckRunsAsLocalRoot pins that the managed-venv interpreter
-// probe runs as local root, since the venv lives in the root-owned workspace.
 func TestVSpherePyvmomiCheckRunsAsLocalRoot(t *testing.T) {
 	check := vspherePyvmomiCheck(Deps{
 		CommandOutput: func(_ string, _ ...string) ([]byte, error) {
@@ -353,10 +327,6 @@ func TestVSpherePyvmomiCheckRunsAsLocalRoot(t *testing.T) {
 	}
 }
 
-// TestVirtctlPreflightGatedOnDepsProvisioning pins the deps-aware virtctl gate:
-// the deps stage provisions a version-matched virtctl from the host cluster, so
-// the hard binary check is required only for a base run without deps; a full
-// apply (no --stage) or any run that includes deps skips it.
 func TestVirtctlPreflightGatedOnDepsProvisioning(t *testing.T) {
 	state := v1alpha1.State{
 		InfraProviders: []v1alpha1.InfraProvider{{
@@ -615,11 +585,6 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 	assertPreflightCheckStatus(t, checks, "StorageCluster/ceph ceph entitlementRef registry credentialsRef", "FAIL")
 }
 
-// A scoped apply pulls a managed StorageCluster into the plan state only as a
-// render reference for a container cluster's data-foundation attachment. Its
-// bootstrap secrets and cephadm SSH/scp tooling belong to the storage cluster's
-// own lifecycle, so a SecretScope that omits it must drop those checks while the
-// in-scope container cluster's secrets stay required.
 func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
@@ -687,8 +652,6 @@ func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 		LookPath: func(name string, _ []string) (string, error) { return "/bin/" + name, nil },
 		StatPath: func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 	}
-	// Scope to the container cluster only: the Ceph cluster and its node are
-	// render references, so neither is a work object.
 	scope := &SecretScope{Machines: map[string]bool{}, StorageClusters: map[string]bool{}}
 	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, scope)
 
@@ -704,7 +667,6 @@ func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 			t.Errorf("render-reference Ceph check %q must be dropped by the secret scope: %+v", name, checkNames(checks))
 		}
 	}
-	// The in-scope container cluster still requires its pull secret.
 	assertPreflightCheckStatus(t, checks, "ocp pullSecretRef", "FAIL")
 }
 
@@ -735,7 +697,6 @@ func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
 		},
 	}
 
-	// An add-on shipping a playbook hook makes the add-ons phase run ansible.
 	state := importedCephSecretState(v1alpha1.SecretSource{})
 	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
 		Name:      "attach",
@@ -751,8 +712,6 @@ func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
 	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
 	assertPreflightCheckStatus(t, checks, "python3", "OK")
 
-	// Without playbook hooks (manifest-only add-ons), a scoped add-ons run
-	// needs no controller ansible runtime.
 	state = importedCephSecretState(v1alpha1.SecretSource{})
 	checks = CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
 	for _, name := range []string{"ansible-playbook", "python3"} {
@@ -1038,9 +997,6 @@ func assertPreflightCheckStatus(t *testing.T, checks []Check, name, status strin
 	t.Fatalf("preflight check %q not found: %+v", name, checks)
 }
 
-// TestSecretFileCheckAllowsOwnerOnlyModes pins that a hardened read-only secret
-// (0400) passes while any group/other access (0640, 0604) still fails: the check
-// guards against over-broad permissions, not tighter-than-0600 ones.
 func TestSecretFileCheckAllowsOwnerOnlyModes(t *testing.T) {
 	deps := Deps{StatPath: os.Stat}
 	path := filepath.Join(t.TempDir(), "secret")
@@ -1065,8 +1021,6 @@ func TestSecretFileCheckAllowsOwnerOnlyModes(t *testing.T) {
 	}
 }
 
-// TestSecretsDirCheckAllowsOwnerOnlyModes pins the same relaxation for the
-// secrets directory: 0500 passes, group/other bits fail.
 func TestSecretsDirCheckAllowsOwnerOnlyModes(t *testing.T) {
 	deps := Deps{StatPath: os.Stat}
 	for _, tc := range []struct {
@@ -1085,14 +1039,10 @@ func TestSecretsDirCheckAllowsOwnerOnlyModes(t *testing.T) {
 		if got := secretsDirCheck(dir, deps).Status; got != tc.want {
 			t.Fatalf("secrets dir mode %04o = %s, want %s", tc.mode, got, tc.want)
 		}
-		_ = os.Chmod(dir, 0o700) // restore so t.TempDir cleanup can remove it
+		_ = os.Chmod(dir, 0o700)
 	}
 }
 
-// TestAddonsStageGatesMissingKubeconfig pins that a stage-scoped add-ons run
-// (base out of scope, so no cluster install produces the kubeconfig) gates the
-// per-cluster kubeconfig up front, while a run that also installs the cluster
-// (base in scope) does not — the kubeconfig is produced mid-run.
 func TestAddonsStageGatesMissingKubeconfig(t *testing.T) {
 	state := v1alpha1.State{ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 		Metadata: v1alpha1.Metadata{Name: "b1"},
@@ -1112,9 +1062,6 @@ func TestAddonsStageGatesMissingKubeconfig(t *testing.T) {
 	}
 }
 
-// TestKubeVirtKubeconfigRefProbesAPI pins that a provider pointing at an
-// external hub via kubeconfigRef (its kubeconfig already on disk) gets the live
-// KubeVirt API/CRD and networkRef probes, not just a secret-file existence check.
 func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 	sourceDir := t.TempDir()
 	kubeconfig := filepath.Join(sourceDir, "hub-kubeconfig")
@@ -1177,9 +1124,6 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 	}
 }
 
-// upsertSecret replaces the like-named first-class Secret in state, or appends
-// it when absent, mirroring the overwrite semantics of the former
-// Environment.spec.secrets map.
 func upsertSecret(state *v1alpha1.State, secret v1alpha1.Secret) {
 	for i := range state.Secrets {
 		if state.Secrets[i].Metadata.Name == secret.Metadata.Name {

@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// state-check annotates each drifted resource with whether its drift reconciles in
-// place (a reconfigure-only re-apply, a structural-hash-unchanged edit) or needs a
-// destructive rebuild, using the same taskDriftReconcilable primitive the apply
-// preflight uses — so the report and the gate never disagree.
 func TestStateCheckReportsReconcilableDrift(t *testing.T) {
 	runsDir := t.TempDir()
 	reconfigure := stateCheckTask("addon.demo.x", "clusterAddon", "demo", "container")

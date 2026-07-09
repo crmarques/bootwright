@@ -55,8 +55,6 @@
   changed_when: false
   when: bootwright_proxy_has_url
 
-# When disabled, blank the env vars explicitly (not {}) to override stale
-# HTTP(S)_PROXY exports inherited from sshd/systemd of a prior enabled run.
 - name: Build proxy environment facts
   ansible.builtin.set_fact:
     bootwright_proxy_env: >-

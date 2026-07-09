@@ -2,14 +2,6 @@ package nmstate
 
 import "testing"
 
-// TestMergePropagatesNilForConflictingOverrides asserts the merge-drop guard
-// this package exists to protect: Merge now returns mergo's error instead of
-// discarding it, and for the inputs this package feeds mergo (a *map[string]any
-// dst and a map[string]any src of identical type) that error is always nil even
-// when nested scalar/map/slice types conflict — those overwrite under
-// WithOverride. If a future change made Merge able to error here, EffectiveConfig
-// would panic instead of silently dropping the merge; this test pins the guard to
-// its no-error contract.
 func TestMergePropagatesNilForConflictingOverrides(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -31,9 +23,6 @@ func TestMergePropagatesNilForConflictingOverrides(t *testing.T) {
 	}
 }
 
-// TestEffectiveConfigMergesOverridesWithoutPanic exercises the EffectiveConfig
-// call site: the override merge lands (override wins on scalar conflict) and the
-// unreachable-error panic guard never trips for representative inputs.
 func TestEffectiveConfigMergesOverridesWithoutPanic(t *testing.T) {
 	template := map[string]any{
 		"interfaces": []any{

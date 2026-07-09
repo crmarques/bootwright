@@ -35,13 +35,7 @@ func printApplyLedgerStatus(p *cliout.Printer, runsDir string, displays map[stri
 	if ledger.Active() {
 		printApplyRunActivity(p, runsDir, ledger)
 	}
-	// Render the same step frame the live apply view uses, so `status` /
-	// `status --watch` and a running apply can never disagree about a run's
-	// shape. RenderFrame width 0 disables wrap accounting: status reprints the
-	// whole page each poll rather than redrawing the frame in place.
 	p.Section("Progress")
-	// collapse=false: a one-shot status report prints the full record, including
-	// finished groups, rather than summarizing them like the live redraw does.
 	p.RenderFrame(applyRunFrame(ledger, displays), 0, false)
 	printApplyLedgerFailures(p, ledger)
 }

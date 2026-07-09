@@ -10,12 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-// newSecretGenerateCmd materializes the declared Environment.spec.secrets: it
-// creates missing "generated:" secrets and copies "file:"-sourced material into
-// the encrypted context store when secretStorage.mode is context. With --renew
-// it replaces every "generated:" secret with fresh material. Context secrets
-// that still need `secret set` are reported but do not fail the command; use
-// `bootwright secret check` to gate on a complete secret set.
 func newSecretGenerateCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 	var renew bool
 	cmd := &cobra.Command{

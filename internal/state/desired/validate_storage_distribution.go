@@ -46,9 +46,6 @@ func validateStorageCephDistributionEntitlement(prefix string, state v1alpha1.St
 	return nil
 }
 
-// validateStorageCephRelease checks spec.ceph.release against the meaning the
-// chosen distribution gives it: an upstream release name or x.y.z version for
-// oss, a product stream version for the subscription-backed distributions.
 func validateStorageCephRelease(prefix, distribution, release string) []string {
 	if release == "" {
 		return nil
@@ -66,8 +63,6 @@ func validateStorageCephRelease(prefix, distribution, release string) []string {
 	return nil
 }
 
-// validateStorageCephImage checks spec.ceph.image pins a reproducible reference,
-// reusing the same tag/digest rules enforced for pinned component images.
 func validateStorageCephImage(prefix, image string) []string {
 	if image == "" {
 		return nil
@@ -131,13 +126,6 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 	return errs
 }
 
-// validateStorageCephFIPS gates a FIPS-declared managed Ceph cluster. FIPS is
-// delivered by each node's OS install (MachineInstallProfile
-// customizations.security.fips), so this enforces the cluster-level intent is
-// consistent: the distribution must be FIPS-validated (redhat or ibm, not the
-// community oss images), and every Ceph node whose OS Bootwright installs must
-// install in FIPS mode. Provided-OS nodes (no install profile) are skipped —
-// like validateStorageCephManagedOS — and must be FIPS-installed out of band.
 func validateStorageCephFIPS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
 	if !cluster.Spec.Ceph.Security.FIPS.Enabled {
 		return nil

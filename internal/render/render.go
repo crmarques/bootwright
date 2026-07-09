@@ -13,7 +13,6 @@ import (
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
-// Result is the set of paths and assets the renderer wrote.
 type Result struct {
 	EffectiveStatePath string
 	LockPath           string
@@ -24,14 +23,6 @@ type Result struct {
 	StorageAssets      []StorageAsset
 }
 
-// All writes effective-state, lock, Ansible inventory + vars, and
-// per-cluster installer placeholders. `renderedDir` is the Bootwright context
-// rendered directory, `clustersDir` is the context cluster directory, and
-// `secretsDir` is the local secrets dir. Uses the
-// default os-backed FileSystem; tests use AllOn to inject a substitute.
-// Every render entry point fails before writing anything when the state
-// carries unresolved names (see checkResolvedNames); Validate is the first
-// enforcement line and rejects such state with field-level diagnostics.
 func All(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	return AllOn(defaultFS, renderedDir, clustersDir, secretsDir, state)
 }
@@ -44,14 +35,10 @@ func AllWithOwnershipRecordsAndPathOptions(renderedDir, clustersDir string, path
 	return allOn(defaultFS, renderedDir, clustersDir, paths, state, records)
 }
 
-// Effective writes only the normalized effective-state snapshot. It is used by
-// `bootwright render effective` so operators can inspect defaults without
-// rendering installer, Ansible, or storage tool inputs.
 func Effective(renderedDir string, state v1alpha1.State) (Result, error) {
 	return EffectiveOn(defaultFS, renderedDir, state)
 }
 
-// EffectiveOn is Effective parameterised on FileSystem for tests.
 func EffectiveOn(fs FileSystem, renderedDir string, state v1alpha1.State) (Result, error) {
 	if err := checkResolvedNames(state); err != nil {
 		return Result{}, err
@@ -66,15 +53,10 @@ func EffectiveOn(fs FileSystem, renderedDir string, state v1alpha1.State) (Resul
 	return result, nil
 }
 
-// AllOn is All parameterised on FileSystem so tests can assert mode invariants
-// without touching disk. Production callers use All.
 func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	return allOn(fs, renderedDir, clustersDir, PathOptions{SecretsDir: secretsDir}, state, nil)
 }
 
-// allOn renders the on-disk context bundle (installer placeholders under
-// clustersDir, Ansible inventory/vars carrying ownership records) by feeding
-// its four mode seams into the shared renderCore.
 func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
 	return renderCore(fs, renderedDir, state, renderParams{
 		installerAssets: func(s v1alpha1.State) []InstallerAsset { return InstallerAssets(clustersDir, s) },
@@ -90,17 +72,10 @@ func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, st
 	})
 }
 
-// ResolveInstallerForContext writes install-config / agent-config with real
-// secret material inlined under each cluster's runtime work dir.
-// Placeholder copies under the rendered installer dir are left untouched.
-// Uses the default os-backed FileSystem; tests use ResolveInstallerOnForContext.
 func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	return ResolveInstallerOnForContext(defaultFS, contextName, clustersDir, secretsDir, state)
 }
 
-// ResolveInstallerOnForContext is ResolveInstallerForContext parameterised on
-// FileSystem so tests can assert mode invariants on the secret-inlined work-dir
-// writes without touching disk.
 func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	if err := checkResolvedNames(state); err != nil {
 		return Result{}, err
@@ -162,12 +137,6 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 	})
 }
 
-// ToolInputsPortable renders the tool-input bundle to outputDir from an
-// arbitrary desired state with NO context and NO secrets directory: every
-// secret reference renders as a "{{ secret <name>[.<role>] }}" substitution
-// token a downstream secrets manager rehydrates. It powers `bootwright render
-// --input-dir`. Unlike ToolInputsForContext it writes no Bootwright ownership
-// marker, so the output stays a plain, relocatable artifact set.
 func ToolInputsPortable(outputDir string, state v1alpha1.State) (Result, error) {
 	cleanOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
@@ -176,12 +145,7 @@ func ToolInputsPortable(outputDir string, state v1alpha1.State) (Result, error) 
 	return ToolInputsPortableOn(defaultFS, cleanOutputDir, state)
 }
 
-// ToolInputsPortableOn is ToolInputsPortable parameterised on FileSystem so
-// tests can assert mode invariants without touching disk.
 func ToolInputsPortableOn(fs FileSystem, outputDir string, state v1alpha1.State) (Result, error) {
-	// Fail fast — before any write — on install-config secret material that has
-	// no portable token form, so an unsupported cluster never yields a partial
-	// or silently-incomplete bundle.
 	for _, ocp := range state.ContainerClusters {
 		if err := installer.CheckPortableSupport(state, ocp); err != nil {
 			return Result{}, err
@@ -197,26 +161,13 @@ func ToolInputsPortableOn(fs FileSystem, outputDir string, state v1alpha1.State)
 	})
 }
 
-// renderParams parameterises the shared render core over its modes: on-disk
-// context (allOn), tool-input context, and portable ({{ secret }} tokens). The
-// four seams are the only things that differ between those modes.
 type renderParams struct {
-	// installerAssets computes the per-cluster installer asset layout: rooted at
-	// the context clusters dir (allOn) or at the tool-input output dir.
-	installerAssets func(v1alpha1.State) []InstallerAsset
-	// inventory and vars render the Ansible inventory/vars documents, carrying
-	// ownership records + path options (allOn) or a secrets-dir seam (tool-input).
-	inventory func(v1alpha1.State) any
-	vars      func(v1alpha1.State) any
-	// installerSecrets supplies the per-cluster install-config/manifest secrets:
-	// placeholder references, real context material, or portable tokens.
+	installerAssets  func(v1alpha1.State) []InstallerAsset
+	inventory        func(v1alpha1.State) any
+	vars             func(v1alpha1.State) any
 	installerSecrets func(v1alpha1.State, v1alpha1.ContainerCluster) (installer.InstallerSecrets, error)
 }
 
-// renderCore is the single render body shared by every mode. baseDir roots the
-// effective-state, lock, Ansible, and storage outputs; params supplies the four
-// per-mode seams. It fails before any write when the state carries unresolved
-// names (checkResolvedNames).
 func renderCore(fs FileSystem, baseDir string, state v1alpha1.State, params renderParams) (Result, error) {
 	if err := checkResolvedNames(state); err != nil {
 		return Result{}, err

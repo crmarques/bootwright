@@ -11,9 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-// ResolveEnvForContext returns nil when the proxy is Bootwright-managed:
-// Bootwright provisions that proxy, so bootstrap cannot route through a proxy
-// that does not yet exist.
 func ResolveEnvForContext(contextName string, state v1alpha1.State, secretsDir string) (map[string]string, error) {
 	if IsManaged(state) {
 		return nil, nil

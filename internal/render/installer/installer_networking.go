@@ -5,10 +5,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// networkingConfig fills install-config.yaml's networking block. The
-// renderer owns machineNetwork (derived from each selected NetworkConfig);
-// the user owns clusterNetwork / serviceNetwork (declared on
-// ContainerCluster.spec.networking).
 func networkingConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) map[string]any {
 	result := map[string]any{
 		"machineNetwork": machineNetworkConfig(state, ci),

@@ -43,8 +43,6 @@ func TestCanonicalExamples(t *testing.T) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		// _wip holds intentionally-incomplete scratch examples (gitignored);
-		// they are not canonical and are not validated here.
 		if name == "_wip" {
 			continue
 		}
@@ -253,7 +251,6 @@ func TestMachineInstallIPOutsideNetworkRejected(t *testing.T) {
 `
 	cluster := strings.Replace(newClusterYAML, baselineMachineNetworkConfigYAML(), interfaceAddrConfig, 1)
 
-	// In-CIDR install IP validates: the containment check is not a false positive.
 	dirOK := t.TempDir()
 	okFiles := newBaselineFiles()
 	okFiles["cluster.yaml"] = cluster
@@ -262,8 +259,6 @@ func TestMachineInstallIPOutsideNetworkRejected(t *testing.T) {
 		t.Fatalf("in-CIDR interfaceAddresses install IP should validate, got: %v", err)
 	}
 
-	// Off-CIDR install IP fails naming the machine, the interfaceAddresses entry,
-	// and the resolved address.
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["cluster.yaml"] = strings.Replace(cluster, "{ name: ip, address: 192.168.132.20 }", "{ name: ip, address: 192.168.99.20 }", 1)
@@ -287,9 +282,6 @@ func TestValidationErrorReportsInvalidClusterCIDR(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	// The validator's responsibility is the message naming the owning object,
-	// field, and offending value; the CLI reconstructs the routable
-	// Object/Field/Value from it (see internal/cli/diagnostics.go).
 	message := err.Error()
 	for _, want := range []string{"ContainerCluster/sno", "spec.networking.clusterNetwork[0].cidr", "not-a-cidr"} {
 		if !strings.Contains(message, want) {
@@ -568,17 +560,12 @@ func TestDefaultedNodeSSHKeyPairRefErrorSaysDefaulted(t *testing.T) {
 	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
 		"    nodeSSH:\n      keyPairRef: sno-cluster-admin-ssh-key\n", "", 1)
 
-	// With install.nodeSSH omitted, the derived <cluster>-cluster-admin-ssh-key
-	// name resolves against the declared secret.
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
 	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	// Renaming the cluster re-derives the secret name; the resulting dangling
-	// ref must say it was defaulted rather than blame a field the author
-	// never wrote.
 	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
 		"metadata: { name: sno }", "metadata: { name: sno2 }", 1)
 	dir = t.TempDir()
@@ -850,9 +837,6 @@ spec:
 			wantSubstring: `spec.hosts[0].machineRef "missing" does not match any Machine`,
 		},
 		{
-			// machineRef is required: no default is derived from the
-			// hostname, so omission fails instead of silently binding a
-			// same-named Machine.
 			name: "omitted-machine-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"\n      machineRef: srv1", "", 1)},
@@ -1291,9 +1275,6 @@ spec:
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.localization.additionalLocales[1] "pt_BR.UTF-8" is duplicated`,
 		},
 		{
-			// Additional install repositories belong under the install profile's
-			// packageSource.mirror; the removed direct repositories field must
-			// fail strict decode.
 			name: "machine-install-anaconda-repositories-rejected",
 			mutate: func(files map[string]string) {
 				files["machine-install.yaml"] = strings.Replace(machineInstallProfileYAML("rhel", `
@@ -1393,8 +1374,6 @@ func TestEnvironmentNTPRejectInvalidTypedEntries(t *testing.T) {
 			wantSubstring: `spec.infraComponents.ntp[0].management "sometimes" must be one of {external, managed}`,
 		},
 		{
-			// The managed/external axis is spelled management; the stale
-			// per-entry type key fails strict decode.
 			name: "stale type key rejected",
 			sources: `      - name: default
         type: external
@@ -1520,10 +1499,6 @@ func TestNTPInfraComponentRejectsInvalidFields(t *testing.T) {
 	}
 }
 
-// TestComponentEndpointRefsRejectObjectForm guards the uniform reference
-// grammar on the wrapper-typed endpoint refs: the {name: ...} object form
-// fails decode with the shared reference error instead of a raw YAML type
-// mismatch.
 func TestComponentEndpointRefsRejectObjectForm(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -1901,10 +1876,6 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 	}
 }
 
-// A proxy that TLS-inspects egress declares its signing CA as
-// connection.trustBundleRef; like every other secret ref it must resolve to a
-// declared Environment secret, else apply would try to copy a missing PEM onto
-// the storage nodes.
 func TestEnvironmentProxyTrustBundleRefMustBeDeclared(t *testing.T) {
 	proxyYAML := `    proxies:
       - name: default
@@ -2050,8 +2021,6 @@ func TestEnvironmentProxyTwoDefaultsRejected(t *testing.T) {
 func TestEnvironmentProxyMachineOSInstallManagedDefaultRejected(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	// A managed proxy marked default fans out to machineOSInstall by inheritance,
-	// which the node cannot use (it installs before any managed proxy exists).
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
       - name: squid
         default: true
@@ -3092,9 +3061,6 @@ func TestVSphereFailureDomainRequiresInstallerFields(t *testing.T) {
 	}
 }
 
-// TestVSphereFailureDomainRefMustResolve covers F24/F18/F34: a
-// machineProfiles[].failureDomainRef that names no spec.vsphere.failureDomains[]
-// entry must fail validation instead of flowing raw into Ansible vars.
 func TestVSphereFailureDomainRefMustResolve(t *testing.T) {
 	dir := t.TempDir()
 	files := newVSphereFiles(`    nodeNetworking:
@@ -3113,9 +3079,6 @@ func TestVSphereFailureDomainRefMustResolve(t *testing.T) {
 	}
 }
 
-// TestVSphereFailureDomainServerMustMatchVCenter covers F59/F24: every
-// failureDomains[].server must equal a declared vcenters[].server instead of
-// binding by unchecked string equality.
 func TestVSphereFailureDomainServerMustMatchVCenter(t *testing.T) {
 	dir := t.TempDir()
 	files := newVSphereFiles(`    nodeNetworking:
@@ -3182,17 +3145,12 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not a declared Secret`,
 		},
 		{
-			// An omitted attachmentRef defaults to the networkConfigRef name
-			// during normalize, so the binding resolves and validates clean.
 			name: "omitted-attachment-ref-defaults-to-network-config",
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "      attachmentRef: child-machine-net\n", "", 1)
 			},
 		},
 		{
-			// The networkConfigRef-name default is rejected when the provider
-			// declares several attachments: a NetworkConfig rename could
-			// silently re-bind the machine, so the choice must be authored.
 			name: "defaulted-attachment-ref-ambiguous-across-multiple-attachments",
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = addSecondKubeVirtNetworkAttachment(files["child.yaml"])
@@ -3201,8 +3159,6 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			wantSubstring: `Machine/child-master-0 spec.network.config.attachmentRef was defaulted from networkConfigRef "child-machine-net", but InfraProvider/child-kubevirt-provider declares multiple networkAttachments {child-machine-net, child-storage-net}; author attachmentRef to pick one`,
 		},
 		{
-			// An authored attachmentRef names its attachment explicitly, so
-			// several provider attachments are not ambiguous.
 			name: "authored-attachment-ref-with-multiple-attachments",
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = addSecondKubeVirtNetworkAttachment(files["child.yaml"])
@@ -3424,9 +3380,6 @@ func TestClusterRootNameCollisionValidation(t *testing.T) {
 			want: []string{`StorageCluster/dc1 metadata.name "dc1" is already used by ContainerCluster/dc1; ContainerCluster and StorageCluster names share one cluster selection namespace (--clusters, Environment cluster lists)`},
 		},
 		{
-			// Same-kind duplicates stay with the per-kind `duplicate <Kind>`
-			// rules; the cross-kind check fires once per colliding name even
-			// when the StorageCluster side declares it twice.
 			name: "duplicated-storage-name-colliding-once",
 			state: v1alpha1.State{
 				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1")},
@@ -3499,10 +3452,6 @@ func TestSameKindDuplicateClusterNamesKeepPerKindErrors(t *testing.T) {
 	}
 }
 
-// TestDuplicateNameFindingsAreStructured locks the F2 improvement: duplicate
-// findings name their owning object and value at the source, so the CLI routes
-// them without reparsing the message (the legacy heuristic produced an empty
-// object for "duplicate <Kind> %q").
 func TestDuplicateNameFindingsAreStructured(t *testing.T) {
 	state := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{
@@ -4018,7 +3967,7 @@ func TestValidateStorageCephFIPSGate(t *testing.T) {
 		cluster       v1alpha1.StorageCluster
 		machines      map[string]v1alpha1.Machine
 		profiles      map[string]v1alpha1.MachineInstallProfile
-		wantSubstring string // empty means expect no errors
+		wantSubstring string
 	}{
 		{
 			name:     "ibm-fips-with-fips-profile-ok",
@@ -4049,7 +3998,7 @@ func TestValidateStorageCephFIPSGate(t *testing.T) {
 		{
 			name:     "provided-os-node-skipped",
 			cluster:  cluster(v1alpha1.StorageCephDistributionRedHat, true),
-			machines: machines(""), // no install profile ref => provided OS, not enforced
+			machines: machines(""),
 			profiles: profiles(false),
 		},
 	}
@@ -4086,7 +4035,7 @@ func TestValidateContainerClusterFIPSGate(t *testing.T) {
 	cases := []struct {
 		name          string
 		cluster       v1alpha1.ContainerCluster
-		wantSubstring string // empty means expect no errors
+		wantSubstring string
 	}{
 		{
 			name:    "openshift-fips-ok",
@@ -4252,11 +4201,6 @@ func environmentYAMLWithNTP(sources string) string {
 	return strings.Replace(newEnvironmentYAML, "    artifactServers:\n", "    ntp:\n"+sources+"    artifactServers:\n", 1)
 }
 
-// Secrets are first-class top-level objects. The baseline declares them as
-// extra YAML documents appended to environment.yaml, so they load whenever the
-// Environment does — including under spec.resources selection, where the
-// environment file always loads. Each doc is a standalone building block so
-// individual tests can add, drop, or reshape one secret with a string replace.
 const pullSecretDoc = `---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret
@@ -4300,9 +4244,6 @@ spec:
 
 const newBaselineSecretsYAML = pullSecretDoc + nodeSSHKeySecretDoc + bastionSSHSecretDoc + bmcCredentialsSecretDoc
 
-// secretDoc renders a standalone context-local Secret YAML document (leading
-// separator included) for a given type — the shape a bare, no-source secret
-// declaration takes.
 func secretDoc(name, secretType string) string {
 	return "---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: { name: " + name + " }\nspec:\n  type: " + secretType + "\n"
 }

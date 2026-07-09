@@ -6,11 +6,6 @@
     bootwright_libvirt_storage_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters/{{ bootwright_current_cluster.name }}/machines/{{ bootwright_component.name }}"
   changed_when: false
 
-# A foreign domain that happens to match the <cluster>-<machine> naming on this
-# hypervisor must not be destroyed/undefined. Read the domain XML and require the
-# Bootwright ownership marker for this context, cluster, and machine before
-# touching it (mirrors the context-sweep ownership check). When the domain is
-# absent the probe fails and the assert is skipped, so destroy stays idempotent.
 - name: Read libvirt domain ownership metadata
   ansible.builtin.command:
     argv:
@@ -25,11 +20,6 @@
 
 - name: Resolve libvirt domain ownership for destroy
   ansible.builtin.set_fact:
-    # Match the marker regardless of the XML namespace prefix: the managed-OS
-    # media insert round-trips the domain through ElementTree, which re-emits the
-    # bootwright namespace with a generated prefix (e.g. ns0:). The marker stays
-    # semantically intact, so key on the element's local name, not the literal
-    # prefix, otherwise a genuinely Bootwright-owned VM fails the ownership check.
     bootwright_libvirt_destroy_owned: >-
       {{
         (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
@@ -39,10 +29,6 @@
   changed_when: false
   when: bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
 
-# --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a
-# domain that matches the <cluster>-<machine> naming but carries a missing or
-# mismatched marker — e.g. after the desired-state names changed post-apply — is
-# still torn down. Without it, the marker mismatch fails closed as before.
 - name: Refuse to destroy a non-Bootwright libvirt domain
   ansible.builtin.assert:
     that:
@@ -115,14 +101,6 @@
       attributes: {}
   when: bootwright_component.osManaged | default(false) | bool
 
-# The multi-GB source DVD is staged once and shared by every machine in the
-# cluster (throttle:1). Removing it from the per-machine record above would let
-# the first machine's destroy delete it mid-loop, forcing every surviving
-# machine to re-stage the full DVD on its next install if the teardown is
-# interrupted or partial. Instead, remove the shared cache only once this
-# machine's per-machine dir is gone AND no other machine's install dir remains,
-# so a complete teardown still clears it (no orphan) while a partial one keeps
-# it for the survivors.
 - name: Probe remaining managed-OS install machines in this cluster
   ansible.builtin.find:
     paths: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}"

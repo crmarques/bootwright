@@ -32,11 +32,6 @@ func TestNameResolutionRecordsIncludeDNSRefConsumers(t *testing.T) {
 	}
 }
 
-// TestNameResolutionRecordsPublishStorageNodesAndGateway covers the storage-only
-// path: the resolver publishes each served node by its normalized FQDN and bare
-// name (so the cephadm dashboard can dial e.g. an alertmanager host), plus the
-// object gateway's public dnsName at its ingress VIP and the management dnsName
-// at its mgmt-gateway VIP.
 func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
@@ -126,9 +121,6 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	}
 }
 
-// A cluster whose node network references a managed dnsmasq projects that
-// resolver's bind address + the env base domain, so the agent-install layer can
-// wire the controller's own resolver to it before the DNS gate.
 func TestClusterControllerNameResolversFromManagedDnsmasq(t *testing.T) {
 	state := dnsRecordsState()
 	state.InfraComponents[0].Spec.NameResolution.BindAddress = "192.168.130.1"
@@ -144,8 +136,6 @@ func TestClusterControllerNameResolversFromManagedDnsmasq(t *testing.T) {
 	}
 }
 
-// The shipped sno-libvirt-redfish example must render its managed dnsmasq as a
-// controller resolver so a from-scratch apply wires controller DNS automatically.
 func TestSNOLibvirtRedfishExampleWiresControllerResolver(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "sno-libvirt-redfish")})
 	if err != nil {
@@ -166,8 +156,6 @@ func TestSNOLibvirtRedfishExampleWiresControllerResolver(t *testing.T) {
 	}
 }
 
-// An external (operator-owned) name resolution entry must NOT be auto-wired:
-// the controller resolver stays the operator's responsibility.
 func TestClusterControllerNameResolversSkipsExternal(t *testing.T) {
 	state := dnsRecordsState()
 	state.InfraComponents[0].Spec.NameResolution.BindAddress = "192.168.130.1"
@@ -182,9 +170,6 @@ func TestClusterControllerNameResolversSkipsExternal(t *testing.T) {
 	}
 }
 
-// A dnsmasq bound to the IPv6 wildcard "::" is not a routable resolver
-// address, so it must be skipped exactly like "" and "0.0.0.0" rather than
-// emitting DNS=:: into the controller's systemd-resolved drop-in.
 func TestClusterControllerNameResolversSkipsWildcardBind(t *testing.T) {
 	for _, bind := range []string{"::", "0.0.0.0", ""} {
 		state := dnsRecordsState()

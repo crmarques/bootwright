@@ -2,11 +2,6 @@ package stateview
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-// Storage-cluster and storage-subresource lookups by name. These are generic
-// cross-kind State joins (the same shape as Machine/Provider/NetworkConfig
-// above); internal/storage/topology stays focused on placement, failure
-// domain, and node-to-machine resolution rather than owning state lookups.
-
 func ClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
 	for _, cluster := range state.StorageClusters {
 		if cluster.Metadata.Name == name {

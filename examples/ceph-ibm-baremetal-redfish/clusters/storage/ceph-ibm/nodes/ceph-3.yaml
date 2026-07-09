@@ -1,7 +1,3 @@
-# Bare-metal Ceph node (monitor-only tie-breaker). Bootwright installs RHEL 9.7
-# via anaconda + Redfish virtual media; cephadm runs only a monitor here so the
-# cluster keeps mon quorum (3 mons) if one full node is lost. No OSD devices.
-# Role (../cluster.yaml): mon.
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:

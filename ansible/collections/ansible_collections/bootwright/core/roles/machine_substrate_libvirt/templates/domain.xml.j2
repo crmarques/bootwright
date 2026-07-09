@@ -36,10 +36,6 @@
       <target dev='vd{{ _data_disk_letters[loop.index0] }}' bus='virtio'/>
     </disk>
 {% endfor %}
-{# No static optical drive: the managed-OS install path attaches its own #}
-{# source-backed cdrom via insert_libvirt_media.py and removes it again on #}
-{# cleanup, so a provisioned guest carries no leftover /dev/sr0. The SATA #}
-{# controller is kept because the inserted install cdrom targets it on q35. #}
     <controller type='sata' index='0'/>
 {% set _ifaces = bootwright_component.interfaces | default([]) %}
 {% if _ifaces | length == 0 %}

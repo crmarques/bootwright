@@ -197,8 +197,6 @@ func TestCLIInstallSpecPlannedCommandSignalsFIPS(t *testing.T) {
 	if !slices.Contains(got, "bootwright_clis_fips_required=true") {
 		t.Fatalf("FIPS spec must pass bootwright_clis_fips_required=true, got %v", got)
 	}
-	// The non-FIPS default must stay silent so ordinary environments keep the
-	// stock argv and skip the extra RHEL9 installer download.
 	if slices.Contains((CLIInstallSpec{}).PlannedCommand("inv.ini"), "bootwright_clis_fips_required=true") {
 		t.Fatal("non-FIPS spec must not emit bootwright_clis_fips_required")
 	}
@@ -564,25 +562,19 @@ func TestMergeBootstrapEnvStripsProxyAndAppliesExtra(t *testing.T) {
 	}
 	got := MergeBootstrapEnv(base, extra)
 
-	// PATH and USER from base are preserved.
 	if !slices.Contains(got, "PATH=/bin:/usr/bin") {
 		t.Errorf("PATH was dropped: %v", got)
 	}
 	if !slices.Contains(got, "USER=test") {
 		t.Errorf("USER was dropped: %v", got)
 	}
-	// Original proxy entries are stripped (we don't want the base ones
-	// leaking through when the operator sets a different proxy).
 	for _, kv := range got {
 		if strings.HasPrefix(kv, "https_proxy=") && kv != "https_proxy=" {
-			// The ORIGINAL value should not survive — the operator
-			// decides what proxy applies.
 			if strings.Contains(kv, "proxy:8443") {
 				t.Errorf("original https_proxy survived in env: %q", kv)
 			}
 		}
 	}
-	// Extra overrides land.
 	if !slices.Contains(got, "HTTP_PROXY=http://other:3128") {
 		t.Errorf("extra HTTP_PROXY missing: %v", got)
 	}
@@ -594,9 +586,6 @@ func TestMergeBootstrapEnvStripsProxyAndAppliesExtra(t *testing.T) {
 func TestMergeBootstrapEnvWithEmptyExtra(t *testing.T) {
 	base := []string{"PATH=/bin", "HTTP_PROXY=http://x:1"}
 	got := MergeBootstrapEnv(base, nil)
-	// Proxy is stripped even with no extra overrides — that's the
-	// "bootstrap" part of the function name: the bootstrap subprocess
-	// must not inherit ambient HTTP_PROXY.
 	for _, kv := range got {
 		if strings.HasPrefix(kv, "HTTP_PROXY=") {
 			t.Errorf("HTTP_PROXY should be stripped, got %q", kv)

@@ -5,20 +5,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// The storage-cluster apply chain, one managed StorageCluster at a time:
-//
-//	managed-OS install (machines) -> storage infra / cephadm prereqs (deps)
-//	  -> cephadm bootstrap + operations (base)
-//
-// Each stage returns the per-cluster task IDs the next stage depends on, so the
-// caller threads the chain without the dependency edges leaking into the graph
-// engine. Imported (unmanaged) storage clusters plan no task here.
-
-// planStorageManagedOSInstallActivities plans the managed-OS install on storage
-// nodes — the storage-side twin of clusterInstall (provides machine.instantiated
-// + machine.os-ready), so it lives in the infra family, not with the cephadm
-// prereqs. It returns the per-cluster install task IDs the storage-infra stage
-// depends on.
 func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string) (map[string][]string, error) {
 	managedOSDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
@@ -75,13 +61,10 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 					Status:       TaskStatusPending,
 					ResourceKeys: applyManagedOSResourceKeys(state, cluster.Metadata.Name, managedOSMachines),
 				},
-				Playbook:      applyManagedMachineOSPlaybook,
-				Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
-				ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
-				State:         storageTaskState(state, cluster.Metadata.Name),
-				// A pool/topology/OSD-device/BMC edit changes the full state hash but
-				// not the OS-install identity: classify it reconcilable in place so
-				// apply does not refuse it as a machine-disk wipe reinstall.
+				Playbook:           applyManagedMachineOSPlaybook,
+				Limit:              render.ManagedOSGroupName(cluster.Metadata.Name),
+				ExtraVarPairs:      []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
+				State:              storageTaskState(state, cluster.Metadata.Name),
 				StructuralHashVars: managedMachineOSStructuralHashVars(state, cluster.Metadata.Name),
 				Forks:              len(managedOSMachines),
 				RedfishSlots:       len(managedOSMachines),
@@ -93,12 +76,6 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 	return managedOSDepsByCluster, nil
 }
 
-// planStorageInfraActivities plans the cephadm prerequisites on storage nodes,
-// before bootstrap. It depends on the managed-OS install (machines family) via
-// managedOSDepsByCluster when both phases are planned together; otherwise the
-// os-ready capability is satisfied by a prior run
-// (addAvailableMachineOSCapabilities / provided OS). It returns the per-cluster
-// prereq task IDs the cephadm-bootstrap stage depends on.
 func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
 	storageInfraDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseDeps] && includeStorage) {
@@ -144,9 +121,6 @@ func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, targ
 	return storageInfraDepsByCluster, nil
 }
 
-// planStorageClusterActivities plans cephadm bootstrap and storage operations on
-// the seed node. It returns the per-cluster storage task IDs the storage-
-// attachment activities depend on.
 func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, storageInfraDepsByCluster map[string][]string) (map[string][]string, error) {
 	storageDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseBase] && includeStorage) {
@@ -217,15 +191,11 @@ func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State
 					ResourceKeys: []string{hostMutationResource(host)},
 					Status:       TaskStatusPending,
 				},
-				Playbook:      applyMachineInfraPrepare,
-				Limit:         host,
-				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
-				Forks:         1,
-				State:         storageTaskState(state, clusterName),
-				// Managed-OS prepare is idempotent, not a reinstall; reuse the same
-				// destructive-identity projection as the OS-install task so a day-2
-				// storage edit (OSD device, pool) reconciles instead of falsely
-				// refusing as a machine disk wipe.
+				Playbook:           applyMachineInfraPrepare,
+				Limit:              host,
+				ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
+				Forks:              1,
+				State:              storageTaskState(state, clusterName),
 				StructuralHashVars: managedMachineOSStructuralHashVars(state, clusterName),
 			},
 		}); err != nil {

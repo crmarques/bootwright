@@ -8,12 +8,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// planNodeConfigActivities adds, for every ContainerCluster that declares infra
-// hosts or hosts carrying labels/taints, one day-2 activity that applies the
-// node role labels/taints and the infra MachineConfigPool against the installed
-// cluster. It mirrors planStorageAttachmentActivities: it runs in the addons
-// phase and depends on the cluster being up (wait.<cluster>) when the install
-// phase is planned.
 func planNodeConfigActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool) error {
 	for _, ocp := range state.ContainerClusters {
 		if !clusterNeedsNodeConfig(ocp) {
@@ -46,9 +40,6 @@ func planNodeConfigActivities(graph *ActivityGraph, state v1alpha1.State, instal
 	return nil
 }
 
-// clusterNeedsNodeConfig reports whether any host needs day-2 node config: an
-// infra role (implies the infra label + taint + MachineConfigPool) or any
-// authored labels/taints.
 func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 	for _, host := range ocp.Spec.Hosts {
 		if host.Role == v1alpha1.NodeRoleInfra || len(host.Labels) > 0 || len(host.Taints) > 0 {
@@ -58,11 +49,6 @@ func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 	return false
 }
 
-// nodeConfigManifests renders the day-2 manifests for one cluster: a Node patch
-// per host that carries day-2 labels/taints (the infra role label + NoSchedule
-// taint for infra hosts, plus any authored labels/taints), and the infra
-// MachineConfigPool when any infra host exists. Returns the manifests as a
-// single multi-document YAML byte slice, or nil when there is nothing to apply.
 func nodeConfigManifests(ocp v1alpha1.ContainerCluster) ([]byte, error) {
 	var docs []any
 	hasInfra := false
@@ -117,8 +103,6 @@ func nodePatchManifest(name string, labels map[string]string, taints []v1alpha1.
 	}
 	if len(taints) > 0 {
 		rendered := make([]any, 0, len(taints))
-		// Stable order: server-side apply owns the taints we list, so render
-		// them deterministically by key+effect.
 		sorted := append([]v1alpha1.OCPNodeTaint(nil), taints...)
 		sort.Slice(sorted, func(i, j int) bool {
 			if sorted[i].Key != sorted[j].Key {

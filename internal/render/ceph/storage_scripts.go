@@ -9,29 +9,14 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// CephScriptOptions carries the render-time file references a generated apply
-// script needs. Every path is RELATIVE to the script's own directory
-// (storage/<cluster>/) so the emitted bundle is relocatable; an empty value
-// omits the corresponding step.
 type CephScriptOptions struct {
-	LibFile              string // e.g. "lib.sh"
-	BootstrapConfFile    string // e.g. "cephadm/bootstrap-ceph.conf" or ""
-	BootstrapSpecFile    string // e.g. "cephadm/bootstrap-spec.yaml"
-	CoreServicesSpecFile string // e.g. "cephadm/core-services.yaml"
-	LateServicesSpecFile string // e.g. "cephadm/late-services.yaml"
+	LibFile              string
+	BootstrapConfFile    string
+	BootstrapSpecFile    string
+	CoreServicesSpecFile string
+	LateServicesSpecFile string
 }
 
-// CephApplyScript renders the self-contained native-CLI apply bash for one
-// managed Ceph cluster. It consumes the SAME operation document CephOperations
-// emits (which the apply role also runs), so the script and the
-// bootwright-applied state can never drift: each imperative object bootwright
-// configures (pools, EC profiles, CRUSH rules, cephfs, rgw, nfs, mgr modules,
-// config) becomes the exact native command, in the exact rendered order.
-//
-// The script is re-runnable: create-style operations (the ones CephOperations
-// tags with an idempotency probe) are guarded skip-if-exists; the in-place
-// reconcile operations (set-*) run every time. The data-destroying --override
-// rebuild path is bootwright-only and is intentionally NOT generated here.
 func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) string {
 	var b strings.Builder
 	name := cluster.Metadata.Name
@@ -62,12 +47,6 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	b.WriteString("\necho \"== stage 30: late service specs (ceph orch apply) ==\"\n")
 	writeOrchApply(&b, opts.LateServicesSpecFile)
 
-	// When the management gateway carries secret material (TLS cert / oauth2-proxy
-	// secrets) bootwright omits its cephadm doc from late-services and applies it
-	// from a dedicated secret-staging step this native-CLI bundle does not
-	// reproduce. late-services still deploys the keepalive ingress that fronts it,
-	// so warn the operator: the VIP is up but has no backend until the gateway is
-	// applied by hand (or via 'bootwright apply').
 	if ManagementHasSecrets(cluster) {
 		b.WriteString("\necho \"  [todo] spec.ceph.management carries TLS/oauth2-proxy secrets: the mgmt-gateway is NOT in this bundle.\"\n")
 		b.WriteString("echo \"  [todo] The keepalive ingress above fronts it, so its VIP has no backend until you apply the\"\n")
@@ -78,7 +57,6 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	return b.String()
 }
 
-// cephOperationList returns the rendered operation slice in apply order.
 func cephOperationList(state v1alpha1.State, cluster v1alpha1.StorageCluster) []map[string]any {
 	ops, _ := CephOperations(state, cluster)["operations"].([]map[string]any)
 	return ops
@@ -126,24 +104,12 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	b.WriteString("fi\n")
 }
 
-// writeOperation emits the bash for a single rendered operation. Guarding is
-// driven purely by the operation metadata, never by a name convention: an
-// operation that carries an idempotency probe is create-style and gets a
-// skip-if-exists guard; one without it is an in-place reconcile and runs
-// directly. Operations whose output is sensitive (auth keys) run with stdout
-// discarded. A structured operation with no argv (the stretch CRUSH rule the
-// role compiles into the CRUSH map) cannot be a single native command, so it is
-// emitted as a clearly marked bootwright-apply-only stub.
 func writeOperation(b *strings.Builder, op map[string]any) {
 	name := opString(op, "name")
 	cmd := opCommand(op)
 	kind, resName, guarded := opIdempotency(op)
 	fmt.Fprintf(b, "# %s\n", name)
 	if len(cmd) == 0 {
-		// The stretch CRUSH rule places two replicas per failure domain, which
-		// `ceph osd crush rule create-replicated` cannot express; it is compiled
-		// into the CRUSH map instead (see bw_stretch_crush_rule in lib.sh). Any
-		// other argv-less operation has no native form and degrades to a stub.
 		if kind == "stretch-crush-rule" {
 			domain, replicas := stretchRuleParams(op)
 			fmt.Fprintf(b, "bw_stretch_crush_rule %s\n", shellquote.QuoteWords([]string{resName, domain, replicas}))
@@ -152,10 +118,6 @@ func writeOperation(b *strings.Builder, op map[string]any) {
 		fmt.Fprintf(b, "echo \"  [todo] %s cannot be expressed as a native command; apply it with 'bootwright apply --clusters <cluster>'\"\n", name)
 		return
 	}
-	// QuoteWords (allowlist) not Quote (denylist): idempotency identities carry
-	// shell-active characters Quote's display denylist misses -- the nfs-export
-	// key is <serviceID>|<pseudo>, and an unquoted '|' would parse as a pipe and
-	// abort the script under set -euo pipefail.
 	sensitive := opSensitive(op)
 	switch {
 	case guarded && sensitive:
@@ -169,8 +131,6 @@ func writeOperation(b *strings.Builder, op map[string]any) {
 	}
 }
 
-// stretchRuleParams extracts the failure domain and replicas-per-domain from a
-// stretch CRUSH rule operation's structural identity, defaulting replicas to 2.
 func stretchRuleParams(op map[string]any) (domain, replicas string) {
 	replicas = "2"
 	if s, ok := op["structural"].(map[string]any); ok {
@@ -206,9 +166,6 @@ func opIdempotency(op map[string]any) (kind, name string, ok bool) {
 	return kind, name, kind != ""
 }
 
-// opSensitive reports whether an operation's stdout must be discarded: either it
-// is explicitly no_log'd (the standalone RGW admin user) or it captures secret
-// material (the data-foundation auth keys / RGW user).
 func opSensitive(op map[string]any) bool {
 	if nolog, ok := op["no_log"].(bool); ok && nolog {
 		return true
@@ -217,11 +174,6 @@ func opSensitive(op map[string]any) bool {
 	return hasCapture
 }
 
-// CephApplyLib renders the shared guard/helper library (lib.sh) the per-cluster
-// apply.sh sources. It is cluster-independent; a byte-identical copy is written
-// into each storage/<cluster>/ dir so every cluster's bundle stays relocatable.
-// Each guard mirrors the idempotency probe the apply role uses so re-running the
-// script converges instead of erroring on already-created objects.
 func CephApplyLib() string {
 	return cephApplyLib
 }

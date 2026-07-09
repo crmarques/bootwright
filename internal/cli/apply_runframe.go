@@ -6,17 +6,6 @@ import (
 	"github.com/crmarques/bootwright/internal/status"
 )
 
-// applyRunFrame projects a run ledger into a progress frame: a header progress
-// bar plus, for each cluster, every ledger task as a step. Fabric/infra tasks
-// that own no cluster lead in a non-cluster "infra" group so an infra-only run
-// (apply --stage infra) still lists its steps. This single mapper feeds both the
-// live apply reporter and `status --watch`, so the two views cannot diverge.
-//
-// displays carries the desired-state descriptor/ordering metadata so the group
-// headings distinguish a bare-metal cluster from a KubeVirt-hosted one and a
-// child is ordered after its host parent. It may be nil (no state loaded), in
-// which case headings fall back to the ledger-derived kind word and ordering
-// falls back to alphabetical.
 func applyRunFrame(ledger workflow.RunLedger, displays map[string]clusterDisplay) output.RunFrame {
 	groups := make([]output.StepGroup, 0)
 	if infra := applyNonClusterSteps(ledger); len(infra) > 0 {
@@ -127,8 +116,6 @@ func applyStepStatus(status workflow.TaskStatus) output.Status {
 	}
 }
 
-// applyStepDetail gives a short inline reason for a step that did not simply
-// succeed; the full failure tail lives in the task log, surfaced by the Summary.
 func applyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger) string {
 	switch task.Status {
 	case workflow.TaskStatusFailed:

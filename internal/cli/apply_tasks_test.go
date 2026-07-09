@@ -164,10 +164,6 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	}
 }
 
-// The apply phase aggregation itself (cluster kinds, phase grouping, terminal
-// states) is owned and tested by internal/status (applyrun_test.go); the CLI
-// only maps those phases to display statuses.
-
 func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 	base := t.TempDir()
 	runsDir := filepath.Join(base, "runs")
@@ -459,8 +455,6 @@ echo "ansible stderr ${cluster}" >&2
 			t.Fatalf("task log %s missing ansible output:\n%s", cluster, taskLog)
 		}
 	}
-	// The shared run log keeps cluster ansible output out and carries only the
-	// per-cluster lifecycle markers, so it stays a readable index of the run.
 	runLog, err := os.ReadFile(workflow.ApplyRunLogPath(runsDir, ledger.RunID))
 	if err != nil {
 		t.Fatalf("read run log: %v", err)

@@ -8,8 +8,6 @@ import (
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
-// ossChecksumCluster is an oss-distribution StorageCluster carrying the given
-// spec.ceph.community.checksum.
 func ossChecksumCluster(checksum string) v1alpha1.StorageCluster {
 	return v1alpha1.StorageCluster{
 		Spec: v1alpha1.StorageClusterSpec{
@@ -26,8 +24,6 @@ func ossChecksumCluster(checksum string) v1alpha1.StorageCluster {
 func TestSelectOSSProviderProjectsCommunityChecksum(t *testing.T) {
 	sum := strings.Repeat("a", 64)
 	provider := Select(ossChecksumCluster("sha256:"+sum), nil, secret.Index{}, "/context/secrets")
-	// The provider normalizes the operator value to bare sha256 hex (the shape
-	// the community role re-prefixes into get_url's checksum).
 	if provider.Community.Checksum != sum {
 		t.Fatalf("community checksum = %q, want normalized %q", provider.Community.Checksum, sum)
 	}
@@ -38,7 +34,6 @@ func TestSelectOSSProviderProjectsCommunityChecksum(t *testing.T) {
 }
 
 func TestSelectOSSProviderOmitsUnsetCommunityChecksum(t *testing.T) {
-	// Absent checksum keeps today's behavior: no checksum var reaches the role.
 	provider := Select(ossChecksumCluster(""), nil, secret.Index{}, "/context/secrets")
 	if provider.Community.Checksum != "" {
 		t.Fatalf("unset checksum projected: %q", provider.Community.Checksum)
@@ -48,7 +43,6 @@ func TestSelectOSSProviderOmitsUnsetCommunityChecksum(t *testing.T) {
 		t.Fatalf("community vars must omit checksum when unset: %#v", community)
 	}
 
-	// A community block with only a mirror also omits checksum.
 	noChecksum := v1alpha1.StorageCluster{
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{

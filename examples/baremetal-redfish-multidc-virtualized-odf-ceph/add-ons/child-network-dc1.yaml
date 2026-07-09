@@ -18,7 +18,6 @@ spec:
         apiVersion: k8s.ovn.org/v1
         kind: ClusterUserDefinedNetwork
         name: dc1-child-net
-      # The OVN-derived NetworkAttachmentDefinition is what the child VMs consume.
       - type: resourceExists
         apiVersion: k8s.cni.cncf.io/v1
         kind: NetworkAttachmentDefinition

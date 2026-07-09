@@ -5,12 +5,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-// Lookup helpers shared by normalize and validate. Pure functions —
-// no error reporting, no defaults. Callers handle missing values.
-
-// indexByName builds a name->item map. It is the single owner of the
-// by-Metadata.Name index that every kind needs; the per-kind helpers below are
-// thin typed entry points over it rather than copy-pasted map builders.
 func indexByName[T any](items []T, name func(T) string) map[string]T {
 	out := make(map[string]T, len(items))
 	for _, item := range items {

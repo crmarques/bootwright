@@ -7,11 +7,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// TestMachineTaskHostEntriesUseLocalhostForAPISubstrates pins the per-machine
-// task-host entries for API-native substrates: no Machine object backs the
-// localhost provider-host ref, yet the machine-task groups reference the
-// per-machine host names, so the entries must be emitted with a local
-// connection instead of being silently dropped.
 func TestMachineTaskHostEntriesUseLocalhostForAPISubstrates(t *testing.T) {
 	cases := []struct {
 		name        string

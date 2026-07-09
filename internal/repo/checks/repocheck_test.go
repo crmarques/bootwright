@@ -14,8 +14,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// TestREADMEDescribesDesiredStateModel verifies the README still names the
-// canonical v1alpha1 desired-state model.
 func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	required := []string{
@@ -68,10 +66,6 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	}
 }
 
-// TestCurrentDefinitionDocsUseNewSchemaTerms scans the
-// schema-bearing docs for terms from the abandoned shape (old
-// bootArtifacts placement, single-substrate Closure, providerRefs, and
-// pre-installer-aligned refs).
 func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 	files := []string{
 		"README.md",
@@ -139,14 +133,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 	}
 }
 
-// TestCephFSMetadataPoolDestructiveChangeDocumented guards the warning that
-// changing a StorageFilesystem's metadata pool is a data-destroying,
-// --override-only recreate (the role runs `ceph fs rm` on a metadata-pool
-// mismatch), not an in-place reconcile. The structural-identity surfaces must
-// say so, so the warning cannot silently regress into reading as a safe change.
 func TestCephFSMetadataPoolDestructiveChangeDocumented(t *testing.T) {
-	// "metadata pool" must co-occur, within the same sentence, with the
-	// destructive-recreate vocabulary.
 	note := regexp.MustCompile(`(?is)metadata pool[^.]{0,220}(data-destroying|ceph fs rm|recreate)`)
 	surfaces := []string{
 		"specs/state-model.md",
@@ -162,8 +149,6 @@ func TestCephFSMetadataPoolDestructiveChangeDocumented(t *testing.T) {
 	}
 }
 
-// TestRuntimeBundleUseNewSchemaTerms scans shipped Ansible role text for
-// stale schema fragments that otherwise surface only as runtime diagnostics.
 func TestRuntimeBundleUseNewSchemaTerms(t *testing.T) {
 	roots := []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles",
@@ -444,10 +429,6 @@ func desiredStateYAMLPaths(t *testing.T, roots ...string) []string {
 
 func isExtensionPayloadManifest(path string) bool {
 	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		// manifests/ holds ClusterAddon Kubernetes payloads; playbooks/, roles/,
-		// and collections/ hold a ProvisioningPlaybook's operator Ansible content.
-		// None are authored Bootwright objects, so they are exempt from the
-		// desired-state YAML style checks.
 		switch part {
 		case "manifests", "playbooks", "roles", "collections":
 			return true

@@ -88,10 +88,6 @@ func vsphereInstallerTestState() v1alpha1.State {
 	}
 }
 
-// TestLoadInstallerSecretsResolvesVSphereCredentials covers the real-secrets
-// install-config path for platform vsphere: the vCenter user/password
-// material replaces the secret-ref placeholders, while the placeholder
-// render keeps emitting placeholders only.
 func TestLoadInstallerSecretsResolvesVSphereCredentials(t *testing.T) {
 	secretsDir := t.TempDir()
 	writeEncryptedSecret(t, secretsDir, "pull", secretstore.MaterialPrimary, `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`)
@@ -125,9 +121,6 @@ func TestLoadInstallerSecretsResolvesVSphereCredentials(t *testing.T) {
 	}
 }
 
-// TestPlaceholderInstallerConfigKeepsVSphereCredentialPlaceholders pins the
-// placeholder render: without resolved material the vcenter user/password
-// stay secret-ref placeholders and never leak bytes.
 func TestPlaceholderInstallerConfigKeepsVSphereCredentialPlaceholders(t *testing.T) {
 	state := vsphereInstallerTestState()
 	config, err := InstallerConfig(state, state.ContainerClusters[0])
@@ -146,15 +139,10 @@ func TestPlaceholderInstallerConfigKeepsVSphereCredentialPlaceholders(t *testing
 	}
 }
 
-// TestPlatformConfigVSphereUserManagedLoadBalancer covers the external-LB
-// case: when api/api-int/ingress are not all OpenShift-managed (e.g. a bastion
-// haproxy owns the VIPs), the vSphere platform must declare
-// loadBalancer.type=UserManaged so the integrated LB stays out of those VIPs.
 func TestPlatformConfigVSphereUserManagedLoadBalancer(t *testing.T) {
 	state := v1alpha1.State{}
 	ocp := v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: "ocp"}}
 
-	// No OpenShift-sourced endpoints -> userManaged -> loadBalancer UserManaged.
 	externalLB := v1alpha1.ClusterInstall{}
 	got := platformConfig(state, v1alpha1.PlatformTypeVSphere, externalLB, ocp, InstallerSecrets{})
 	lb := vspherePlatformLoadBalancer(t, got)
@@ -162,7 +150,6 @@ func TestPlatformConfigVSphereUserManagedLoadBalancer(t *testing.T) {
 		t.Fatalf("external-LB vsphere platform loadBalancer = %v, want type=UserManaged", lb)
 	}
 
-	// All three standard endpoints OpenShift-managed -> integrated LB (no field).
 	openshiftManaged := v1alpha1.ClusterInstall{
 		Endpoints: map[string]v1alpha1.Endpoint{
 			v1alpha1.EndpointAPI:     {Source: v1alpha1.EndpointSource{Type: v1alpha1.EndpointSourceOpenShift}},

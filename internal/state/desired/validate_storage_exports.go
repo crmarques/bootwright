@@ -69,11 +69,6 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 	return errs
 }
 
-// validateStorageExportExternalDetails validates the operator-supplied
-// details arm. A managed-Ceph export may omit externalDetails entirely — the
-// consuming add-on then produces the details itself (a hook running the Rook
-// exporter on a Ceph node). External Ceph has no nodes Bootwright can reach,
-// so operator-supplied details are the only source.
 func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster) []string {
 	prefix := fmt.Sprintf("StorageExport/%s spec.externalDetails", export.Metadata.Name)
 	details := export.Spec.ExternalDetails

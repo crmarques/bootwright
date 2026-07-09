@@ -2,14 +2,6 @@ package inventory
 
 import "testing"
 
-// TestNormalizeRedfishURL pins how vendor BMC addresses get shaped
-// before they reach boot_redfish / external_validate. The role
-// appends "/redfish/v1/Systems[/...]" to baseUrl unconditionally,
-// so any Ironic-style transport hint and any trailing /Systems/<id>
-// must be stripped here — otherwise the doubled-path silently 404s
-// inside `wait-for install-complete` 30 minutes later. systemId is
-// returned alongside so the role can target the embedded /Systems/<id>
-// directly without an extra discovery round-trip.
 func TestNormalizeRedfishURL(t *testing.T) {
 	cases := []struct {
 		name         string

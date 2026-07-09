@@ -115,8 +115,6 @@ func TestClusterFacingHostAddressUnknownHost(t *testing.T) {
 }
 
 func TestClusterFacingHostAddressFallsBackThroughMachineInterface(t *testing.T) {
-	// No endpoints declared — the helper must still find a primary
-	// network via the first machine's first interface.
 	state := clusterFacingState("localhost", "", "192.168.132.1")
 	infra := clusterFacingInfra()
 	infra.Endpoints = nil

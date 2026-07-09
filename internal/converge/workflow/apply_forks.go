@@ -7,13 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// AnsibleForksForLimit sizes ansible --forks to the number of hosts a run's
-// --limit actually targets, so a playbook fans out no wider than its selected
-// inventory. It resolves group tokens through the rendered host groups and counts
-// distinct hosts; an unknown token is treated as a literal host, and an empty
-// limit counts every rendered host. This is a render/inventory-shaped helper —
-// it reads desired state and host groups, not the task graph — so it lives beside
-// the domain planners rather than in the generic scheduler.
 func AnsibleForksForLimit(state v1alpha1.State, limit string) int {
 	members := render.HostGroupMembers(state)
 	selected := map[string]bool{}

@@ -22,14 +22,6 @@ func infraComponentServicesVars(state v1alpha1.State) []any {
 	})
 }
 
-// FabricHostDesiredVars returns the deterministic rendered fabric vars for one
-// host: the provider services, infra-component services, and provider machine
-// setups whose placement machineRef is host. state-check hashes this instead of
-// the whole desired state for fabric (provider/infra-component) tasks, so an
-// edit elsewhere in the fleet that does not change this host's rendered vars no
-// longer reports spurious infrastructure drift — while a change that does affect
-// the host (a cluster its load balancer fronts, a storage node it prepares) still
-// does, because that change flows into these same vars.
 func FabricHostDesiredVars(state v1alpha1.State, host string) []any {
 	out := []any{}
 	for _, group := range [][]any{
@@ -69,10 +61,6 @@ func machineServicesVars(state v1alpha1.State, include func(stategraph.MachineSe
 	return builder.Services()
 }
 
-// machineServiceVarBuilders maps each service-graph identity kind to its vars
-// builder. Every kind the support registry can produce must have an entry here,
-// or its rendered vars are silently dropped; TestMachineServiceVarBuildersCoverRegistry
-// enforces that against roles.ServiceEntries().
 var machineServiceVarBuilders = map[string]func(v1alpha1.State, stategraph.MachineService) (map[string]any, bool){
 	v1alpha1.ComponentSlotLoadBalancer:   loadBalancerMachineServiceVars,
 	v1alpha1.ComponentSlotArtifactServer: artifactMachineServiceVars,
@@ -155,10 +143,6 @@ func nameResolutionMachineServiceVars(state v1alpha1.State, service stategraph.M
 	if !ok || component.Spec.NameResolution == nil {
 		return nil, false
 	}
-	// Delegate the dnsmasq var shape to the shared component builder (the single
-	// owner of the dnsmasq key set, used by the per-cluster components path too),
-	// then overlay the cross-consumer aggregates only the graph path has: the
-	// merged additional ingress hosts and the merged host/domain records.
 	entry := v1alpha1.EnvironmentNameResolutionComponent{Name: serviceEntryName(service)}
 	out := nameResolutionComponentVars(state, entry, component)
 	out["additionalIngressHosts"] = append([]string(nil), service.MergedStringFields["additionalIngressHosts"]...)

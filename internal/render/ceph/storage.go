@@ -16,11 +16,8 @@ type StorageAsset struct {
 	CoreServicesSpecPath string
 	LateServicesSpecPath string
 	OperationsPath       string
-	// ApplyScriptPath / ApplyLibPath are the generated native-CLI apply
-	// script and its helper library (managed clusters only). Running the
-	// script reproduces the same Ceph objects `bootwright apply` configures.
-	ApplyScriptPath string
-	ApplyLibPath    string
+	ApplyScriptPath      string
+	ApplyLibPath         string
 }
 
 func (a StorageAsset) Directories() []string {

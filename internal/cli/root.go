@@ -10,12 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// preserves AddCommand order in --help so commands render in usage order within
-// their group, not alphabetically
 func init() { cobra.EnableCommandSorting = false }
 
-// Top-level commands are grouped by domain in --help. Groups render in the order
-// they are added via AddGroup; commands within a group render in AddCommand order.
 const (
 	groupSetup     = "setup"
 	groupResource  = "resource"
@@ -24,10 +20,6 @@ const (
 	groupGeneral   = "general"
 )
 
-// contextOverride holds the value of the global --context flag. It is a
-// package var bound by newRootCmd's persistent flag (StringVar resets it to ""
-// on every newRootCmd call), and consulted by commonFlags.resolve so any
-// command can operate in a non-current context without "context use" first.
 var contextOverride string
 
 func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -144,8 +136,6 @@ func (cf *commonFlags) resolveWithLocality(checkLocality bool) (workspace.Contex
 	return ctx, nil
 }
 
-// resolveTargetContext returns the context the command operates in: the
-// --context override when set, otherwise the current context.
 func resolveTargetContext() (workspace.Context, error) {
 	if name := strings.TrimSpace(contextOverride); name != "" {
 		return workspace.RequireExistingContext(name)
@@ -153,8 +143,6 @@ func resolveTargetContext() (workspace.Context, error) {
 	return workspace.CurrentContext()
 }
 
-// registerContextNameCompletion offers existing context names as completions
-// for a context-selecting flag.
 func registerContextNameCompletion(cmd *cobra.Command, flag string) {
 	_ = cmd.RegisterFlagCompletionFunc(flag, func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		contexts, err := workspace.ListContexts()
@@ -169,55 +157,22 @@ func registerContextNameCompletion(cmd *cobra.Command, flag string) {
 	})
 }
 
-// requireSubcommand configures cmd as a pure dispatcher whose only valid
-// positionals are the names of its already-registered subcommands. Wiring:
-//
-//   - FParseErrWhitelist.UnknownFlags lets the args validator run even when
-//     the user typed a subcommand-shaped typo followed by a child's flag
-//     (e.g. `cluster acces --cluster X`). Without it, pflag bails on the
-//     unknown `--cluster` before Cobra ever sees `acces`.
-//   - Args rejects any positional that is not a registered subcommand and
-//     reproduces Cobra's "Did you mean ...?" suggestion. It deliberately does
-//     NOT set ValidArgs: a ValidArgs slice mirroring the subcommand names makes
-//     shell completion list every subcommand twice — once described from the
-//     subcommand walk and once bare from ValidArgs (see Cobra's getCompletions)
-//     — so the dispatcher leaves completion to the subcommand walk alone.
-//   - RunE = Help is needed because Cobra skips ValidateArgs on commands
-//     with no Run* defined, falling through to a silent help dump instead.
-//
-// Call after AddCommand so c.Commands() is populated.
 func requireSubcommand(cmd *cobra.Command) {
 	cmd.FParseErrWhitelist = cobra.FParseErrWhitelist{UnknownFlags: true}
 	cmd.Args = rejectUnknownSubcommandArgs
-	// A bare dispatcher invocation (no subcommand) is a usage error, not a
-	// success: print help for guidance, then exit 2 so a CI gate that forgets
-	// the target (e.g. `bootwright preflight`) fails instead of passing green
-	// having checked nothing.
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		_ = c.Help()
 		return failErr(2, fmt.Errorf("%s requires a subcommand", c.CommandPath()))
 	}
 }
 
-// rejectUnknownSubcommandArgs is a cobra.PositionalArgs for dispatcher commands:
-// no positional is fine (the command then prints help), and the first positional
-// that did not match a subcommand is rejected with Cobra's own wording. Cobra
-// only invokes a parent's Args when no child matched, so the rejected positional
-// is always a genuine typo, never a valid subcommand.
 func rejectUnknownSubcommandArgs(c *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	// A rejected positional is a usage error: exit 2 so CI can distinguish "my
-	// invocation is wrong" from "the run failed" (exit 1), matching the exit-code
-	// contract in plan/apply help.
 	return failErr(2, unknownSubcommandError(c, args[0]))
 }
 
-// unknownSubcommandError formats the message cobra.OnlyValidArgs produces for an
-// unknown positional, including the subcommand-derived "Did you mean this?"
-// suggestion, so callers get that UX without populating ValidArgs (which would
-// pollute shell completion with description-less duplicate entries).
 func unknownSubcommandError(c *cobra.Command, arg string) error {
 	msg := fmt.Sprintf("invalid argument %q for %q", arg, c.CommandPath())
 	if !c.DisableSuggestions {

@@ -87,8 +87,6 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 		}
 	}
 
-	// ceph-a was left partially destroyed (a powered-off node kept its OSD data);
-	// ceph-b was fully torn down.
 	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, ClustersScope, st, nil, []string{"ceph-a"})
 
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
@@ -108,8 +106,6 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 		t.Fatalf("fully-destroyed cluster's StoragePool/ceph-b.rbd record must be reset to missing")
 	}
 
-	// The kept records make apply --expect-new still fail closed over the
-	// still-alive ceph-a, while the fully-destroyed ceph-b no longer refuses.
 	err = workflow.EvaluateApplyModePreflight(workflow.ApplyModeCreate, objects)
 	if err == nil || !strings.Contains(err.Error(), "ceph-a") {
 		t.Fatalf("apply --expect-new must refuse the partially-destroyed ceph-a, got %v", err)
@@ -119,8 +115,6 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 	}
 }
 
-// objectRecorded reports whether the classified object identified by key carries
-// a convergence-safety record (Bootwright created or touched it).
 func objectRecorded(objects []workflow.ObjectClassification, key string) bool {
 	for _, o := range objects {
 		if o.ObjectKey == key {
@@ -130,9 +124,6 @@ func objectRecorded(objects []workflow.ObjectClassification, key string) bool {
 	return false
 }
 
-// twoCephClustersState declares two managed Ceph clusters, each with one pool,
-// so a partial-destroy reset can keep one cluster's records while clearing the
-// other's.
 func twoCephClustersState() v1alpha1.State {
 	cluster := func(name string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{

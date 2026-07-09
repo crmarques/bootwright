@@ -9,20 +9,9 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// CephadmBootstrapConf is the initial ceph.conf handed to `cephadm bootstrap
-// --config`. public_network has no bootstrap flag (unlike --cluster-network)
-// and the first monitor binds at bootstrap, so declared public CIDRs must be
-// in the config before bootstrap; the set-public-network operation keeps the
-// value converged on later applies. Empty when nothing needs seeding.
 func CephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
 	ceph := cluster.Spec.Ceph
 	publics := ceph.Networks.PublicCIDRs
-	// Only the global/mon/osd sections (no masks) seed at bootstrap: their
-	// daemons exist at bootstrap, so seeding them via --config means cephadm's
-	// own auto-created pools (e.g. .mgr) honor the declared defaults instead of
-	// the cephadm defaults the post-bootstrap `ceph config set` ops would only
-	// correct afterward. mgr/mds/client/<type>.<id> have no daemon yet and are
-	// left to the post-bootstrap ops (which run for every section regardless).
 	var out strings.Builder
 	for _, section := range []string{"global", "mon", "osd"} {
 		options := ceph.Config[section]
@@ -50,11 +39,6 @@ func CephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
 
 func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
-	// The stretch tiebreaker is a mon-only arbiter in a third site. It must get a
-	// monmap location (ceph mon set_location, rendered separately) but NOT a CRUSH
-	// host-spec location: cephadm creates the failure-domain bucket at host add, so
-	// a location here would add a third datacenter bucket and `ceph mon
-	// enable_stretch_mode` refuses when the dividing bucket type has != 2 members.
 	stretch := cluster.Spec.Ceph.Topology.Stretch
 	tiebreaker := ""
 	if stretch != nil {
@@ -72,13 +56,6 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 			"hostname":     node.Hostname,
 			"labels":       labels,
 		}
-		// A CRUSH location is only meaningful in stretch mode, where sites map to
-		// real failure-domain buckets (e.g. datacenter). Without stretch the
-		// failure domain is "host", so a location would parent every host bucket
-		// under a bogus host-type bucket named after the site — outside
-		// root=default, where no CRUSH rule maps PGs and all pool I/O hangs. The
-		// mon-only tiebreaker is excluded (see above); data-site hosts pin
-		// root=default so their failure-domain buckets nest under the data root.
 		if stretch != nil && node.Site != "" && node.Hostname != tiebreaker {
 			host["location"] = map[string]any{
 				"root":                          "default",
@@ -169,9 +146,6 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		if nfs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		// cephadm auto-provisions the backing .nfs pool (Squid), so the service
-		// needs only placement; no pool/namespace. There is no nfs topology role,
-		// so placement is authored explicitly (role "" — same as passthrough).
 		docs = append(docs, cephadmPlacementService("nfs", nfs.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, nfs.Spec.Ceph.Placement, ""), nfs.Spec.Ceph.Placement.CountPerHost, nil))
 		for _, ingress := range nfs.Spec.Ceph.Ingresses {
 			endpoint, ok := topology.GatewayIngressEndpoint(ingress)
@@ -193,10 +167,6 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 	return docs
 }
 
-// applyCephServiceCommonFields sets the cephadm common service-spec keys that
-// are top-level (siblings of placement/spec), not daemon config: unmanaged,
-// extra_container_args, extra_entrypoint_args, and networks. Each renders only
-// when set so a service without overrides is byte-identical to before.
 func applyCephServiceCommonFields(doc map[string]any, unmanaged bool, extraContainerArgs, extraEntrypointArgs, networks []string, customConfigs []v1alpha1.StorageCephCustomConfig) {
 	if unmanaged {
 		doc["unmanaged"] = true

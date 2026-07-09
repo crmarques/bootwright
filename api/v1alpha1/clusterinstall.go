@@ -19,10 +19,6 @@ func (r ArtifactServerEndpointRef) IsZero() bool {
 }
 
 type MachineNetworkBinding struct {
-	// MachineName is the projected source Machine that owns this binding's
-	// network/substrate facts. It is the editable owner diagnostics must name;
-	// the binding itself is a computed view (ClusterInstall.NetworkBindings is
-	// yaml:"-"), so this field is never authored or serialized.
 	MachineName      string               `yaml:"-" json:"-"`
 	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef" json:"networkConfigRef"`
 	ProviderRef      LocalObjectReference `yaml:"providerRef" json:"providerRef"`
@@ -55,12 +51,8 @@ type Endpoint struct {
 }
 
 type EndpointSource struct {
-	Type         string               `yaml:"type,omitempty" json:"type,omitempty"`
-	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	// BindAddressRef names the referenced loadBalancer's bindAddresses[]
-	// entry this endpoint resolves to. It is a name reference, not the
-	// literal listen IP the bindAddress fields on InfraComponent service
-	// arms carry.
+	Type           string               `yaml:"type,omitempty" json:"type,omitempty"`
+	ComponentRef   LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	BindAddressRef LocalObjectReference `yaml:"bindAddressRef,omitempty" json:"bindAddressRef,omitempty"`
 }
 

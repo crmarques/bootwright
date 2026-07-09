@@ -6,8 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// fixtureRoot is the relative path from internal/render/inventory to
-// the canonical good desired-state fixtures.
 const fixtureRoot = "../../state/desired/testdata/good"
 
 func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any {

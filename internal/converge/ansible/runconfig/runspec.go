@@ -1,7 +1,3 @@
-// Package runconfig is the bridge from the renderer output to the
-// Ansible runner. It builds an ansible.RunSpec from the rendered
-// inventory + vars paths and the embedded bundle layout; nothing here
-// touches state, validation, or installer assets — that's render's job.
 package runconfig
 
 import (
@@ -32,9 +28,6 @@ type RunSpecConfig struct {
 	ArtifactsDir       string
 	OutputLogPath      string
 	ExtraVarPairs      []string
-	// RolesPath and CollectionsPath are optional operator-supplied vendored
-	// directories (from a ProvisioningPlaybook), appended after the bundle
-	// collections so bootwright.core stays resolvable. Empty for core tasks.
 	RolesPath          string
 	CollectionsPath    string
 	Check              bool
@@ -93,8 +86,6 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	pairs = append(pairs, cfg.ExtraVarPairs...)
 	collectionsPath := filepath.Join(cfg.BundleDir, bundle.CollectionsRelPath)
 	if strings.TrimSpace(cfg.CollectionsPath) != "" {
-		// Bundle collections first so bootwright.core resolves; operator
-		// collections append (a distinct namespace, no conflict).
 		collectionsPath = collectionsPath + string(os.PathListSeparator) + cfg.CollectionsPath
 	}
 	return ansible.RunSpec{
@@ -118,8 +109,6 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 }
 
 func bundlePlaybook(bundleDir, playbook string) string {
-	// An absolute path is an operator-supplied ProvisioningPlaybook already
-	// rooted under the context input dir — pass it through unjoined.
 	if filepath.IsAbs(playbook) {
 		return playbook
 	}

@@ -28,10 +28,6 @@ spec:
         management: managed
         componentRef: artifact-server
     proxies:
-      # default: true routes every proxy consumer (bootwright,
-      # containerClusterInstall, machineOSInstall) through this one proxy, so no
-      # proxyFor block is needed. To exempt a consumer, set proxyFor.<consumer>
-      # to "none"; to send one through a different proxy, name that proxy.
       - name: default
         default: true
         management: external

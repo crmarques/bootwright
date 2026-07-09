@@ -59,9 +59,6 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	for _, cluster := range state.StorageClusters {
 		addStorageClusterMachines(selectedMachines, cluster)
 	}
-	// Service machines (DNS, BMC, ...) consumed by the selected storage
-	// clusters must survive the filter even when no provider machineRef
-	// pulls them in — API-native substrates (vsphere, kubevirt) have none.
 	addSelectedServiceMachines(selectedMachines, state, selected)
 	selectedContainerClusters := storageAttachmentContainerClusters(state)
 	var containerClusters []v1alpha1.ContainerCluster
@@ -325,15 +322,6 @@ func addSelectedServiceMachines(out map[string]bool, state v1alpha1.State, selec
 	}
 }
 
-// ApplyWorkObjects returns the Machine and StorageCluster names a scoped apply
-// genuinely acts on for the given selected cluster roots. Unlike
-// FilterStateToClusterRoots it deliberately does NOT follow the data-foundation
-// attachment edge: a managed StorageCluster reached only through a selected
-// container cluster's attachment (and that StorageCluster's nodes) is a render
-// reference in the apply plan state, not a provisioning target. The storage set
-// therefore holds only directly-selected storage roots. Readiness checks use
-// these sets so a render-reference object's bootstrap secrets and tools do not
-// block a run that never provisions it.
 func ApplyWorkObjects(state v1alpha1.State, containerNames, storageNames []string) (machines map[string]bool, storageClusters map[string]bool) {
 	selectedContainer := nameSet(containerNames)
 	selectedStorage := nameSet(storageNames)
@@ -360,9 +348,6 @@ func ApplyWorkObjects(state v1alpha1.State, containerNames, storageNames []strin
 	return machines, selectedStorage
 }
 
-// addProviderHostMachines pulls in the provider host Machine (e.g. a libvirt
-// hypervisor's machineRef) backing any already-selected machine's provider, so
-// its SSH material stays in scope alongside the guests it hosts.
 func addProviderHostMachines(machines map[string]bool, state v1alpha1.State) {
 	providers := map[string]bool{}
 	for _, machine := range state.Machines {

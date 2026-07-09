@@ -85,16 +85,6 @@ func kubeVirtHostClusterApplyCapabilitiesForMachines(state v1alpha1.State, machi
 	return out, nil
 }
 
-// kubeVirtHostClusterReadiness returns, per distinct KubeVirt host cluster
-// referenced by the loaded container clusters' machines, the capabilities that
-// must be satisfied before the controller can talk to that host (the host
-// cluster being installed plus its KubeVirt-providing addon). A host that is not
-// itself a selected ContainerCluster (a pre-existing, externally-managed host)
-// yields a nil slice: it is assumed ready, so the deps-stage virtctl provision
-// for it has no prerequisites. The second return maps each container cluster to
-// the distinct host clusters its machines run on, so each boot task can require
-// its hosts' virtctl provision. Mirrors kubeVirtHostClusterApplyCapabilities so
-// the readiness gate is identical to the one boot already waits on.
 func kubeVirtHostClusterReadiness(state v1alpha1.State) (map[string][]CapabilityRef, map[string][]string, error) {
 	selected := map[string]bool{}
 	for _, cluster := range state.ContainerClusters {

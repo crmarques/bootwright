@@ -7,10 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 )
 
-// printStorageAccessSections renders one block per storage cluster into an
-// existing printer, so it composes with both the standalone cluster info command
-// and the post-apply continuation. showSecrets reveals the dashboard password's
-// cleartext inline; the post-apply caller always passes false.
 func printStorageAccessSections(p *cliout.Printer, summaries []clusteraccess.StorageSummary, showSecrets bool) {
 	for _, summary := range summaries {
 		p.Section("Storage cluster " + summary.Name)

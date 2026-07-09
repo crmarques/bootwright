@@ -65,8 +65,6 @@ func TestIsControllerLocalMachineProvidedWithoutSSH(t *testing.T) {
 	provided := true
 	notProvided := false
 
-	// A policy that matches no real address, to prove a no-ssh provided-OS
-	// machine is the local bastion on its own, not via address resolution.
 	policy := Policy{Deps: Deps{
 		Hostname:       func() (string, error) { return "somewhere-else", nil },
 		InterfaceAddrs: func() ([]net.Addr, error) { return nil, nil },
@@ -80,8 +78,6 @@ func TestIsControllerLocalMachineProvidedWithoutSSH(t *testing.T) {
 		t.Fatalf("provided-OS machine with no ssh block should be the local bastion")
 	}
 
-	// A provided-OS machine that keeps an ssh block is still resolved by
-	// address, so a non-matching address is not local.
 	remote := v1alpha1.Machine{Spec: v1alpha1.MachineSpec{
 		OS:        v1alpha1.MachineOSSpec{Provided: &provided},
 		Addresses: []v1alpha1.MachineAddress{{Name: "ip", Address: "10.9.9.9"}},
@@ -91,8 +87,6 @@ func TestIsControllerLocalMachineProvidedWithoutSSH(t *testing.T) {
 		t.Fatalf("provided-OS machine with a remote ssh address should not be local")
 	}
 
-	// A non-provided machine with no ssh block is a provisioning target, not the
-	// bastion.
 	node := v1alpha1.Machine{Spec: v1alpha1.MachineSpec{
 		OS: v1alpha1.MachineOSSpec{Provided: &notProvided},
 	}}

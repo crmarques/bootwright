@@ -12,6 +12,3 @@ spec:
       role: Secondary
       physicalNetworkName: dc1-child
       mtu: 1500
-      # No subnets / no ipam: child node IPs are static, assigned by bootwright
-      # through NMState/agent-config (see infra/networkconfigs/dc1-child-net.yaml).
-      # OVN carries L2 only; enabling IPAM here would override those static IPs.

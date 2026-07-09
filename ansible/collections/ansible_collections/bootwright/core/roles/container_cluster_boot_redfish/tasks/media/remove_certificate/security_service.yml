@@ -1,9 +1,4 @@
 ---
-# Remove the root CA the manager SecurityService OEM method imported, by the same
-# fixed RootCertId slot it was written to. Gated on the import having recorded the
-# slot; tolerant of 400/404 (already gone), so it is a no-op when import was
-# skipped or failed. Credentials/TLS/timeout come from the role-wide
-# ansible.builtin.uri module_defaults set in tasks/main.yml.
 - name: Build SecurityService remote-HTTPS-server root-CA delete body
   ansible.builtin.set_fact:
     bootwright_redfish_security_service_delete_body: "{{ {'RootCertId': (bootwright_redfish_artifact_root_cert_imported_id | int)} }}"

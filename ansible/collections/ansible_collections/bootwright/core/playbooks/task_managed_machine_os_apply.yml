@@ -68,8 +68,6 @@
         bootwright_component: "{{ bootwright_current_machines | first }}"
       changed_when: false
 
-    # substrateApplyFrom selects the role entrypoint; the renderer omits it for
-    # substrates driven from their default main.yml, so fall back to main.
     - name: Dispatch substrate per managed OS machine
       ansible.builtin.include_role:
         name: "{{ bootwright_component.substrateApplyRole }}"

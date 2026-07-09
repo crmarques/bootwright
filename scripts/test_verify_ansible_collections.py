@@ -4,14 +4,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-
 def load_verify_module():
     path = Path(__file__).with_name("verify-ansible-collections.py")
     spec = importlib.util.spec_from_file_location("verify_ansible_collections", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
 
 verify_mod = load_verify_module()
 
@@ -26,7 +24,6 @@ collections:
     source: https://galaxy.ansible.com/download/ansible-posix-2.1.0.tar.gz
     filesManifestSha256: bbbb
 """
-
 
 def _write_manifest(root, namespace, name, version, sha, chksum_type="sha256"):
     coll_dir = Path(root) / "ansible_collections" / namespace / name
@@ -48,7 +45,6 @@ def _write_manifest(root, namespace, name, version, sha, chksum_type="sha256"):
         encoding="utf-8",
     )
 
-
 class ParseLockTest(unittest.TestCase):
     def test_parses_name_version_and_sha(self):
         entries = verify_mod.parse_lock(_LOCK)
@@ -56,11 +52,9 @@ class ParseLockTest(unittest.TestCase):
         self.assertEqual(entries[0]["name"], "community.general")
         self.assertEqual(entries[0]["version"], "12.6.0")
         self.assertEqual(entries[0]["filesManifestSha256"], "aaaa")
-        # the source value keeps its embedded colons
         self.assertTrue(entries[0]["source"].startswith("https://"))
         self.assertEqual(entries[1]["name"], "ansible.posix")
         self.assertEqual(entries[1]["filesManifestSha256"], "bbbb")
-
 
 class VerifyTest(unittest.TestCase):
     def test_passes_when_manifests_match(self):
@@ -102,7 +96,6 @@ class VerifyTest(unittest.TestCase):
             errors = verify_mod.verify(tmp, entries)
             self.assertEqual(len(errors), 1)
             self.assertIn("community.general", errors[0])
-
 
 if __name__ == "__main__":
     unittest.main()

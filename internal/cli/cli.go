@@ -113,8 +113,6 @@ func commandErrorRemediation(message string) string {
 
 func argsRequestJSON(args []string) bool {
 	for i, arg := range args {
-		// Everything after the "--" terminator is a positional, not a flag, so a
-		// bare "--output json" there does not select JSON error output.
 		if arg == "--" {
 			return false
 		}
@@ -191,8 +189,6 @@ func printRenderResult(stdout io.Writer, result render.Result) {
 	p.Artifacts(groups)
 }
 
-// warnSecretsDirPerms emits a one-line stderr warning when the local
-// secrets directory exists with permission bits other than 0700.
 func warnSecretsDirPerms(secretsDir string, stderr io.Writer) {
 	if stderr == nil {
 		return
@@ -202,8 +198,6 @@ func warnSecretsDirPerms(secretsDir string, stderr io.Writer) {
 	}
 }
 
-// strictSecretsDirCheck enforces 0700 on the secrets-dir and 0600 on
-// every file inside.
 func strictSecretsDirCheck(secretsDir string) *exitError {
 	if err := secret.StrictDirCheck(secretsDir); err != nil {
 		return failErr(1, err)

@@ -49,10 +49,6 @@ func networkConfigInterfaceNames(config map[string]any) []string {
 		if name == "" || seen[name] {
 			continue
 		}
-		// Only physical NICs get a generated MAC and a fabricated VM NIC; a
-		// bond/vlan (or other virtual) interface is created inside the guest by
-		// NMState, so materialising it as a substrate NIC would collide with the
-		// guest interface of the same name and stamp a bogus MAC on it.
 		ifType, _ := entry["type"].(string)
 		if isVirtualInterfaceType(ifType) {
 			continue
@@ -64,9 +60,6 @@ func networkConfigInterfaceNames(config map[string]any) []string {
 	return out
 }
 
-// isVirtualInterfaceType reports whether an NMState interface type names a
-// logical interface the substrate cannot materialise as a physical NIC. An
-// empty type is treated as physical (ethernet).
 func isVirtualInterfaceType(ifType string) bool {
 	switch ifType {
 	case "bond", "vlan", "vxlan", "bridge", "linux-bridge", "ovs-bridge",

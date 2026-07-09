@@ -41,19 +41,14 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 		if len(files) != 1 {
 			return failf(2, "context update copies exactly one source directory; pass a single -f <dir>")
 		}
-		// Resolve before any sudo re-exec so relative paths and ~ expand
-		// against the caller's environment, not root's.
 		source, err := workspace.ResolveWorkspaceDir(files[0])
 		if err != nil {
 			return failErr(2, err)
 		}
 		if shouldRunContextRootChild() {
-			// Confirm here, as the calling user, before re-exec under root so the
-			// prompt reaches a real terminal; the child runs with --yes.
 			if !yes && !confirm(stdin, stdout, contextUpdateConfirmPrompt(name, source)) {
 				return failErr(1, errors.New("context update aborted"))
 			}
-			// update keeps the current pointer, so the registry is not synced back.
 			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "update", "--name", name, "-f", source, "--yes"}, stdin, stdout, stderr, false)
 			if err != nil {
 				return failErr(1, err)
@@ -74,17 +69,12 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
-		// Validate the source before prompting so a bad -f fails fast instead of
-		// asking the user to confirm a replacement that cannot happen.
 		if !yes && !confirm(stdin, stdout, contextUpdateConfirmPrompt(ctx.Name, source)) {
 			return failErr(1, errors.New("context update aborted"))
 		}
 		if err := workspace.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
-		// Route through the centralized input-mutation component so the current
-		// input is snapshotted into history before it is discarded, exactly as
-		// `diff --adopt` does — the operator can recover the pre-update state.
 		snapshot, err := workspace.ReplaceInput(ctx, source, "context update", nativecatalog.ReferencedStoreAddons(state))
 		if err != nil {
 			return failErr(1, err)
@@ -106,8 +96,6 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 	return cmd
 }
 
-// contextUpdateConfirmPrompt is the interactive confirmation shown before
-// update discards a context's current input and replaces it from source.
 func contextUpdateConfirmPrompt(name, source string) string {
 	return fmt.Sprintf("Replace the input of context %q from %s? The current input is discarded (secrets, runs, rendered output, and clusters are preserved). [y/N] (default: no): ", name, source)
 }

@@ -30,7 +30,6 @@ func TestNormalizeDerivesSatelliteContentBaseURL(t *testing.T) {
 		t.Fatalf("contentBaseURL = %q, want derived default", sat.ContentBaseURL)
 	}
 
-	// An explicit contentBaseURL is preserved.
 	state.Entitlements[0].Spec.RHSM.Satellite = &v1alpha1.EntitlementRHSMSatellite{
 		Hostname:       "capsule.corp.example.com",
 		ContentBaseURL: "https://capsule.corp.example.com/custom/content",
@@ -104,8 +103,6 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 	if got := install.NodeSSH.PrivateKeyRef.Name; got != "cluster-private" {
 		t.Fatalf("NodeSSH.PrivateKeyRef.Name = %q, want cluster-private", got)
 	}
-	// Environment-defaults copies are normalize-injected too: the cluster
-	// author never wrote them, so they carry the defaulted markers.
 	defaulted := state.ContainerClusters[0].DefaultedRefs
 	if !defaulted.PullSecretRef || !defaulted.NodeSSH {
 		t.Fatalf("DefaultedRefs = %+v, want PullSecretRef and NodeSSH marked defaulted", defaulted)
@@ -145,9 +142,6 @@ func TestNormalizeDoesNotDefaultMachineSSHUser(t *testing.T) {
 
 	Normalize(&state)
 
-	// An omitted user is left empty so rendered artifacts are deterministic
-	// across operators; the connection layer falls back to the (root) user
-	// running ansible-playbook, matching the kickstart's root default.
 	if got := state.Machines[0].Spec.Access.SSH.User; got != "" {
 		t.Fatalf("omitted Machine SSH user = %q, want empty (not process-derived)", got)
 	}

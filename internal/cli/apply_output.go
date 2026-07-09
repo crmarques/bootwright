@@ -10,11 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/status"
 )
 
-// applyReporter drives the live apply progress surface. It owns a single
-// output.RunView fed from the run ledger (see applyRunFrame): the view redraws
-// the step list in place on a TTY and emits append-only transition lines
-// otherwise. The scheduler calls these methods from one goroutine, so the view
-// needs no locking.
 type applyReporter struct {
 	stdout      io.Writer
 	stderr      io.Writer
@@ -58,9 +53,6 @@ func (r *applyReporter) PromptGap() {
 	output.NewContinuation(r.stderr).BlankLine()
 }
 
-// printApplyRunStart writes the run-identity fields under the already-open
-// "Run" section (opened by the workflow reporter); it no longer opens its own
-// section, so the run shows a single "Run" heading.
 func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	fields := []output.Field{
@@ -115,12 +107,6 @@ func printApplyRunSummary(stdout io.Writer, runsDir string, clustersDir string, 
 	printApplyFailureDetails(stdout, runsDir, clustersDir, ledger)
 }
 
-// applyClusterLogFields points the operator at the on-disk logs, ordered by
-// topology. ansible output never reaches the terminal, so each cluster keeps a
-// concise bootwright-log pointer. The verbose OpenShift installer log is added
-// only for a container cluster that did not finish cleanly — that is the only
-// time its detail is wanted — so a green fleet is not buried under an installer
-// path for every healthy cluster.
 func applyClusterLogFields(runsDir string, clustersDir string, ledger workflow.RunLedger) []output.Field {
 	var fields []output.Field
 	for _, cluster := range orderClusterNames(ledger.ClusterNames(), nil) {
@@ -133,9 +119,6 @@ func applyClusterLogFields(runsDir string, clustersDir string, ledger workflow.R
 	return fields
 }
 
-// applyClusterFullyDone reports whether every task of a cluster reached a clean
-// terminal state (OK or skipped), so a green cluster's logs can be omitted from
-// a Summary that is otherwise drawing attention to the clusters needing work.
 func applyClusterFullyDone(tasks []workflow.TaskLedgerEntry) bool {
 	for _, task := range tasks {
 		switch task.Status {
@@ -159,9 +142,6 @@ func printApplyFailureDetails(stdout io.Writer, runsDir string, clustersDir stri
 		if task.LogPath != "" {
 			fields = append(fields, output.Field{Key: "task log", Value: task.LogPath})
 		}
-		// An install-wait failure's root cause is in the OpenShift installer log,
-		// not the ansible task log — point straight at it so the operator does not
-		// have to know the runtime path by heart.
 		if task.Kind == workflow.ApplyTaskKindInstallWait && task.ClusterKind == workflow.ApplyClusterKindContainer && task.Cluster != "" {
 			fields = append(fields, output.Field{Key: "installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)})
 		}

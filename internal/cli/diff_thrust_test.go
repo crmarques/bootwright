@@ -7,9 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// P20: a present root's summary must break out its out-of-sync resources by class so
-// a foreign-owned resource (resolve the foreign owner) is never reported as "drifted"
-// (re-apply) — the two need opposite remediations.
 func TestDiffRootSummarySplitsForeignFromDrift(t *testing.T) {
 	root := workflow.StateCheckRoot{
 		Kind:  "infrastructure",
@@ -32,7 +29,6 @@ func TestDiffRootSummarySplitsForeignFromDrift(t *testing.T) {
 	}
 }
 
-// A drift-only root must name only drift, not the empty foreign/never-applied classes.
 func TestDiffRootSummaryOmitsEmptyClasses(t *testing.T) {
 	root := workflow.StateCheckRoot{
 		Total: 4,
@@ -50,9 +46,6 @@ func TestDiffRootSummaryOmitsEmptyClasses(t *testing.T) {
 	}
 }
 
-// P19: diff must exit non-zero (3) when the selected state is out of sync, so
-// automation can gate on drift, while still printing the report. A never-applied
-// context is out of sync (every root absent).
 func TestDiffExitsThreeWhenOutOfSync(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 

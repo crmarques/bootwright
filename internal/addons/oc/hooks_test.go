@@ -13,8 +13,6 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 )
 
-// recordingHookRunner records lifecycle calls, sharing the oc runner's event log
-// so hook timing can be correlated with oc apply/get calls.
 type recordingHookRunner struct {
 	runner *sequencingRunner
 	calls  []string
@@ -28,9 +26,6 @@ func (h *recordingHookRunner) Run(_ context.Context, lifecycle string) error {
 	return nil
 }
 
-// TestApplyHookTriggersCSVGateWithoutCustomResources proves an olm add-on with a
-// postOperatorReady hook but zero customResources still waits for the operator's
-// CSV before running the hook, and that preApply runs before the operator install.
 func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")

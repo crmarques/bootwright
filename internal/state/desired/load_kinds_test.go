@@ -11,9 +11,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// Every authored kind must round-trip through Load: a kind added to State and
-// the accessor table but missing a loadFile decode case fails here instead of
-// silently dropping user YAML.
 func TestLoadCoversEveryAuthoredKind(t *testing.T) {
 	var docs []string
 	for _, acc := range v1alpha1.AuthoredKindAccessors() {

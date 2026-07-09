@@ -11,10 +11,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// The 010 fixture's three ceph nodes install through the same profile-owned
-// packageSource.mirror, which declares a BaseOS install tree plus an AppStream
-// repo. The check probes each unique base URL's repodata/repomd.xml once
-// (deduped across nodes) and verifies TLS by default.
 func TestPackageSourceReachabilityProbesRepoMetadata(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	var probed []string
@@ -48,8 +44,6 @@ func TestPackageSourceReachabilityProbesRepoMetadata(t *testing.T) {
 	}
 }
 
-// A server that answers but serves no yum metadata at the path means a wrong
-// install-tree URL — a definitive failure, not an ambiguous reachability blip.
 func TestPackageSourceReachabilityFailsOnHTTPError(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
@@ -67,9 +61,6 @@ func TestPackageSourceReachabilityFailsOnHTTPError(t *testing.T) {
 	}
 }
 
-// A controller that cannot reach the mirror may simply not share the install
-// network, so a transport error only warns — the install target is the
-// authoritative fetcher.
 func TestPackageSourceReachabilityWarnsOnTransportError(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
@@ -87,7 +78,6 @@ func TestPackageSourceReachabilityWarnsOnTransportError(t *testing.T) {
 	}
 }
 
-// DVD media carries its own packages, so it has no package source to probe.
 func TestPackageSourceReachabilitySkipsDVDMedia(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
@@ -100,8 +90,6 @@ func TestPackageSourceReachabilitySkipsDVDMedia(t *testing.T) {
 	}
 }
 
-// redhatCDN reachability hides behind entitlement auth and is covered by the
-// entitlement secret-material checks, so it is not probed here.
 func TestPackageSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
@@ -119,9 +107,6 @@ func TestPackageSourceReachabilitySkipsRedhatCDN(t *testing.T) {
 	}
 }
 
-// A baseURL carrying yum variables ($basearch/$releasever) is expanded by the
-// install target, not the controller, so probing the literal path would 404 a
-// source that installs fine — report it INFO without probing.
 func TestPackageSourceReachabilityYumVariableReportsInfo(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
@@ -140,7 +125,6 @@ func TestPackageSourceReachabilityYumVariableReportsInfo(t *testing.T) {
 	}
 }
 
-// The package source is only needed once the machines phase provisions the OS.
 func TestPackageSourceReachabilitySkippedOutsideMachinesPhase(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
@@ -153,8 +137,6 @@ func TestPackageSourceReachabilitySkippedOutsideMachinesPhase(t *testing.T) {
 	}
 }
 
-// CollectChecks must wire the package-source probe into the apply/preflight
-// host check alongside the installer-media check.
 func TestCollectChecksIncludesPackageSource(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	deps := Deps{

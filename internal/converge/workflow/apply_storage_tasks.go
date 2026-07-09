@@ -15,14 +15,6 @@ func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	return filtered
 }
 
-// storageClusterDesiredHashVars projects the desired state hashed for a
-// StorageCluster's convergence record: the cluster's own spec, topology, nodes,
-// and bound machines — but NOT its pools, filesystems, object gateways, NFS
-// exports, exports, or placement policies. Those sub-objects are classified
-// independently (each is its own object), so adding or changing one must never
-// flip the StorageCluster itself to drift. The task still carries the full State
-// for rendering and for the ceph operations loop; only the hash input is
-// projected, mirroring the fabric DesiredHashVars pattern.
 func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.State {
 	s := storageTaskState(state, name)
 	s.StoragePlacementPolicies = nil
@@ -34,24 +26,6 @@ func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.S
 	return s
 }
 
-// storageClusterStructuralHashVars projects the DESTRUCTIVE-IDENTITY subset of a
-// StorageCluster's desired state: the full desired-hash projection with the entire
-// host topology (the host set, per-host roles/site/labels, the OSD device
-// selection, and topology.osdDrivegroups) cleared. Everything cephadm reconciles in
-// place via `ceph orch host add` + `ceph orch apply` — scaling out a node, adding a
-// device, rebalancing a mon/mgr/mds daemon by editing host roles — keeps this hash
-// stable and classifies reconcilable, so apply proceeds in place and --override does
-// not wipe. Only a change to cluster/bootstrap IDENTITY (the bootstrap host, fsid
-// seed, cluster/public networks, cluster name, distribution) moves this hash and
-// stays a destructive rebuild.
-//
-// Making a host REMOVAL reconcilable here is safe because it is never a silent OSD
-// wipe: a host still in the inventory whose declared devices shrank is caught by the
-// device-removal gate (install.yml, "Refuse to drop an OSD device that still hosts an
-// OSD"), and a host dropped from the topology entirely leaves the inventory group so
-// bootwright never touches its OSDs — it lingers in the cluster until explicitly
-// drained. The topology is cleared on a JSON deep copy so the shared render state is
-// never mutated.
 func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha1.State {
 	base := storageClusterDesiredHashVars(state, name)
 	var clone v1alpha1.State
@@ -62,14 +36,6 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	if err := json.Unmarshal(data, &clone); err != nil {
 		return base
 	}
-	// Shared fabric (provider BMC defaults, artifact-server/proxy/registry infra
-	// components) is reconfigure-only and re-applied by its own task, so editing it
-	// must not flip a StorageCluster to a destructive rebuild. cephadm reaches the
-	// nodes over SSH, not the BMC, so none of it is cluster identity. The Environment
-	// (entitlements, secrets, proxy, base domain) and the Machine specs (hardware,
-	// BMC endpoint, network) are likewise fabric/reconfigure inputs — cephadm never
-	// re-bootstraps a running cluster because a node's BMC was re-IP'd or an
-	// unrelated Environment secret was added — so neither is Ceph-cluster identity.
 	clone.InfraProviders = nil
 	clone.InfraComponents = nil
 	clone.Environments = nil
@@ -82,16 +48,8 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		}
 		ceph.Topology.Hosts = nil
 		ceph.Topology.OSDDrivegroups = nil
-		// The management access (dashboard / mgmt-gateway HA VIP) and the cephadm
-		// service-spec passthrough are stateless daemons cephadm reconciles via
-		// `ceph orch apply` — enabling the mgmt-gateway or rebalancing a service is a
-		// day-2 reconfigure, not a cluster wipe — so they are not cluster identity.
 		ceph.Management = nil
 		ceph.Services = nil
-		// ceph config keys, mgr modules, and the monitoring stack are all applied in
-		// place by `ceph config set` / `ceph mgr module enable` / `ceph orch apply`
-		// on a running cluster — a retention-time or config-key edit is a day-2
-		// reconfigure, never a re-bootstrap, so they are not cluster identity either.
 		ceph.Config = nil
 		ceph.MgrModules = nil
 		ceph.Monitoring = nil
@@ -99,25 +57,6 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	return clone
 }
 
-// managedMachineOSStructuralHashVars projects the DESTRUCTIVE-IDENTITY (disk-wipe
-// reinstall) subset of a storage cluster's managed-OS install intent. The
-// managedMachineOS task otherwise hashes the whole storage-filtered State, so ANY
-// edit to the cluster — a pool size change, an OSD-device add, a machine's BMC
-// endpoint — flipped the install object to structural drift and apply refused it
-// as "would wipe the machine disks", even though none of those touch the installed
-// OS. This projection clears exactly the fields the on-host install marker
-// (machineOSInstallMarkerVars, which hashes only osInstall) ALSO excludes, so the
-// Go classification and the Ansible probe agree: a change to one of them is
-// reconcilable in place (the install is skipped, the storage/day-2 task applies the
-// edit), never a reinstall. It deliberately does NOT touch the marker hash itself —
-// re-hashing it would false-drift every already-installed host on upgrade.
-//
-// Cleared (not OS-install identity, absent from the marker): the storage
-// sub-objects (pools/filesystems/gateways/NFS/exports/placement, each classified
-// independently), the OSD device selection, and each machine's substrate (the
-// BMC/Redfish endpoint, which is how bootwright reaches the host, applied each boot,
-// not baked into the OS). Kept structural (present in the marker, a real reinstall
-// trigger): the machine OS spec, hardware/disk layout, network, and access.
 func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alpha1.State {
 	base := storageClusterDesiredHashVars(state, name)
 	var clone v1alpha1.State
@@ -128,9 +67,6 @@ func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alp
 	if err := json.Unmarshal(data, &clone); err != nil {
 		return base
 	}
-	// Provider BMC defaults and infra components are how bootwright reaches the host,
-	// not part of the installed OS, so a fabric edit is not a reinstall (mirrors the
-	// per-machine substrate clear below).
 	clone.InfraProviders = nil
 	clone.InfraComponents = nil
 	for i := range clone.StorageClusters {

@@ -14,9 +14,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// Machine provisioning states surfaced by `machine list`. A Machine that
-// carries an externally provided OS (os.provided: true) is never provisioned by
-// Bootwright, so it is neither provisioned nor pending — it reports "external".
 const (
 	machineStateProvisioned    = "provisioned"
 	machineStateNotProvisioned = "not-provisioned"
@@ -29,9 +26,7 @@ type machineListReport struct {
 }
 
 type machineListEntry struct {
-	Name string `json:"name"`
-	// State is one of machineStateProvisioned, machineStateNotProvisioned, or
-	// machineStateExternal; Provisioned is the boolean projection for scripts.
+	Name        string `json:"name"`
 	State       string `json:"state"`
 	Provisioned bool   `json:"provisioned"`
 	OS          string `json:"os,omitempty"`
@@ -94,10 +89,6 @@ func newMachineListCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-// resolveMachineClusterFilter turns the --clusters value into the set of cluster
-// names to keep, or nil when the flag is unset (keep every Machine). A name that
-// matches neither a ContainerCluster nor a StorageCluster is rejected, so a typo
-// fails loudly instead of silently listing nothing.
 func resolveMachineClusterFilter(state v1alpha1.State, clusters string) (map[string]bool, error) {
 	if strings.TrimSpace(clusters) == "" {
 		return nil, nil
@@ -135,10 +126,6 @@ func resolveMachineClusterFilter(state v1alpha1.State, clusters string) (map[str
 	return requested, nil
 }
 
-// buildMachineList projects the desired-state Machines onto their display rows,
-// deriving provisioning status from the context's ownership records (a Machine
-// is provisioned when any recorded resource stamps its name). filter, when
-// non-nil, keeps only Machines bound to one of its clusters.
 func buildMachineList(state v1alpha1.State, records []ownership.ResourceRecord, filter map[string]bool) []machineListEntry {
 	provisioned := provisionedMachineNames(records)
 	entries := make([]machineListEntry, 0, len(state.Machines))
@@ -154,7 +141,6 @@ func buildMachineList(state v1alpha1.State, records []ownership.ResourceRecord, 
 			SSHAddress: v1alpha1.MachineSSHAddress(machine),
 		}
 		if machine.Spec.Access.SSH != nil {
-			// The effective login user `machine ssh` would use, so the two agree.
 			entry.SSHUser = machineSSHUser(machine)
 		}
 		if bound {
@@ -177,10 +163,6 @@ func buildMachineList(state v1alpha1.State, records []ownership.ResourceRecord, 
 	return entries
 }
 
-// provisionedMachineNames collects the Machine names any ownership record refers
-// to. The Ansible ownership_record role stamps the backing Machine on every
-// substrate/OS resource it provisions, so a record's presence is Bootwright's
-// record that the Machine was provisioned in this context.
 func provisionedMachineNames(records []ownership.ResourceRecord) map[string]bool {
 	out := map[string]bool{}
 	for _, record := range records {
@@ -191,9 +173,6 @@ func provisionedMachineNames(records []ownership.ResourceRecord) map[string]bool
 	return out
 }
 
-// machineOSDescriptor renders the OS a Machine runs: "provided" for an
-// externally supplied OS, else the install profile's family/version/arch, else
-// empty when neither is declared.
 func machineOSDescriptor(state v1alpha1.State, machine v1alpha1.Machine) string {
 	if v1alpha1.MachineOSProvided(machine) {
 		return "provided"
@@ -217,9 +196,6 @@ func machineOSDescriptor(state v1alpha1.State, machine v1alpha1.Machine) string 
 	return desc
 }
 
-// machineSubstrateType names the provisioner a Machine's substrate provider
-// declares (baremetal/libvirt/kubevirt/vsphere). An externally provided OS has
-// no Bootwright-provisioned substrate, so it renders empty.
 func machineSubstrateType(state v1alpha1.State, machine v1alpha1.Machine) string {
 	if v1alpha1.MachineOSProvided(machine) {
 		return ""

@@ -21,10 +21,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// runHookPlaybook resolves the hook's target machines, materializes only the
-// scoped secrets (the target machines' SSH material into a connection dir, the
-// declared secretRefs into the playbook-visible dir), runs the add-on's shipped
-// playbook, and captures the declared outputs. Returns output name -> value.
 func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.ClusterAddonHook, hookRoot string) (map[string]string, error) {
 	machines, err := e.resolveHookTargetMachines(hook)
 	if err != nil {
@@ -117,8 +113,6 @@ func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.Cl
 			UseControllingTTY:  e.opts.UseControllingTTY,
 		}
 	}
-	// all: one run against every resolved host. firstReachable: try each host in
-	// order until one run succeeds (the exporter admin-node pattern).
 	if v1alpha1.ClusterAddonHookTargetLimit(hook) == v1alpha1.ClusterAddonHookTargetLimitAll {
 		return e.runOneHookAnsible(ctx, runner, newSpec("", 0), timeout)
 	}
@@ -149,9 +143,6 @@ func (e *addonHookExecutor) runOneHookAnsible(ctx context.Context, runner ansibl
 	return nil
 }
 
-// captureHookOutputs reads each declared output file, validates its format, and
-// persists it (secret 0600 under secrets/, non-secret under runtime/). It
-// returns the captured values for manifest token resolution.
 func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, outputsDir string) (map[string]string, error) {
 	values := map[string]string{}
 	for _, output := range hook.Outputs {
@@ -175,12 +166,6 @@ func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, o
 	return values, nil
 }
 
-// resolveExportDetailsToken loads the operator-supplied external-cluster-details
-// payload for the StorageExport a fromInput property references (its
-// externalDetails.fromSecretRef secret). Exports without operator-supplied
-// details are produced by the add-on itself — a hook running the exporter on a
-// Ceph node captures the payload as an output and consumes it via
-// {{ output <name> }} instead.
 func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error) {
 	input, property, ok := hooks.SplitInputProperty(arg)
 	if !ok {
@@ -217,9 +202,6 @@ func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error
 	return string(data), nil
 }
 
-// resolveHookRefs builds bootwright_hook_refs: for each accepted input property
-// that names a refKind object and has a binding value, the resolved object keyed
-// by property name, so a playbook can read e.g. exportRef.spec.dataFoundation.
 func (e *addonHookExecutor) resolveHookRefs() map[string]any {
 	refs := map[string]any{}
 	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
@@ -314,8 +296,6 @@ func writeHookInventory(path string, targets []hookSSHTarget) error {
 	return writeWorkflowYAML(path, inventory, 0o600)
 }
 
-// hookSSHTarget is one resolved hook target machine, flattened to the SSH
-// connection facts the ad-hoc inventory needs.
 type hookSSHTarget struct {
 	label          string
 	inventoryName  string

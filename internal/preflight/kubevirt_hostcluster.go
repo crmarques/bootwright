@@ -13,16 +13,6 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
 		return nil
 	}
-	// A KubeVirt host cluster that is itself a ContainerCluster this run installs
-	// has its kubeconfig produced during the run: the apply scheduler orders the
-	// host cluster's install ahead of the dependent child clusters' node boot via
-	// the clusterInstalled capability (see workflow.kubeVirtHostClusterReadiness),
-	// so a missing kubeconfig is expected, not a gate. Mirror that scheduler
-	// signal — the host is a ContainerCluster present in the scoped plan state,
-	// with the kubeconfig-producing base phase in scope — and report INFO instead
-	// of FAIL. A host that is external/pre-existing (not a ContainerCluster in the
-	// plan state) or a run that does not install it (base out of scope) stays
-	// gated: its kubeconfig must already be on disk.
 	provisionedThisRun := map[string]bool{}
 	if phaseInScope("base", selected, true) {
 		for _, cluster := range state.ContainerClusters {
@@ -56,12 +46,6 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			usable["host:"+name] = path
 		}
 	}
-	// Providers that point at an external hub via kubeconfigRef (rather than a
-	// greenfield hostClusterRef this run installs) have their kubeconfig on disk
-	// before the run, so the live API/CRD probe is runnable at preflight. A
-	// missing or malformed file is already reported by the secret-material
-	// checks, so skip the probe when the file is absent to avoid a duplicate
-	// FAIL; when it is present, gate the KubeVirt API the same as the host arm.
 	idx := secret.NewIndex(state)
 	for _, p := range state.InfraProviders {
 		k := p.Spec.KubeVirt
@@ -69,7 +53,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			continue
 		}
 		if k.HostClusterRef != nil && k.HostClusterRef.Name != "" {
-			continue // handled by the hostClusterRef arm above
+			continue
 		}
 		refName := k.KubeconfigRef.Name
 		if seen["kc:"+refName] {
@@ -85,9 +69,6 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 		checks = append(checks, kubeVirtAPIReadyCheck(refName, path, deps))
 		usable["kc:"+refName] = path
 	}
-	// Per provider (networkAttachments are provider-scoped, even when several
-	// providers share one host cluster), verify the referenced network resolves
-	// on the host cluster whose kubeconfig is usable.
 	for _, p := range state.InfraProviders {
 		k := p.Spec.KubeVirt
 		if k == nil {
@@ -112,11 +93,6 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 }
 
 func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
-	// Read the kubeconfig directly before shelling out. The probe runs as local
-	// root (like CommandOutputLocalRoot), so an os.Open failure is an unambiguous
-	// unreadable/missing kubeconfig we can classify here — keeping a genuine
-	// EACCES out of the "KubeVirt not ready → re-apply" bucket even when a given
-	// kubectl build words the error in a way kubeconfigUnreadable does not match.
 	f, ferr := os.Open(kubeconfigPath)
 	if ferr != nil {
 		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", ferr.Error(), "KubeVirt child clusters need a readable host cluster kubeconfig", "ensure "+kubeconfigPath+" is a readable, valid kubeconfig (bootwright manages it under the root-owned workspace)")
@@ -139,11 +115,6 @@ func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
 	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "virtualmachines.kubevirt.io")
 }
 
-// kubeconfigUnreadable reports whether a kubectl failure is the host cluster
-// kubeconfig being unloadable (unreadable or malformed) rather than the cluster
-// being unreachable or KubeVirt not installed. The two failure classes want
-// different remediations, so an EACCES is never reported as "KubeVirt not ready"
-// or "create the network".
 func kubeconfigUnreadable(evidence string) bool {
 	return strings.Contains(evidence, "error loading config file") ||
 		strings.Contains(evidence, "permission denied")

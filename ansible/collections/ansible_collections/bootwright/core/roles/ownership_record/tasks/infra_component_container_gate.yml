@@ -1,16 +1,4 @@
 ---
-# Apply-mode gate for a container-backed infra-component. Ownership is read from the
-# LIVE container's Bootwright provenance labels, not from a per-context ownership
-# record on disk: the bastion runs a single global podman store shared by every
-# Bootwright context, while each context keeps its own per-context ownership/ dir, so
-# stat-ing a per-context record misreports a shared container created by another
-# context as foreign. The container's own bootwright.provider/bootwright.name labels
-# are context-independent proof Bootwright created it, so a label-probe match is the
-# ownership oracle. A same-named container WITHOUT those labels (a genuine foreign
-# squatter) is detected by an optional name probe and still refused. Safe before the
-# component is created: a missing podman binary or no matching container both read as
-# "does not exist". Callers pass bootwright_gate_container_name to enable the
-# foreign-squatter probe; an empty value degrades to label-probe-only.
 - name: "Probe Bootwright-owned container for {{ bootwright_component.name }}"
   ansible.builtin.command:
     argv:

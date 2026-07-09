@@ -3,9 +3,6 @@ kind: Machine
 metadata:
   name: bastion
 spec:
-  # An existing host (provided OS) that runs the artifact server which serves the
-  # RHEL install ISO to the BMCs over Redfish virtual media. It needs a container
-  # runtime (podman) and HTTPS reachability from the BMCs.
   capabilities:
     - container-runtime
 
@@ -13,11 +10,8 @@ spec:
     provided: true
 
   addresses:
-    # How Bootwright reaches the bastion over SSH (operator workstation -> bastion).
     - name: ssh
       address: bastion.example.com
-    # The bastion's address on the machine network; the BMCs fetch install media
-    # from here (the artifact-server `bmc` endpoint binds to it).
     - name: lan
       address: 10.20.30.10
 

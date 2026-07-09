@@ -11,11 +11,6 @@
     bootwright_os_fetch_url: "{{ bootwright_component.boot.agentIso.fetchUrl | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
   changed_when: false
 
-# Every machine in an OS group installs from the same source ISO; only the
-# per-machine Kickstart differs. The renderer owns the shared-source identity
-# (image.sourceId) and the effective source path (image.effectiveSourcePath):
-# the staged shared-source ISO under _source/, or the in-place media when the
-# install runs where the source already lives (controller-local sourceOnTarget).
 - name: Resolve managed OS shared source root
   ansible.builtin.set_fact:
     bootwright_os_source_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_os_group.name }}/_source"

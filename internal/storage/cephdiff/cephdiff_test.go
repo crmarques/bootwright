@@ -38,7 +38,6 @@ func TestOSDDevicesFacet(t *testing.T) {
 	})
 	report := Compare(state, cluster, disc)
 
-	// srv1 pins /dev/sdb,/dev/sdc but the cluster grew an OSD on sdd -> drift.
 	osd := facet(report, "osd-devices")
 	srv1, ok := objByKey(osd, "srv1")
 	if !ok || srv1.State != ObjectChanged {
@@ -48,7 +47,6 @@ func TestOSDDevicesFacet(t *testing.T) {
 	if !ok || devs.Desired != "sdb sdc" || devs.Real != "sdb sdc sdd" {
 		t.Fatalf("srv1 devices diff wrong: %+v", devs)
 	}
-	// srv2 selects with all:true -> reconstruction advisory, never facet drift.
 	if _, ok := objByKey(osd, "srv2"); ok {
 		t.Fatal("filter/all host must not appear as osd-devices drift")
 	}
@@ -73,8 +71,6 @@ func TestOSDDevicesFacetInSyncAndStablePaths(t *testing.T) {
 		]`,
 	})
 	report := Compare(state, cluster, disc)
-	// srv1 matches its pin; srv2 pins a stable /dev/disk/by-id alias (already
-	// reconstruction-faithful) so its kernel-name real device is not compared.
 	if osd := facet(report, "osd-devices"); osd != nil {
 		t.Fatalf("expected no osd-devices drift, got %+v", osd)
 	}
@@ -108,7 +104,6 @@ func discovery(t *testing.T, probed bool, reads map[string]string) cephstate.Dis
 	return cephstate.Discovery{Cluster: "ceph-prod", Probed: probed, Reads: m}
 }
 
-// facet returns the named facet's objects, or nil.
 func facet(r Report, name string) []ObjectDiff {
 	for _, f := range r.Facets {
 		if f.Name == name {
@@ -145,7 +140,6 @@ func TestPoolsFacet(t *testing.T) {
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph-prod"},
 				Ceph:              v1alpha1.StoragePoolCephSpec{Type: "replicated", Role: "rbd", Replicated: v1alpha1.StorageCephPoolReplicas{Size: 3, MinSize: 2}},
 			}},
-			// Declared but not on the cluster -> desired-only.
 			{Metadata: v1alpha1.Metadata{Name: "backups"}, Spec: v1alpha1.StoragePoolSpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph-prod"},
 				Ceph:              v1alpha1.StoragePoolCephSpec{Type: "replicated", Role: "rbd", Replicated: v1alpha1.StorageCephPoolReplicas{Size: 3, MinSize: 2}},
@@ -168,7 +162,6 @@ func TestPoolsFacet(t *testing.T) {
 		t.Fatal("expected a pools facet")
 	}
 
-	// rbd: size drifted 3 -> 2.
 	rbd, ok := objByKey(pools, "rbd")
 	if !ok || rbd.State != ObjectChanged {
 		t.Fatalf("rbd should be changed, got %+v", rbd)
@@ -178,20 +171,15 @@ func TestPoolsFacet(t *testing.T) {
 		t.Fatalf("rbd size diff wrong: %+v", size)
 	}
 
-	// backups: declared, not on cluster.
 	if b, ok := objByKey(pools, "backups"); !ok || b.State != ObjectDesiredOnly {
 		t.Fatalf("backups should be desired-only, got %+v ok=%v", b, ok)
 	}
-	// extra: on cluster, not declared.
 	if e, ok := objByKey(pools, "extra"); !ok || e.State != ObjectRealOnly {
 		t.Fatalf("extra should be real-only, got %+v ok=%v", e, ok)
 	}
-	// .mgr internal pool is filtered from real-only.
 	if _, ok := objByKey(pools, ".mgr"); ok {
 		t.Fatal(".mgr internal pool should be filtered from the diff")
 	}
-	// RGW auto-creates .rgw.root and the per-zone <zone>.rgw.* pools; neither is
-	// authored, so both must be filtered from real-only (not adopt candidates).
 	if _, ok := objByKey(pools, ".rgw.root"); ok {
 		t.Fatal(".rgw.root RGW pool should be filtered from the diff")
 	}
@@ -211,7 +199,6 @@ func TestHostsFacet(t *testing.T) {
 	})
 	report := Compare(state, cluster, disc)
 	hosts := facet(report, "hosts")
-	// srv1 gained _admin on the cluster; srv2 matches (no diff).
 	srv1, ok := objByKey(hosts, "srv1")
 	if !ok || srv1.State != ObjectChanged {
 		t.Fatalf("srv1 should be changed, got %+v", srv1)
@@ -232,12 +219,9 @@ func TestConfigAndMgrFacets(t *testing.T) {
 	})
 	report := Compare(state, cluster, disc)
 
-	// public_network matches -> no config facet.
 	if facet(report, "config") != nil {
 		t.Fatalf("config should match, got %+v", facet(report, "config"))
 	}
-	// rgw module declared but not enabled -> desired-only; dashboard matches;
-	// balancer is real-only but ignored for mgr modules.
 	mods := facet(report, "mgr-modules")
 	if m, ok := objByKey(mods, "rgw"); !ok || m.State != ObjectDesiredOnly {
 		t.Fatalf("rgw module should be desired-only, got %+v ok=%v", m, ok)
@@ -269,8 +253,6 @@ func TestCrushRulesFacet(t *testing.T) {
 	})
 	report := Compare(state, cluster, disc)
 	rules := facet(report, "crush-rules")
-	// rack-rule declared failure-domain rack, live host -> changed. replicated_rule
-	// is real-only and ignored.
 	rr, ok := objByKey(rules, "rack-rule")
 	if !ok || rr.State != ObjectChanged {
 		t.Fatalf("rack-rule should be changed, got %+v ok=%v", rr, ok)
@@ -305,21 +287,15 @@ func TestServicesFacet(t *testing.T) {
 	})
 	report := Compare(state, cluster, disc)
 	services := facet(report, "services")
-	// mgr is declared (srv1 has mgr role) but not on the cluster -> desired-only.
 	if m, ok := objByKey(services, "mgr"); !ok || m.State != ObjectDesiredOnly {
 		t.Fatalf("mgr service should be desired-only, got %+v ok=%v", m, ok)
 	}
-	// osd.data-srv2 declared (srv2 has osd role) but no live service -> desired-only.
 	if s, ok := objByKey(services, "osd.data-srv2"); !ok || s.State != ObjectDesiredOnly {
 		t.Fatalf("osd.data-srv2 should be desired-only, got %+v ok=%v", s, ok)
 	}
-	// mon exists on both with matching placement -> no diff.
 	if _, ok := objByKey(services, "mon"); ok {
 		t.Fatal("mon placement matches; it must not appear")
 	}
-	// cephadm infra services (crash, monitoring stack, mgmt-gateway, ingress) are
-	// deployed by cephadm/management, not modeled by desiredServices, so a live
-	// instance must be filtered from real-only rather than reported as drift.
 	for _, infra := range []string{"crash", "prometheus", "grafana", "mgmt-gateway", "ingress.rgw.store"} {
 		if _, ok := objByKey(services, infra); ok {
 			t.Fatalf("infra service %q must be filtered from real-only drift", infra)
@@ -327,9 +303,6 @@ func TestServicesFacet(t *testing.T) {
 	}
 }
 
-// TestServicesPassthroughRendered checks a spec.ceph.services passthrough entry
-// is rendered on the desired side (named <type> or <type>.<id>) so an applied
-// passthrough service reads in-sync rather than as real-only drift.
 func TestServicesPassthroughRendered(t *testing.T) {
 	cluster := managedCluster()
 	cluster.Spec.Ceph.Services = []v1alpha1.StorageCephService{
@@ -341,26 +314,20 @@ func TestServicesPassthroughRendered(t *testing.T) {
 		cephstate.ReadOrchLS: `[
 			{"service_type":"snmp-gateway","service_name":"snmp-gateway"}
 		]`,
-		// No placement authored -> resolves to every topology host (srv1, srv2).
 		cephstate.ReadOrchPS: `[
 			{"daemon_type":"snmp-gateway","service_name":"snmp-gateway","hostname":"srv1"},
 			{"daemon_type":"snmp-gateway","service_name":"snmp-gateway","hostname":"srv2"}
 		]`,
 	})
 	services := facet(Compare(state, cluster, disc), "services")
-	// snmp-gateway is declared and live -> in sync, must not appear.
 	if _, ok := objByKey(services, "snmp-gateway"); ok {
 		t.Fatal("applied passthrough snmp-gateway must not read as drift")
 	}
-	// nvmeof.rbd is declared but not live -> desired-only (proves <type>.<id> naming).
 	if s, ok := objByKey(services, "nvmeof.rbd"); !ok || s.State != ObjectDesiredOnly {
 		t.Fatalf("nvmeof.rbd passthrough should be desired-only, got %+v ok=%v", s, ok)
 	}
 }
 
-// TestDesiredHostsNaming covers desiredHosts' dual naming path: a host with an
-// explicit Hostname uses it verbatim, while a host with an empty Hostname falls
-// back to its machine name via CanonicalHostname.
 func TestDesiredHostsNaming(t *testing.T) {
 	cluster := osdCluster([]v1alpha1.StorageCephHost{
 		{Hostname: "named-host", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}, Roles: []string{"mon"}},
@@ -388,14 +355,11 @@ func TestHealthFacet(t *testing.T) {
 		t.Fatal("HEALTH_OK must not produce a health diff")
 	}
 
-	// A transient HEALTH_WARN is tolerated, matching state-check --probe's
-	// storageHealthDegraded gate (only HEALTH_ERR is degraded).
 	warn := discovery(t, true, map[string]string{cephstate.ReadHealth: `{"status":"HEALTH_WARN","checks":{}}`})
 	if facet(Compare(state, cluster, warn), "health") != nil {
 		t.Fatal("HEALTH_WARN must not surface as drift (matches state-check --probe tolerance)")
 	}
 
-	// HEALTH_ERR is real drift and must surface.
 	bad := discovery(t, true, map[string]string{cephstate.ReadHealth: `{"status":"HEALTH_ERR","checks":{}}`})
 	h := facet(Compare(state, cluster, bad), "health")
 	if o, ok := objByKey(h, "cluster"); !ok || o.State != ObjectChanged {

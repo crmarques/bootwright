@@ -1,6 +1,2 @@
 ---
-# Per-component identity for one HAProxy capability. The container name is a default
-# (not an inline literal) so the apply-mode gate can pass it as
-# bootwright_gate_container_name for the foreign-squatter probe, and the create,
-# ownership-record, and destroy paths all reference one var.
 bootwright_haproxy_container_name: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"

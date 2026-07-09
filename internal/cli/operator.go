@@ -21,10 +21,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// controllerBootstrapPlan builds the CLI's bootstrap plan with the
-// CLI's path helpers. Pure logic lives in internal/converge/bastion; this is a
-// thin adapter so the CLI doesn't have to know venv layout when
-// computing or running the plan.
 func controllerBootstrapPlan(preserveProxyEnv bool, pyvmomiPin string) ([]bastion.BootstrapStep, error) {
 	return bastion.BootstrapPlanWith(controllerBootstrapProcessDeps(), workspace.AnsibleVenvDir(), workspace.AnsibleVenvBin, preserveProxyEnv, true, pyvmomiPin)
 }
@@ -156,9 +152,6 @@ func refreshBootstrapSudo(ctx context.Context, stderr io.Writer, env []string, p
 	})
 }
 
-// planControllerCLIInstall is the CLI-side wrapper that supplies the
-// venv-bin resolver and the sudo-safe bundle dir shown in dry-run output.
-// bastion.PlanCLIInstall is the pure planner.
 func planControllerCLIInstall(state v1alpha1.State, installDir string) *bastion.CLIInstallSpec {
 	return bastion.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), workspace.AnsibleVenvBin)
 }

@@ -28,12 +28,6 @@
     bootwright_virtctl_lookup_path: "{{ bootwright_virtctl_install_dir }}:{{ ansible_facts.env.PATH }}"
   changed_when: false
 
-# observedKubeVirtVersion on the KubeVirt CR is the operator image's version
-# tag, which is a digest (sha256:...) whenever the image is digest-pinned, as it
-# always is in OpenShift Virtualization. A digest cannot drive a version match
-# against virtctl's GitVersion nor a mirror URL. Query the subresource
-# apiserver's version endpoint instead: it returns the real KubeVirt semver, the
-# same GitVersion that `virtctl version` reports as the Server Version.
 - name: Read KubeVirt server version from the host cluster
   ansible.builtin.command:
     argv:
@@ -75,9 +69,6 @@
       {{ bootwright_virtctl_installed_probe.rc != 0
          or bootwright_virtctl_installed_client_version != bootwright_virtctl_server_version }}
   vars:
-    # Extract the client GitVersion token rather than substring-matching the
-    # whole `virtctl version --client` line: a substring check makes server
-    # v1.2.1 spuriously match an installed v1.2.10 (and vice versa).
     bootwright_virtctl_installed_client_version: >-
       {{ bootwright_virtctl_installed_probe.stdout | default('')
          | regex_search('GitVersion:"?(v[0-9][^",}\s]*)', '\1') | default('', true) }}
@@ -127,12 +118,6 @@
   register: bootwright_virtctl_tmp
   when: bootwright_virtctl_install | bool
 
-# The ConsoleCLIDownload route is served by the host cluster's default ingress
-# router, whose wildcard cert is signed by the cluster ingress CA and is not in
-# the controller trust store. We already hold the host kubeconfig, so verify the
-# download against that cluster's published ingress CA rather than skipping TLS.
-# The mirror path points at an arbitrary (internally trusted) host, so it does
-# not use the ingress CA.
 - name: Read host cluster ingress CA bundle
   ansible.builtin.command:
     argv:
@@ -178,12 +163,6 @@
     url: "{{ bootwright_virtctl_download_url }}"
     dest: "{{ bootwright_virtctl_tmp.path }}/virtctl.tar.gz"
     mode: "0644"
-  # get_url has no CA-file parameter, but its SSL context loads the system trust
-  # plus whatever SSL_CERT_FILE points at. On the ConsoleCLIDownload path that
-  # points verification at the host cluster ingress CA written above; the mirror
-  # path leaves it unset and verifies against the controller trust store. We
-  # rebuild the env explicitly (proxy env + SSL_CERT_FILE) rather than rely on
-  # play/task environment merge semantics.
   environment: >-
     {{ (bootwright_proxy_env | default({}))
        | combine({'SSL_CERT_FILE': bootwright_virtctl_tmp.path ~ '/ingress-ca.crt'})

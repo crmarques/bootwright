@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// EvaluateDestroySafety requires --override when a protected kind is present in the
-// (scope-filtered) teardown, even when the fleet default is allow — but a protected
-// kind absent from the scope does not gate, so destroying a scratch cluster stays
-// friction-free.
 func TestEvaluateDestroySafetyProtectedKinds(t *testing.T) {
 	protectStorage := v1alpha1.State{Environments: []v1alpha1.Environment{{
 		Metadata: v1alpha1.Metadata{Name: "nprd"},

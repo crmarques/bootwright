@@ -4,42 +4,23 @@ metadata:
   name: ceph-ibm
 spec:
   type: ceph
-  # Bootwright installs and owns this cluster via cephadm (vs. imported/external).
 
   management: managed
 
   ceph:
-    # IBM Storage Ceph: images from cp.icr.io/cp, RPMs from IBM's vendor repo,
-    # RHEL repos via RHSM. All credentials come from the Environment entitlement.
     distribution: ibm
 
-    # release selects the IBM Storage Ceph product stream. "9" is the latest
-    # available stream (https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph
-    # publishes ibm-storage-ceph-9-rhel-9.repo as the newest). It is also the
-    # default, but pin it explicitly. With image left unset, cephadm pulls the
-    # latest 9.x image from cp.icr.io at bootstrap.
     release: "9"
-    # To freeze an exact, reproducible version instead of tracking latest 9.x,
-    # pin a digest (a mutable :latest tag is rejected by validation), e.g.:
-    # image: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:<digest>
 
     entitlementRef: ibm-storage-ceph
 
-    # Install and run this cluster in FIPS mode. This is a cluster-level intent
-    # gate, not a separate cephadm switch: Ceph runs FIPS by running on
-    # FIPS-installed RHEL nodes. Bootwright validates that the distribution is
-    # FIPS-validated (redhat/ibm — community oss images are not) and that every
-    # node's install profile (infra/os/rhel-9-ceph-node.yaml) also sets
-    # customizations.security.fips.enabled, where the fips=1 install lives.
     security:
       fips:
         enabled: true
 
     cephadm:
-      # Reach every node over its "ssh" address with the ceph-node-ssh key.
       addressRef: ssh
       bootstrap:
-        # Bootstrap the first monitor on ceph-1.
         host: ceph-1
 
     networks:
@@ -48,46 +29,19 @@ spec:
       clusterCIDRs:
         - 192.168.140.0/24
 
-    # ----------------------------------------------------------------------
-    # Native HA access to the manager UI (IBM Storage Ceph mgmt-gateway pattern).
-    # cephadm renders a `mgmt-gateway` that reverse-proxies the Ceph Dashboard
-    # (and, through the same gateway, the Grafana/Prometheus/Alertmanager UIs)
-    # plus an `ingress` in keepalive_only mode that floats a dedicated VIP in
-    # front of it. This is the supported HA path for the manager interface — a
-    # separate service and VIP from the RGW data-path ingress (object-gateways/
-    # rgw.yaml), which fronts RGW daemons with HAProxy instead.
-    # ----------------------------------------------------------------------
     management:
-      # Published by the lab dnsmasq at the VIP below; `bootwright cluster
-      # access` reports the dashboard at
-      # https://dashboard.ceph.bootwright.test:8443 (8443 is the default port).
       dnsName: dashboard.ceph.bootwright.test
-      # enableAuth is left unset (cephadm default: off) so the lab reaches the
-      # dashboard directly through the VIP without an external IdP/SSO.
       ingress:
         name: lab
-        # A dedicated VIP, distinct from the RGW ingress (.80), on the lab net.
         address: 192.168.140.81
         prefixLength: 24
         virtualInterfaceNetworks:
           - 192.168.140.0/24
-        # The mgmt-gateway and its keepalived VIP run on the two full nodes
-        # (which carry the `ingress` role); ceph-3 is the mon-only tie-breaker.
         placement:
           hosts:
             - ceph-1
             - ceph-2
 
-    # ----------------------------------------------------------------------
-    # 3-node topology, NOT stretch mode.
-    #   ceph-1, ceph-2: all services + OSDs (block, file, object capable)
-    #   ceph-3:         monitor only -> quorum tie-breaker (3 mons total)
-    #
-    # NOTE: true Ceph "stretch" mode in Bootwright requires exactly two data
-    # sites with two mon nodes each (5 nodes incl. the arbiter). A 3-node lab
-    # cannot satisfy that, so this uses a flat single-site topology where the
-    # third node simply runs the tie-breaking monitor. See README for details.
-    # ----------------------------------------------------------------------
     topology:
       hosts:
         - machineRef: ceph-1
@@ -118,6 +72,5 @@ spec:
             - /dev/vdd
         - machineRef: ceph-3
           site: lab
-          # Tie-breaker: monitor only, no OSD devices.
           roles:
             - mon

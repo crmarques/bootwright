@@ -14,9 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// preflightHTTPProbeTimeout bounds every preflight endpoint probe (vCenter
-// session login, install-source reachability) so an unresponsive endpoint fails
-// the check instead of hanging the run.
 const preflightHTTPProbeTimeout = 15 * time.Second
 
 func stateNeedsVSphere(state v1alpha1.State) bool {
@@ -33,9 +30,6 @@ func stateNeedsVSphere(state v1alpha1.State) bool {
 	return false
 }
 
-// vspherePyvmomiCheck verifies the managed Ansible venv python can import
-// pyVmomi — the community.vmware modules that create vSphere machines run
-// on the controller through that interpreter.
 func vspherePyvmomiCheck(deps Deps) Check {
 	name := "pyvmomi (vCenter SDK)"
 	venvPython := filepath.Join(workspace.AnsibleVenvDir(), "bin", "python")
@@ -50,10 +44,6 @@ func vspherePyvmomiCheck(deps Deps) Check {
 	return okCheck(checkGroupInstallerTools, name, venvPython+" imports pyVmomi")
 }
 
-// vsphereVCenterChecks probes every declared vCenter with a REST session
-// login using the resolved credentials, so unreachable endpoints and bad
-// credentials surface before apply instead of mid-convergence. Missing
-// credential material is left to the secret-material checks.
 func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, secretsDir string, deps Deps) []Check {
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) || !stateNeedsVSphere(state) {
 		return nil
@@ -66,10 +56,6 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, s
 			continue
 		}
 		for _, vc := range p.Spec.VSphere.VCenters {
-			// Dedupe on the full connection identity — a second provider that
-			// declares the same server with different credentials (or a different
-			// port) is a distinct session to probe, so a bad second credential
-			// still surfaces at preflight rather than mid-convergence.
 			key := fmt.Sprintf("%s|%d|%s", vc.Server, vc.Port, vc.CredentialsRef.Name)
 			if vc.Server == "" || seen[key] {
 				continue
@@ -93,13 +79,8 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, s
 
 func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, resolver secret.Resolver, deps Deps) Check {
 	name := vc.Server + " vCenter session"
-	// The resolver decrypts context-store material (generated credentials
-	// live there) and reads file-sourced material in place — the same path
-	// the install-config secret loading uses.
 	creds, err := resolver.ReadUserPasswordMaterial(vc.CredentialsRef.Name, secret.MaterialPrimary, "vCenter credentials")
 	if err != nil {
-		// The secret-material checks already fail loudly on missing or
-		// malformed material; warn that the live probe could not run.
 		return Check{
 			Group:    checkGroupInstallerTools,
 			Name:     name,
@@ -134,9 +115,6 @@ func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, resolver secret.Resolver, d
 	}
 }
 
-// vsphereSessionID extracts the session token the connectivity probe just
-// established, preferring the response header and falling back to the quoted
-// JSON body vCenter returns from POST /api/session.
 func vsphereSessionID(resp *http.Response) string {
 	if id := resp.Header.Get("vmware-api-session-id"); id != "" {
 		return id
@@ -148,9 +126,6 @@ func vsphereSessionID(resp *http.Response) string {
 	return strings.Trim(strings.TrimSpace(string(body)), `"`)
 }
 
-// releaseVSphereSession deletes the session the probe opened so each preflight
-// run does not leak a live authenticated vCenter login until it idles out.
-// Cleanup is best-effort: a missing id or a failed DELETE never fails the check.
 func releaseVSphereSession(deps Deps, url, sessionID string, insecureSkipVerify bool) {
 	if sessionID == "" {
 		return
@@ -167,12 +142,6 @@ func releaseVSphereSession(deps Deps, url, sessionID string, insecureSkipVerify 
 	_ = resp.Body.Close()
 }
 
-// preflightHTTPDo issues a preflight endpoint probe: it honors an injected
-// deps.HTTPDo, otherwise builds a real client bounded by preflightHTTPProbeTimeout.
-// insecureSkipVerify opts the built client out of TLS verification for
-// self-signed labs (vSphere sets it from disableCertificateVerification);
-// verifying probes (install source) pass false, so the single builder serves
-// both without duplicating the client wiring.
 func preflightHTTPDo(deps Deps, req *http.Request, insecureSkipVerify bool) (*http.Response, error) {
 	if deps.HTTPDo != nil {
 		return deps.HTTPDo(req, insecureSkipVerify)

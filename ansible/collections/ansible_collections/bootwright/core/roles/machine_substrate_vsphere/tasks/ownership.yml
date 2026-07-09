@@ -1,7 +1,4 @@
 ---
-# Identity attributes are recorded at create time, before any later rename
-# or move, so destroy can still address the VM and its uploaded media when
-# live lookups drift.
 - name: Record vSphere machine ownership
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

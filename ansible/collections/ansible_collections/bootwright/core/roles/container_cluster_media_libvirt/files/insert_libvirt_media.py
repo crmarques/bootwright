@@ -5,13 +5,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-# Preserve Bootwright's libvirt metadata namespace prefix across the
-# parse/serialize round-trip below. Without this, ElementTree re-emits the
-# foreign namespace with a generated prefix (ns0:), mangling the
-# <bootwright:...> ownership marker that the destroy guard matches. Registering
-# the prefix keeps the marker byte-for-byte intact after `virsh define`.
 ET.register_namespace("bootwright", "https://bootwright.io/libvirt/metadata/1.0")
-
 
 def run(args, input_text=None, check=True):
     result = subprocess.run(
@@ -28,17 +22,14 @@ def run(args, input_text=None, check=True):
         )
     return result
 
-
 def virsh(uri, *args, input_text=None, check=True):
     return run(["virsh", "-c", uri, *args], input_text=input_text, check=check)
-
 
 def dump_domain_xml(uri, domain):
     inactive = virsh(uri, "dumpxml", "--inactive", domain, check=False)
     if inactive.returncode == 0:
         return inactive.stdout
     return virsh(uri, "dumpxml", domain).stdout
-
 
 def default_controller(root):
     os_element = root.find("os")
@@ -52,7 +43,6 @@ def default_controller(root):
             if arch and "aarch64" in arch:
                 return "scsi"
     return "ide"
-
 
 def select_target(devices, controller_type):
     for disk in devices.findall("disk"):
@@ -68,7 +58,6 @@ def select_target(devices, controller_type):
     if controller_type == "ide":
         return "hdc", "ide"
     return "sdx", controller_type
-
 
 def select_unit(devices, target_bus):
     free_units = set(range(100))
@@ -90,7 +79,6 @@ def select_unit(devices, target_bus):
         raise RuntimeError("no free %s bus unit found" % target_bus)
     return min(free_units)
 
-
 def remove_cdroms(devices):
     removed = False
     for disk in list(devices.findall("disk")):
@@ -98,7 +86,6 @@ def remove_cdroms(devices):
             devices.remove(disk)
             removed = True
     return removed
-
 
 def set_boot_order(root, boot_order):
     if boot_order not in {"disk-first", "cdrom-first"}:
@@ -118,7 +105,6 @@ def set_boot_order(root, boot_order):
     for dev in devices:
         boot = ET.SubElement(os_element, "boot")
         boot.set("dev", dev)
-
 
 def add_cdrom(devices, source_iso, target_dev, target_bus, unit):
     disk = ET.SubElement(devices, "disk", {"type": "file", "device": "cdrom"})
@@ -143,7 +129,6 @@ def add_cdrom(devices, source_iso, target_dev, target_bus, unit):
 
     ET.SubElement(disk, "readonly")
 
-
 def build_domain_xml(domain_xml, source_iso, boot_order):
     root = ET.fromstring(domain_xml)
     devices = root.find("devices")
@@ -157,7 +142,6 @@ def build_domain_xml(domain_xml, source_iso, boot_order):
     add_cdrom(devices, source_iso, target_dev, target_bus, unit)
     set_boot_order(root, boot_order)
     return ET.tostring(root, encoding="unicode")
-
 
 def define_domain(uri, xml_text):
     tmpdir = os.environ.get("TMPDIR") or os.environ.get("TMP") or "/var/tmp"
@@ -177,7 +161,6 @@ def define_domain(uri, xml_text):
             os.unlink(tmp.name)
         except FileNotFoundError:
             pass
-
 
 def main():
     if len(sys.argv) not in {4, 5}:
@@ -200,7 +183,6 @@ def main():
     define_domain(uri, updated_xml)
     print("changed=true")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

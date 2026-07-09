@@ -14,11 +14,6 @@ func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
 	return out
 }
 
-// infraReferencedHosts returns the hosts that back a profile-based
-// machine substrate. Bare-metal `machines[]` entries are reached over
-// BMC from the controller. KubeVirt and vSphere VM operations run from the
-// controller — against a kubeconfig and the vCenter API respectively — so
-// they contribute localhost.
 func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ocp := range state.ContainerClusters {

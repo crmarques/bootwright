@@ -49,17 +49,8 @@ const (
 )
 
 type ClusterInstallRecord struct {
-	Cluster     string `json:"cluster"`
-	DesiredHash string `json:"desiredHash"`
-	// StructuralHash is the desired install-input hash with the day-2-owned intent
-	// (cluster add-ons, per-node labels/taints) projected out — the same projection
-	// the apply preflight's structural hash uses. The install-state gate compares on
-	// it when present so a day-2-only edit (adding an add-on, a node label) reconciles
-	// in place under a plain apply instead of the gate refusing and steering the
-	// operator to --override, which would reinstall a healthy cluster. It is additive
-	// and migration-safe: a legacy record (empty StructuralHash) falls back to the
-	// full DesiredHash comparison, so upgrading bootwright never turns an installed
-	// cluster into drift. DesiredHash is left byte-stable for the same reason.
+	Cluster        string               `json:"cluster"`
+	DesiredHash    string               `json:"desiredHash"`
 	StructuralHash string               `json:"structuralHash,omitempty"`
 	Status         ClusterInstallStatus `json:"status"`
 	Phase          ClusterInstallPhase  `json:"phase"`
@@ -84,8 +75,7 @@ type ClusterAvailabilityChecker interface {
 
 type OCClusterAvailabilityChecker struct {
 	Command string
-	// Runner substitutes the local process launcher in tests; nil runs on the OS.
-	Runner execution.Runner
+	Runner  execution.Runner
 }
 
 func (c OCClusterAvailabilityChecker) Available(ctx context.Context, kubeconfigPath string) (bool, error) {
@@ -138,13 +128,6 @@ func ClusterConnectionPath(clustersDir, cluster string) string {
 	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterConnectionFileName)
 }
 
-// RemoveClusterInstallState removes the controller-side install record, connection
-// record, and kubeconfig for a container cluster (each a no-op if absent). Destroy
-// calls it so a torn-down cluster reclassifies as missing and the next apply rebuilds
-// it cleanly. The ansible cluster destroy runs on bootwright_ocp_hosts and cannot
-// remove these controller-side files; without this a surviving install record or
-// kubeconfig makes ReconcileApplyClusterInstallState refuse the next apply ("existing
-// kubeconfig but does not report Available=True; refusing … without --override").
 func RemoveClusterInstallState(clustersDir, cluster string) error {
 	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
 		return nil
@@ -161,14 +144,6 @@ func RemoveClusterInstallState(clustersDir, cluster string) error {
 	return nil
 }
 
-// RecordedProvisionedClusters returns the names of ContainerClusters that carry a
-// live controller install-record under clustersDir — the clusters bootwright has
-// actually provisioned and not torn down (any status except destroyed). It
-// enumerates the per-cluster record files rather than the desired state, so a caller
-// can detect a provisioned cluster that is no longer declared: the signature of a
-// rename (the name changed, so the old record orphans and the new name re-provisions
-// from scratch) or an orphan (a declaration removed without a destroy). A missing
-// clustersDir yields an empty list.
 func RecordedProvisionedClusters(clustersDir string) ([]string, error) {
 	entries, err := os.ReadDir(clustersDir)
 	if err != nil {
@@ -260,23 +235,8 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			return out, err
 		}
 		if mode == ApplyModeOverride {
-			// Override authorizes a clean rebuild of a DRIFTED or unhealthy owned
-			// cluster — but must not wipe a cluster that is already installed, in sync,
-			// and Available. A scoped `apply --override` run (to rebuild some OTHER
-			// drifted object in scope) would otherwise reinstall every healthy cluster
-			// in that scope from scratch. So skip the install tasks for a
-			// match+installed+Available cluster exactly as continue would; let a
-			// drifted, not-installed, or unreachable cluster rebuild from scratch.
-			// A day-2-only edit (add-on, node label) reads as a match here too, so
-			// override does not reinstall a cluster whose install inputs are unchanged.
 			if found && installInputsMatch(record, hash, structuralHash) && record.Status == ClusterInstallStatusInstalled {
 				available, err := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
-				// A probe error (oc missing from PATH, or the API refusing
-				// connection on a hard-down cluster) leaves availability unknown.
-				// Under --override that is not a refusal: override exists precisely
-				// to rebuild an unreachable cluster from scratch, so treat an
-				// unverifiable probe as not-available and let the install tasks run.
-				// Only a clean Available=True skips the rebuild of a healthy match.
 				if err == nil && available {
 					out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --override rebuilds only drifted objects, not a healthy in-sync cluster", now)
 				}
@@ -289,10 +249,6 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		}
 		kubeconfigPath := clusterKubeconfigPath(clustersDir, name)
 		if !found {
-			// No install record. A fresh cluster (no kubeconfig) installs normally;
-			// a record-less cluster that already has a kubeconfig is refused rather
-			// than silently adopted (bootwright cannot confirm it was installed from
-			// the current desired inputs).
 			if err := guardUnrecordedCluster(ctx, name, kubeconfigPath, checker); err != nil {
 				return out, err
 			}
@@ -322,15 +278,6 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 	return out, nil
 }
 
-// guardUnrecordedCluster gates a ContainerCluster that has no install record. A
-// fresh cluster (no kubeconfig yet) returns nil so the install tasks run. A
-// record-less cluster that ALREADY has a kubeconfig is refused: bootwright cannot
-// verify the live cluster was installed from the CURRENT desired install inputs, so
-// silently stamping today's hashes as the install baseline would absorb real
-// install-input drift as "installed and in sync" — the change would never be applied
-// and every later gate would compare against a forged baseline. The operator must
-// choose explicitly: rebuild from the desired state (--override) or restore the
-// install record if the running cluster genuinely matches.
 func guardUnrecordedCluster(ctx context.Context, name, kubeconfigPath string, checker ClusterAvailabilityChecker) error {
 	if _, err := os.Stat(kubeconfigPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -507,13 +454,6 @@ func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.Stat
 	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, false)
 }
 
-// clusterInstallStructuralHashForContext hashes the DESTRUCTIVE-IDENTITY subset of a
-// cluster's install inputs: the same payload as the desired hash, but with the
-// day-2-owned intent (add-ons, per-node labels/taints) projected out of the embedded
-// state. The installer/agent config and manifests are still rendered from the FULL
-// state, so the structural hash only stays stable when the ONLY change is day-2
-// intent that does not alter the install config — a conservative, false-negative-safe
-// definition of "reconcilable in place".
 func clusterInstallStructuralHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
 	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, true)
 }
@@ -537,9 +477,6 @@ func clusterInstallHashForContext(contextName string, state v1alpha1.State, clus
 	if err != nil {
 		return "", err
 	}
-	// The embedded state carries the day-2 intent unless this is the structural
-	// hash, which projects it out so an add-on / node-label edit does not move the
-	// hash the install-state gate compares on.
 	embedState := clusterState
 	if projectDay2 {
 		embedState = containerClusterInstallStructuralHashVars(clusterState)
@@ -569,13 +506,6 @@ func clusterInstallHashForContext(contextName string, state v1alpha1.State, clus
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-// installInputsMatch reports whether the recorded install inputs still match the
-// desired inputs for the purpose of the healthy-skip / no-regenerate gate. It
-// prefers the day-2-projected structural hash so an add-on or node-label edit reads
-// as a match (reconciled in place by the add-on/node-config tasks) rather than a
-// changed install input. A legacy record with no structural hash, or a caller that
-// could not compute one, falls back to the full desired-hash comparison — the
-// pre-existing behavior — so the gate never loosens on missing data.
 func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
 	if record.StructuralHash != "" && structuralHash != "" {
 		return record.StructuralHash == structuralHash
@@ -583,9 +513,6 @@ func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash
 	return record.DesiredHash == desiredHash
 }
 
-// clusterInstallHashes computes both the full desired install-input hash and its
-// day-2-projected structural hash, so every record write stamps both. Kept together
-// so a caller can never persist one without the other.
 func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, err error) {
 	hash, err = clusterInstallDesiredHashForContext(contextName, state, clusterName, secretsDir)
 	if err != nil {
@@ -624,9 +551,6 @@ func clusterConnectionRecord(clustersDir, clusterName string, environments []v1a
 	return record
 }
 
-// ContainerInstallClusterNames returns, sorted, the container-cluster names that have a
-// cluster-install task (clusterISO/nodeBoot/installWait) in the set. Destroy uses it to
-// know which clusters' controller-side install state to remove via RemoveClusterInstallState.
 func ContainerInstallClusterNames(tasks []ApplyTask) []string {
 	return installTaskClusterNames(tasks)
 }

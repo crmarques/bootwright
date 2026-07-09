@@ -10,9 +10,6 @@
       - bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']
     fail_msg: "Unsupported direct libvirt virtual media action {{ bootwright_libvirt_media_action }}"
 
-# The final cleanup detaches the whole optical drive so the provisioned guest
-# is left with no leftover /dev/sr0; boot (pre-insert) and cleanup_persistent
-# only eject the medium and keep the drive the installer still needs.
 - name: Clean stale running virtual media before insert
   ansible.builtin.include_tasks: eject.yml
   vars:
@@ -37,10 +34,6 @@
     bootwright_libvirt_media_insert_requested: "{{ bootwright_libvirt_media_action == 'boot' }}"
     bootwright_libvirt_media_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
     bootwright_libvirt_media_boot_order: "{{ bootwright_component.boot.media.libvirt.bootOrder | default('disk-first') }}"
-    # Content-hash the helper into its own path so two bootwright versions
-    # converging concurrently on one provider host never race the shared
-    # copy/execute window and run the other version's helper (a fixed shared
-    # path lets a later copy overwrite the helper a running task is about to exec).
     bootwright_libvirt_media_helper_path: "/var/tmp/bootwright-libvirt-media-insert-{{ lookup('ansible.builtin.file', role_path ~ '/files/insert_libvirt_media.py') | hash('sha1') }}.py"
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
@@ -72,10 +65,6 @@
   changed_when: bootwright_libvirt_media_insert.stdout is search('(?m)^changed=true$')
   delegate_to: "{{ bootwright_component.boot.media.libvirt.machineRef }}"
   become: true
-  # stagePath embeds the agent-ISO publish token (substituted in
-  # container_cluster_agent_install boot_machine.yml); without no_log the full
-  # token is written to stdout/logs, matching how the Redfish backend and the
-  # neighbouring set_fact tasks already redact it.
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_libvirt_media_insert_requested | bool
 

@@ -2,10 +2,6 @@ package workflow
 
 import "testing"
 
-// HasConvergeSafetyRecords is the cheap "has Bootwright applied at least once" gate
-// the status spine uses to start suggesting state-check. It must report false for an
-// unapplied context (nothing recorded to compare against) and true once any record
-// is written, without reading or classifying the records.
 func TestHasConvergeSafetyRecords(t *testing.T) {
 	if HasConvergeSafetyRecords("") {
 		t.Fatal("empty runsDir must report no records")

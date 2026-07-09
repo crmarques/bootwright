@@ -96,9 +96,6 @@ func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
 
 func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alpha1.State) []string {
 	var errs []string
-	// An authored empty list (present but with no entries) is rejected: it reads
-	// as "select nothing" but is treated as "select all", silently widening
-	// apply/destroy scope to the whole fleet. Omit the field to select all.
 	if env.Spec.ContainerClusters != nil && len(env.Spec.ContainerClusters) == 0 {
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.containerClusters is an empty list; omit it to select all clusters, or list the clusters to select", env.Metadata.Name))
 	}
@@ -160,11 +157,6 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 	if len(env.Spec.Resources) == 0 {
 		return []string{fmt.Sprintf("Environment/%s spec.resources must include at least one file or directory when set", env.Metadata.Name)}
 	}
-	// The path-shape rules (empty, whitespace, absolute, directory escape) are
-	// enforced at load by resolveEnvironmentResourcePath, which aborts before
-	// Validate runs; duplicating them here only produced dead arms whose nicely
-	// routed findings never rendered. The cross-entry duplicate check is the one
-	// rule load does not cover, so it is all that remains reachable here.
 	var errs []string
 	seen := map[string]bool{}
 	for i, value := range env.Spec.Resources {

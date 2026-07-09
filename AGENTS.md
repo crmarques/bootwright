@@ -11,6 +11,24 @@ the task before editing. Do not start from partial context.
 3. `/specs/README.md` and `/specs/index.md`, then only the task-relevant specs.
 4. The skill(s) the catalog maps to the task, from `/.agents/skills/`.
 
+## Knowledge Lookup
+
+The repository keeps its non-spec knowledge in two indexed stores; consult them
+instead of rediscovering:
+
+- **On any unexpected failure** — build, test, lint, a `bootwright` command, an
+  Ansible task, an install that stalls — match the error text or symptom
+  against `.agents/knowledge/KNOWLEDGE.md` first and load only the matching
+  file. Most recurring failures in this repo already have a diagnosed root
+  cause there.
+- **Before designing or changing behavior**, scan the decision table in
+  `specs/adr/README.md`; an accepted ADR may already fix the shape of the
+  change or record why the obvious alternative was rejected.
+- **When a task uncovers a new root cause, vendor quirk, constraint, or
+  decision**, record it in `.agents/knowledge/` (with a symptom row in
+  `KNOWLEDGE.md`) or `specs/adr/` in the same change. Source comments are not
+  a knowledge store.
+
 ## Core Invariants
 
 These hold for every change; verify their current form in `/specs/` when a task
@@ -46,6 +64,12 @@ depends on them.
 - **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
   teach workflows and link back. Add implementation detail only when current code
   or an accepted decision needs it.
+- **Comments.** Source files carry no prose comments — only machine-read
+  directives (`//go:build`, `//go:embed`, `//nolint`, `# noqa`, `# shellcheck`,
+  `# syntax=`, shebangs). Knowledge lives in `.agents/knowledge/`, decisions in
+  `specs/adr/`, schema semantics in `/specs/` and `/docs/`. Enforced by the
+  comment-policy guard tests in `internal/repo/checks`; the full rule is in
+  `.agents/skills/code-quality/SKILL.md`.
 
 ## Implementation Workflow
 

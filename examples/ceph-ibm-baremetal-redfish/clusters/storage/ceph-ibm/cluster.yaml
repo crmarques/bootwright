@@ -5,74 +5,39 @@ metadata:
 spec:
   type: ceph
 
-  # Bootwright installs and owns this cluster via cephadm (vs. imported/external).
-
   management: managed
 
   ceph:
-    # IBM Storage Ceph: images from cp.icr.io/cp, RPMs from IBM's vendor repo,
-    # RHEL repos via RHSM. All credentials come from the Environment entitlement.
     distribution: ibm
 
-    # release selects the IBM Storage Ceph product stream. "9" is the latest
-    # available stream. With image left unset, cephadm pulls the latest 9.x image
-    # from cp.icr.io at bootstrap.
     release: "9"
-    # To freeze an exact, reproducible version, pin a digest (a mutable :latest
-    # tag is rejected by validation), e.g.:
-    # image: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:<digest>
 
     entitlementRef: ibm-storage-ceph
 
     cephadm:
-      # Reach every node over its "ssh" address with the ceph-node-ssh key.
       addressRef: ssh
       bootstrap:
-        # Bootstrap the first monitor on ceph-1.
         host: ceph-1
 
     networks:
-      # Single flat network for this example (public == cluster). Point
-      # clusterCIDRs at a dedicated OSD-replication subnet in production.
       publicCIDRs:
         - 10.20.30.0/24
       clusterCIDRs:
         - 10.20.30.0/24
 
-    # ----------------------------------------------------------------------
-    # Native HA access to the manager UI (IBM Storage Ceph mgmt-gateway pattern).
-    # cephadm renders a `mgmt-gateway` that reverse-proxies the Ceph Dashboard
-    # (plus Grafana/Prometheus/Alertmanager) and an `ingress` in keepalive_only
-    # mode that floats a dedicated VIP in front of it. Separate from the RGW
-    # data-path ingress (object-gateways/rgw.yaml).
-    # ----------------------------------------------------------------------
     management:
-      # `bootwright cluster access` reports the dashboard here (8443 default).
-      # This name must resolve to the VIP below in the external DNS.
       dnsName: dashboard.ceph-ibm.example.com
       ingress:
         name: mgmt
-        # Dedicated VIP, distinct from the RGW ingress (.80), on the node network.
         address: 10.20.30.81
         prefixLength: 24
         virtualInterfaceNetworks:
           - 10.20.30.0/24
-        # The mgmt-gateway and its keepalived VIP run on the two full nodes
-        # (which carry the `ingress` role); ceph-3 is the mon-only tie-breaker.
         placement:
           hosts:
             - ceph-1
             - ceph-2
 
-    # ----------------------------------------------------------------------
-    # 3-node topology, NOT stretch mode.
-    #   ceph-1, ceph-2: all services + OSDs (block, file, object capable)
-    #   ceph-3:         monitor only -> quorum tie-breaker (3 mons total)
-    #
-    # True Ceph "stretch" mode in Bootwright requires two data sites with two
-    # mon nodes each (5 nodes incl. the arbiter); a 3-node cluster cannot satisfy
-    # that, so this is a flat single-site topology with a tie-breaking monitor.
-    # ----------------------------------------------------------------------
     topology:
       hosts:
         - machineRef: ceph-1
@@ -84,8 +49,6 @@ spec:
             - mds
             - rgw
             - ingress
-          # Blank data disks cephadm claims as OSDs (one OSD per device). Adjust
-          # to the real device paths on your hardware.
           devices:
             - /dev/sdb
             - /dev/sdc
@@ -105,6 +68,5 @@ spec:
             - /dev/sdd
         - machineRef: ceph-3
           site: dc1
-          # Tie-breaker: monitor only, no OSD devices.
           roles:
             - mon

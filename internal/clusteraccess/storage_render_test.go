@@ -7,10 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestStorageRenderStateDropsContainerClusters is the unit guard for the
-// storage-only render narrowing that `render storage` relies on: it keeps the
-// selected StorageClusters but strips ContainerClusters so no OpenShift installer
-// input is ever emitted, even when a container cluster is present in the state.
 func TestStorageRenderStateDropsContainerClusters(t *testing.T) {
 	state := loadFixtureState(t, cephFixture)
 	state.ContainerClusters = []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "phantom-ocp"}}}

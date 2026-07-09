@@ -92,8 +92,6 @@ func ecdsaSSHKeyPairPEM(source v1alpha1.GeneratedSSHKeyPairSpec, curve elliptic.
 	if err != nil {
 		return nil, nil, fmt.Errorf("derive SSH public key point: %w", err)
 	}
-	// ecdh.PublicKey.Bytes returns the SEC1 uncompressed encoding
-	// (0x04 || X || Y) — identical to the deprecated elliptic.Marshal.
 	point := ecdhPub.Bytes()
 	publicBlob := sshMarshalStrings([]byte(publicType), []byte(curveName), point)
 	privateDER, err := x509.MarshalECPrivateKey(key)

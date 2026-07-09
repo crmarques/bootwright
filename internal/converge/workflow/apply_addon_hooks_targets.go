@@ -9,17 +9,11 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// hookTargetMachine is one resolved target: a Machine plus a human label used in
-// the ad-hoc inventory and failure messages.
 type hookTargetMachine struct {
 	label   string
 	machine v1alpha1.Machine
 }
 
-// resolveHookTargetMachines resolves a hook's target spec to the machines its
-// playbook runs against. It mirrors resolveProvisioningTarget but at the machine
-// level (hooks build an ad-hoc SSH inventory, never a rendered inventory group),
-// and adds the fromInput ref-chain the storage-attachment use case needs.
 func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddonHook) ([]hookTargetMachine, error) {
 	target := hook.Target
 	var out []hookTargetMachine
@@ -121,9 +115,6 @@ func (e *addonHookExecutor) containerClusterMachines(name string) ([]hookTargetM
 	return out, nil
 }
 
-// storageClusterMachines resolves a Ceph cluster's admin-capable machines,
-// ordering the cephadm bootstrap host first (it holds the admin keyring the
-// exporter and ceph-auth commands need), then the remaining topology hosts.
 func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMachine, error) {
 	cluster, ok := stateview.ClusterByName(e.state, name)
 	if !ok || cluster.Spec.Ceph == nil {
@@ -160,9 +151,6 @@ func (e *addonHookExecutor) inputRefKind(input, property string) (string, bool) 
 	return "", false
 }
 
-// machineSecretNames collects the context secret names the resolved machines'
-// SSH access references (private key + explicit known-hosts), for scoped
-// materialization into the hook connection dir.
 func machineSecretNames(machines []hookTargetMachine) []string {
 	seen := map[string]bool{}
 	var names []string

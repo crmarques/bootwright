@@ -90,8 +90,6 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	}
 	ctx := cf.ctx
 	warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-	// "all" so --clusters accepts both ContainerCluster and StorageCluster names,
-	// matching the flag help and `apply`; the tool-input bundle covers both.
 	sel, err := clusteraccess.Resolve(state, "all", clusterScope)
 	if err != nil {
 		return failErr(1, err)
@@ -117,18 +115,11 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	return nil
 }
 
-// runRenderPortable renders the context-free portable bundle: it loads desired
-// state straight from inputDir (no context, the same loader `validate -f` uses)
-// and writes tool inputs to outputDir with every secret rendered as a
-// {{ secret <name> }} placeholder, so neither a configured context nor a
-// secrets directory is required.
 func runRenderPortable(stdout io.Writer, inputDir, outputDir, clusterScope, output string) error {
 	state, err := desiredstate.LoadNormalizeValidate([]string{inputDir})
 	if err != nil {
 		return failErr(1, err)
 	}
-	// "all" so --clusters accepts both ContainerCluster and StorageCluster names,
-	// matching the flag help and `apply`; the tool-input bundle covers both.
 	sel, err := clusteraccess.Resolve(state, "all", clusterScope)
 	if err != nil {
 		return failErr(1, err)
@@ -198,10 +189,6 @@ func writeRenderInstallerJSON(stdout io.Writer, result render.Result, resolved r
 	return cliout.JSON(stdout, report)
 }
 
-// renderToolInputsReport is the machine-readable form of a top-level
-// `render --output-dir` / `render --input-dir` bundle: the shared Bootwright and
-// Ansible artifacts plus the per-cluster installer and storage inputs. InputDir
-// is set only for the portable ({{ secret }} placeholder) render.
 type renderToolInputsReport struct {
 	InputDir           string                   `json:"inputDir,omitempty"`
 	OutputDir          string                   `json:"outputDir"`
@@ -307,10 +294,6 @@ func printToolInputCommands(stdout io.Writer, result render.Result) {
 		if asset.ApplyScriptPath == "" {
 			continue
 		}
-		// The generated apply.sh subsumes cephadm bootstrap, the `ceph orch
-		// apply -i` service specs, and every imperative ceph/radosgw-admin/rbd
-		// object bootwright configures, in order. It reproduces the same target
-		// state as `bootwright apply` using only native CLIs.
 		p.CommandLine("apply ceph objects ["+asset.StorageClusterName+"]", []string{asset.ApplyScriptPath})
 	}
 }

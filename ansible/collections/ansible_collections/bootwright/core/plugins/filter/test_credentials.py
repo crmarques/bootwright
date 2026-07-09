@@ -21,9 +21,6 @@ import pathlib
 import sys
 import unittest
 
-# Provide a stub for ansible.errors so the filter module imports without
-# pulling in the full Ansible runtime. The filter only uses
-# AnsibleFilterError, which behaves as a regular exception subclass.
 if "ansible" not in sys.modules:
     ansible_module = type(sys)("ansible")
     sys.modules["ansible"] = ansible_module
@@ -36,8 +33,6 @@ if "ansible.errors" not in sys.modules:
     errors_module.AnsibleFilterError = _AnsibleFilterError
     sys.modules["ansible.errors"] = errors_module
 
-# Load the filter module by file path so the test does not depend on
-# any legacy filter plugin directory being on sys.path.
 _HERE = pathlib.Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location(
     "_bootwright_credentials_filter",
@@ -51,13 +46,11 @@ bootwright_parse_credential = _module.bootwright_parse_credential
 bootwright_proxy_userinfo = _module.bootwright_proxy_userinfo
 AnsibleFilterError = sys.modules["ansible.errors"].AnsibleFilterError
 
-
 def _slurp(payload: str | bytes) -> dict:
     """Build a fake ansible.builtin.slurp result dict."""
     if isinstance(payload, str):
         payload = payload.encode("utf-8")
     return {"content": base64.b64encode(payload).decode("ascii"), "source": "/fake/path"}
-
 
 class ParseCredentialHappyPath(unittest.TestCase):
     def test_basic_username_password(self):
@@ -77,11 +70,8 @@ class ParseCredentialHappyPath(unittest.TestCase):
         self.assertEqual(got, {"username": "alice", "password": "s3c:ret"})
 
     def test_label_appears_in_filter_module_signature(self):
-        # The label is keyword-only positional second; default applies
-        # when caller omits it.
         got = bootwright_parse_credential(_slurp("u:p"), "my-label")
         self.assertEqual(got, {"username": "u", "password": "p"})
-
 
 class ParseCredentialBadInput(unittest.TestCase):
     def assertFilterError(self, payload, *, label="credential", contains=""):
@@ -124,13 +114,9 @@ class ParseCredentialBadInput(unittest.TestCase):
                                contains="username and password must both be non-empty")
 
     def test_label_is_included_in_error(self):
-        # Operators rely on the label to identify which credentialsRef is
-        # malformed — they may have several configured and the error
-        # message is the only signal.
         with self.assertRaises(AnsibleFilterError) as ctx:
             bootwright_parse_credential({"source": "/fake/path"}, "mirror credentialsRef secrets/mirror")
         self.assertIn("mirror credentialsRef secrets/mirror", str(ctx.exception))
-
 
 class ProxyUserinfo(unittest.TestCase):
     def test_dollar_is_preserved_and_delimiters_are_escaped(self):
@@ -142,18 +128,13 @@ class ProxyUserinfo(unittest.TestCase):
             bootwright_proxy_userinfo({"username": "u", "password": ""}, "proxy auth")
         self.assertIn("proxy auth", str(ctx.exception))
 
-
 class FilterRegistration(unittest.TestCase):
     def test_filter_module_exposes_filter(self):
-        # The FilterModule class is how Ansible discovers the filter.
-        # If the registration name drifts, every playbook using the
-        # filter breaks at parse time.
         registered = _module.FilterModule().filters()
         self.assertIn("bootwright_parse_credential", registered)
         self.assertIs(registered["bootwright_parse_credential"], bootwright_parse_credential)
         self.assertIn("bootwright_proxy_userinfo", registered)
         self.assertIs(registered["bootwright_proxy_userinfo"], bootwright_proxy_userinfo)
-
 
 if __name__ == "__main__":
     unittest.main()

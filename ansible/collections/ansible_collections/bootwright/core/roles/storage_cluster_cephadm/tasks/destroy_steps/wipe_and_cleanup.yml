@@ -1,7 +1,4 @@
 ---
-# The first mount probe runs before the cluster-ownership checks; re-probe each
-# device immediately before the irreversible wipe to shrink the window in which a
-# device could be mounted after that first check.
 - name: Re-probe declared Ceph destroy devices for active mounts before wipe
   ansible.builtin.command:
     argv:
@@ -45,13 +42,6 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
-# sgdisk lives in the gdisk package, which the Ceph install never pulls in (the
-# install-time device check uses wipefs only, and cephadm runs ceph-volume's own
-# sgdisk inside its container). Without it the zap below dies with "No such file
-# or directory: sgdisk". Ensure the host tool here, recorded as required-by this
-# cluster so the package-ownership removal at the end of destroy uninstalls it
-# again (unless it predated Bootwright). Gated on the same present-device set the
-# zap loops over, so mon-only or device-less nodes never install it.
 - name: Ensure gdisk is present for the Ceph device zap
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -70,8 +60,6 @@
       - "{{ item }}"
   register: bootwright_ceph_sgdisk
   changed_when: true
-  # A failed zap leaves a half-cleared partition table that can corrupt the next
-  # provision or a later repurpose of the device. Fail closed instead of swallowing.
   failed_when: bootwright_ceph_sgdisk.rc != 0
   loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
@@ -91,11 +79,6 @@
     - "{{ bootwright_ceph_proxy_ca_anchor_path }}"
     - "{{ bootwright_ceph_osd_marker_path }}"
 
-# Keep the cluster's controller-side ownership record when a node was skipped as
-# unreachable (--skip-unreachable): the cluster is only partially torn down, so it
-# must not be treated as fully gone. bootwright re-stamps the kept record as
-# partially destroyed from the destroy-result file. A normal teardown (no skipped
-# nodes) removes the record as before.
 - name: Remove storage cluster ownership record
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

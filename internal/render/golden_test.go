@@ -15,42 +15,14 @@ import (
 
 var updateGoldens = flag.Bool("update", false, "rewrite testdata/golden from the current render output")
 
-// goldenSecretsDir is a fixed fictitious secrets directory. render.All never
-// reads it — its value is only embedded verbatim into inventory/vars secret
-// paths — so a constant keeps goldens hermetic: no per-run temp dirs and no
-// paths from the machine that generated them.
 const goldenSecretsDir = "/bootwright-golden/secrets"
 
-// goldenHome pins $HOME for the render: fixture secrets declare `file:
-// ~/.ssh/...` sources which the renderer expands via os.UserHomeDir(), and
-// without a fixed value the goldens would embed the home directory of
-// whoever regenerated them.
 const goldenHome = "/bootwright-golden/home"
 
-// goldenFixtures are the fixtures pinned by golden files: the single-node
-// libvirt case and a multi-node bare-metal case (BMC/redfish machine
-// services, per-host installer entries).
 var goldenFixtures = []string{"001-sno-libvirt", "005-3nodes-baremetal"}
 
-// secretLeakMarkers must never appear in rendered output: fixtures are
-// sanitized and installer placeholders carry bootwright-secret-ref markers
-// instead of material, so any hit means a secret was baked in.
 var secretLeakMarkers = []string{"-----BEGIN", "PRIVATE KEY", `"auth":`}
 
-// TestRenderGoldenFixtures is the renderer's determinism regression test.
-// For each fixture it renders twice — from independently loaded state into
-// different temp dirs — and requires byte-identical output (differing temp
-// dirs also prove no output embeds its own absolute render path), then
-// compares every produced file against testdata/golden/<fixture>/.
-// Regenerate with:
-//
-//	go test ./internal/render -run TestRenderGoldenFixtures -update
-//
-// No produced file is excluded — the full tree is golden-pinned. Two values
-// that look run-variant are not: lookupDate fields in the lock/vars come
-// from static source constants in inventory/components.go (pin freshness
-// stamps, not render dates), and ~-expanded secret file paths are made
-// hermetic by pinning $HOME (see goldenHome).
 func TestRenderGoldenFixtures(t *testing.T) {
 	for _, name := range goldenFixtures {
 		t.Run(name, func(t *testing.T) {
@@ -76,9 +48,6 @@ func TestRenderGoldenFixtures(t *testing.T) {
 	}
 }
 
-// renderGoldenFixture loads the fixture from disk and renders it into fresh
-// temp dirs, returning every produced file keyed by a stable relative path
-// (rendered/... for the rendered dir, clusters/... for the clusters dir).
 func renderGoldenFixture(t *testing.T, fixture string) map[string][]byte {
 	t.Helper()
 	t.Setenv("HOME", goldenHome)
@@ -100,9 +69,6 @@ func renderGoldenFixture(t *testing.T, fixture string) map[string][]byte {
 	return out
 }
 
-// readTree returns every file under dir keyed by prefix-joined slash path.
-// A missing dir yields an empty tree so a first run without goldens reaches
-// the "generate them with -update" diagnostic instead of a walk error.
 func readTree(t *testing.T, dir, prefix string) map[string][]byte {
 	t.Helper()
 	out := map[string][]byte{}

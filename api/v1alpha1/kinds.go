@@ -1,24 +1,11 @@
 package v1alpha1
 
-// KindAccessor ties one authored kind to its State list so cross-kind walks
-// (resource sets, presence checks, duplicate-name scans) iterate one table
-// instead of hand-enumerating kinds. kinds_test.go proves the table covers
-// every State field exactly once, and the loader probe test in
-// internal/state/desired proves every kind round-trips through Load, so
-// registering a new kind means adding the State field, the Kind constant, one
-// accessor here, and the loadFile decode case — the guards fail on any subset.
 type KindAccessor struct {
-	// Kind is the authored kind discriminator (the Kind* constant).
-	Kind string
-	// StateField names the State field holding this kind's objects; the
-	// completeness test matches it against the State struct by reflection.
+	Kind       string
 	StateField string
-	// Names returns metadata.name for every loaded object of this kind, in
-	// declaration order.
-	Names func(State) []string
+	Names      func(State) []string
 }
 
-// AuthoredKindAccessors lists every authored kind in State declaration order.
 func AuthoredKindAccessors() []KindAccessor {
 	return []KindAccessor{
 		{KindEnvironment, "Environments", func(s State) []string {

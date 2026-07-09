@@ -7,16 +7,8 @@ spec:
 
   ceph:
     distribution: oss
-    # Optional. release picks the upstream Ceph release: a name like squid (the
-    # floating latest stable) or a reproducible x.y.z such as 19.2.1. A version
-    # also derives the matching quay.io/ceph/ceph:vX.Y.Z image; for byte-exact
-    # runs pin spec.ceph.image to a digest instead.
     release: squid
-    # image: quay.io/ceph/ceph:v19.2.1
     community:
-      # Optional. Set community.mirror to a download.ceph.com mirror for
-      # disconnected sites. Bootwright configures the upstream community Ceph
-      # repo with cephadm.
       mirror: https://download.ceph.com
     cephadm:
       bootstrap:

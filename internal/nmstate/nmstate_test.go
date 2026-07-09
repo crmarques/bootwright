@@ -63,9 +63,6 @@ func TestEffectiveConfigInjectsInterfaceAddress(t *testing.T) {
 }
 
 func TestSetInterfaceAddressEnablesDisabledFamily(t *testing.T) {
-	// Templates commonly disable the opposite family (ipv6: {enabled: false}).
-	// Injecting a static address into that family must flip enabled to true so
-	// the rendered NMState document is valid, not an addressless inert block.
 	config := map[string]any{"interfaces": []any{
 		map[string]any{"name": "primary", "ipv6": map[string]any{"enabled": false}},
 	}}

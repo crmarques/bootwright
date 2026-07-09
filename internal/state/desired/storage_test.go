@@ -8,11 +8,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestValidateArtifactServerRequirementsStorageBareMetalManagedOS guards the
-// fix for the opaque empty-path apply failure (No such file or directory): a
-// bare-metal node whose managed OS installs over the BMC needs the install
-// profile to declare its Redfish virtual-media publication endpoint. When it is
-// absent the renderer would otherwise produce an empty stage path.
 func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.T) {
 	baseState := func() v1alpha1.State {
 		return v1alpha1.State{
@@ -103,29 +98,14 @@ func TestStorageStretchValidationAcceptsCanonicalShape(t *testing.T) {
 	}
 }
 
-// TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization guards the
-// regression where the tiebreaker mon-only / no-OSD / site safety checks
-// silently no-op after normalize FQDN-qualifies node hostnames. The shipped
-// multi-DC example authors tiebreaker.host as a machine name; once normalize
-// rewrites node.Hostname to <machine>.<cluster>.<baseDomain> a raw
-// node.Hostname == tiebreaker.host compare never matches, so a misconfigured
-// arbiter would reach cephadm. The validator must resolve the tiebreaker host
-// by machine name or hostname (storageCephNodeByName) the way every other
-// storage reference does. Unlike TestStorageStretchValidationRejectsInvalidRules
-// this runs the full Normalize -> validate pipeline, which is what exposes the
-// bug (validateStorage alone leaves Hostname == machine name and false-greens).
 func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing.T) {
 	state := storageValidationState()
-	// A baseDomain plus an unset arbiter hostname makes normalize qualify the
-	// arbiter to its FQDN, reproducing the machine-name authoring form.
 	state.Environments = []v1alpha1.Environment{{
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
 	}}
 	arbiter := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6]
 	arbiter.Hostname = ""
-	// Give the arbiter a second role so it is no longer mon-only; the safety
-	// check must reject it even though its hostname is now FQDN-qualified.
 	arbiter.Roles = []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR}
 
 	Normalize(&state)
@@ -295,10 +275,6 @@ spec:
 	}
 }
 
-// TestStorageFilesystemDataPoolRefsAcceptPlainNames covers the data pool
-// authoring forms: a plain pool name decodes as {name} (every other ref list's
-// shape) while the {name, default} object form still elects the default data
-// pool on multi-pool filesystems.
 func TestStorageFilesystemDataPoolRefsAcceptPlainNames(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{"filesystem.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -349,8 +325,6 @@ spec:
 	}
 }
 
-// cephNodeSSHSecretYAML is the first-class Secret the storage-node Machines
-// reference by keyRef, declared as a generated sshKeyPair.
 const cephNodeSSHSecretYAML = `apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata: { name: ceph-node-ssh }
@@ -361,11 +335,6 @@ spec:
       comment: bootwright-ceph-node
 `
 
-// TestStorageCephRoleVocabularyAuthorableFromYAML guards the one role
-// vocabulary end-to-end: an authored host carrying a monitoring role plus the
-// matching monitoring service block must pass validation (placement derives
-// from the role), and a role outside v1alpha1.StorageCephRoles() must still
-// be rejected with the full vocabulary in the error.
 func TestStorageCephRoleVocabularyAuthorableFromYAML(t *testing.T) {
 	const environment = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
@@ -449,10 +418,6 @@ spec:
 	}
 }
 
-// TestStorageCephHostSiteRequiredOnlyWhereItHasEffect guards the site
-// requirement: optional on single-site clusters (no CRUSH location is
-// rendered without stretch), required when stretch is set or any placement
-// narrows by sites.
 func TestStorageCephHostSiteRequiredOnlyWhereItHasEffect(t *testing.T) {
 	const environment = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
@@ -692,11 +657,6 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	}
 }
 
-// TestStorageCephHostOSDDeviceSelectionExplicit covers F12/F43/F48: OSD
-// device consumption is explicit opt-in — an osd-role host must author
-// devices or osd.dataDevices (all-devices is the explicit
-// osd: {dataDevices: {all: true}}), and devices requires the osd role
-// exactly like the drivegroup-shaped osd block.
 func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 	cases := []struct {
 		name string
@@ -819,10 +779,6 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 	}
 }
 
-// TestStorageCephDevicePathValidation pins the per-entry OSD device-path checks:
-// each path must be a non-empty absolute /dev path and must not repeat, across
-// both the devices shorthand and the drivegroup dataDevices.paths/pathSpecs, so a
-// typo fails at the validate gate rather than at wipefs / ceph orch apply.
 func TestStorageCephDevicePathValidation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -887,8 +843,6 @@ func TestStorageCephDevicePathValidation(t *testing.T) {
 	}
 }
 
-// TestStoragePoolTuningValidation covers the per-pool autoscaler / quota /
-// compression intents: enum and bounds checks against the native ceph vocabulary.
 func TestStoragePoolTuningValidation(t *testing.T) {
 	neg := int64(-1)
 	cases := []struct {
@@ -942,8 +896,6 @@ func TestStoragePoolTuningValidation(t *testing.T) {
 	}
 }
 
-// TestStorageECProfileValidation covers the erasure-code profile knobs: the
-// plugin enum and the opaque parameters one-owner guard.
 func TestStorageECProfileValidation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -972,9 +924,6 @@ func TestStorageECProfileValidation(t *testing.T) {
 	}
 }
 
-// TestValidateSingleHostDefaults covers the --single-host-defaults gate: only a
-// one-host non-stretch topology, and it owns the three osd/crush bootstrap
-// defaults so spec.ceph.config[global] must not also set them.
 func TestValidateSingleHostDefaults(t *testing.T) {
 	base := func() v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
@@ -1000,8 +949,6 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 	}
 }
 
-// TestStorageManagementAuthGate covers the enableAuth/oauth2Proxy pairing and
-// the TLS/oauth2 secret-ref checks.
 func TestStorageManagementAuthGate(t *testing.T) {
 	on := true
 	off := false
@@ -1045,8 +992,6 @@ func TestStorageManagementAuthGate(t *testing.T) {
 	}
 }
 
-// TestStorageGatewayRealmAndConfigValidation covers the all-or-nothing realm
-// binding and the per-RGW config one-owner / reserved-key guards.
 func TestStorageGatewayRealmAndConfigValidation(t *testing.T) {
 	gwWith := func(c v1alpha1.StorageObjectGatewayCephSpec) v1alpha1.StorageObjectGateway {
 		return v1alpha1.StorageObjectGateway{Metadata: v1alpha1.Metadata{Name: "s3"}, Spec: v1alpha1.StorageObjectGatewaySpec{Ceph: c}}
@@ -1071,8 +1016,6 @@ func TestStorageGatewayRealmAndConfigValidation(t *testing.T) {
 	}
 }
 
-// TestValidCephConfigSectionMasks covers the CRUSH config-DB masks: a who-target
-// may carry a single /class:<v> or /<bucket>:<v> mask.
 func TestValidCephConfigSectionMasks(t *testing.T) {
 	valid := []string{"global", "osd", "mds.fs1", "osd/class:ssd", "osd/rack:r1", "client.rgw.s3/datacenter:dc1"}
 	for _, s := range valid {
@@ -1088,8 +1031,6 @@ func TestValidCephConfigSectionMasks(t *testing.T) {
 	}
 }
 
-// TestStorageServiceOverridesValidation covers the OSD service-override
-// escape-hatch guards: CIDR networks and well-formed custom configs.
 func TestStorageServiceOverridesValidation(t *testing.T) {
 	ok := validateStorageServiceOverrides("p", &v1alpha1.StorageCephServiceOverrides{
 		Networks:      []string{"10.0.0.0/24"},
@@ -1109,9 +1050,6 @@ func TestStorageServiceOverridesValidation(t *testing.T) {
 	}
 }
 
-// TestStorageFleetOSDDrivegroupOverlap covers the one-owner rule: a host may not
-// be claimed by both a per-host osd and a fleet, nor by two fleets, and a fleet
-// satisfies the osd-role device requirement.
 func TestStorageFleetOSDDrivegroupOverlap(t *testing.T) {
 	dg := func(id string, hosts ...string) v1alpha1.StorageCephOSDDrivegroup {
 		return v1alpha1.StorageCephOSDDrivegroup{
@@ -1205,10 +1143,6 @@ func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 	}
 }
 
-// TestStorageFilesystemMDSPlacementValidated covers F13: spec.cephfs.mds.placement
-// goes through validateStoragePlacementHosts like every sibling placement, so a
-// dangling host and a topology with no mds-capable host fail validate instead of
-// silently rendering a filesystem with zero MDS daemons.
 func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1253,8 +1187,6 @@ func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
 	}
 }
 
-// TestStorageFilesystemMDSRolePlacementPasses confirms the default role-derived
-// placement still validates on a topology whose hosts carry the mds role.
 func TestStorageFilesystemMDSRolePlacementPasses(t *testing.T) {
 	state := storageValidationState()
 	state.StorageFilesystems[0].Spec.CephFS.MDS.Placement = v1alpha1.StoragePlacement{}
@@ -1349,11 +1281,6 @@ func TestExternalStorageValidationRequiresExternalDetailsSource(t *testing.T) {
 	}
 }
 
-// TestManagedStorageExportOmittedExternalDetailsStaysNil pins the retirement
-// of the generated/sshExecution details arms: a managed-Ceph export may omit
-// spec.externalDetails entirely — the consuming add-on then produces the
-// details itself via its exporter hook — and Normalize must no longer default
-// the field.
 func TestManagedStorageExportOmittedExternalDetailsStaysNil(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementManaged
@@ -1477,9 +1404,6 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 	}
 }
 
-// TestStorageExportTypeMustEqualArmKey guards the union grammar: the type
-// value is the camelCase arm key, so the retired kebab-case spelling is
-// rejected with the canonical value in the error.
 func TestStorageExportTypeMustEqualArmKey(t *testing.T) {
 	state := storageValidationState()
 	state.StorageExports[0].Spec.Type = "data-foundation"
@@ -1510,9 +1434,6 @@ spec:
 	}
 }
 
-// TestStorageExportFromSecretRefWalksEnvironmentSecrets confirms fromSecretRef
-// rides the comprehensive secret walk: the standard DNS-label check plus the
-// uniform dangling-secret diagnostic.
 func TestStorageExportFromSecretRefWalksEnvironmentSecrets(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1692,8 +1613,6 @@ func storageValidationCephNode(name, site string, roles []string) v1alpha1.Stora
 		Site:  site,
 		Roles: roles,
 	}
-	// An osd-role host must select devices explicitly; there is no
-	// all-devices omission default.
 	for _, role := range roles {
 		if role == v1alpha1.StorageCephRoleOSD {
 			node.Devices = []string{"/dev/vdb"}
@@ -1702,8 +1621,6 @@ func storageValidationCephNode(name, site string, roles []string) v1alpha1.Stora
 	return node
 }
 
-// opaqueSecret is a first-class opaque Secret declaration, the shape the
-// storage external-details fromSecretRef resolves against.
 func opaqueSecret(name string) v1alpha1.Secret {
 	return v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: name}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}}
 }

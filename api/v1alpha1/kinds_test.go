@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// The accessor table is total: every State field is one authored-kind list
-// covered by exactly one accessor with a unique kind, so a new kind cannot
-// land in State without registering here.
 func TestAuthoredKindAccessorsCoverState(t *testing.T) {
 	accessors := AuthoredKindAccessors()
 	stateType := reflect.TypeOf(State{})
@@ -39,9 +36,6 @@ func TestAuthoredKindAccessorsCoverState(t *testing.T) {
 	}
 }
 
-// Each accessor must read its own State field: populate every list with one
-// object named after the field and check the accessor returns exactly that
-// name, so a copy-paste accessor reading a sibling list fails.
 func TestAuthoredKindAccessorNamesReadTheirField(t *testing.T) {
 	var s State
 	v := reflect.ValueOf(&s).Elem()

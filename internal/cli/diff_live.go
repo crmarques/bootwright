@@ -18,14 +18,8 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// clusterVersionJSONPath extracts "<Available-status>|<desired-version>" from a
-// ClusterVersion, the shallow container-cluster liveness signal the installer's
-// own idempotency guard trusts.
 const clusterVersionJSONPath = `jsonpath={.status.conditions[?(@.type=="Available")].status}|{.status.desired.version}`
 
-// liveDiffReport is the result of `bootwright diff` in live mode: the real-state
-// comparison for each storage and container cluster, laid over the offline
-// report's structural skeleton (never-applied roots, orphans, infrastructure).
 type liveDiffReport struct {
 	InSync         bool                          `json:"inSync"`
 	Storage        []liveStorageDiff             `json:"storage,omitempty"`
@@ -38,8 +32,6 @@ type liveDiffReport struct {
 	Adopt          *cephadopt.Summary            `json:"adopt,omitempty"`
 }
 
-// liveStorageDiff is one managed StorageCluster's live comparison. Note carries
-// a reason (external, unreachable) when Report is empty.
 type liveStorageDiff struct {
 	Cluster string          `json:"cluster"`
 	Probed  bool            `json:"probed"`
@@ -48,7 +40,6 @@ type liveStorageDiff struct {
 	Report  cephdiff.Report `json:"report"`
 }
 
-// liveContainerDiff is one ContainerCluster's shallow live check.
 type liveContainerDiff struct {
 	Cluster   string `json:"cluster"`
 	Installed bool   `json:"installed"`
@@ -58,19 +49,11 @@ type liveContainerDiff struct {
 	Note      string `json:"note,omitempty"`
 }
 
-// liveInfraResource carries the offline classification of a non-cluster
-// resource, which has no live probe.
 type liveInfraResource struct {
 	Label          string                                `json:"label"`
 	Classification workflow.ConvergeSafetyClassification `json:"classification"`
 }
 
-// buildLiveDiff overlays a real-state comparison on the offline report. It
-// discovers live Ceph state once (if any managed storage cluster is in scope),
-// diffs each storage cluster, shallow-checks each container cluster, and folds
-// the offline classification for infrastructure and never-applied roots. A
-// discovery or probe failure degrades to a warning, never a fatal error, so the
-// default diff stays usable against a partially-built or unreachable environment.
 func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, offline workflow.StateCheckReport, streamAnsible bool, stderr io.Writer) liveDiffReport {
 	live := liveDiffReport{InSync: true}
 
@@ -115,9 +98,6 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 				continue
 			}
 			container := probeContainerCluster(ctx, state, clustersDir, cf.ctx.RunsDir, root.Name)
-			// Only a cluster we could reach and that reports NOT Available is a
-			// genuine live difference; not-installed/unreachable is a warning we
-			// cannot turn into a drift verdict.
 			if container.Reachable && !container.Available {
 				live.InSync = false
 			}
@@ -140,8 +120,6 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 	return live
 }
 
-// diffStorageCluster builds one storage cluster's live diff, flipping live.InSync
-// when a probed cluster differs from desired state.
 func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, name string, discos map[string]cephstate.Discovery, live *liveDiffReport) liveStorageDiff {
 	result := liveStorageDiff{Cluster: name, InSync: true}
 	if cluster.Metadata.Name == "" {
@@ -154,8 +132,6 @@ func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 	}
 	disc, ok := discos[name]
 	if !ok || !disc.Probed {
-		// Reached no answer (unreachable seed, or Ceph not bootstrapped): cannot
-		// confirm drift, so do not fail the diff on it.
 		result.Note = "cluster unreachable; could not compare live state"
 		return result
 	}
@@ -169,8 +145,6 @@ func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 	return result
 }
 
-// runCephDiscovery prepares the bundle and runs the read-only discovery playbook,
-// degrading a failure to a warning string rather than aborting the diff.
 func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, streamAnsible bool, stderr io.Writer) (map[string]cephstate.Discovery, string) {
 	clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
 	reporter := newWorkflowReporter(stderr)
@@ -185,9 +159,6 @@ func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, s
 	return discos, ""
 }
 
-// probeContainerCluster runs the shallow ClusterVersion check against a container
-// cluster's kubeconfig. Absence of a kubeconfig means it was never installed; an
-// oc error means it is unreachable. Neither is treated as drift.
 func probeContainerCluster(ctx context.Context, state v1alpha1.State, clustersDir, runsDir, name string) liveContainerDiff {
 	data, err := clusteraccess.Kubeconfig(state, clustersDir, name)
 	if err != nil {
@@ -225,7 +196,6 @@ func probeContainerCluster(ctx context.Context, state v1alpha1.State, clustersDi
 	return container
 }
 
-// printLiveDiff renders the live report as a git-style diff plus status lines.
 func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 	p := cliout.New(stdout)
 	p.Command("diff")
@@ -287,8 +257,6 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 	printStateCheckLoadWarnings(p, live.LoadWarnings)
 }
 
-// printAdoptSummary reports what `--adopt` folded into desired state and what it
-// left for the operator to edit by hand.
 func printAdoptSummary(p *cliout.Printer, adopt *cephadopt.Summary) {
 	if adopt == nil {
 		return
@@ -311,20 +279,12 @@ func printAdoptSummary(p *cliout.Printer, adopt *cephadopt.Summary) {
 	}
 }
 
-// renderOSDAdvisories prints the reconstruction-fidelity advice for osd-role
-// hosts that select devices by filter/all: the intent is satisfied (not drift),
-// but the desired YAML does not pin the physical devices, so a rebuild would not
-// be byte-for-byte the same. It prints regardless of InSync so a fully-converged
-// filter cluster still learns which devices to pin.
 func renderOSDAdvisories(p *cliout.Printer, report cephdiff.Report) {
 	for _, adv := range report.UnpinnedOSDHosts {
 		p.Status(cliout.StatusWarn, "unpinned OSDs", adv.Host+" on ["+strings.Join(adv.Devices, " ")+"] via a filter/all selection — pin osd.dataDevices.paths for exact reconstruction")
 	}
 }
 
-// renderStorageDiff prints one storage cluster's facet diffs as a git-style
-// unified diff: one object header, a hunk per differing object, and -/+ lines
-// per field.
 func renderStorageDiff(p *cliout.Printer, label string, report cephdiff.Report) {
 	p.DiffObjectHeader(label, "differs from the live cluster")
 	for _, facet := range report.Facets {
@@ -344,8 +304,6 @@ func renderStorageDiff(p *cliout.Printer, label string, report cephdiff.Report) 
 	}
 }
 
-// firstErrorLine returns the first line of an error message, so a multi-line
-// Ansible failure collapses to a single status/warning line.
 func firstErrorLine(err error) string {
 	if err == nil {
 		return ""

@@ -8,15 +8,10 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// clusterDisplay holds the human descriptor and ordering metadata for one
-// cluster, derived once from desired state and shared by every CLI surface
-// (apply frame, summary, status, inventory) so they all describe a cluster the
-// same way. In a mixed fleet this is what lets a bare-metal OpenShift parent, a
-// KubeVirt-hosted child, and a Ceph cluster read differently at a glance.
 type clusterDisplay struct {
-	descriptor string // e.g. "OpenShift · KubeVirt on dc1-metal-ocp", "Ceph storage"
-	storage    bool   // true for StorageClusters
-	host       string // KubeVirt host cluster, used to order children after their parent
+	descriptor string
+	storage    bool
+	host       string
 }
 
 func substrateLabel(provider string) string {
@@ -41,9 +36,6 @@ func distributionLabel(distribution string) string {
 	return "OpenShift"
 }
 
-// containerDescriptor renders "<distro> · <substrate>" and, for KubeVirt,
-// "<distro> · KubeVirt on <host>" so a bare-metal parent and a KubeVirt-hosted
-// child are distinguishable rather than both reading as "ContainerCluster".
 func containerDescriptor(distribution string, sub stateview.ClusterSubstrate) string {
 	distro := distributionLabel(distribution)
 	switch {
@@ -68,9 +60,6 @@ func storageDescriptor(cluster v1alpha1.StorageCluster) string {
 	return label
 }
 
-// substrateDescriptor formats a provisioner (+ KubeVirt host) without a
-// distribution prefix, for surfaces (cluster list/access) that already name the
-// cluster's install mode/method and only need the substrate appended.
 func substrateDescriptor(provider, host string) string {
 	switch {
 	case provider == "":
@@ -82,10 +71,6 @@ func substrateDescriptor(provider, host string) string {
 	}
 }
 
-// buildClusterDisplays precomputes the descriptor and ordering metadata for
-// every declared cluster. The result is keyed by cluster name so ledger-fed
-// surfaces (which know only the name) can describe a cluster the same way the
-// state-fed surfaces do.
 func buildClusterDisplays(state v1alpha1.State) map[string]clusterDisplay {
 	out := make(map[string]clusterDisplay, len(state.ContainerClusters)+len(state.StorageClusters))
 	for _, cluster := range state.ContainerClusters {
@@ -104,9 +89,6 @@ func buildClusterDisplays(state v1alpha1.State) map[string]clusterDisplay {
 	return out
 }
 
-// clusterGroupTitle builds the per-cluster group heading "name (descriptor)".
-// It prefers the desired-state descriptor; when state is unavailable it falls
-// back to the ledger-derived kind word so the heading is never empty.
 func clusterGroupTitle(name string, displays map[string]clusterDisplay, fallbackKind string) string {
 	if d, ok := displays[name]; ok && d.descriptor != "" {
 		return name + " (" + d.descriptor + ")"
@@ -117,12 +99,6 @@ func clusterGroupTitle(name string, displays map[string]clusterDisplay, fallback
 	return name
 }
 
-// orderClusterNames returns the given cluster names in a topology-aware order:
-// storage clusters first, then each container "root" (a bare-metal/standalone
-// cluster) immediately followed by the KubeVirt children it hosts. This matches
-// apply/teardown reality (a child cannot install before its host) instead of
-// the alphabetical order that would print a child above its own parent. Order
-// is deterministic: roots and children are alphabetical within their group.
 func orderClusterNames(names []string, displays map[string]clusterDisplay) []string {
 	var storage, containers []string
 	for _, name := range names {

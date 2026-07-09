@@ -8,10 +8,6 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 )
 
-// SharedServiceDegradesUnderScope classifies which shared machine services a
-// scoped apply must refuse (config rendered from the in-state cluster/machine set)
-// versus those it may provision in full (config from the spec). Unknown slots
-// default to degrading so a new service is not silently allowed under scope.
 func TestSharedServiceDegradesUnderScope(t *testing.T) {
 	for _, slot := range []string{
 		v1alpha1.ComponentSlotLoadBalancer,
@@ -167,16 +163,9 @@ func TestSharedServicesReportsContainerClusterConsumers(t *testing.T) {
 	}
 }
 
-// TestScopedStorageApplyKeepsArtifactServerHost guards the fix for the opaque
-// "No such file or directory" managed-OS apply failure under a scoped run. A
-// bare-metal storage node publishes its install ISO through the artifact server
-// for Redfish virtual media, so `apply --clusters <storage>` must keep the
-// artifact server's host machine; without it the install ISO stage path renders
-// empty. Container clusters already pull the host in via their artifact consumer.
 func TestScopedStorageApplyKeepsArtifactServerHost(t *testing.T) {
 	state := bareMetalStorageManagedOSState()
 
-	// The artifact server must register as a service the storage cluster consumes.
 	var found bool
 	for _, service := range ResolveMachineServices(state).Services {
 		if service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {

@@ -35,18 +35,10 @@ func storageRoot(report StateCheckReport) *StateCheckRoot {
 	return nil
 }
 
-// TestStateCheckOmitsStorageWhenStagePlansNoStorageTask pins that state-check
-// classifies a StorageCluster's sub-objects ONLY when the selected graph plans a
-// StorageCluster task for it — the same object set the apply mode preflight reasons
-// about. A stage that plans no storage (e.g. --stage infra) must not report the
-// storage cluster as absent and exit non-zero where the identically-scoped apply is
-// a clean no-op.
 func TestStateCheckOmitsStorageWhenStagePlansNoStorageTask(t *testing.T) {
 	runsDir := t.TempDir()
 	state := stateCheckScopeState()
 
-	// No StorageCluster task in scope (mirrors state-check --stage infra): no
-	// storage root, in sync.
 	report, err := StateCheck(nil, ApplyTarget{}, state, runsDir)
 	if err != nil {
 		t.Fatalf("StateCheck (no storage task): %v", err)
@@ -58,8 +50,6 @@ func TestStateCheckOmitsStorageWhenStagePlansNoStorageTask(t *testing.T) {
 		t.Fatalf("state-check must be in sync when the scope plans no storage, got %+v", report.Roots)
 	}
 
-	// A StorageCluster task in scope (mirrors state-check --stage clusters): the
-	// never-applied cluster collapses to one absence, including its sub-objects.
 	storageTask := ApplyTask{
 		Entry: TaskLedgerEntry{
 			ID:          "storage.ceph",

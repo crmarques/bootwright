@@ -61,10 +61,6 @@ func openApplyLogFile(path string, label string) (*os.File, error) {
 	return file, nil
 }
 
-// Writer returns the log sink for one task's tool output. Cluster-specific work
-// goes solely to that cluster's own log so the shared run log stays a clean
-// record of shared-stage output plus the per-cluster lifecycle markers
-// (writeRunLine). Shared work (no cluster) goes to the run log.
 func (s *applyLogSet) Writer(cluster string) io.Writer {
 	if s == nil {
 		return io.Discard
@@ -80,9 +76,6 @@ func (s *applyLogSet) Writer(cluster string) io.Writer {
 	return io.Discard
 }
 
-// writeRunLine appends one Bootwright-authored marker line to the shared run
-// log. It is the only writer of the per-cluster "apply initiated/finished"
-// boundaries that bracket each cluster's split-out flow log.
 func (s *applyLogSet) writeRunLine(line string) {
 	if s == nil || s.run == nil {
 		return
@@ -106,9 +99,6 @@ func applyLogTimestamp(now time.Time) string {
 	return now.UTC().Format(time.RFC3339)
 }
 
-// clusterApplyTerminal reports whether every task of a cluster has reached a
-// terminal state and, if so, whether all of them ended cleanly (ok/skipped). A
-// cluster with no tasks is never "done" — there is no flow to mark finished.
 func clusterApplyTerminal(ledger RunLedger, cluster string) (done bool, ok bool) {
 	tasks := ledger.TasksForCluster(cluster)
 	if len(tasks) == 0 {
@@ -128,12 +118,6 @@ func clusterApplyTerminal(ledger RunLedger, cluster string) (done bool, ok bool)
 	return true, ok
 }
 
-// flushFinishedClusterMarkers writes the "apply finished" run-log marker for
-// every cluster that was announced (initiated) and has since reached a fully
-// terminal state but not yet been marked finished. It is idempotent: the
-// finished set guards against a second marker. The scheduler calls it after each
-// task event and once after the graph drains so a cluster whose tasks were
-// blocked or cancelled at the very end still gets its closing line.
 func flushFinishedClusterMarkers(logs *applyLogSet, ledger RunLedger, initiated, finished map[string]bool, now time.Time) {
 	for cluster := range initiated {
 		if finished[cluster] {
@@ -185,10 +169,6 @@ func ApplyRunLogPath(runsDir, runID string) string {
 	return filepath.Join(runsDir, "history", runID, applyLogName)
 }
 
-// ApplyClusterLogPath is the per-cluster flow log for one run. It lives beside
-// the shared run log under the run's history directory so a single run is
-// self-contained: bootwright.log holds shared-stage output and the per-cluster
-// markers; bootwright-<cluster>.log holds that cluster's split-out flow.
 func ApplyClusterLogPath(runsDir, runID, cluster string) string {
 	return filepath.Join(runsDir, "history", runID, applyClusterLogPrefix+cluster+".log")
 }
@@ -197,17 +177,10 @@ func OpenShiftInstallerLogPath(clustersDir, cluster string) string {
 	return filepath.Join(clustersDir, cluster, "runtime", render.RuntimeRelativeDir, ".openshift_install.log")
 }
 
-// PreflightLogPath is the file the read-only ansible preflight writes its output
-// to. Preflight has no per-run history dir, so it is a stable per-scope path the
-// CLI surfaces instead of streaming ansible to the terminal.
 func PreflightLogPath(runsDir, scopeName string) string {
 	return filepath.Join(runsDir, "preflight", scopeName, ansible.OutputLogName)
 }
 
-// DestroyLogPath is the file a destroy run writes its ansible output to. Destroy
-// runs a single workflow playbook and mints its run ID internally, so this is a
-// stable per-base-name path (e.g. "infra-destroy") the CLI surfaces instead of
-// streaming ansible to the terminal.
 func DestroyLogPath(runsDir, baseName string) string {
 	return filepath.Join(runsDir, "destroy", baseName, ansible.OutputLogName)
 }

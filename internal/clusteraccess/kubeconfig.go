@@ -8,8 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// Kubeconfig resolves and reads the generated admin kubeconfig for an
-// installed container cluster, returning its bytes.
 func Kubeconfig(state v1alpha1.State, clustersDir, clusterName string) ([]byte, error) {
 	summaries := FilterClusterSummaries(
 		ClusterSummariesFromAssets(state, render.InstallerAssets(clustersDir, state)),

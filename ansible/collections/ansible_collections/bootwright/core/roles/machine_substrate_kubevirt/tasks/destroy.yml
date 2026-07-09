@@ -17,12 +17,6 @@
       KubeVirt destroy for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is missing kubeconfig or namespace.
 
-# A teardown can target guests on a host cluster that was never installed or is
-# itself being destroyed, so its kubeconfig may be missing or its API unreachable.
-# Probe the API up front (independent of any VM/DataVolume, and bounded by a
-# request timeout so an unreachable endpoint cannot hang) and classify the host as
-# reachable or not. /version answers on any running API server regardless of
-# cluster readiness, so a partially-up cluster mid-teardown still reads reachable.
 - name: Probe KubeVirt host cluster reachability
   ansible.builtin.command:
     argv:
@@ -41,13 +35,6 @@
     bootwright_kubevirt_host_reachable: "{{ (bootwright_kubevirt_host_probe.rc | default(1)) == 0 }}"
   changed_when: false
 
-# A guest that was never provisioned has no kubevirt-machine ownership record: it
-# is written only after the VirtualMachine's root DataVolume reaches Ready during
-# apply (machine_substrate_kubevirt/tasks/main.yml). That record — in scope as
-# global extra-vars, keyed by the computed <cluster>-<machine> VM name — proves
-# absence WITHOUT contacting the host, so a never-provisioned guest whose host
-# cluster was itself never provisioned tears down to a clean no-op under a plain
-# destroy, with no --skip-unreachable and no reachable host required.
 - name: Resolve KubeVirt machine ownership record presence
   ansible.builtin.set_fact:
     bootwright_kubevirt_machine_recorded: >-
@@ -58,13 +45,6 @@
       }}
   changed_when: false
 
-# Fail closed by default ONLY for a RECORDED guest on an unreachable host cluster:
-# we recorded creating it, so an unreachable host is an operator problem to fix,
-# not a reason to silently assume the guest is gone. The assert aborts with
-# actionable guidance instead of a raw kubectl connection error mid-delete;
-# --skip-unreachable opts into treating the recorded guest as already-absent. A
-# never-provisioned (unrecorded) guest never reaches this assert — it no-ops via
-# the record check above. This mirrors the storage teardown's contract.
 - name: Require the KubeVirt host cluster to be reachable
   ansible.builtin.assert:
     that:
@@ -101,19 +81,9 @@
     - bootwright_kubevirt_machine_recorded | default(false) | bool
     - not (bootwright_kubevirt_host_reachable | bool)
 
-# Everything below runs only on a reachable host cluster. On an unreachable one,
-# the assert above has already failed closed (default) or --skip-unreachable has
-# turned the teardown into a no-op (block skipped); either way no kubectl delete
-# runs against an unreachable API.
 - name: Tear down KubeVirt guest on the reachable host cluster
   when: bootwright_kubevirt_host_reachable | bool
   block:
-    # The VM is addressed by computed name in a namespace that may be shared with
-    # foreign workloads. Re-verify live ownership (the bootwright.io/managed-by
-    # label the template stamps) before deleting, so a name collision with a
-    # non-Bootwright VM is refused instead of silently deleted. With the host
-    # cluster proven reachable, rc != 0 here means the VM is genuinely gone
-    # (NotFound), so the stop/delete are skipped as a no-op.
     - name: Read KubeVirt VirtualMachine ownership label
       ansible.builtin.command:
         argv:
@@ -133,8 +103,6 @@
 
     - name: Resolve KubeVirt VirtualMachine ownership for destroy
       ansible.builtin.set_fact:
-        # rc == 0 proves the VM exists on the reachable host; only then is there
-        # anything to stop or delete.
         bootwright_kubevirt_vm_present: "{{ (bootwright_kubevirt_vm_owner.rc | default(1)) == 0 }}"
         bootwright_kubevirt_destroy_owned: >-
           {{ (bootwright_kubevirt_vm_owner.rc | default(1)) != 0
@@ -149,10 +117,6 @@
           nothing to tear down.
       when: not (bootwright_kubevirt_vm_present | bool)
 
-    # --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a
-    # VirtualMachine that matches the computed name but carries a missing or
-    # mismatched managed-by label — e.g. after the desired-state names changed
-    # post-apply — is still deleted. Without it, the mismatch fails closed.
     - name: Refuse to delete a non-Bootwright KubeVirt VirtualMachine
       ansible.builtin.assert:
         that:
@@ -205,12 +169,6 @@
       changed_when: "'deleted' in (bootwright_kubevirt_vm_delete.stdout | default(''))"
       when: bootwright_kubevirt_vm_present | bool
 
-    # The DataVolumes are addressed by computed name in the same shared namespace
-    # as the VM. Re-verify each one's live ownership (the bootwright.io/managed-by
-    # label the root DataVolume template and the agent-ISO upload stamp) before
-    # deleting, so a name collision with a non-Bootwright DataVolume is refused
-    # instead of silently deleted. On the reachable host, rc != 0 means the
-    # DataVolume is genuinely gone (NotFound) and its delete is skipped.
     - name: Read KubeVirt DataVolume ownership labels
       ansible.builtin.command:
         argv:
@@ -231,9 +189,6 @@
       changed_when: false
       failed_when: false
 
-    # --force-unowned relaxes this refusal so a DataVolume that matches the
-    # computed name but carries a missing or mismatched managed-by label is still
-    # deleted.
     - name: Refuse to delete a non-Bootwright KubeVirt DataVolume
       ansible.builtin.assert:
         that:
@@ -262,8 +217,6 @@
         - (item.rc | default(1)) == 0
         - (item.stdout | default('') | trim) != 'bootwright'
 
-    # Delete only the DataVolumes whose ownership read succeeded (rc == 0): those
-    # exist on the host. DataVolumes read as absent (rc != 0) are skipped.
     - name: Delete KubeVirt DataVolumes
       ansible.builtin.command:
         argv:
@@ -283,9 +236,6 @@
       register: bootwright_kubevirt_dv_delete
       changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
 
-# The machine is now gone (deleted on the reachable host, or treated as
-# already-absent on an unreachable one under --skip-unreachable), so drop its
-# ownership record: a later apply recreates it instead of skipping a gone machine.
 - name: Remove KubeVirt machine ownership record
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

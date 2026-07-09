@@ -1,9 +1,5 @@
 package roles
 
-// Playbook entry points in the bootwright.core collection. Alongside the role
-// contracts in this package, these constants are the only place
-// bootwright.core names may be spelled in Go source; a repository fitness
-// test enforces it.
 const (
 	PlaybookWorkflowInfraApply                   = "bootwright.core.workflow_infra_apply"
 	PlaybookWorkflowInfraDestroy                 = "bootwright.core.workflow_infra_destroy"
@@ -28,10 +24,6 @@ const (
 	PlaybookTaskHostVirtctlProvision             = "bootwright.core.task_host_virtctl_provision"
 	PlaybookTaskStorageClusterApply              = "bootwright.core.task_storage_cluster_apply"
 
-	// Per-task destroy entry points. The workflow_*_destroy playbooks are thin
-	// import wrappers over these; the apply-style destroy scheduler runs them as
-	// individual graph tasks (in teardown order) so destroy shows granular
-	// progress, reusing the run's limit and extra-vars unchanged.
 	PlaybookTaskMachineInfraDestroy           = "bootwright.core.task_machine_infra_destroy"
 	PlaybookTaskInfraComponentServicesDestroy = "bootwright.core.task_infra_component_services_destroy"
 	PlaybookTaskProviderServicesDestroy       = "bootwright.core.task_provider_services_destroy"

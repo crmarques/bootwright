@@ -8,11 +8,6 @@
       Ceph distribution {{ bootwright_ceph_provider_name }} uses the upstream community
       package source and must not require Red Hat or IBM entitlement material.
 
-# The renderer emits exactly one of community.version (a full x.y.z, pinning the
-# repository reproducibly) or community.release (an upstream codename). The repo
-# directory and cephadm add-repo flag follow whichever is present, so an x.y.z
-# pin resolves rpm-<x.y.z>/ + add-repo --version and a name resolves rpm-<name>/
-# + add-repo --release.
 - name: Resolve community Ceph package source
   ansible.builtin.set_fact:
     bootwright_ceph_community_version: "{{ bootwright_ceph_provider.community.version | default('') }}"
@@ -34,10 +29,6 @@
       spec.ceph.community.mirror to an https:// URL (got
       {{ bootwright_ceph_community_mirror }}).
 
-# The renderer emits spec.ceph.community.checksum as bare sha256 hex under
-# provider.community.checksum; re-prefix it for get_url so the fetched-and-
-# executed bootstrap binary is content-verified. Unset resolves to omit, keeping
-# the HTTPS-only default the upstream install procedure documents.
 - name: Download cephadm utility to configure community Ceph repository
   ansible.builtin.get_url:
     url: "{{ bootwright_ceph_community_mirror }}/{{ bootwright_ceph_community_repo_path }}/el{{ ansible_distribution_major_version }}/noarch/cephadm"
@@ -47,9 +38,6 @@
     group: root
     mode: "0755"
 
-# The renderer emits no EPEL override under provider.community; the source is a
-# role variable (vars/os/RedHat.yml) an operator overrides to an internal EPEL
-# mirror for a disconnected site.
 - name: Resolve EPEL bootstrap package source
   ansible.builtin.set_fact:
     bootwright_ceph_community_epel_url: "{{ bootwright_ceph_community_epel_release_url }}"
@@ -64,22 +52,12 @@
       set bootwright_ceph_community_epel_release_url to an https:// URL (got
       {{ bootwright_ceph_community_epel_url }}).
 
-# cephadm add-repo enables EPEL with "dnf install -y epel-release" and has no flag
-# to skip it; pre-installing epel-release makes that internal step an idempotent
-# no-op on the unregistered managed RHEL node. disable_gpg_check covers hardened
-# images that force local package verification: epel-release is the bootstrap
-# package that itself ships the EPEL signing key, so no key is yet trusted.
 - name: Enable EPEL before cephadm configures the community Ceph repository
   ansible.builtin.dnf:
     name: "{{ bootwright_ceph_community_epel_url }}"
     state: present
     disable_gpg_check: true
 
-# The renderer emits no dependency-repo overrides under provider.community; both
-# knobs are role variables. Set bootwright_ceph_community_dependency_repos_enabled
-# to false on a host that entitles BaseOS/AppStream/CRB another way, or point
-# bootwright_ceph_community_dependency_default_mirror at an internal CentOS Stream
-# mirror for a disconnected site.
 - name: Resolve community Ceph dependency repository source
   ansible.builtin.set_fact:
     bootwright_ceph_community_dependency_enabled: "{{ bootwright_ceph_community_dependency_repos_enabled | default(true) | bool }}"
@@ -99,12 +77,6 @@
       {{ bootwright_ceph_community_dependency_gpgkey }}).
   when: bootwright_ceph_community_dependency_enabled
 
-# Community ceph-common depsolves against the distribution base repositories that
-# cephadm add-repo never configures (librabbitmq, librdkafka, python3-prettytable
-# from AppStream; libbabeltrace from CRB), and an unregistered RHEL node exposes
-# none of them. Trust the CentOS Official signing key with its fingerprint pinned,
-# so a substituted key over a compromised transport is rejected, before adding the
-# community repositories that key signs.
 - name: Trust the CentOS community signing key for Ceph dependency repositories
   ansible.builtin.rpm_key:
     key: "{{ bootwright_ceph_community_dependency_gpgkey }}"
@@ -112,11 +84,6 @@
     state: present
   when: bootwright_ceph_community_dependency_enabled
 
-# Mirror the documented community install procedure: add BaseOS, AppStream and CRB
-# from CentOS Stream so ceph-common dependencies resolve on an unregistered RHEL
-# node. $basearch is expanded by dnf; the release track is the EL major version
-# plus "-stream" (e.g. 9-stream) rather than dnf's $releasever, which on RHEL
-# resolves to a point release with no matching CentOS Stream path.
 - name: Add CentOS Stream community repositories for Ceph dependencies
   ansible.builtin.yum_repository:
     name: "{{ item.id }}"

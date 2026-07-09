@@ -8,8 +8,6 @@ import (
 
 func TestDiffRenderingPlainWhenNoColor(t *testing.T) {
 	var buf bytes.Buffer
-	// A buffer is not a TTY, so color is disabled and the output is a plain
-	// unified diff (consumable by review tooling / patch).
 	p := New(&buf)
 	p.DiffObjectHeader("StorageCluster/ceph-prod", "drifted")
 	p.DiffHunk("pool rbd")
@@ -20,7 +18,6 @@ func TestDiffRenderingPlainWhenNoColor(t *testing.T) {
 	})
 
 	got := buf.String()
-	// No ANSI escapes on a non-TTY.
 	if strings.Contains(got, "\x1b[") {
 		t.Fatalf("expected no ANSI escapes on a non-TTY:\n%q", got)
 	}

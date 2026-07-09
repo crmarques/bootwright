@@ -1,7 +1,4 @@
 ---
-# Resolve the loadBalancer components on this host and the libvirt-attached VIP
-# targets among their frontends. Shared by main.yml (attach) and destroy.yml
-# (detach) so both always operate on exactly the same target set.
 - name: Resolve LB components for this cluster on this host
   ansible.builtin.set_fact:
     bootwright_vip_lbs: >-

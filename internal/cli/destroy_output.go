@@ -10,10 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/status"
 )
 
-// destroyReporter drives the live destroy progress surface, the teardown
-// counterpart of applyReporter. It owns one output.RunView fed from the destroy
-// run ledger (see destroyRunFrame). The scheduler calls these from a single
-// goroutine, so the view needs no locking.
 type destroyReporter struct {
 	stdout  io.Writer
 	stderr  io.Writer
@@ -46,13 +42,6 @@ func (r *destroyReporter) PromptGap() {
 	output.NewContinuation(r.stderr).BlankLine()
 }
 
-// destroyRunFrame projects the destroy ledger into a single ordered group of
-// teardown steps. Destroy tasks are scope-level (host-group teardown), not
-// per-cluster, so they share one group rather than the per-cluster grouping
-// apply uses. The cluster-stage steps cover several clusters at once, so each
-// step names the clusters it tears down (from the persisted ResourceKeys) —
-// otherwise a failed "Container clusters" step would not say which of the fleet
-// it covered.
 func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 	steps := make([]output.Step, 0, len(ledger.Tasks))
 	for _, task := range ledger.Tasks {
@@ -72,9 +61,6 @@ func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 	}
 }
 
-// destroyStepDetail names the clusters a teardown step covers, appending the
-// failure/blocked reason when the step did not simply succeed so identity is
-// kept even on failure.
 func destroyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger) string {
 	covered := strings.Join(task.ResourceKeys, ", ")
 	reason := applyStepDetail(task, ledger)
@@ -88,8 +74,6 @@ func destroyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger)
 	}
 }
 
-// printDestroyRunStart writes the run-identity fields under the already-open
-// "Run" section opened by the bundle reporter.
 func printDestroyRunStart(stdout io.Writer, runsDir string, ledger workflow.RunLedger) {
 	output.NewContinuation(stdout).Fields([]output.Field{
 		{Key: "ID", Value: ledger.RunID},

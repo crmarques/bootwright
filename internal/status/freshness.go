@@ -55,14 +55,6 @@ func LoadEffectiveStateFreshness(current v1alpha1.State, renderedDir string) Eff
 }
 
 func stateFreshnessShape(state v1alpha1.State) v1alpha1.State {
-	// Clear computed bookkeeping (SourcePath, normalize-injected DefaultedRefs)
-	// on every loaded resource so freshness compares only the authored fields.
-	// Both carry `yaml:"-"`, so they are absent from the round-tripped
-	// effective-state.yaml; clearing them on the in-memory side too keeps the
-	// DeepEqual honest. Reflecting over State's per-kind slices ensures a newly
-	// added kind can never be silently omitted from this normalization (the
-	// previous explicit list missed all storage and add-on kinds, which made
-	// status falsely report "stale" for any storage/add-on-bearing state).
 	v := reflect.ValueOf(&state).Elem()
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)

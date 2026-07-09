@@ -6,8 +6,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 )
 
-// recordingApplyReporter records which progress calls fired so the positive case can
-// assert the helpers forward to a live reporter.
 type recordingApplyReporter struct {
 	render, resolve, bundleStart, bundleReady int
 }
@@ -19,12 +17,8 @@ func (r *recordingApplyReporter) BundleReady(bundle.AnsibleBundleResult) {
 	r.bundleReady++
 }
 
-// A nil ApplyRunReporter is a supported contract (ExecuteApply guards every reporter
-// call), so the report* helpers must be no-ops on nil rather than panic — the
-// clusters-targeting path (ResolveInstallerStart) previously dereferenced nil directly.
 func TestReportHelpersTolerateNilReporter(t *testing.T) {
 	var nilReporter ApplyRunReporter
-	// Each of these panicked before the nil guard was added.
 	reportRenderStart(nilReporter)
 	reportResolveInstallerStart(nilReporter)
 	reportBundleStart(nilReporter)

@@ -18,14 +18,14 @@ func frame(barDone, barTotal int, steps ...Step) RunFrame {
 
 func TestRunViewTransitionsEmitOncePerStatus(t *testing.T) {
 	buf := &bytes.Buffer{}
-	v := NewRunView(buf) // a *bytes.Buffer is not interactive -> transition mode
+	v := NewRunView(buf)
 
 	v.Render(frame(0, 1, Step{ID: "a", Label: "Provider services", Status: StatusPending}))
 	if buf.Len() != 0 {
 		t.Fatalf("PENDING step should emit nothing, got %q", buf.String())
 	}
 	v.Render(frame(0, 1, Step{ID: "a", Label: "Provider services", Status: StatusRunning}))
-	v.Render(frame(0, 1, Step{ID: "a", Label: "Provider services", Status: StatusRunning})) // no repeat
+	v.Render(frame(0, 1, Step{ID: "a", Label: "Provider services", Status: StatusRunning}))
 	v.Finish(frame(1, 1, Step{ID: "a", Label: "Provider services", Status: StatusDone}))
 
 	out := buf.String()
@@ -43,11 +43,10 @@ func TestRunViewTransitionsEmitOncePerStatus(t *testing.T) {
 func TestRunViewInPlaceClearsPreviousHeight(t *testing.T) {
 	buf := &bytes.Buffer{}
 	v := NewRunView(buf)
-	v.tty = true // white-box: exercise the in-place redraw path
-	v.width = 80 // no wrapping
+	v.tty = true
+	v.width = 80
 	v.p.color = false
 
-	// 1 leading gap + 1 bar + 1 gap + 1 group title + 2 steps = 6 rows.
 	v.Render(frame(0, 2,
 		Step{ID: "a", Label: "Provider services", Status: StatusRunning},
 		Step{ID: "b", Label: "Machine infra", Status: StatusPending},
@@ -79,7 +78,7 @@ func TestRunViewInPlaceClearsPreviousHeight(t *testing.T) {
 }
 
 func TestRenderFrameFormat(t *testing.T) {
-	p, buf := newBufferPrinter(false) // color off for a stable golden
+	p, buf := newBufferPrinter(false)
 	rows := p.RenderFrame(RunFrame{
 		BarLabel: "Fleet",
 		Done:     1,
@@ -123,8 +122,6 @@ func TestRenderFrameCollapsesFinishedGroups(t *testing.T) {
 		},
 	}
 
-	// collapse=true: the all-terminal group becomes a one-liner; the active group
-	// keeps its steps.
 	p, buf := newBufferPrinter(false)
 	p.RenderFrame(frame, 0, true)
 	got := buf.String()
@@ -138,7 +135,6 @@ func TestRenderFrameCollapsesFinishedGroups(t *testing.T) {
 		t.Fatalf("active group must stay expanded:\n%s", got)
 	}
 
-	// collapse=false: every group is fully listed (the one-shot status record).
 	p2, buf2 := newBufferPrinter(false)
 	p2.RenderFrame(frame, 0, false)
 	if !strings.Contains(buf2.String(), "[DONE] Install") {
@@ -150,13 +146,12 @@ func TestRunViewInPlaceCountsWrappedRows(t *testing.T) {
 	buf := &bytes.Buffer{}
 	v := NewRunView(buf)
 	v.tty = true
-	v.width = 20 // narrow: a long step label wraps
+	v.width = 20
 	v.p.color = false
 
-	long := strings.Repeat("x", 60) // ~ wraps to 4 rows at width 20
+	long := strings.Repeat("x", 60)
 	v.Render(RunFrame{BarLabel: "Fleet", Done: 0, Total: 1,
 		Groups: []StepGroup{{Steps: []Step{{ID: "a", Label: long, Status: StatusRunning}}}}})
-	// bar line (~ "  Fleet  [....] 0/1 0 tasks" < 40 -> 2 rows) + 1 step row.
 	height := v.lastHeight
 	if height < 4 {
 		t.Fatalf("expected wrapped rows counted, got height %d", height)

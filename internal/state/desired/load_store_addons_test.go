@@ -10,10 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// storeAddonFixture copies the multidc ODF example into a temp workspace,
-// drops its authored openshift-data-foundation add-on directory, and rewrites
-// its binding addonRefs to addonName — a fleet whose Data Foundation add-on
-// must come from the registered store.
 func storeAddonFixture(t *testing.T, addonName string) string {
 	t.Helper()
 	src := filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
@@ -67,10 +63,6 @@ func copyFixtureTree(t *testing.T, src, dst string) {
 	}
 }
 
-// TestLoadResolvesRegisteredNativeAddons proves the loader falls back to the
-// machine-registered store for binding addonRefs no authored ClusterAddon
-// matches — and, because the registered content is the real catalog release,
-// it also validates each shipped native add-on inside a real fleet.
 func TestLoadResolvesRegisteredNativeAddons(t *testing.T) {
 	cases := []struct {
 		addon   string
@@ -116,9 +108,6 @@ func TestLoadResolvesRegisteredNativeAddons(t *testing.T) {
 	}
 }
 
-// TestLoadWithoutStoreKeepsUnresolvedReferenceError pins the rootless / no
-// store behavior: the reference stays unresolved, validation reports it, and
-// the finding carries the register remedy because the catalog ships the name.
 func TestLoadWithoutStoreKeepsUnresolvedReferenceError(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(workspace.SetRootDirForTest(root))

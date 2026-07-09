@@ -11,8 +11,6 @@ import (
 
 type preflightCheck = output.Check
 
-// preflightChecksToOutput adapts plain preflight check data to the CLI output
-// vocabulary at the presentation boundary.
 func preflightChecksToOutput(checks []preflight.Check) []output.Check {
 	out := make([]output.Check, 0, len(checks))
 	for _, check := range checks {
@@ -28,8 +26,6 @@ func preflightChecksToOutput(checks []preflight.Check) []output.Check {
 	return out
 }
 
-// preflightPhases narrows the CLI phase selection to the names preflight
-// scoping consumes.
 func preflightPhases(selected []converge.Phase) []preflight.Phase {
 	out := make([]preflight.Phase, 0, len(selected))
 	for _, phase := range selected {

@@ -9,8 +9,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Token kinds a hook manifest template may embed. Each token must be a whole
-// YAML scalar value ("{{ kind arg }}"); no interpolation into a larger string.
 const (
 	TokenCluster       = "cluster"
 	TokenOutput        = "output"
@@ -19,22 +17,13 @@ const (
 	TokenExportDetails = "exportDetails"
 )
 
-// Token is one whole-scalar template reference parsed from a hook manifest.
-// Arg is the text after the kind: a name (output/secret), an "input.property"
-// pair (input/exportDetails), or empty (cluster).
 type Token struct {
 	Kind string
 	Arg  string
 }
 
-// tokenRe matches a whole-scalar token: "{{ kind }}" or "{{ kind arg }}" after
-// trimming surrounding whitespace. The arg is any run of non-space, non-brace
-// characters (a name or a dotted input.property pair).
 var tokenRe = regexp.MustCompile(`^\{\{\s*([a-zA-Z]+)(?:\s+([^\s{}]+))?\s*\}\}$`)
 
-// ParseToken returns the token a scalar value denotes, or ok=false when the
-// value is not a whole-scalar token (a literal, or an interpolation the grammar
-// deliberately rejects).
 func ParseToken(value string) (Token, bool) {
 	match := tokenRe.FindStringSubmatch(strings.TrimSpace(value))
 	if match == nil {
@@ -43,10 +32,6 @@ func ParseToken(value string) (Token, bool) {
 	return Token{Kind: match[1], Arg: match[2]}, true
 }
 
-// ExtractTokens returns every whole-scalar token in a manifest template, in a
-// stable order, for validation. A scalar that merely contains "{{" but is not a
-// whole-scalar token is ignored here and rejected at render time only if the
-// grammar cannot resolve it; validation catches unknown token kinds/args.
 func ExtractTokens(raw []byte) ([]Token, error) {
 	var doc any
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -61,10 +46,6 @@ func ExtractTokens(raw []byte) ([]Token, error) {
 	return out, nil
 }
 
-// RenderManifest parses a manifest template and replaces every whole-scalar
-// token with the value resolve returns, returning the resulting object.
-// Replacing whole scalars (never substrings) keeps multi-line JSON payloads as
-// programmatic values re-marshaled by yaml — no escaping or injection concerns.
 func RenderManifest(raw []byte, resolve func(Token) (string, error)) (map[string]any, error) {
 	var doc any
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -135,8 +116,6 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// SplitInputProperty splits an "input.property" token arg. ok is false when the
-// arg is not exactly one dotted pair.
 func SplitInputProperty(arg string) (input, property string, ok bool) {
 	parts := strings.SplitN(arg, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[1], ".") {

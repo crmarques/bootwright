@@ -103,10 +103,6 @@ func isPlaceholderTLSSecret(pair InstallerTLSSecret) bool {
 }
 
 func containsSecretRef(value string) bool {
-	// Recognize both placeholder dialects so a redacted cert/key lands in
-	// stringData (verbatim) rather than the base64 data block (which would
-	// corrupt the token): the context placeholder render's "<bootwright-...-ref:>"
-	// sentinels and the portable render's "{{ secret ... }}" tokens.
 	return strings.HasPrefix(value, "<bootwright-") || strings.HasPrefix(value, "{{ secret ")
 }
 

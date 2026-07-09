@@ -16,9 +16,7 @@ type ClusterAddonSpec struct {
 	OLM         *ClusterAddonOLMSpec     `yaml:"olm,omitempty" json:"olm,omitempty"`
 	ManifestSet *ClusterAddonManifestSet `yaml:"manifestSet,omitempty" json:"manifestSet,omitempty"`
 	Readiness   ClusterAddonReadiness    `yaml:"readiness,omitempty" json:"readiness,omitempty"`
-	// Hooks are addon-shipped Ansible playbooks and/or templated manifests run at
-	// lifecycle points of the add-on apply. See ClusterAddonHook.
-	Hooks []ClusterAddonHook `yaml:"hooks,omitempty" json:"hooks,omitempty"`
+	Hooks       []ClusterAddonHook       `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 }
 
 type ClusterAddonAccepts struct {
@@ -26,10 +24,7 @@ type ClusterAddonAccepts struct {
 }
 
 type ClusterAddonAcceptedInput struct {
-	Name string `yaml:"name" json:"name"`
-	// Required marks an input every binding of this add-on must supply;
-	// validation rejects a binding that omits it, instead of the omission
-	// surfacing mid-apply as an unresolvable hook target or a skipped effect.
+	Name     string                    `yaml:"name" json:"name"`
 	Required bool                      `yaml:"required,omitempty" json:"required,omitempty"`
 	Schema   ClusterAddonInputSchema   `yaml:"schema,omitempty" json:"schema,omitempty"`
 	Effects  []ClusterAddonInputEffect `yaml:"effects,omitempty" json:"effects,omitempty"`
@@ -41,10 +36,6 @@ type ClusterAddonInputSchema struct {
 	Properties map[string]ClusterAddonInputProperty `yaml:"properties,omitempty" json:"properties,omitempty"`
 }
 
-// ClusterAddonInputProperty types one binding-supplied input value. Exactly
-// one of refKind or secret is set: refKind values are plain object names
-// resolved against the loaded objects of that kind, secret marks values that
-// resolve against Environment spec.secrets.
 type ClusterAddonInputProperty struct {
 	RefKind string `yaml:"refKind,omitempty" json:"refKind,omitempty"`
 	Secret  bool   `yaml:"secret,omitempty" json:"secret,omitempty"`
@@ -53,10 +44,6 @@ type ClusterAddonInputProperty struct {
 type ClusterAddonInputEffect struct {
 	Type     string `yaml:"type" json:"type"`
 	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
-	// Registry and Username shape the globalPullSecretMerge effect: the value
-	// of the input's single secret property becomes the password of an
-	// `auths[registry]` entry (user `username`) merged into the bound
-	// cluster's global pull secret. Both are rejected on other effect types.
 	Registry string `yaml:"registry,omitempty" json:"registry,omitempty"`
 	Username string `yaml:"username,omitempty" json:"username,omitempty"`
 }
@@ -69,20 +56,11 @@ type ClusterAddonOLMSpec struct {
 	CustomResources []map[string]any              `yaml:"customResources,omitempty" json:"customResources,omitempty"`
 }
 
-// ClusterAddonOLMCatalogSource declares an operator catalog the add-on brings
-// with it (a partner or community index the cluster does not already serve).
-// It renders as a grpc CatalogSource in the subscription's sourceNamespace and
-// is applied before the operator-install set; the apply path then waits for
-// the catalog's registry to report a READY connection before applying the
-// Subscription, so OLM dependency resolution never races the catalog startup.
-// When set, subscription.source defaults to this catalog's name.
 type ClusterAddonOLMCatalogSource struct {
-	Name        string `yaml:"name" json:"name"`
-	Image       string `yaml:"image" json:"image"`
-	DisplayName string `yaml:"displayName,omitempty" json:"displayName,omitempty"`
-	Publisher   string `yaml:"publisher,omitempty" json:"publisher,omitempty"`
-	// PollInterval sets updateStrategy.registryPoll.interval (how often OLM
-	// re-pulls the index image for updates). Empty leaves polling unset.
+	Name         string `yaml:"name" json:"name"`
+	Image        string `yaml:"image" json:"image"`
+	DisplayName  string `yaml:"displayName,omitempty" json:"displayName,omitempty"`
+	Publisher    string `yaml:"publisher,omitempty" json:"publisher,omitempty"`
 	PollInterval string `yaml:"pollInterval,omitempty" json:"pollInterval,omitempty"`
 }
 

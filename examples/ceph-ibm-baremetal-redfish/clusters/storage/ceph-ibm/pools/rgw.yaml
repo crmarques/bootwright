@@ -8,5 +8,4 @@ spec:
   placementPolicyRef: replicated-host
 
   ceph:
-    # Object storage (RGW) data pool.
     role: rgw

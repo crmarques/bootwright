@@ -288,10 +288,6 @@ func TestSummarizeFailureExtractsTaskAndReason(t *testing.T) {
 	}
 }
 
-// TestSummarizeFailureExtractsAnsibleMessage locks in the descriptive-reason fix:
-// the `failure:` line must carry the human-readable `msg` of the failing task —
-// including the actionable tail — not the raw JSON fatal blob, across the classic
-// callback line, an ansible-core enriched banner, and a color-coded line.
 func TestSummarizeFailureExtractsAnsibleMessage(t *testing.T) {
 	const overrideMsg = "managed OS at 10.7.7.129 is Bootwright-owned but /etc/bootwright/install-marker.json does not match desired hash sha256:d04dffb4; rerun with --override to rebuild it."
 	cases := map[string]string{
@@ -315,7 +311,6 @@ func TestSummarizeFailureExtractsAnsibleMessage(t *testing.T) {
 			if !strings.Contains(got, "  failure: "+overrideMsg) {
 				t.Fatalf("summary must carry the actionable msg on the failure line:\n%s", got)
 			}
-			// The actionable tail is what makes it useful.
 			if !strings.Contains(got, "rerun with --override to rebuild it.") {
 				t.Fatalf("summary must preserve the --override hint:\n%s", got)
 			}
@@ -380,7 +375,6 @@ func TestCallerOwnedChainTrusted(t *testing.T) {
 		t.Fatalf("caller-owned 0755 chain should be trusted")
 	}
 
-	// A group/other-writable component anywhere up the chain must break trust.
 	mid := filepath.Join(home, ".local")
 	if err := os.Chmod(mid, 0o777); err != nil {
 		t.Fatalf("chmod: %v", err)
@@ -392,7 +386,6 @@ func TestCallerOwnedChainTrusted(t *testing.T) {
 		t.Fatalf("chmod back: %v", err)
 	}
 
-	// A uid mismatch (simulated with an impossible owner) must break trust.
 	if callerOwnedChainTrusted(site, home, uid+1) {
 		t.Fatalf("foreign-owned chain must not be trusted")
 	}

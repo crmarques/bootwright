@@ -1,13 +1,3 @@
-# Attaches Data Foundation to the StorageExport's Ceph cluster end to end: a
-# controller-local task reads Rook's ceph-external-cluster-details-exporter.py
-# from the ConfigMap the just-installed operator publishes (Data Foundation
-# 4.19+ ships it only there), the script is staged onto a Ceph node resolved
-# from the hook's fromInput target and executed inside cephadm shell (creating
-# the CSI clients idempotently), and its JSON payload is captured as the hook's
-# declared externalDetails output. Set bootwright_exporter_script to a
-# pre-placed path on the Ceph node to skip the retrieval, or
-# bootwright_exporter_use_cephadm_shell: false to run the script with the
-# node's own python3/rados bindings.
 - name: Export Data Foundation external cluster details
   hosts: all
   gather_facts: false
@@ -77,9 +67,6 @@
       ansible.builtin.set_fact:
         bootwright_exporter_argv: "{{ ['python3', bootwright_exporter_path] + bootwright_exporter_args }}"
 
-    # cephadm shell guarantees the ceph CLI, cluster config, admin keyring, and
-    # python rados bindings the exporter needs; Bootwright-managed (cephadm)
-    # Ceph nodes do not carry those on the host itself.
     - name: Wrap the exporter in cephadm shell
       when: bootwright_exporter_use_cephadm_shell | bool
       ansible.builtin.set_fact:

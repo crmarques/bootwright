@@ -12,9 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// newValidateCmd exposes a pure offline validation: load + normalize + validate
-// the current context input YAML without running Ansible, probing hosts, or
-// rendering installer files. Designed to be safe and instant on every edit.
 func newValidateCmd(stdout io.Writer) *cobra.Command {
 	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
 		use:   "validate",
@@ -96,13 +93,6 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 	return cmd
 }
 
-// contextSecretChecks reports declared-secret material status during `validate`
-// against the current context, mirroring the secret checks `status` shows so
-// validate makes plain which declared secrets are still missing locally.
-// Missing material is a WARN, not a failure: offline validation checks
-// desired-state YAML, and unsynced secrets are a readiness concern that must not
-// fail validate. It returns nothing when validating explicit -f input, which has
-// no context secrets directory to inspect.
 func contextSecretChecks(cf *commonFlags, files []string, state v1alpha1.State) []preflightCheck {
 	if len(files) > 0 || cf.ctx.Name == "" {
 		return nil
@@ -121,11 +111,6 @@ func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, desi
 	return loadDesiredStateWithExclusions(cf)
 }
 
-// environmentSelectionChecks warns about loaded clusters that Environment
-// spec.containerClusters / spec.storageClusters selection excludes from the
-// effective state: excluded clusters are never validated and apply never
-// touches them, so a cluster file missing from the selection lists would
-// otherwise disappear silently.
 func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusions) []preflightCheck {
 	checks := make([]preflightCheck, 0, len(exclusions.ContainerClusters)+len(exclusions.StorageClusters))
 	for _, name := range exclusions.ContainerClusters {
@@ -149,13 +134,6 @@ func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusio
 	return checks
 }
 
-// storageAdvisoryChecks surfaces every non-fatal storage advisory the advice
-// package produces: the Ceph best-practice warnings (sub-quorum monitors, a
-// single manager, an unpinned subscription image) and the INFO stretch-pool
-// inheritance notice. They never fail validate — a single-node or lab cluster is
-// a valid authored shape — but make a cluster's departure from IBM Storage Ceph
-// recommendations, or behaviour its per-object YAML hides, visible at author
-// time. Sharing the advice source keeps text and `--output json` in step.
 func storageAdvisoryChecks(state v1alpha1.State) []preflightCheck {
 	advisories := advice.StorageAdvisories(state)
 	checks := make([]preflightCheck, 0, len(advisories))
@@ -176,40 +154,32 @@ func storageAdvisoryChecks(state v1alpha1.State) []preflightCheck {
 }
 
 type syntaxCheckReport struct {
-	OK bool `json:"ok"`
-	// ExitCode mirrors the process exit status (0 valid, 1 load or validation
-	// error) so CI consuming the JSON gets the same automation signal the
-	// generic command-error report carries, without parsing text.
-	ExitCode int    `json:"exitCode"`
-	Error    string `json:"error,omitempty"`
-	// Excluded* name loaded clusters that Environment spec.containerClusters /
-	// spec.storageClusters selection drops from the effective state; they are
-	// not validated and apply never touches them.
-	ExcludedContainerClusters []string     `json:"excludedContainerClusters,omitempty"`
-	ExcludedStorageClusters   []string     `json:"excludedStorageClusters,omitempty"`
-	Diagnostics               []Diagnostic `json:"diagnostics,omitempty"`
-	// Advisories are non-fatal Ceph best-practice warnings; their presence does
-	// not set OK=false.
-	Advisories               []advice.StorageAdvisory `json:"advisories,omitempty"`
-	Environments             int                      `json:"environments"`
-	Machines                 int                      `json:"machines"`
-	MachineImages            int                      `json:"machineImages"`
-	MachineInstallProfiles   int                      `json:"machineInstallProfiles"`
-	NetworkConfigs           int                      `json:"networkConfigs"`
-	InfraProviders           int                      `json:"infraProviders"`
-	InfraComponents          int                      `json:"infraComponents"`
-	ContainerClusters        int                      `json:"containerClusters"`
-	StorageClusters          int                      `json:"storageClusters"`
-	StoragePlacementPolicies int                      `json:"storagePlacementPolicies"`
-	StoragePools             int                      `json:"storagePools"`
-	StorageFilesystems       int                      `json:"storageFilesystems"`
-	StorageObjectGateways    int                      `json:"storageObjectGateways"`
-	StorageNFSExports        int                      `json:"storageNFSExports"`
-	StorageExports           int                      `json:"storageExports"`
-	ClusterAddons            int                      `json:"clusterAddons"`
-	Profiles                 int                      `json:"clusterAddonProfiles"`
-	ExtensionBindings        int                      `json:"clusterAddonBindings"`
-	ProvisioningPlaybooks    int                      `json:"provisioningPlaybooks"`
+	OK                        bool                     `json:"ok"`
+	ExitCode                  int                      `json:"exitCode"`
+	Error                     string                   `json:"error,omitempty"`
+	ExcludedContainerClusters []string                 `json:"excludedContainerClusters,omitempty"`
+	ExcludedStorageClusters   []string                 `json:"excludedStorageClusters,omitempty"`
+	Diagnostics               []Diagnostic             `json:"diagnostics,omitempty"`
+	Advisories                []advice.StorageAdvisory `json:"advisories,omitempty"`
+	Environments              int                      `json:"environments"`
+	Machines                  int                      `json:"machines"`
+	MachineImages             int                      `json:"machineImages"`
+	MachineInstallProfiles    int                      `json:"machineInstallProfiles"`
+	NetworkConfigs            int                      `json:"networkConfigs"`
+	InfraProviders            int                      `json:"infraProviders"`
+	InfraComponents           int                      `json:"infraComponents"`
+	ContainerClusters         int                      `json:"containerClusters"`
+	StorageClusters           int                      `json:"storageClusters"`
+	StoragePlacementPolicies  int                      `json:"storagePlacementPolicies"`
+	StoragePools              int                      `json:"storagePools"`
+	StorageFilesystems        int                      `json:"storageFilesystems"`
+	StorageObjectGateways     int                      `json:"storageObjectGateways"`
+	StorageNFSExports         int                      `json:"storageNFSExports"`
+	StorageExports            int                      `json:"storageExports"`
+	ClusterAddons             int                      `json:"clusterAddons"`
+	Profiles                  int                      `json:"clusterAddonProfiles"`
+	ExtensionBindings         int                      `json:"clusterAddonBindings"`
+	ProvisioningPlaybooks     int                      `json:"provisioningPlaybooks"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions desiredstate.ClusterSelectionExclusions, checkErr error) error {
@@ -250,8 +220,6 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 	return cliout.JSON(stdout, report)
 }
 
-// syntaxSourceLabel names what was validated so a `-f` run does not mislabel
-// its source as the context input it never read.
 func syntaxSourceLabel(files []string) string {
 	if len(files) > 0 {
 		return "input files"

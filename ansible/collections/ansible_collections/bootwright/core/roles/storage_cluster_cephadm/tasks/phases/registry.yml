@@ -1,9 +1,4 @@
 ---
-# Container registry configuration for subscription-backed distributions. This
-# stage runs after dependencies (which installs podman) and before cephadm is
-# installed and the cluster is bootstrapped, so every storage node can pull the
-# Ceph container images cephadm orchestrates. The registry URL, credentials, and
-# optional trust bundle all come from the rendered Environment entitlement.
 - name: Install cephadm registry trust on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_ceph_registry_trust_path }}"

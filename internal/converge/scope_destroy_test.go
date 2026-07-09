@@ -7,12 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// TestApplyDestroyScopeExtraVarsStorageGate locks the single-source contract for
-// the storage teardown gate: ApplyDestroyScopeExtraVars composes
-// DestroyStorageScopeExtraVar from plan.StorageWorkNames so the task-graph and
-// single-playbook paths carry an identical allowlist. nil work set (no
-// --clusters narrowing) emits nothing; a non-nil set emits the exact allowlist,
-// empty included (tear down none).
 func TestApplyDestroyScopeExtraVarsStorageGate(t *testing.T) {
 	storageVar := func(plan WorkflowPlan) (string, bool) {
 		for _, pair := range plan.ExtraVarPairs {
@@ -50,9 +44,6 @@ func TestApplyDestroyScopeExtraVarsStorageGate(t *testing.T) {
 	})
 }
 
-// TestApplyDestroyScopeExtraVarsSkipUnreachable locks that the skip-unreachable
-// executor gate is composed only when requested, so the node-targeting destroy
-// plays tolerate powered-off hosts only on explicit opt-in.
 func TestApplyDestroyScopeExtraVarsSkipUnreachable(t *testing.T) {
 	has := func(plan WorkflowPlan) bool {
 		for _, pair := range plan.ExtraVarPairs {

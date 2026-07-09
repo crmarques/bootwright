@@ -1,12 +1,4 @@
 ---
-# Subscription-backed Ceph package repository preparation, shared by every
-# distribution the renderer marks requiresRHSM (redhat, ibm). What differs
-# between those distributions is data, not control flow: the RHSM repository set
-# (provider.repository.redhatRepos), an optional vendor .repo file
-# (provider.repository.ibmRepoURL), and whether a license must be accepted
-# (provider.requiresLicense). Each step below is gated on a rendered flag, so a
-# new subscription-backed distribution needs a table entry in the Go renderer,
-# never a new task file here.
 - name: Validate subscription-backed Ceph entitlement paths
   ansible.builtin.assert:
     that:
@@ -27,13 +19,6 @@
       set the Environment entitlement license.accept=true.
   when: bootwright_ceph_provider.requiresLicense | default(false) | bool
 
-# Corporate Satellite redirect: when the entitlement names a Satellite, bind this
-# node's subscription-manager to it before registering so `register` targets the
-# Satellite instead of the public Red Hat CDN. The katello-ca-consumer RPM (served
-# over plain HTTP from the Satellite's /pub bootstrap path) writes the Satellite CA
-# into /etc/rhsm/ca and points rhsm.conf at the server; the system trust anchor is
-# updated too for general dnf/HTTPS content access. Skipped entirely (and behavior
-# is unchanged) when no satellite is set.
 - name: Trust corporate Satellite CA on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_ceph_rhsm_satellite_ca_path }}"
@@ -59,16 +44,6 @@
     disable_gpg_check: true
   when: bootwright_ceph_rhsm_satellite_hostname | length > 0
 
-# noProxy honouring for rhsm.conf has one gap the other consumers do not: python-rhsm's
-# [server] no_proxy cannot match a CIDR entry (10.0.0.0/8), only a hostname or a
-# domain suffix. Render handles the matchable cases — it feeds rhsm.conf the
-# CIDR-stripped bootwright_proxy_no_literal (domains + concrete IP literals, with the
-# internal hosts a CIDR covers already pinned as literals). What render cannot do is
-# resolve a Satellite named only by FQDN and bypassed only by a CIDR, because it does
-# no DNS. So do that here on the node: getent-resolve the Satellite and, if its address
-# falls inside a no_proxy CIDR, mark it bypassed so the proxy is left out of rhsm.conf
-# entirely (registering direct). bootwright_ceph_rhsm_server_bypassed defaults false, so
-# the public Red Hat CDN and a proxied Satellite are unaffected.
 - name: Resolve corporate Satellite address for the no_proxy CIDR bypass check
   ansible.builtin.command:
     argv:
@@ -96,26 +71,6 @@
     - bootwright_ceph_rhsm_satellite_hostname | length > 0
     - (bootwright_ceph_rhsm_satellite_resolve.stdout_lines | default([]) | length) > 0
 
-# Point subscription-manager at the egress proxy through /etc/rhsm/rhsm.conf, not
-# just the http(s)_proxy task environment. subscription-manager and the RHSM dnf
-# plugin drive the certificate-based RHEL repos in /etc/yum.repos.d/redhat.repo
-# from rhsm.conf's [server] proxy settings, ignoring the environment proxy that
-# carries every other dnf repo: with no proxy in rhsm.conf the plugin stamps
-# `proxy = _none_` into each RHEL repo, so on a proxied estate dnf tries the Red
-# Hat CDN directly and fails (baseos/appstream repomd.xml unreachable) while a
-# third-party vendor .repo still succeeds over the environment proxy. Writing the
-# proxy here fixes both registration and RHEL content fetches; the subsequent
-# refresh regenerates redhat.repo so the proxy takes effect before the vendor
-# license package pulls RHEL dependencies. noProxy hosts are honoured via
-# server.no_proxy (the CIDR-stripped literal list; see the CIDR-bypass note above).
-# Credentials land in root-owned rhsm.conf, tightened to 0600 so the proxy password
-# is not world-readable.
-#
-# The task always runs and converges the [server] proxy to its desired state: the
-# effective proxy when one is declared and the RHSM server is not bypassed, blanked
-# otherwise. Blanking matters — a stale proxy left in rhsm.conf would force a
-# now-direct node through a dead proxy — and a change either way triggers the
-# refresh below so redhat.repo is regenerated to match.
 - name: Configure subscription-manager egress proxy
   community.general.ini_file:
     path: /etc/rhsm/rhsm.conf
@@ -149,18 +104,6 @@
       - option: proxy_password
         value: "{{ bootwright_proxy_credentials.password if bootwright_ceph_rhsm_proxy_creds else '' }}"
 
-# A TLS-inspecting (SSL-bump) proxy re-signs cdn.redhat.com with the corporate CA,
-# but subscription-manager stamps every redhat.repo entry with
-# sslcacert=/etc/rhsm/ca/redhat-uep.pem, which libcurl uses as CURLOPT_CAINFO --
-# REPLACING the system trust store, not augmenting it. So the proxy CA installed
-# into the system anchors (phases/repository.yml) makes get_url/podman/the vendor
-# .repo validate, but NOT the RHSM CDN repos: dnf still verifies cdn.redhat.com
-# against redhat-uep.pem alone, which lacks the proxy CA -> "unable to get local
-# issuer certificate". Point repo_ca_cert at the system bundle that update-ca-trust
-# has already merged the proxy CA into, so redhat.repo's sslcacert trusts the
-# re-signed certificate. Converges both ways: the stock RHSM CA is restored when no
-# inspecting proxy declares a trustBundleRef, and a change triggers the refresh
-# below so redhat.repo regenerates with the new sslcacert.
 - name: Point RHSM content CA at the proxy-aware trust store
   community.general.ini_file:
     path: /etc/rhsm/rhsm.conf
@@ -173,10 +116,6 @@
   register: bootwright_ceph_rhsm_repo_ca
 
 - name: Register storage node with RHSM
-  # redhat_subscription checks the node's registration identity and only registers
-  # when needed, instead of re-registering with --force on every apply (which
-  # mints a fresh consumer record and rotates entitlement certs each run). Honest
-  # change reporting also restores the drift signal that changed_when:false hid.
   community.general.redhat_subscription:
     state: present
     org_id: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_organization_path) | trim }}"
@@ -184,10 +123,6 @@
   register: bootwright_ceph_rhsm_register
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# Refresh after a fresh registration, a proxy change, or a repo-CA change: refresh
-# regenerates redhat.repo, stamping the rhsm.conf proxy AND sslcacert into the RHEL
-# repos so the vendor license install below (and every later RHEL dependency pull)
-# reaches the CDN through the proxy and validates its re-signed certificate.
 - name: Refresh RHSM subscription metadata
   ansible.builtin.command:
     argv:
@@ -196,9 +131,6 @@
   changed_when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed or bootwright_ceph_rhsm_repo_ca is changed
   when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed or bootwright_ceph_rhsm_repo_ca is changed
 
-# subscription-manager register does not connect Red Hat Insights on its own;
-# honor the entitlement's connectToInsights intent explicitly when set, matching
-# the managed-OS Kickstart's rhsm --connect-to-insights behavior.
 - name: Connect storage node to Red Hat Insights
   ansible.builtin.command:
     argv:
@@ -209,10 +141,6 @@
   when: bootwright_ceph_provider.rhsm.connectToInsights | default(false) | bool
 
 - name: Enable subscription-backed Ceph repositories (and disable the rest)
-  # rhsm_repository with purge:true declaratively enables exactly the named repos
-  # and disables all others, idempotently and with honest change reporting --
-  # replacing the unconditional `repos --disable=* / --enable=` commands that ran
-  # every apply behind changed_when:false.
   community.general.rhsm_repository:
     name: "{{ bootwright_ceph_provider.repository.redhatRepos | default([]) }}"
     purge: true
@@ -233,9 +161,6 @@
     state: present
   when: bootwright_ceph_provider.requiresLicense | default(false) | bool
 
-# The licensed packages (cephadm, ceph) installed later from the vendor repo
-# refuse to operate until this acceptance marker exists, so it must be written in
-# the repository stage, before the install stage pulls them.
 - name: Accept vendor Ceph license provisions
   ansible.builtin.file:
     path: /usr/share/ibm-storage-ceph-license/accept

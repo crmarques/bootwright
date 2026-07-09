@@ -5,9 +5,6 @@ metadata:
 spec:
   storageClusterRef: ceph-ibm
 
-  # Public S3 endpoint. Resolves to the ingress VIP below (192.168.140.80);
-  # the dnsmasq component publishes rgw.ceph.bootwright.test.
-
   public:
     dnsName: rgw.ceph.bootwright.test
     scheme: http
@@ -15,15 +12,12 @@ spec:
 
   ceph:
     serviceID: lab
-    # RGW daemons on both full nodes.
     placement:
       hosts:
         - ceph-1
         - ceph-2
       countPerHost: 1
     frontendPort: 8080
-    # cephadm ingress (haproxy + keepalived) fronts the two RGW daemons with a
-    # single floating VIP on the lab network.
     ingresses:
       - name: lab
         address: 192.168.140.80

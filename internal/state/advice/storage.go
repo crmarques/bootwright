@@ -1,8 +1,3 @@
-// Package advice produces non-blocking, best-practice advisories over a
-// validated desired State. Advisories never affect the load -> normalize ->
-// validate -> render -> apply outcome; they are operator-facing guidance the
-// CLI surfaces as warnings. This is a read-only analysis service that returns
-// plain data, separate from the loader/validator that owns the State contract.
 package advice
 
 import (
@@ -13,9 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// AdvisorySeverity grades an advisory: a WARN departs from a production
-// recommendation, an INFO merely notices behaviour the operator may not expect.
-// Neither blocks validate, render, or apply.
 type AdvisorySeverity string
 
 const (
@@ -28,15 +20,6 @@ const (
 	stretchPoolGroup      = "Stretch pools"
 )
 
-// StorageAdvisory is a non-fatal best-practice finding about a managed Ceph
-// StorageCluster. Advisories never block validate, render, or apply — a
-// single-node or lab cluster is a legitimate authored shape — but
-// `bootwright validate` surfaces them so a cluster that departs from IBM
-// Storage Ceph / upstream production recommendations (sub-quorum monitors, a
-// single manager, an unpinned subscription image), or behaves in a way its
-// per-object YAML does not reveal (policy-less pools inheriting the stretch
-// rule), is visible at author time rather than discovered in production.
-// INFO advisories carry only a Finding; Impact and Remediation accompany WARN.
 type StorageAdvisory struct {
 	Severity    AdvisorySeverity `json:"severity"`
 	Group       string           `json:"group"`
@@ -46,11 +29,6 @@ type StorageAdvisory struct {
 	Remediation string           `json:"remediation,omitempty"`
 }
 
-// StorageAdvisories returns the best-practice advisories for every managed Ceph
-// StorageCluster in the state, in cluster order and, within a cluster, monitor
-// then manager then image order. The result is deterministic so the CLI and its
-// golden tests render a stable warning list. It reads only the Ceph spec, so it
-// is safe to call on any validated state.
 func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 	disconnected := environmentIsDisconnected(state)
 	var out []StorageAdvisory
@@ -68,10 +46,6 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 	return out
 }
 
-// environmentIsDisconnected reports whether the Environment routes images
-// through a mirror or digest-source remap — the disconnected posture in which
-// cephadm's upstream sidecar image defaults are unreachable. It reads the
-// Environment off the state directly to keep advice free of cross-package deps.
 func environmentIsDisconnected(state v1alpha1.State) bool {
 	if len(state.Environments) == 0 {
 		return false
@@ -83,14 +57,6 @@ func environmentIsDisconnected(state v1alpha1.State) bool {
 	return registries.Mirror != nil || len(registries.ImageDigestSources) > 0
 }
 
-// storageSidecarImageAdvisories flags the airgap foot-gun: cephadm pulls the
-// monitoring and ingress sidecars (prometheus, grafana, alertmanager,
-// node-exporter, haproxy, keepalived) from compiled-in upstream defaults that a
-// disconnected estate — or an IBM cluster entitled only to cp.icr.io — cannot
-// reach, even though spec.ceph.image only pins the Ceph daemon image. Pinning
-// these is the difference between a working and a non-working airgapped install.
-// Suppressed once the operator pins any sidecar image under config[mgr], and for
-// connected non-IBM clusters whose upstream defaults resolve.
 func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluster, disconnected bool) []StorageAdvisory {
 	ceph := cluster.Spec.Ceph
 	monitoring := ceph.Monitoring
@@ -98,9 +64,6 @@ func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluste
 	if !monitoringEnabled {
 		return nil
 	}
-	// IBM's compiled-in cephadm defaults point at registry.redhat.io, which an
-	// IBM entitlement (cp.icr.io only) cannot pull, so it needs the pins even
-	// when otherwise connected.
 	vendorMismatch := ceph.Distribution == v1alpha1.StorageCephDistributionIBM
 	if !disconnected && !vendorMismatch {
 		return nil
@@ -120,10 +83,6 @@ func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluste
 	}}
 }
 
-// storageMonitorAdvisories flags a monitor count that cannot form, or barely
-// forms, quorum. Stretch clusters are exempt: their monitor topology (two data
-// sites plus a tiebreaker) is governed by the dedicated stretch validation, and
-// the plain count heuristic would misread their intentional shape.
 func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
 	if cluster.Spec.Ceph.Topology.Stretch != nil {
 		return nil
@@ -152,7 +111,6 @@ func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []
 	return nil
 }
 
-// storageManagerAdvisories flags a manager count with no standby.
 func storageManagerAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
 	mgrs := len(topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMGR))
 	if mgrs < 2 {
@@ -168,12 +126,6 @@ func storageManagerAdvisories(object string, cluster v1alpha1.StorageCluster) []
 	return nil
 }
 
-// storageImageAdvisories flags a subscription-backed distribution that pins no
-// container image. The distribution-packaged cephadm supplies a default image
-// tag in that case, but it floats, so the running Ceph version is not
-// reproducible across re-installs — and validation already forbids an explicit
-// mutable :latest, so leaving the image unset is the same anti-pattern by
-// omission.
 func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
 	distribution := cluster.Spec.Ceph.Distribution
 	if distribution != v1alpha1.StorageCephDistributionIBM && distribution != v1alpha1.StorageCephDistributionRedHat {
@@ -192,14 +144,6 @@ func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []St
 	}}
 }
 
-// storageStretchPoolAdvisories notices stretch pool inheritance: on a
-// stretch-mode cluster every pool that references no placement policy renders
-// with the stretch CRUSH rule and the stretch replication regardless of its own
-// YAML, so authoring topology.stretch re-rules and resizes those pools on the
-// next apply. An author reading only the StoragePool file would predict the
-// global default, hence the INFO notice. The replication figures come from the
-// topology constants the renderer applies, so the notice can never drift from
-// what apply actually does.
 func storageStretchPoolAdvisories(object string, state v1alpha1.State, cluster v1alpha1.StorageCluster) []StorageAdvisory {
 	if cluster.Spec.Ceph.Topology.Stretch == nil {
 		return nil

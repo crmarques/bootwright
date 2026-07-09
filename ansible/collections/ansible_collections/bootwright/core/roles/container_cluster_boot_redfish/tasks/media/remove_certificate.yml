@@ -1,10 +1,4 @@
 ---
-# Drop the certificate import_certificate.yml added, so the BMC trust store is
-# left as bootwright found it. Runs in the boot role's always block. Dispatches to
-# the same discovered method the import used; each per-method file is gated on its
-# import having recorded a handle and tolerant of a 404 (already gone), so it is a
-# no-op when import was skipped or failed. Skipped entirely when no import method
-# was ever resolved (import did not run).
 - name: Remove the imported artifact certificate via the discovered trust-store method
   ansible.builtin.include_tasks: "remove_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"
   when: (bootwright_redfish_artifact_cert_method | default('') | length) > 0

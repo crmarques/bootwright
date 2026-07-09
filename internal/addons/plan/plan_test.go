@@ -240,8 +240,6 @@ func TestBindingPlansCarryBindingInputs(t *testing.T) {
 		t.Fatalf("plan inputs = %v, want the binding-supplied external-storage input", inputs)
 	}
 
-	// Duplicate addonRef entries merge their inputs (the executor resolves the
-	// merged list via inputs.EffectiveBindingAddons; the hash must match).
 	state.ClusterAddonBindings[0].Spec.Addons = append(state.ClusterAddonBindings[0].Spec.Addons, v1alpha1.ClusterAddonBindingAddon{
 		AddonRef: v1alpha1.LocalObjectReference{Name: "virt"},
 		Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "tuning", Values: map[string]any{"profileRef": "fast"}}},
@@ -410,9 +408,6 @@ func TestBindingPlansOrdersByRequiresProvides(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				// Authored order puts the consumer before its provider; the provider
-				// (nmstate) must still be applied first. The independent add-on keeps
-				// its authored position relative to the unconstrained pair.
 				Addons: []v1alpha1.ClusterAddonBindingAddon{
 					{AddonRef: v1alpha1.LocalObjectReference{Name: "vcn"}},
 					{AddonRef: v1alpha1.LocalObjectReference{Name: "storage"}},
@@ -429,8 +424,6 @@ func TestBindingPlansOrdersByRequiresProvides(t *testing.T) {
 	for _, extension := range plans[0].Addons {
 		got = append(got, extension.Name)
 	}
-	// nmstate is pulled ahead of vcn (the only ordering edge); storage, with no
-	// edges, keeps its authored slot — so it stays before nmstate.
 	want := []string{"storage", "nmstate", "vcn"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ordered addons = %v, want %v", got, want)

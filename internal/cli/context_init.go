@@ -41,8 +41,6 @@ context entirely and recreate it from the source.`,
 		if len(files) != 1 {
 			return failf(2, "context init copies exactly one source directory; pass a single -f <dir>")
 		}
-		// Resolve before any sudo re-exec so relative paths and ~ expand
-		// against the caller's environment, not root's.
 		source, err := workspace.ResolveWorkspaceDir(files[0])
 		if err != nil {
 			return failErr(2, err)
@@ -76,8 +74,6 @@ context entirely and recreate it from the source.`,
 		if exists && !yes {
 			return failf(1, "context %q already exists; rerun with --yes to drop it and recreate it from %s", name, source)
 		}
-		// Validate the source before any destructive step so an invalid -f never
-		// drops an existing context.
 		state, err := desiredstate.LoadNormalizeValidateInputFiles([]string{source})
 		if err != nil {
 			return failErr(1, fmt.Errorf("validate source input files: %w", err))
@@ -118,9 +114,6 @@ context entirely and recreate it from the source.`,
 	return cmd
 }
 
-// printBundleStatus reports how the embedded Ansible bundle was prepared during
-// context init: skipped (build without an embedded bundle), reused from cache,
-// or freshly extracted.
 func printBundleStatus(p *output.Printer, result bundle.AnsibleBundleResult, skipped bool) {
 	switch {
 	case skipped:

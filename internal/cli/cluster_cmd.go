@@ -14,9 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// clusterInfoReport is the --output json shape of `cluster info`. Each entry
-// embeds its full access summary; the cleartext *Value fields are populated only
-// under --secrets, so a default run never serializes a secret's bytes.
 type clusterInfoReport struct {
 	Context  string              `json:"context"`
 	Clusters []clusterInfoResult `json:"clusters"`
@@ -271,8 +268,6 @@ func printClusterInfo(stdout io.Writer, state v1alpha1.State, summaries []cluste
 	printStorageAccessSections(p, storage, showSecrets)
 }
 
-// buildClusterInfoReport assembles the --output json payload, embedding each
-// access summary and adding the cleartext password only when --secrets is set.
 func buildClusterInfoReport(context string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) clusterInfoReport {
 	report := clusterInfoReport{Context: context}
 	for _, summary := range summaries {

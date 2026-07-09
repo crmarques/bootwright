@@ -10,13 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// printApplyTransitionLedger prints a read-only "Change plan" for a dry-run: the
-// transition apply would perform on each selected object under the chosen mode —
-// what it would DESTROY & rebuild, reconcile in place, create, or refuse — so the
-// destructive consequences are visible before any mutation, independent of
-// destroyProtection. Classification is read-only (it only reads convergence records).
-// A best-effort classification error is skipped silently; the mutating run's preflight
-// remains the authoritative gate.
 func printApplyTransitionLedger(stdout io.Writer, tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode) {
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil || len(objects) == 0 {

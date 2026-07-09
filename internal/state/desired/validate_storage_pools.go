@@ -23,10 +23,6 @@ func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, c
 		} else if storageClusterExternal(cluster) {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q references an external StorageCluster; Bootwright-managed placement policies are not declared for imported Ceph", prefix, policy.Spec.StorageClusterRef.Name))
 		} else if storageClusterStretchEnabled(cluster) {
-			// A pool inheriting replication from this policy bypasses the inline
-			// stretch 4/2 check in validateStoragePools, so the 4/2 rule must also
-			// cover policy-derived replication. Omitted values fall through to the
-			// stretch default at render time and are accepted here.
 			replicas := policy.Spec.Ceph.Replicated
 			if replicas.Size != 0 && replicas.Size != topology.StretchReplicatedPoolSize {
 				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.size must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolSize, cluster.Metadata.Name))
@@ -116,9 +112,6 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 	return errs
 }
 
-// validateStorageECProfile checks the erasure-code profile knobs: the plugin
-// enum and the opaque parameters map, which must not duplicate a first-class
-// field or the derived crush-failure-domain (one owner per fact).
 func validateStorageECProfile(prefix string, ec *v1alpha1.StoragePoolErasureCode) []string {
 	var errs []string
 	switch ec.Plugin {
@@ -147,9 +140,6 @@ func validateStorageECProfile(prefix string, ec *v1alpha1.StoragePoolErasureCode
 	return errs
 }
 
-// validateStoragePoolTuning checks the per-pool steady-state intents: the
-// autoscaler mode and bounds, the quota values, and the compression mode and
-// algorithm — each against the native `ceph osd pool set` vocabulary.
 func validateStoragePoolTuning(prefix string, spec v1alpha1.StoragePoolCephSpec) []string {
 	var errs []string
 	if a := spec.Autoscale; a != nil {
@@ -276,16 +266,9 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 	return errs
 }
 
-// validateStorageMDSStandbyFeasible rejects an MDS standby intent the placement
-// can never satisfy. cephadm runs one MDS daemon per placed host; max_mds
-// consumes activeCount of them (default 1), standby-replay one more per active
-// rank, and standbyCountWanted the rest. When the resolved placement provides
-// fewer daemons than that sum, the cluster degrades to a permanent
-// MDS_INSUFFICIENT_STANDBY, so fail at validate rather than converge into it.
 func validateStorageMDSStandbyFeasible(prefix string, mds v1alpha1.StorageCephFSMetadataServices, hosts []string) []string {
 	available := len(hosts)
 	if available == 0 {
-		// The empty-placement case is already reported by validateStoragePlacementHosts.
 		return nil
 	}
 	active := mds.ActiveCount
@@ -305,9 +288,6 @@ func validateStorageMDSStandbyFeasible(prefix string, mds v1alpha1.StorageCephFS
 
 var cephOctalModePattern = regexp.MustCompile(`^0?[0-7]{3,4}$`)
 
-// validateStorageSubvolumeGroups checks the declared subvolume groups: unique
-// non-empty names, an octal mode, a pool layout that resolves to a pool in the
-// same cluster, and non-negative quota/ids.
 func validateStorageSubvolumeGroups(prefix string, fs v1alpha1.StorageFilesystem, pools map[string]v1alpha1.StoragePool) []string {
 	var errs []string
 	seen := map[string]bool{}
@@ -393,9 +373,6 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 	return errs
 }
 
-// validateStorageGatewayRealm enforces the all-or-nothing realm/zonegroup/zone
-// binding: a named multisite deployment needs all three, so setting any one
-// requires the others.
 func validateStorageGatewayRealm(prefix string, gw v1alpha1.StorageObjectGateway) []string {
 	realm, zg, zone := gw.Spec.Ceph.Realm, gw.Spec.Ceph.ZoneGroup, gw.Spec.Ceph.Zone
 	if realm == "" && zg == "" && zone == "" {
@@ -407,9 +384,6 @@ func validateStorageGatewayRealm(prefix string, gw v1alpha1.StorageObjectGateway
 	return nil
 }
 
-// validateStorageGatewayConfig checks the per-RGW config map: non-empty values,
-// no rgw_frontend_port (owned by frontendPort), and one-owner against the
-// cluster's config[client.rgw.<serviceID>] section (so a key is declared once).
 func validateStorageGatewayConfig(prefix string, gw v1alpha1.StorageObjectGateway, cluster v1alpha1.StorageCluster, clusterOK bool) []string {
 	if len(gw.Spec.Ceph.Config) == 0 {
 		return nil

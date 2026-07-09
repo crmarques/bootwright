@@ -1,12 +1,4 @@
 ---
-# ssh-keyscan does NOT honor the controller's crypto policy: on a FIPS controller it
-# still offers curve25519 in its KEXINIT, the managed OS prefers it, and the FIPS
-# backend then refuses the exchange ("Key exchange type c25519 is not allowed in FIPS
-# mode"), so no host key is ever recorded and the scan retries forever. `ssh` DOES
-# honor the policy (it Includes /etc/crypto-policies/back-ends/openssh.config), so it
-# negotiates a FIPS-approved KEX (e.g. ecdh-sha2-nistp256) and records the host key on
-# first connect. We use it with accept-new to pin the key the connection actually
-# used - the same key the verify step will re-encounter under StrictHostKeyChecking.
 
 - name: Ensure managed OS SSH trust directory
   ansible.builtin.file:

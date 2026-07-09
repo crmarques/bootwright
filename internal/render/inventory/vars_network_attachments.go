@@ -69,12 +69,6 @@ func networkAttachmentVars(attachment v1alpha1.NetworkAttachmentCapability) map[
 	return out
 }
 
-// networkRefMultusName resolves a kubevirt networkRef to the multus
-// networkName the VM consumes. For every kind it is <namespace>/<name>: a
-// referenced NAD by its own identity, and a (C)UDN by its OVN-derived NAD,
-// which shares the object's name in the selected namespace. Namespace is
-// defaulted to the provider VM namespace in normalize and required by
-// validation, so it is always set here.
 func networkRefMultusName(ref v1alpha1.KubeVirtNetworkRef) string {
 	return ref.Namespace + "/" + ref.Name
 }

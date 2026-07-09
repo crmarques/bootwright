@@ -11,13 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/sshtrust"
 )
 
-// offerTrustOnFirstUse is the interactive trust-on-first-use flow for preflight
-// and apply: it wires the operator-facing prompting and printing into
-// sshtrust.OfferTrustOnFirstUse, which scans every selected machine that
-// requires managed SSH trust and has no recorded host key yet and records the
-// key only after an explicit per-host yes. Callers gate this on interactive
-// text runs; non-interactive runs keep failing closed without recording
-// anything.
 func offerTrustOnFirstUse(ctx context.Context, stdin io.Reader, stdout io.Writer, contextDir string, state v1alpha1.State, deps sshtrust.Deps, hostTrustScope map[string]bool) error {
 	if deps.Scan == nil {
 		deps.Scan = sshtrust.ScanHostKeys

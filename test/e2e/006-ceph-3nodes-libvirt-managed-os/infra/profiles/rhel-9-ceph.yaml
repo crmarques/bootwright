@@ -16,9 +16,6 @@ spec:
     hostname:
       source: machineName
     localization:
-      # English system messages, Brazilian regional formatting/keyboard/timezone.
-      # language omitted -> defaults to en_US.UTF-8; formats drives LC_* and adds
-      # the pt_BR.UTF-8 entry to %packages --inst-langs.
       formats: pt_BR.UTF-8
       keyboard: br-abnt2
       timezone: America/Sao_Paulo
@@ -34,8 +31,6 @@ spec:
       installWeakDeps: false
       excludeDocs: true
       install:
-        # cephadm is not on the RHEL DVD; the storage_cluster_cephadm role
-        # installs it post-provision after configuring the Ceph repo.
         - podman
         - lvm2
         - chrony

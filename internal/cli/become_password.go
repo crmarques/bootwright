@@ -112,9 +112,6 @@ func readBecomePassword(in io.Reader, prompt io.Writer) (string, error) {
 func readSudoPassword(in io.Reader, prompt io.Writer) (string, error) {
 	password, err := readPromptedPassword(in, prompt, "SUDO password: ", true)
 	if err != nil {
-		// A bare "read password: EOF" gives no hint why a read-only command wants
-		// a password. bootwright re-executes itself under sudo to reach
-		// /var/lib/bootwright, so name that and the ways to satisfy it.
 		return "", fmt.Errorf("bootwright needs root to access /var/lib/bootwright: run interactively so it can prompt for the sudo password, as root, or with passwordless sudo (%w)", err)
 	}
 	return password, nil

@@ -1,9 +1,4 @@
 ---
-# Standard DMTF trust-store method: POST the artifact server's leaf certificate to
-# the Certificates collection on the VirtualMedia member. Selected by
-# media/import_certificate.yml when the BMC advertises that collection.
-# Credentials/TLS/timeout come from the role-wide ansible.builtin.uri
-# module_defaults set in tasks/main.yml.
 - name: Import the artifact certificate via the DMTF VirtualMedia store
   ansible.builtin.uri:
     url: "{{ bootwright_redfish_vmedia_certificates_url }}"
@@ -14,19 +9,10 @@
       CertificateType: PEM
     status_code: [200, 201, 202, 204]
   register: bootwright_redfish_artifact_cert_import_standard
-  # Don't let the uri module's status_code mismatch raise the bare
-  # "Status code was 403 ..." here: that message carries no BMC detail, and the
-  # task's no_log (which protects url_password) buries the response body that
-  # explains the refusal as "output has been hidden due to no_log". Tolerate any
-  # status, then surface the BMC message in a credential-safe assert below.
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_import_standard.status | default(0) | int) in [200, 201, 202, 204]
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
-# A non-2xx here is the BMC refusing the import, not a malformed request: the
-# reason lives in the response body the import task's no_log hides, so re-surface
-# it. Only status/json/content/msg and the resource path are interpolated -- none
-# of which carry url_password -- so the credential stays redacted.
 - name: Confirm the DMTF VirtualMedia certificate import was accepted
   ansible.builtin.assert:
     that:

@@ -14,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// fakeRunner satisfies ansible.Runner without actually exec'ing.
 type fakeRunner struct {
 	runCalled  bool
 	command    []string
@@ -55,8 +54,6 @@ func (f *fakeRunner) Command(spec ansible.RunSpec) []string {
 	return []string{executable, "-i", spec.Inventory, spec.Playbook}
 }
 
-// minimalState is the smallest state that satisfies render.All without
-// triggering provider-closure validation in the installer renderer.
 func minimalState() v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
@@ -281,7 +278,6 @@ func TestRunDryRunLabelFallsBackToPlaybook(t *testing.T) {
 		Playbook:           "bootwright.core.check_preflight",
 		ArtifactsBaseName:  "preflight-test",
 		DryRun:             true,
-		// Label intentionally empty.
 	}, runner, reporter)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -292,8 +288,6 @@ func TestRunDryRunLabelFallsBackToPlaybook(t *testing.T) {
 }
 
 func TestRunRenderFailureSurfaces(t *testing.T) {
-	// Pointing RenderedDir at a path that already exists as a *file* causes
-	// MkdirAll to fail with a recognizable error.
 	stateFile := t.TempDir() + "/not-a-dir"
 	if err := writeStub(stateFile); err != nil {
 		t.Fatalf("setup: %v", err)
@@ -301,7 +295,7 @@ func TestRunRenderFailureSurfaces(t *testing.T) {
 	runner := &fakeRunner{}
 	_, err := Run(context.Background(), RunOptions{
 		State:              minimalState(),
-		RenderedDir:        stateFile, // file, not directory
+		RenderedDir:        stateFile,
 		ClustersDir:        t.TempDir(),
 		RunsDir:            t.TempDir(),
 		SecretsDir:         t.TempDir(),
@@ -366,11 +360,6 @@ func storageSSHState() v1alpha1.State {
 	}
 }
 
-// TestRunSkipsAnsibleWhenLimitMatchesNoHosts pins the test-002 fix:
-// when `--limit` names only renderer-emitted groups that are empty for
-// this state, workflow.Run must skip the runner and surface
-// Skipped=true instead of letting ansible abort with "no hosts to
-// target".
 func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 	runner := &fakeRunner{}
 	reporter := &fakeReporter{}
@@ -402,10 +391,6 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 	}
 }
 
-// TestLimitMatchesNoHostsTable exercises the parser without touching
-// disk. Empty/whitespace limits ⇒ false (no --limit set, full
-// inventory is in play). Limits naming any non-empty group ⇒ false.
-// Limits naming only empty/unknown groups ⇒ true.
 func TestLimitMatchesNoHostsTable(t *testing.T) {
 	state := minimalState()
 	tests := []struct {

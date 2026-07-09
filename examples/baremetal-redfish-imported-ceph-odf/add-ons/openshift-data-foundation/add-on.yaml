@@ -10,8 +10,6 @@ spec:
 
   accepts:
     inputs:
-      # The add-on installs external mode only, so the StorageExport to attach
-      # is not optional: a binding that omits it fails validation.
       - name: external-storage
         required: true
         schema:
@@ -42,10 +40,6 @@ spec:
       source: redhat-operators
 
   hooks:
-    # The imported Ceph cluster's external-cluster-details JSON is supplied by
-    # the operator (the StorageExport's externalDetails.fromSecretRef secret);
-    # a manifest-only hook resolves it via the exportDetails token and applies
-    # the external-mode consumer manifests after the operator's CSV succeeds.
     - name: attach-external-storage
       lifecycle: postOperatorReady
       manifests:

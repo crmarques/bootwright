@@ -18,7 +18,7 @@ func TestParseToken(t *testing.T) {
 		{"{{ exportDetails external-storage.exportRef }}", "exportDetails", "external-storage.exportRef", true},
 		{"{{secret foo}}", "secret", "foo", true},
 		{"literal", "", "", false},
-		{"prefix {{ output x }}", "", "", false}, // not a whole scalar
+		{"prefix {{ output x }}", "", "", false},
 		{"{{ output x }} suffix", "", "", false},
 		{"{{ }}", "", "", false},
 	}
@@ -44,8 +44,6 @@ metadata:
 stringData:
   external_cluster_details: "{{ output externalDetails }}"
 `)
-	// A multi-line JSON payload substituted as a whole scalar must survive
-	// re-marshaling intact.
 	payload := "[{\"name\":\"rook-ceph-mon-endpoints\"},\n{\"name\":\"rook-ceph-mon\"}]"
 	object, err := RenderManifest(raw, func(token Token) (string, error) {
 		switch {

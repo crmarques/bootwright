@@ -71,7 +71,6 @@ func TestApplyBareMetalBMCDefaults(t *testing.T) {
 		!in.VirtualMedia.TLS.ImportServerCertificate || !in.VirtualMedia.TLS.RemoveServerCertificateAfterBoot {
 		t.Errorf("inherits virtualMedia = %+v, want import+remove", in.VirtualMedia)
 	}
-	// alias guard: mutating the inherited copy must not touch the provider default.
 	in.VirtualMedia.TLS.ImportServerCertificate = false
 	if !state.InfraProviders[0].Spec.BareMetal.Defaults.BMC.VirtualMedia.TLS.ImportServerCertificate {
 		t.Errorf("provider default was aliased by machine inheritance")

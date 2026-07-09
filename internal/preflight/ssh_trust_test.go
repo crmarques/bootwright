@@ -73,8 +73,6 @@ func TestStatusNeedsHostTrust(t *testing.T) {
 		{"remote managed-trust machine, no trust store", v1alpha1.State{Machines: []v1alpha1.Machine{remote}}, true},
 	}
 	for _, tc := range cases {
-		// An empty context secrets dir means no recorded trust, so a managed
-		// machine without a known-hosts ref needs `bootwright host trust`.
 		if got := NeedsHostTrust(tc.state, t.TempDir()); got != tc.want {
 			t.Fatalf("%s: NeedsHostTrust = %v, want %v", tc.name, got, tc.want)
 		}
@@ -125,19 +123,14 @@ func TestManagedHostTrustChecksScopeExcludesOutOfScopeMachine(t *testing.T) {
 	deps := Deps{
 		StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 	}
-	// Nil scope flags the provided-OS machine (and the missing known_hosts file).
 	full := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, nil)
 	if !hasCheck(full, checkGroupHostTrust, "Machine/provider-01", "bootwright machine trust") {
 		t.Fatalf("nil scope should flag provider-01: %+v", full)
 	}
-	// A scope that excludes the machine drops both its check and the now-moot
-	// managed known_hosts check, so a host the run never connects to does not
-	// block it.
 	scoped := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, map[string]bool{})
 	if len(scoped) != 0 {
 		t.Fatalf("empty scope should yield no host trust checks, got %+v", scoped)
 	}
-	// A scope that includes the machine still flags it.
 	inScope := ManagedHostTrustChecks(state, "/context/secrets", deps, locality.DefaultPolicy, StatusFail, map[string]bool{"provider-01": true})
 	if !hasCheck(inScope, checkGroupHostTrust, "Machine/provider-01", "bootwright machine trust") {
 		t.Fatalf("in-scope machine should be flagged: %+v", inScope)

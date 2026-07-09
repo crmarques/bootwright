@@ -10,23 +10,14 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// ObjectState classifies how one object differs between desired and real state.
 type ObjectState string
 
 const (
-	// ObjectChanged means the object exists on both sides but a field differs.
-	ObjectChanged ObjectState = "changed"
-	// ObjectDesiredOnly means the object is declared in desired state but is not
-	// present on the cluster (not yet applied, or removed out of band).
+	ObjectChanged     ObjectState = "changed"
 	ObjectDesiredOnly ObjectState = "desired-only"
-	// ObjectRealOnly means the object exists on the cluster but is not declared
-	// in desired state. Under the storage additive-only rule this is not drift;
-	// it is the candidate `--adopt` pulls into desired state.
-	ObjectRealOnly ObjectState = "real-only"
+	ObjectRealOnly    ObjectState = "real-only"
 )
 
-// FieldDiff is one field's desired-vs-real values. A field is only recorded when
-// it differs (value mismatch or presence mismatch).
 type FieldDiff struct {
 	Name       string `json:"name"`
 	Desired    string `json:"desired,omitempty"`
@@ -35,47 +26,29 @@ type FieldDiff struct {
 	HasReal    bool   `json:"hasReal"`
 }
 
-// ObjectDiff is one object's difference within a facet.
 type ObjectDiff struct {
 	Key    string      `json:"key"`
 	State  ObjectState `json:"state"`
 	Fields []FieldDiff `json:"fields,omitempty"`
 }
 
-// FacetDiff groups the differing objects of one facet (hosts, services, pools,
-// crush-rules, config, mgr-modules, health). A facet with no differing objects
-// is omitted from the report.
 type FacetDiff struct {
 	Name    string       `json:"name"`
 	Objects []ObjectDiff `json:"objects"`
 }
 
-// Report is the whole desired-vs-real diff for one managed StorageCluster.
 type Report struct {
-	Cluster string      `json:"cluster"`
-	Probed  bool        `json:"probed"`
-	Facets  []FacetDiff `json:"facets,omitempty"`
-	// UnpinnedOSDHosts lists osd-role hosts whose OSD selection is a filter/all
-	// (no explicit device paths): the host, and the devices its OSDs currently
-	// consume. The filter intent is satisfied, so these are reconstruction
-	// advisories — not drift — and deliberately do not affect InSync(): `diff`
-	// prints them as advice and `--adopt` reports them as pin-manually
-	// candidates, but nothing is ever rewritten (pinning would disable cephadm's
-	// automatic consumption of replacement disks, an intent change only the
-	// operator should make).
+	Cluster          string              `json:"cluster"`
+	Probed           bool                `json:"probed"`
+	Facets           []FacetDiff         `json:"facets,omitempty"`
 	UnpinnedOSDHosts []OSDDeviceAdvisory `json:"unpinnedOSDHosts,omitempty"`
 }
 
-// OSDDeviceAdvisory is one filter/all osd-role host and the kernel device
-// basenames its OSDs currently consume, for the reconstruction-fidelity advice.
 type OSDDeviceAdvisory struct {
 	Host    string   `json:"host"`
 	Devices []string `json:"devices"`
 }
 
-// InSync reports whether desired and real match across every facet. The
-// UnpinnedOSDHosts advisories are intentionally excluded: a filter/all host is
-// not drift.
 func (r Report) InSync() bool {
 	for _, facet := range r.Facets {
 		if len(facet.Objects) > 0 {
@@ -85,7 +58,6 @@ func (r Report) InSync() bool {
 	return true
 }
 
-// Changes counts the differing objects across all facets.
 func (r Report) Changes() int {
 	n := 0
 	for _, facet := range r.Facets {
@@ -94,32 +66,21 @@ func (r Report) Changes() int {
 	return n
 }
 
-// kv is one ordered field of an entry.
 type kv struct {
 	name  string
 	value string
 }
 
-// entry is one comparable object within a facet: a stable key and its ordered
-// fields.
 type entry struct {
 	key    string
 	fields []kv
 }
 
-// facetOptions tunes how a facet diffs. ignoreRealOnly drops objects present on
-// the cluster but not declared — right for facets whose live side is dominated
-// by Ceph defaults (config, crush rules, mgr modules) rather than operator
-// intent. skipRealKeys drops specific real-only keys (e.g. internal pools).
 type facetOptions struct {
 	ignoreRealOnly bool
 	skipRealKey    func(key string) bool
 }
 
-// Compare produces the desired-vs-real diff for one managed StorageCluster. An
-// external (imported) cluster or an unprobed cluster yields a report with no
-// facets. Only differing objects appear; a fully-converged cluster reports
-// InSync.
 func Compare(state v1alpha1.State, cluster v1alpha1.StorageCluster, disc cephstate.Discovery) Report {
 	report := Report{Cluster: cluster.Metadata.Name, Probed: disc.Probed}
 	if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil || !disc.Probed {
@@ -145,8 +106,6 @@ func Compare(state v1alpha1.State, cluster v1alpha1.StorageCluster, disc cephsta
 	return report
 }
 
-// diffEntries compares two entry sets keyed by entry.key and returns the
-// differing objects, sorted by key.
 func diffEntries(desired, real []entry, opts facetOptions) []ObjectDiff {
 	dmap := indexEntries(desired)
 	rmap := indexEntries(real)
@@ -176,8 +135,6 @@ func diffEntries(desired, real []entry, opts facetOptions) []ObjectDiff {
 	return out
 }
 
-// diffFields returns the fields that differ between two ordered field lists,
-// preserving desired order then appending real-only field names.
 func diffFields(desired, real []kv) []FieldDiff {
 	dmap := map[string]string{}
 	for _, f := range desired {
@@ -256,8 +213,6 @@ func unionKeys(a, b map[string]entry) []string {
 	return out
 }
 
-// === Facet builders ===
-
 func desiredHosts(cluster v1alpha1.StorageCluster) []entry {
 	var out []entry
 	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
@@ -284,19 +239,11 @@ func realHosts(disc cephstate.Discovery) []entry {
 	return out
 }
 
-// osdKind classifies how an osd-role host selects its data devices.
 type osdKind int
 
 const (
-	// osdFilterPaths is a filter/all selection (no explicit device paths): the
-	// device set is resolved on-host by ceph-volume, so desired pins nothing.
 	osdFilterPaths osdKind = iota
-	// osdKernelPaths names explicit plain /dev/<name> devices whose kernel
-	// basename compares reliably against `ceph osd metadata`.
 	osdKernelPaths
-	// osdStablePaths names explicit stable aliases (/dev/disk/by-*, /dev/mapper):
-	// already reconstruction-faithful, and not comparable to kernel names, so
-	// left uncompared.
 	osdStablePaths
 )
 
@@ -312,9 +259,6 @@ func osdSelectionKind(paths []string) osdKind {
 	return osdKernelPaths
 }
 
-// plainKernelDevice reports whether a path is /dev/<kernelname> with no further
-// slash — the only form whose basename compares reliably against the short
-// device names `ceph osd metadata` reports.
 func plainKernelDevice(path string) bool {
 	if !strings.HasPrefix(path, "/dev/") {
 		return false
@@ -323,15 +267,9 @@ func plainKernelDevice(path string) bool {
 	return rest != "" && !strings.Contains(rest, "/")
 }
 
-// desiredOSDDevices builds the osd-devices desired side. It returns one entry per
-// osd-role host that pins explicit kernel devices (compared field-by-field), the
-// set of hostnames whose real OSD devices should surface as drift (only those
-// pinned hosts — every other host's real devices are dropped so a filter/all or
-// stable-alias host never reads as drift), and the filter/all hosts as
-// reconstruction advisories carrying the devices they actually consume.
 func desiredOSDDevices(cluster v1alpha1.StorageCluster, disc cephstate.Discovery) ([]entry, map[string]bool, []OSDDeviceAdvisory) {
 	surface := map[string]bool{}
-	realByHost, _ := disc.OSDDevicesByHost() // nil on absent read → advisories simply carry no devices
+	realByHost, _ := disc.OSDDevicesByHost()
 	var entries []entry
 	var unpinned []OSDDeviceAdvisory
 	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
@@ -352,7 +290,6 @@ func desiredOSDDevices(cluster v1alpha1.StorageCluster, disc cephstate.Discovery
 				unpinned = append(unpinned, OSDDeviceAdvisory{Host: name, Devices: devices})
 			}
 		case osdStablePaths:
-			// Already faithful; leave its real devices uncompared (surface stays false).
 		}
 	}
 	sort.Slice(unpinned, func(i, j int) bool { return unpinned[i].Host < unpinned[j].Host })
@@ -371,8 +308,6 @@ func realOSDDevices(disc cephstate.Discovery) []entry {
 	return out
 }
 
-// joinSortedBasenames reduces each device path to its kernel basename, then
-// sorts and space-joins them to match realOSDDevices' format.
 func joinSortedBasenames(paths []string) string {
 	names := make([]string, 0, len(paths))
 	for _, p := range paths {
@@ -399,8 +334,6 @@ func desiredServices(state v1alpha1.State, cluster v1alpha1.StorageCluster) []en
 	if hosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMGR); len(hosts) > 0 {
 		svc("mgr", hosts)
 	}
-	// OSD services: per-host (data-<machine>) for osd-role hosts not owned by a
-	// drivegroup, plus one per fleet drivegroup.
 	drivegroupHosts := map[string]bool{}
 	for _, dg := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
 		hosts := topology.ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD)
@@ -440,9 +373,6 @@ func desiredServices(state v1alpha1.State, cluster v1alpha1.StorageCluster) []en
 		}
 		svc("nfs."+nfs.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, nfs.Spec.Ceph.Placement, ""))
 	}
-	// spec.ceph.services passthrough: cephadm names a service <type> or, when an
-	// id is given, <type>.<id>. Rendering them here keeps an authored passthrough
-	// service from reading as real-only drift once applied.
 	for _, passthrough := range cluster.Spec.Ceph.Services {
 		name := passthrough.ServiceType
 		if passthrough.ServiceID != "" {
@@ -471,13 +401,6 @@ func realServices(disc cephstate.Discovery) []entry {
 	return out
 }
 
-// isInfraService reports whether a live cephadm service is bootstrap or
-// monitoring infrastructure rather than an operator-authored topology service:
-// crash (always deployed at bootstrap), the default monitoring stack
-// (prometheus/grafana/alertmanager/node-exporter/ceph-exporter), and the HA
-// management daemons spec.ceph.management renders (mgmt-gateway/oauth2-proxy and
-// its keepalive ingress). desiredServices does not model these, so a real-only
-// hit is filtered instead of reported as permanent drift or an adopt candidate.
 func isInfraService(name string) bool {
 	switch name {
 	case "crash", "prometheus", "grafana", "alertmanager", "node-exporter", "ceph-exporter", "mgmt-gateway", "oauth2-proxy":
@@ -629,7 +552,6 @@ func realMgrModules(disc cephstate.Discovery) []entry {
 	return out
 }
 
-// desiredHealth is the implicit invariant: a healthy cluster.
 func desiredHealth() []entry {
 	return []entry{{key: "cluster", fields: []kv{{"health", "HEALTH_OK"}}}}
 }
@@ -639,14 +561,7 @@ func realHealth(disc cephstate.Discovery) []entry {
 	if err != nil {
 		return nil
 	}
-	// Only the health status is diffed against the HEALTH_OK invariant. OSD
-	// counts are reported by the services/OSD facets and `ceph -s`; folding them
-	// in here would make the health object always differ (desired has no count),
-	// so they are deliberately not compared as fields.
 	status := health.Status
-	// A transient HEALTH_WARN is not treated as drift, matching state-check
-	// --probe's storageHealthDegraded gate (only HEALTH_ERR is degraded): the two
-	// read-only surfaces must agree on whether a WARN cluster is in sync.
 	if status == "HEALTH_WARN" {
 		status = "HEALTH_OK"
 	}
@@ -660,17 +575,11 @@ func poolTypeString(erasure bool) string {
 	return "replicated"
 }
 
-// isInternalPool reports whether a live pool is Ceph-internal (auto-created,
-// never authored) so a real-only diff does not flag it as an adopt candidate.
 func isInternalPool(name string) bool {
 	switch name {
 	case ".mgr", "device_health_metrics", ".nfs":
 		return true
 	}
-	// RGW auto-creates its metadata/data pools (.rgw.root and the per-zone
-	// <zone>.rgw.log/control/meta/otp and <zone>.rgw.buckets.* pools) whenever a
-	// StorageObjectGateway is declared; they are never authored as StoragePools,
-	// so they must not be flagged real-only or synthesized into adopt YAML.
 	return strings.Contains(name, ".rgw.")
 }
 

@@ -22,17 +22,12 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 		if task.Entry.ID != wantIDs[i] {
 			t.Fatalf("task[%d] = %s, want %s", i, task.Entry.ID, wantIDs[i])
 		}
-		// Every task reuses the run's limit and extra-vars unchanged — the
-		// safety property that keeps the split equivalent to the monolith.
 		if task.Limit != limit {
 			t.Fatalf("task[%d] limit = %q, want %q", i, task.Limit, limit)
 		}
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
 		}
-		// Sequential chain: each task is ORDERING-sequenced after the previous
-		// (teardown order preserved) without a hard dependency, so a failed stage
-		// does not block the rest. Hard Dependencies stay empty.
 		if len(task.Entry.Dependencies) != 0 {
 			t.Fatalf("task[%d] hard deps = %v, want none (ordering only)", i, task.Entry.Dependencies)
 		}
@@ -66,9 +61,6 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	}
 }
 
-// TestPlanDestroyTasksAllChain locks in the whole-context (stage omitted)
-// teardown order: the clusters chain first, then the infra they ran on, as one
-// sequential ORDERING chain (no hard deps) — the reverse of the apply order.
 func TestPlanDestroyTasksAllChain(t *testing.T) {
 	limit := ""
 	extra := []string{"bootwright_infra_destroy_context_sweep=true"}
@@ -112,15 +104,6 @@ func TestPlanDestroyTasksRejectsUnknownScope(t *testing.T) {
 	}
 }
 
-// TestPlanDestroyTasksStorageWorkSetGate is the regression guard for the scoped
-// destroy bug: a --clusters selection that names container clusters but no
-// storage cluster (storageWorkNames is a non-nil empty slice) must NOT plan a
-// storage teardown step, even though the render-inclusive state still carries
-// the managed StorageCluster pulled in by the container cluster's
-// data-foundation attachment. A non-empty work set keeps the step and labels it
-// with the named roots. The allowlist extra-var that gates the wipe is composed
-// centrally (converge.ApplyDestroyScopeExtraVars), not by the planner, so this
-// also locks that the planner does NOT re-emit it.
 func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 	state := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{
@@ -129,7 +112,6 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 		},
 	}
 
-	// Container-only selection: empty (non-nil) storage work set drops the step.
 	containerOnly, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{})
 	if err != nil {
 		t.Fatal(err)
@@ -140,10 +122,6 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 		}
 	}
 
-	// Storage-narrowed selection: the step runs and is labelled with the named
-	// root only; the render reference is excluded. The planner must NOT emit the
-	// allowlist extra-var itself — that is the central composer's job, so the gate
-	// is single-sourced across the task-graph and single-playbook paths.
 	narrowed, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{"ceph-selected"})
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +144,6 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 		}
 	}
 
-	// No selection (nil): teardown covers every rendered storage cluster.
 	unscoped, err := PlanDestroyTasks("clusters", state, "limit", nil, nil)
 	if err != nil {
 		t.Fatal(err)

@@ -11,11 +11,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// upsertSecret replaces (or appends) a first-class State.Secrets entry by name,
-// mirroring the map-set semantics these tests relied on before secrets were
-// promoted out of Environment.spec.secrets. sourcePath sets Secret.SourcePath,
-// which scopes relative file-source paths (pass "" for context/generated
-// secrets that never resolve against a file).
 func upsertSecret(state *v1alpha1.State, name string, spec v1alpha1.SecretSpec, sourcePath string) {
 	for i := range state.Secrets {
 		if state.Secrets[i].Metadata.Name == name {
@@ -49,11 +44,6 @@ func TestComponentPinsIncludeManagedDNSImage(t *testing.T) {
 	}
 }
 
-// TestComponentPinsReflectOverrides pins that the bill of materials records the
-// artifacts an environment actually pulls: a componentImages override is
-// reflected into the service pin's source (and tag), and a clientsMirror
-// override is reflected into the openshift-install pin source, rather than the
-// upstream defaults those overrides supersede.
 func TestComponentPinsReflectOverrides(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -122,8 +112,6 @@ func TestVarsProjectNodeSSHPrivateKeyPath(t *testing.T) {
 	sourceDir := t.TempDir()
 	state.Environments[0].SourcePath = filepath.Join(sourceDir, "environment.yaml")
 	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
-	// Combined KeyPairRef sourced from an operator file: the private half lives at
-	// keys/admin (its .pub is derived), resolving against the secret's own file.
 	upsertSecret(&state, keyName, v1alpha1.SecretSpec{
 		Type:   v1alpha1.SecretTypeSSHKeyPair,
 		Source: v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{PrivateKey: "keys/admin"}},
@@ -182,13 +170,6 @@ func TestVarsProjectSplitNodeSSHPrivateKeyPath(t *testing.T) {
 	}
 }
 
-// TestMachineBootBlockProjectsSubstrateBlind pins the boot_redfish
-// contract: every Redfish-driven machine carries a fully-resolved
-// boot.{redfish,agentIso} tuple so the role does NOT branch on
-// bmcRole or look up provider components at runtime. Covers both
-// substrate arms: libvirt-emulated Redfish (001) and bare-metal vendor BMC
-// (002) — because the leak that prompted this contract was
-// emulator-specific staging logic surfacing on the bare-metal path.
 func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 	cases := []struct {
 		fixture       string
@@ -329,9 +310,6 @@ func TestEmulatedLibvirtBootProjectsMediaBackend(t *testing.T) {
 	if got := redfish["setBootSource"]; got != false {
 		t.Fatalf("setBootSource got %v, want false for media backend", got)
 	}
-	// The emulated sushy-tools BMC shares a lazily-built VirtualMedia sqlite
-	// state DB, so the boot role must serialize and retry the first probe
-	// through that cold-init lock.
 	if got := redfish["vmediaColdInitRetry"]; got != true {
 		t.Fatalf("vmediaColdInitRetry got %v, want true for emulated sushy BMC", got)
 	}
@@ -352,8 +330,6 @@ func TestBareMetalBootDoesNotProjectMediaBackend(t *testing.T) {
 	if _, ok := machine["mediaPrepareRole"]; ok {
 		t.Fatalf("bare-metal machine unexpectedly has mediaPrepareRole: %v", machine)
 	}
-	// Bare metal has no host-side media backend, but the BMC still holds virtual
-	// media that the boot role's cleanup_media action must eject after install.
 	if got := machine["cleanupMediaRole"]; got != "bootwright.core.container_cluster_boot_redfish" {
 		t.Fatalf("cleanupMediaRole got %v, want bootwright.core.container_cluster_boot_redfish", got)
 	}
@@ -361,9 +337,6 @@ func TestBareMetalBootDoesNotProjectMediaBackend(t *testing.T) {
 	if got := redfish["setBootSource"]; got != true {
 		t.Fatalf("setBootSource got %v, want true for real BMC", got)
 	}
-	// Real per-server BMCs share no VirtualMedia state, so they must not carry
-	// the cold-init retry flag -- the boot role makes a single best-effort
-	// probe instead of serially burning the retry window on every host.
 	if _, ok := redfish["vmediaColdInitRetry"]; ok {
 		t.Fatalf("bare-metal redfish unexpectedly has vmediaColdInitRetry: %v", redfish)
 	}
@@ -734,12 +707,6 @@ func TestBareMetalArtifactFetchURLUsesExternalArtifactServerEndpoint(t *testing.
 	}
 }
 
-// TestMachineEmulatedBMCProjection pins the substrate-blind block the
-// bmc_emulated role consumes. The renderer is the single source of
-// truth for the emulator's listen port / vmedia port / bind address;
-// without this pin, an accidental drift between Go and the role's
-// default(8000)-style fallbacks would surface only at apply time as a
-// "BMC reaches a different port than agentIso.fetchUrl" mismatch.
 func TestMachineEmulatedBMCProjection(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -768,8 +735,6 @@ func TestMachineEmulatedBMCProjection(t *testing.T) {
 		}
 	}
 
-	// boot.agentIso.fetchUrl must use the same vMediaPort the role
-	// will stand up. This pins the cross-projection invariant.
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
 	fetchURL := iso["fetchUrl"].(string)
@@ -1029,12 +994,6 @@ func TestManagedClusterInstallProxyRendersNoProxy(t *testing.T) {
 	}
 }
 
-// TestMachineEmulatedBMCAbsentForBareMetal pins the negative half of
-// the projection: from.name baremetal machines never carry a
-// bmcEmulated block — they speak a vendor BMC, not an emulated one,
-// and the role never runs against them. Keeping the absence pinned
-// catches a renderer regression that would project the block onto
-// every machine indiscriminately.
 func TestMachineEmulatedBMCAbsentForBareMetal(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {
@@ -1048,13 +1007,6 @@ func TestMachineEmulatedBMCAbsentForBareMetal(t *testing.T) {
 	}
 }
 
-// TestLoadBalancerFrontendAttachmentLibvirt pins the per-frontend
-// attachment block network_vips consumes. The role no longer scans
-// `bootwright_current_cluster.networks` for a libvirt bridge; the
-// renderer projects attachment.{kind, libvirt.{bridge,prefix}} on
-// every frontend so a non-libvirt cluster with a managed LB no-ops
-// cleanly instead of silently skipping. This pins the libvirt arm
-// (001 fixture: managed haProxy + libvirt connectivity).
 func TestLoadBalancerFrontendAttachmentLibvirt(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -1191,9 +1143,6 @@ func commaListContains(list, want string) bool {
 	return false
 }
 
-// TestVarsProjectFIPSFlagForFIPSClusters pins that a FIPS OpenShift cluster
-// projects fips: true (which the agent install role reads to pick
-// openshift-install-fips) while non-FIPS clusters omit the key entirely.
 func TestVarsProjectFIPSFlagForFIPSClusters(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {

@@ -13,21 +13,11 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// nodeRegistrationAttempts/Interval bound the pre-apply wait for a host's Node
-// object to appear. A registered node passes on the first probe (no delay); a
-// late-joining worker is given ~5 min to register before the task fails.
 const (
 	nodeRegistrationAttempts = 30
 	nodeRegistrationInterval = 10 * time.Second
 )
 
-// runOneNodeConfigTask applies a cluster's day-2 node configuration: the infra
-// role labels/taints and the infra MachineConfigPool (plus any authored
-// labels/taints). It generates the manifests in-process from the desired host
-// specs and applies them with server-side `oc apply` against the installed
-// cluster's kubeconfig — the same shape as runOneExtensionTask. The
-// MachineConfigPool roll (which reboots nodes) proceeds asynchronously in the
-// cluster; this task does not block on it.
 func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
 	ocp, ok := stateview.ContainerCluster(task.State, task.Entry.Cluster)
 	if !ok {
@@ -38,7 +28,6 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	if len(manifests) == 0 {
-		// Nothing to do (e.g. infra role removed); record reconciled.
 		if err := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, time.Now()); err != nil {
 			return applyTaskResult{id: task.Entry.ID, err: err}
 		}
@@ -55,12 +44,6 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
 	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
-	// Assert every host we are about to patch has actually registered as a Node
-	// before applying. Server-side apply would otherwise CREATE a phantom Node for
-	// an authored-hostname divergence (typo, uppercase, FQDN-vs-short) — landing
-	// the infra taint on a non-existent node while the real one keeps scheduling
-	// regular workloads. The read probe is quiet (no console writer) so the
-	// expected NotFound lines during a late-worker wait do not alarm.
 	checker := extensionoc.CommandRunner{LogPath: logPath}
 	if err := waitNodesRegistered(ctx, checker, kubeconfig, task.Entry.Cluster, nodeConfigNodeNames(ocp), nodeRegistrationAttempts, nodeRegistrationInterval); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
@@ -79,9 +62,6 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 	return applyTaskResult{id: task.Entry.ID}
 }
 
-// nodeConfigNodeNames returns the host names that get a day-2 Node patch — the
-// hosts nodeConfigManifests emits a Node object for (infra role, or authored
-// labels/taints). These are the names that must resolve to a registered Node.
 func nodeConfigNodeNames(ocp v1alpha1.ContainerCluster) []string {
 	var names []string
 	for _, host := range ocp.Spec.Hosts {
@@ -92,10 +72,6 @@ func nodeConfigNodeNames(ocp v1alpha1.ContainerCluster) []string {
 	return names
 }
 
-// waitNodesRegistered blocks until every named host resolves to a Node object,
-// retrying up to attempts times (interval between tries) to allow a late-joining
-// worker to register. It fails, naming the missing node, rather than let a
-// server-side apply create a phantom Node for a hostname that never registered.
 func waitNodesRegistered(ctx context.Context, runner extensionoc.OCRunner, kubeconfig, cluster string, names []string, attempts int, interval time.Duration) error {
 	for _, name := range names {
 		var lastErr error

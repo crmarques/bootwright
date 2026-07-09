@@ -2,10 +2,6 @@ package workflow
 
 import "testing"
 
-// ClassifyApplyTransitions maps each object to what apply would do under a mode:
-// create (no record), unchanged (match), reconcile (reconcilable/reconfigure-only
-// drift), rebuild (destructive --override), refuse (foreign, structural drift under
-// continue, or any recorded object under --expect-new).
 func TestClassifyApplyTransitions(t *testing.T) {
 	runsDir := t.TempDir()
 	create := classifyTask("addon.new", ApplyTaskKindClusterAddon, "demo")
@@ -49,17 +45,17 @@ func TestClassifyApplyTransitions(t *testing.T) {
 		"addon.match":   ApplyTransitionUnchanged,
 		"addon.drift":   ApplyTransitionReconcile,
 		"addon.foreign": ApplyTransitionRefuse,
-		"os.demo":       ApplyTransitionRefuse, // structural drift refused under continue
+		"os.demo":       ApplyTransitionRefuse,
 	})
 	check(ApplyModeOverride, map[string]ApplyTransitionAction{
 		"addon.drift":   ApplyTransitionReconcile,
-		"addon.foreign": ApplyTransitionRefuse,  // foreign never rebuilt
-		"os.demo":       ApplyTransitionRebuild, // destructive rebuild authorized
+		"addon.foreign": ApplyTransitionRefuse,
+		"os.demo":       ApplyTransitionRebuild,
 		"addon.new":     ApplyTransitionCreate,
 		"addon.match":   ApplyTransitionUnchanged,
 	})
 	check(ApplyModeCreate, map[string]ApplyTransitionAction{
 		"addon.new":   ApplyTransitionCreate,
-		"addon.match": ApplyTransitionRefuse, // --expect-new refuses a recorded object
+		"addon.match": ApplyTransitionRefuse,
 	})
 }

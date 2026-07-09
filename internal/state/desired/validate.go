@@ -12,10 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-// Validate is the single entry point. Every rule in
-// `specs/state-model.md § Validation Rules` lives behind one of the
-// per-kind validators called below. Each rule emits a precise
-// diagnostic naming the field and the conflicting value.
 func Validate(state v1alpha1.State) error {
 	findings := validateFindings(state)
 	if len(findings) == 0 {
@@ -24,9 +20,6 @@ func Validate(state v1alpha1.State) error {
 	return newValidationError(findings)
 }
 
-// validateFindings runs every per-kind validator and returns the raw findings.
-// Validate wraps them in a ValidationError. Keep the validator call order here as
-// the single source of truth.
 func validateFindings(state v1alpha1.State) []Finding {
 	var errs []Finding
 	errs = append(errs, notes(validateEnvironments(state))...)
@@ -52,12 +45,6 @@ func validateFindings(state v1alpha1.State) []Finding {
 	return errs
 }
 
-// validateUniqueMachineSSHAddresses fails closed when two different Machines resolve
-// to the same SSH address. bootwright reaches a node over that address to probe
-// ownership, apply day-2 network state, and verify readiness, so a shared address
-// means two logical Machines drive — and could reinstall or reconfigure — a single
-// physical host, and the pre-install ownership probe of one would see the other's OS.
-// A Machine with no SSH address (a VM that pre-provisions its OS) is skipped.
 func validateUniqueMachineSSHAddresses(state v1alpha1.State) []string {
 	byAddress := map[string][]string{}
 	for _, machine := range state.Machines {
@@ -84,21 +71,7 @@ func validateUniqueMachineSSHAddresses(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateUniqueBMCAddresses fails closed when two different Machines declare the
-// same BMC (Redfish) endpoint. A BMC address identifies one physical host's
-// management controller, so a shared address is a copy-paste error that points two
-// logical Machines at a single physical host — and bootwright's boot/install path
-// would drive the SAME host for both, disk-wiping the wrong machine. Catching it at
-// validation, before any apply, is the cheapest guard against that fat-finger; VM
-// substrates (KubeVirt/vSphere) declare no BMC address and are unaffected.
 func validateUniqueBMCAddresses(state v1alpha1.State) []string {
-	// Key on the normalized endpoint, not the raw string: the boot renderer
-	// collapses equivalent Redfish spellings (redfish+https / redfish-virtualmedia
-	// / redfish schemes, a trailing /redfish/v1/Systems/<id> suffix, trailing
-	// slashes) to one baseUrl, so two Machines that spell the SAME endpoint
-	// differently drive one physical host at apply — the exact wrong-host disk-wipe
-	// this guard exists to prevent. Comparing raw strings would let those variants
-	// bypass it.
 	type group struct {
 		display string
 		names   []string
@@ -134,13 +107,6 @@ func validateUniqueBMCAddresses(state v1alpha1.State) []string {
 	return errs
 }
 
-// normalizeBMCAddressKey mirrors the boot renderer's normalizeRedfishURL /
-// normalizeRedfishTransport (internal/render/inventory/vars_boot.go) so the
-// duplicate-BMC guard compares endpoints exactly as apply drives them. Kept in
-// sync by hand: the renderer package is not importable here. It folds the
-// transport scheme, a /redfish/v1/Systems/<id> suffix, and trailing slashes into
-// a single comparison key; it deliberately does NOT normalize ports, matching the
-// renderer.
 func normalizeBMCAddressKey(addr string) string {
 	base, systemID := normalizeRedfishEndpoint(addr)
 	return base + "|" + systemID
@@ -181,12 +147,6 @@ func normalizeRedfishScheme(addr string) string {
 	}
 }
 
-// duplicateNameFindings reports every metadata.name that appears more than once
-// within a kind, as a structured finding naming the owning object. It replaces
-// the per-validator inline dedup loops so the duplicate diagnostics are routed
-// at the source (with a real Object) instead of the CLI reconstructing them
-// from the message text. NetworkConfig keeps its own structured check; an
-// Environment count is reported by validateEnvironments.
 func duplicateNameFindings(state v1alpha1.State) []Finding {
 	var out []Finding
 	for _, accessor := range v1alpha1.AuthoredKindAccessors() {
@@ -199,10 +159,6 @@ func duplicateNameFindings(state v1alpha1.State) []Finding {
 	return out
 }
 
-// duplicateFindings reports each name that appears more than once. The dedup
-// mirrors the per-validator checks it replaces: only names that pass
-// validateName participate (an invalid name is reported as a name error, not a
-// duplicate), and the second and later occurrences are flagged.
 func duplicateFindings(kind string, names []string) []Finding {
 	var out []Finding
 	seen := map[string]bool{}
@@ -223,8 +179,6 @@ var dnsSubdomain = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]
 var labelName = regexp.MustCompile(`^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$`)
 var labelValue = regexp.MustCompile(`^([A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?)?$`)
 
-// IsDNSLabel returns whether s matches the canonical
-// `[a-z0-9]([-a-z0-9]*[a-z0-9])?` DNS-label form.
 func IsDNSLabel(s string) bool { return dnsLabel.MatchString(s) }
 
 func isLabelKey(s string) bool {
@@ -264,10 +218,6 @@ func validateName(kind, name string) string {
 	return ""
 }
 
-// validateCrossLayer enforces the few rules that span multiple kinds:
-// one ContainerCluster owner per ClusterInstall in v1, the proxy /
-// registry single-source-of-truth rule, the disconnected-install
-// requirement, and fleet-wide machine node-binding exclusivity.
 func validateCrossLayer(state v1alpha1.State) []string {
 	var errs []string
 	errs = append(errs, validateClusterRootNameCollisions(state)...)
@@ -281,12 +231,6 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateClusterRootNameCollisions enforces one cluster-root name namespace
-// across ContainerCluster and StorageCluster. Cluster selection resolves bare
-// names against both kinds (`--clusters`, Environment.spec.containerClusters /
-// spec.storageClusters), so a name declared by both would silently widen
-// apply, state-check, and destroy scope to the second cluster. Same-kind
-// duplicates stay with the per-kind `duplicate <Kind>` rules.
 func validateClusterRootNameCollisions(state v1alpha1.State) []string {
 	container := map[string]bool{}
 	for _, ocp := range state.ContainerClusters {
@@ -305,10 +249,6 @@ func validateClusterRootNameCollisions(state v1alpha1.State) []string {
 	return errs
 }
 
-// reservedClusterRootName is the literal `destroy --stage infra --clusters`
-// accepts to remove only the generated artifact publication service. A cluster
-// root of this name would make that destructive selection ambiguous, so it is
-// reserved out of the cluster-name namespace.
 const reservedClusterRootName = "artifact-server"
 
 func validateReservedClusterRootNames(state v1alpha1.State) []string {
@@ -326,12 +266,6 @@ func validateReservedClusterRootNames(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateMachineNodeBindings enforces node-binding exclusivity across the
-// whole fleet: a Machine backs at most one ContainerCluster spec.hosts[] or
-// StorageCluster spec.ceph.topology.hosts[] entry. Normalize defaults an
-// omitted container host machineRef to the hostname, so two clusters reusing
-// a hostname would otherwise silently capture (and re-install) the same
-// Machine.
 func validateMachineNodeBindings(state v1alpha1.State) []string {
 	type binding struct {
 		cluster string
@@ -561,10 +495,6 @@ func validateStorageManagedOSArtifactServerEndpoints(state v1alpha1.State, ci v1
 	return errs
 }
 
-// validateSecretReferences walks every SecretRef in the loaded state
-// and rejects those that point at undeclared names. Validation runs
-// after the per-kind validators so the `Environment` cardinality rule
-// has already fired if it would; this loop tolerates a missing env.
 func validateSecretReferences(state v1alpha1.State) []string {
 	env := primaryEnvironment(&state)
 	if env == nil {
@@ -577,10 +507,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		secretType[s.Metadata.Name] = s.Spec.Type
 	}
 	var errs []string
-	// requireNoted carries an optional note appended to the dangling-secret
-	// diagnostic; normalize-injected refs use it to say the value was
-	// defaulted and how to override, since it appears nowhere in the
-	// author's files.
 	requireNoted := func(owner string, ref v1alpha1.SecretRef, note string) {
 		if ref.Name == "" {
 			return
@@ -600,8 +526,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	require := func(owner string, ref v1alpha1.SecretRef) {
 		requireNoted(owner, ref, "")
 	}
-	// requireTypeNoted additionally checks the referenced Secret's declared type
-	// matches what the consuming field expects.
 	requireTypeNoted := func(owner string, ref v1alpha1.SecretRef, wantType, note string) {
 		requireNoted(owner, ref, note)
 		if ref.Name == "" || !declared[ref.Name] {
@@ -675,9 +599,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults.auth.credentialsRef",
 				p.Metadata.Name), p.Spec.Libvirt.BMCEmulationDefaults.Auth.CredentialsRef)
 		}
-		// credentialsRef on the provider BMC default is optional (a cert-only default
-		// is valid); validate it only when set. Per-machine credentialsRef is
-		// independently required in validate_machine.go.
 		if p.Spec.BareMetal != nil && p.Spec.BareMetal.Defaults.BMC != nil && p.Spec.BareMetal.Defaults.BMC.CredentialsRef.Name != "" {
 			require(fmt.Sprintf("InfraProvider/%s spec.bareMetal.defaults.bmc.credentialsRef",
 				p.Metadata.Name), p.Spec.BareMetal.Defaults.BMC.CredentialsRef)
@@ -694,9 +615,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 	}
 	for _, ocp := range state.ContainerClusters {
-		// Normalize-injected install refs (Environment defaults or invented
-		// convention names) appear nowhere in the cluster author's file;
-		// when one dangles, say it was defaulted and how to override.
 		pullSecretNote := ""
 		if ocp.DefaultedRefs.PullSecretRef {
 			pullSecretNote = "(defaulted; declare the secret or set spec.install.pullSecretRef)"

@@ -8,18 +8,11 @@ import (
 )
 
 const (
-	// InstallerRelativeDir is the path under each cluster rendered dir for
-	// generated installer placeholder artifacts.
 	InstallerRelativeDir = "installer"
 
-	// RuntimeRelativeDir is the path under each cluster runtime dir for
-	// local-only runtime artifacts.
 	RuntimeRelativeDir = "installer"
 )
 
-// InstallerAsset is the per-cluster path pair for the placeholder
-// (`Dir`) and effective (`WorkDir`) install-config / agent-config
-// outputs.
 type InstallerAsset struct {
 	ClusterName                  string
 	ClusterDir                   string
@@ -78,16 +71,10 @@ func InstallerToolInputAssets(outputDir string, state v1alpha1.State) []Installe
 	return assets
 }
 
-// InstallerConfig renders the placeholder install-config.yaml with
-// secret references rather than secret material.
 func InstallerConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
 	return InstallerConfigWithSecrets(state, ocp, PlaceholderInstallerSecrets(state, ocp))
 }
 
-// InstallerConfigWithSecrets is the same as InstallerConfig but accepts
-// resolved secret material so the result can be passed straight to
-// openshift-install. ResolveInstaller calls this; the placeholder
-// render path calls InstallerConfig.
 func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, secrets InstallerSecrets) (map[string]any, error) {
 	ci, err := ClusterInstallForOCP(state, ocp)
 	if err != nil {
@@ -134,9 +121,6 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 	return base, nil
 }
 
-// AgentConfig renders the agent-config.yaml for the OpenShift agent
-// installer. minimalISO + bootArtifactsBaseURL are auto-added in
-// disconnected mode when an environment artifact server is available.
 func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
 	ci, err := ClusterInstallForOCP(state, ocp)
 	if err != nil {

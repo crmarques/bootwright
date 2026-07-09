@@ -6,9 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// hostTrustScopePlanningState is a container cluster that attaches a managed
-// Ceph cluster's data foundation export. The Ceph cluster has a provided-OS
-// cephadm seed and a provided-OS arbiter, both needing managed SSH host trust.
 func hostTrustScopePlanningState() v1alpha1.State {
 	cephMachine := func(name, address string) v1alpha1.Machine {
 		return v1alpha1.Machine{
@@ -86,10 +83,6 @@ func hostTrustScopePlanningState() v1alpha1.State {
 	}
 }
 
-// The base storage task SSHes only the cephadm seed; cephadm fans out to the
-// other nodes over its own cluster key. So a base apply that pulls the managed
-// Ceph cluster in transitively must not require host trust for the arbiter,
-// which only the deps prereqs phase connects to.
 func TestApplyTaskConnectedMachinesBaseExcludesArbiter(t *testing.T) {
 	state := hostTrustScopePlanningState()
 	target := ApplyTarget{Name: "base", PhaseNames: []string{ApplyPhaseBase}, StorageClusterNames: []string{"ceph"}}
@@ -109,8 +102,6 @@ func TestApplyTaskConnectedMachinesBaseExcludesArbiter(t *testing.T) {
 	}
 }
 
-// The deps prereqs task is group-limited to every storage node, so it connects
-// to the arbiter and host trust is required again.
 func TestApplyTaskConnectedMachinesDepsIncludesArbiter(t *testing.T) {
 	state := hostTrustScopePlanningState()
 	target := ApplyTarget{Name: "deps", PhaseNames: []string{ApplyPhaseDeps}, StorageClusterNames: []string{"ceph"}}

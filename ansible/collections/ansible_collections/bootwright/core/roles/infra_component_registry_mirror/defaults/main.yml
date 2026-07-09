@@ -1,5 +1,4 @@
 ---
-# Per-component layout for one mirror registry capability.
 bootwright_mr_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
 bootwright_mr_data_dir: "{{ bootwright_mr_root }}/data"
 bootwright_mr_auth_dir: "{{ bootwright_mr_root }}/auth"

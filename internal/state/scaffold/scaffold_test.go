@@ -10,9 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/scaffold"
 )
 
-// TestWorkspaceUnknownProvider asserts the dispatch error names every
-// known provider so the user sees the supported set instead of just
-// "unknown".
 func TestWorkspaceUnknownProvider(t *testing.T) {
 	_, err := scaffold.Workspace("c1", scaffold.Provider("not-a-provider"))
 	if err == nil {
@@ -39,9 +36,6 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 	}
 }
 
-// TestWorkspaceProducesScaffoldFiles asserts the scaffolder emits one
-// YAML file per object for every provider. Names are pinned so
-// downstream init.go's `os.WriteFile` directory layout doesn't drift.
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	defaultNames := []string{
 		"environment.yaml", "secrets.yaml", "infra/providers/provider.yaml", "infra/networkconfigs/networks.yaml",
@@ -86,11 +80,6 @@ func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	}
 }
 
-// TestWorkspacePassesValidator is the load-bearing test: every
-// substrate's scaffolded output must round-trip through
-// LoadNormalizeValidate without error. Catches schema drift between
-// the scaffolder's templates and the actual API types — the exact
-// gap that motivated this rewrite.
 func TestWorkspacePassesValidator(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
@@ -114,10 +103,6 @@ func TestWorkspacePassesValidator(t *testing.T) {
 	}
 }
 
-// TestWorkspaceInterpolatesClusterName confirms the cluster name lands
-// in metadata.name everywhere the templates reference it. A regression
-// where a substrate forgot to substitute would scaffold a workspace
-// that fails the unique-name check.
 func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 	files, err := scaffold.Workspace("my-cluster", scaffold.ProviderEmulatedBareMetal)
 	if err != nil {

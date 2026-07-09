@@ -33,10 +33,6 @@
           missing; the boot driver or OS installer must stage it before the
           vSphere media role uploads it.
 
-    # A retried install rotates the publish token, so the new upload lands
-    # at a new datastore path while the per-machine record still references
-    # the previous one. Retire the superseded upload before the record is
-    # overwritten — recorded media must never become unreachable.
     - name: Probe previously recorded vSphere virtual media
       ansible.builtin.stat:
         path: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
@@ -90,20 +86,11 @@
         bootwright_ownership_record: "{{ bootwright_vsphere_media_previous_record }}"
       when: bootwright_vsphere_media_superseded | bool
 
-    # All machines of a cluster share one agent ISO on the controller, but the
-    # attach target datastore is per-failure-domain, so the upload marker must
-    # be keyed by (server, datastore): two machines in different failure domains
-    # each upload to their own datastore, while machines sharing a datastore
-    # still dedupe. A shared stage-path marker would let the second machine skip
-    # its upload and attach media that was never copied to that datastore.
     - name: Resolve vSphere upload marker path
       ansible.builtin.set_fact:
         bootwright_vsphere_media_uploaded_marker_path: "{{ bootwright_vsphere_media_stage_path }}.uploaded-{{ (bootwright_vsphere_media.server ~ '|' ~ bootwright_vsphere_media_datastore) | hash('sha1') }}"
       changed_when: false
 
-    # The marker dedupes the upload across the per-machine attach passes and the
-    # throttle keeps any residual uploads from racing the same datastore file.
-    # A rebuilt ISO (newer than the marker) re-uploads.
     - name: Probe uploaded vSphere virtual media marker
       ansible.builtin.stat:
         path: "{{ bootwright_vsphere_media_uploaded_marker_path }}"
@@ -140,9 +127,6 @@
         not (bootwright_vsphere_media_uploaded_marker.stat.exists | default(false))
         or ((bootwright_vsphere_media_stage_stat.stat.mtime | default(0)) > (bootwright_vsphere_media_uploaded_marker.stat.mtime | default(0)))
 
-    # The uploaded path is recorded before the attach so cleanup and machine
-    # destroy can always read it back — datastore media must never outlive
-    # the machine even when a later step renames or loses the live handle.
     - name: Record vSphere virtual media ownership
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
@@ -190,4 +174,3 @@
         bootwright_redfish_vmedia_backend_image_name: "{{ bootwright_vsphere_media_stage_path | basename }}"
       changed_when: false
       no_log: "{{ bootwright_no_log | default(true) | bool }}"
-

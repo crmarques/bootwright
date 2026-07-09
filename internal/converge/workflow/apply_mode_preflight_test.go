@@ -5,11 +5,6 @@ import (
 	"testing"
 )
 
-// TestOverrideReconfigureOnlyKindsMatchPublishedContract binds the code allowlist
-// to the reconfigure-vs-rebuild taxonomy published in the specs/state-model.md
-// --override CLI Contract (and docs/advanced/ownership-and-safety.md). A change to
-// the set must update that spec so the published consequence class never drifts
-// from what the destroy-protection gate actually enforces.
 func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 	want := map[string]bool{
 		ApplyTaskKindProvider:               true,
@@ -17,10 +12,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindNodeConfigApply:        true,
 		ApplyTaskKindHostVirtctl:            true,
 		ApplyTaskKindClusterAddon:           true,
-		// The retired storageAttachmentApply kind stays reconfigure-only so
-		// pre-migration converge records remain inert (see
-		// overrideReconfigureOnlyKinds); its constant is deleted with the task.
-		"storageAttachmentApply": true,
+		"storageAttachmentApply":            true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
 		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --override taxonomy", len(overrideReconfigureOnlyKinds), len(want))
@@ -37,8 +29,6 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 	}
 }
 
-// preflightObjects builds a real object set from seeded converge-safety records so
-// the preflight is exercised through the same classification path apply uses.
 func preflightObjects(t *testing.T, runsDir string) []ObjectClassification {
 	t.Helper()
 	match := classifyTask("addon.demo.match", "clusterAddon", "demo")
@@ -52,7 +42,6 @@ func preflightObjects(t *testing.T, runsDir string) []ObjectClassification {
 	saveStateCheckRecord(t, runsDir, match, matchHash, ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
-	// missing: no record
 	objs, err := ClassifyApplyObjects([]ApplyTask{match, drift, foreign, missing}, runsDir)
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
@@ -69,7 +58,6 @@ func TestEvaluateApplyModePreflightCreateGreenfieldOnly(t *testing.T) {
 	if !strings.Contains(err.Error(), "--expect-new") {
 		t.Fatalf("create error must name --expect-new: %v", err)
 	}
-	// All-missing -> create proceeds.
 	missing := classifyTask("addon.demo.new", "clusterAddon", "demo")
 	objs2, err := ClassifyApplyObjects([]ApplyTask{missing}, t.TempDir())
 	if err != nil {
@@ -82,9 +70,6 @@ func TestEvaluateApplyModePreflightCreateGreenfieldOnly(t *testing.T) {
 
 func TestEvaluateApplyModePreflightContinueFailsStructuralDriftAndForeign(t *testing.T) {
 	runsDir := t.TempDir()
-	// Foreign ownership and a destructive-kind (managed-OS reinstall) structural
-	// drift still fail closed. A drifted reconfigure-only kind (clusterAddon) is
-	// reconcilable in place, so continue reconciles it instead of refusing.
 	addonDrift := classifyTask("addon.demo.drift", ApplyTaskKindClusterAddon, "demo")
 	foreign := classifyTask("addon.demo.foreign", ApplyTaskKindClusterAddon, "demo")
 	osDrift := classifyTask("os.demo", ApplyTaskKindManagedMachineOS, "demo")
@@ -109,9 +94,6 @@ func TestEvaluateApplyModePreflightContinueFailsStructuralDriftAndForeign(t *tes
 	}
 }
 
-// A run whose only drift is a reconfigure-only day-2 re-apply (a changed add-on,
-// node label/taint, DNS/LB record) is reconcilable in place: continue proceeds and
-// converges it, rather than refusing and forcing --override.
 func TestEvaluateApplyModePreflightContinueReconcilesReconfigureOnlyDrift(t *testing.T) {
 	runsDir := t.TempDir()
 	addonDrift := classifyTask("addon.demo.drift", ApplyTaskKindClusterAddon, "demo")
@@ -147,11 +129,6 @@ func TestEvaluateApplyModePreflightContinueAllMatchProceeds(t *testing.T) {
 	}
 }
 
-// TestOverrideDestructiveDriftedObjects locks in the destroy-protection gate's
-// classification: only a drifted object of a destructive kind (a cluster, storage,
-// or machine rebuild) counts. A drifted reconfigure-only fabric service is exempt
-// (override re-applies it in place, destroying nothing), and a missing object is a
-// greenfield create, not a destroy.
 func TestOverrideDestructiveDriftedObjects(t *testing.T) {
 	runsDir := t.TempDir()
 	infra := classifyTask("infra-component.bastion", ApplyTaskKindInfraComponentServices, "")
@@ -160,7 +137,6 @@ func TestOverrideDestructiveDriftedObjects(t *testing.T) {
 	matchedStorage := classifyTask("storage.ceph2", ApplyTaskKindStorageCluster, "ceph2")
 	missingCluster := classifyTask("iso.ocp", ApplyTaskKindClusterISO, "ocp")
 
-	// Drift everything but the matched storage and the missing cluster.
 	saveStateCheckRecord(t, runsDir, infra, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, provider, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, storage, "sha256:stale", ConvergeSafetyOwner)
@@ -169,7 +145,6 @@ func TestOverrideDestructiveDriftedObjects(t *testing.T) {
 		t.Fatalf("desired hash: %v", err)
 	}
 	saveStateCheckRecord(t, runsDir, matchedStorage, matchedHash, ConvergeSafetyOwner)
-	// missingCluster: no record.
 
 	objs, err := ClassifyApplyObjects([]ApplyTask{infra, provider, storage, matchedStorage, missingCluster}, runsDir)
 	if err != nil {
@@ -181,10 +156,6 @@ func TestOverrideDestructiveDriftedObjects(t *testing.T) {
 	}
 }
 
-// TestOverrideDestructiveMachineSubstrate verifies the machine-substrate split the
-// destroy-protection remedy routes on: a drifted managed-OS install is machine
-// substrate (cleared only by the infra stage) and reports its cluster; a drifted
-// StorageCluster is a cluster rebuild and is NOT machine substrate.
 func TestOverrideDestructiveMachineSubstrate(t *testing.T) {
 	runsDir := t.TempDir()
 	managedOS := classifyTask("osinstall.ceph", ApplyTaskKindManagedMachineOS, "ceph")
@@ -214,8 +185,6 @@ func TestEvaluateApplyModePreflightOverrideOnlyFailsForeign(t *testing.T) {
 	if !strings.Contains(err.Error(), "addon.demo.foreign") {
 		t.Fatalf("override error must name the foreign object: %v", err)
 	}
-	// Override tolerates drift and match (rebuilds drift, skips match): the only
-	// blocker is foreign, so an object set without foreign must proceed.
 	if strings.Contains(err.Error(), "addon.demo.drift") {
 		t.Fatalf("override must not block drift (it rebuilds it): %v", err)
 	}

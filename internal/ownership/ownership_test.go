@@ -138,10 +138,6 @@ func TestResourceRecordRejectsSecretLikeData(t *testing.T) {
 	}
 }
 
-// The sensitive scan must tolerate benign connection strings and paths (ssh args,
-// known-hosts paths, FQDNs) that merely contain a word like token/kubeconfig, so a
-// recorded host stays loadable and reclaimable, while still rejecting actual
-// embedded credential material and fields named like a secret.
 func TestSensitiveScanTolersBenignConnectionDataButRejectsCredentials(t *testing.T) {
 	benign := ResourceRecord{
 		Kind: "libvirt-domain", Name: "node0", Owner: Owner, Host: "h",
@@ -200,20 +196,12 @@ func TestFilterByContextEmptyContextKeepsAll(t *testing.T) {
 	}
 }
 
-// One unreadable/invalid record must not hide every other recorded resource: a
-// destroy sweep has to be able to reclaim the good ones (and a record can be
-// written by the Ansible role, which does not run Go's validation, so an invalid
-// record can land on disk). LoadResources skips it; LoadResourcesWithWarnings
-// surfaces the skip.
 func TestLoadResourcesSkipsBadRecordWithoutDroppingGood(t *testing.T) {
 	root := t.TempDir()
 	good := ResourceRecord{Kind: "libvirt-domain", Name: "good-machine", Owner: Owner, Host: "h"}
 	if err := SaveResource(root, good); err != nil {
 		t.Fatalf("SaveResource: %v", err)
 	}
-	// A corrupt file the atomic writer could leave behind, plus a syntactically
-	// valid record that trips the load-time sensitive scan (a field named like a
-	// secret): both must be skipped, not fatal.
 	corruptDir := filepath.Join(root, ResourceDirName, "libvirt-domain")
 	if err := os.WriteFile(filepath.Join(corruptDir, "truncated.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("write corrupt: %v", err)

@@ -10,22 +10,13 @@ import (
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
-// TestPackageRemovalGuardedByOwnershipAndRequirements pins the host-package safety
-// contract: Bootwright removes a package only when its ownership record proves
-// Bootwright introduced it (preexisting is false, defaulting to true so an
-// operator-preexisting package is kept) AND nothing else still requires it. A
-// regression that inverts the preexisting default or drops the requiredBy gate
-// would silently start removing operator-preexisting packages (chrony, podman, ...).
 func TestPackageRemovalGuardedByOwnershipAndRequirements(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_remove_one.yml")
 	remove := tasks[findAnsibleTask(t, tasks, "Remove package that Bootwright introduced")]
 	when := fmt.Sprint(remove["when"])
-	// Removal only when the package is NOT operator-preexisting; the default is true
-	// so a missing flag keeps the package.
 	if !strings.Contains(when, "not (bootwright_ownership_package_record.preexisting") || !strings.Contains(when, "preexisting | default(true)") {
 		t.Fatalf("package removal must be gated on preexisting defaulting to true (keep), got when=%v", remove["when"])
 	}
-	// Removal only when nothing else still requires the package.
 	if !strings.Contains(when, "bootwright_ownership_package_remaining_required_by") || !strings.Contains(when, "length == 0") {
 		t.Fatalf("package removal must be gated on an empty remaining requiredBy, got when=%v", remove["when"])
 	}
@@ -99,8 +90,6 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 			t.Fatalf("artifact nginx template missing %q", want)
 		}
 	}
-	// Legacy-BMC TLS relaxation: ssl_protocols/ssl_ciphers render only when the
-	// component sets them, so the default keeps the server's built-in TLS.
 	for _, want := range []string{
 		"bootwright_component.tls.protocols | default('')",
 		"ssl_protocols {{ bootwright_component.tls.protocols }};",
@@ -117,14 +106,9 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 			t.Fatalf("artifact TLS template must render SANs; missing %q", want)
 		}
 	}
-	// The OpenSSL config renders unconditionally so a change to the desired
-	// SANs/CN surfaces as a content change; it must not be gated on existing
-	// material or an edited SAN list would keep serving a stale certificate.
 	if when := fmt.Sprint(tasks[tlsConfigIdx]["when"]); strings.Contains(when, "bootwright_artifacts_tls_material_present") {
 		t.Fatalf("%s must render unconditionally to detect SAN/CN drift, got when=%v", tasks[tlsConfigIdx]["name"], tasks[tlsConfigIdx]["when"])
 	}
-	// Cert generation preserves existing material unless it is absent or the
-	// rendered OpenSSL config (SANs/CN) changed, which rotates the certificate.
 	genWhen := fmt.Sprint(tasks[tlsGenerateIdx]["when"])
 	if !strings.Contains(genWhen, "not (bootwright_artifacts_tls_material_present") {
 		t.Fatalf("%s must preserve existing TLS material, got when=%v", tasks[tlsGenerateIdx]["name"], tasks[tlsGenerateIdx]["when"])
@@ -163,16 +147,9 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 	}
 }
 
-// TestInfraComponentContainerGateUsesLiveProvenanceLabel locks the multi-context fix:
-// the container apply-mode gate must read ownership from the LIVE container's
-// Bootwright provenance labels, not from a per-context ownership-record stat. The
-// bastion runs one global podman store shared by every context while each context
-// keeps its own ownership/ dir, so a per-context stat misreports a shared container
-// created by another context as foreign and blocks the second context's apply.
 func TestInfraComponentContainerGateUsesLiveProvenanceLabel(t *testing.T) {
 	rel := bootwrightCollectionRoleRoot + "/ownership_record/tasks/infra_component_container_gate.yml"
 	body := readRepoFile(t, rel)
-	// The per-context ownership-record stat oracle must be gone entirely.
 	for _, banned := range []string{"bootwright_infra_component_owned_stat", "Stat ownership record", "bootwright_ownership_dir", "ansible.builtin.stat"} {
 		if strings.Contains(body, banned) {
 			t.Fatalf("container gate must not derive ownership from a per-context record; found %q", banned)
@@ -217,9 +194,6 @@ func TestInfraComponentContainerGateUsesLiveProvenanceLabel(t *testing.T) {
 	}
 }
 
-// TestInfraComponentRolesPassContainerNameToGate verifies every container-backed
-// infra-component role feeds its container name to the gate, so the foreign-squatter
-// name probe is armed (an empty name degrades to label-probe-only).
 func TestInfraComponentRolesPassContainerNameToGate(t *testing.T) {
 	roles := []string{
 		"infra_component_artifact_server_http",
@@ -506,9 +480,6 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 		}
 	}
 
-	// A scoped destroy must restrict recorded-resource cleanup to the selected
-	// roots so it cannot tear down a co-located cluster's VMs/disks on a shared
-	// host; an unscoped destroy leaves the var undefined and cleans everything.
 	recorded := tasks[findAnsibleTask(t, tasks, "Destroy recorded machine infrastructure resources")]
 	recordedWhen := fmt.Sprint(recorded["when"])
 	if !strings.Contains(recordedWhen, "bootwright_destroy_cluster_scope") {
@@ -524,12 +495,7 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 		"destroy",
 		"undefine",
 		"Remove current-context libvirt storage directory",
-		// The sweep must require the live Bootwright ownership marker, not just a
-		// disk-path match, so a foreign VM parked under the context root is not
-		// undefined.
 		"dumpxml",
-		// Prefix-agnostic: a managed-OS install rewrites the namespace prefix
-		// (ns0:), so the sweep keys on the element local name, not <bootwright:...>.
 		"([A-Za-z0-9_]+:)?context>",
 		"bootwright_libvirt_context_owned_domains",
 		"item.bootwright_libvirt_domain_name in bootwright_libvirt_context_owned_domains",
@@ -540,11 +506,6 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 	}
 }
 
-// TestLibvirtContextSweepPreservesForeignDiskUnderRoot pins that the infra-destroy
-// context sweep never deletes a foreign (non-Bootwright) domain's disk parked under
-// the namespaced context root: the blanket root removal is gated on no foreign
-// domain using the root, and when one co-resides only the Bootwright-owned machine
-// subtrees are removed.
 func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_host_libvirt/tasks/destroy_context.yml")
 
@@ -597,10 +558,6 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("libvirt destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
 	}
 	owned := fmt.Sprint(decide["bootwright_libvirt_destroy_owned"])
-	// The marker must be matched prefix-agnostically: the managed-OS media insert
-	// round-trips the domain XML through ElementTree, which rewrites the bootwright
-	// namespace prefix (ns0:), so a literal <bootwright:...> match would reject a
-	// genuinely Bootwright-owned VM.
 	for _, want := range []string{"([A-Za-z0-9_]+:)?context>", "([A-Za-z0-9_]+:)?cluster>", "([A-Za-z0-9_]+:)?machine>"} {
 		if !strings.Contains(owned, want) {
 			t.Fatalf("libvirt destroy ownership decision must require the Bootwright ownership marker %q, got %v", want, decide["bootwright_libvirt_destroy_owned"])
@@ -616,8 +573,6 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_libvirt_destroy_owned") {
 		t.Fatalf("libvirt destroy guard must require the decided ownership fact, got %v", refuse["that"])
 	}
-	// --force-unowned relaxes the refusal so a renamed/unmarked domain is still
-	// torn down; the marker mismatch must otherwise stay fail-closed.
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
 		t.Fatalf("libvirt destroy guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
@@ -625,10 +580,6 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 
 func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
-	// Fail closed by default: an unreachable host cluster aborts with guidance (not
-	// a raw kubectl error); --skip-unreachable opts into treating the guests as
-	// already-absent. The reachability probe and assert run before the teardown,
-	// which is gated on the host being reachable.
 	probeIdx := findAnsibleTask(t, topTasks, "Probe KubeVirt host cluster reachability")
 	recordIdx := findAnsibleTask(t, topTasks, "Resolve KubeVirt machine ownership record presence")
 	gateIdx := findAnsibleTask(t, topTasks, "Require the KubeVirt host cluster to be reachable")
@@ -636,9 +587,6 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if !(probeIdx < recordIdx && recordIdx < gateIdx && gateIdx < blockIdx) {
 		t.Fatalf("kubevirt destroy must probe, resolve the ownership record, then gate reachability before the teardown (probe=%d record=%d gate=%d block=%d)", probeIdx, recordIdx, gateIdx, blockIdx)
 	}
-	// A never-provisioned guest has no kubevirt-machine record, so it must no-op
-	// without a reachable host and without --skip-unreachable: the record presence
-	// is resolved from the in-scope ownership records, not by probing the host.
 	recordDecide, ok := topTasks[recordIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("kubevirt destroy record presence must be a set_fact, got %v", topTasks[recordIdx])
@@ -650,8 +598,6 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if !strings.Contains(gateWhen, "not (bootwright_destroy_skip_unreachable") {
 		t.Fatalf("host-reachability gate must fail closed unless --skip-unreachable, got when=%v", topTasks[gateIdx]["when"])
 	}
-	// The gate must only fire for a RECORDED guest, so a never-provisioned guest
-	// on an unreachable/never-provisioned host cluster tears down to a clean no-op.
 	if !strings.Contains(gateWhen, "bootwright_kubevirt_machine_recorded") {
 		t.Fatalf("host-reachability gate must only fail closed for a recorded guest, got when=%v", topTasks[gateIdx]["when"])
 	}
@@ -661,8 +607,6 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if got := fmt.Sprint(topTasks[blockIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_reachable") {
 		t.Fatalf("guest teardown must be gated on host reachability, got when=%v", topTasks[blockIdx]["when"])
 	}
-	// The ownership read/decide/refuse/delete tasks live inside that reachable-host
-	// block, so a no-op on an unreachable host never reaches a kubectl delete.
 	tasks := nestedAnsibleTasks(t, topTasks[blockIdx], "block")
 	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")
 	decideIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt VirtualMachine ownership for destroy")
@@ -693,8 +637,6 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("kubevirt delete guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
 
-	// The DataVolume deletes must be gated the same way: read each DV's ownership
-	// label, refuse a non-Bootwright DV, and only then delete.
 	dvReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
 	dvRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt DataVolume")
 	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt DataVolumes")
@@ -715,9 +657,6 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("kubevirt DataVolume delete guard must be skipped under --force-unowned, got when=%v", tasks[dvRefuseIdx]["when"])
 	}
 
-	// The agent-ISO DataVolume is created by virtctl image-upload, which stamps no
-	// labels, so the boot role must label it managed-by=bootwright — otherwise the
-	// destroy gate above could never recognize it as owned.
 	bootTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml")
 	uploadIdx := findAnsibleTask(t, bootTasks, "Upload KubeVirt agent ISO DataVolume")
 	labelIdx := findAnsibleTask(t, bootTasks, "Label KubeVirt agent ISO DataVolume as Bootwright-managed")
@@ -733,18 +672,9 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	}
 }
 
-// TestBaremetalSubstrateDestroyNoUnconditionalFail locks the fix for the destroy
-// deadlock: managed-OS bare-metal substrate teardown must NOT hard-fail. Bare
-// metal is operator hardware Bootwright never deletes, so destroy is local state
-// cleanup only (drop the managed-os-install record + provider-state so a later
-// apply reinstalls, whose kickstart clearpart reclaims the OS disk). An
-// unconditional fail here deadlocked destroy against the apply --override remedy
-// that routes back into `destroy --stage infra`.
 func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_baremetal/tasks/destroy.yml")
 
-	// No task may abort the teardown: an ansible.builtin.fail (or a shell/command
-	// that would connect to the host) reintroduces the deadlock.
 	for _, task := range tasks {
 		if _, ok := task["ansible.builtin.fail"]; ok {
 			t.Fatalf("bare-metal substrate destroy must not fail closed, found fail task %q", task["name"])
@@ -757,8 +687,6 @@ func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
 		}
 	}
 
-	// The managed-OS install record is reclaimed (so a later apply treats the
-	// machine as fresh), gated on osManaged, via the ownership destroy_resource.
 	reclaimIdx := findAnsibleTask(t, tasks, "Remove managed OS install artifacts")
 	reclaim := tasks[reclaimIdx]
 	inc, ok := reclaim["ansible.builtin.include_role"].(map[string]any)
@@ -780,7 +708,6 @@ func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
 		t.Fatalf("reclaim task must be gated on osManaged, got when=%v", reclaim["when"])
 	}
 
-	// The local provider-state file is still removed unconditionally.
 	stateIdx := findAnsibleTask(t, tasks, "Remove cluster baremetal state directory (idempotent)")
 	fileTask, ok := tasks[stateIdx]["ansible.builtin.file"].(map[string]any)
 	if !ok || fmt.Sprint(fileTask["state"]) != "absent" {
@@ -789,11 +716,6 @@ func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
 }
 
 func TestOwnershipDestroyReadsPreRenameVMediaAttrs(t *testing.T) {
-	// Ownership records are persisted JSON written by previous applies, so the
-	// vMediaUnit/vMediaPort attr rename must keep read compatibility with the
-	// lowercase vmediaUnit/vmediaPort keys recorded by earlier versions;
-	// otherwise destroy silently leaves the recorded vmedia unit running and
-	// its firewall port open.
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_resource.yml")
 
 	stopIdx := findAnsibleTask(t, tasks, "Stop recorded systemd units")

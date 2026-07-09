@@ -6,8 +6,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// clusterNetworksVars exposes the NetworkConfig templates and machine
-// network CIDRs a cluster consumes without scanning the global state.
 func clusterNetworksVars(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
 	networks := stateview.ClusterNetworkConfigs(state, ci)
 	out := make([]any, 0, len(networks))

@@ -7,9 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-// OwnershipOrphans flags Bootwright-owned records whose backing object is gone from
-// desired state (correlated on machine, else cluster, else infra-component name, else
-// provider), and never flags declared objects or foreign-owned records.
 func TestOwnershipOrphans(t *testing.T) {
 	state := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "live-cluster"}}},
@@ -17,9 +14,6 @@ func TestOwnershipOrphans(t *testing.T) {
 		InfraProviders:    []v1alpha1.InfraProvider{{Metadata: v1alpha1.Metadata{Name: "live-provider"}}},
 		InfraComponents:   []v1alpha1.InfraComponent{{Metadata: v1alpha1.Metadata{Name: "live-lb"}}},
 	}
-	// infra-component records stamp the literal "InfraComponent" provider sentinel
-	// and the bare component name in the bootwright.name label (gone-by-name has no
-	// label, exercising the name-prefix fallback). bmc-emulator keeps a real provider.
 	records := []ownership.ResourceRecord{
 		{Kind: "libvirt-domain", Name: "live-cluster-node0", Owner: "bootwright", Cluster: "live-cluster", Machine: "live-machine"},
 		{Kind: "libvirt-domain", Name: "gone-cluster-node0", Owner: "bootwright", Cluster: "gone-cluster", Machine: "gone-machine"},
@@ -52,8 +46,6 @@ func TestOwnershipOrphans(t *testing.T) {
 	}
 }
 
-// A record carrying none of machine/cluster/provider is not flagged (conservative:
-// read-only reporting must not produce false positives).
 func TestOwnershipOrphansIgnoresUncorrelatableRecords(t *testing.T) {
 	records := []ownership.ResourceRecord{
 		{Kind: "context-marker", Name: "ctx", Owner: "bootwright"},

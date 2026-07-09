@@ -64,9 +64,6 @@ func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
 	return hosts
 }
 
-// HostByName returns the topology host identified by an authored token: its
-// registered cephadm hostname (the FQDN) or its backing machine name. The two
-// diverge once hostnames are fully qualified, so both spellings resolve.
 func HostByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
 	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
 		if host.Hostname == name || host.MachineRef.Name == name {
@@ -76,9 +73,6 @@ func HostByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageC
 	return v1alpha1.StorageCephHost{}, false
 }
 
-// CanonicalHostname maps an authored host token — a topology host's machine
-// name or its registered hostname — to the registered hostname cephadm uses.
-// An unmatched token passes through unchanged.
 func CanonicalHostname(cluster v1alpha1.StorageCluster, token string) string {
 	if host, ok := HostByName(cluster, token); ok && host.Hostname != "" {
 		return host.Hostname
@@ -86,16 +80,10 @@ func CanonicalHostname(cluster v1alpha1.StorageCluster, token string) string {
 	return token
 }
 
-// ResolvePlacement resolves a placement to concrete topology hostnames: the
-// explicit hosts when authored, else every topology host carrying the role
-// (every topology host when role is empty — passthrough services have no
-// role), optionally narrowed to the named sites.
 func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.StoragePlacement, role string) []string {
 	var base []string
 	switch {
 	case len(placement.Hosts) > 0:
-		// Authored tokens may be machine names; canonicalize to the registered
-		// hostname so cephadm matches them against the host spec.
 		for _, token := range placement.Hosts {
 			base = append(base, CanonicalHostname(cluster, token))
 		}
@@ -144,9 +132,6 @@ func FilesystemDefaultDataPool(fs v1alpha1.StorageFilesystem) string {
 	return ""
 }
 
-// GatewayPublicEndpoint returns the storage-owned public S3 endpoint of the RGW
-// service. Ownership is on the gateway itself, so no ContainerCluster lookup is
-// involved and a storage-only object store needs no consumer cluster.
 func GatewayPublicEndpoint(gateway v1alpha1.StorageObjectGateway) (v1alpha1.Endpoint, bool) {
 	public := gateway.Spec.Public
 	if public.DNSName == "" {
@@ -155,7 +140,6 @@ func GatewayPublicEndpoint(gateway v1alpha1.StorageObjectGateway) (v1alpha1.Endp
 	return v1alpha1.Endpoint{DNSName: public.DNSName, Scheme: public.Scheme, Port: public.Port}, true
 }
 
-// GatewayIngressEndpoint returns one storage-owned RGW ingress VIP.
 func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alpha1.Endpoint, bool) {
 	if ingress.Address == "" {
 		return v1alpha1.Endpoint{}, false
@@ -163,8 +147,6 @@ func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alp
 	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.VirtualInterfaceNetworks}, true
 }
 
-// ManagementIngressEndpoint returns the storage-owned management VIP fronting
-// the mgmt-gateway.
 func ManagementIngressEndpoint(ingress v1alpha1.StorageCephManagementIngress) (v1alpha1.Endpoint, bool) {
 	if ingress.Address == "" {
 		return v1alpha1.Endpoint{}, false
@@ -198,14 +180,6 @@ func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.Stor
 	return v1alpha1.StorageCephHost{}, false
 }
 
-// OSDHostDataDevices returns the explicit OSD *data*-device paths this host
-// selects: the `devices` shorthand, the per-host osd.dataDevices paths and
-// pathSpecs, and any covering fleet osdDrivegroup's data-device paths —
-// deduplicated, shorthand first. It is empty for a filter/all selection (whose
-// devices ceph-volume resolves on-host, not statically) and for a non-OSD host.
-// It is the data-device analogue of render's OSDGateDevicePaths (which also
-// spans db/wal for the wipe/gate), kept here so cephdiff can resolve the desired
-// OSD layout without importing the renderer.
 func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) []string {
 	if cluster.Spec.Ceph == nil {
 		return nil
@@ -239,9 +213,6 @@ func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCe
 	return out
 }
 
-// dataDeviceStaticPaths returns the explicit data-device paths an OSD spec names
-// (dataDevices.paths and dataDevices.pathSpecs[].path). It is empty for a
-// filter/all data selection, whose devices are not statically enumerable.
 func dataDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
 	if osd == nil || osd.DataDevices == nil {
 		return nil

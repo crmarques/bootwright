@@ -8,16 +8,10 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// Materialization builds the list of secret work items from loaded state
-// (generated certificates, credentials, SSH key pairs, and file-sourced
-// copies) and applies them to the context secrets directory.
-
 type MaterializeOptions struct {
 	Generated   bool
 	FileSources bool
-	// Renew regenerates every generated secret even when present material
-	// already matches the desired spec, replacing it with fresh material.
-	Renew bool
+	Renew       bool
 }
 
 type MaterializeResult struct {
@@ -25,9 +19,6 @@ type MaterializeResult struct {
 	Action string
 }
 
-// GeneratedSelfSignedRequest is one generated self-signed certificate work
-// item derived from the declared Secrets; preflight drift checks consume the
-// same derivation that materialization applies.
 type GeneratedSelfSignedRequest struct {
 	Name        string
 	Certificate v1alpha1.SelfSignedCertificateSpec
@@ -45,14 +36,10 @@ func GeneratedSelfSignedRequests(state v1alpha1.State) ([]GeneratedSelfSignedReq
 	return result, nil
 }
 
-// generatedSecretsOfType returns the declared Secrets of the given type whose
-// source is generated.
 func generatedSecretsOfType(state v1alpha1.State, secretType string) []v1alpha1.Secret {
 	return generatedSecrets(state, func(t string) bool { return t == secretType })
 }
 
-// generatedSecrets returns the generated-source Secrets whose type satisfies
-// match, sorted by name so materialization is deterministic.
 func generatedSecrets(state v1alpha1.State, match func(string) bool) []v1alpha1.Secret {
 	var out []v1alpha1.Secret
 	for _, s := range state.Secrets {
@@ -92,8 +79,6 @@ func generatedSSHKeyPairRequestsFor(state v1alpha1.State) []generatedSSHKeyPairR
 	return out
 }
 
-// MaterializeForContext applies the requested secret work items for one
-// context and reports what was generated, copied, or reused.
 func MaterializeForContext(contextName, secretsDir string, state v1alpha1.State, opts MaterializeOptions) ([]MaterializeResult, error) {
 	store := NewContextStore(contextName, secretsDir)
 	var out []MaterializeResult

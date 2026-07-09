@@ -8,15 +8,10 @@ import (
 	"time"
 )
 
-// TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact proves M2: after run B takes
-// over run A's stale lease, run A's resumed heartbeat tick and its deferred
-// cleanup must NOT touch run B's lease. The blind SaveRunLease/RemoveRunLease
-// pair would have clobbered/deleted B's lease; the IfOwner variants no-op.
 func TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
 
-	// Run A holds a stale lease whose process has died, so run B can take over.
 	previous := runLeaseProcessAlive
 	runLeaseProcessAlive = func(int) bool { return false }
 	defer func() { runLeaseProcessAlive = previous }()
@@ -29,8 +24,6 @@ func TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact(t *testing.T) {
 		t.Fatalf("AcquireRunLease B over stale A: %v", err)
 	}
 
-	// Run A resumes and tries to refresh its heartbeat: must be a no-op signal and
-	// leave B's lease on disk untouched.
 	leaseA.HeartbeatAt = now
 	if err := SaveRunLeaseIfOwner(runsDir, leaseA); !errors.Is(err, ErrLeaseNotOwned) {
 		t.Fatalf("SaveRunLeaseIfOwner after takeover = %v, want ErrLeaseNotOwned", err)
@@ -43,7 +36,6 @@ func TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact(t *testing.T) {
 		t.Fatalf("heartbeat clobbered new holder: runID=%q, want run-B", got.RunID)
 	}
 
-	// Run A's deferred cleanup must not delete B's lease either.
 	if err := RemoveRunLeaseIfOwner(runsDir, "run-A"); !errors.Is(err, ErrLeaseNotOwned) {
 		t.Fatalf("RemoveRunLeaseIfOwner after takeover = %v, want ErrLeaseNotOwned", err)
 	}
@@ -56,9 +48,6 @@ func TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact(t *testing.T) {
 	}
 }
 
-// TestCancelRunLedgerLeavesNewHolderLeaseIntact proves the M2 wiring at a real
-// call site: cancelling a stale run's ledger (e.g. during ReconcileCurrentApply
-// before a takeover) must not delete the lease a newer run already holds.
 func TestCancelRunLedgerLeavesNewHolderLeaseIntact(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
@@ -66,7 +55,6 @@ func TestCancelRunLedgerLeavesNewHolderLeaseIntact(t *testing.T) {
 	ledgerA := NewRunLedger("run-A", "cluster", "", ConcurrencyLimits{}, []TaskLedgerEntry{
 		{ID: "t1", Status: TaskStatusRunning},
 	}, now)
-	// Run B currently owns the on-disk lease.
 	if err := SaveRunLease(runsDir, NewRunLease("run-B", now)); err != nil {
 		t.Fatalf("SaveRunLease B: %v", err)
 	}
@@ -84,8 +72,6 @@ func TestCancelRunLedgerLeavesNewHolderLeaseIntact(t *testing.T) {
 	}
 }
 
-// TestOwnershipCheckedLeaseOpsHonorOwner confirms the IfOwner variants still act
-// when the on-disk lease belongs to the caller.
 func TestOwnershipCheckedLeaseOpsHonorOwner(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
@@ -112,18 +98,11 @@ func TestOwnershipCheckedLeaseOpsHonorOwner(t *testing.T) {
 	}
 }
 
-// TestAssessRunActivityAliveLocalProcessNotStale proves M2: a same-host lease
-// whose PID is verifiably alive is active regardless of heartbeat age. Before the
-// fix an aged heartbeat forced the run stale, inviting a concurrent takeover of a
-// still-mutating run.
 func TestAssessRunActivityAliveLocalProcessNotStale(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := NewRunLedger("run-1", "cluster", "", ConcurrencyLimits{}, nil, now)
 	dir := t.TempDir()
 
-	// NewRunLease stamps this host + this (alive) PID; back-date the heartbeat well
-	// past the stale window and pin an explicit identity token so the assertion is
-	// deterministic on every platform (not just where /proc is readable).
 	lease := NewRunLease("run-1", now)
 	lease.ProcessStart = "start-token-1"
 	lease.HeartbeatAt = now.Add(-ApplyLeaseStaleAfter - time.Hour)
@@ -145,11 +124,6 @@ func TestAssessRunActivityAliveLocalProcessNotStale(t *testing.T) {
 	}
 }
 
-// TestAssessRunActivityReusedPIDDoesNotWedgeLease proves the identity guard: after
-// a hard crash, an unrelated live process that reuses the lease's PID must NOT keep
-// the lease immortal. A mismatched start-time token falls through to the
-// heartbeat-age rule so the stale lease still self-heals (and a new run can take
-// over) instead of wedging every future apply/destroy.
 func TestAssessRunActivityReusedPIDDoesNotWedgeLease(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := NewRunLedger("run-1", "cluster", "", ConcurrencyLimits{}, nil, now)
@@ -163,8 +137,6 @@ func TestAssessRunActivityReusedPIDDoesNotWedgeLease(t *testing.T) {
 	}
 	prevAlive := runLeaseProcessAlive
 	prevToken := runLeaseProcessStartToken
-	// The PID is live (reused by an unrelated process) but its identity token
-	// differs from the lease's — it is not the lease's process.
 	runLeaseProcessAlive = func(int) bool { return true }
 	runLeaseProcessStartToken = func(int) (string, bool) { return "start-token-new", true }
 	defer func() { runLeaseProcessAlive = prevAlive; runLeaseProcessStartToken = prevToken }()
@@ -178,17 +150,11 @@ func TestAssessRunActivityReusedPIDDoesNotWedgeLease(t *testing.T) {
 	}
 }
 
-// TestSweepStaleRuntimeSecretsRemovesNonLiveRunsOnly proves M5: leftover
-// materialized runtime-secret dirs of a prior run are reclaimed while the live
-// run's dirs and any non-secret artifacts survive.
 func TestSweepStaleRuntimeSecretsRemovesNonLiveRunsOnly(t *testing.T) {
 	runsDir := t.TempDir()
 	const liveRunID = "apply-live"
 	const staleRunID = "apply-stale"
 
-	// Two nesting shapes match the two materialization sites: the storage
-	// attachment (tasks/<id>/runtime/secrets) and the generic apply task
-	// (tasks/<id>/artifacts/runtime/secrets).
 	staleSecrets := filepath.Join(runsDir, "history", staleRunID, "tasks", "t1", "runtime", "secrets")
 	staleSecretsNested := filepath.Join(runsDir, "history", staleRunID, "tasks", "t2", "artifacts", "runtime", "secrets")
 	staleKeep := filepath.Join(runsDir, "history", staleRunID, "tasks", "t1", "rendered")

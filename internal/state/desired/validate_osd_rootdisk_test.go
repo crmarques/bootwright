@@ -24,19 +24,16 @@ func osdNodeState(root string, hostDevices []string, osd *v1alpha1.StorageCephHo
 }
 
 func TestValidateOSDDevicesExcludeRootDisk(t *testing.T) {
-	// root disk listed as an OSD device (shorthand) -> refuse.
 	errs := validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", []string{"/dev/sda", "/dev/sdb"}, nil))
 	if len(errs) != 1 || !strings.Contains(errs[0], "wipe the installed operating system") {
 		t.Fatalf("root disk as OSD device must refuse, got %v", errs)
 	}
-	// root disk listed via osd.dataDevices.paths -> refuse.
 	errs = validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", nil, &v1alpha1.StorageCephHostOSD{
 		DataDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/sda"}},
 	}))
 	if len(errs) != 1 {
 		t.Fatalf("root disk in osd.dataDevices.paths must refuse, got %v", errs)
 	}
-	// OSD devices distinct from the root disk -> pass.
 	if e := validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", []string{"/dev/sdb", "/dev/sdc"}, nil)); len(e) != 0 {
 		t.Fatalf("OSD devices distinct from root disk must pass, got %v", e)
 	}

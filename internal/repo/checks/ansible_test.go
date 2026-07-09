@@ -160,10 +160,6 @@ func TestHostProxyPersistenceDrivesPackageManagersFromEnvironment(t *testing.T) 
 		t.Fatalf("%s must persist NO_PROXY, got %s", envTask["name"], envBody)
 	}
 
-	// dnf/yum read the proxy (and its noProxy exceptions) from the environment,
-	// never from a config proxy= line: dnf.conf/yum.conf have no no_proxy
-	// directive, so a config proxy would force noProxy hosts through the proxy
-	// too. Any lineinfile touching these files must only strip a proxy= line.
 	for _, task := range block {
 		line, ok := task["ansible.builtin.lineinfile"].(map[string]any)
 		if !ok {
@@ -181,8 +177,6 @@ func TestHostProxyPersistenceDrivesPackageManagersFromEnvironment(t *testing.T) 
 		}
 	}
 
-	// The strip runs whenever the file exists so a proxy= line written by an
-	// older bootwright is removed on the next apply.
 	for _, name := range []string{"Strip dnf proxy line", "Strip yum proxy line (RHEL 7 / legacy)"} {
 		task := block[findAnsibleTask(t, block, name)]
 		if got := fmt.Sprint(task["when"]); !strings.Contains(got, ".stat.exists") {
@@ -190,7 +184,6 @@ func TestHostProxyPersistenceDrivesPackageManagersFromEnvironment(t *testing.T) 
 		}
 	}
 
-	// pip config and the reachability probe stay gated on an actual proxy URL.
 	if task := block[findAnsibleTask(t, block, "Remove stale pip proxy config when URL proxy is disabled")]; !stringListContains(task["when"], "not bootwright_proxy_has_url") {
 		t.Fatalf("pip strip must run when URL proxy is disabled, got when=%v", task["when"])
 	}
@@ -454,10 +447,6 @@ func TestOCPCLIsRemoveStaleBinariesAndVerifyFinalVersions(t *testing.T) {
 	}
 }
 
-// TestOCPCLIsInstallFIPSInstallerWhenRequired pins that the controller fetches
-// the FIPS-capable openshift-install-fips from the RHEL9 client archive when a
-// cluster enables FIPS — the stock openshift-install refuses to build a
-// FIPS-mode agent ISO.
 func TestOCPCLIsInstallFIPSInstallerWhenRequired(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/controller_openshift_tools/tasks/main.yml")
 

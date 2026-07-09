@@ -21,12 +21,6 @@ type StorageExportDataFoundationSpec struct {
 	ObjectGatewayRef LocalObjectReference `yaml:"objectGatewayRef,omitempty" json:"objectGatewayRef,omitempty"`
 }
 
-// StorageExportExternalDetailsSpec supplies operator-provided external-cluster
-// details for the consuming add-on (the Rook external-cluster JSON, as a
-// secret). When omitted on a managed-Ceph export, the consuming add-on
-// produces the details itself — e.g. a hook running the Rook exporter on a
-// Ceph node. External (unmanaged) Ceph has no nodes Bootwright can run the
-// exporter on, so it requires fromSecretRef.
 type StorageExportExternalDetailsSpec struct {
 	FromSecretRef SecretRef `yaml:"fromSecretRef,omitempty" json:"fromSecretRef,omitempty"`
 }

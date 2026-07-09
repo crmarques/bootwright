@@ -8,19 +8,6 @@ import (
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
 
-// The container-cluster apply chain, driving openshift-install agent:
-//
-//	machine infra prepare/provision/finalize (machines) -> agent ISO (deps)
-//	  -> boot nodes -> wait for install-complete (base)
-//
-// with a per-KubeVirt-host virtctl provision (deps) that every child boot waits
-// on. Machine-infra returns the per-cluster finalize task IDs the ISO stage
-// depends on; the install stage reads the shared virtctl readiness the caller
-// computed once.
-
-// planContainerMachineInfraActivities plans per-machine provisioning and the
-// per-host infra finalize for every container cluster. It returns the finalize
-// task IDs (infraDepsByCluster) the agent-ISO stage depends on.
 func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, machineServiceTaskIDs []string) (map[string][]string, error) {
 	infraDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeContainer) {
@@ -81,9 +68,6 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 		}
 		for _, host := range infraHosts {
 			taskID := "infrafinalize." + name + "." + host
-			// host is "localhost" for KubeVirt/vSphere (the finalize runs on
-			// the controller); only name the host when it is a real, distinct
-			// provider machine (libvirt) where it disambiguates per-host tasks.
 			finalizeLabel := "finalize infra " + name
 			if host != "localhost" {
 				finalizeLabel += " on " + host
@@ -109,17 +93,11 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 						ResourceKeys: []string{hostMutationResource(host)},
 						Status:       TaskStatusPending,
 					},
-					Playbook:      applyMachineInfraFinalize,
-					Limit:         host,
-					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_provider_host_name=" + host},
-					Forks:         1,
-					State:         clusterState,
-					// Finalize is a post-provision reconcile step, not a disk-wipe
-					// reinstall; without a structural projection any day-2 edit
-					// (a host label, a ClusterAddon) flipped it to structural drift
-					// and continue refused with a false "would reinstall the machine
-					// — its disks wiped". Share the install task's projection so
-					// only a genuine install-identity change stays a rebuild.
+					Playbook:           applyMachineInfraFinalize,
+					Limit:              host,
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_task_provider_host_name=" + host},
+					Forks:              1,
+					State:              clusterState,
 					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 				},
 			}); err != nil {
@@ -154,15 +132,11 @@ func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State
 					ResourceKeys: []string{hostMutationResource(host)},
 					Status:       TaskStatusPending,
 				},
-				Playbook:      applyMachineInfraPrepare,
-				Limit:         host,
-				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
-				Forks:         1,
-				State:         clusterState,
-				// Prepare is an idempotent pre-provision step, not a disk-wipe
-				// reinstall; share the install task's structural projection so a
-				// reconcilable day-2 edit (label/addon/pool) does not falsely flip it
-				// to structural drift and refuse the run as a machine re-image.
+				Playbook:           applyMachineInfraPrepare,
+				Limit:              host,
+				ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
+				Forks:              1,
+				State:              clusterState,
 				StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 			},
 		}); err != nil {
@@ -172,11 +146,6 @@ func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State
 	return out, nil
 }
 
-// planHostVirtctlActivities provisions a version-matched virtctl on the controller
-// for each distinct KubeVirt host cluster, before any child boots. virtctl runs on
-// the controller (the agent-node layer connects locally), so one provision per
-// host suffices; each child's boot task waits on its host's provision. The caller
-// passes the shared readiness map it computed once.
 func planHostVirtctlActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, hostVirtctlReadiness map[string][]CapabilityRef) error {
 	if !(phaseSet[ApplyPhaseDeps] && includeContainer) {
 		return nil
@@ -220,19 +189,10 @@ func planHostVirtctlActivities(graph *ActivityGraph, state v1alpha1.State, phase
 	return nil
 }
 
-// planContainerInstallActivities builds and publishes the agent install ISO
-// (deps), then boots the declared nodes and waits for openshift-install to
-// converge (base). boot/wait depend on the ISO task only when deps is also in
-// scope (the iso activity exists in this graph); when only base is selected the
-// dep is omitted so the run reuses the ISO a prior deps run published, instead of
-// blocking on a task that was never planned — the same conditional-omit pattern
-// the storage/addons extension activities use (installPhasePlanned).
 func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, infraDepsByCluster map[string][]string, hostsByContainerCluster map[string][]string) error {
 	for _, name := range clusterNames {
 		infraDeps := append([]string(nil), infraDepsByCluster[name]...)
 		isoTaskID := "iso." + name
-		// deps (clusters): build + publish the agent install ISO — the OCP/OKD
-		// pre-bringup asset, the container-side twin of the cephadm prereqs.
 		if phaseSet[ApplyPhaseDeps] && includeContainer {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			if err := graph.Add(Activity{
@@ -259,7 +219,6 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 				return err
 			}
 		}
-		// base (clusters): boot nodes then wait for openshift-install to converge.
 		if phaseSet[ApplyPhaseBase] && includeContainer {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			machineNames := applyClusterMachineNames(state, name)
@@ -306,9 +265,6 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 			if bootTaskID != "" {
 				waitDeps = append(waitDeps, bootTaskID)
 			} else {
-				// No machines to boot: wait orders behind the ISO task when deps
-				// is in scope, else nothing (isoDeps is empty) so a base-only run
-				// reuses a prior deps run's ISO instead of blocking on it.
 				waitDeps = append(waitDeps, isoDeps...)
 			}
 			waitID := "wait." + name
@@ -340,16 +296,6 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 	return nil
 }
 
-// virtctlDesiredHashVars projects the desired-state inputs the per-host virtctl
-// provision actually depends on — the KubeVirt host cluster identity and the
-// optional virtctl mirror override — so the task's convergence hash is stable
-// regardless of the --clusters scope a run was planned with. The task still
-// carries the full planning State for execution, but that State is the
-// --clusters-filtered set on a scoped run; hashing it flipped an unscoped
-// state-check to drift after a scoped apply (and so fail-closed the next
-// reconcile). Mirrors the fabric/storage DesiredHashVars projection pattern; a
-// map[string]string marshals with sorted keys, so the hash input is
-// order-stable.
 func virtctlDesiredHashVars(host, mirror string) map[string]string {
 	return map[string]string{
 		"hostCluster":   host,

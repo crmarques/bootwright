@@ -17,29 +17,18 @@ import (
 )
 
 const (
-	// DirName is the store directory under the Bootwright root, sibling to
-	// contexts/ and media/. Like media, the store is machine-local and holds
-	// at most one registered version per add-on name; bindings reference the
-	// add-on by name only, so re-registering a different version is the
-	// upgrade path.
 	DirName = "add-ons"
 
-	// MarkerName is the provenance marker written into each registered add-on
-	// dir: name, version, and a content digest so list/delete can report local
-	// modifications. It is extensionless on purpose — the desired-state loader
-	// must never try to decode it.
 	MarkerName = ".bootwright-addon"
 
 	dirMode  = 0o700
 	fileMode = 0o600
 )
 
-// StoreDir is the machine-local registered add-ons store.
 func StoreDir() string {
 	return filepath.Join(workspace.RootDir(), DirName)
 }
 
-// InstalledDir is where a registered add-on's content lives.
 func InstalledDir(name string) string {
 	return filepath.Join(StoreDir(), name)
 }
@@ -54,22 +43,18 @@ func ensureStoreDir() error {
 	return os.Chmod(StoreDir(), dirMode)
 }
 
-// Marker is a registered add-on's provenance record.
 type Marker struct {
 	Name          string
 	Version       string
 	ContentDigest string
 }
 
-// Installed describes one registered add-on for list output.
 type Installed struct {
 	Marker   Marker
 	Dir      string
 	Modified bool
 }
 
-// Digest hashes a release's files (sorted path + bytes), the recipe the
-// marker records and drift detection recomputes.
 func Digest(files []File) string {
 	sum := sha256.New()
 	for _, file := range files {
@@ -81,9 +66,6 @@ func Digest(files []File) string {
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
 
-// Install registers a release into the store, replacing any prior version of
-// the same add-on (the caller confirms replacement). The whole directory is
-// rewritten so no stale file of the prior version survives.
 func Install(release Release) (dir string, err error) {
 	files, err := Files(release)
 	if err != nil {
@@ -116,8 +98,6 @@ func Install(release Release) (dir string, err error) {
 	return dir, nil
 }
 
-// ReadMarker loads a registered add-on's provenance marker. found is false
-// when the directory or marker does not exist.
 func ReadMarker(dir string) (marker Marker, found bool, err error) {
 	data, err := os.ReadFile(filepath.Join(dir, MarkerName))
 	if errors.Is(err, os.ErrNotExist) {
@@ -143,9 +123,6 @@ func ReadMarker(dir string) (marker Marker, found bool, err error) {
 	return marker, true, nil
 }
 
-// InstalledAddons lists the registered add-ons (dir-listing store, no
-// registry file — the media pattern). Directories without a marker are
-// skipped: they are not Bootwright-registered content.
 func InstalledAddons() ([]Installed, error) {
 	entries, err := os.ReadDir(StoreDir())
 	if errors.Is(err, os.ErrNotExist) {
@@ -174,7 +151,6 @@ func InstalledAddons() ([]Installed, error) {
 	return out, nil
 }
 
-// installedDigest recomputes the on-disk content digest (marker excluded).
 func installedDigest(dir string) string {
 	var files []File
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -202,8 +178,6 @@ func installedDigest(dir string) string {
 	return Digest(files)
 }
 
-// Remove unregisters an add-on. It refuses a directory that carries no
-// Bootwright marker — that is not vended content.
 func Remove(name string) error {
 	dir := InstalledDir(name)
 	_, found, err := ReadMarker(dir)
@@ -219,10 +193,6 @@ func Remove(name string) error {
 	return os.RemoveAll(dir)
 }
 
-// ReferencedStoreAddons maps the loaded state's ClusterAddons that were
-// resolved from the store (SourcePath under the store dir) to their store
-// directories, so context init/update can snapshot them into the context
-// input tree.
 func ReferencedStoreAddons(state v1alpha1.State) map[string]string {
 	prefix := StoreDir() + string(filepath.Separator)
 	out := map[string]string{}

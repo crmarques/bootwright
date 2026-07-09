@@ -1,21 +1,4 @@
 ---
-# Shared credential loader: slurps a credential file from the controller
-# (where bootwright keeps secrets under `bootwright_secrets_dir`) and
-# parses it into a {username, password} mapping as a fact on the
-# *current* host (where the consuming task will run).
-#
-# Required vars passed by the caller:
-#   bootwright_creds_path   – path to the credential file on the
-#                             controller
-#   bootwright_creds_var    – name of the fact to set (e.g.
-#                             "bootwright_bmc_credentials")
-#   bootwright_creds_label  – human-readable label used in the
-#                             filter's error messages
-#
-# Callers wrap the include with their own `when:` because the
-# precondition differs across sites (proxy enabled, non-empty path,
-# etc.). All tasks are no_log: true so credential material never
-# enters the Ansible log.
 
 - name: "Slurp {{ bootwright_creds_label }}"
   ansible.builtin.slurp:

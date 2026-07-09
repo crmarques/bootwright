@@ -29,11 +29,6 @@ func ownershipInventory(records []ownership.ResourceRecord) ownershipInventoryFa
 		out.Hosts[record.Host] = ownershipHostEntry(record)
 		group, known := ownership.InventoryGroupForKind(record.Kind)
 		if !known {
-			// An unrecognized but Bootwright-owned record: fall back to the infra
-			// teardown group so a destroy sweep can still reclaim its host instead
-			// of silently dropping it from every inventory group. A fitness test
-			// keeps ownership's kind table in sync with the kinds the Ansible roles
-			// emit, so this fallback is only ever a defensive guard against drift.
 			group = ownership.GroupInfra
 		}
 		switch group {

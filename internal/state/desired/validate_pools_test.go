@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// TestRemovedMachinePoolFieldsRejectUnknown covers the MachinePoolSpec
-// fake-knob removal: the agent installer renders a single default-architecture
-// master/worker pool, so architecture, hyperthreading, platform, and name left
-// the authored API and strict decode rejects them with the offending line.
 func TestRemovedMachinePoolFieldsRejectUnknown(t *testing.T) {
 	cases := []struct {
 		name string

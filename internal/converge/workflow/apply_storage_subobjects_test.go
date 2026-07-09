@@ -20,9 +20,6 @@ func storageSubObjectTestPool(name string, size int) v1alpha1.StoragePool {
 	}
 }
 
-// Each sub-object is hashed against its own spec only: distinct pools hash
-// differently, changing one pool never changes another's hash, and changing a pool's
-// own spec changes its hash (drift). The record key is "<Kind>/<cluster>.<name>".
 func TestStorageSubObjectDesiredHashIsolatesSubObjects(t *testing.T) {
 	state := v1alpha1.State{StoragePools: []v1alpha1.StoragePool{storageSubObjectTestPool("p1", 3), storageSubObjectTestPool("p2", 3)}}
 	sub1 := storageSubObject{storageSubObjectKindPool, "demo", "p1"}
@@ -54,10 +51,6 @@ func mustSubHash(t *testing.T, state v1alpha1.State, sub storageSubObject) strin
 	return h
 }
 
-// A pool whose only change is a reconcilable-in-place field (replica size) drifts but
-// classifies as RECONCILABLE, so continue proceeds and --override does not wipe. A
-// change to the pool's immutable identity (type) stays STRUCTURAL. A record written
-// before the structural hash existed falls back to structural (fail-safe).
 func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	cluster := v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "demo"}}
@@ -89,14 +82,12 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 		return ObjectClassification{}
 	}
 
-	// Baseline: replicated pool, size 3, recorded (writes desired + structural hash).
 	base := stateWith(storageSubObjectTestPool("p1", 3))
 	runsDir := t.TempDir()
 	if err := MarkStorageSubObjectsConvergeSafety(runsDir, "", "", base, "demo", ConvergeSafetyStatusReconciled, now); err != nil {
 		t.Fatalf("mark sub-objects: %v", err)
 	}
 
-	// Size 3 -> 2: reconcilable drift (structural hash unchanged).
 	sized := classifyPool(t, runsDir, stateWith(storageSubObjectTestPool("p1", 2)))
 	if sized.Class != ConvergeSafetyDrift {
 		t.Fatalf("size change should DISPLAY as drift, got %q", sized.Class)
@@ -108,7 +99,6 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 		t.Fatalf("Reconcilable flag must be set for a size-only pool edit")
 	}
 
-	// Type replicated -> erasure: structural (immutable identity).
 	ecPool := storageSubObjectTestPool("p1", 3)
 	ecPool.Spec.Ceph.Type = v1alpha1.StoragePoolTypeErasureCode
 	ecPool.Spec.Ceph.ErasureCoded = &v1alpha1.StoragePoolErasureCode{DataChunks: 2, CodingChunks: 1}
@@ -117,7 +107,6 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 		t.Fatalf("pool type change must be structural: structural=%v reconcilable=%v", typed.HasStructuralDrift(), typed.HasReconcilableDrift())
 	}
 
-	// Legacy record (no structural hash): a size edit falls back to structural.
 	legacyDir := t.TempDir()
 	desired, err := storageSubObjectDesiredHash(base, storageSubObject{storageSubObjectKindPool, "demo", "p1"})
 	if err != nil {
@@ -126,7 +115,7 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	legacy := ConvergeSafetyRecord{
 		APIVersion:  ConvergeSafetyAPIVersion,
 		ResourceID:  "StoragePool/demo.p1",
-		DesiredHash: desired, // no StructuralHash
+		DesiredHash: desired,
 		Owner:       ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
 		Status:      ConvergeSafetyStatusReconciled,
 		UpdatedAt:   now.UTC(),
@@ -140,9 +129,6 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	}
 }
 
-// The user's worked example: a converged 4-pool cluster gains a 5th pool. The cluster
-// and pools 1-4 stay match (so bootstrap and those pools are skipped); only pool 5
-// reads missing (and is created). The cluster does not inherit the new pool's absence.
 func TestClassifyApplyObjectsExpandsStorageSubObjects(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -193,9 +179,6 @@ func TestClassifyApplyObjectsExpandsStorageSubObjects(t *testing.T) {
 	}
 }
 
-// An NFS-Ganesha service added to a converged cluster follows the same worked
-// example as the 5th pool: the cluster stays match (its hash excludes NFS
-// exports) and only the new StorageNFSExport reads missing.
 func TestClassifyApplyObjectsExpandsStorageNFSExports(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -250,8 +233,6 @@ func TestClassifyApplyObjectsExpandsStorageNFSExports(t *testing.T) {
 	}
 }
 
-// Editing an existing pool's size drifts only that pool; the cluster and other pools
-// stay match. A default apply would FAIL on this drift; --override rebuilds only this pool.
 func TestClassifyApplyObjectsReportsSubObjectDrift(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -287,8 +268,6 @@ func TestClassifyApplyObjectsReportsSubObjectDrift(t *testing.T) {
 	}
 }
 
-// Destroy must reset sub-object records so a torn-down pool reclassifies as missing
-// and a later apply recreates it, rather than a stale record reporting match.
 func TestRemoveStorageSubObjectsConvergeSafetyResetsRecords(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)

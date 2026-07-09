@@ -11,18 +11,8 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// provisioningTokenRe matches an Ansible inventory group name and a
-// provides/requires capability token (letters, digits, and _.- with an
-// alphanumeric lead).
 var provisioningTokenRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
-// provisioningControllerGroups names the inventory host groups that resolve to
-// the bootwright controller / localhost. A ProvisioningPlaybook must never
-// target these: it would run arbitrary operator code as root on the controller,
-// which holds every context's decrypted secrets and kubeconfigs. The literals
-// mirror internal/render/inventory (GroupOCPHosts, GroupControllerHosts); the
-// leaf desired package cannot import render, so they are duplicated here behind
-// this security guard.
 var provisioningControllerGroups = map[string]bool{
 	"localhost":                   true,
 	"127.0.0.1":                   true,
@@ -30,12 +20,6 @@ var provisioningControllerGroups = map[string]bool{
 	"bootwright_controller_hosts": true,
 }
 
-// validateProvisioningPlaybooks checks every ProvisioningPlaybook: the stage /
-// timing / run / failureMode vocabularies, the relative-and-contained playbook
-// and vendored-directory paths (the manifestSet.path convention), a resolvable
-// non-controller target, and an acyclic provides/requires graph within each
-// (stage, timing) bucket. secretRefs are resolved centrally in
-// validateSecretReferences.
 func validateProvisioningPlaybooks(state v1alpha1.State) []string {
 	var errs []string
 	machines := indexMachines(state.Machines)
@@ -110,10 +94,6 @@ func validateProvisioningPlaybookTarget(prefix string, p v1alpha1.ProvisioningPl
 	return errs
 }
 
-// validateProvisioningPlaybookOrdering checks the inter-playbook provides/requires
-// graph within each (stage, timing) bucket: every requires must be provided by
-// another enabled playbook in the same bucket, provides must be unique, and the
-// dependency graph must be acyclic.
 func validateProvisioningPlaybookOrdering(playbooks []v1alpha1.ProvisioningPlaybook) []string {
 	var errs []string
 	type bucketKey struct{ stage, timing string }
@@ -126,7 +106,7 @@ func validateProvisioningPlaybookOrdering(playbooks []v1alpha1.ProvisioningPlayb
 		buckets[key] = append(buckets[key], p)
 	}
 	for _, bucket := range buckets {
-		provider := map[string]string{} // capability -> playbook name
+		provider := map[string]string{}
 		for _, p := range bucket {
 			for _, cap := range p.Spec.Provides {
 				if cap == "" {
@@ -151,9 +131,6 @@ func validateProvisioningPlaybookOrdering(playbooks []v1alpha1.ProvisioningPlayb
 	return errs
 }
 
-// provisioningOrderingCycles reports a cycle in the requires->provides graph of a
-// single bucket via DFS. provider maps a capability to the playbook that
-// provides it.
 func provisioningOrderingCycles(bucket []v1alpha1.ProvisioningPlaybook, provider map[string]string) []string {
 	byName := map[string]v1alpha1.ProvisioningPlaybook{}
 	for _, p := range bucket {
@@ -199,9 +176,6 @@ func provisioningOrderingCycles(bucket []v1alpha1.ProvisioningPlaybook, provider
 	return errs
 }
 
-// validateContainedFile applies the manifestSet.path rules to a file reference:
-// non-empty, no surrounding whitespace, relative, contained (no ..), optionally
-// a .yaml/.yml file, existing, not a symlink, not a directory.
 func validateContainedFile(owner, baseDir, value string, requireYAML bool) []string {
 	clean, errs := validateContainedPath(owner, value)
 	if len(errs) > 0 || clean == "" {
@@ -223,9 +197,6 @@ func validateContainedFile(owner, baseDir, value string, requireYAML bool) []str
 	return nil
 }
 
-// validateContainedDir is validateContainedFile's directory counterpart: it must
-// exist, be a directory, not a symlink, and not be named vendor/node_modules
-// (which context-init's tree copy skips, so the directory would silently vanish).
 func validateContainedDir(owner, baseDir, value string) []string {
 	clean, errs := validateContainedPath(owner, value)
 	if len(errs) > 0 || clean == "" {
@@ -247,9 +218,6 @@ func validateContainedDir(owner, baseDir, value string) []string {
 	return nil
 }
 
-// validateContainedPath enforces the shared relative-and-contained rules and
-// returns the cleaned path. A returned empty string with no errs means the value
-// was empty (the caller decides whether that is allowed before calling).
 func validateContainedPath(owner, value string) (string, []string) {
 	if strings.TrimSpace(value) == "" {
 		return "", []string{owner + " is required"}

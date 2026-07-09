@@ -48,8 +48,6 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	if m.Source.ProfileRef.Name != "" {
 		out["fromProfile"] = m.Source.ProfileRef.Name
-		// Inline the profile spec so Ansible roles do not need to
-		// resolve back across the provider list.
 		if provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name); ok {
 			if profile, ok := stateview.MachineProfile(provider, m.Source.ProfileRef.Name); ok {
 				out["profile"] = map[string]any{
@@ -86,10 +84,6 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					}
 					if k.HostClusterRef != nil {
 						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
-						// The host cluster's admin kubeconfig is a sibling-cluster runtime
-						// artifact under the context clusters dir. In placeholder mode that
-						// path ({{ bootwright_clusters_dir }}/...) is unresolvable context-free,
-						// so tokenize it like any other secret material the consumer rehydrates.
 						if secret.IsPlaceholderSecretsDir(secretsDir) {
 							out["kubevirt"].(map[string]any)["kubeconfig"] = secret.SecretPlaceholder(k.HostClusterRef.Name+"-kubeconfig", "")
 						} else {
@@ -123,11 +117,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 				out["server"] = serverVars
 				if bmc := server.Spec.Hardware.Management.BMC; bmc.Address != "" {
 					out["bmc"] = map[string]any{
-						"address":        bmc.Address,
-						"protocol":       bmc.Protocol,
-						"credentialsRef": bmc.CredentialsRef.Name,
-						// Rendered key kept stable for machine-manifest.yml.j2; sourced
-						// from the new bmc.tls schema (provider default merged in Normalize).
+						"address":                        bmc.Address,
+						"protocol":                       bmc.Protocol,
+						"credentialsRef":                 bmc.CredentialsRef.Name,
 						"disableCertificateVerification": !bmc.TLS.VerifyEnabled(),
 					}
 				}
@@ -206,22 +198,12 @@ func machineHostRef(state v1alpha1.State, m v1alpha1.InstallMachine) string {
 	if provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil {
 		return provider.Spec.Libvirt.MachineRef.Name
 	}
-	// API-native substrates run machine operations from the controller:
-	// KubeVirt through a kubeconfig, vSphere through the vCenter API.
 	if provider.Spec.Type == v1alpha1.ProvisionerKubeVirt || provider.Spec.Type == v1alpha1.ProvisionerVSphere {
 		return "localhost"
 	}
 	return ""
 }
 
-// managedOSTaskHost resolves the host that drives a storage cluster machine's
-// managed-OS install. Libvirt machines instantiate on their provider host;
-// every other shape — KubeVirt and vSphere through an API, and bare-metal over
-// the BMC (Redfish virtual media) — is driven from the controller, so it
-// resolves to localhost. machineHostRef already returns the provider host for
-// libvirt and localhost for the API-native substrates; only bare-metal (no
-// substrate profile) returns "", which would otherwise drop the node from its
-// managed-OS inventory group and silently skip the machines-phase install task.
 func managedOSTaskHost(state v1alpha1.State, m v1alpha1.InstallMachine) string {
 	if host := machineHostRef(state, m); host != "" {
 		return host

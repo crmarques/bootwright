@@ -13,8 +13,6 @@ func TestMachineNetworkConfigIsZero(t *testing.T) {
 		{"attachmentRef", MachineNetworkConfig{AttachmentRef: LocalObjectReference{Name: "a"}}, false},
 		{"overrides", MachineNetworkConfig{Overrides: map[string]any{"k": "v"}}, false},
 		{"spec", MachineNetworkConfig{Spec: &NetworkConfigSpec{}}, false},
-		// interfaceAddresses-only must count as non-zero so the provided=true
-		// emptiness gate names the real rule instead of the standalone-address one.
 		{"interfaceAddresses", MachineNetworkConfig{InterfaceAddresses: []MachineInterfaceAddress{{Interface: "eth0"}}}, false},
 	}
 	for _, tc := range cases {

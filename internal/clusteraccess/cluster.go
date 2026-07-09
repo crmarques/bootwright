@@ -1,7 +1,3 @@
-// Package clusteraccess derives installed-cluster access data — local access
-// artifacts, access summaries, selection by name/scope, and kubeconfig
-// retrieval — from desired state and on-disk artifacts. It returns plain data;
-// presentation lives with the callers.
 package clusteraccess
 
 import (
@@ -113,10 +109,6 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 	return out
 }
 
-// RevealSecretFile reads a captured credential file (kubeadmin-password,
-// dashboard-password) and returns its trimmed cleartext. It is the only reader
-// of a secret's bytes in this package — every summary reports paths and presence
-// only — so callers gate it behind an explicit --secrets opt-in.
 func RevealSecretFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

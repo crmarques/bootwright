@@ -28,9 +28,6 @@ func storageTaskWith(desired, structural any) ApplyTask {
 	return task
 }
 
-// A StorageCluster whose only change is the OSD device selection (full desired
-// hash moves, structural hash unchanged) classifies as reconcilable drift: it
-// still displays as drift, but continue proceeds and --override does not wipe.
 func TestReconcilableDeviceDriftIsNotStructural(t *testing.T) {
 	runsDir := t.TempDir()
 	base := storageTaskWith(
@@ -47,7 +44,6 @@ func TestReconcilableDeviceDriftIsNotStructural(t *testing.T) {
 	}
 	saveRecordWithHashes(t, runsDir, base, dh, sh)
 
-	// Device add: same structural projection, different device list.
 	added := storageTaskWith(
 		map[string]any{"id": "s1", "devices": []string{"/dev/sdb", "/dev/sdc"}},
 		map[string]any{"id": "s1"},
@@ -67,7 +63,6 @@ func TestReconcilableDeviceDriftIsNotStructural(t *testing.T) {
 		t.Fatalf("Reconcilable flag must be set for a device-only drift")
 	}
 
-	// Structural change (identity moved): not reconcilable.
 	structural := storageTaskWith(
 		map[string]any{"id": "s2", "devices": []string{"/dev/sdb"}},
 		map[string]any{"id": "s2"},
@@ -81,9 +76,6 @@ func TestReconcilableDeviceDriftIsNotStructural(t *testing.T) {
 	}
 }
 
-// A record written before StructuralHash existed (empty) must fall back to
-// structural drift on any change — never silently reconcilable — so upgrading
-// bootwright never turns a real rebuild into a no-op.
 func TestMissingStructuralHashFallsBackToStructural(t *testing.T) {
 	runsDir := t.TempDir()
 	base := storageTaskWith(
@@ -94,7 +86,7 @@ func TestMissingStructuralHashFallsBackToStructural(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desired hash: %v", err)
 	}
-	saveRecordWithHashes(t, runsDir, base, dh, "") // legacy record: no structural hash
+	saveRecordWithHashes(t, runsDir, base, dh, "")
 
 	added := storageTaskWith(
 		map[string]any{"id": "s1", "devices": []string{"/dev/sdb", "/dev/sdc"}},

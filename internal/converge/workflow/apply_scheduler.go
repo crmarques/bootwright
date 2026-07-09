@@ -50,18 +50,12 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	return RunPreparedApplyTaskGraph(ctx, stdout, stderr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory)
 }
 
-// applyTaskExecutor runs one task to completion. Apply and destroy share the
-// scheduler below and differ only in this callback: runOneApplyTask records
-// install/convergence state; runOneDestroyTask just renders and tears down.
 type applyTaskExecutor func(ctx context.Context, stdout, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult
 
-// RunPreparedApplyTaskGraph runs a prepared apply graph through the scheduler.
 func RunPreparedApplyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
 	return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneApplyTask)
 }
 
-// RunPreparedDestroyTaskGraph runs a prepared destroy graph through the same
-// scheduler, using the destroy executor (no install-state recording).
 func RunPreparedDestroyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
 	return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneDestroyTask)
 }
@@ -96,9 +90,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
-	// Claim the run lease atomically before writing our ledger. A concurrent
-	// mutator that raced past the advisory pre-mutation check must lose here
-	// rather than silently overwriting the in-flight run's lease and ledger.
 	now := time.Now()
 	lease := NewRunLease(runID, now)
 	if err := AcquireRunLease(runsDir, lease, now); err != nil {
@@ -108,9 +99,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		_ = RemoveRunLease(runsDir)
 		return ledger, err
 	}
-	// Now that the lease is ours and the live run id is known, reclaim decrypted
-	// runtime-secret dirs left behind by prior mutating runs (a SIGKILL'd run only
-	// defers their removal, so nothing else ever cleans them up).
 	sweepStaleRuntimeSecrets(runsDir, runID)
 	stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)
 	finishRun := func(status RunStatus) error {
@@ -119,8 +107,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		if err := SaveRunLedger(runsDir, ledger); err != nil {
 			return err
 		}
-		// Ownership-checked: if this run stalled and was taken over, its cleanup
-		// must not delete the new holder's lease.
 		if err := RemoveRunLeaseIfOwner(runsDir, runID); err != nil && !isLeaseNotOwned(err) {
 			return err
 		}
@@ -158,10 +144,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	running := 0
 	runningRedfish := 0
 	completed := initiallyCompletedApplyTasks(tasks)
-	// Per-cluster lifecycle markers: "initiated" is written to the shared run
-	// log the first time any task of a cluster starts running; "finished" once
-	// every task of an initiated cluster reaches a terminal state. Destroy
-	// graphs carry no Entry.Cluster, so neither marker fires there.
 	clusterInitiated := map[string]bool{}
 	clusterFinished := map[string]bool{}
 	var fatalErr error
@@ -173,15 +155,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			if running >= parallelism {
 				break
 			}
-			// Once the run is being torn down — a fatal ledger/lease error
-			// (fatalErr) or a signal-cancelled context (Ctrl-C) — stop launching
-			// newly-ready tasks. Otherwise a task freed as a killed task's failure
-			// event drains would be started under the dead ctx: runOneApplyTask
-			// stamps its cluster-install record 'started', exec.CommandContext kills
-			// ansible instantly, and it is recorded 'failed' — a phantom
-			// started->failed record for work that never ran, which then forces
-			// --override on the next apply. Let the running tasks drain and the
-			// unstarted ones terminalize as blocked below.
 			if fatalErr != nil || ctx.Err() != nil {
 				break
 			}
@@ -289,16 +262,9 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			}
 		}
 	}
-	// If a fatal ledger/lease error aborted the graph mid-run, tasks that never
-	// launched are still non-terminal (the no-progress block above is gated on
-	// fatalErr == nil). Terminalize them so an already-initiated cluster still
-	// gets its closing run-log marker. Idempotent: a no-op when every task is
-	// already terminal.
 	if fatalErr != nil {
 		blockUnfinishedApplyTasks(&ledger, time.Now())
 	}
-	// Final sweep: clusters whose last tasks were blocked or cancelled as the
-	// graph drained reach terminal here, after the per-event flushes stopped.
 	flushFinishedClusterMarkers(logs, ledger, clusterInitiated, clusterFinished, time.Now())
 	if fatalErr != nil {
 		_ = finishRun(RunStatusFailed)
@@ -325,10 +291,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 
 var (
 	applyLeaseHeartbeatInterval = ApplyLeaseHeartbeatInterval
-	// saveRunLease is ownership-checked so a heartbeat tick that resumes after a
-	// takeover becomes a no-op (ErrLeaseNotOwned) instead of clobbering the new
-	// holder's lease.
-	saveRunLease = SaveRunLeaseIfOwner
+	saveRunLease                = SaveRunLeaseIfOwner
 )
 
 func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease) (func(), <-chan error) {
@@ -347,12 +310,6 @@ func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease)
 				lease.HeartbeatAt = now.UTC()
 				if err := saveRunLease(runsDir, lease); err != nil {
 					if isLeaseNotOwned(err) {
-						// Taken over by a newer holder. We no longer hold the lease, so
-						// we must NOT keep launching mutating tasks concurrently with the
-						// new holder (the exact double-mutator the lease prevents). Emit a
-						// distinct lease-lost error so the scheduler stops and finishes the
-						// run as failed; finishRun's RemoveRunLeaseIfOwner leaves the new
-						// holder's lease untouched.
 						errors <- fmt.Errorf("apply lease taken over by another run: %w", err)
 						return
 					}
@@ -501,10 +458,6 @@ func releaseTaskHostSlots(task ApplyTask, running map[string]int) {
 	}
 }
 
-// applyTaskWriters returns the stdout/stderr writers for one task's ansible
-// run. By default both go to the per-run/per-cluster log files only, keeping the
-// terminal clean for the progress view. When stream is true (--stream-ansible),
-// each is tee'd to the run's terminal writer as well.
 func applyTaskWriters(task ApplyTask, logs *applyLogSet, streamOut, streamErr io.Writer, stream bool) (io.Writer, io.Writer) {
 	writer := logs.Writer(task.Entry.Cluster)
 	if !stream {
@@ -573,8 +526,6 @@ func taskReady(ledger RunLedger, task TaskLedgerEntry) bool {
 			return false
 		}
 	}
-	// Ordering deps only sequence: wait until each is terminal (any outcome),
-	// then run regardless. A failed ordering dep does not block this task.
 	for _, dep := range task.OrderingDependencies {
 		depTask, ok := ledger.Task(dep)
 		if !ok {

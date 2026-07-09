@@ -1,8 +1,4 @@
 ---
-# External-LB / external-DNS diagnostics. Runs when a cluster's endpoints use
-# source.type=external — the operator owns the LB and DNS records. This reports
-# hostname resolution from the provider-host vantage point without failing the
-# apply.
 
 - name: Resolve external endpoints for this cluster
   ansible.builtin.set_fact:
@@ -15,10 +11,6 @@
       }}
   changed_when: false
 
-# No end_play here: this role runs inside a multi-host, strategy:free play, where
-# meta:end_play would abort the play for ALL hosts, not just this one. The probe
-# and report tasks below already no-op when bootwright_external_endpoints is empty
-# (their loops iterate an empty list), so no short-circuit is needed.
 - name: Validate external endpoint DNS
   ansible.builtin.command:
     argv:

@@ -13,45 +13,18 @@ bootwright_ceph_managed_packages:
   - lvm2
   - podman
   - chrony
-  # Installed on demand by the destroy device zap (sgdisk); listed here so its
-  # ownership record is removed and the package uninstalled at teardown.
   - gdisk
 bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
-# Distinct anchor for the corporate Satellite CA so it never collides with the
-# cephadm-registry CA above. Matches the managed-OS Kickstart anchor filename.
 bootwright_ceph_rhsm_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem
-# Distinct anchor for the egress proxy's TLS-inspection CA (proxy
-# connection.trustBundleRef), so a proxied node trusts the certificates the
-# proxy re-signs for general HTTPS (get_url, podman, the vendor .repo).
 bootwright_ceph_proxy_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.pem
-# System-extracted CA bundle that update-ca-trust rebuilds from the anchors above,
-# so it carries the public roots AND the corporate proxy CA. RHSM CDN repos are
-# pointed here (rhsm.conf [rhsm] repo_ca_cert) when a TLS-inspecting proxy is set,
-# because their sslcacert REPLACES the system store rather than augmenting it.
 bootwright_ceph_system_ca_bundle_path: /etc/pki/tls/certs/ca-bundle.crt
-# subscription-manager's stock repo CA (the default sslcacert stamped into
-# redhat.repo); restored when no TLS-inspecting proxy declares a trustBundleRef.
 bootwright_ceph_rhsm_default_repo_ca: /etc/rhsm/ca/redhat-uep.pem
 bootwright_ceph_ca_trust_update_argv:
   - update-ca-trust
 bootwright_ceph_community_default_mirror: https://download.ceph.com
 bootwright_ceph_community_bootstrap_cephadm: /var/tmp/bootwright-cephadm-bootstrap
 bootwright_ceph_community_repo_file: /etc/yum.repos.d/ceph.repo
-# cephadm add-repo unconditionally enables EPEL via "dnf install -y epel-release"
-# on EL nodes; on an unregistered RHEL node no enabled repo provides that package,
-# so Bootwright pre-installs epel-release from Fedora's canonical RPM. Override
-# this URL to an internal EPEL mirror for disconnected sites.
 bootwright_ceph_community_epel_release_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
-# Community ceph-common pulls dependencies from the distribution base repositories
-# that cephadm add-repo never configures: librabbitmq, librdkafka and
-# python3-prettytable live in AppStream, libbabeltrace lives in CodeReady Builder
-# (CRB). An unregistered RHEL node exposes none of those RHSM-gated repositories,
-# so depsolve fails. Following the documented community install procedure,
-# Bootwright adds the matching CentOS Stream community repositories and trusts the
-# CentOS Official signing key (fingerprint pinned). Override the mirror to an
-# internal CentOS Stream mirror for disconnected sites, or set
-# spec.ceph.community.enableDependencyRepos=false on hosts that already entitle
-# BaseOS/AppStream/CRB another way (e.g. RHSM or a MachineInstallProfile mirror).
 bootwright_ceph_community_dependency_default_mirror: https://mirror.stream.centos.org
 bootwright_ceph_community_dependency_gpgkey: https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official-SHA256
 bootwright_ceph_community_dependency_gpg_fingerprint: 99DB70FAE1D7CE227FB6488205B555B38483C65D

@@ -83,10 +83,6 @@ Drop into an interactive shell instead with 'cluster rsh'.
 	return cmd
 }
 
-// resolveClusterNodeMachine loads desired state, validates the cluster name, and
-// resolves --node to its backing Machine — the shared front half of both
-// cluster rsh and cluster exec before they hand off to execSSHToMachine. It
-// returns the loaded state so the caller reuses it for the ssh invocation.
 func resolveClusterNodeMachine(cf *commonFlags, clusterName, node string) (string, v1alpha1.State, error) {
 	state, err := loadDesiredState(cf)
 	if err != nil {

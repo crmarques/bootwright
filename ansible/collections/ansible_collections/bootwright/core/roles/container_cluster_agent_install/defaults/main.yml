@@ -2,11 +2,6 @@
 bootwright_install_local_work_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer"
 bootwright_install_work_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer"
 bootwright_cluster_secrets_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/secrets"
-# FIPS clusters must build their agent ISO with the FIPS-capable installer;
-# the stock openshift-install refuses ("use the FIPS-capable installer binary
-# for RHEL 9"). The controller_openshift_tools role installs both binaries when
-# any cluster enables FIPS, and bootwright_current_cluster.fips is projected by
-# the renderer per cluster.
 bootwright_openshift_install: "{{ 'openshift-install-fips' if (bootwright_current_cluster.fips | default(false) | bool) else 'openshift-install' }}"
 bootwright_install_timeout_seconds: 5400
 bootwright_install_wait_poll_seconds: 15

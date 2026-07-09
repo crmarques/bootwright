@@ -49,15 +49,6 @@
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# 0711, not 0700, so an unprivileged qemu process can traverse this per-token
-# directory to reach a directly-attached agent ISO. The libvirt-direct media
-# backend (qemu:///system) attaches the staged ISO straight into the guest
-# domain; libvirt dynamic ownership chowns only the ISO file to the qemu user,
-# not this parent directory, so 0700 here makes the guest fail to start with
-# "Could not open <iso>: Permission denied". The execute-only bits keep the
-# directory non-listable (the unguessable publish token still gates discovery)
-# and the ISO file mode (0600) keeps its contents private, matching libvirt's
-# own /var/lib/libvirt/images convention (drwx--x--x).
 - name: Create agent ISO staging directory
   ansible.builtin.file:
     path: "{{ bootwright_agent_iso_stage_dir }}"

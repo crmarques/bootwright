@@ -14,14 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// The context setup checks below back `bootwright status`: the status spine
-// reports them inline on a healthy context and falls back to them when the
-// current context is missing or not ready (the surface that used to be
-// `context validate`).
-
-// runStatusSetup reports the context setup checks when the current context is
-// missing or not ready, instead of failing with a bare error. It shows what is
-// wrong and the remediation for each failing check.
 func runStatusSetup(stdout io.Writer, resolveErr error) error {
 	p := output.New(stdout)
 	p.Command("status")
@@ -74,9 +66,6 @@ func currentContextValidation() (workspace.Context, []output.Check) {
 }
 
 func ensureContextReady(ctx workspace.Context) error {
-	// The owned input directory holds the copied authored YAML; a missing or
-	// unreadable input directory means a corrupted/half-created context, so
-	// surface its own named error instead of the generic one.
 	if err := workspace.ValidateInputDir(ctx); err != nil {
 		return err
 	}
@@ -100,9 +89,6 @@ func validateContextChecks(ctx workspace.Context) []output.Check {
 	return checks
 }
 
-// bastionLocalityCheck reports whether bootwright runs on the declared bastion
-// for the loaded state; status surfaces it both inline and in the setup
-// fallback.
 func bastionLocalityCheck(state v1alpha1.State) output.Check {
 	result := locality.CheckController(state, controllerLocalityPolicy)
 	if result.OK {
@@ -181,9 +167,6 @@ func contextReadinessChecks(ctx workspace.Context) []output.Check {
 	return checks
 }
 
-// inputDirContextCheck reports whether the owned input directory (the copy of
-// the operator's source) exists and is readable. Evidence names the input
-// directory; remediation is repopulating it with context update --name -f.
 func inputDirContextCheck(ctx workspace.Context) output.Check {
 	if err := workspace.ValidateInputDir(ctx); err != nil {
 		return missingContextCheck("input", err.Error(), fmt.Sprintf("bootwright context update --name %s -f <dir> (or bootwright context init --name %s -f <dir> --yes)", ctx.Name, ctx.Name))

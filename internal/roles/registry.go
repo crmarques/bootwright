@@ -19,10 +19,6 @@ type Dispatch struct {
 	BootRole      string
 }
 
-// ExternalBMC reports whether the dispatch targets an operator-owned external
-// BMC (bare-metal Redfish), as opposed to a Bootwright-managed emulated BMC or
-// no BMC at all. The renderer projects it so playbooks select probe targets
-// from this fact instead of comparing bmcRole labels.
 func (d Dispatch) ExternalBMC() bool {
 	return d.BMCRole == "redfish"
 }
@@ -332,10 +328,6 @@ func ServiceImagePin(kind, realisation string) (ServiceImage, bool) {
 	return image, image.Type != ""
 }
 
-// PinnableServiceKeys returns every service realisation the registry pins a
-// container image for, sorted. The renderer's image-pin gate is tested against
-// this so a new image-bearing entry cannot be added to the registry without a
-// matching pin path.
 func PinnableServiceKeys() []ServiceKey {
 	var out []ServiceKey
 	for _, s := range serviceSupport {

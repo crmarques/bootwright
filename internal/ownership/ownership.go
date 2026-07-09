@@ -16,32 +16,18 @@ import (
 
 const ResourceDirName = "resources"
 
-// Owner is the canonical owner stamp for a Bootwright-created ownership record.
-// SaveResource defaults Owner to this, and consumers that decide whether
-// Bootwright owns a record (for example orphan reporting) compare against it.
-// The Ansible ownership_record role writes the same literal independently
-// (resource.yml owner: bootwright); keep the two in sync.
 const Owner = "bootwright"
 
-// Role names the lifecycle relationship a context holds over a shared
-// infra-component. RoleOwner provisions the base and may destroy it; RoleReference
-// only contributes/consumes and is released (never torn down) by another context's
-// destroy. An empty Role reads as RoleOwner, so records written before the field
-// existed and single-context records keep owner semantics. The Ansible
-// ownership_record role writes the same literals (mirrors api/v1alpha1.ComponentRole*);
-// keep the three in sync.
 const (
 	RoleOwner     = "owner"
 	RoleReference = "reference"
 )
 
 type ResourceRecord struct {
-	APIVersion string `json:"apiVersion"`
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
-	Owner      string `json:"owner"`
-	// Role is the context's lifecycle relationship to the resource
-	// (owner|reference); empty reads as owner. See RoleOwner/RoleReference.
+	APIVersion string            `json:"apiVersion"`
+	Kind       string            `json:"kind"`
+	Name       string            `json:"name"`
+	Owner      string            `json:"owner"`
 	Role       string            `json:"role,omitempty"`
 	Context    string            `json:"context,omitempty"`
 	Host       string            `json:"host,omitempty"`
@@ -55,8 +41,6 @@ type ResourceRecord struct {
 	UpdatedAt  time.Time         `json:"updatedAt"`
 }
 
-// EffectiveRole returns the record's lifecycle role, defaulting an empty stamp to
-// RoleOwner so pre-existing and single-context records read as owner.
 func (record ResourceRecord) EffectiveRole() string {
 	if role := strings.TrimSpace(record.Role); role != "" {
 		return role
@@ -64,8 +48,6 @@ func (record ResourceRecord) EffectiveRole() string {
 	return RoleOwner
 }
 
-// IsReference reports whether the record is a cross-context reference: a context
-// that contributes to and consumes a service another context owns.
 func (record ResourceRecord) IsReference() bool {
 	return record.EffectiveRole() == RoleReference
 }
@@ -120,11 +102,6 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// coerceStringMap normalizes a wire string map whose values may have been
-// serialized as JSON scalars other than strings (for example numeric port
-// attributes written by older Ansible roles). String values are taken
-// verbatim; numbers and booleans are kept as their literal token so the
-// in-memory record stays map[string]string and round-trips as strings.
 func coerceStringMap(in map[string]json.RawMessage) map[string]string {
 	if len(in) == 0 {
 		return nil
@@ -149,12 +126,6 @@ func ResourcePath(root string, record ResourceRecord) (string, error) {
 		return "", fmt.Errorf("name: %w", err)
 	}
 	base := record.Name
-	// A reference record shares Kind+Name+Host with the owner it references, so
-	// it must not overwrite the owner's <name>.json. Give it a context-suffixed
-	// filename; the un-suffixed file then belongs to exactly one owner, making
-	// single-owner a filesystem invariant. LoadResources still discovers it and
-	// matches it by Kind+Name+Host regardless of filename. The Ansible
-	// ownership_record role names the file identically; keep the two in sync.
 	if record.IsReference() {
 		if err := validateSegment(record.Context); err != nil {
 			return "", fmt.Errorf("reference record context: %w", err)
@@ -192,21 +163,11 @@ func SaveResource(root string, record ResourceRecord) error {
 	return nil
 }
 
-// LoadResources loads every ownership resource record under root. A single file
-// that cannot be read, decoded, or validated is SKIPPED rather than failing the
-// whole load: the ownership store is the safety net a destroy sweep relies on, so
-// one corrupt or policy-rejected record must never hide every other recorded
-// resource (and block the very sweep that would reclaim it). Only a genuine
-// directory-traversal failure is returned as an error. Use LoadResourcesWithWarnings
-// to surface which records were skipped.
 func LoadResources(root string) ([]ResourceRecord, error) {
 	records, _, err := LoadResourcesWithWarnings(root)
 	return records, err
 }
 
-// LoadResourcesWithWarnings is LoadResources plus the per-record skip reasons, so
-// a caller (state-check, destroy preview) can report which records were dropped
-// instead of letting them vanish silently.
 func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {
 	base := filepath.Join(root, ResourceDirName)
 	var records []ResourceRecord
@@ -250,13 +211,6 @@ func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {
 	return records, warnings, nil
 }
 
-// LoadContext is the single context-scoped entry point for reading ownership
-// records: it loads every record under dir and drops any stamped with a different
-// context (defense in depth for a shared or misconfigured ownership dir). Every
-// consumer — destroy planning, the destroy run inventory, and state-check orphan
-// reporting — goes through this, so the records that gate a destroy, the records it
-// executes against, and the records the operator preview shows are always the same
-// set. An empty contextName applies no context filter (FilterByContext semantics).
 func LoadContext(dir, contextName string) ([]ResourceRecord, error) {
 	records, err := LoadResources(dir)
 	if err != nil {
@@ -265,9 +219,6 @@ func LoadContext(dir, contextName string) ([]ResourceRecord, error) {
 	return FilterByContext(records, contextName), nil
 }
 
-// LoadContextWithWarnings is LoadContext plus the per-record skip reasons, so a
-// caller can report records that were dropped on load instead of silently losing
-// them. Context filtering is applied to the records that loaded cleanly.
 func LoadContextWithWarnings(dir, contextName string) ([]ResourceRecord, []error, error) {
 	records, warnings, err := LoadResourcesWithWarnings(dir)
 	if err != nil {
@@ -276,11 +227,6 @@ func LoadContextWithWarnings(dir, contextName string) ([]ResourceRecord, []error
 	return FilterByContext(records, contextName), warnings, nil
 }
 
-// FilterByContext drops records explicitly stamped with a different context, so a
-// destroy never consumes an ownership record that belongs to another Bootwright
-// context (for example a record misplaced into a shared context directory).
-// Records with no context stamp are kept for backward compatibility with records
-// written before the context field existed.
 func FilterByContext(records []ResourceRecord, context string) []ResourceRecord {
 	context = strings.TrimSpace(context)
 	if context == "" {
@@ -320,9 +266,6 @@ func ValidateResource(record ResourceRecord) error {
 			return fmt.Errorf("ownership resource %s/%s contains sensitive value", record.Kind, record.Name)
 		}
 	}
-	// Owned paths drive destructive removal during destroy; reject `..` so a
-	// recorded path cannot traverse outside its intended root when the record is
-	// later consumed to delete files.
 	for _, path := range record.Paths {
 		if strings.Contains(path, "..") {
 			return fmt.Errorf("ownership resource %s/%s path %q must not contain %q", record.Kind, record.Name, path, "..")
@@ -342,9 +285,6 @@ func validateSegment(value string) error {
 	return nil
 }
 
-// sensitiveKeyMarkers flag a field whose NAME looks like it carries a secret.
-// Field names are role/operator-authored and short, so a broad list here has no
-// realistic false-positive cost.
 var sensitiveKeyMarkers = []string{
 	"password",
 	"token",
@@ -358,21 +298,13 @@ var sensitiveKeyMarkers = []string{
 	"secret",
 }
 
-// sensitiveValueMarkers flag a VALUE as embedded secret material. They are
-// deliberately narrower than the key markers: recorded values include connection
-// strings and filesystem paths (ssh ProxyCommand args, UserKnownHostsFile paths,
-// FQDNs) that legitimately contain a word like "token" or "kubeconfig", and a
-// substring match on those would reject the record — stranding the very resource
-// the record exists to let destroy reclaim. Only markers that do not occur in
-// benign connection/path data are scanned in values; an actual leaked credential
-// (a PEM block, an auth header, explicit key material) still trips.
 var sensitiveValueMarkers = []string{
-	"-----begin ", // PEM private key / certificate block
+	"-----begin ",
 	"private_key",
 	"privatekey",
 	"client-secret",
-	"authorization:", // HTTP auth header
-	"bearer ",        // HTTP bearer token header
+	"authorization:",
+	"bearer ",
 }
 
 func sensitiveKey(key string) bool { return containsAnyLower(key, sensitiveKeyMarkers) }

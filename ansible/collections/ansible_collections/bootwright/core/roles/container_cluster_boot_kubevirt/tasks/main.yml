@@ -32,12 +32,6 @@
       KubeVirt boot for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is missing kubeconfig, namespace, or generated agent ISO path.
 
-# On a re-boot the VM may already be running and holding the agent-ISO
-# DataVolume. Deleting/re-uploading the DV under a running VMI deletes an in-use
-# volume and leaves the VMI on the stale ISO (the later `virtctl start` tolerates
-# "already running" and no-ops). Stop the VM first, mirroring the destroy path
-# (machine_substrate_kubevirt/tasks/destroy.yml), so the start below re-attaches
-# the freshly uploaded ISO.
 - name: Stop KubeVirt VirtualMachine before replacing the agent ISO
   ansible.builtin.command:
     argv:
@@ -107,11 +101,6 @@
   changed_when: bootwright_kubevirt_iso_upload.rc == 0
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# virtctl image-upload stamps no labels, unlike the root DataVolume and VM
-# templates that stamp bootwright.io/managed-by. Label the agent-ISO DataVolume
-# so the destroy ownership gate can recognize it as Bootwright-owned and refuse
-# a name collision with a foreign DataVolume in a shared namespace. --overwrite
-# keeps a re-upload idempotent.
 - name: Label KubeVirt agent ISO DataVolume as Bootwright-managed
   ansible.builtin.command:
     argv:
@@ -147,11 +136,6 @@
     - "'already' not in ((bootwright_kubevirt_vm_start.stderr | default('')) | lower)"
 
 - name: Wait for the KubeVirt VirtualMachineInstance to be created
-  # virtctl start returns before virt-controller has created the VMI object, so
-  # the readiness wait below can hit "no matching resources found" and fail the
-  # boot spuriously when the controller is slow (busy hub, parallel boots). Wait
-  # for the object to exist first; `kubectl wait --for=condition=Ready` then
-  # polls correctly once the VMI is present.
   ansible.builtin.command:
     argv:
       - kubectl

@@ -55,10 +55,6 @@ func validateClusterEndpoints(owner string, ci v1alpha1.ClusterInstall, componen
 	}
 	loadBalancerRefs := map[string]map[string]bool{}
 	for name, endpoint := range ci.Endpoints {
-		// The endpoint vocabulary is closed: every consumer (load balancer
-		// frontends, DNS records, install-config VIPs, noProxy) is keyed to
-		// the standard slots, so an unknown key would validate clean and
-		// silently get no wiring.
 		switch name {
 		case v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress:
 		default:
@@ -144,9 +140,6 @@ func validateEndpointAddressNetwork(prefix string, ci v1alpha1.ClusterInstall, n
 	default:
 		errs = append(errs, fmt.Sprintf("%s %q matches multiple selected NetworkConfigs (%s)", prefix, address, joinSortedNames(matches)))
 	}
-	// A single-node cluster (SNO) has no keepalived VIP: api, api-int, and
-	// ingress all legitimately resolve to the lone node's own IP. Only a
-	// multi-node cluster floats VIPs that must stay distinct from every node.
 	if len(ci.Machines) > 1 {
 		for _, node := range clusterInstallNodeInstallIPs(ci) {
 			if node.ip.Equal(ip) {
@@ -163,10 +156,6 @@ type nodeInstallIP struct {
 	owner string
 }
 
-// clusterInstallNodeInstallIPs resolves each node's static install IP from its
-// interfaceAddresses (addressRef -> spec.addresses[]). These are exactly the
-// addresses a VIP must not reuse, since keepalived would fight the node that
-// statically owns the address.
 func clusterInstallNodeInstallIPs(ci v1alpha1.ClusterInstall) []nodeInstallIP {
 	var out []nodeInstallIP
 	for _, machine := range ci.Machines {
@@ -189,10 +178,6 @@ func clusterInstallNodeInstallIPs(ci v1alpha1.ClusterInstall) []nodeInstallIP {
 	return out
 }
 
-// validateEndpointBindAddressNetwork checks that an infraComponent-sourced
-// endpoint's resolved load-balancer bind address falls inside the cluster's
-// selected machine networks, the same containment rule direct endpoint addresses
-// already carry. Resolution errors are left to validateEndpointProvider.
 func validateEndpointBindAddressNetwork(prefix string, ci v1alpha1.ClusterInstall, components map[string]v1alpha1.InfraComponent, source v1alpha1.EndpointSource, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	if !clusterInstallHasSelectedInstallNetwork(ci) {
 		return nil
@@ -262,17 +247,9 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 	if component.Spec.LoadBalancer == nil {
 		return []string{fmt.Sprintf("%s.source.componentRef %q must reference a loadBalancer InfraComponent", prefix, source.ComponentRef.Name)}
 	}
-	// The endpoint must name which loadBalancer bind address it uses unless the
-	// loadBalancer declares exactly one (the accepted single-bind shortcut). With
-	// zero or multiple bindAddresses and no source.bindAddressRef,
-	// state/view.LoadBalancerBindAddress cannot resolve a VIP and the
-	// install-config ships with an empty api/ingress VIP.
 	if source.BindAddressRef.Name == "" && len(component.Spec.LoadBalancer.BindAddresses) != 1 {
 		errs = append(errs, prefix+".source.bindAddressRef is required unless the referenced loadBalancer declares exactly one bindAddress")
 	}
-	// A non-empty source.bindAddressRef is a name reference into the referenced
-	// loadBalancer and must resolve even when it declares a single bindAddress;
-	// the single-bind shortcut applies only when the field is empty.
 	referenced := map[string]bool{}
 	if source.BindAddressRef.Name != "" {
 		referenced[source.BindAddressRef.Name] = true
@@ -384,8 +361,6 @@ func artifactServerEndpointProtocol(entry v1alpha1.EnvironmentArtifactServerComp
 func validateMachineNetworkBindings(ci v1alpha1.ClusterInstall, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
 	for _, binding := range ci.NetworkBindings {
-		// NetworkBindings is a computed view; blame the editable owner (the
-		// referenced Machine), not the synthetic spec.install.networkBindings path.
 		mp := fmt.Sprintf("Machine/%s", binding.MachineName)
 		if binding.MachineName == "" {
 			mp = fmt.Sprintf("ContainerCluster/%s node Machine", ci.Metadata.Name)

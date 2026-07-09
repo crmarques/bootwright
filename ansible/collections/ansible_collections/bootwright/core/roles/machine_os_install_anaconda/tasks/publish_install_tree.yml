@@ -1,13 +1,4 @@
 ---
-# Extract the hosted install tree (packageSource.hostedTree) from its DVD
-# into the artifact server document root, once per (cluster, image). The trust
-# model matches a per-node install ISO: the DVD is sha256-verified, extracted
-# faithfully (Red Hat's documented copy of the whole tree, preserving
-# .treeinfo), content-addressed by the DVD identity, and published atomically
-# read-only so an in-flight install never observes a partial or mutated tree.
-# The installing node then fetches GPG-signed packages from it (dnf enforces
-# gpgcheck), so a tampered tree cannot install a malicious package. Included
-# with run_once, so it builds a single shared tree for the whole OS group.
 - name: Resolve hosted install tree paths
   ansible.builtin.set_fact:
     bootwright_tree: "{{ bootwright_component.osInstall.image.installTree }}"
@@ -17,10 +8,6 @@
     bootwright_tree_identity_path: "{{ bootwright_component.osInstall.image.installTree.publishPath }}/.bootwright-tree.identity"
   changed_when: false
 
-# The DVD is read in place from the media store (local-media) or an absolute
-# file path. hostedTree rejects a url fromMedia in validation so the DVD is
-# always a media-store entry `bootwright media add` already sha256-verified,
-# never an unpinned ad-hoc download.
 - name: Resolve hosted install tree DVD source path
   ansible.builtin.set_fact:
     bootwright_tree_dvd_path: "{{ bootwright_tree.fromMedia.path }}"
@@ -62,11 +49,6 @@
   register: bootwright_tree_identity_raw
   failed_when: false
 
-# Skip the multi-GB extraction when the tree is already published from the same
-# DVD. Identity is the DVD size+mtime (mirroring the boot-source identity check
-# in install_media.yml), so a re-apply is a cheap no-op instead of re-hashing
-# and re-copying the whole DVD; a changed DVD (new bytes) flips identity and
-# forces a verified rebuild.
 - name: Resolve hosted install tree rebuild state
   ansible.builtin.set_fact:
     bootwright_tree_identity: "{{ bootwright_tree_dvd_stat.stat.size }}:{{ bootwright_tree_dvd_stat.stat.mtime }}"
@@ -81,11 +63,6 @@
 - name: Build and publish hosted install tree
   when: bootwright_tree_rebuild | bool
   block:
-    # Compute the DVD sha256 for the identity/diagnostics marker. The DVD's origin
-    # authenticity was already established at `bootwright media add` time (verified
-    # against the recorded sha256 there) — the same anchor a sealed per-node ISO
-    # relies on — so this only records the digest in the published tree's marker
-    # for traceability; there is no author-supplied pin to re-assert here.
     - name: Record hosted install tree DVD checksum
       ansible.builtin.command:
         argv:
@@ -130,10 +107,6 @@
           register: bootwright_tree_src_treeinfo
           failed_when: not (bootwright_tree_src_treeinfo.stat.exists | default(false))
 
-        # Faithful full copy per Red Hat's documented method: copy the entire
-        # tree (the "/." keeps dotfiles) so .treeinfo/.discinfo and both the
-        # BaseOS and AppStream repodata survive; a partial copy that skips
-        # .treeinfo breaks the source.
         - name: Copy DVD contents into the building tree
           ansible.builtin.command:
             argv:
@@ -166,9 +139,6 @@
             group: root
             mode: "0444"
 
-        # The identity file is written LAST inside the building tree and is what
-        # the skip check reads, so a partially built tree never carries a
-        # matching identity: an interrupted run rebuilds cleanly next apply.
         - name: Write hosted install tree identity
           ansible.builtin.copy:
             dest: "{{ bootwright_tree_building }}/.bootwright-tree.identity"
@@ -182,8 +152,6 @@
             path: "{{ bootwright_tree_publish }}"
             state: absent
 
-        # Atomic swap on the same filesystem (both under .../public/trees), so a
-        # concurrently-fetching installer only ever sees a complete tree.
         - name: Publish hosted install tree atomically
           ansible.builtin.command:
             argv:
@@ -197,11 +165,6 @@
             path: "{{ bootwright_tree_mount }}"
             state: absent
 
-    # Align the tree's SELinux label with the artifact docroot (container_file_t
-    # via the :Z bind mount) so the nginx container_t process can read it;
-    # restorecon would reset it to var_lib_t and the read would AVC-deny (nginx
-    # 404 -> the node's package fetch fails). Same rationale as the managed-OS
-    # ISO label alignment in install_media.yml.
     - name: Align hosted install tree SELinux label with the artifact docroot
       ansible.builtin.command:
         argv:

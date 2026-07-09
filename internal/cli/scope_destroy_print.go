@@ -17,10 +17,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-// printDestroyOrphans lists Bootwright-owned resources still recorded in the ownership
-// store but no longer declared in desired state. A full `bootwright destroy` reclaims
-// them via the ownership-record sweep; this preview surfaces them so the operator knows
-// they exist. Read-only.
 func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 	if len(orphans) == 0 {
 		return
@@ -40,12 +36,6 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 	}
 }
 
-// destroySweepReclaims reports whether a full destroy's ownership-record sweep
-// actually reclaims an orphan of this kind. The sweep
-// (task_machine_infra_destroy.yml) allowlists exactly these three kinds;
-// kubevirt-machine, vsphere-machine, and storage-cluster records are torn down
-// only from desired-state component loops, so once the object is gone no sweep
-// reaches them and the "destroy reclaims it" promise would be false.
 func destroySweepReclaims(kind string) bool {
 	switch kind {
 	case string(ownership.KindLibvirtDomain), string(ownership.KindLibvirtNetwork), string(ownership.KindManagedOSInstall):
@@ -55,10 +45,6 @@ func destroySweepReclaims(kind string) bool {
 	}
 }
 
-// printSkippedOwnershipRecords warns about ownership records that could not be
-// read, decoded, or validated and were skipped on load. The destroy sweep cannot
-// reclaim a record it could not read, so the operator is told which files to
-// repair or remove rather than letting them vanish silently.
 func printSkippedOwnershipRecords(w io.Writer, warnings []error) {
 	if len(warnings) == 0 {
 		return
@@ -70,13 +56,6 @@ func printSkippedOwnershipRecords(w io.Writer, warnings []error) {
 	}
 }
 
-// printInfraComponentReleases previews the cross-context outcome of an infra-component
-// teardown: shared bastion services this context only REFERENCES are released (the
-// owner's base and data stay, only this context's contribution + reference record are
-// removed), and owner-held bases that sibling contexts still reference are surfaced as
-// BLOCKED (the destroy refuses unless --override). It also surfaces any sibling
-// ownership store that could not be read during the scan, so an unverifiable reference
-// is visible rather than silently treated as absent. Read-only.
 func printInfraComponentReleases(w io.Writer, decision converge.ReleaseDecision) {
 	if len(decision.Releases) == 0 && len(decision.Blocks) == 0 && len(decision.Warnings) == 0 {
 		return
@@ -107,19 +86,9 @@ func printInfraComponentReleases(w io.Writer, decision converge.ReleaseDecision)
 	}
 }
 
-// printDestroyPreview lists the user-visible resources `destroy` will
-// remove for the current scope, before the confirmation prompt. The
-// preview is concise on purpose: the user can read the YAML for full
-// detail. The output differs by scope because the two destroy stages remove
-// very different things: cluster destroy removes cluster-stage runtime and
-// managed storage state; infra destroy tears down VMs, networks, provider
-// services, infra component services, and provider-owned machine disks.
 func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State, storageWorkNames []string) {
 	switch {
 	case converge.DestroyIsFullScope(scope):
-		// Whole-context destroy runs both stages in teardown order: clusters
-		// first, then the infra they ran on. Preview both so the operator sees
-		// the full blast radius before the confirmation prompt.
 		printDestroyClustersPreview(w, clustersDir, state, storageWorkNames)
 		printDestroyInfraPreview(w, state, storageWorkNames)
 	case scope.Name == "clusters" || scope.Name == "container-cluster":
@@ -129,12 +98,6 @@ func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, 
 	}
 }
 
-// destroyStoragePreviewNames lists the StorageClusters a destroy preview shows
-// as teardown targets: the directly-selected storage roots when a --clusters
-// selection narrowed storage (storageWorkNames non-nil, possibly empty), else
-// every StorageCluster the render-inclusive state carries. This keeps the
-// preview aligned with the work-set gate — a render-reference StorageCluster is
-// never shown as a teardown target for a container-only scope.
 func destroyStoragePreviewNames(state v1alpha1.State, storageWorkNames []string) []string {
 	if storageWorkNames != nil {
 		out := append([]string(nil), storageWorkNames...)

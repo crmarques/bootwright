@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// A StorageCluster's convergence hash must be cluster-scoped: adding a StoragePool
-// (a child object) must not change it, so a 4-pool cluster that grows a 5th pool
-// stays "match" at the cluster level while the new pool is the only thing that
-// needs creating. This is the user's worked example.
 func TestStorageClusterHashIgnoresSubObjects(t *testing.T) {
 	pool := func(name string) v1alpha1.StoragePool {
 		return v1alpha1.StoragePool{

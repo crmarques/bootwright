@@ -9,10 +9,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestKubeVirtAPIReadyCheckBoundsProbeWithRequestTimeout pins M7: the host
-// cluster KubeVirt API probe must pass kubectl --request-timeout=5s so an
-// unreachable host-cluster API fails the check instead of hanging preflight and
-// apply indefinitely.
 func TestKubeVirtAPIReadyCheckBoundsProbeWithRequestTimeout(t *testing.T) {
 	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
@@ -32,8 +28,6 @@ func TestKubeVirtAPIReadyCheckBoundsProbeWithRequestTimeout(t *testing.T) {
 	}
 }
 
-// TestKubeVirtNetworkRefCheckBoundsProbeWithRequestTimeout pins M7 for the
-// network-attachment probe, which shells out to kubectl on the same host cluster.
 func TestKubeVirtNetworkRefCheckBoundsProbeWithRequestTimeout(t *testing.T) {
 	ref := v1alpha1.KubeVirtNetworkRef{Kind: v1alpha1.KubeVirtNetworkKindCUDN, Name: "child-net", Namespace: "bootwright-child-ocp"}
 	var gotArgs []string

@@ -66,9 +66,6 @@ func pullSecretMergePlan() extensionplan.ExtensionPlan {
 	}
 }
 
-// TestApplyRunsEffectsBeforeResources proves input effects execute before the
-// first resource apply (the pull-secret merge must precede any image pull) and
-// that a pull-secret-merge add-on never takes the already-ready short-circuit.
 func TestApplyRunsEffectsBeforeResources(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")
@@ -137,8 +134,6 @@ func TestApplyEffectFailureRecordsEffectSummary(t *testing.T) {
 	}
 }
 
-// orderNotingRunner appends apply:<kind> / get events to a shared order slice so
-// tests can interleave effect-runner events with oc calls.
 type orderNotingRunner struct {
 	order *[]string
 }

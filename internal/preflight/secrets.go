@@ -23,10 +23,7 @@ type secretRefRequirement struct {
 	role          secret.MaterialRole
 	tlsPair       bool
 	sshPair       bool
-	// owner ties the requirement to the work object whose lifecycle needs it (see
-	// secretRefOwner in scope.go), so a scoped run can drop secrets owned by
-	// render-reference pull-ins.
-	owner secretRefOwner
+	owner         secretRefOwner
 }
 
 type secretRefSource string
@@ -290,8 +287,6 @@ func resolveSecretRequirementSources(state v1alpha1.State, requirements []secret
 	return requirements
 }
 
-// generatedSecretKind maps a generated Secret's type onto the legacy generated
-// kind labels the preflight material checks branch on.
 func generatedSecretKind(s v1alpha1.Secret) string {
 	if s.Spec.Source.Generated == nil {
 		return ""

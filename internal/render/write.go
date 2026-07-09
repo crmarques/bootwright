@@ -18,9 +18,6 @@ func writeText(fs FileSystem, path string, content string) error {
 	return nil
 }
 
-// writeScript writes an executable (0755) generated apply script. Unlike
-// writeText/writeYAML it does not carry secret material, so it is written with
-// the exec bit set; the owner-only parent dir still gates access.
 func writeScript(fs FileSystem, path string, content string) error {
 	if err := fs.WriteAtomic(path, []byte(content), localScriptMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
@@ -28,9 +25,6 @@ func writeScript(fs FileSystem, path string, content string) error {
 	return nil
 }
 
-// scriptOptionsFor derives the apply script's file references as paths relative
-// to the script's own directory (storage/<cluster>/), so the emitted bundle is
-// relocatable. An empty source path yields an empty reference (step omitted).
 func scriptOptionsFor(asset StorageAsset) ceph.CephScriptOptions {
 	rel := func(path string) string {
 		if path == "" {
@@ -103,11 +97,6 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 			if err := writeYAML(fs, asset.OperationsPath, ceph.CephOperations(state, cluster)); err != nil {
 				return err
 			}
-			// The native-CLI apply bundle: a helper library plus an apply.sh
-			// that reproduces the same Ceph objects (pools, EC profiles, CRUSH
-			// rules, cephfs, rgw, nfs, mgr modules, config) using cephadm/ceph
-			// commands. Both consume the same CephOperations document written
-			// above, so they can never drift from what `bootwright apply` runs.
 			if asset.ApplyLibPath != "" {
 				if err := writeScript(fs, asset.ApplyLibPath, ceph.CephApplyLib()); err != nil {
 					return err

@@ -67,8 +67,6 @@
         bootwright_component: "{{ bootwright_prepare_components | first }}"
       changed_when: false
 
-    # substratePrepareFrom selects the role entrypoint; the renderer omits it for
-    # substrates driven from their default main.yml, so fall back to main.
     - name: Dispatch machine infrastructure prepare role
       ansible.builtin.include_role:
         name: "{{ bootwright_component.substratePrepareRole }}"

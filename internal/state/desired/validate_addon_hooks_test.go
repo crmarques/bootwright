@@ -55,7 +55,6 @@ func TestValidateHookLifecycleOnManifestSet(t *testing.T) {
 func TestValidateHookTargetModes(t *testing.T) {
 	dir := t.TempDir()
 	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
-	// playbook set but no target mode.
 	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
 		Name:      "h",
 		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
@@ -63,7 +62,6 @@ func TestValidateHookTargetModes(t *testing.T) {
 	})
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "target must select")
 
-	// two target modes.
 	addon = hookAddon(dir, v1alpha1.ClusterAddonHook{
 		Name:      "h",
 		Lifecycle: v1alpha1.ClusterAddonHookPreApply,

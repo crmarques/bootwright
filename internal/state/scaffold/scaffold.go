@@ -1,11 +1,3 @@
-// Package scaffold materialises example desired-state YAML from a single set of
-// templates plus a per-substrate Substrate value. It backs public example
-// generation and internal schema fixture generation.
-//
-// The architectural intent: adding a new substrate is one new entry
-// in the Substrates map plus the schema/validator/render dispatch
-// changes the spec already required. Without this package, scaffolder
-// drift was the fifth-and-easiest-to-forget step.
 package scaffold
 
 import (
@@ -19,7 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
-// Provider is the substrate identifier used by internal scaffold fixtures.
 type Provider string
 
 const (
@@ -29,19 +20,11 @@ const (
 	ProviderKubeVirt          Provider = "kubevirt"
 )
 
-// File is one scaffolded YAML output: a relative filename inside the
-// per-cluster bootwright/ directory plus its body.
 type File struct {
 	Name string
 	Body string
 }
 
-// Workspace renders the YAML objects for one cluster against the
-// substrate matching `kind`. Returns an error when `kind` does not
-// match any registered substrate. The substrate fragments may
-// themselves contain `{{.ProviderID}}` / `{{.NetworkID}}`
-// placeholders; they are rendered against the same data in a pre-pass
-// so the main templates see fully-interpolated strings.
 func Workspace(clusterName string, kind Provider) ([]File, error) {
 	s, ok := Substrates[kind]
 	if !ok {
@@ -160,11 +143,6 @@ func isDirectSpecChildLine(line string) bool {
 	return rest[0] != ' ' && rest[0] != '#' && strings.Contains(rest, ":")
 }
 
-// resolveSubstrateFragments returns a copy of s with every string
-// field run through text/template against `data` so embedded
-// `{{.ProviderID}}` / `{{.NetworkID}}` references expand. The
-// per-substrate registry uses the same template language as the main
-// templates; one render pass per fragment is enough.
 func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error) {
 	render := func(fieldName, body string) (string, error) {
 		if !strings.Contains(body, "{{") {
@@ -214,8 +192,6 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	return s, nil
 }
 
-// KnownProviders returns the substrate names in deterministic order so
-// CLI errors and help text are stable.
 func KnownProviders() []string {
 	names := make([]string, 0, len(Substrates))
 	for p := range Substrates {
@@ -225,9 +201,6 @@ func KnownProviders() []string {
 	return names
 }
 
-// ApplySupport maps a scaffold provider to the dispatch support status users
-// will hit after `bootwright apply`. Schema-only scaffolds stay valid authoring
-// examples, but the CLI must not imply their role bundle is converged.
 func ApplySupport(kind Provider) roles.DispatchSupport {
 	switch kind {
 	case ProviderEmulatedBareMetal:
@@ -243,12 +216,6 @@ func ApplySupport(kind Provider) roles.DispatchSupport {
 	}
 }
 
-// Substrate holds the per-flavor YAML fragments that vary between
-// substrates. Everything else (env, container cluster shape) is
-// rendered identically from the templates below.
-// Substrate fields are exported so text/template can read them. Use
-// the Substrates registry to construct values; the field names are an
-// internal contract between this file and the templates below.
 type Substrate struct {
 	ProviderNameSuffix         string
 	NetworkNameSuffix          string
@@ -277,12 +244,9 @@ type templateData struct {
 }
 
 type namedTemplate struct {
-	name string
-	tmpl *template.Template
-	// optional drops the file when its rendered body is empty.
-	optional bool
-	// perObject splits the rendered body into one file per YAML object under
-	// the directory named by `name`, keeping one object per file.
+	name      string
+	tmpl      *template.Template
+	optional  bool
 	perObject bool
 }
 

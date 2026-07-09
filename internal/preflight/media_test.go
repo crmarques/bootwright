@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// The 006 fixture's three ceph nodes all install a managed OS from the same
-// local-media image, so the check must fail once (deduped) with an actionable
-// "bootwright media add" remediation when the source ISO is absent.
 func TestInstallerMediaCheckFailsWhenSourceMissing(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }}
@@ -48,8 +45,6 @@ func TestInstallerMediaCheckPassesWhenSourcePresent(t *testing.T) {
 	}
 }
 
-// The source ISO is only needed once the machines phase provisions the OS, so a
-// phase selection that excludes it (e.g. an addons-only apply) skips the check.
 func TestInstallerMediaCheckSkippedOutsideMachinesPhase(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }}
@@ -59,8 +54,6 @@ func TestInstallerMediaCheckSkippedOutsideMachinesPhase(t *testing.T) {
 	}
 }
 
-// A scoped run that does not act on the managed-OS machine must not require its
-// install media.
 func TestInstallerMediaCheckHonorsSecretScope(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }}
@@ -71,7 +64,6 @@ func TestInstallerMediaCheckHonorsSecretScope(t *testing.T) {
 	}
 }
 
-// CollectChecks must wire the media check into the apply/preflight host check.
 func TestCollectChecksIncludesInstallerMedia(t *testing.T) {
 	state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 	deps := Deps{

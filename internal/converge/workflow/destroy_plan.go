@@ -10,9 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
-// Destroy task kinds. Destroy reuses the ApplyTask/TaskLedgerEntry shape and the
-// apply scheduler; only the per-task executor (runOneDestroyTask) and the plan
-// differ.
 const (
 	DestroyTaskKindMachineInfra     = "destroyMachineInfra"
 	DestroyTaskKindInfraComponents  = "destroyInfraComponents"
@@ -21,39 +18,8 @@ const (
 	DestroyTaskKindContainerCluster = "destroyContainerCluster"
 )
 
-// DestroyStorageScopeExtraVar is the comma-separated allowlist of StorageCluster
-// names the storage teardown is restricted to. It is the destroy mirror of
-// apply's applyTarget.StorageClusterNames: the storage destroy playbook
-// end_hosts any rendered storage node whose cluster is not in the allowlist, so
-// a render-reference StorageCluster present in the (render-inclusive) state is
-// never wiped. It is composed onto the plan once, centrally, by
-// converge.ApplyDestroyScopeExtraVars from the resolved storage work set, so
-// every execution path (task graph and single playbook) carries the same gate.
-// The var is present (defined) whenever a --clusters selection narrows storage —
-// an empty value tears down none — and absent when there is no narrowing (tear
-// down every storage host the state renders).
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
 
-// PlanDestroyTasks decomposes a scoped destroy into the task graph the apply
-// scheduler runs. The workflow_*_destroy playbooks are thin import wrappers that
-// run the task playbooks in teardown order in a single ansible process; this
-// rebuilds that order as a sequential dependency chain of individual graph
-// tasks so destroy shows granular progress.
-//
-// Safety: every task reuses the run's limit and extra-vars unchanged, and each
-// task playbook restricts itself with its own hosts: selector, so a task sees
-// exactly the hosts it would have inside the monolithic playbook. Per-cluster
-// teardown (e.g. which Ceph cluster a storage host belongs to) is driven by
-// rendered per-host inventory vars, not by per-task parameters, so running a
-// task playbook once against its host group tears down every cluster correctly.
-// storageWorkNames shapes the storage teardown step in the graph (the destroy
-// mirror of apply's applyTarget.StorageClusterNames): nil means no --clusters
-// narrowing (tear down every StorageCluster the state renders); a non-nil empty
-// slice means a selection that names no storage cluster (drop the storage
-// teardown step); a non-empty slice labels the step with those roots. The
-// allowlist that actually gates the wipe (DestroyStorageScopeExtraVar) is
-// composed centrally onto extraVars by converge.ApplyDestroyScopeExtraVars and
-// flows in unchanged, so this only decides the graph's shape.
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
@@ -61,10 +27,6 @@ func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extr
 	case "clusters":
 		return destroyChain(state, limit, extraVars, clusterDestroySteps(), storageWorkNames), nil
 	case "all":
-		// Whole-context teardown: tear the clusters down before the infra they
-		// run on (the reverse of the apply order, infra then clusters). One
-		// sequential chain so each step waits for the previous, exactly as the
-		// stage chains do, with the clusters steps ahead of the infra steps.
 		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), infraDestroySteps()...), storageWorkNames), nil
 	default:
 		return nil, fmt.Errorf("granular destroy is only supported for the infra, clusters, and all stages, not %q", scopeName)
@@ -79,9 +41,6 @@ func infraDestroySteps() []destroyStep {
 	}
 }
 
-// DestroyStorageClustersTaskID is the storage teardown task's id in the destroy
-// graph. Exported so converge can locate the task's per-run artifacts (the
-// partial-teardown summary the storage play writes) under the run history dir.
 const DestroyStorageClustersTaskID = "destroy.storage-clusters"
 
 func clusterDestroySteps() []destroyStep {
@@ -98,22 +57,6 @@ type destroyStep struct {
 	playbook string
 }
 
-// destroyChain turns the ordered steps into a sequential task chain (each task
-// is sequenced after the previous emitted step), preserving the monolith's
-// teardown order. The link is an ORDERING dependency, not a hard one: a step
-// runs after the prior step reaches a terminal state regardless of its outcome,
-// so one stage failing (e.g. an unreachable storage seed) no longer blocks the
-// independent later stages — a destroy makes maximal progress instead of leaving
-// the rest BLOCKED. Each step carries its own ownership/safety gate (the storage
-// seed gate, the per-VM ownership refusals), so the chain order is correctness,
-// not a safety boundary. When a --clusters selection narrows storage teardown,
-// the storage step is dropped if no storage cluster is selected, or labelled with
-// the selected roots otherwise; skipped steps do not break the chain because prev
-// only advances for emitted steps. The DestroyStorageScopeExtraVar allowlist that
-// actually gates the wipe is composed once onto the plan's extra-vars
-// (converge.ApplyDestroyScopeExtraVars) and flows in via extraVars, so the
-// task-graph and single-playbook paths share one gate; this only decides the
-// graph's shape (drop the step) and progress label.
 func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) []ApplyTask {
 	tasks := make([]ApplyTask, 0, len(steps))
 	prev := ""
@@ -121,8 +64,6 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		resourceKeys := destroyStepClusters(state, step.kind)
 		if step.kind == DestroyTaskKindStorageCluster && storageWorkNames != nil {
 			if len(storageWorkNames) == 0 {
-				// Selection names no storage cluster (e.g. a container-only scope):
-				// tear down none, so emit no storage teardown step at all.
 				continue
 			}
 			resourceKeys = append([]string(nil), storageWorkNames...)
@@ -150,9 +91,6 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 	return tasks
 }
 
-// destroyStepClusters lists the clusters a cluster-stage teardown step covers,
-// so the ledger entry (and the progress frame/summary built from it) can name
-// them. The host-group infra steps are not per-cluster, so they carry none.
 func destroyStepClusters(state v1alpha1.State, kind string) []string {
 	var names []string
 	switch kind {
@@ -171,9 +109,6 @@ func destroyStepClusters(state v1alpha1.State, kind string) []string {
 	return names
 }
 
-// PrepareDestroyTaskGraph mints the destroy run ID and resolves concurrency
-// limits. Unlike apply it does no install-state reconcile: destroy has no
-// per-cluster install state to advance.
 func PrepareDestroyTaskGraph(runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {
 	startedAt := time.Now()
 	if strings.TrimSpace(opts.ClustersDir) == "" {

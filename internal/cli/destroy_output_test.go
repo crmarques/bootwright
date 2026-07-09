@@ -45,8 +45,6 @@ func TestDestroyOrphanHintScopedToSweepCoverage(t *testing.T) {
 			t.Fatalf("missing orphan %q:\n%s", line, out)
 		}
 	}
-	// The sweep does not cover kubevirt/storage records, so their hint must not
-	// over-promise an automatic reclaim.
 	if strings.Count(out, "does not reclaim this record") != 2 {
 		t.Fatalf("kubevirt and storage orphans should each get the not-reclaimed hint:\n%s", out)
 	}
@@ -59,7 +57,6 @@ func TestDestroyOutputNamesCoveredClusters(t *testing.T) {
 		{ID: "destroy.container-clusters", Kind: workflow.DestroyTaskKindContainerCluster, Label: "Container clusters", ResourceKeys: []string{"dc1-metal-ocp", "dc1-child-ocp"}, Status: workflow.TaskStatusFailed, Dependencies: []string{"destroy.storage-clusters"}, Failure: "failure: agent removal failed"},
 	}, now)
 
-	// The frame names the clusters each step covers, even on the failed step.
 	frame := destroyRunFrame(ledger)
 	if got := frame.Groups[0].Steps[1].Detail; !strings.Contains(got, "dc1-metal-ocp, dc1-child-ocp") {
 		t.Fatalf("failed step detail = %q, want covered cluster names", got)

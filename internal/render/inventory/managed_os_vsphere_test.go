@@ -8,10 +8,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// TestManagedOSInstallVarsFromCephVSphereFixture pins the managed-OS shape
-// for vCenter-managed machines: the machine task runs on the controller,
-// the install ISO stages under the controller-local provider-state vmedia
-// path, and the vsphere media/boot roles get their component contract.
 func TestManagedOSInstallVarsFromCephVSphereFixture(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "008-ceph-3nodes-vsphere-managed-os")})
 	if err != nil {

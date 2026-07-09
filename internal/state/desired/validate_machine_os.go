@@ -97,13 +97,6 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateMachineInstallOSFloor rejects an install profile whose OS is below the
-// grammar floor the Anaconda kickstart template targets. The template unconditionally
-// emits RHEL-9+ pykickstart grammar (rootpw --allow-ssh, %packages --exclude-weakdeps
-// and --inst-langs, the rhsm command), all absent from RHEL 8 and non-RHEL Anaconda,
-// so an older or other family validates and renders but aborts with a kickstart parse
-// error only at the install console, followed by the SSH-wait timeout. Empty
-// family/version are reported separately; this fires only once both are present.
 func validateMachineInstallOSFloor(prefix string, os v1alpha1.MachineInstallOS) []string {
 	if os.Family == "" || os.Version == "" {
 		return nil
@@ -117,9 +110,6 @@ func validateMachineInstallOSFloor(prefix string, os v1alpha1.MachineInstallOS) 
 	return nil
 }
 
-// leadingVersionMajor parses the leading integer of a dotted version string. It
-// returns 0 when the leading component is not a plain number so an unparseable
-// version is left to the non-empty check rather than being rejected here.
 func leadingVersionMajor(version string) int {
 	head, _, _ := strings.Cut(version, ".")
 	if head == "" {
@@ -135,11 +125,6 @@ func leadingVersionMajor(version string) int {
 	return n
 }
 
-// validateMachineInstallLocalization rejects whitespace in any localization
-// field. Each renders as a bare token on a kickstart lang/keyboard/timezone
-// line, an --inst-langs entry, or an LC_* assignment in %post, so an embedded
-// space would inject a stray argument or corrupt the directive rather than fail
-// loudly at install.
 func validateMachineInstallLocalization(prefix string, loc v1alpha1.MachineInstallLocalization) []string {
 	var errs []string
 	for _, field := range []struct{ name, value string }{
@@ -228,10 +213,6 @@ func validateMachineInstallStringList(prefix string, values []string) []string {
 		if strings.TrimSpace(value) != value {
 			errs = append(errs, fmt.Sprintf("%s[%d] %q must not contain leading or trailing whitespace", prefix, i, value))
 		} else if strings.ContainsAny(value, " \t") {
-			// Each value renders as a single token on a kickstart line (a %packages
-			// spec, a services --disabled= entry); internal whitespace injects a stray
-			// positional argument or an invalid package spec that only fails at the
-			// install console.
 			errs = append(errs, fmt.Sprintf("%s[%d] %q must not contain internal whitespace", prefix, i, value))
 		}
 		if seen[value] {
@@ -251,9 +232,6 @@ func machineInstallStringListContains(values []string, want string) bool {
 	return false
 }
 
-// validateMachineInstallPackageSource checks the packageSource union. nil means
-// bootMedia is a full DVD (packages install offline via cdrom). Otherwise
-// exactly one arm must be set and internally valid; the arm is the source type.
 func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.MachineInstallPackageSource) []string {
 	if ps == nil {
 		return nil
@@ -272,8 +250,6 @@ func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.
 		errs = append(errs, prefix+".packageSource must set exactly one of: mirror, redhatCDN, hostedTree")
 	}
 	if m := ps.Mirror; m != nil {
-		// baseURL is the primary install tree (the kickstart `url --url=`);
-		// repositories are strictly additional (e.g. AppStream).
 		if m.BaseURL == "" {
 			errs = append(errs, prefix+".packageSource.mirror.baseURL is required")
 		} else if !httpURL(m.BaseURL) {
@@ -285,8 +261,6 @@ func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.
 		errs = append(errs, prefix+".packageSource.redhatCDN.entitlementRef is required")
 	}
 	if t := ps.HostedTree; t != nil {
-		// bootwright extracts the DVD and derives the tree URL from the cluster
-		// artifact server, so the DVD must be verifiable local media.
 		switch {
 		case t.FromMedia == "":
 			errs = append(errs, prefix+".packageSource.hostedTree.fromMedia is required")
@@ -312,8 +286,6 @@ func validateMachineInstallRepositories(prefix string, repos []v1alpha1.MachineI
 		if repo.ID == "" {
 			errs = append(errs, owner+".id is required")
 		} else if strings.ContainsAny(repo.ID, " \t\"'") {
-			// The id renders as `repo --name="{{ repo.id }}"`; whitespace or a quote
-			// breaks the quoting and produces an invalid Anaconda repo line.
 			errs = append(errs, fmt.Sprintf("%s.id %q must not contain whitespace or quotes", owner, repo.ID))
 		}
 		if repo.BaseURL == "" {

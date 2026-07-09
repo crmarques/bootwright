@@ -11,12 +11,6 @@ import (
 )
 
 func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) error {
-	// Standalone preflight/check has no planned task graph; an unscoped run
-	// passes nil scopes and checks every managed-trust machine and every
-	// declared object's secrets. A --clusters-scoped preflight passes the
-	// selection's work objects so it mirrors the scoped apply: it does not fail
-	// closed on trust/secrets for out-of-scope hosts and render-reference
-	// objects it will never act on.
 	return runApplyHostCheck(stdout, stderr, state, selected, contextName, secretsDir, clustersDir, hostTrustScope, secretScope)
 }
 

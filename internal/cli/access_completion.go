@@ -6,9 +6,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// registerMachineNameCompletion offers declared Machine names as completions for
-// a command's --name flag (machine rsh/exec). It loads state without escalating;
-// on any error it returns no completions rather than failing.
 func registerMachineNameCompletion(cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc("name", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		state, err := loadDesiredStateLocalOnly(addCommonFlags())
@@ -23,8 +20,6 @@ func registerMachineNameCompletion(cmd *cobra.Command) {
 	})
 }
 
-// registerAccessClusterNameCompletion offers container and storage cluster names
-// as completions for a command's --name flag (cluster info/rsh/exec).
 func registerAccessClusterNameCompletion(cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc("name", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		state, err := loadDesiredStateLocalOnly(addCommonFlags())
@@ -42,9 +37,6 @@ func registerAccessClusterNameCompletion(cmd *cobra.Command) {
 	})
 }
 
-// registerClusterNodeCompletion offers the nodes of the cluster named by the
-// already-typed --name flag as completions for --node, one entry per node's
-// backing Machine name (the always-valid selector).
 func registerClusterNodeCompletion(cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc("node", func(c *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		clusterName := c.Flags().Lookup("name").Value.String()

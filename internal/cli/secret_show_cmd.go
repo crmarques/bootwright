@@ -76,11 +76,6 @@ func localSecretPartRole(part string) (secret.MaterialRole, error) {
 	}
 }
 
-// secretShowParts lists the material parts `secret show` can print, in the order
-// they are offered to the user. A failed or part-ambiguous lookup uses it to
-// report which parts a secret actually provides: SSH key pairs expose
-// private/public, certificates expose primary/tls-key, and plain context
-// secrets expose primary.
 var secretShowParts = []struct {
 	part string
 	role secret.MaterialRole
@@ -91,8 +86,6 @@ var secretShowParts = []struct {
 	{"tls-key", secret.MaterialTLSKey},
 }
 
-// presentSecretParts reports the parts of name that hold readable encrypted
-// material, skipping the named excluded part.
 func presentSecretParts(store *secret.ContextStore, name, exclude string) []string {
 	var parts []string
 	for _, p := range secretShowParts {
@@ -107,11 +100,6 @@ func presentSecretParts(store *secret.ContextStore, name, exclude string) []stri
 	return parts
 }
 
-// secretShowUnavailable explains why the requested part could not be printed and
-// points at the parts that are present (or at sudo when the store is root-owned),
-// instead of a bare "not found". A keypair shown without --part lands here
-// because it has no primary material, and the message names its private/public
-// parts; a root-owned store read without sudo surfaces the ownership reason.
 func secretShowUnavailable(store *secret.ContextStore, name, part, secretsDir string, status secret.MaterialStatus, partSpecified bool) error {
 	present := presentSecretParts(store, name, part)
 	var b strings.Builder
@@ -123,10 +111,6 @@ func secretShowUnavailable(store *secret.ContextStore, name, part, secretsDir st
 	default:
 		b.WriteString(fmt.Sprintf("secret %q not found in %s", name, secretsDir))
 	}
-	// Surface the underlying reason only when it is genuinely diagnostic: an
-	// unsafe path (wrong owner/mode) or a state with no present parts. When
-	// other parts are present, the requested part's status is just the
-	// primary/private file-collision artifact and would mislead.
 	if status.Message != "" && (status.State == secret.MaterialStateUnsafe || len(present) == 0) {
 		b.WriteString(fmt.Sprintf("\n%s: %s", status.State, status.Message))
 	}
@@ -139,9 +123,6 @@ func secretShowUnavailable(store *secret.ContextStore, name, part, secretsDir st
 	return errors.New(b.String())
 }
 
-// noteOtherSecretParts tells a user who did not select a --part that the secret
-// exposes more than the one just printed (e.g. a certificate's tls-key beside
-// its primary), writing to stderr so the material on stdout stays clean.
 func noteOtherSecretParts(stderr io.Writer, store *secret.ContextStore, name, shown string) {
 	other := presentSecretParts(store, name, shown)
 	if len(other) == 0 {

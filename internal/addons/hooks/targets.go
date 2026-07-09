@@ -5,8 +5,6 @@ import (
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 )
 
-// Supported refKinds a fromInput target may dereference, and the machine/cluster
-// group each maps to. StorageExport resolves through its storageClusterRef.
 const (
 	RefKindStorageExport    = v1alpha1.KindStorageExport
 	RefKindStorageCluster   = v1alpha1.KindStorageCluster
@@ -14,16 +12,10 @@ const (
 	RefKindMachine          = v1alpha1.KindMachine
 )
 
-// SupportedTargetRefKinds lists the refKinds a fromInput target may dereference.
 func SupportedTargetRefKinds() []string {
 	return []string{RefKindStorageExport, RefKindStorageCluster, RefKindContainerCluster, RefKindMachine}
 }
 
-// TargetClusters returns the container-cluster and storage-cluster names a
-// hook's target resolves to, for plan-time dependency wiring. It is a pure state
-// walk (no secrets), so the planner can add the storage.<ceph> / wait.<ocp>
-// edges a cross-cluster hook needs. inputs are the binding's resolved inputs for
-// this add-on (used to dereference a fromInput target).
 func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundCluster string, hook v1alpha1.ClusterAddonHook, inputs []v1alpha1.ClusterAddonBindingInput) (containers []string, storage []string) {
 	c := newClusterSet()
 	s := newClusterSet()
@@ -46,8 +38,6 @@ func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundClus
 	return c.list(), s.list()
 }
 
-// resolveInputRef finds the (refKind, name) a fromInput target points at: the
-// accepted input's property refKind and the binding-supplied value for it.
 func resolveInputRef(addon v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook, inputs []v1alpha1.ClusterAddonBindingInput, from v1alpha1.ClusterAddonHookInputTarget) (refKind, name string, ok bool) {
 	accepted, found := acceptedInput(addon, from.Input)
 	if !found {

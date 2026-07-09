@@ -43,11 +43,6 @@
   changed_when: false
 
 - name: Capture original VerifyCertificate state once per boot
-  # The pre-patch probe reflects the live value, which this same attempt then
-  # PATCHes to false. Recapturing on every retry would record the
-  # already-disabled value and make the role's always-block skip the restore,
-  # leaving BMC certificate verification permanently off after a fail-then-retry.
-  # Capture only on the first attempt; the value then stays stable across retries.
   ansible.builtin.set_fact:
     bootwright_redfish_vmedia_verify_certificate_supported: "{{ 'VerifyCertificate' in (bootwright_redfish_vmedia_pre_patch_probe.json | default({})) }}"
     bootwright_redfish_vmedia_verify_certificate_original: "{{ (bootwright_redfish_vmedia_pre_patch_probe.json | default({})).VerifyCertificate | default(false) | bool }}"
@@ -71,13 +66,6 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
 
-# The disable PATCH tolerates the codes a BMC that keeps VerifyCertificate
-# read-only returns (Huawei/xFusion iBMC 501s this PATCH; others 400/405), so the
-# boot still proceeds on the manager HttpsTransferCertVerification path. A 401/403
-# is different: the credentials authenticated but the account's BMC role lacks the
-# privilege this write needs. Swallowing it hid the refusal, so re-surface it.
-# Only the status, resource path, and response body (never url_password) are
-# interpolated, so the credential stays redacted.
 - name: Confirm the virtual-media certificate verification disable was not refused for lack of privilege
   ansible.builtin.assert:
     that:
@@ -110,17 +98,6 @@
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'standard-insert-media'
-
-# The standard InsertMedia action body stays canonical -- Image, Inserted, and
-# TransferProtocolType only (see .agents/knowledge/redfish-virtual-media.md).
-# VerifyCertificate is NOT sent as an action parameter: verification is disabled
-# out-of-band via the per-resource VerifyCertificate PATCH (above) and the manager
-# SecurityService HttpsTransferCertVerification PATCH. Huawei/xFusion iBMC exposes a
-# read-only VerifyCertificate property on the VirtualMedia resource yet 501s a PATCH
-# to it AND rejects an InsertMedia action carrying VerifyCertificate with HTTP 400,
-# so honoring bmc.virtualMedia.tls.verify=false by injecting it into the body broke
-# the very fetch it meant to permit. A restricted account that can disable neither
-# knob relies on the manager HttpsTransferCertVerification already being off.
 
 - name: Build Redfish VMM virtual media request body
   ansible.builtin.set_fact:

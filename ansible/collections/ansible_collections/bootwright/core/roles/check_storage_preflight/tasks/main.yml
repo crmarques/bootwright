@@ -76,15 +76,6 @@
     fail_msg: "Storage node {{ bootwright_host_name }} needs at least 10 GiB free for /var/lib/containers or /var/lib."
   when: bootwright_host_storage_nodes | length > 0
 
-# Mirror the apply-path device gate's ownership allowlist so preflight stops
-# false-failing a healthy Bootwright-owned cluster: after a successful apply the
-# OSD disks carry ceph-volume LVM, and this gate — the exact pre-apply check the
-# apply dry-run recommends — used to abort on that signature even though the very
-# next apply proceeds. Slurp the OSD-device ownership marker this host stamped;
-# trust its device list only when it is a Bootwright marker for one of this host's
-# declared storage nodes (a foreign or wrong-node marker is ignored, so we stay
-# fail-closed on genuinely foreign data). A machine is node-bound to one cluster,
-# so a marker whose node matches was written by that cluster.
 - name: Read Bootwright OSD device ownership marker for preflight
   ansible.builtin.slurp:
     src: /etc/bootwright/ceph-osd-devices.json
@@ -113,14 +104,9 @@
       - --no-act
       - --noheadings
       - "{{ item.1 }}"
-  # Run privileged to match the identical check in the apply path: an unprivileged
-  # wipefs on a block device returns EACCES (rc!=0), which would false-fail this
-  # safety-critical "OSD device is empty" gate for a non-root storage SSH user.
   become: true
   register: bootwright_preflight_storage_device
   changed_when: false
-  # Only a probe failure is fatal here; the empty-or-owned decision is the assert
-  # below, which distinguishes a missing device from a foreign-signed one.
   failed_when: false
   loop: "{{ bootwright_host_storage_nodes | subelements('devices', skip_missing=True) }}"
   loop_control:

@@ -6,8 +6,6 @@ import (
 	secretstore "github.com/crmarques/bootwright/internal/secrets"
 )
 
-// fixtureRoot is the relative path from internal/render/installer to
-// the canonical good desired-state fixtures.
 const fixtureRoot = "../../state/desired/testdata/good"
 
 func writeEncryptedContextSecret(t *testing.T, dir, name string, role secretstore.MaterialRole, data []byte) {

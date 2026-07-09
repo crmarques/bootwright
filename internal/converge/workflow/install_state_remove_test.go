@@ -7,11 +7,6 @@ import (
 	"time"
 )
 
-// Destroy must clear the controller-side install record, connection record, and
-// kubeconfig so a torn-down container cluster reclassifies as missing and the next
-// apply rebuilds it instead of refusing at the install-state reconcile (surviving
-// kubeconfig / installed record). The ansible cluster destroy runs on the OCP nodes
-// and cannot remove these controller-side files, so RemoveClusterInstallState owns it.
 func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 	clustersDir := t.TempDir()
 	cluster := "demo"
@@ -53,14 +48,11 @@ func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 		}
 	}
 
-	// Idempotent: removing an already-clean cluster is a no-op, not an error.
 	if err := RemoveClusterInstallState(clustersDir, cluster); err != nil {
 		t.Fatalf("removing absent state must be a no-op, got %v", err)
 	}
 }
 
-// ContainerInstallClusterNames yields the clusters whose install tasks are present, so
-// destroy knows which clusters' controller-side state to clear.
 func TestContainerInstallClusterNames(t *testing.T) {
 	tasks := []ApplyTask{
 		{Entry: TaskLedgerEntry{ID: "iso.a", Kind: ApplyTaskKindClusterISO, Cluster: "a"}},

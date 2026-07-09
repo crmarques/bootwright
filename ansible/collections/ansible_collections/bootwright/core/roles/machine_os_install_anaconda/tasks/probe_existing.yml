@@ -10,22 +10,11 @@
   failed_when: false
   changed_when: false
 
-# wait_for with failed_when:false always registers failed=False (the failure is
-# suppressed), so `.failed` is a dead signal — it cannot distinguish a reachable
-# host from a timed-out one. The module only sets `msg` on a failure path (e.g.
-# "Timeout when waiting..."), so absence of msg is the reliable "port is open"
-# predicate. Everything below keys reachability off this fact, not off `.failed`.
 - name: Resolve managed OS SSH reachability before install
   ansible.builtin.set_fact:
     bootwright_os_pre_ssh_reachable: "{{ (bootwright_os_pre_ssh_port.msg | default('')) | length == 0 }}"
   changed_when: false
 
-# Fail closed on the one combination that would otherwise wipe a host blind: the
-# SSH port is REACHABLE but no knownHostsPath is configured, so the ownership probe
-# below is skipped, readiness defaults to false, and the install proceeds to wipe an
-# occupied host that could be foreign or lost-record Bootwright production. A truly
-# greenfield host is unreachable (port closed) and never trips this, so intentional
-# fresh installs are unaffected; only a reachable-but-unverifiable host is refused.
 - name: Refuse to wipe a reachable managed OS with no host-key trust to verify it
   ansible.builtin.fail:
     msg: >-
@@ -108,10 +97,6 @@
   changed_when: false
   when: bootwright_managed_os_already_ready | bool
 
-# A Bootwright-owned marker is one written by bootwright (owner == bootwright),
-# regardless of whether its hash still matches desired. Ownership is a stronger,
-# separate predicate than match: --override may rebuild an OWNED host whose hash
-# drifted, but must NEVER adopt or wipe a host Bootwright does not own.
 - name: Resolve managed OS Bootwright ownership before install
   ansible.builtin.set_fact:
     bootwright_os_pre_marker_owned: >-
@@ -135,9 +120,6 @@
   changed_when: false
   when: bootwright_managed_os_already_ready | bool
 
-# A reachable host that does NOT carry a Bootwright-owned marker is foreign (or was
-# manually prepared): never adopt, reinstall, or wipe it — fail closed even under
-# --override, which does not bypass foreign ownership.
 - name: Refuse foreign or unmarked reachable managed OS
   ansible.builtin.fail:
     msg: >-
@@ -149,9 +131,6 @@
     - bootwright_managed_os_already_ready | bool
     - not (bootwright_os_pre_marker_owned | default(false) | bool)
 
-# A reachable Bootwright-owned host whose marker no longer matches the desired hash
-# has drifted. The default reconcile fails closed; --override authorizes the
-# data-destroying rebuild of an owned host.
 - name: Refuse drifted Bootwright-owned managed OS without override
   ansible.builtin.fail:
     msg: >-
@@ -164,11 +143,6 @@
     - not (bootwright_os_pre_marker_matches | default(false) | bool)
     - (bootwright_apply_mode | default('continue')) != 'override'
 
-# Stamp the marker/ownership only for a host Bootwright legitimately owns: one it
-# freshly installs this run (was not already reachable) or one it already owns
-# (matching, or override-rebuilt). A foreign host fails closed above and never
-# reaches the stamp; gate it so a future reordering cannot launder a foreign host
-# into an owned one.
 - name: Resolve whether managed OS may be stamped as Bootwright-owned
   ansible.builtin.set_fact:
     bootwright_managed_os_stamp_owned: >-
@@ -178,13 +152,6 @@
       }}
   changed_when: false
 
-# A reachable, Bootwright-owned host whose marker drifted is refused by default
-# (fail above) and authorized for a destructive rebuild under --override. The
-# refusal only *suppresses the fail*; this fact drives the actual reinstall so an
-# override-rebuild is carried out instead of the host being silently skipped as
-# "already ready" (which also re-stamped its marker to the new desired hash
-# without the OS ever changing). Mirror-image of the refuse-drifted predicate:
-# owned+drifted+reachable is EITHER refused (no override) OR rebuilt (override).
 - name: Resolve whether an owned drifted managed OS must be override-rebuilt
   ansible.builtin.set_fact:
     bootwright_managed_os_force_rebuild: >-
@@ -196,11 +163,6 @@
       }}
   changed_when: false
 
-# The install runs when the node was not reachable/authenticated before this run
-# (fresh, wiped, or lost node) OR when --override forces a rebuild of an owned host
-# that drifted. A reachable owned host already matching desired is left untouched.
-# Every downstream "did this run (re)install?" gate keys off this, not off
-# not-already-ready, so a forced rebuild is treated exactly like a fresh install.
 - name: Resolve whether managed OS install must run
   ansible.builtin.set_fact:
     bootwright_managed_os_install_required: >-

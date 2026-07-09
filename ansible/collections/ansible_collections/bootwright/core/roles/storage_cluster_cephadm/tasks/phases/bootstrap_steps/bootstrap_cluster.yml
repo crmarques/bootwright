@@ -1,16 +1,4 @@
 ---
-# --allow-fqdn-hostname is unconditional, matching IBM's recommended bootstrap
-# command (--ssh-user --mon-ip --allow-fqdn-hostname --registry-json). cephadm
-# bootstrap refuses a seed whose hostname is an FQDN unless this is set, and
-# RHEL/IBM storage nodes routinely use FQDN hostnames; the flag only relaxes
-# that check, so it is a no-op for short hostnames and a foot-gun removed for
-# FQDN ones. The host spec hostnames must still equal each node's real hostname.
-# --dashboard-password-noupdate is also unconditional: bootwright captures the
-# generated dashboard password install-only (secrets/dashboard-password), so the
-# forced first-login rotation would immediately stale that captured secret and
-# break the documented recover-from-secrets workflow.
-# --single-host-defaults is conditional on a one-host topology so a single-node
-# lab cluster reaches active+clean (multi-host CRUSH defaults never would).
 - name: Resolve cephadm bootstrap command
   ansible.builtin.set_fact:
     bootwright_ceph_bootstrap_argv: >-
@@ -76,14 +64,5 @@
     argv: "{{ bootwright_ceph_bootstrap_argv }}"
   register: bootwright_ceph_bootstrap
   changed_when: true
-  # cephadm prints the one-time dashboard admin password to stdout for EVERY
-  # provider (not just registry-authed ones), and that stdout is shown on
-  # failure and under -v. Always redact, regardless of registry credentials.
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  # cephadm bootstrap is a one-time, non-idempotent operation that refuses to
-  # run when /etc/ceph/ceph.conf already exists. Gate purely on that file, the
-  # same marker cephadm itself checks: an already-bootstrapped node must never
-  # be re-bootstrapped (a transiently unreachable cluster cannot be repaired by
-  # re-running bootstrap). A stale conf from a prior cluster is cleared by the
-  # destroy flow, which owns /etc/ceph, before a fresh apply re-bootstraps.
   when: bootwright_ceph_conf_check.rc != 0

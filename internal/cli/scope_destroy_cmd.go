@@ -80,9 +80,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
 		}
-		// Skipping a down node yields a partial teardown (its OSD devices are not
-		// wiped, local Ceph state remains), so gate it behind the same --override
-		// that authorizes other unsafe Bootwright-owned destroy operations.
 		if skipUnreachable && !override {
 			return failErr(2, errors.New("--skip-unreachable requires --override"))
 		}
@@ -90,16 +87,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		runCommandLabel := commandLabel
 		if options.stageSelector {
 			if strings.TrimSpace(stage) == "" && strings.TrimSpace(flags.clusterScope) != "" {
-				// --clusters names ContainerCluster/StorageCluster objects, which
-				// only the clusters stage tears down. Infer it so `destroy
-				// --clusters <names>` works without repeating `--stage clusters`.
-				// The infra-scoped uses of --clusters (the artifact-server literal,
-				// scoping the infra sweep) still require an explicit --stage infra.
 				stage = "clusters"
 			}
 			var err error
-			// An omitted --stage resolves to the whole-context full destroy
-			// (AllScope): tear the clusters down, then the infra they ran on.
 			runScope, err = converge.DestroyStageScope(stage)
 			if err != nil {
 				return failErr(2, err)
@@ -120,12 +110,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, err)
 		}
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
-		// Resolve the cluster selection once: the render set destroy plans over,
-		// the directly-named storage roots it actually tears down (so a
-		// render-reference StorageCluster pulled in by a selected container
-		// cluster's data-foundation attachment is not destroyed), and the resolved
-		// roots the executor cleanup gate consumes. The artifact-server literal is
-		// not a cluster name, so it bypasses Selection.
 		var sel clusteraccess.Selection
 		if !artifactServerOnly {
 			sel, err = clusteraccess.Resolve(state, runScope.Name, flags.clusterScope)
@@ -133,10 +117,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 		}
-		// For scoped infra destroy, refuse to proceed when selected clusters
-		// share a provider service component with unscoped clusters: the
-		// renderer keys container names and state dirs per (provider, name), so
-		// destroying a shared instance breaks the unscoped consumers silently.
 		if runScope.Name == "infra" && sel.Active {
 			if conflicts := stategraph.SharedDestroyConflicts(state, sel.ContainerRoots); len(conflicts) > 0 {
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
@@ -150,13 +130,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
-		// A self-contained shared bastion service (artifact server, registry, proxy)
-		// is one physical container that several contexts reference. Before this
-		// context's teardown removes one, scan the other contexts' ownership stores:
-		// if any still references it, RELEASE it (drop only this context's record)
-		// instead of tearing down a container another context still uses. Only the
-		// scopes that actually tear down infra-components run the scan; a clusters
-		// destroy never touches them. A scan failure fails closed unless --override.
 		tearsDownInfraComponents := artifactServerOnly || runScope.Name == "infra" || fullDestroy
 		var releaseDecision converge.ReleaseDecision
 		if tearsDownInfraComponents {
@@ -164,9 +137,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if releaseErr != nil && !override {
 				return failErr(1, fmt.Errorf("cannot verify whether shared services are still referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", releaseErr))
 			}
-			// Owner-refuse-while-referenced: this context owns a shared base that
-			// sibling contexts still reference. Tearing it down would break them, so
-			// fail closed unless --override.
 			if err := converge.ReferencedOwnerError(decision.Blocks); err != nil && !override {
 				return failErr(1, err)
 			}
@@ -183,19 +153,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if err != nil {
 				return failErr(1, err)
 			}
-			// Gate storage teardown to the directly-selected storage roots. State
-			// stays render-inclusive (so a container cluster's data-foundation
-			// attachment still renders), but the work set decides what is actually
-			// torn down — the destroy mirror of apply's applyTarget.StorageClusterNames.
 			plan.StorageWorkNames = sel.StorageWorkNames()
 		}
-		// Compose the teardown-scoping executor gate variables in converge (the
-		// service that runs the plan) rather than as raw literals here. Cluster
-		// name resolution stays a CLI concern: resolve the selected roots and
-		// pass them in. Ownership records are loaded context-wide so an unscoped
-		// destroy can remove orphans, but a scoped destroy must not tear down a
-		// co-located cluster's VMs/disks on a shared hypervisor; the resolved set
-		// gates that cleanup.
 		infraScope := !artifactServerOnly && (runScope.Name == "infra" || fullDestroy)
 		var resolvedClusterRoots []string
 		if infraScope && sel.Active {
@@ -203,21 +162,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
 		converge.ApplyInfraComponentReleaseExtraVar(&plan, releaseDecision.Names())
-		// Stamp the verbose-output gate after the destroy-scoping extra-vars so
-		// it flows to both the --dry-run command preview and the real run.
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
-		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
-		// below). No Ansible destroy role consumes a destroy-override extra-var, so
-		// emitting one would be inert plumbing that reads like an executor-level
-		// gate; the authorization decision stays here.
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
 			if fullDestroy {
-				// Full destroy has no single playbook; report the ordered task
-				// chain the teardown would run instead of a single ansible command.
 				tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 				if terr != nil {
 					return failErr(1, terr)
@@ -250,10 +201,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		if !dryRun && !plan.NoRemoteWork {
-			// Record the exact input set this mutating destroy was launched
-			// from. Destroy has no per-run history directory (workflow.Run
-			// mints its run ID internally), so the snapshot is a rolling
-			// last-destroy-input directory under the context runs dir.
 			if err := converge.SnapshotMutatingRunInput(workflow.LastDestroyInputSnapshotDir(ctx.RunsDir), ctx); err != nil {
 				return failErr(1, err)
 			}
@@ -273,11 +220,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleReady(bundle)
 		}
-		// Normal infra/clusters teardown runs as an apply-style task graph so it
-		// shows granular per-step progress and routes ansible to per-task logs.
-		// Dry-run, no-remote-work, and the narrow artifact-server destroy keep
-		// the single-playbook path; full destroy has no single playbook, so its
-		// dry-run previews the ordered task chain instead.
 		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
 		var renderResult render.Result
 		switch {
@@ -296,13 +238,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
-			// A --skip-unreachable teardown that skipped powered-off nodes leaves
-			// those clusters only partially destroyed. The storage-destroy step
-			// writes its result file when it completes, which can be BEFORE a later
-			// independent task fails the run, so record and warn about the partial
-			// teardown regardless of overall outcome — otherwise a completed partial
-			// wipe silently loses its ownership re-stamp and operator warning to an
-			// unrelated later failure.
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
@@ -311,10 +246,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				}
 				return failErr(1, gerr)
 			}
-			// Resolve the partial set BEFORE resetting convergence records so the
-			// reset keeps a partially-destroyed cluster's records intact — otherwise
-			// a later apply --expect-new would re-bootstrap atop its residual Ceph
-			// state instead of failing closed.
 			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, partial)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
@@ -324,8 +255,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly {
-				// The single-playbook path is the artifact-server / no-remote-work
-				// teardown, which never produces a partial storage destroy.
 				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, nil)
 			}
 			if !dryRun && !plan.NoRemoteWork {
@@ -341,9 +270,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	return cmd
 }
 
-// printPartialStorageDestroyWarning surfaces storage clusters left partially
-// destroyed because --skip-unreachable skipped powered-off nodes, so the operator
-// knows the teardown is incomplete and must be finished before reusing hardware.
 func printPartialStorageDestroyWarning(stdout io.Writer, partial []string, err error) {
 	if len(partial) > 0 {
 		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(

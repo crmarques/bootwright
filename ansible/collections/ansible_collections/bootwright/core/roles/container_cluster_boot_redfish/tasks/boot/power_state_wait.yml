@@ -1,18 +1,4 @@
 ---
-# Tail-recursive wrapper for the Redfish PowerState poll. power_override.yml
-# seeds bootwright_redfish_power_state_attempt to 1 and includes this file once
-# per wait (Off, then On). Each probe is power_state_probe.yml -- a censored uri
-# GET plus a sanitized capture, the reached-flag resolve, a per-attempt debug
-# report, and the inter-attempt sleep -- left byte-identical. Recursing re-checks
-# the reached fact only after a probe completes, so a wait that settles in one or
-# two probes never enqueues (and prints as skipped) the remaining iterations the
-# old range() loop pushed up front.
-#
-# Attempt accounting mirrors the previous range(1, retries + 1) loop: attempt
-# starts at 1, advances after a probe that has not reached the expected state,
-# and recursion stops once the advanced attempt exceeds power_state_retries --
-# exactly power_state_retries total probes, with a sleep only between them (the
-# probe's own attempt < retries guard drops the trailing sleep).
 - name: Run Redfish power state probe
   ansible.builtin.include_tasks: power_state_probe.yml
 

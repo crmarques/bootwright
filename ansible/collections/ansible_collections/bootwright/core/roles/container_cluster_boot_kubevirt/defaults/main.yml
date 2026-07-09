@@ -2,7 +2,4 @@
 bootwright_kubevirt_boot_iso_timeout: 1800
 bootwright_kubevirt_boot_vmi_timeout: 600
 bootwright_kubevirt_virtctl_insecure_upload: false
-# Size of the per-VM agent-ISO DataVolume. The default fits a typical agent ISO
-# (~1-1.5GiB) with headroom; override for a larger release payload so the upload
-# does not fail on an ISO above this size.
 bootwright_kubevirt_agent_iso_size: 4Gi

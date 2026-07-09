@@ -11,16 +11,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// Vars produces the per-cluster Ansible variables consumed by the
-// layers under ansible/playbooks/. The contract is documented in
-// ADR-0002: each machine component carries diagnostic dispatch labels
-// plus exact rendered role names; machine services carry their own
-// apply/destroy role names.
-//
-// Vars is the public entry point; the implementation is split across
-// vars_provider.go, vars_networks.go, vars_components.go, and
-// vars_dispatch.go so each concern stays under the size lint and
-// editing one shape (e.g. networking) doesn't touch the rest.
 func Vars(state v1alpha1.State) map[string]any {
 	return VarsWithSecretsDir(state, "")
 }
@@ -62,9 +52,6 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)
 		}
-		// FIPS clusters render fips: true into install-config; the agent
-		// install role reads this to pick openshift-install-fips over the
-		// stock binary, which refuses to build a FIPS-mode agent ISO.
 		if ocp.Spec.Security.FIPS.Enabled {
 			entry["fips"] = true
 		}
@@ -106,10 +93,6 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 	return out
 }
 
-// componentPinsVars projects the lock's component pins into the
-// Ansible vars shape for operator-visible diagnostics. Runtime roles
-// consume renderer-projected image/tool fields on their components.
-// Same data as render.Lock(); kept in sync via ComponentPins().
 func componentPinsVars(state v1alpha1.State) []any {
 	pins := ComponentPins(state)
 	out := make([]any, 0, len(pins))
@@ -135,9 +118,6 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	if len(env.Spec.ContainerClusters) > 0 {
 		out["containerClusters"] = stringSliceAny(env.Spec.ContainerClusters)
 	}
-	// Echo the resolved (post-default, post-opt-out) proxy each consumer routes
-	// through, not the raw authored slot: an omitted-but-inherited consumer shows
-	// the default proxy's name, and a "none" opt-out shows nothing.
 	proxyFor := map[string]any{}
 	for _, consumer := range []string{
 		v1alpha1.ProxyConsumerBootwright,
@@ -264,13 +244,9 @@ func effectiveProxyVars(eff *proxy.Effective) map[string]any {
 		out["https"] = eff.HTTPS
 	}
 	if len(eff.NoProxy) > 0 {
-		// Stable order so downstream tests can diff.
 		sorted := append([]string(nil), eff.NoProxy...)
 		sort.SliceStable(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
 		out["noProxy"] = sorted
-		// noProxyLiteral drops raw CIDR entries that python-rhsm's proxy bypass
-		// cannot match; rhsm.conf's [server] no_proxy is fed from this. CIDR-covered
-		// internal hosts already survive as pinned literals (see ResolveNoProxy).
 		if literal := proxy.NoProxyForLiteralMatchers(eff); len(literal) > 0 {
 			sortedLiteral := append([]string(nil), literal...)
 			sort.SliceStable(sortedLiteral, func(i, j int) bool { return sortedLiteral[i] < sortedLiteral[j] })

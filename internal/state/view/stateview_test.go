@@ -216,9 +216,6 @@ func TestStorageClusterArtifactInstallCarriesMachinesOnly(t *testing.T) {
 }
 
 func TestClusterNetworkConfigsOrdersIPv4First(t *testing.T) {
-	// The v6-only NetworkConfig sorts first by name ("a-v6" < "z-v4"), so a
-	// name-order sort would make the cluster IPv6-primary purely from object
-	// naming. The dual-stack ordering must place the IPv4 network first.
 	state := v1alpha1.State{
 		NetworkConfigs: []v1alpha1.NetworkConfig{
 			{

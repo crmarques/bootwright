@@ -46,9 +46,6 @@ func ScopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 	return state, nil
 }
 
-// unsupportedClusterScopeError is the single spelling of the "--clusters is not
-// supported for this target" error, shared by ScopeState and Selection.Resolve
-// so the message cannot drift between the filter and the selector.
 func unsupportedClusterScopeError(target string) error {
 	return fmt.Errorf("--clusters is not supported for %s", target)
 }
@@ -67,14 +64,6 @@ func ScopeStateForApply(state v1alpha1.State, target, scope string) (v1alpha1.St
 	return ScopeState(state, target, scope)
 }
 
-// isClusterRootScopeTarget reports whether a resolved apply/plan/state-check
-// scope name narrows its --clusters value to ContainerCluster/StorageCluster
-// roots. It covers the canonical families (infra/clusters/all) and sub-phases
-// (fabric/machines/deps/base) plus the synthetic "through-<phase>" prefix scopes
-// that converge.ApplyThroughScope mints for `--through fabric|deps|base` (the
-// other --through endpoints already resolve to the canonical infra/all scopes).
-// Every such scope is cluster-root-scopable; the single-cluster-type targets
-// (container-cluster/storage-cluster/addons) are handled by ScopeState directly.
 func isClusterRootScopeTarget(target string) bool {
 	switch target {
 	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
@@ -126,9 +115,6 @@ func ClusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []
 	return containerNames, storageNames, nil
 }
 
-// availableClusterNamesHint formats the declared cluster roots for an
-// unknown-cluster error so an operator can correct a typo from the message
-// alone, mirroring the actionable style of the shared-service conflict errors.
 func availableClusterNamesHint(names []string) string {
 	if len(names) == 0 {
 		return "no ContainerCluster or StorageCluster roots are declared"
@@ -202,9 +188,6 @@ func ValidateClusterNames(state v1alpha1.State, names []string) error {
 	return fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
 }
 
-// ValidateAccessClusterName validates a --cluster value for the cluster access
-// surface. When storage is in scope the name may resolve to a ContainerCluster
-// or a StorageCluster; otherwise only container clusters are accepted.
 func ValidateAccessClusterName(state v1alpha1.State, name string, includeStorage bool) error {
 	if !includeStorage {
 		return ValidateClusterNames(state, []string{name})
@@ -226,18 +209,12 @@ func ValidateAccessClusterName(state v1alpha1.State, name string, includeStorage
 	return fmt.Errorf("unknown cluster(s): %s; %s", name, availableClusterNamesHint(available))
 }
 
-// FormatDestroyScopeConflicts builds an actionable error message that
-// lists every shared machine service and names the unscoped clusters
-// that would break if the destroy proceeded.
 func FormatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict, flagName string) error {
 	return formatScopeConflicts(conflicts,
 		flagName+" would destroy shared machine service(s) that other clusters still depend on:",
 		"re-run without "+flagName+" to destroy everything, or extend "+flagName+" to include the unscoped clusters")
 }
 
-// formatScopeConflicts renders the shared shared-machine-service conflict list
-// both the destroy and apply scope guards report; only the lead-in and closing
-// guidance differ by verb (destroy "would destroy" / apply "would narrow").
 func formatScopeConflicts(conflicts []stategraph.DestroyScopeConflict, lead, closing string) error {
 	var b strings.Builder
 	b.WriteString(lead + "\n")
@@ -266,14 +243,6 @@ func ValidateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 		return nil
 	}
 	conflicts := stategraph.SharedDestroyConflicts(state, selectedNames)
-	// Apply only needs to refuse the shared services a scoped provision would
-	// DEGRADE: those whose config is rendered from the in-state cluster/machine set
-	// (load balancer, name resolution, NTP). A self-contained shared service
-	// (artifact server, proxy, registry, emulated BMC) renders from the
-	// InfraComponent/provider spec, which scoping keeps in full, so a scoped apply
-	// re-provisions it identically and must not be blocked. The destroy path keeps
-	// refusing on the full structural conflict set — it tears down the shared
-	// instance regardless of how its config is derived.
 	degrading := make([]stategraph.DestroyScopeConflict, 0, len(conflicts))
 	for _, conflict := range conflicts {
 		if stategraph.SharedServiceDegradesUnderScope(conflict.Slot) {
@@ -286,12 +255,6 @@ func ValidateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 	return formatApplyScopeConflicts(degrading)
 }
 
-// scopeProvisionsSharedMachineLayer reports whether a resolved apply scope
-// (re)provisions the shared machine/fabric layer, so a --clusters narrowing must
-// be checked against shared-service consumers other clusters still depend on.
-// Cluster-workload-only scopes (clusters/deps/base/addons) do not. Every
-// synthetic "through-<phase>" prefix scope begins at fabric, so it always
-// provisions that layer and is treated like infra/fabric here.
 func scopeProvisionsSharedMachineLayer(target string) bool {
 	switch target {
 	case "infra", "all", "fabric", "machines":
@@ -306,11 +269,6 @@ func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) erro
 		"re-run without --clusters to apply every consumer, or extend --clusters to include the unscoped clusters")
 }
 
-// ApplyWorkObjects returns the Machine and StorageCluster names a scoped apply
-// acts on for the given selected cluster roots, excluding render-reference
-// pull-ins (a managed StorageCluster reached only through a container cluster's
-// data-foundation attachment, and its nodes). Readiness checks use it so those
-// render references do not require their own bootstrap secrets.
 func ApplyWorkObjects(state v1alpha1.State, containerNames, storageNames []string) (machines map[string]bool, storageClusters map[string]bool) {
 	return stategraph.ApplyWorkObjects(state, containerNames, storageNames)
 }
@@ -355,16 +313,6 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	return stategraph.FilterStateToStorageClusters(state, names)
 }
 
-// StorageRenderState resolves the StorageCluster --clusters scope (all clusters
-// when scope is empty) and narrows the state to a storage-only render set: the
-// selected StorageClusters plus the machines and providers backing them, with
-// ContainerClusters dropped so `render storage` never emits OpenShift installer
-// inputs. It gives `render storage` the same single-call scoping shape
-// `render installer` gets from Resolve, keeping the storage-only narrowing policy
-// in this package rather than mutating state fields in the CLI handler. It is
-// deliberately narrower than Resolve(state, "storage-cluster", scope): it does
-// not follow the data-foundation attachment edge, so a StorageCluster's OpenShift
-// consumers are never pulled into the render set.
 func StorageRenderState(state v1alpha1.State, scope string) (v1alpha1.State, error) {
 	names, err := StorageClusterNamesForTarget(state, scope)
 	if err != nil {

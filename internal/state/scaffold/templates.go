@@ -1,7 +1,5 @@
 package scaffold
 
-// ----- templates -----
-
 const environmentTmpl = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:

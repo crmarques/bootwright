@@ -38,9 +38,6 @@ func (r Resolver) ReadMaterial(name string, role MaterialRole) ([]byte, error) {
 	return r.Store.Read(MaterialKey{Name: name, Role: role})
 }
 
-// ReadMaterialWithPath resolves the on-disk path for a material and reads
-// it, returning the path alongside the trailing-newline-trimmed content so
-// callers can report where the material came from.
 func (r Resolver) ReadMaterialWithPath(name string, role MaterialRole, kind string) (string, string, error) {
 	path := ResolveMaterialPath(name, r.Index, r.SecretsDir, role)
 	if path == "" {

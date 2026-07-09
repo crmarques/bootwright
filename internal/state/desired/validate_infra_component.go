@@ -81,8 +81,6 @@ func validateArtifactServerTLS(prefix string, tls *v1alpha1.ArtifactServerTLS, l
 			prefix, tls.MinVersion,
 			v1alpha1.TLSVersion10, v1alpha1.TLSVersion11, v1alpha1.TLSVersion12, v1alpha1.TLSVersion13))
 	}
-	// ciphers renders verbatim into the nginx ssl_ciphers directive, so reject
-	// anything that could terminate the directive or open a new one.
 	if tls.Ciphers != "" && strings.ContainsAny(tls.Ciphers, ";{}\n\r") {
 		errs = append(errs, fmt.Sprintf("%s.tls.ciphers %q must not contain ';', '{', '}', or newlines", prefix, tls.Ciphers))
 	}

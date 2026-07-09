@@ -117,9 +117,6 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			"or clusters. Writing secret-inlined installer files with --output-dir requires\n" +
 			"--sensitive; --input-dir renders context-free with secrets as\n" +
 			"{{ secret <name> }} placeholders.",
-		// render takes either a subcommand target or --output-dir; reject an
-		// unknown positional without a ValidArgs slice, which would otherwise
-		// duplicate every target in shell completion.
 		Args: rejectUnknownSubcommandArgs,
 		Example: `  # Export concrete tool input files for external execution
   bootwright render --output-dir ./rendered --sensitive

@@ -102,9 +102,6 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInstall) (string, 
 	if port == 0 {
 		port = v1alpha1.DefaultSquidPort
 	}
-	// net.JoinHostPort brackets a bare IPv6 literal (fd00::1 -> [fd00::1]:3128);
-	// a plain %s:%d would emit an unbracketed authority that clients dialing the
-	// rendered httpProxy reject (net.SplitHostPort: too many colons).
 	return "http://" + net.JoinHostPort(hostAddr, strconv.Itoa(port)), nil
 }
 
@@ -219,13 +216,6 @@ func noProxyCIDRs(entries []string) []netip.Prefix {
 	return out
 }
 
-// noProxyTargets is the set of known internal endpoint addresses that a CIDR
-// no_proxy entry may cover. expandCIDRNoProxy keeps only the IP-parseable ones
-// and pins each that falls inside a declared CIDR as a concrete literal, so a
-// bypass implementation that cannot match a CIDR (python-rhsm, and the Ansible
-// uri module) still bypasses the host. It must span every internal service the
-// estate talks to — not just BMCs — or a Satellite/mirror/registry reachable
-// only through a no_proxy CIDR is silently proxied.
 func noProxyTargets(state v1alpha1.State) []string {
 	var out []string
 	for _, machine := range state.Machines {
@@ -284,12 +274,6 @@ func noProxyTargets(state v1alpha1.State) []string {
 	return out
 }
 
-// Bypasses reports whether host would be sent direct (not through the proxy)
-// under the effective no_proxy list. host may be a bare hostname, an IP literal,
-// or a URL / host:port authority — it is reduced to a host first. Matching:
-// "*" bypasses everything; a domain entry (".example.com" or "example.com")
-// matches the domain and its subdomains case-insensitively; a CIDR entry matches
-// when host is an IP inside the prefix. An empty no_proxy never bypasses.
 func Bypasses(eff *Effective, host string) bool {
 	if eff == nil {
 		return false
@@ -318,20 +302,11 @@ func matchNoProxyEntry(entry, host string, addr netip.Addr, isIP bool) bool {
 	if prefix, err := netip.ParsePrefix(entry); err == nil {
 		return isIP && prefix.Contains(addr)
 	}
-	// Domain / host entry: a leading-dot form (".example.com") and the bare form
-	// ("example.com") both match the domain itself and any subdomain.
 	suffix := strings.ToLower(strings.TrimPrefix(entry, "."))
 	lowered := strings.ToLower(host)
 	return lowered == suffix || strings.HasSuffix(lowered, "."+suffix)
 }
 
-// NoProxyForLiteralMatchers returns eff.NoProxy with raw CIDR entries dropped,
-// keeping domains, wildcards, and concrete host/IP literals. python-rhsm's proxy
-// bypass (and other suffix/host matchers) silently ignore a CIDR entry like
-// 10.0.0.0/8, so writing one into rhsm.conf's [server] no_proxy leaves hosts in
-// that range proxied. ResolveNoProxy already expands each CIDR to the concrete
-// internal IPs it covers (see noProxyTargets), so those survive here as literals
-// while the unmatchable CIDR string is removed.
 func NoProxyForLiteralMatchers(eff *Effective) []string {
 	if eff == nil {
 		return nil

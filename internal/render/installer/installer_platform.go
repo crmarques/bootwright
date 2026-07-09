@@ -37,10 +37,6 @@ func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInstal
 			out["nodeNetworking"] = VSphereNodeNetworkingConfig(ci.Platform.VSphere.NodeNetworking)
 		}
 		if userManaged {
-			// api/api-int/ingress come from an external load balancer (e.g. a
-			// bastion haproxy InfraComponent), so keep the vSphere integrated
-			// load balancer out of the VIPs the external one already owns —
-			// otherwise keepalived fights the external LB for the same address.
 			out["loadBalancer"] = map[string]any{"type": "UserManaged"}
 		}
 		return map[string]any{"vsphere": out}

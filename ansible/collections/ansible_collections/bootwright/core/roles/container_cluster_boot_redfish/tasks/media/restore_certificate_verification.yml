@@ -48,13 +48,6 @@
   when:
     - bootwright_redfish_vmedia_restore_if_match is defined
 
-# This file runs in the role's always-block, so a hard failure here could mask
-# the original boot error. Surface a prominent warning instead when the restore
-# actually ran (its If-Match gate was satisfied) but the BMC did not accept it,
-# so the operator knows VerifyCertificate may still be OFF and how to re-enable
-# it. No no_log: only the credential-free PATCH status and VirtualMedia resource
-# path are interpolated (never url_password), and a no_log debug would censor the
-# very warning this task exists to surface.
 - name: Warn if virtual media fetch certificate verification was not restored
   ansible.builtin.debug:
     msg: >-
@@ -118,9 +111,6 @@
   when:
     - bootwright_redfish_security_service_restore_if_match is defined
 
-# Same always-block reasoning as the VerifyCertificate restore warning above:
-# surface, don't fail, so the original error is preserved. Credential-free
-# interpolation only; no no_log so the warning is actually visible.
 - name: Warn if HTTPS transfer certificate verification was not restored
   ansible.builtin.debug:
     msg: >-

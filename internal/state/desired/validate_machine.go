@@ -52,12 +52,6 @@ func validateMachines(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateUniqueMachineInstallIPs fails closed when two different Machines resolve
-// their interfaceAddresses to the same static install IP. Install-IP uniqueness was
-// only ever checked within a single machine, so two nodes claiming one address
-// validated clean and rendered two agent hosts carrying the same static address;
-// both boot into an IP conflict and the install stalls with hard-to-diagnose
-// rendezvous failures. Mirrors validateUniqueMachineSSHAddresses.
 func validateUniqueMachineInstallIPs(state v1alpha1.State) []string {
 	byIP := map[string][]string{}
 	for _, machine := range state.Machines {
@@ -94,11 +88,6 @@ func validateUniqueMachineInstallIPs(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateUniqueMachineNICMACs fails closed when two different Machines declare the
-// same NIC MAC. MAC dedup was per-machine only, so a copy-pasted MAC on a second
-// machine validated clean and the agent-config shipped two hosts with one macAddress;
-// the agent installer matches hosts by MAC and rejects the config at ISO creation,
-// deep in apply, instead of at validate. Comparison is case-insensitive.
 func validateUniqueMachineNICMACs(state v1alpha1.State) []string {
 	byMAC := map[string][]string{}
 	for _, machine := range state.Machines {
@@ -178,11 +167,6 @@ func validateMachineOS(prefix string, machine v1alpha1.Machine, installProfiles 
 }
 
 func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
-	// bootwright installs the OS only when os.installProfileRef is set, and it
-	// reaches the freshly-installed node over SSH, so ssh is mandatory there. A
-	// provided-OS Machine may omit ssh to declare it is the local bastion
-	// bootwright runs on: it is rendered with ansible_connection: local and has
-	// no remote address to connect to (see locality.IsControllerLocalMachine).
 	if machine.Spec.OS.InstallProfileRef.Name != "" && machine.Spec.Access.SSH == nil {
 		return []string{prefix + ".ssh is required when os.installProfileRef is set"}
 	}
@@ -321,9 +305,6 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 	return errs
 }
 
-// validateBMCVirtualMediaTLS holds the invariants for the BMC → artifact-server
-// virtual-media TLS block, shared by the per-machine and provider-default
-// validators so they stay in lockstep.
 func validateBMCVirtualMediaTLS(prefix string, tls *v1alpha1.BMCVirtualMediaTLS) []string {
 	var errs []string
 	if tls.RemoveServerCertificateAfterBoot && !tls.ImportServerCertificate {
@@ -347,10 +328,6 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	if config.NetworkConfigRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
 		errs = append(errs, prefix+".config.attachmentRef is required when networkConfigRef is set on a provider-backed Machine")
 	}
-	// A defaulted attachmentRef rides the NetworkConfig name; that convention
-	// is only safe while the provider has exactly one attachment to bind.
-	// With several, a NetworkConfig rename could silently re-bind the machine
-	// to a different substrate network, so the choice must be authored.
 	if machine.DefaultedRefs.AttachmentRef {
 		if candidates := providerNetworkAttachmentNames(provider); len(candidates) > 1 {
 			errs = append(errs, fmt.Sprintf("%s.config.attachmentRef was defaulted from networkConfigRef %q, but InfraProvider/%s declares multiple networkAttachments {%s}; author attachmentRef to pick one",
@@ -420,10 +397,6 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 		} else if address, ok := addrByName[ia.AddressRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to spec.addresses[].name", owner, ia.AddressRef.Name))
 		} else if ip := net.ParseIP(strings.TrimSpace(address)); ip != nil {
-			// family defaults to ipv4 in the NMState writer, so a v6 literal with the
-			// family omitted lands in the ipv4 block and renders an invalid NMState
-			// document that fails at agent boot. Require the resolved literal's family
-			// to match the declared (or defaulted) family.
 			if wantIPv4 := ia.Family == "" || ia.Family == "ipv4"; (ip.To4() != nil) != wantIPv4 {
 				errs = append(errs, fmt.Sprintf("%s.addressRef %q resolves to %s, which is not an %s address; set family to match the literal", owner, ia.AddressRef.Name, strings.TrimSpace(address), interfaceAddressFamilyLabel(ia.Family)))
 			}
@@ -438,13 +411,6 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 	return errs
 }
 
-// validateInterfaceAddressesResolveInterface fails closed when an
-// interfaceAddresses[].interface names an interface the effective NetworkConfig
-// template does not declare. The install-IP inject creates an interface entry when
-// the name is absent, so a typo would silently mint a typeless phantom interface
-// carrying the install IP while the real interface stays address-less and the node
-// boots with no address on its machine network. templateInterfaces is nil when no
-// template is selectable (reported elsewhere), which disables the check.
 func validateInterfaceAddressesResolveInterface(prefix string, config v1alpha1.MachineNetworkConfig, templateInterfaces map[string]bool) []string {
 	if len(config.InterfaceAddresses) == 0 || templateInterfaces == nil {
 		return nil
@@ -459,8 +425,6 @@ func validateInterfaceAddressesResolveInterface(prefix string, config v1alpha1.M
 	return errs
 }
 
-// interfaceAddressFamilyLabel renders the effective family of an interfaceAddress:
-// an empty family defaults to ipv4 in the NMState writer.
 func interfaceAddressFamilyLabel(family string) string {
 	if family == "ipv6" {
 		return "ipv6"
@@ -468,12 +432,6 @@ func interfaceAddressFamilyLabel(family string) string {
 	return "ipv4"
 }
 
-// machineNetworkTemplateInterfaceNames returns the set of every interface name
-// declared by the effective NetworkConfig template a machine selects (ref +
-// overrides, or inline spec), BEFORE interfaceAddresses are injected. Passing it to
-// validateMachineInterfaceAddresses lets a typo'd interface be rejected instead of
-// silently minting a phantom interface via the inject. A nil result means no
-// template is selectable (reported elsewhere) and disables the resolution check.
 func machineNetworkTemplateInterfaceNames(config v1alpha1.MachineNetworkConfig, networks map[string]v1alpha1.NetworkConfig) map[string]bool {
 	var template map[string]any
 	switch {
@@ -502,11 +460,6 @@ func machineNetworkTemplateInterfaceNames(config v1alpha1.MachineNetworkConfig, 
 	return names
 }
 
-// macInVSphereManualRange reports whether a MAC falls inside the vCenter
-// manually-assigned range 00:50:56:00:00:00-00:50:56:3f:ff:ff. vCenter rejects a VM
-// create whose NIC carries a manual MAC outside it (generated MACs are masked into
-// this range in internal/render/installer/mac.go), so an authored out-of-range MAC on
-// a vSphere machine must fail at validate, not mid-apply behind a no_log module error.
 func macInVSphereManualRange(mac string) bool {
 	hw, err := net.ParseMAC(mac)
 	if err != nil || len(hw) != 6 {
@@ -515,10 +468,6 @@ func macInVSphereManualRange(mac string) bool {
 	return hw[0] == 0x00 && hw[1] == 0x50 && hw[2] == 0x56 && hw[3] <= 0x3f
 }
 
-// validateMachineInstallIPInNetwork checks that each interfaceAddresses-resolved
-// install IP falls inside a machineNetwork CIDR of the selected NetworkConfig, so
-// a renumbered node that lands off its machine network fails at validate instead
-// of stalling the agent boot with an unreachable address.
 func validateMachineInstallIPInNetwork(prefix string, machine v1alpha1.Machine, config v1alpha1.MachineNetworkConfig, networks map[string]v1alpha1.NetworkConfig) []string {
 	cidrs := selectedMachineNetworkCIDRs(config, networks)
 	if len(cidrs) == 0 {

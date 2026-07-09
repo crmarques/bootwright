@@ -74,9 +74,6 @@ func TestValidateClusterAddonCatalogSource(t *testing.T) {
 	}
 }
 
-// TestNormalizeDefaultsSubscriptionSourceToShippedCatalog pins the normalize
-// default: an add-on shipping a catalog subscribes to it unless it says
-// otherwise.
 func TestNormalizeDefaultsSubscriptionSourceToShippedCatalog(t *testing.T) {
 	addon := cataloguedOLMAddon()
 	addon.Spec.OLM.Subscription.Source = ""

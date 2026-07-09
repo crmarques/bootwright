@@ -9,10 +9,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// ntpHostname matches a DNS hostname suitable for additionalNTPSources:
-// one or more dot-separated labels of the canonical DNS-label form. We
-// also accept bare IPs (handled separately) since the assisted installer
-// treats either as valid.
 var ntpHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
 
 func validateEnvironmentInfraComponents(env v1alpha1.Environment, state v1alpha1.State) []string {
@@ -138,10 +134,6 @@ func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.proxyFor.%s %q does not match any spec.infraComponents.proxies[].name", env.Metadata.Name, field.name, field.value))
 		}
 	}
-	// machineOSInstall cannot use a managed proxy — the node installs before any
-	// bootwright-managed proxy exists. This rejects both an explicit managed name
-	// and inheriting a managed default; bootwright and containerClusterInstall run
-	// after infra provisioning and may use a managed proxy freely.
 	if resolved := env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall); resolved != "" && management[resolved] == v1alpha1.EnvironmentComponentManaged {
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.proxyFor.machineOSInstall resolves to managed proxy %q; it must name an external proxy or %q (a managed proxy does not exist during node install)", env.Metadata.Name, resolved, v1alpha1.EnvironmentComponentNone))
 	}

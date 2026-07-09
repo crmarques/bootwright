@@ -1,9 +1,4 @@
 ---
-# Self-contained shared bastion service: one mirror-registry container can be
-# referenced by several Bootwright contexts. When another context still references it
-# the Go destroy planner lists it in bootwright_infra_component_release_records; we then
-# RELEASE it — skip every destructive step (container, trust anchor, firewall, state)
-# but still drop this context's ownership record — so the shared registry survives.
 - name: Resolve shared-service release decision for mirror registry
   ansible.builtin.set_fact:
     bootwright_component_release: >-

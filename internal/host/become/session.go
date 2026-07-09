@@ -1,8 +1,3 @@
-// Package become manages local sudo sessions and the BECOME password material
-// shared between the bootwright parent process and its rootful child: sudo
-// keepalive, the internal handoff environment variables, and the short-lived
-// plaintext password file. Interactive prompting stays with the caller, which
-// supplies password material through callbacks.
 package become
 
 import (
@@ -21,10 +16,8 @@ const localSudoFallbackKeepAliveInterval = time.Minute
 const localSudoMinimumKeepAliveInterval = time.Second
 const localSudoPasswordAttempts = 3
 
-// SudoAuthEnv tells the rootful child how the parent authenticated sudo.
 const SudoAuthEnv = "BOOTWRIGHT_INTERNAL_LOCAL_SUDO_AUTH"
 
-// PasswordFileEnv hands the captured BECOME password file to the rootful child.
 const PasswordFileEnv = "BOOTWRIGHT_INTERNAL_BECOME_PASSWORD_FILE"
 
 const (
@@ -32,12 +25,8 @@ const (
 	AuthPrompted       = "prompted"
 )
 
-// CommandFactory builds the sudo probe and keep-alive commands a Session runs.
-// Callers outside internal/host pass DefaultCommandFactory so they never touch
-// os/exec themselves.
 type CommandFactory = func(context.Context, string, ...string) *exec.Cmd
 
-// DefaultCommandFactory is the os/exec-backed CommandFactory.
 func DefaultCommandFactory(ctx context.Context, name string, args ...string) *exec.Cmd {
 	return exec.CommandContext(ctx, name, args...)
 }
@@ -83,8 +72,6 @@ func NewSession(ctx context.Context, readPassword func() (string, error), stderr
 	return nil, fmt.Errorf("sudo authentication failed after %d attempts", localSudoPasswordAttempts)
 }
 
-// SudoArgs prepends the non-interactive flag to argv for a sudo invocation. It
-// carries no session state, so it is a package function rather than a method.
 func SudoArgs(args ...string) []string {
 	out := []string{"-n"}
 	return append(out, args...)

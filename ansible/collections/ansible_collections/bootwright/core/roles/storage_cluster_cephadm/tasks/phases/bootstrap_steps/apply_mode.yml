@@ -1,17 +1,4 @@
 ---
-# Before bootstrapping, classify any pre-existing cephadm cluster on the seed and
-# enforce the apply-mode contract: create refuses any existing cluster
-# (greenfield); continue and override act only on a Bootwright-owned cluster and
-# refuse a foreign/co-resident one. Ownership is 3-factor: the on-disk ceph.conf
-# carries an fsid AND a Bootwright storage-cluster ownership record exists on this
-# seed AND this host is the declared seedHost; a present marker's fsid must agree
-# with the conf fsid. The fsid is sourced from the on-disk conf (not live
-# `ceph fsid`) so a DOWN cluster stays classifiable and re-stampable. The record
-# is written right after bootstrap (below), so a half-provisioned cluster (conf
-# present, marker absent) is still classified as owned and is recoverable by
-# re-running `apply` instead of a manual /etc/ceph removal. Computed for every
-# mode; override then zaps+rebuilds an owned cluster, the default reconcile
-# leaves its bootstrap untouched (idempotent resume) and re-stamps it below.
 - name: Read existing Ceph configuration for override rebuild
   ansible.builtin.slurp:
     src: /etc/ceph/ceph.conf
@@ -47,12 +34,6 @@
          | default('', true) | trim }}
   when: (bootwright_ceph_override_marker | default({})).content is defined
 
-# Owned iff conf fsid present AND a Bootwright ownership record exists on this
-# seed AND this host is the declared seedHost AND any present marker fsid agrees
-# with the conf fsid. The record is the load-bearing proof Bootwright created this
-# cluster (a foreign/co-resident cluster has none); the marker fsid is a secondary
-# consistency check, tolerant of a markerless-but-recorded cluster so the deadlock
-# case is reclaimable.
 - name: Decide override rebuild ownership
   ansible.builtin.set_fact:
     bootwright_ceph_override_owned: >-
@@ -67,10 +48,6 @@
         )
       }}
 
-# Host-side enforcement of the apply-mode contract, the live backstop to the Go
-# preflight: create fails if a cluster already exists; continue and override fail
-# if it exists but is not Bootwright-owned. An owned cluster proceeds — override
-# to the zap below, continue to the idempotent bootstrap skip.
 - name: Enforce apply mode for the Ceph cluster
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -80,28 +57,12 @@
     bootwright_gate_exists: "{{ (bootwright_ceph_override_conf | default({})).content is defined }}"
     bootwright_gate_owned: "{{ bootwright_ceph_override_owned | default(false) | bool }}"
 
-# The controller classifies a StorageCluster whose only drift is an OSD-device add
-# as reconcilable in place and passes its name in
-# bootwright_ceph_reconcilable_only_clusters. For such a cluster --override must NOT
-# wipe: `ceph orch apply` in the service-spec step adds the new OSD additively. An
-# absent/empty var leaves this false, so a structural rebuild (or a cluster the
-# controller did not mark reconcilable) keeps the existing zap-and-rebuild behavior.
 - name: Decide whether this cluster's override drift is reconcilable in place
   ansible.builtin.set_fact:
     bootwright_ceph_reconcilable_only: >-
       {{ bootwright_selected_storage_cluster.name
          in (bootwright_ceph_reconcilable_only_clusters | default('') | split(',')) }}
 
-# Positive rebuild-authorization token — the last line of defense against wiping a
-# healthy owned cluster under --override. The controller names ONLY the structurally
-# drifted clusters (a change to cluster identity/host-set that truly needs a
-# wipe-and-rebuild) in bootwright_ceph_rebuild_authorized_clusters; the destructive
-# rm-cluster below runs only when the cluster is in that list. A no-drift MATCH and a
-# reconcilable-only OSD-device add are absent from it, so --override reconciles them
-# idempotently in place instead of zapping their OSDs. The var is fail-safe: an
-# absent/empty token authorizes NO wipe, so a stale bundle can only under-authorize
-# (skip a rebuild), never over-authorize. This gate is independent of the ownership
-# and reconcilable-only checks, both of which still apply.
 - name: Decide whether the controller authorizes a destructive rebuild of this cluster
   ansible.builtin.set_fact:
     bootwright_ceph_rebuild_authorized: >-
@@ -119,8 +80,6 @@
       - "{{ bootwright_ceph_override_fsid }}"
   register: bootwright_ceph_override_rm
   changed_when: true
-  # A failed rm-cluster must not silently fall through to clearing config and
-  # re-bootstrapping: that would orphan the old cephadm daemons. Fail closed.
   failed_when: bootwright_ceph_override_rm.rc != 0
   when:
     - (bootwright_apply_mode | default('continue')) == 'override'
@@ -155,16 +114,6 @@
   changed_when: false
   failed_when: false
 
-# The apply-mode gate above has cleared: any pre-existing cluster on this seed is
-# Bootwright-owned (a foreign one was refused before reaching here). Record
-# ownership NOW — before the non-idempotent `cephadm bootstrap` — so a crash that
-# writes /etc/ceph/ceph.conf but aborts before ownership_marker.yml still leaves
-# the controller-side ownership record. That keeps the half-converged cluster
-# classified owned and recoverable by re-running `apply` instead of deadlocked:
-# continue, --override, and destroy all key on this record, so without it the only
-# escape from a mid-bootstrap crash is a manual /etc/ceph removal. The
-# post-bootstrap writes (ownership_marker.yml, result_and_ownership.yml) refresh it
-# with the fsid marker and the enriched paths/labels/attributes.
 - name: Pre-record storage cluster ownership before bootstrap
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

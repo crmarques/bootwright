@@ -20,20 +20,6 @@ func machineOSInstallMarkerVars(osInstall map[string]any, clusterName, machineNa
 	}
 }
 
-// stableMarkerInput returns a deep copy of the rendered managed-OS install vars
-// with the controller-side secret PATHS reduced to their stable basenames.
-//
-// privateKeyPath, sshPublicKeyPath, knownHostsPath, trustDir, and the RHSM
-// organization/activation-key paths all resolve into the per-run runtime secrets
-// directory (runs/history/<runID>/.../secrets). Hashing them verbatim made the
-// on-host install marker change on every apply, so a re-apply of an already
-// installed machine failed the role's "refuse to reinstall without a matching
-// marker" guard, and --override then wiped and reinstalled with unchanged desired
-// state. The basename is the stable secret material name, so the marker still
-// changes when the referenced material changes but is identical across runs.
-//
-// The copy is essential: the original map still feeds vars.json, which must carry
-// the real per-run paths for Ansible.
 func stableMarkerInput(osInstall map[string]any) map[string]any {
 	out := deepCopyMarkerValue(osInstall).(map[string]any)
 	if ssh, ok := out["ssh"].(map[string]any); ok {
@@ -48,10 +34,6 @@ func stableMarkerInput(osInstall map[string]any) map[string]any {
 		if rhsm, ok := installer["rhsm"].(map[string]any); ok {
 			markerBasename(rhsm, "organizationPath")
 			markerBasename(rhsm, "activationKeyPath")
-			// The Satellite CA path resolves into the per-run secrets dir like
-			// the org/key paths, so basename it too. hostname/contentBaseURL are
-			// stable identifiers and stay verbatim, so the marker still changes
-			// when the host registers against a different Satellite.
 			if satellite, ok := rhsm["satellite"].(map[string]any); ok {
 				markerBasename(satellite, "caPath")
 			}

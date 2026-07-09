@@ -9,19 +9,12 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-// IPv6 counterparts of the stock IPv4 cluster/service network defaults, used
-// when a cluster's machine networks are IPv6-only so the rendered install-config
-// does not silently mix address families (openshift-install rejects that, but
-// only at apply time). Kept local: they are a normalize-time default, not part
-// of the authored API surface.
 const (
 	defaultClusterNetworkCIDRIPv6       = "fd01::/48"
 	defaultClusterNetworkHostPrefixIPv6 = 64
 	defaultServiceNetworkCIDRIPv6       = "fd02::/112"
 )
 
-// Normalize applies defaults in-place. Pure transformation: no
-// diagnostics, no rejections; that work belongs to Validate.
 func Normalize(state *v1alpha1.State) {
 	for i := range state.Environments {
 		normalizeEnvironment(&state.Environments[i])
@@ -70,9 +63,6 @@ func Normalize(state *v1alpha1.State) {
 	}
 }
 
-// normalizeProvisioningPlaybook materializes the optional-with-default fields so
-// every downstream consumer (validation, planner, dry-run) reads one value
-// rather than re-deriving the default.
 func normalizeProvisioningPlaybook(p *v1alpha1.ProvisioningPlaybook) {
 	if p.Spec.Timing == "" {
 		p.Spec.Timing = v1alpha1.ProvisioningPlaybookTimingAfter
@@ -89,15 +79,9 @@ func normalizeProvisioningPlaybook(p *v1alpha1.ProvisioningPlaybook) {
 	}
 }
 
-// applyBareMetalBMCDefaults lets a bare-metal InfraProvider set BMC TLS behavior
-// once (spec.baremetal.defaults.bmc) and have every Machine bound to it inherit
-// what it omits. credentialsRef is never defaulted (it stays per-machine). The
-// merge mutates the effective machine spec so every consumer — boot vars, the
-// substrate manifest, validation, and render effective — reads one value.
 func applyBareMetalBMCDefaults(state *v1alpha1.State) {
 	for i := range state.Machines {
 		bmc := &state.Machines[i].Spec.Hardware.Management.BMC
-		// Never invent a BMC on a machine that declares none.
 		if bmc.Address == "" {
 			continue
 		}
@@ -109,7 +93,6 @@ func applyBareMetalBMCDefaults(state *v1alpha1.State) {
 		if d == nil {
 			continue
 		}
-		// tls.verify: tri-state; inherit field-level only when the machine left it unset.
 		if d.TLS != nil && d.TLS.Verify != nil {
 			if bmc.TLS == nil {
 				bmc.TLS = &v1alpha1.BMCTLS{}
@@ -119,7 +102,6 @@ func applyBareMetalBMCDefaults(state *v1alpha1.State) {
 				bmc.TLS.Verify = &v
 			}
 		}
-		// virtualMedia: an authored node block wins whole; otherwise deep-copy the default.
 		if bmc.VirtualMedia == nil && d.VirtualMedia != nil {
 			bmc.VirtualMedia = deepCopyBMCVirtualMedia(d.VirtualMedia)
 		}
@@ -148,9 +130,6 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 	}
 }
 
-// normalizeSecrets defaults the generated parameters of each Secret according
-// to its type: certificate validity, the credential username, and the SSH key
-// algorithm.
 func normalizeSecrets(state *v1alpha1.State) {
 	for i := range state.Secrets {
 		gen := state.Secrets[i].Spec.Source.Generated
@@ -174,10 +153,6 @@ func normalizeSecrets(state *v1alpha1.State) {
 	}
 }
 
-// normalizeEntitlementSatellite trims the Satellite hostname and, when the
-// operator left contentBaseURL unset, derives the canonical Satellite 6 content
-// path (https://<hostname>/pulp/content) so normalized state shows the effective
-// value the renderer will use.
 func normalizeEntitlementSatellite(rhsm *v1alpha1.EntitlementRHSM) {
 	if rhsm == nil || rhsm.Satellite == nil {
 		return
@@ -198,9 +173,6 @@ func normalizeMachine(m *v1alpha1.Machine) {
 		config.AttachmentRef.Name = config.NetworkConfigRef.Name
 		m.DefaultedRefs.AttachmentRef = true
 	}
-	// Documented convention: access.ssh.addressRef defaults to the address
-	// named "ssh" when one exists. No only-address fallback — adding a second
-	// address must never silently change behavior.
 	if ssh := m.Spec.Access.SSH; ssh != nil && ssh.AddressRef.Name == "" {
 		for _, address := range m.Spec.Addresses {
 			if address.Name == "ssh" {
@@ -211,18 +183,11 @@ func normalizeMachine(m *v1alpha1.Machine) {
 	}
 }
 
-// MachineImage needs no normalization: bootMedia is authored explicitly and
-// package source belongs to MachineInstallProfile. Validators and renderers read
-// those fields directly.
-
 func normalizeProvider(p *v1alpha1.InfraProvider) {
 	if p.Spec.Type == v1alpha1.ProvisionerLibvirt && p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil {
 		normalizeBMCEmulationDefaults(p.Spec.Libvirt.BMCEmulationDefaults)
 	}
 	if p.Spec.Type == v1alpha1.ProvisionerKubeVirt && p.Spec.KubeVirt != nil {
-		// A kubevirt networkRef.namespace defaults to the provider's VM
-		// namespace: the OVN-derived NAD (for a CUDN) lands in the selected VM
-		// namespace, and a referenced NAD/UDN is co-located with the VMs.
 		for i := range p.Spec.NetworkAttachments {
 			ref := p.Spec.NetworkAttachments[i].KubeVirt
 			if ref != nil && ref.NetworkRef.Namespace == "" {
@@ -316,9 +281,6 @@ func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {
 	if extension.Spec.OLM.Subscription.SourceNamespace == "" {
 		extension.Spec.OLM.Subscription.SourceNamespace = "openshift-marketplace"
 	}
-	// An add-on that ships its own catalog almost always subscribes to it;
-	// defaulting the subscription source to the shipped catalog keeps the two
-	// from drifting apart (validation still rejects an explicit mismatch).
 	if extension.Spec.OLM.CatalogSource != nil && extension.Spec.OLM.Subscription.Source == "" {
 		extension.Spec.OLM.Subscription.Source = extension.Spec.OLM.CatalogSource.Name
 	}
@@ -341,26 +303,12 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if adm.Bootstrap.AddressRef.Name == "" {
 		adm.Bootstrap.AddressRef = adm.AddressRef
 	}
-	// An explicit cephadm cluster SSH key carries an explicit manage user;
-	// default it to root. Leaving it empty when no clusterSSHKeyRef is set keeps
-	// the legacy path, where the user is borrowed from the first host's access.
 	if adm.ClusterSSHKeyRef.Name != "" && adm.ClusterSSHUser == "" {
 		adm.ClusterSSHUser = "root"
 	}
-	// A topology host's cephadm hostname defaults to the fully-qualified node
-	// name; normalizeNodeHostnames fills it once baseDomain and the backing
-	// machine's install profile are in scope. The explicit field is a signal
-	// that the Ceph hostname genuinely differs and is kept verbatim.
 	normalizeStorageStretch(cluster)
 }
 
-// normalizeNodeHostnames defaults every cluster node's hostname to the
-// fully-qualified <machine>.<cluster>.<baseDomain> form — the OpenShift node
-// convention, applied uniformly to Ceph and OpenShift nodes so the name
-// cephadm/the installer registers always resolves. An explicit hostname is kept
-// verbatim. A node opts back out to the bare machine name with
-// hostname.source: machineName on its install profile, and every node falls
-// back to the bare name when no baseDomain is declared.
 func normalizeNodeHostnames(state *v1alpha1.State) {
 	baseDomain := ""
 	if env := primaryEnvironment(state); env != nil {
@@ -387,9 +335,6 @@ func normalizeNodeHostnames(state *v1alpha1.State) {
 	}
 }
 
-// defaultNodeHostname derives a node's default hostname: the fully-qualified
-// <machine>.<cluster>.<baseDomain>, or the bare machine name when the node's
-// install profile opts out or no baseDomain qualifies it.
 func defaultNodeHostname(state *v1alpha1.State, machineName, clusterName, baseDomain string) string {
 	if machineName == "" {
 		return ""
@@ -400,9 +345,6 @@ func defaultNodeHostname(state *v1alpha1.State, machineName, clusterName, baseDo
 	return stateview.ComposeFQDN(machineName, clusterName, baseDomain)
 }
 
-// nodeOptsOutOfFQDN reports whether a machine's install profile pins the OS
-// hostname to the bare machine name (hostname.source: machineName), opting the
-// node out of FQDN naming.
 func nodeOptsOutOfFQDN(state *v1alpha1.State, machineName string) bool {
 	machine, ok := stateview.Machine(*state, machineName)
 	if !ok {
@@ -415,12 +357,6 @@ func nodeOptsOutOfFQDN(state *v1alpha1.State, machineName string) bool {
 	return profile.Spec.Customizations.Hostname.Source == v1alpha1.MachineInstallHostnameMachineName
 }
 
-// normalizeStorageStretch fills the derivable stretch fields: presence of the
-// stretch block is the enablement signal, and only failureDomain plus the
-// tiebreaker host are facts the operator alone knows. ruleName takes any
-// authored value; dataSites and tiebreaker.site are echoes of the topology
-// that validation cross-checks post-normalize, so authoring them only
-// narrows (dataSites with OSD-only extra sites) or restates the derivation.
 func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
 	if stretch == nil {
@@ -430,9 +366,6 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 		stretch.RuleName = "stretch-rule"
 	}
 	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Host != "" {
-		// The tiebreaker host is authored as a machine name or a hostname; match
-		// either. This runs before hostnames are qualified, so the machine name
-		// is the reliable key.
 		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
 			if host.Hostname == stretch.Tiebreaker.Host || host.MachineRef.Name == stretch.Tiebreaker.Host {
 				stretch.Tiebreaker.Site = host.Site
@@ -453,12 +386,6 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	}
 }
 
-// applyClusterNetworkDefaults injects the default cluster/service networks for
-// any ContainerCluster that omits them, matching the address family of the
-// cluster's resolved machine networks. An IPv6-only estate gets IPv6 defaults so
-// the rendered install-config does not pair an IPv6 machineNetwork with IPv4
-// cluster/service networks (a family mismatch openshift-install rejects only at
-// apply); every other shape keeps the historical IPv4 defaults.
 func applyClusterNetworkDefaults(state *v1alpha1.State) {
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
 	for i := range state.ContainerClusters {
@@ -484,9 +411,6 @@ func applyClusterNetworkDefaults(state *v1alpha1.State) {
 	}
 }
 
-// clusterMachineNetworkIsIPv6Only reports whether every resolved machine network
-// CIDR behind a cluster's nodes is IPv6. A single IPv4 CIDR (or no resolvable
-// machine network at all) returns false, keeping the historical IPv4 defaults.
 func clusterMachineNetworkIsIPv6Only(state v1alpha1.State, ocp v1alpha1.ContainerCluster, networkConfigs map[string]v1alpha1.NetworkConfig) bool {
 	ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
 	if !ok {
@@ -538,9 +462,6 @@ func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
 	}
 }
 
-// normalizeStorageExport defaults the export type. A managed-Ceph export with
-// no externalDetails needs no defaulting: the consuming add-on produces the
-// details itself (its exporter hook).
 func normalizeStorageExport(export *v1alpha1.StorageExport) {
 	if export.Spec.Type == "" && export.Spec.DataFoundation != nil {
 		export.Spec.Type = v1alpha1.StorageExportTypeDataFoundation
@@ -576,20 +497,9 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 	if ocp.Spec.Networking == nil {
 		ocp.Spec.Networking = &v1alpha1.OCPNetworkingSpec{}
 	}
-	// The cluster/service network defaults are family-aware and depend on the
-	// resolved machine networks, so they are injected by applyClusterNetworkDefaults
-	// (state-level pass) rather than here where only the cluster is in scope.
 	applyEnvironmentInstallDefaults(ocp, env)
 }
 
-// applyClusterPlatformDefaults derives spec.install.platform from the single
-// provider type behind a cluster's node machines when the platform block is
-// fully omitted. The mapping mirrors what every shipped example authors:
-// libvirt and baremetal providers install with platform bareMetal and the
-// provisioning network disabled; vsphere providers install with platform
-// vsphere; kubevirt-hosted clusters install with platform none. Ambiguous
-// bindings (multiple provider types) are left for Validate to diagnose;
-// authored platforms always win.
 func applyClusterPlatformDefaults(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		cluster := &state.ContainerClusters[i]
@@ -622,10 +532,6 @@ func installPlatformOmitted(platform v1alpha1.InstallPlatform) bool {
 		platform.External == nil
 }
 
-// clusterProviderBinding summarizes the InfraProviders behind a cluster's
-// node machines. types holds the sorted unique provider types; providers
-// holds "InfraProvider/<name> (<type>)" descriptions for diagnostics;
-// complete reports whether every node resolved to a typed provider.
 type clusterProviderBinding struct {
 	types     []string
 	providers []string

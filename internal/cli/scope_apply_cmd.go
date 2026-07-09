@@ -123,9 +123,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 	}
 	if options.hideExecFlags {
-		// plan contacts nothing and runs no Ansible, so hide the flags that only
-		// shape a real mutating run. Otherwise its --help advertises alarming
-		// WIPE/reinstall and become-password controls that do nothing here.
 		for _, name := range []string{"reclaim-devices", "allow-destroy", "ask-become-pass", "strict-secrets", "verbose"} {
 			_ = cmd.Flags().MarkHidden(name)
 		}
@@ -183,14 +180,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return failErr(1, err)
 		}
 		printPlanStep(stdout, flags.output, runCommandLabel)
-		// Resolve the cluster selection once: the render state to plan over, the
-		// storage roots actually provisioned, and the readiness work objects. A
-		// managed StorageCluster pulled into the render state only as a render
-		// reference for a selected container cluster's data-foundation attachment
-		// is left out of both the provisioning set and the readiness checks, so
-		// scoping a container cluster never requires its external storage's
-		// bootstrap secrets or host trust (ADR-0004). This holds for every apply
-		// command that accepts --clusters, not only the stage-selector apply.
 		sel, err := clusteraccess.Resolve(state, runScope.Name, flags.clusterScope)
 		if err != nil {
 			return failErr(1, err)
@@ -207,12 +196,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		// The marker-aware device-empty gate for managed Ceph runs in the deps
-		// phase, while the destructive `cephadm rm-cluster --zap-osds` rebuild runs
-		// in the base phase; `--stage base` plans only the base seed task, so the
-		// device gate never executes before the wipe-and-rebuild. Refuse
-		// `--override --stage base` for a scope carrying a managed StorageCluster and
-		// point at `--through base`, which includes the deps-phase gate.
 		if mode == workflow.ApplyModeOverride && stage == converge.PhaseBase && len(sel.StorageWorkNames()) > 0 {
 			return failErr(2, errors.New("--override --stage base skips the deps-phase device-empty gate that must precede a Ceph wipe-and-rebuild; use --override --through base (runs the gate then the rebuild) or the full graph"))
 		}
@@ -233,9 +216,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(1, err)
 		}
-		// Stamp the verbose-output gate after PlanScopedApply has composed
-		// plan.ExtraVarPairs so it flows to both the --dry-run JSON command
-		// preview and the real run (BuildApplyRunOptions copies ExtraVarPairs).
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		if flags.output == outputJSON {
 			if !dryRun {
@@ -249,55 +229,23 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err != nil {
 				return failErr(1, err)
 			}
-			// Fail closed on the signature of a cluster rename (a new cluster while
-			// another is provisioned but no longer declared): bootwright cannot rename in
-			// place, so it would re-provision from scratch and orphan the old cluster.
 			if err := converge.CheckApplyRenameOrphan(plan.State, objects, clustersDir, sel.Active); err != nil {
 				return failErr(1, err)
 			}
-			// apply --override authorizes Bootwright-owned destructive rebuilds
-			// (managed-OS VM reinstall, owned-Ceph wipe-and-rebuild, cluster
-			// reinstall). On a destroy-protected Environment that destruction must
-			// cross the destroy authorization boundary instead of slipping in through
-			// apply, so fail closed before any mutation and direct the operator to
-			// destroy first. Scope/drift-aware (keyed on the classified objects): a
-			// scoped apply whose only drift is a reconfigure-only fabric service is
-			// not blocked. Dry-run/plan still previews the override plan.
 			if override {
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects); err != nil {
 					return failErr(1, err)
 				}
-				// Data-loss seatbelt, independent of destroyProtection: a destructive
-				// --override rebuild (managed-OS/substrate machine reinstall with disks
-				// wiped, container/Ceph cluster wipe-and-rebuild) requires an explicit
-				// acknowledgment even on an UNPROTECTED environment, so a mis-scoped
-				// --override never silently destroys. --yes skips the routine confirm but
-				// does NOT authorize data loss; --allow-destroy does. A protected
-				// environment already failed closed above, so this only gates the
-				// unprotected case; a reconfigure-only override reaches neither gate.
 				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
 				if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 					return failErr(1, err)
 				}
 			}
-			// Surface every "this destroys data / re-images a host" warning and
-			// thread the storage safety extra vars (reconcilable-only + positive
-			// rebuild-authorization tokens, reclaim allowlist) before the confirm.
 			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices)
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
-			// Host trust is required only for machines the planned tasks will
-			// actually SSH into. A scoped run can pull an object into plan.State
-			// purely as a render reference (e.g. a managed StorageCluster pulled in
-			// by an OCP cluster's data-foundation attachment); its provided-OS nodes
-			// that no selected phase connects to must not block the run on missing
-			// trust. When a phase that connects to them is in scope its tasks select
-			// them and trust is required again.
 			hostTrustScope := workflow.ApplyTaskConnectedMachines(tasks)
-			// Trust-on-first-use: only in interactive text runs, and only for
-			// hosts with no recorded key. --yes and JSON runs fail closed on
-			// missing trust exactly as before.
 			if trustOnFirstUse && !yes && flags.output == outputText {
 				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps, hostTrustScope); err != nil {
 					return failErr(1, err)
@@ -313,9 +261,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, errors.New("apply aborted"))
 			}
 		}
-		// The single "Run" section is opened by the workflow reporter as it
-		// reports render/bundle prep, then printApplyRunStart adds the run
-		// identity fields under it — no separate workflow-start banner.
 		become, reporter, becomeCleanup, err := prepareMutatingRunCredential(stdin, stdout, stderr, plan, dryRun)
 		if err != nil {
 			return failErr(1, err)

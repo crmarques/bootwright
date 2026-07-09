@@ -1,11 +1,4 @@
 ---
-# Converges one Squid forward-proxy capability on this provider host.
-# The renderer projects `bootwright_component` with:
-#   { kind, providerName, name, machineRef, machineAddress, port,
-#     realisation: 'squid', url }
-# Credentials come from Environment.spec.infraComponents.proxies[].spec.auth.proxyAuthRef and
-# are resolved into `bootwright_proxy_credentials_ref` (a path under
-# the secrets dir) by machine_proxy/defaults.
 
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:

@@ -115,8 +115,6 @@ func TestMachineNetworkOverrideShapeErrors(t *testing.T) {
 		},
 	}
 
-	// Named-interface override merged by name, with a positional address list:
-	// both are mergeable, so no error.
 	named := map[string]any{
 		"interfaces": []any{
 			map[string]any{"name": "primary", "ipv4": map[string]any{
@@ -128,7 +126,6 @@ func TestMachineNetworkOverrideShapeErrors(t *testing.T) {
 		t.Fatalf("named override should be mergeable, got %v", errs)
 	}
 
-	// Heterogeneous interfaces list (a scalar mixed with maps) cannot be merged.
 	hetero := map[string]any{
 		"interfaces": []any{
 			"primary",

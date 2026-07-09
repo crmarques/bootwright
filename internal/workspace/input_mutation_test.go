@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// seedInput populates a context's input directory with one file so there is a
-// tree to snapshot.
 func seedInput(t *testing.T, ctx Context, rel, contents string) {
 	t.Helper()
 	writeFile(t, filepath.Join(ctx.InputDir, filepath.FromSlash(rel)), contents)
@@ -66,7 +64,6 @@ func TestSnapshotInputSkipsWhenNoInputTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No EnsureDirs: the input directory does not exist yet.
 	entry, err := SnapshotInput(ctx, "never-applied")
 	if err != nil {
 		t.Fatalf("snapshot of a never-applied context should not error: %v", err)
@@ -94,7 +91,6 @@ func TestSnapshotSequenceIncrements(t *testing.T) {
 
 func TestPruneInputHistoryKeepsMostRecent(t *testing.T) {
 	historyDir := t.TempDir()
-	// Create more entries than the retention keep.
 	for i := 1; i <= 5; i++ {
 		if err := os.Mkdir(filepath.Join(historyDir, padSeq(i)+"-x"), 0o700); err != nil {
 			t.Fatal(err)
@@ -110,7 +106,6 @@ func TestPruneInputHistoryKeepsMostRecent(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("kept %d entries, want 3", len(entries))
 	}
-	// The three most recent (highest sequence) survive; the oldest two are gone.
 	for _, gone := range []string{padSeq(1) + "-x", padSeq(2) + "-x"} {
 		if _, err := os.Stat(filepath.Join(historyDir, gone)); !os.IsNotExist(err) {
 			t.Fatalf("prune kept old entry %s", gone)
@@ -141,9 +136,7 @@ func TestApplyInputEditsWritesAndSnapshots(t *testing.T) {
 	seedInput(t, ctx, "clusters/storage/ceph/cluster.yaml", "kind: StorageCluster\n# authored comment\n")
 
 	edits := []InputEdit{
-		// Replace an existing authored file.
 		{RelPath: "clusters/storage/ceph/cluster.yaml", Content: []byte("kind: StorageCluster\n# adopted\n")},
-		// Create a brand-new object file in a new directory.
 		{RelPath: "clusters/storage/ceph/pools/backups.yaml", Content: []byte("kind: StoragePool\n")},
 	}
 	snapshot, err := ApplyInputEdits(ctx, "diff adopt", edits)
@@ -153,7 +146,6 @@ func TestApplyInputEditsWritesAndSnapshots(t *testing.T) {
 	if snapshot == "" {
 		t.Fatal("ApplyInputEdits returned an empty snapshot despite an existing input tree")
 	}
-	// The pre-edit content is preserved in history.
 	snapPath := filepath.Join(InputHistoryDir(ctx), snapshot, inputSnapshotTreeName, "clusters", "storage", "ceph", "cluster.yaml")
 	old, err := os.ReadFile(snapPath)
 	if err != nil {
@@ -162,7 +154,6 @@ func TestApplyInputEditsWritesAndSnapshots(t *testing.T) {
 	if !strings.Contains(string(old), "authored comment") {
 		t.Fatalf("history snapshot lost the pre-edit content:\n%s", old)
 	}
-	// The edits landed.
 	got, err := os.ReadFile(filepath.Join(ctx.InputDir, "clusters", "storage", "ceph", "cluster.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -185,8 +176,6 @@ func TestApplyInputEditsRejectsEscape(t *testing.T) {
 		if err == nil {
 			t.Fatalf("ApplyInputEdits accepted an escaping path %q", bad)
 		}
-		// A rejected edit must not have created a snapshot side effect beyond the
-		// validation error; the escaping file must never exist.
 		if _, statErr := os.Stat(filepath.Join(ctx.BaseDir, "escape.yaml")); !os.IsNotExist(statErr) {
 			t.Fatalf("escaping edit %q wrote outside the input dir", bad)
 		}
@@ -207,7 +196,6 @@ func TestReplaceInputSnapshotsPriorTree(t *testing.T) {
 	if snapshot == "" {
 		t.Fatal("ReplaceInput returned empty snapshot despite an existing input tree")
 	}
-	// New input is in place.
 	got, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +203,6 @@ func TestReplaceInputSnapshotsPriorTree(t *testing.T) {
 	if !strings.Contains(string(got), "replacement") {
 		t.Fatalf("ReplaceInput did not install the new tree:\n%s", got)
 	}
-	// The prior tree is recoverable from history.
 	old, err := os.ReadFile(filepath.Join(InputHistoryDir(ctx), snapshot, inputSnapshotTreeName, "environment.yaml"))
 	if err != nil {
 		t.Fatal(err)

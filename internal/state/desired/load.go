@@ -15,9 +15,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// LoadNormalizeValidate is the canonical entry point used by the CLI. It
-// validates the effective selected State. When an Environment declares
-// spec.resources, only that allow-listed input set is effective.
 func LoadNormalizeValidate(paths []string) (v1alpha1.State, error) {
 	return LoadNormalizeValidateInputFiles(paths)
 }
@@ -27,11 +24,6 @@ func LoadNormalizeValidateInputFiles(paths []string) (v1alpha1.State, error) {
 	return state, err
 }
 
-// ClusterSelectionExclusions names the loaded clusters that Environment
-// spec.containerClusters / spec.storageClusters selection drops from the
-// effective state. Excluded clusters are never validated and apply never
-// touches them, so callers surface them instead of letting an unselected
-// cluster file disappear silently.
 type ClusterSelectionExclusions struct {
 	ContainerClusters []string
 	StorageClusters   []string
@@ -41,9 +33,6 @@ func (e ClusterSelectionExclusions) Empty() bool {
 	return len(e.ContainerClusters) == 0 && len(e.StorageClusters) == 0
 }
 
-// LoadNormalizeValidateWithExclusions is LoadNormalizeValidateInputFiles plus
-// the loaded cluster names the Environment cluster selection excluded from
-// the effective state. `bootwright validate` reports them as warnings.
 func LoadNormalizeValidateWithExclusions(paths []string) (v1alpha1.State, ClusterSelectionExclusions, error) {
 	selected, exclusions, err := loadNormalizeSelect(paths)
 	if err != nil {
@@ -55,20 +44,11 @@ func LoadNormalizeValidateWithExclusions(paths []string) (v1alpha1.State, Cluste
 	return selected, exclusions, nil
 }
 
-// LoadNormalizeInputFiles loads and normalizes the effective selected State
-// without validating it. It exists for callers that validate only a narrower
-// scope — `apply`/`destroy --scoped-validation` load with this and run Validate
-// on just the --clusters/--stage subset, so a desired-state error in an
-// out-of-scope object does not block a scoped run. Every other caller must use
-// LoadNormalizeValidateInputFiles, which validates the whole effective state.
 func LoadNormalizeInputFiles(paths []string) (v1alpha1.State, error) {
 	selected, _, err := loadNormalizeSelect(paths)
 	return selected, err
 }
 
-// loadNormalizeSelect discovers, loads, normalizes, and applies Environment
-// cluster selection, returning the effective state and the clusters that
-// selection excluded. It does not validate; callers decide what to validate.
 func loadNormalizeSelect(paths []string) (v1alpha1.State, ClusterSelectionExclusions, error) {
 	files, err := discoverFiles(paths)
 	if err != nil {
@@ -87,9 +67,6 @@ func loadNormalizeSelect(paths []string) (v1alpha1.State, ClusterSelectionExclus
 	return selected, exclusions, nil
 }
 
-// LoadedInputFiles returns the YAML files the canonical loader would decode
-// for paths, after Environment spec.resources selection. Mutating runs use it
-// to snapshot the exact input set they were launched from.
 func LoadedInputFiles(paths []string) ([]string, error) {
 	files, err := discoverFiles(paths)
 	if err != nil {
@@ -113,9 +90,6 @@ func applyEnvironmentClusterSelection(state v1alpha1.State) v1alpha1.State {
 	return stategraph.FilterStateToClusterRoots(state, env.Spec.ContainerClusters, env.Spec.StorageClusters)
 }
 
-// clusterSelectionExclusions diffs the loaded state against the
-// environment-selected state and names the dropped clusters, in the loaded
-// (name-sorted) order.
 func clusterSelectionExclusions(loaded, selected v1alpha1.State) ClusterSelectionExclusions {
 	return ClusterSelectionExclusions{
 		ContainerClusters: excludedClusterNames(loaded.ContainerClusters, selected.ContainerClusters, func(item v1alpha1.ContainerCluster) string { return item.Metadata.Name }),
@@ -138,10 +112,6 @@ func excludedClusterNames[T any](loaded, selected []T, name func(T) string) []st
 	return out
 }
 
-// Load reads `-f` arguments (files or directories) and decodes either every
-// discovered YAML file or the Environment-selected resource subset into a
-// State. Unknown kinds and unknown fields are rejected at decode time so typos
-// surface immediately rather than after normalize.
 func Load(paths []string) (v1alpha1.State, error) {
 	files, err := discoverFiles(paths)
 	if err != nil {
@@ -201,24 +171,11 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 	return state, nil
 }
 
-// nonWorkspaceDirs is the set of directory names that never hold
-// Bootwright YAML and are expensive to traverse. Hidden directories
-// (anything starting with ".") are skipped separately by the WalkDir
-// callback below — this set covers the non-hidden build/vendor outputs
-// that commonly appear when bootwright is invoked from inside a larger
-// repo.
 var nonWorkspaceDirs = map[string]struct{}{
 	"node_modules": {},
 	"vendor":       {},
 }
 
-// ansibleContentDirs names directories that hold operator-supplied Ansible
-// content (a ProvisioningPlaybook's playbook / rolesPath / collectionsPath), not
-// authored Bootwright objects. Their YAML is frequently a top-level sequence (a
-// playbook) or role vars with no apiVersion, so the strict loader skips the whole
-// subtree — the content is referenced by path from the ProvisioningPlaybook,
-// never loaded as a document. context init's input-tree copy still carries it to
-// the context so ansible-playbook resolves it at run time.
 var ansibleContentDirs = map[string]struct{}{
 	"playbooks":   {},
 	"roles":       {},
@@ -494,10 +451,6 @@ func loadFile(path string, state *v1alpha1.State) error {
 	return nil
 }
 
-// supportedKinds lists every authored kind name, sorted, from the
-// single-source AuthoredKindAccessors registry. Decode errors append it so a
-// casing/plural typo (Machin, machines) is visible against the accepted set
-// instead of guessed at.
 func supportedKinds() []string {
 	accessors := v1alpha1.AuthoredKindAccessors()
 	kinds := make([]string, 0, len(accessors))

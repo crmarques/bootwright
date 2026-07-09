@@ -1,8 +1,3 @@
-// Package nativecatalog owns the repo-shipped native add-on catalog: parsing
-// the embedded index, materializing catalog releases, and the machine-local
-// store (`bootwright add-ons list|add|delete`) that registered add-ons live in.
-// Registered add-ons resolve ClusterAddonBinding addonRefs that no authored
-// ClusterAddon matches, and context init snapshots them into the context input.
 package nativecatalog
 
 import (
@@ -16,7 +11,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Entry is one catalog add-on with its available versions.
 type Entry struct {
 	Name           string         `yaml:"name"`
 	Description    string         `yaml:"description"`
@@ -24,15 +18,12 @@ type Entry struct {
 	Versions       []EntryVersion `yaml:"versions"`
 }
 
-// EntryVersion is one shippable content snapshot of a catalog entry. Channel
-// and Notes are informational (shown by list), never substituted into content.
 type EntryVersion struct {
 	Version string `yaml:"version"`
 	Channel string `yaml:"channel,omitempty"`
 	Notes   string `yaml:"notes,omitempty"`
 }
 
-// Release is a resolved (entry, version) pair.
 type Release struct {
 	Entry   Entry
 	Version string
@@ -40,9 +31,6 @@ type Release struct {
 
 var versionTokenRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// Entries parses the embedded catalog index and cross-checks it against the
-// embedded content tree, so a forgotten go:embed pattern or index row fails
-// loudly instead of vending nothing.
 func Entries() ([]Entry, error) {
 	raw, err := catalog.Content.ReadFile("catalog.yaml")
 	if err != nil {
@@ -85,8 +73,6 @@ func Entries() ([]Entry, error) {
 	return index.Entries, nil
 }
 
-// Resolve finds the catalog release for name and version. An empty version
-// resolves to the entry's default.
 func Resolve(name, version string) (Release, error) {
 	entries, err := Entries()
 	if err != nil {
@@ -109,7 +95,6 @@ func Resolve(name, version string) (Release, error) {
 	return Release{}, fmt.Errorf("add-on %q not found in the catalog; run bootwright add-ons list", name)
 }
 
-// ParseNameVersion splits the --name flag's optional <name>:<version> form.
 func ParseNameVersion(value string) (name, version string) {
 	if idx := strings.Index(value, ":"); idx >= 0 {
 		return value[:idx], value[idx+1:]
@@ -117,14 +102,11 @@ func ParseNameVersion(value string) (name, version string) {
 	return value, ""
 }
 
-// File is one materializable file of a release, path relative to the vended
-// add-on directory.
 type File struct {
 	Path string
 	Data []byte
 }
 
-// Files walks the release's embedded content in sorted order.
 func Files(release Release) ([]File, error) {
 	root := release.Entry.Name + "/" + release.Version
 	var out []File

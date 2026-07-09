@@ -34,11 +34,6 @@ func EffectiveBindingAddons(state v1alpha1.State, binding v1alpha1.ClusterAddonB
 		positions[item.AddonRef.Name] = len(expanded)
 		expanded = append(expanded, item)
 	}
-	// Mirrors internal/addons/plan.expandSet: the same ProfileRefs-then-AddonRefs
-	// walk of the ClusterAddonProfile DAG, breaking on a profile already on the
-	// current path. Cycles are rejected upstream by state/desired (the cycle
-	// authority), so this path is unreachable on valid state; keeping the same
-	// shape as plan keeps the two traversals from drifting apart.
 	var visitProfile func(string, []string)
 	visitProfile = func(name string, stack []string) {
 		profile, ok := sets[name]
@@ -115,9 +110,6 @@ func EffectBindings(state v1alpha1.State, effectType, provider string) []EffectB
 	return out
 }
 
-// StorageExportAttachment is one DataFoundation storage-export attachment
-// resolved to its target StorageExport. It carries the effect binding's
-// addon/input identity and the StorageExport its exportRef input names.
 type StorageExportAttachment struct {
 	Binding v1alpha1.ClusterAddonBinding
 	Addon   v1alpha1.ClusterAddonBindingAddon
@@ -125,11 +117,6 @@ type StorageExportAttachment struct {
 	Export  v1alpha1.StorageExport
 }
 
-// StorageExportAttachments is the single traversal of the dataFoundation
-// storageExportAttachment effect bindings, resolving each binding's exportRef
-// input to its StorageExport. It is the one owner of the "walk the attachment
-// bindings and resolve the export" pattern; callers that need a subset filter
-// on the returned Export rather than re-walking the bindings.
 func StorageExportAttachments(state v1alpha1.State) []StorageExportAttachment {
 	exports := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
@@ -156,8 +143,6 @@ func SecretRefValue(values map[string]any, field string) v1alpha1.SecretRef {
 }
 
 func namedValue(values map[string]any, field string) string {
-	// Reference-typed input values are plain name strings, like every other
-	// *Ref in the API.
 	name, _ := values[field].(string)
 	return name
 }

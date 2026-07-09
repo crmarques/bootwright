@@ -1,11 +1,4 @@
 ---
-# Converges one mirror registry capability on this provider host. The
-# renderer projects `bootwright_component` with:
-#   { kind, providerName, name, machineRef, machineAddress, port,
-#     realisation: 'mirror-registry', url }
-# Image mirroring (`oc adm release mirror`) is not in scope of this
-# role; the operator runs it once the registry is up. The role only
-# stands up the Distribution container, htpasswd, and trust anchor.
 
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
@@ -153,11 +146,6 @@
     pull: missing
     env:
       REGISTRY_HTTP_ADDR: "0.0.0.0:{{ bootwright_component.port }}"
-      # Emit the htpasswd auth vars ONLY when credentials are configured. The
-      # distribution registry treats the presence of REGISTRY_AUTH_HTPASSWD_PATH
-      # as "configure htpasswd auth" and panics at startup when no htpasswd file
-      # exists (credentialsRef is optional for a disconnected mirror), crash-looping
-      # under restart_policy while podman reports the container started.
       REGISTRY_AUTH: "{{ 'htpasswd' if (bootwright_mr_credentials_path | length) > 0 else omit }}"
       REGISTRY_AUTH_HTPASSWD_PATH: "{{ '/auth/htpasswd' if (bootwright_mr_credentials_path | length) > 0 else omit }}"
       REGISTRY_AUTH_HTPASSWD_REALM: "{{ 'Registry Realm' if (bootwright_mr_credentials_path | length) > 0 else omit }}"

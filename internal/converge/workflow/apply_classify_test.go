@@ -6,9 +6,6 @@ func classifyTask(id, kind, cluster string) ApplyTask {
 	return ApplyTask{Entry: TaskLedgerEntry{ID: id, Kind: kind, Label: id, Cluster: cluster, ClusterKind: "container"}}
 }
 
-// A ContainerCluster's three install tasks collapse to one object; a partial
-// apply (some tasks recorded, one never applied) is Recorded but not drifted, and
-// displays as incomplete (missing) rather than match.
 func TestClassifyApplyObjectsGroupsContainerInstall(t *testing.T) {
 	runsDir := t.TempDir()
 	iso := classifyTask("iso.demo", ApplyTaskKindClusterISO, "demo")
@@ -21,7 +18,6 @@ func TestClassifyApplyObjectsGroupsContainerInstall(t *testing.T) {
 		}
 		saveStateCheckRecord(t, runsDir, task, h, ConvergeSafetyOwner)
 	}
-	// wait: no record -> never applied
 
 	objs, err := ClassifyApplyObjects([]ApplyTask{iso, boot, wait}, runsDir)
 	if err != nil {

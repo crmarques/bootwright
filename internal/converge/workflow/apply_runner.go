@@ -60,12 +60,6 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	runner := runnerFactory(stdout, stderr)
 	now := time.Now()
-	// The start-mark stamps status=installing (phase booting/waiting/creating-iso)
-	// before Run decides whether the task has any hosts to act on. If Run then
-	// no-op skips (empty inventory for this cluster's phase), the succeeded-mark is
-	// gated off below and the record would be left installing — the next apply's
-	// resume then refuses ('node boot completion is uncertain') for a run that
-	// touched no host. Capture the prior record so a skip can undo the start-mark.
 	_, isInstallStartKind := clusterInstallTaskStartPhase(task.Entry.Kind)
 	restorable := isInstallStartKind && task.Entry.Cluster != "" && stateHasContainerCluster(task.State, task.Entry.Cluster)
 	var priorInstall ClusterInstallRecord
@@ -95,8 +89,6 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster && !result.Skipped {
 		clusterName := strings.TrimPrefix(task.Entry.ID, "storage.")
-		// Record each pool/filesystem/gateway/export so the next apply's preflight and
-		// state-check report sub-object drift independently of the cluster.
 		if recordErr := MarkStorageSubObjectsConvergeSafety(runsDir, opts.ContextName, runID, task.State, clusterName, ConvergeSafetyStatusReconciled, now); recordErr != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
@@ -116,12 +108,6 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }
 
-// restoreClusterInstallRecordOnSkip undoes a start-mark left by a task that then
-// no-op skipped: it re-saves the record that existed before the start-mark, or —
-// when no record existed — removes the phantom installing record (only the
-// install record, not the kubeconfig/connection). This keeps a skipped, host-less
-// install task from stranding the cluster in 'installing' so the next apply's
-// resume path does not refuse to proceed.
 func restoreClusterInstallRecordOnSkip(clustersDir, cluster string, prior ClusterInstallRecord, priorFound bool) error {
 	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
 		return nil
@@ -135,20 +121,13 @@ func restoreClusterInstallRecordOnSkip(clustersDir, cluster string, prior Cluste
 	return nil
 }
 
-// provisioningPlaybookConvergeSkip implements a ProvisioningPlaybook's run:
-// onChange gate. It returns skipped=true when the task's declared inputs (hashed
-// into DesiredHash, including a content digest of the playbook and vendored
-// trees) match the last reconciled/skipped converge-safety record, so an
-// unchanged operator playbook is not re-run every apply. A missing or corrupt
-// record, or any hash mismatch, runs the playbook (fail-open). It also re-stamps
-// the record as skipped so the record (and its hash) persist across the run.
 func provisioningPlaybookConvergeSkip(runsDir, contextName, runID string, task ApplyTask) (bool, string, error) {
 	if !task.SkipWhenConverged || strings.TrimSpace(runsDir) == "" {
 		return false, "", nil
 	}
 	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
 	if err != nil || !found {
-		return false, "", nil // fail-open: run on a missing/corrupt record
+		return false, "", nil
 	}
 	if record.Status != ConvergeSafetyStatusReconciled && record.Status != ConvergeSafetyStatusSkipped {
 		return false, "", nil

@@ -706,7 +706,6 @@ spec:
 func TestClusterAddonAllowsNamespacelessCustomResource(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	// A cluster-scoped custom resource (no metadata.namespace) must validate.
 	files["extension.yaml"] = strings.Replace(extensionYAML("virt"),
 		"        metadata:\n          name: kubevirt-hyperconverged\n          namespace: openshift-cnv",
 		"        metadata:\n          name: kubevirt-hyperconverged", 1)
@@ -718,8 +717,6 @@ func TestClusterAddonAllowsNamespacelessCustomResource(t *testing.T) {
 	}
 }
 
-// capabilityAddonYAML builds a minimal OLM ClusterAddon with optional
-// provides/requires and a csvSucceeded readiness check (provides mandates one).
 func capabilityAddonYAML(name string, provides, requires []string) string {
 	spec := "  type: olm\n"
 	if len(provides) > 0 {
@@ -776,8 +773,6 @@ func TestClusterAddonRequiresSatisfiedValidates(t *testing.T) {
 	files := newBaselineFiles()
 	files["nmstate.yaml"] = capabilityAddonYAML("nmstate", []string{"nmstate"}, nil)
 	files["vcn.yaml"] = capabilityAddonYAML("vcn", nil, []string{"nmstate"})
-	// vcn listed before its provider on purpose: ordering is resolved by
-	// requires/provides, so a satisfied requirement validates regardless of order.
 	files["binding.yaml"] = inlineBindingYAML("binding", "vcn", "nmstate")
 	writeFiles(t, dir, files)
 	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {

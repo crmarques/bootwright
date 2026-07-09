@@ -9,8 +9,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// Lookup date constants are freshness stamps on the pinned versions below.
-// Bump the matching constant whenever a pin is updated.
 const versionLookupDate = "2026-05-21"
 const currentVersionLookupDate = "2026-05-21"
 const ansibleCoreLookupDate = "2026-05-31"
@@ -21,10 +19,6 @@ const (
 	defaultPyvmomiVersion    = "9.1.0.0"
 )
 
-// OpenShiftClientsMirrorBase is the canonical upstream base URL for downloading
-// oc, kubectl, and openshift-install. The openshift-install ComponentPin source
-// and the controller CLI install both derive from it; an Environment
-// defaults.clientsMirror overrides it for disconnected labs.
 const OpenShiftClientsMirrorBase = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp"
 
 type ComponentPin struct {
@@ -34,10 +28,6 @@ type ComponentPin struct {
 	LookupDate string `yaml:"lookupDate" json:"lookupDate"`
 }
 
-// ComponentPins enumerates the runtime tools and container images
-// Bootwright pins. Includes only tools whose use is implied by the
-// loaded state (sushy-tools when libvirt BMC emulation is on, haproxy
-// when an LB capability is referenced, etc.).
 func ComponentPins(state v1alpha1.State) []ComponentPin {
 	pins := []ComponentPin{
 		{Name: "ansible-core", Version: "2.21.0", Source: "https://pypi.org/project/ansible-core/", LookupDate: ansibleCoreLookupDate},
@@ -57,11 +47,8 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 	}
 	for _, version := range openshiftInstallVersions(state) {
 		pins = append(pins, ComponentPin{
-			Name:    "openshift-install",
-			Version: version,
-			// Honor an Environment defaults.clientsMirror override so the
-			// bill of materials records the release URL the controller CLI
-			// install actually fetches from, not the upstream default.
+			Name:       "openshift-install",
+			Version:    version,
 			Source:     OpenShiftClientsReleaseURL(state, version) + "/",
 			LookupDate: versionLookupDate,
 		})
@@ -69,11 +56,6 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 	return pins
 }
 
-// OpenShiftClientsReleaseURL is the release-scoped base URL the controller CLI
-// install fetches oc/openshift-install and their checksums from. It honors an
-// Environment defaults.clientsMirror override and otherwise uses the pinned
-// upstream mirror, keeping the install source renderer-owned instead of
-// hardcoded in the Ansible role.
 func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 	base := OpenShiftClientsMirrorBase
 	if env := stateview.Environment(state); env != nil {
@@ -84,12 +66,6 @@ func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 	return base + "/" + version
 }
 
-// VirtctlMirrorOverride returns the Environment defaults.virtctlMirror base URL
-// when set, and "" otherwise. Empty means the controller_virtctl role fetches
-// the version-matched virtctl from each KubeVirt host cluster's OpenShift
-// Virtualization ConsoleCLIDownload; a disconnected lab sets the override and
-// the role appends the server-reported version. Unlike OpenShiftClientsReleaseURL
-// there is no upstream default base — the default source is the host cluster.
 func VirtctlMirrorOverride(state v1alpha1.State) string {
 	if env := stateview.Environment(state); env != nil {
 		if m := strings.TrimSpace(env.Spec.Defaults.VirtctlMirror); m != "" {
@@ -99,10 +75,6 @@ func VirtctlMirrorOverride(state v1alpha1.State) string {
 	return ""
 }
 
-// servicePinGates maps each pinnable managed service to the predicate that
-// decides whether the loaded state actually uses it. The set of keys here must
-// match roles.PinnableServiceKeys(); TestServicePinGatesCoverPinnableServices
-// enforces that so a new image-bearing registry entry cannot ship without a pin.
 var servicePinGates = []struct {
 	key  roles.ServiceKey
 	uses func(v1alpha1.State) bool
@@ -125,11 +97,6 @@ func appendServicePin(pins []ComponentPin, state v1alpha1.State, kind, realisati
 		Source:     image.Source,
 		LookupDate: image.LookupDate,
 	}
-	// Reflect a componentImages override into the bill of materials so a
-	// disconnected operator auditing the lock file mirrors the reference that
-	// is actually pulled, not the upstream default this environment overrides.
-	// Resolve the override directly (not via managedServiceImage, whose version
-	// lookup re-enters ComponentPins) to avoid infinite recursion.
 	fallback := image.Repository + ":" + image.Version
 	if effective := managedComponentImage(state, image.Category, image.Type, fallback); effective != fallback {
 		pin.Source = effective
@@ -140,10 +107,6 @@ func appendServicePin(pins []ComponentPin, state v1alpha1.State, kind, realisati
 	return append(pins, pin)
 }
 
-// imageRefTag returns the tag of a container image reference (the text after
-// the last ":" in the final path segment), or "" when the reference carries no
-// tag. Splitting on the final segment avoids mistaking a registry host:port for
-// a tag.
 func imageRefTag(ref string) string {
 	segment := ref
 	if slash := strings.LastIndex(ref, "/"); slash >= 0 {
@@ -191,9 +154,6 @@ func usesSushyTools(state v1alpha1.State) bool {
 	return false
 }
 
-// usesVSphere reports whether any vSphere provider declares machine
-// profiles, implying community.vmware modules (and so pyvmomi in the
-// controller venv) will run during apply.
 func usesVSphere(state v1alpha1.State) bool {
 	for _, p := range state.InfraProviders {
 		if p.Spec.Type != v1alpha1.ProvisionerVSphere || p.Spec.VSphere == nil {

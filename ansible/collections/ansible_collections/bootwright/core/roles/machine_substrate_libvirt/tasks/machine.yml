@@ -51,14 +51,6 @@
       }}
   changed_when: false
 
-# The domain name <cluster>-<machine> carries no context component, so a second
-# Bootwright context (or a foreign owner) can already hold a running domain of the
-# same name on this hypervisor. Before the override reset destroys/undefines it, or
-# a plain apply redefines it, require the Bootwright ownership marker for THIS
-# context/cluster/machine — mirroring destroy.yml. When the domain is absent the
-# probe fails and the guard is skipped, so first apply still creates it; on a
-# same-context re-apply the marker is present and mutation proceeds. Apply fails
-# closed (no --force-unowned escape): it must never touch a domain it does not own.
 - name: Read libvirt domain ownership metadata for apply
   ansible.builtin.command:
     argv:
@@ -255,13 +247,6 @@
     - bootwright_libvirt_machine_data_disk_source_locations.results[ansible_loop.index0].stat.exists | default(false)
     - not (bootwright_libvirt_machine_data_disk_storage_locations.results[ansible_loop.index0].stat.exists | default(false))
 
-# A machineProfile diskGiB change no longer flips the cluster to a destructive
-# rebuild (the InfraProvider is cleared from the install structural hash), so the
-# edit reaches here in continue mode. "Create machine disk" guards on creates:, so
-# an existing disk is silently left at its old size — the resize vanishes. cephadm/
-# the guest partitions cannot follow an in-place qcow2 grow anyway, so refuse the
-# mismatch loudly instead of no-op'ing. The override reset deletes the disk first,
-# so it is exempt (the disk is recreated at the new size below).
 - name: Probe existing libvirt root disk size
   ansible.builtin.command:
     argv:

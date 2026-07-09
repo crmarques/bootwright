@@ -18,11 +18,11 @@ func accessTestNodes() []stateview.ClusterNode {
 
 func TestResolveClusterNodeSelectorPrecedence(t *testing.T) {
 	cases := []struct{ selector, want string }{
-		{"cp-1", "cp-1"},              // exact Machine name
-		{"w-0", "w-0"},                // short hostname (also a Machine name here)
-		{"cp-0.managed.test", "cp-0"}, // full FQDN
-		{"master-1", "cp-1"},          // role-ordinal
-		{"worker-0", "w-0"},           // role-ordinal
+		{"cp-1", "cp-1"},
+		{"w-0", "w-0"},
+		{"cp-0.managed.test", "cp-0"},
+		{"master-1", "cp-1"},
+		{"worker-0", "w-0"},
 	}
 	for _, tc := range cases {
 		got, err := resolveClusterNode(accessTestNodes(), tc.selector)

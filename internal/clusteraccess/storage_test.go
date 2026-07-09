@@ -91,10 +91,6 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 	}
 }
 
-// TestStorageAccessSummaryUsesManagementVIPDashboardURL covers the access URL
-// for a cluster fronted by a mgmt-gateway VIP: the dashboard URL is the
-// management FQDN (resolvable at the VIP), not a per-node address, and the port
-// defaults to 8443 but follows an explicit management.port.
 func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
 	managementCluster := func(port int) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{

@@ -1,6 +1,3 @@
-# Bare-metal Ceph node (full). Bootwright installs RHEL 9.7 via anaconda +
-# Redfish virtual media, then cephadm builds IBM Storage Ceph on it.
-# Roles (../cluster.yaml): mon, mgr, osd, mds, rgw, ingress.
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
@@ -39,8 +36,6 @@ spec:
       nicRef: primary
     management:
       bmc:
-        # Real Redfish endpoint (iDRAC/iLO/etc.). tls.verify: false accepts the
-        # BMC's self-signed TLS cert; drop it if the BMC has a trusted cert.
         address: redfish-virtualmedia+https://ceph-1-bmc.example.com/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
         tls:

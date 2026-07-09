@@ -3,7 +3,6 @@ kind: ProvisioningPlaybook
 metadata:
   name: register-nodes
 spec:
-  # Run after the cluster has finished installing ("after installing clusters").
   stage: base
 
   timing: after

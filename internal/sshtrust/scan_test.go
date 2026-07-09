@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestScanHostKeyCommandUsesFIPSHonoringSSH pins that host-key capture runs
-// `ssh` with accept-new (which honors the controller's crypto policy) and never
-// ssh-keyscan (which ignores it and returns nothing on a FIPS controller).
 func TestScanHostKeyCommandUsesFIPSHonoringSSH(t *testing.T) {
 	cmd := scanHostKeyCommand("10.0.0.5", 15, "/tmp/kh/known_hosts")
 	if cmd.Name != "ssh" {

@@ -11,8 +11,6 @@ const (
 	ansibleBundlesDirName = "ansible-bundles"
 )
 
-// DefaultControllerCLIInstallDir is where bastion setup installs managed CLI
-// binaries.
 func DefaultControllerCLIInstallDir() string {
 	return "/usr/local/bin"
 }
@@ -37,8 +35,6 @@ func AnsibleVenvBin(name string) string {
 	return filepath.Join(AnsibleVenvDir(), "bin", name)
 }
 
-// ResolveAnsiblePlaybook prefers the bootwright-managed venv binary and
-// falls back to PATH lookup.
 func ResolveAnsiblePlaybook() string {
 	bin := AnsibleVenvBin("ansible-playbook")
 	if isExecutable(bin) {
@@ -47,7 +43,6 @@ func ResolveAnsiblePlaybook() string {
 	return "ansible-playbook"
 }
 
-// BundleDir is the cache directory for one extracted embedded Ansible bundle.
 func BundleDir(versionMarker string) (string, error) {
 	return filepath.Abs(filepath.Join(CacheDir(), ansibleBundlesDirName, bundleCacheKey(versionMarker)))
 }
@@ -62,8 +57,6 @@ func bundleCacheKey(versionMarker string) string {
 	return "version=unknown"
 }
 
-// CurrentContext loads the default registry and returns the selected
-// context.
 func CurrentContext() (Context, error) {
 	_, store, err := LoadDefaultStore()
 	if err != nil {
@@ -72,8 +65,6 @@ func CurrentContext() (Context, error) {
 	return Current(store)
 }
 
-// LoadDefaultStore loads the context registry from its default path and
-// returns both.
 func LoadDefaultStore() (string, Store, error) {
 	registry, err := DefaultRegistryPath()
 	if err != nil {

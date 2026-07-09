@@ -10,15 +10,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// This file holds the low-level YAML-document mutation primitives `diff --adopt`
-// uses: load/marshal a multi-document desired-state file preserving comments, and
-// apply the two kinds of edit (scalar set, sequence append) a Summary's nodeEdits
-// describe. The adopt policy — which differences fold in and which are only
-// reported — lives in adopt.go.
-
-// applyNodeEdits loads a desired-state file's documents, applies each edit to the
-// matching document, and re-marshals the whole file, preserving comments and the
-// order of unaffected documents.
 func applyNodeEdits(path string, edits []nodeEdit) ([]byte, error) {
 	docs, err := loadYAMLDocuments(path)
 	if err != nil {
@@ -80,11 +71,6 @@ func marshalYAMLDocuments(docs []*yaml.Node) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// appendHostSequence appends each value (as a !!str scalar, skipping ones already
-// present) to the sequence at hostPath within the spec.ceph.topology.hosts[]
-// element identified by hostRef (its machineRef.name or hostname). It is purely
-// additive: it never rewrites or removes an existing entry, and it creates the
-// target sequence only if the host declares none yet.
 func appendHostSequence(doc *yaml.Node, hostRef string, hostPath, values []string) error {
 	mapping := doc
 	if mapping.Kind == yaml.DocumentNode && len(mapping.Content) > 0 {
@@ -116,8 +102,6 @@ func appendHostSequence(doc *yaml.Node, hostRef string, hostPath, values []strin
 	return nil
 }
 
-// mappingSequenceAtPath follows a mapping-key path to a sequence node, or nil if
-// any element is missing or not the expected kind.
 func mappingSequenceAtPath(mapping *yaml.Node, path []string) *yaml.Node {
 	cur := mapping
 	for _, key := range path {
@@ -135,8 +119,6 @@ func mappingSequenceAtPath(mapping *yaml.Node, path []string) *yaml.Node {
 	return cur
 }
 
-// findHostElement returns the hosts[] mapping whose hostname or machineRef.name
-// equals ref.
 func findHostElement(hosts *yaml.Node, ref string) *yaml.Node {
 	for _, host := range hosts.Content {
 		if host.Kind != yaml.MappingNode {
@@ -154,8 +136,6 @@ func findHostElement(hosts *yaml.Node, ref string) *yaml.Node {
 	return nil
 }
 
-// ensureSequenceAtPath resolves the sequence at a mapping-key path within mapping,
-// creating any missing intermediate mappings and an empty final sequence.
 func ensureSequenceAtPath(mapping *yaml.Node, path []string) (*yaml.Node, error) {
 	cur := mapping
 	for i, key := range path {
@@ -183,8 +163,6 @@ func ensureSequenceAtPath(mapping *yaml.Node, path []string) (*yaml.Node, error)
 	return nil, fmt.Errorf("empty path")
 }
 
-// findDocumentByName returns the mapping node of the document whose metadata.name
-// equals name.
 func findDocumentByName(docs []*yaml.Node, name string) *yaml.Node {
 	for _, doc := range docs {
 		mapping := doc
@@ -205,8 +183,6 @@ func findDocumentByName(docs []*yaml.Node, name string) *yaml.Node {
 	return nil
 }
 
-// setScalarAtPath sets value at the mapping-key path within mapping, creating any
-// missing intermediate mappings.
 func setScalarAtPath(doc *yaml.Node, path []string, value, tag string) error {
 	mapping := doc
 	if mapping.Kind == yaml.DocumentNode && len(mapping.Content) > 0 {

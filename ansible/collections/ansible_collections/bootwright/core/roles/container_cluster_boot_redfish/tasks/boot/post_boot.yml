@@ -29,21 +29,6 @@
       }}
   changed_when: false
 
-# Forcing Continuous/Hdd is only safe once the live ISO has positively booted:
-# the BMC reports PowerState=On the instant chassis power applies, minutes
-# before UEFI reads the one-time Once/Cd override during POST. On the agent-ISO
-# path (readiness.type=ssh) the SSH probe above blocks until the live ISO's sshd
-# answers, so Once/Cd is long consumed before this PATCH lands. The managed-OS
-# (Anaconda) path renders readiness.type=none because the installer environment
-# has no reachable sshd, so the probe is a no-op and this PATCH would otherwise
-# fire ~1-2s after power-on. An iBMC that reads BootSourceOverride live during
-# POST then overwrites the pending Once/Cd with Hdd -> the node boots its
-# existing disk, Anaconda never runs, and the foreign OS answers SSH later at the
-# auth check. So skip the disk override when there was no readiness gate to prove
-# the ISO booted: Once/Cd self-clears after the single install boot, the fresh
-# install's own UEFI boot entry takes precedence, and wait.yml ejects the media.
-# Also honor setBootSource: when boot source is externally managed we never set
-# Once/Cd, so we must not force Hdd either.
 - name: Refresh Redfish system metadata before disk boot override
   ansible.builtin.uri:
     url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"

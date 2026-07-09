@@ -9,14 +9,6 @@ spec:
 
   ceph:
     distribution: oss
-    # Pin the Ceph release here; a name (squid) tracks the latest stable, while a
-    # full x.y.z (e.g. 19.2.1) makes the run reproducible and derives the matching
-    # quay.io/ceph/ceph image. Set spec.ceph.image to pin an exact tag or digest.
-    # Bootwright configures the upstream community Ceph repo on each node with
-    # cephadm; cephadm's add-repo also enables EPEL, so on these unregistered
-    # managed RHEL nodes Bootwright pre-installs epel-release from
-    # dl.fedoraproject.org. Set community.mirror to an internal download.ceph.com
-    # mirror for disconnected sites.
     release: squid
     cephadm:
       bootstrap:

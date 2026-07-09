@@ -6,11 +6,6 @@ spec:
   storageClusterRef: ceph-ibm
 
   ceph:
-    # Only two OSD hosts exist, so replicate across hosts with size 2.
-    # minSize 2 keeps both copies required for writes (no silent single-copy
-    # writes). With one OSD host down, I/O pauses but mon quorum (3 mons)
-    # survives — this is a tie-breaker layout, not data-HA across a site. Add OSD
-    # hosts and raise size to 3 / minSize to 2 for production durability.
     failureDomain: host
     ruleName: replicated-host
     replicated:

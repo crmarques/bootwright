@@ -9,9 +9,6 @@
 
 - name: Remove ownership resource record
   ansible.builtin.file:
-    # A reference record lives at <name>@<context>.json (see resource.yml); an
-    # owner/default record at <name>.json. Mirror the same suffix so a reference
-    # teardown removes only this context's record and never the owner's file.
     path: >-
       {{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{
         (bootwright_ownership_name ~ '@' ~ (bootwright_clusters_dir | dirname | basename))

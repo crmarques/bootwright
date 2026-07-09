@@ -1,21 +1,4 @@
 ---
-# `ceph orch apply` registers the OSD drivegroups with the cephadm mgr and returns
-# immediately; cephadm then creates OSDs asynchronously through ceph-volume. Without
-# this poll a cluster that ends up with zero or fewer OSDs than declared — a busy,
-# undersized, or foreign-signed device, a ceph-volume refusal, an OSD image-pull or
-# SELinux failure — would report a green apply, and because the desired hash is
-# unchanged it would read 'match' on every later re-apply. Poll until the OSDs the
-# managed drivegroups should create are 'in', then fail closed with an actionable
-# message. Runs before topology_operations so pools/CRUSH/EC never land on a
-# zero-OSD cluster. Gates on num_in_osds (created and part of the cluster), not
-# num_up_osds, so a transiently-down OSD on a benign re-apply is not a false fail.
-#
-# The expectation is rendered from the declared OSD topology (osdReadiness):
-#   exact      — every managed OSD selection names explicit devices; expectedCount
-#                is the exact number of OSDs to expect.
-#   atLeastOne — a filter/all selection makes the count host-resolved; only '>0' is
-#                assertable.
-#   skip       — no managed OSD service creates OSDs (no osd host, or all unmanaged).
 - name: Resolve OSD readiness expectation
   ansible.builtin.set_fact:
     bootwright_ceph_osd_readiness_mode: >-
@@ -31,9 +14,6 @@
       service is unmanaged).
   when: bootwright_ceph_osd_readiness_mode == 'skip'
 
-# Bounded, non-fatal poll (failed_when:false so exhausting the retries does not abort
-# here with a bare until-timeout message — the assert below owns the failure and
-# names the cluster, expected, and observed counts).
 - name: Wait for declared Ceph OSDs to be created and in
   ansible.builtin.command:
     argv:
@@ -83,9 +63,6 @@
       than reporting success against a short or zero-OSD cluster.
   when: bootwright_ceph_osd_readiness_mode != 'skip'
 
-# Capture the observed OSD counts + health so result_and_ownership.yml can persist
-# them and the controller can classify a silently-degraded cluster as drift instead
-# of a blind hash match.
 - name: Capture observed Ceph health for the storage result
   ansible.builtin.command:
     argv:

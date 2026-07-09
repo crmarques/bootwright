@@ -1,44 +1,19 @@
 ---
-# ansible-lint gate for the embedded bootwright.core collection.
-#
-# Strategy: run the FULL default rule set (not a weak named profile) and skip
-# only the rules that conflict with deliberate, reviewed house style. The
-# codebase already passes every high-value rule (no-changed-when,
-# no-log-password, risky-shell-pipe, command-instead-of-module,
-# risky-file-permissions, ...), so this gate mechanically catches regressions in
-# exactly those classes while staying green on the current tree. Ratchet up by
-# removing skips over time; do not retro-fix the existing house-style hits.
-
 offline: true
 
 skip_list:
-  # YAML formatting is governed by yamllint via .yamllint, not ansible-lint.
   - yaml
-  # House style: variables use a single global `bootwright_` prefix rather than a
-  # per-role prefix (intentional, repo-wide convention).
   - var-naming[no-role-prefix]
-  # Orchestration playbooks are thin import_playbook/strategy plays that are not
-  # individually named by design.
   - name[play]
-  # A few task names embed Jinja mid-string for legibility.
   - name[template]
-  # strategy: free and run_once-under-free are intentional, reviewed idioms.
   - run-once[play]
   - run-once[task]
-  # Inline `when: <result> is changed` reactions (systemd reloads, trust-store
-  # updates, ownership-record writes, destroy-path cleanups) are used by design;
-  # handler/flush semantics do not fit the run_once/strategy:free/destroy flows.
   - no-handler
-  # Static type inference cannot resolve list-typed vars at lint time and reports
-  # spurious "can only concatenate str/list" on runtime-valid templates.
   - jinja[invalid]
-  # requires_ansible ">=2.20.0" is intentional (collection targets ansible-core 2.20+).
   - meta-runtime[unsupported-version]
-  # Embedded collection: galaxy metadata is deliberately minimal.
   - galaxy[no-changelog]
   - galaxy[no-license]
   - galaxy[no-repository]
-  # Cosmetic task-key ordering; not worth churn.
   - key-order[task]
 
 warn_list:

@@ -4,16 +4,6 @@
     bootwright_redfish_system_vmedia_url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/VirtualMedia') | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
   changed_when: false
 
-# throttle: 1 makes the first vmedia probe hit one host at a time -- cheap, and
-# required by the emulated sushy-tools BMC, whose VirtualMedia driver is built
-# lazily on the first GET to /Systems/<id>/VirtualMedia: that cold init
-# initializes a shared sqlite state DB under a WAL write lock, so parallel boots
-# race it and every loser returns HTTP 500 ("database is locked"). Backends with
-# that shared cold init project redfish.vmediaColdInitRetry=true; for them
-# until/retries rides out the residual lock before the candidate assertion below.
-# Real per-server BMCs share no state and answer in one shot, so they leave the
-# flag unset and the probe makes a single best-effort attempt instead of
-# serially burning the whole retry window on every host.
 - name: List VirtualMedia members for the target system
   ansible.builtin.uri:
     url: "{{ bootwright_redfish_system_vmedia_url }}"
@@ -88,10 +78,6 @@
     bootwright_redfish_vmedia_member_urls: []
   changed_when: false
 
-# BMC dialects that expose the same VirtualMedia resources under both
-# /Systems/<id>/VirtualMedia and /Managers/<id>/VirtualMedia (iDRAC-style)
-# otherwise get every member probed twice; unique on the resolved URL string
-# drops those duplicate GETs. iBMC 404s the system view, so it is unaffected.
 - name: Collect Redfish VirtualMedia member URLs
   ansible.builtin.set_fact:
     bootwright_redfish_vmedia_member_urls: "{{ (bootwright_redfish_vmedia_member_urls + [item['@odata.id'] | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)]) | unique }}"

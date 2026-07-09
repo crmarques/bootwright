@@ -1,20 +1,3 @@
-// Package workflow exposes the provisioning pipeline as a pure Go API
-// independent of the CLI. CLI handlers in internal/cli should be thin
-// adapters that translate flags to Options and call into this package;
-// they should not embed business logic. This keeps multi-cluster
-// orchestration reusable without depending on Cobra.
-//
-// Design constraints:
-//   - No package in internal/converge/workflow imports internal/cli.
-//   - Human output is reported as semantic events; no fmt.Print or log.
-//   - Ansible exec goes through ansible.Runner so tests can fake it.
-//   - Options structs are flat: callers compute defaults and resolve paths
-//     before calling in; workflow does not consult the environment.
-//
-// Apply-result persistence owned here: the durable run ledger (ledger.go) and
-// per-cluster install state (install_state.go). Add-on apply state lives in
-// internal/addons/records; managed-Ceph and Data Foundation results in
-// internal/storage.
 package workflow
 
 import (
@@ -33,74 +16,44 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-// RunOptions describes one ansible-playbook invocation against rendered
-// desired state. Callers pre-resolve every field (no defaults, no env
-// lookup) so the function is deterministic from its inputs alone.
 type RunOptions struct {
-	State              v1alpha1.State
-	RenderedDir        string
-	ClustersDir        string
-	RunsDir            string
-	RenderDir          string
-	ContextName        string
-	SecretsDir         string
-	ManagedServicesDir string
-	ProviderStateDir   string
-	OwnershipDir       string
-	Executable         string
-	BundleDir          string
-	Playbook           string
-	Limit              string
-	Forks              int
-	ExtraVarPairs      []string
-	// RolesPath and CollectionsPath are optional operator-supplied vendored
-	// directories (from a ProvisioningPlaybook), passed through to the runspec.
-	RolesPath       string
-	CollectionsPath string
-	ArtifactsRoot   string
-	OutputLogPath   string
-	// ArtifactsBaseName names the per-run subdirectory under the render
-	// artifacts root, e.g. "preflight-infra" or "infra-destroy".
-	ArtifactsBaseName  string
-	Check              bool
-	AskBecomePass      bool
-	BecomePasswordFile string
-	UseControllingTTY  bool
-	DryRun             bool
-	// ResolveInstaller, when true and the run is not a dry-run, writes
-	// per-cluster effective installer inputs with real secret material before
-	// invoking ansible-playbook. Required for any apply path that
-	// targets the openshift install_agent role.
-	ResolveInstaller bool
-	// Label is included in the dry-run echo line, e.g. "infra apply".
-	Label string
-	// AcquireRunLease, when true and the run is not a dry-run or no-hosts skip,
-	// claims the run lease around the ansible invocation so the run is mutually
-	// exclusive with scheduler applies and other lease-holding runs. Set by
-	// destroy, which mutates outside the apply scheduler and would otherwise hold
-	// no lease, letting an apply start concurrently against the same targets.
-	AcquireRunLease bool
-	// ApplyMode is the explicit safety mode for this run (create/continue/override).
-	// Empty is treated as continue (the safe reconcile) by consumers.
+	State                      v1alpha1.State
+	RenderedDir                string
+	ClustersDir                string
+	RunsDir                    string
+	RenderDir                  string
+	ContextName                string
+	SecretsDir                 string
+	ManagedServicesDir         string
+	ProviderStateDir           string
+	OwnershipDir               string
+	Executable                 string
+	BundleDir                  string
+	Playbook                   string
+	Limit                      string
+	Forks                      int
+	ExtraVarPairs              []string
+	RolesPath                  string
+	CollectionsPath            string
+	ArtifactsRoot              string
+	OutputLogPath              string
+	ArtifactsBaseName          string
+	Check                      bool
+	AskBecomePass              bool
+	BecomePasswordFile         string
+	UseControllingTTY          bool
+	DryRun                     bool
+	ResolveInstaller           bool
+	Label                      string
+	AcquireRunLease            bool
 	ApplyMode                  ApplyMode
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
-	// StreamAnsible, when true, tees raw ansible-playbook output to the run's
-	// terminal writers in addition to the per-task log files (the default routes
-	// ansible output to the log only). Set by --stream-ansible.
-	StreamAnsible bool
+	StreamAnsible              bool
 }
 
-// RunResult is what callers need to keep printing after the run completes
-// (artifact paths, the rendered installer assets). The CLI prints these;
-// workflow does not.
 type RunResult struct {
-	Render render.Result
-	// Command is the argv the runner used, including ansible-playbook.
+	Render  render.Result
 	Command []string
-	// Skipped is true when Run rendered artifacts but did not invoke
-	// ansible-playbook because the configured --limit targets only empty
-	// inventory groups (so ansible would have aborted with "no hosts to
-	// target"). The CLI uses this to keep its end-of-run banner accurate.
 	Skipped bool
 }
 
@@ -112,11 +65,6 @@ type Reporter interface {
 	AnsibleStart(executable string)
 }
 
-// Run renders artifacts and either prints the dry-run command or executes
-// ansible-playbook through the provided runner. Errors from rendering or
-// runspec construction are returned as-is. The runner's stdout/stderr are
-// already wired by the caller. Accepts the ansible.Runner interface so
-// tests can substitute a fake that records calls without exec'ing.
 func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter Reporter) (RunResult, error) {
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return RunResult{}, errors.New("clusters dir is required")
@@ -228,32 +176,21 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	}
 	if opts.AcquireRunLease {
 		now := time.Now()
-		// Destroy mutates outside the apply scheduler; label its lease destroy-…
-		// so the "a mutating run (…) is still running" message does not mislabel a
-		// destroy as an apply.
 		lease := NewRunLease(destroyRunID(now), now)
 		if err := AcquireRunLease(opts.RunsDir, lease, now); err != nil {
 			return RunResult{Render: result, Command: command}, err
 		}
-		// Reclaim decrypted runtime-secret dirs left by prior mutating runs now that
-		// we hold the lease and know the live run id.
 		sweepStaleRuntimeSecrets(opts.RunsDir, lease.RunID)
 		leaseCtx, leaseCancel := context.WithCancel(ctx)
 		defer leaseCancel()
 		stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(leaseCtx, opts.RunsDir, lease)
 		defer func() {
 			stopLeaseHeartbeat()
-			// Ownership-checked: if this run stalled and was taken over, its cleanup
-			// must not delete the new holder's lease.
 			_ = RemoveRunLeaseIfOwner(opts.RunsDir, lease.RunID)
 		}()
 		if reporter != nil {
 			reporter.AnsibleStart(command[0])
 		}
-		// Run under leaseCtx and select on the heartbeat error channel alongside the
-		// runner completing. A heartbeat-save failure means we can no longer prove
-		// exclusive ownership, so cancel (reaping the ansible process tree) and fail
-		// the run, matching the scheduler's fail-closed handling.
 		runErr := make(chan error, 1)
 		go func() { runErr <- runner.Run(leaseCtx, spec) }()
 		select {
@@ -281,9 +218,6 @@ func loadOwnershipRecordsForRun(playbook, ownershipDir, contextName string) ([]o
 	if !strings.Contains(playbook, "destroy") {
 		return nil, nil
 	}
-	// Go through the shared context-scoped loader so the inventory the teardown
-	// executes against is exactly the set destroy planning gated and the operator
-	// preview showed — never a wider, foreign-context-inclusive set.
 	return ownership.LoadContext(ownershipDir, contextName)
 }
 
@@ -294,17 +228,6 @@ func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {
 	return filepath.Join(filepath.Dir(renderDir), "runtime")
 }
 
-// sweepStaleRuntimeSecrets removes decrypted runtime-secret directories left in
-// run history by prior mutating runs. Run materializes plaintext BMC/SSH/pull
-// secrets under a per-run/task runtime/secrets dir and only defers their removal,
-// so a SIGKILL leaves the plaintext behind forever. The run lease is the single
-// point of mutual exclusion, so once liveRunID holds it every other history entry
-// belongs to a finished or killed run whose plaintext copies are safe to reclaim
-// (security.md: short-lived plaintext copies must be removed after execution).
-// The live run's own dirs are never touched. This targets the host-local,
-// root-managed runs directory; the unsupported cross-host shared-runsDir case,
-// where a remote holder's lease can go stale while its run is still live, is a
-// pre-existing split-brain concern this sweep does not attempt to solve.
 func sweepStaleRuntimeSecrets(runsDir, liveRunID string) {
 	historyRoot := filepath.Join(runsDir, "history")
 	entries, err := os.ReadDir(historyRoot)
@@ -319,8 +242,6 @@ func sweepStaleRuntimeSecrets(runsDir, liveRunID string) {
 	}
 }
 
-// removeRuntimeSecretDirs removes every runtime/secrets directory found under
-// root, matching the path construction used to materialize them.
 func removeRuntimeSecretDirs(root string) {
 	var targets []string
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -345,21 +266,6 @@ func effectiveContextName(name string) string {
 	return name
 }
 
-// LimitMatchesNoHosts reports whether an ansible-playbook --limit
-// string would resolve to zero hosts against the renderer's inventory
-// for `state`. The renderer emits a fixed set of inventory groups (see
-// render.HostGroupCounts); when every group named in --limit is empty
-// (or unknown), ansible aborts with "Specified inventory, host pattern
-// and/or --limit leaves us with no hosts to target", and the caller
-// should skip the run.
-//
-// Returns false when --limit is empty (ansible runs against the full
-// inventory and per-play hosts: selectors handle scoping). Returns
-// false when --limit names any non-empty group. Group names are
-// matched verbatim; ansible's wildcard / regex / `:!`-exclusion
-// patterns are not interpreted — bootwright only emits literal
-// colon-separated group lists today, so the simple parse matches the
-// only forms that reach this helper.
 func LimitMatchesNoHosts(limit string, state v1alpha1.State) bool {
 	return LimitMatchesNoHostsWithOwnershipRecords(limit, state, nil)
 }
@@ -389,9 +295,6 @@ func LimitMatchesNoHostsWithOwnershipRecords(limit string, state v1alpha1.State,
 	return true
 }
 
-// RenderOnly executes the render half of a Run without producing a
-// RunSpec or invoking ansible. Used by `bootwright render installer` and
-// other read-only previews.
 func RenderOnly(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
 	return render.All(renderedDir, clustersDir, secretsDir, state)
 }
@@ -408,8 +311,6 @@ func RenderToolInputsForContext(contextName, outputDir, secretsDir string, state
 	return render.ToolInputsForContext(contextName, outputDir, secretsDir, state)
 }
 
-// RenderToolInputsPortable renders the context-free tool-input bundle with
-// {{ secret <name> }} placeholders. Used by `bootwright render --input-dir`.
 func RenderToolInputsPortable(outputDir string, state v1alpha1.State) (render.Result, error) {
 	return render.ToolInputsPortable(outputDir, state)
 }

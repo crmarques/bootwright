@@ -101,10 +101,6 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 			}
 			return nil
 		}
-		// Live mode (default): overlay a real-state comparison on top of the
-		// offline report's structural skeleton (which roots exist, which are
-		// never-applied, and the orphans). Discovery noise is routed to stderr so
-		// stdout stays clean for the report or the JSON document.
 		live := buildLiveDiff(c.Context(), cf, executable, state, report, false, stderr)
 		if adopt {
 			var probed []cephadopt.ProbedStorage
@@ -163,10 +159,6 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 	printStateCheckLoadWarnings(p, report.LoadWarnings)
 }
 
-// printStateCheckLoadWarnings surfaces ownership records that could not be read,
-// decoded, or validated and were skipped on load, mirroring destroy's skipped-
-// record warning. A skipped record's orphan never appears in the report above, so
-// the operator is told which files to repair rather than letting an orphan vanish.
 func printStateCheckLoadWarnings(p *cliout.Printer, warnings []string) {
 	if len(warnings) == 0 {
 		return
@@ -177,10 +169,6 @@ func printStateCheckLoadWarnings(p *cliout.Printer, warnings []string) {
 	}
 }
 
-// stateCheckRootSummary describes a present root's out-of-sync resources by
-// classification, so a foreign-owned resource (resolve the foreign owner) is never
-// lumped under "drifted" (re-apply) — the two have opposite remediations, and a
-// never-applied resource is a third, distinct case.
 func stateCheckRootSummary(root workflow.StateCheckRoot) string {
 	var drift, foreign, missing, other int
 	for _, resource := range root.Resources {
@@ -211,9 +199,6 @@ func stateCheckRootSummary(root workflow.StateCheckRoot) string {
 	return fmt.Sprintf("%d of %d resources out of sync: %s", len(root.Resources), root.Total, strings.Join(parts, ", "))
 }
 
-// printStateCheckOrphans lists Bootwright-owned resources that are no longer declared
-// in desired state (orphans). They are not drift and are never auto-removed; the
-// remedy is to re-declare them or run a full `bootwright destroy` to reclaim them.
 func printStateCheckOrphans(p *cliout.Printer, orphans []workflow.UndeclaredResource) {
 	if len(orphans) == 0 {
 		return

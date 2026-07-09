@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// TestRenderFailsOnUnresolvedEndpointBindAddress constructs the resolution gap
-// directly in Go (Validate rejects it since the bind-name resolution fix): an
-// install endpoint sourced from a loadBalancer whose source.bindAddressRef
-// matches no bindAddresses[].name. stateview.EndpointAddress degrades to ""
-// for it and the installer platform guards with `if vip != ""`, so without the
-// render-side check the install-config would ship with empty api/ingress VIPs.
 func TestRenderFailsOnUnresolvedEndpointBindAddress(t *testing.T) {
 	state := v1alpha1.State{
 		InfraComponents: []v1alpha1.InfraComponent{{
@@ -60,11 +54,6 @@ func TestRenderFailsOnUnresolvedEndpointBindAddress(t *testing.T) {
 	}
 }
 
-// TestRenderFailsOnUnresolvedStorageNodeAddress constructs the topology gap
-// directly in Go: a managed Ceph cluster whose host machine carries no
-// resolvable address. topology.NodeAddress returns "" and MonitorEndpoints
-// silently drops the host from the monitor list, so without the render-side
-// check the inventory ansible_host and the bootstrap monIP would render empty.
 func TestRenderFailsOnUnresolvedStorageNodeAddress(t *testing.T) {
 	state := v1alpha1.State{
 		Machines: []v1alpha1.Machine{{
@@ -108,7 +97,6 @@ func TestRenderFailsOnUnresolvedStorageNodeAddress(t *testing.T) {
 		t.Fatalf("render.All error = %q, want it to contain %q", err, wantBootstrap)
 	}
 
-	// The same state with a resolvable machine address renders cleanly.
 	state.Machines[0].Spec.Addresses = []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.168.133.30"}}
 	state.Machines[0].Spec.Access = v1alpha1.MachineAccess{
 		SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},

@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// TestRenderInputDirRendersPortableBundleWithoutContext exercises the
-// context-free render end to end: no `context init`/`use` runs first, yet
-// `render --input-dir <dir> --output-dir <dir>` produces the full tool-input
-// bundle with {{ secret }} placeholders and no inlined material.
 func TestRenderInputDirRendersPortableBundleWithoutContext(t *testing.T) {
 	setTestHomeAndRoot(t)
 	outputDir := filepath.Join(t.TempDir(), "rendered")
@@ -71,9 +67,6 @@ func TestRenderInputDirRejectsSensitive(t *testing.T) {
 	}
 }
 
-// TestRenderInputDirStaysRootless pins the root-gate carve-out: a context-free
-// render reads/writes user-owned dirs and must never escalate, even though it
-// carries --output-dir (which is an execution target in the context mode).
 func TestRenderInputDirStaysRootless(t *testing.T) {
 	cases := [][]string{
 		{"render", "--input-dir", "/in", "--output-dir", "/out"},
@@ -85,7 +78,6 @@ func TestRenderInputDirStaysRootless(t *testing.T) {
 			t.Errorf("%v should stay rootless", args)
 		}
 	}
-	// The context-bound --output-dir path still escalates.
 	if !argsNeedLocalRoot([]string{"render", "--output-dir", "/out"}) {
 		t.Fatal("context render --output-dir should be rootful")
 	}

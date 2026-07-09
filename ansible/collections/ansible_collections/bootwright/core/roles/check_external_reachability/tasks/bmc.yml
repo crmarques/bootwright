@@ -1,14 +1,4 @@
 ---
-# External Redfish BMC probe. Issues an authenticated GET against
-# `/redfish/v1/Systems` (the entry point every Redfish service must
-# expose) on the renderer-normalized base URL. A 200 with a JSON body
-# proves both reachability AND that the supplied credentials
-# authenticate — what the install layer needs.
-#
-# Reads only bootwright_validate_machine.boot.redfish.{baseUrl,
-# credentialsRef, validateCerts}; the renderer strips any Ironic-style
-# transport hint and trailing /Systems/<id> before projection, so this
-# task does not parse BMC URLs.
 
 - name: "[bmc {{ bootwright_validate_machine.name }}] Resolve BMC credentials path"
   ansible.builtin.set_fact:
@@ -44,5 +34,3 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_validate_bmc_cred_path | length) > 0) }}"
   register: bootwright_validate_bmc_probe
   changed_when: false
-  # Failure here is fatal: include_tasks bubbles the error and the
-  # play aborts before any infra convergence runs.

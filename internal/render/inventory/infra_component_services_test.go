@@ -44,8 +44,6 @@ func TestFabricHostDesiredVarsFiltersByHost(t *testing.T) {
 		t.Fatal("infra component service has no machineRef; the fabric host projection would be silently empty")
 	}
 
-	// The host's projection must be non-empty: a silently-empty projection would
-	// make every fabric host hash identically and hide real drift.
 	got := FabricHostDesiredVars(state, host)
 	if len(got) == 0 {
 		t.Fatalf("FabricHostDesiredVars(%q) is empty; fabric host vars no longer carry machineRef", host)

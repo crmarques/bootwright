@@ -11,22 +11,10 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// cephDashboardPasswordFile is the controller-side secrets filename the
-// storage_cluster_cephadm role writes the captured dashboard password to,
-// alongside the container clusters' kubeadmin-password. The Ceph on-node layout
-// facts (config/keyring paths, default dashboard user) are owned by
-// storage/topology alongside the dashboard port.
 const cephDashboardPasswordFile = "dashboard-password"
 
-// cephDashboardPort is the dashboard/mgmt-gateway https port shown in the access
-// URL. It derives from the single owner of that default (topology) so the
-// reported URL cannot drift from the port the renderer deploys.
 var cephDashboardPort = strconv.Itoa(topology.CephManagementDefaultPort)
 
-// StorageDashboardPasswordPath returns the controller-local path where the
-// install-time Ceph dashboard admin password is persisted for a storage cluster,
-// mirroring <clustersDir>/<name>/secrets/kubeadmin-password for container
-// clusters. It returns "" when the clusters dir is unknown.
 func StorageDashboardPasswordPath(clustersDir, clusterName string) string {
 	if clustersDir == "" {
 		return ""
@@ -34,12 +22,6 @@ func StorageDashboardPasswordPath(clustersDir, clusterName string) string {
 	return filepath.Join(clustersDir, clusterName, "secrets", cephDashboardPasswordFile)
 }
 
-// StorageSummary is the local, state-derived access surface for a Ceph
-// StorageCluster. Unlike a container cluster, Bootwright keeps no admin
-// credential file on the controller: the admin keyring and ceph.conf live on the
-// seed node, so access is by SSH to that node plus `cephadm shell`. Every field
-// is derived from desired state, so the summary is available without reading any
-// remote artifact.
 type StorageSummary struct {
 	Name                     string   `json:"name"`
 	Type                     string   `json:"type"`
@@ -94,16 +76,9 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		summary.ShellCommand = summary.SSHCommand + " sudo cephadm shell"
 		summary.DashboardURL = "https://" + summary.SeedAddress + ":" + cephDashboardPort
 	}
-	// A configured management VIP supersedes the per-node dashboard address: the
-	// mgmt-gateway VIP is the HA, user-facing entry, resolvable at its FQDN and
-	// independent of which mgr is active, so it does not depend on the seed node.
 	if mgmt := cluster.Spec.Ceph.Management; mgmt != nil && mgmt.DNSName != "" {
 		summary.DashboardURL = "https://" + mgmt.DNSName + ":" + cephManagementPort(mgmt.Port)
 	}
-	// Bootwright captures the dashboard admin password at install for managed Ceph
-	// clusters and persists it like kubeadmin-password. The summary only reports
-	// the file's location and presence — never its bytes (see FileStatus,
-	// which stats the file without reading it).
 	if management == v1alpha1.StorageClusterManagementManaged {
 		if path := StorageDashboardPasswordPath(clustersDir, cluster.Metadata.Name); path != "" {
 			summary.DashboardUser = topology.CephDashboardDefaultUser
@@ -115,9 +90,6 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 	return summary
 }
 
-// cephManagementPort renders the management dashboard port, defaulting to the
-// Ceph dashboard's own port when spec.ceph.management.port is unset (the same
-// default the renderer applies to the mgmt-gateway frontend).
 func cephManagementPort(port int) string {
 	if port == 0 {
 		return cephDashboardPort
@@ -132,10 +104,6 @@ func storageSeedSSHTarget(state v1alpha1.State, cluster v1alpha1.StorageCluster,
 	return address
 }
 
-// StorageSummariesForApply mirrors ClusterSummariesForApply: it
-// reports access only for storage clusters whose install task actually ran to
-// completion in this apply, so a skipped or failed cluster is not advertised as
-// reachable.
 func StorageSummariesForApply(state v1alpha1.State, ledger workflow.RunLedger, clustersDir string) []StorageSummary {
 	if ledger.Status != workflow.RunStatusOK {
 		return nil

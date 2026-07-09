@@ -1,24 +1,15 @@
 package v1alpha1
 
 type Machine struct {
-	APIVersion string      `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string      `yaml:"kind" json:"kind"`
-	Metadata   Metadata    `yaml:"metadata" json:"metadata"`
-	Spec       MachineSpec `yaml:"spec" json:"spec"`
-	SourcePath string      `yaml:"-" json:"-"`
-	// DefaultedRefs records which spec references the normalize phase
-	// injected rather than the author wrote, so validation can reject a
-	// defaulted reference whose resolution is ambiguous instead of letting
-	// a name coincidence pick silently. Computed bookkeeping; never
-	// authored or serialized.
+	APIVersion    string               `yaml:"apiVersion" json:"apiVersion"`
+	Kind          string               `yaml:"kind" json:"kind"`
+	Metadata      Metadata             `yaml:"metadata" json:"metadata"`
+	Spec          MachineSpec          `yaml:"spec" json:"spec"`
+	SourcePath    string               `yaml:"-" json:"-"`
 	DefaultedRefs MachineDefaultedRefs `yaml:"-" json:"-"`
 }
 
-// MachineDefaultedRefs flags the spec references Normalize filled in.
 type MachineDefaultedRefs struct {
-	// AttachmentRef is true when spec.network.config.attachmentRef was
-	// copied from the networkConfigRef name; the same-name convention is
-	// only safe while the provider declares a single attachment to bind.
 	AttachmentRef bool
 }
 
@@ -57,56 +48,29 @@ type MachineHardwareManagement struct {
 }
 
 type BMCSpec struct {
-	Address        string    `yaml:"address,omitempty" json:"address,omitempty"`
-	Protocol       string    `yaml:"protocol,omitempty" json:"protocol,omitempty"`
-	CredentialsRef SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
-	// TLS governs the TLS connection bootwright opens TO this BMC (the Redfish
-	// API leg, bootwright → BMC).
-	TLS *BMCTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
-	// VirtualMedia governs the BMC's own virtual-media client — the connection the
-	// BMC opens to the artifact server to fetch the boot ISO (BMC → artifact
-	// server).
-	VirtualMedia *BMCVirtualMedia `yaml:"virtualMedia,omitempty" json:"virtualMedia,omitempty"`
+	Address        string           `yaml:"address,omitempty" json:"address,omitempty"`
+	Protocol       string           `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+	CredentialsRef SecretRef        `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	TLS            *BMCTLS          `yaml:"tls,omitempty" json:"tls,omitempty"`
+	VirtualMedia   *BMCVirtualMedia `yaml:"virtualMedia,omitempty" json:"virtualMedia,omitempty"`
 }
 
-// BMCTLS configures TLS for a connection to a BMC. Verify is tri-state: nil means
-// verify the certificate (the secure default); set it false only for a
-// lab/self-signed BMC certificate.
 type BMCTLS struct {
 	Verify *bool `yaml:"verify,omitempty" json:"verify,omitempty"`
 }
 
-// VerifyEnabled reports the effective verify decision; a nil receiver or unset
-// Verify means verify (the default).
 func (t *BMCTLS) VerifyEnabled() bool { return t == nil || t.Verify == nil || *t.Verify }
 
-// BMCVirtualMedia configures the BMC's virtual-media client — how it fetches the
-// boot ISO from the artifact server.
 type BMCVirtualMedia struct {
-	// TLS governs how the BMC handles the artifact server's TLS certificate on the
-	// virtual-media fetch (BMC → artifact server), distinct from BMCSpec.TLS
-	// (bootwright → BMC).
 	TLS *BMCVirtualMediaTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
 }
 
-// BMCVirtualMediaTLS controls how the BMC handles the artifact server's TLS
-// certificate when it fetches the boot ISO. Use it when a BMC rejects the
-// artifact server's self-signed certificate and aborts the InsertMedia fetch.
 type BMCVirtualMediaTLS struct {
-	// Verify is tri-state: nil means verify (the default). Set it false to have
-	// the BMC skip verifying the artifact server certificate (best-effort; some
-	// firmware ignores it, in which case ImportServerCertificate is the fix).
-	Verify *bool `yaml:"verify,omitempty" json:"verify,omitempty"`
-	// ImportServerCertificate uploads the artifact server's certificate into the
-	// BMC trust store before the fetch so the BMC accepts a self-signed cert.
-	ImportServerCertificate bool `yaml:"importServerCertificate,omitempty" json:"importServerCertificate,omitempty"`
-	// RemoveServerCertificateAfterBoot removes that imported certificate once the
-	// ISO is mounted. Requires ImportServerCertificate.
-	RemoveServerCertificateAfterBoot bool `yaml:"removeServerCertificateAfterBoot,omitempty" json:"removeServerCertificateAfterBoot,omitempty"`
+	Verify                           *bool `yaml:"verify,omitempty" json:"verify,omitempty"`
+	ImportServerCertificate          bool  `yaml:"importServerCertificate,omitempty" json:"importServerCertificate,omitempty"`
+	RemoveServerCertificateAfterBoot bool  `yaml:"removeServerCertificateAfterBoot,omitempty" json:"removeServerCertificateAfterBoot,omitempty"`
 }
 
-// VerifyEnabled reports the effective verify decision; a nil receiver or unset
-// Verify means verify (the default).
 func (t *BMCVirtualMediaTLS) VerifyEnabled() bool { return t == nil || t.Verify == nil || *t.Verify }
 
 type RootDeviceHints struct {
@@ -143,9 +107,6 @@ type MachineNetworkConfig struct {
 	Spec               *NetworkConfigSpec        `yaml:"spec,omitempty" json:"spec,omitempty"`
 }
 
-// MachineInterfaceAddress binds an NMState interface to a named entry in
-// spec.addresses[], so a node's static install IP is authored exactly once.
-// Rendering injects the resolved address into the interface's ipv4/ipv6 block.
 type MachineInterfaceAddress struct {
 	Interface    string               `yaml:"interface" json:"interface"`
 	AddressRef   LocalObjectReference `yaml:"addressRef" json:"addressRef"`
@@ -182,38 +143,19 @@ type MachineImage struct {
 	SourcePath string           `yaml:"-" json:"-"`
 }
 
-// MachineImageSpec describes the bootable media for a managed OS install.
 type MachineImageSpec struct {
-	// BootMedia locates the ISO the machine boots over BMC virtual media:
-	// "local-media:<file.iso>" for the managed media store, a "file://"
-	// absolute path, or "http(s)://".
-	BootMedia string `yaml:"bootMedia" json:"bootMedia"`
-	// Checksum optionally pins bootMedia content as "sha256:<hex>".
-	Checksum string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
-	// TrustRefs name Environment secrets holding CA bundles trusted when
-	// downloading bootMedia.
-	TrustRefs []SecretRef `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
-	// HeadersRefs name Environment secrets holding extra HTTP headers sent
-	// when downloading bootMedia.
+	BootMedia   string      `yaml:"bootMedia" json:"bootMedia"`
+	Checksum    string      `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+	TrustRefs   []SecretRef `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
 	HeadersRefs []SecretRef `yaml:"headersRefs,omitempty" json:"headersRefs,omitempty"`
 }
 
-// MachineInstallPackageSource selects where Anaconda fetches packages during
-// install when the referenced image is a boot ISO. Exactly one arm is set; the
-// arm itself is the discriminator (there is no type field).
 type MachineInstallPackageSource struct {
-	// Mirror installs from an HTTP(S) install tree you already host.
-	Mirror *MachineInstallPackageMirror `yaml:"mirror,omitempty" json:"mirror,omitempty"`
-	// RedhatCDN registers against Red Hat's CDN over an RHSM entitlement.
-	RedhatCDN *MachineInstallPackageRedhatCDN `yaml:"redhatCDN,omitempty" json:"redhatCDN,omitempty"`
-	// HostedTree has bootwright extract a DVD once and serve it from the
-	// selected artifact server (the air-gapped, no-mirror case).
+	Mirror     *MachineInstallPackageMirror     `yaml:"mirror,omitempty" json:"mirror,omitempty"`
+	RedhatCDN  *MachineInstallPackageRedhatCDN  `yaml:"redhatCDN,omitempty" json:"redhatCDN,omitempty"`
 	HostedTree *MachineInstallPackageHostedTree `yaml:"hostedTree,omitempty" json:"hostedTree,omitempty"`
 }
 
-// GetMirror, GetRedhatCDN, and GetHostedTree are nil-safe accessors: they
-// return the arm (or nil) whether or not packageSource itself is set, so callers
-// can read an optional union without a nil-check dance.
 func (p *MachineInstallPackageSource) GetMirror() *MachineInstallPackageMirror {
 	if p == nil {
 		return nil
@@ -235,31 +177,16 @@ func (p *MachineInstallPackageSource) GetHostedTree() *MachineInstallPackageHost
 	return p.HostedTree
 }
 
-// MachineInstallPackageMirror is an HTTP(S) install tree the operator hosts.
 type MachineInstallPackageMirror struct {
-	// BaseURL is the primary Anaconda install tree (BaseOS), an http(s) URL.
-	BaseURL string `yaml:"baseURL,omitempty" json:"baseURL,omitempty"`
-	// Repositories become additional Kickstart repo entries (e.g. AppStream).
+	BaseURL      string                     `yaml:"baseURL,omitempty" json:"baseURL,omitempty"`
 	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
 }
 
-// MachineInstallPackageRedhatCDN installs from the Red Hat CDN over an entitlement.
 type MachineInstallPackageRedhatCDN struct {
-	// EntitlementRef names an Entitlement of type redhat-rhel backing the CDN
-	// install.
 	EntitlementRef LocalObjectReference `yaml:"entitlementRef" json:"entitlementRef"`
 }
 
-// MachineInstallPackageHostedTree has bootwright extract a DVD into a managed
-// artifact server and serve it as an install tree over the hostedTree
-// artifactServerEndpoint. The installing node fetches GPG-signed packages from
-// that tree, so the DVD payload lands on disk once per (cluster, image) instead
-// of inside every per-node ISO. Serve the endpoint over HTTP (the installer
-// verifies TLS and would reject a self-signed artifact cert).
 type MachineInstallPackageHostedTree struct {
-	// FromMedia references the full DVD ISO to extract, as a "local-media:" or
-	// "file://" reference (not a URL — the DVD is checksum-verified in the media
-	// store). Must differ from the referenced image's bootMedia.
 	FromMedia              string                    `yaml:"fromMedia" json:"fromMedia"`
 	ArtifactServerEndpoint ArtifactServerEndpointRef `yaml:"artifactServerEndpoint,omitempty" json:"artifactServerEndpoint,omitempty"`
 }
@@ -285,7 +212,6 @@ type MachineInstallOS struct {
 }
 
 type MachineInstallProfileInstaller struct {
-	// Anaconda is the only installer backend; its presence is the discriminator.
 	Anaconda *MachineInstallAnaconda `yaml:"anaconda,omitempty" json:"anaconda,omitempty"`
 }
 
@@ -314,23 +240,6 @@ type MachineInstallHostname struct {
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 }
 
-// MachineInstallLocalization sets the installed system's language, keyboard
-// layout, timezone, and installed locale data. Every field is optional and
-// defaults to the Bootwright baseline when omitted (language en_US.UTF-8,
-// keyboard us, timezone UTC), so an absent group renders exactly as before.
-//
-// Formats splits regional formatting (dates, numbers, currency, paper size)
-// from the message Language: leave Language as the message locale (e.g.
-// en_US.UTF-8) and set Formats to the regional locale (e.g. pt_BR.UTF-8) to keep
-// English system messages while dates and numbers follow Brazilian conventions.
-// When Formats is empty, formatting follows Language. Timezone always keeps the
-// hardware clock in UTC.
-//
-// This group is also the single home for which locales exist on the installed
-// system: Language, Formats, and AdditionalLocales are unioned into the kickstart
-// %packages --inst-langs list, which is authoritative over which locales survive
-// in `locale -a`. The active locale therefore can never be pruned. Set
-// AdditionalLocales only for extra locales beyond Language/Formats.
 type MachineInstallLocalization struct {
 	Language          string   `yaml:"language,omitempty" json:"language,omitempty"`
 	Formats           string   `yaml:"formats,omitempty" json:"formats,omitempty"`
@@ -375,15 +284,10 @@ type MachineInstallSELinux struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
-// MachineInstallFirewall.Enabled is a tri-state *bool: explicit false
-// renders a real firewall disable, while unset renders nothing and the
-// installed OS default stands.
 type MachineInstallFirewall struct {
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
-// MachineInstallFIPS.Enabled is a plain bool because false and unset mean
-// the same thing: only enabled: true renders FIPS configuration.
 type MachineInstallFIPS struct {
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }

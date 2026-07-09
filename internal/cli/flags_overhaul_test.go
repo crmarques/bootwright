@@ -9,9 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// TestGlobalContextFlagSelectsContext verifies the global --context flag makes a
-// command operate in a named context other than the current one, without a
-// preceding `context use`.
 func TestGlobalContextFlagSelectsContext(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(workspace.SetRootDirForTest(root))
@@ -20,8 +17,6 @@ func TestGlobalContextFlagSelectsContext(t *testing.T) {
 	if _, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", fixturePath("001-sno-libvirt")); code != 0 {
 		t.Fatalf("context init lab exited %d, stderr=%q", code, stderr)
 	}
-	// init switches the current context to the last one created, so "other" is
-	// current and --context lab must override it.
 	if _, stderr, code := runCLI(t, "context", "init", "--name", "other", "-f", fixturePath("001-sno-libvirt")); code != 0 {
 		t.Fatalf("context init other exited %d, stderr=%q", code, stderr)
 	}
@@ -34,7 +29,6 @@ func TestGlobalContextFlagSelectsContext(t *testing.T) {
 		t.Fatalf("--context lab targeted %q, want lab:\n%s", got, stdout)
 	}
 
-	// Without --context the current context (other) is used.
 	stdout, stderr, code = runCLI(t, "cluster", "list", "--output", "json")
 	if code != 0 {
 		t.Fatalf("cluster list exited %d, stderr=%q", code, stderr)
@@ -43,7 +37,6 @@ func TestGlobalContextFlagSelectsContext(t *testing.T) {
 		t.Fatalf("default targeted %q, want current context other:\n%s", got, stdout)
 	}
 
-	// An unknown context name fails cleanly.
 	if _, _, code := runCLI(t, "cluster", "list", "--output", "json", "--context", "nope"); code == 0 {
 		t.Fatal("--context nope unexpectedly succeeded")
 	}
@@ -60,8 +53,6 @@ func decodeReportContext(t *testing.T, stdout string) string {
 	return report.Context
 }
 
-// TestRenamedFlagsRejectOldSpellings locks the no-backward-compatibility
-// contract: the retired flag spellings now fail with "unknown flag".
 func TestRenamedFlagsRejectOldSpellings(t *testing.T) {
 	cases := []struct {
 		name string
@@ -86,9 +77,6 @@ func TestRenamedFlagsRejectOldSpellings(t *testing.T) {
 	}
 }
 
-// TestStripLeadingGlobalFlags verifies the root gate classifies an invocation by
-// its real command even when the global --context flag leads, while forwarding
-// the original args to the sudo child unchanged.
 func TestStripLeadingGlobalFlags(t *testing.T) {
 	cases := []struct {
 		in   []string
@@ -107,8 +95,6 @@ func TestStripLeadingGlobalFlags(t *testing.T) {
 		}
 	}
 
-	// Classification flows through the strip: a leading --context must not turn a
-	// rootless command rootful, nor mask a rootful one.
 	if argsNeedLocalRoot(stripLeadingGlobalFlags([]string{"--context", "lab", "render"})) {
 		t.Fatal("`--context lab render` should stay rootless (bare render)")
 	}

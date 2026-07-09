@@ -3,8 +3,6 @@ kind: Machine
 metadata:
   name: bastion
 spec:
-  # This machine IS the local workstation/libvirt host. It runs libvirt, the
-  # emulated Redfish BMCs, and the dnsmasq resolver.
   capabilities:
     - container-runtime
     - libvirt

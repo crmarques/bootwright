@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// TestReconcileApplyClusterInstallStateOverride pins B4b: `apply --override` rebuilds
-// only a DRIFTED or unhealthy owned cluster. A cluster that is installed, in sync, and
-// Available must NOT be reinstalled just because --override is in scope (a scoped
-// override run that targets some other drifted object would otherwise wipe every
-// healthy cluster in the scope).
 func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	const cluster = "sno-libvirt"

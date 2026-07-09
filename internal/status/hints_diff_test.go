@@ -6,9 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// P21: diff is the read-only drift verb for the steady-state loop. It belongs
-// on the status next-step spine only once the context has a recorded apply (applied),
-// and must be positioned before plan/apply so it is reached before convergence.
 func TestNextStepHintsSurfacesDiffOnlyWhenApplied(t *testing.T) {
 	state := v1alpha1.State{}
 

@@ -24,15 +24,12 @@ func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
 	if len(frame.Groups) != 3 {
 		t.Fatalf("groups = %d, want 3 (infra, foo, bar): %+v", len(frame.Groups), frame.Groups)
 	}
-	// Leading non-cluster group holds the fabric task.
 	if frame.Groups[0].Title != "infra" {
 		t.Fatalf("first group = %q, want infra", frame.Groups[0].Title)
 	}
 	if got := frame.Groups[0].Steps[0]; got.Label != "Provider services" || got.Status != output.StatusDone {
 		t.Fatalf("infra step = %+v, want Provider services DONE", got)
 	}
-	// Cluster groups carry the kind suffix and per-task steps, ordered by the
-	// ledger's sorted cluster names (bar before foo).
 	if frame.Groups[1].Title != "bar (StorageCluster)" {
 		t.Fatalf("second group = %q, want bar (StorageCluster)", frame.Groups[1].Title)
 	}
@@ -63,8 +60,6 @@ func TestApplyRunFrameOrdersClusterStepsByDependencies(t *testing.T) {
 }
 
 func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
-	// apply --stage infra: tasks belong to clusters by machine ownership, so a
-	// fabric-only task with no cluster must still surface in the infra group.
 	ledger := workflow.NewRunLedger("apply-test", "infra", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: workflow.ApplyTaskKindProvider, Label: "provider services", Status: workflow.TaskStatusRunning},
 	}, time.Now())

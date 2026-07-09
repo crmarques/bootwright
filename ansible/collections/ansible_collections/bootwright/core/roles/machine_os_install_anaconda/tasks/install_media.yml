@@ -10,9 +10,6 @@
         group: root
         mode: "0700"
 
-    # Shared per-(cluster, image) source staging directory. Only created when a
-    # copy or download will actually land here; a controller-local source reads
-    # in place (sourceOnTarget) and never materialises the shared file.
     - name: Create managed OS shared source directory
       ansible.builtin.file:
         path: "{{ bootwright_os_source_root }}"
@@ -25,13 +22,6 @@
     - name: Load Anaconda package list
       ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
-    # Bare-metal-over-BMC, KubeVirt, and vSphere machines all drive their
-    # managed-OS install from the controller (localhost), so every machine in a
-    # cluster collapses onto the same host. This tooling install is host-global,
-    # not per-machine: running it concurrently across those machines races the
-    # dnf transaction test ("package ... is already installed"). throttle holds
-    # it to one host at a time so the first install wins and the rest depsolve
-    # to idempotent no-ops.
     - name: Install Anaconda ISO tooling packages
       ansible.builtin.package:
         name: "{{ bootwright_machine_os_install_anaconda_packages }}"
@@ -58,11 +48,6 @@
           (lorax on Red Hat and Fedora hosts) or run this provider on an OS
           with mkksiso available.
 
-    # The source ISO is read from the controller (the copy below uses
-    # remote_src: false; a controller-local provider host with sourceOnTarget
-    # reads image.path directly). Fail fast with an actionable message instead
-    # of the opaque copy/mkksiso "Could not find or access" error deep into the
-    # machines phase when the operator has not staged the media yet.
     - name: Stat managed ISO source on controller
       ansible.builtin.stat:
         path: "{{ bootwright_component.osInstall.image.path }}"
@@ -83,11 +68,6 @@
           (or --from-url <url>), then re-run apply.
       when: bootwright_component.osInstall.image.kind in ['media', 'file']
 
-    # The destination is shared across every machine in the OS group, so the
-    # first machine on a provider host stages it and the rest find it already
-    # present (copy/get_url skip on a checksum match). throttle holds the task
-    # to one machine at a time so parallel nodes never write the same file
-    # concurrently; it mirrors the vSphere virtual-media upload dedup.
     - name: Copy managed ISO source to provider host
       ansible.builtin.copy:
         src: "{{ bootwright_component.osInstall.image.path }}"
@@ -140,12 +120,6 @@
         mode: "0644"
       register: bootwright_os_source_identity
 
-    # The source ISO is shared across every machine in the OS group, so only
-    # re-hash it when this run actually (re)staged it: get_url already verified
-    # the checksum on download and copy verified src==dest by hash, so re-hashing
-    # an unchanged multi-GB shared ISO once per machine adds no integrity, only
-    # minutes of serialized controller I/O. The rebuild-needed logic below keys
-    # off the same changed flags, so this stays consistent with it.
     - name: Verify managed ISO checksum
       ansible.builtin.command:
         argv:
@@ -168,12 +142,6 @@
         - (bootwright_component.osInstall.image.checksum | default('') | length) > 0
         - not (bootwright_os_source_sha256.skipped | default(false) | bool)
 
-    # Hosted install tree (packageSource.hostedTree): extract the DVD
-    # (image.installTree.fromMedia) once into the artifact server document root
-    # so every node in the group fetches GPG-signed packages from one shared
-    # read-only tree instead of carrying the DVD payload inside its own ISO.
-    # Runs before the per-node boot ISO is built and booted so the tree is
-    # already serving when the installer reaches its `url --url=` package fetch.
     - name: Publish hosted install tree
       ansible.builtin.include_tasks: publish_install_tree.yml
       when: bootwright_component.osInstall.image.installTree is defined
@@ -243,19 +211,6 @@
         mode: "0700"
       when: bootwright_os_install_iso_rebuild_needed | bool
 
-    # The source ISO is shared, but Kickstart, TMPDIR, and output ISO are
-    # per-machine, so these builds can fan out under the task's Ansible forks.
-    # Each active build still needs roughly one source ISO of scratch space.
-    # --rm-args rd.live.check strips the ISO media-check from every boot menu
-    # entry. RHEL's stock default entry is "Test this media & install", which
-    # runs rd.live.check: a full re-read + checksum of the whole ISO before
-    # Anaconda starts. Over BMC virtual media that adds many minutes for no real
-    # gain here -- the source ISO is already SHA-256 verified above (when a
-    # checksum is set) and every RPM is GPG-verified during the install, whereas
-    # rd.live.check only re-confirms the just-built ISO was read off the virtual
-    # CD without corruption (integrity, not authenticity; mkksiso re-implants its
-    # own md5 regardless). Dropping it lets the unattended kickstart install
-    # proceed promptly whichever menu entry the firmware auto-selects.
     - name: Build managed OS install ISO
       ansible.builtin.command:
         argv:
@@ -275,8 +230,6 @@
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
 
-    # See the media-check note on the no-cmdline build above: --rm-args
-    # rd.live.check drops the slow ISO media-check from every boot menu entry.
     - name: Build managed OS install ISO with kernel command line
       ansible.builtin.command:
         argv:
@@ -306,19 +259,6 @@
         group: root
         mode: "{{ '0600' if ((bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) or (bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length > 0)) else '0644' }}"
 
-    # bootwright_os_install_iso is built directly into its publish directory
-    # (== boot.agentIso.stagePath). For bare-metal that directory is the artifact
-    # server's nginx document root, bind-mounted into the container with :Z, so it
-    # carries a private container_file_t MCS label a file created there inherits
-    # and the nginx container_t process can read. restorecon would instead reset
-    # the token directory and ISO to the filesystem-default var_lib_t, which the
-    # container cannot read (SELinux AVC denies the read -> nginx 404 -> the BMC
-    # reports iBMC.1.0.ConnectionFailed on the media fetch). Align the staged
-    # directory and ISO to their publish root's label instead -- exactly what the
-    # agent-ISO publish flow does (container_cluster_agent_install .../iso/
-    # publish_target.yml). For provider media backends (libvirt/vSphere) the
-    # publish root carries the provider's own label and libvirt re-labels the disk
-    # on attach regardless, so inheriting the publish root stays correct there too.
     - name: Align managed OS virtual media directory label with its publish root
       ansible.builtin.command:
         argv:

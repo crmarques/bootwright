@@ -59,10 +59,6 @@ func TestCommandRunnerReportsCommandAndLogErrors(t *testing.T) {
 	}
 }
 
-// TestCommandRunnerReturnsStdoutWithoutStderr guards that a successful oc get
-// yields only stdout: oc routinely writes deprecation/TLS/auth warnings to
-// stderr on a successful `get -o json`, and folding them into the returned bytes
-// corrupts the JSON that readiness checks unmarshal.
 func TestCommandRunnerReturnsStdoutWithoutStderr(t *testing.T) {
 	runner := scriptedGetRunner(t,
 		`{"metadata":{"name":"installed"}}`,
@@ -87,10 +83,6 @@ func TestCommandRunnerReturnsStdoutWithoutStderr(t *testing.T) {
 	}
 }
 
-// TestReadinessChecksDecodeDespiteStderrWarnings exercises the readiness
-// consumers end to end against a CommandRunner whose oc emits a stderr warning
-// alongside valid JSON, proving Ready/csvSucceeded report ready instead of
-// failing to decode a warning-corrupted buffer.
 func TestReadinessChecksDecodeDespiteStderrWarnings(t *testing.T) {
 	ctx := context.Background()
 
@@ -116,8 +108,6 @@ func TestReadinessChecksDecodeDespiteStderrWarnings(t *testing.T) {
 	}
 }
 
-// scriptedGetRunner returns a CommandRunner backed by a script that, for an oc
-// `get`, writes stdout and stderr verbatim and exits 0.
 func scriptedGetRunner(t *testing.T, stdout, stderr string) CommandRunner {
 	t.Helper()
 	script := fmt.Sprintf(`#!/bin/sh
@@ -129,9 +119,6 @@ esac
 	return CommandRunner{Command: writeScript(t, script), Stdout: io.Discard, Stderr: io.Discard}
 }
 
-// scriptedCSVRunner returns a CommandRunner backed by a script that mimics the
-// two oc gets csvSucceeded performs (Subscription, then CSV), each pairing valid
-// JSON on stdout with a stderr warning.
 func scriptedCSVRunner(t *testing.T) CommandRunner {
 	t.Helper()
 	script := fmt.Sprintf(`#!/bin/sh
@@ -192,11 +179,6 @@ func TestApplySkipsReadyExtensionRecord(t *testing.T) {
 	}
 }
 
-// TestApplyReAppliesChecklessAddonDespiteReadyRecord guards that a check-less
-// add-on (Ready() is vacuously true) is re-applied rather than skipped on a
-// matching record: the live-probe pre-check cannot confirm the on-cluster
-// resources still exist, so trusting a stale record would leave an oc-deleted
-// add-on un-reconciled forever.
 func TestApplyReAppliesChecklessAddonDespiteReadyRecord(t *testing.T) {
 	dir := t.TempDir()
 	plan := readyExtensionPlan()
@@ -278,8 +260,6 @@ func TestApplyOLMWaitsForCSVBeforeCustomResources(t *testing.T) {
 					Source: "redhat-operators", SourceNamespace: "openshift-marketplace",
 					InstallPlanApproval: v1alpha1.InstallPlanApprovalAutomatic,
 				},
-				// Cluster-scoped custom resource (no namespace) — must apply only
-				// after the operator's CSV reports Succeeded.
 				CustomResources: []map[string]any{{
 					"apiVersion": "nmstate.io/v1",
 					"kind":       "NMState",
@@ -315,8 +295,6 @@ func TestApplyOLMWaitsForCSVBeforeCustomResources(t *testing.T) {
 	if !reflect.DeepEqual(applied, wantApplied) {
 		t.Fatalf("applied kinds = %v, want %v", applied, wantApplied)
 	}
-	// The CSV gate (a get:csv) must fall between the Subscription apply and the
-	// custom-resource apply — proving the CR does not race the operator CRDs.
 	subIdx, crIdx, gateIdx := -1, -1, -1
 	for i, e := range runner.events {
 		switch {
@@ -333,8 +311,6 @@ func TestApplyOLMWaitsForCSVBeforeCustomResources(t *testing.T) {
 	}
 }
 
-// sequencingRunner records the verb sequence: apply:<kind> for stdin applies and
-// get:subscription / get:csv / get:other for reads. CSV reads report Succeeded.
 type sequencingRunner struct {
 	events []string
 }
@@ -375,9 +351,6 @@ func kindFromManifest(input []byte) string {
 }
 
 func TestCommandRunnerQuietWriterWithOutputDoesNotPanic(t *testing.T) {
-	// The quiet read runner has nil Stdout/Stderr. A subprocess that writes to
-	// both streams must not panic (the old io.MultiWriter(&buf, nil) did), must
-	// return stdout only, and must still capture both streams to the log.
 	script := "#!/bin/sh\nprintf 'NotFound text\\n'\nprintf 'no matches for kind\\n' 1>&2\nexit 0\n"
 	logPath := filepath.Join(t.TempDir(), "oc.log")
 	runner := CommandRunner{Command: writeScript(t, script), LogPath: logPath}
@@ -425,8 +398,6 @@ func gatedOLMPlan(timeout string) extensionplan.ExtensionPlan {
 	}
 }
 
-// phasedCSVRunner reports the CSV as pending ("Installing") until succeedAfter
-// CSV reads have occurred, then "Succeeded". succeedAfter <= 0 never succeeds.
 type phasedCSVRunner struct {
 	events       []string
 	csvReads     int
@@ -470,7 +441,7 @@ func TestApplyOLMGatePollsUntilCSVSucceeds(t *testing.T) {
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
-	runner := &phasedCSVRunner{succeedAfter: 3} // precheck + ≥1 pending gate poll before Succeeded
+	runner := &phasedCSVRunner{succeedAfter: 3}
 	if _, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
 		StartedAt: time.Now(), PollInterval: time.Millisecond,
@@ -502,7 +473,7 @@ func TestApplyOLMGateTimeoutRecordsGateFailureNotApplyFailure(t *testing.T) {
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
-	runner := &phasedCSVRunner{succeedAfter: 0} // CSV never reaches Succeeded
+	runner := &phasedCSVRunner{succeedAfter: 0}
 	plan := gatedOLMPlan("50ms")
 	_, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
@@ -620,21 +591,15 @@ func (r *leakyApplyRunner) Run(_ context.Context, _ string, args []string, _ []b
 	}
 	switch args[0] {
 	case "apply":
-		// Mimic oc echoing the rejected object's fields, including secret bytes.
 		out := "admission webhook denied the request: " + r.secret
 		return []byte(out), fmt.Errorf("run oc %s: exit status 1: %s", strings.Join(args, " "), out)
 	case "get":
-		// Force the readiness pre-check to report not-ready so Apply proceeds.
 		return nil, fmt.Errorf("not found")
 	default:
 		return nil, fmt.Errorf("unexpected oc args %v", args)
 	}
 }
 
-// TestApplyDoesNotPersistRawOutputInFailedRecord guards the "never secret bytes"
-// contract for observed-state records: when oc apply fails with output that echoes
-// user-inlined secret bytes, the failure must be summarized in the record (naming
-// the failed resource and pointing at the apply log) rather than stored verbatim.
 func TestApplyDoesNotPersistRawOutputInFailedRecord(t *testing.T) {
 	dir := t.TempDir()
 	plan := readyExtensionPlan()
@@ -654,7 +619,6 @@ func TestApplyDoesNotPersistRawOutputInFailedRecord(t *testing.T) {
 	if err == nil {
 		t.Fatal("Apply succeeded despite an apply failure")
 	}
-	// The raw output (with the secret) must still reach the caller -> apply log.
 	if !strings.Contains(err.Error(), secret) {
 		t.Fatalf("returned error dropped the raw output that belongs in the apply log: %v", err)
 	}

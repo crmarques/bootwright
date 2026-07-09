@@ -1,8 +1,3 @@
-# Native add-on catalog index. This directory is the repo-shipped catalog
-# behind `bootwright add-ons list|add|delete` — NOT a desired-state input
-# directory (your workspace's add-ons/ directory is your input). Every entry
-# name is a directory here; every version is a subdirectory of it containing
-# add-on.yaml plus its manifests/ and playbooks/ content.
 entries:
   - name: openshift-data-foundation
     description: Red Hat OpenShift Data Foundation in external mode, attaching a Bootwright StorageExport

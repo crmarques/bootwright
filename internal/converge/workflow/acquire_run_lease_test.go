@@ -14,8 +14,6 @@ import (
 func TestAcquireRunLeaseFailsClosedOnFreshLease(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
-	// NewRunLease stamps the current host+pid, so the held lease reads as a live
-	// run with a fresh heartbeat.
 	if err := SaveRunLease(runsDir, NewRunLease("run-held", now)); err != nil {
 		t.Fatalf("SaveRunLease: %v", err)
 	}
@@ -35,13 +33,9 @@ func TestAcquireRunLeaseFailsClosedOnFreshLease(t *testing.T) {
 func TestAcquireRunLeaseTakesOverStaleLease(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
-	// A live local process now reads as active regardless of heartbeat age, so a
-	// backdated heartbeat alone no longer marks the prior run dead: force the
-	// process probe to report the holder gone so the heartbeat-age rule governs.
 	previous := runLeaseProcessAlive
 	runLeaseProcessAlive = func(int) bool { return false }
 	defer func() { runLeaseProcessAlive = previous }()
-	// A heartbeat older than the stale window marks the prior (dead) run stale.
 	if err := SaveRunLease(runsDir, NewRunLease("run-stale", now.Add(-10*time.Minute))); err != nil {
 		t.Fatalf("SaveRunLease: %v", err)
 	}
@@ -68,9 +62,6 @@ func TestAcquireRunLeaseCreatesWhenAbsent(t *testing.T) {
 	}
 }
 
-// TestRunApplyTaskGraphFailsClosedWhenLeaseHeld proves the scheduler refuses to
-// mutate when another run already holds a fresh lease, instead of overwriting it
-// and running a second privileged apply concurrently.
 func TestRunApplyTaskGraphFailsClosedWhenLeaseHeld(t *testing.T) {
 	dir := t.TempDir()
 	runsDir := filepath.Join(dir, "runs")

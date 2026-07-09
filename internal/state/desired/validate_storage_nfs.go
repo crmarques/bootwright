@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// validateStorageNFSExports checks the first-class NFS services and their
-// exports: a placement authored explicitly (there is no nfs topology role),
-// well-formed ingress VIPs, and exports that bind exactly one FSAL — a CephFS
-// filesystem in the same cluster, or an RGW bucket.
 func validateStorageNFSExports(items []v1alpha1.StorageNFSExport, clusters map[string]v1alpha1.StorageCluster, filesystems map[string]v1alpha1.StorageFilesystem) []string {
 	var errs []string
 	for _, nfs := range items {
@@ -29,7 +25,6 @@ func validateStorageNFSExports(items []v1alpha1.StorageNFSExport, clusters map[s
 		if nfs.Spec.Ceph.ServiceID == "" {
 			errs = append(errs, prefix+".ceph.serviceID is required")
 		}
-		// There is no nfs topology role, so placement must be authored explicitly.
 		if len(nfs.Spec.Ceph.Placement.Hosts) == 0 && len(nfs.Spec.Ceph.Placement.Sites) == 0 {
 			errs = append(errs, prefix+".ceph.placement requires hosts or sites")
 		}

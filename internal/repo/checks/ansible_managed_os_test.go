@@ -9,11 +9,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// TestManagedOSRefusesForeignHostRegardlessOfMode pins that a reachable managed-OS
-// host without a Bootwright-owned marker fails closed even under --override (never
-// adopt/wipe a foreign host), while an owned host whose hash drifted is refused only
-// without --override; and that the marker/ownership stamps are gated so a host that
-// failed the ownership proof is never recorded as Bootwright-owned.
 func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 	probe := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml")
 
@@ -35,8 +30,6 @@ func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 		t.Fatalf("drifted refusal must apply only to a Bootwright-owned host, got when=%v", drifted["when"])
 	}
 
-	// The marker and ownership stamps are gated so a host that failed the ownership
-	// proof is never recorded as Bootwright-owned.
 	main := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
 	for _, name := range []string{"Write managed OS marker", "Record managed OS ownership"} {
 		task := main[findAnsibleTask(t, main, name)]
@@ -65,7 +58,6 @@ func TestManagedOSPlaybookUsesLinearTaskGrouping(t *testing.T) {
 
 func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/ssh_trust.yml")
-	// The trust directory must exist before ssh writes the known_hosts entry into it.
 	if findAnsibleTask(t, tasks, "Ensure managed OS SSH trust directory") >= findAnsibleTask(t, tasks, "Scan managed OS SSH host key") {
 		t.Fatalf("the trust directory must be ensured before the host-key scan writes into it")
 	}
@@ -85,11 +77,6 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 			t.Fatalf("%s until missing %q: %s", scan["name"], want, until)
 		}
 	}
-	// ssh-keyscan ignores the controller's crypto policy and dies on a FIPS controller
-	// ("Key exchange type c25519 is not allowed in FIPS mode"), so the host key must be
-	// captured with `ssh` (which honors the policy) via StrictHostKeyChecking=accept-new.
-	// A stale pin is dropped first (ssh-keygen -R) so a reinstalled node's rotated key is
-	// re-learned, and success is gated on the key actually being pinned (ssh-keygen -F).
 	shell, ok := scan["ansible.builtin.shell"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s must be a shell task using ssh, got %v", scan["name"], scan)
@@ -204,10 +191,6 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if cleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupVars["bootwright_redfish_action_effective"] != "cleanup" {
 		t.Fatalf("%s must clean resolved managed OS media, got vars=%v", topTasks[cleanupMediaIdx]["name"], cleanupVars)
 	}
-	// Bare metal has no mediaPrepareRole, so the cleanup above is skipped; the
-	// install role must still eject the BMC virtual media through the rendered
-	// cleanupMediaRole (never a hard-coded boot role name) or it lingers as a
-	// /dev/sr0.
 	assertIncludeRoleName(t, topTasks[baremetalEjectIdx], "{{ bootwright_component.cleanupMediaRole }}")
 	baremetalVars, ok := topTasks[baremetalEjectIdx]["vars"].(map[string]any)
 	if !ok {
@@ -405,9 +388,6 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if stringListContains(buildCommand["argv"], "--cmdline") {
 		t.Fatalf("%s must not pass --cmdline for empty kernel args, got argv=%v", tasks[buildISOIdx]["name"], buildCommand["argv"])
 	}
-	// The media-check (rd.live.check) is stripped from every boot entry so the
-	// unattended install never runs the slow full-ISO checksum over BMC virtual
-	// media; the source ISO is already SHA-256 verified and RPMs are GPG-checked.
 	for _, want := range []string{"--rm-args", "rd.live.check"} {
 		if !stringListContains(buildCommand["argv"], want) {
 			t.Fatalf("%s must strip the ISO media-check via mkksiso --rm-args rd.live.check, missing %q: %v", tasks[buildISOIdx]["name"], want, buildCommand["argv"])
@@ -480,11 +460,6 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if ((bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) or (bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length > 0)) else '0644' }}" {
 		t.Fatalf("%s must set permissions on the published install ISO, got %v", tasks[stagePermsIdx]["name"], stagePerms)
 	}
-	// The staged ISO must inherit its publish directory's SELinux label (the
-	// artifact server's :Z container_file_t for bare-metal), NOT be reset to the
-	// filesystem default with restorecon -- otherwise the nginx container cannot
-	// read it and the BMC fetch 404s. Mirror the agent-ISO publish flow's chcon
-	// --reference alignment (dir <- publish root, ISO <- dir).
 	for _, tc := range []struct {
 		idx       int
 		reference string
@@ -551,10 +526,6 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 	}
 	for _, want := range []string{
 		"reboot",
-		// Localization renders from customizations.localization, defaulting each
-		// field to the pre-field baseline so an absent group is a no-op. formats
-		// splits regional LC_* from the message language via a %post locale.conf;
-		// instLangs (language + formats + additionalLocales) drives --inst-langs.
 		"{% set localization = ks.localization | default({}) %}",
 		"lang {{ localization.language | default('en_US.UTF-8', true) }}",
 		"keyboard {{ localization.keyboard | default('us', true) }}",
@@ -613,13 +584,8 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"cat > /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf <<'BOOTWRIGHT_SSHD_CONFIG'",
 		"PermitRootLogin yes",
 		"PasswordAuthentication no",
-		// An omitted ssh.user is an empty (defined) string, which `default('root')`
-		// would NOT replace; the `, true` makes it fall back to root so the sshkey /
-		// user lines never render an empty username.
 		"sshkey --username={{ ssh_user }}",
 		"{% if ssh_user != 'root' %}",
-		// urlencode leaves '/' unescaped (safe='/'); a credential containing '/'
-		// must be %2F-encoded or it terminates the proxy URL authority early.
 		"| urlencode | replace('/', '%2F')",
 	} {
 		if !strings.Contains(body, want) {
@@ -646,13 +612,6 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 	}
 }
 
-// TestManagedOSKickstartTemplateNoCommandGluedToBlockTag guards the whole class
-// of bug behind `rhsm ...:8080lang en_US.UTF-8` and `%packages ...@^...-environment`:
-// Ansible renders this template with trim_blocks=True, which strips the newline
-// after every {% ... %} tag. A line that mixes literal kickstart content (a command
-// or a {{ expression }}) with a TRAILING block tag therefore loses its newline and
-// the next kickstart command collapses onto it. Every command line must end in
-// literal text or a {{ expression }}; only pure control lines may end in a tag.
 func TestManagedOSKickstartTemplateNoCommandGluedToBlockTag(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/templates/ks.cfg.j2")
 	blockTag := regexp.MustCompile(`\{%.*?%\}`)
@@ -662,8 +621,6 @@ func TestManagedOSKickstartTemplateNoCommandGluedToBlockTag(t *testing.T) {
 		if !strings.HasSuffix(trimmed, "%}") {
 			continue
 		}
-		// Strip control/comment blocks; whatever remains is literal content or a
-		// {{ expression }} that trim_blocks would glue onto the following line.
 		residue := strings.TrimSpace(commentTag.ReplaceAllString(blockTag.ReplaceAllString(trimmed, ""), ""))
 		if residue != "" {
 			t.Fatalf("ks.cfg.j2:%d ends in a {%% %%} tag with trailing content %q; trim_blocks will glue the next line onto it — end command lines in literal text or a {{ expression }} instead", i+1, residue)

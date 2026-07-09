@@ -61,7 +61,6 @@ func TestReferenceRecordDoesNotOverwriteOwnerFile(t *testing.T) {
 		t.Fatalf("reference filename = %q, want prov1-edge@spoke.json", filepath.Base(refPath))
 	}
 
-	// Both records must coexist on disk: the reference save must not clobber the owner.
 	if err := SaveResource(dir, owner); err != nil {
 		t.Fatalf("save owner: %v", err)
 	}
@@ -114,7 +113,6 @@ func TestOwnerAndReferenceContextScans(t *testing.T) {
 		{Context: "spoke-b", Dir: dirSpokeB},
 	}
 
-	// From hub's perspective (the owner): two reference siblings block teardown; no other owner.
 	refs, skipped := ReferenceContexts(stores, "hub", id)
 	if len(skipped) != 0 {
 		t.Fatalf("unexpected skipped: %v", skipped)
@@ -126,7 +124,6 @@ func TestOwnerAndReferenceContextScans(t *testing.T) {
 		t.Fatalf("hub is the only owner; want no sibling owners, got %v", owners)
 	}
 
-	// From spoke-a's perspective (a referrer): hub is the single owner.
 	owners, _ := OtherContextsWithRole(stores, "spoke-a", id, RoleOwner)
 	if len(owners) != 1 || owners[0] != "hub" {
 		t.Fatalf("want [hub] owner, got %v", owners)

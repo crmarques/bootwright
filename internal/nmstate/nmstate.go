@@ -1,8 +1,3 @@
-// Package nmstate implements the single deterministic NMState
-// template+override merge that both rendering and validation rely on. The merge
-// rules are normative in specs/state-model.md ("The merge is the same for
-// rendering and validation"); keeping one implementation here is what makes that
-// promise hold.
 package nmstate
 
 import (
@@ -12,9 +7,6 @@ import (
 	"dario.cat/mergo"
 )
 
-// InterfaceAddress is a resolved static install address to inject into the
-// effective config: the owning kinds resolve the address ref to an IP before
-// calling EffectiveConfig so this package stays free of schema types.
 type InterfaceAddress struct {
 	Interface    string
 	Family       string
@@ -22,21 +14,9 @@ type InterfaceAddress struct {
 	PrefixLength int
 }
 
-// EffectiveConfig clones the NetworkConfig template, merges the per-machine
-// overrides into it, then injects resolved interface addresses. Both render and
-// validate call this so they reason about the identical effective config.
 func EffectiveConfig(template, overrides map[string]any, addresses []InterfaceAddress) map[string]any {
 	out := Clone(template)
 	if len(overrides) > 0 {
-		// Merge only errors when mergo's top-level contract is violated (a
-		// non-pointer dst or mismatched dst/src types); this package always feeds
-		// it a *map[string]any dst and a map[string]any src of identical type, so
-		// the error is unreachable for these inputs (nested scalar/map/slice
-		// conflicts overwrite under WithOverride without erroring). EffectiveConfig
-		// cannot surface an error through its signature — its render and validate
-		// callers pre-check via the validation phase and ShapeErrors — so treat a
-		// merge failure as a broken invariant and panic loudly rather than silently
-		// dropping the override merge this package exists to protect.
 		if err := Merge(out, Clone(overrides)); err != nil {
 			panic(fmt.Sprintf("nmstate: EffectiveConfig merge invariant violated: %v", err))
 		}
@@ -47,9 +27,6 @@ func EffectiveConfig(template, overrides map[string]any, addresses []InterfaceAd
 	return out
 }
 
-// SetInterfaceAddress writes a resolved static address into the named NMState
-// interface, creating the interface and family blocks when absent and
-// overwriting any address already on that interface family.
 func SetInterfaceAddress(config map[string]any, address InterfaceAddress) {
 	if address.IP == "" || address.Interface == "" {
 		return
@@ -78,20 +55,10 @@ func SetInterfaceAddress(config map[string]any, address InterfaceAddress) {
 		familyConfig = map[string]any{}
 		entry[family] = familyConfig
 	}
-	// Force the family enabled: templates commonly author the opposite family as
-	// `{enabled: false}` (e.g. ipv6 disabled), and injecting a static address into
-	// a disabled family yields an invalid/inert NMState document that nmstate
-	// rejects or ignores — leaving the node addressless while the rendezvous IP
-	// still points at the never-configured address. A family carrying a static
-	// address is enabled by definition.
 	familyConfig["enabled"] = true
 	familyConfig["address"] = []any{map[string]any{"ip": address.IP, "prefix-length": address.PrefixLength}}
 }
 
-// Merge applies patch onto base in place: maps deep-merge, named list entries
-// merge by name, all-map lists merge positionally, and the override value wins
-// on scalar conflict. List shapes the merge cannot apply are left untouched here
-// and reported by ShapeErrors at validation time.
 func Merge(base, patch map[string]any) error {
 	for key, patchValue := range patch {
 		baseMap, baseIsMap := base[key].(map[string]any)
@@ -117,9 +84,6 @@ func Merge(base, patch map[string]any) error {
 		base[key] = merged
 		delete(patch, key)
 	}
-	// mergo folds the leftover scalar/unmergeable keys, override wins. This
-	// package exists to prevent silent merge drops, so propagate mergo's error
-	// instead of discarding it.
 	return mergo.Merge(&base, patch, mergo.WithOverride)
 }
 
@@ -203,12 +167,6 @@ func sequenceUsesMaps(items []any) bool {
 	return true
 }
 
-// ShapeErrors reports per-machine NMState override list shapes that the merge
-// cannot apply, naming the owning field instead of letting the override silently
-// drop. It tracks exactly the merge's structured-sequence path: a list override
-// is checked only where both template and override hold a list at the same key,
-// and is rejected unless every override entry is a named map (merge by name) or
-// both lists are positional maps (merge by index).
 func ShapeErrors(prefix string, base, patch map[string]any) []string {
 	if len(patch) == 0 {
 		return nil
@@ -280,8 +238,6 @@ func sequenceShapeErrors(path string, base, patch []any) []string {
 	return []string{path + " override list cannot be merged into the NetworkConfig template; entries must be all named maps or a positional list of maps, not scalars or mixed named and unnamed entries"}
 }
 
-// Clone deep-copies a decoded YAML map so callers can mutate the result without
-// touching the loaded desired state.
 func Clone(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in))
 	for key, value := range in {
@@ -305,9 +261,6 @@ func cloneValue(value any) any {
 	}
 }
 
-// InterfaceHasStaticIP reports whether the named interface carries a static
-// ipv4/ipv6 address in the given config (used to reject an install IP authored
-// in overrides for an interface that interfaceAddresses already owns).
 func InterfaceHasStaticIP(config map[string]any, iface string) bool {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {

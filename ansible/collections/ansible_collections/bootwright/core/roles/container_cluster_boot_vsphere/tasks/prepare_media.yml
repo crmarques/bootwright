@@ -1,7 +1,4 @@
 ---
-# The managed-OS flow includes the media role itself before this boot
-# driver runs, and vsphere_copy re-uploads the full ISO on every call;
-# the attachment fact set by the media role skips the duplicate upload.
 - name: Prepare vSphere virtual media
   ansible.builtin.include_role:
     name: "{{ bootwright_component.mediaPrepareRole }}"

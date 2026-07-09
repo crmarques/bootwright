@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// TestSignalContextCancelsOnSignal verifies the first SIGTERM cancels the
-// returned context — the trigger that arms bootwright's process-group reaping.
-// It sends exactly one signal so the restored default disposition never fires.
 func TestSignalContextCancelsOnSignal(t *testing.T) {
 	ctx, stop := signalContext(context.Background())
 	defer stop()
@@ -28,8 +25,6 @@ func TestSignalContextCancelsOnSignal(t *testing.T) {
 	}
 }
 
-// TestSignalContextStopReleasesWithoutSignal verifies stop cancels the context
-// and unregisters the handler on the normal (no-signal) exit path.
 func TestSignalContextStopReleasesWithoutSignal(t *testing.T) {
 	ctx, stop := signalContext(context.Background())
 	stop()

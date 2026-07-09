@@ -11,12 +11,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// alwaysOwnedInstallConfigKeys are the install-config keys Bootwright
-// writes on EVERY cluster regardless of install mode or fixture. Keys
-// listed in OwnedFields().InstallConfigKeys that are conditional
-// (additionalTrustBundle: disconnected only; imageDigestSources:
-// disconnected or operator-declared mirror) live in conditionalOwned
-// below.
 var alwaysOwnedInstallConfigKeys = []string{
 	"apiVersion",
 	"metadata",
@@ -27,9 +21,6 @@ var alwaysOwnedInstallConfigKeys = []string{
 	"compute",
 }
 
-// conditionalInstallConfigKeys are owned keys the renderer emits only
-// in specific install modes. Listing them here documents the case
-// instead of silently dropping them from the bridge check.
 var conditionalInstallConfigKeys = map[string]string{
 	"additionalTrustBundle":       "set only when ContainerCluster.spec.install.mode=disconnected",
 	"additionalTrustBundlePolicy": "set only when additionalTrustBundle is set",
@@ -52,9 +43,6 @@ var conditionalInstallConfigPaths = map[string]string{
 	"platform.vsphere.nodeNetworking":        "set only when ClusterInstall.spec.platform.type renders vsphere with node networking",
 }
 
-// alwaysOwnedAgentConfigKeys are the agent-config keys Bootwright
-// always writes. minimalISO and bootArtifactsBaseURL fire only in
-// disconnected mode (see disconnectedBootArtifactsConfig).
 var alwaysOwnedAgentConfigKeys = []string{
 	"apiVersion",
 	"kind",
@@ -63,15 +51,6 @@ var alwaysOwnedAgentConfigKeys = []string{
 	"hosts",
 }
 
-// TestOwnedInstallConfigKeysAllHaveWriters bridges
-// api/v1alpha1.OwnedFields() to the renderer: every key listed in
-// OwnedFields().InstallConfigKeys must either be written by the
-// renderer on the canonical good fixture OR be documented here as
-// conditionally owned. The test fails if the registry gains a new key
-// without a renderer that emits it (the validator denylist would then
-// reject overrides for a field the renderer never set, which is wrong).
-// It also fails if the renderer starts writing a key not in the
-// registry (override hatch silently re-opens for it).
 func TestOwnedInstallConfigKeysAllHaveWriters(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "state", "desired", "testdata", "good", "001-sno-libvirt")})
 	if err != nil {
@@ -89,15 +68,11 @@ func TestOwnedInstallConfigKeysAllHaveWriters(t *testing.T) {
 	rendered := keys(cfg)
 	owned := v1alpha1.OwnedFields().InstallConfigKeys
 
-	// Every always-owned key MUST appear in the rendered config.
 	for _, k := range alwaysOwnedInstallConfigKeys {
 		if !slices.Contains(rendered, k) {
 			t.Errorf("installer-config missing always-owned key %q (rendered: %v)", k, rendered)
 		}
 	}
-	// Every owned key in the registry MUST be either always-written or
-	// documented as conditional. This catches a future registry entry
-	// landing without a renderer that emits it.
 	for _, k := range owned {
 		if slices.Contains(alwaysOwnedInstallConfigKeys, k) {
 			continue
@@ -107,13 +82,9 @@ func TestOwnedInstallConfigKeysAllHaveWriters(t *testing.T) {
 		}
 		t.Errorf("OwnedFields() declares key %q but the renderer neither always emits it nor documents it as conditional in conditionalInstallConfigKeys", k)
 	}
-	// Every rendered top-level key that is strictly Bootwright-derived
-	// MUST be in OwnedFields(). Keys the user may legitimately extend
-	// at the same level (networking, platform) live outside the registry by design
-	// and are listed in userExtensibleKeys below.
 	userExtensibleKeys := []string{
-		"networking", // sibling fields remain extensible; Bootwright owns declared networking paths
-		"platform",   // sibling fields remain extensible; Bootwright owns declared platform paths
+		"networking",
+		"platform",
 	}
 	for _, k := range rendered {
 		if slices.Contains(owned, k) || slices.Contains(userExtensibleKeys, k) {
@@ -169,8 +140,6 @@ func TestOwnedInstallConfigPathsAllHaveWriters(t *testing.T) {
 	}
 }
 
-// TestOwnedAgentConfigKeysAllHaveWriters does the same bridge for the
-// agent-config keys, against the same fixture.
 func TestOwnedAgentConfigKeysAllHaveWriters(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "state", "desired", "testdata", "good", "001-sno-libvirt")})
 	if err != nil {

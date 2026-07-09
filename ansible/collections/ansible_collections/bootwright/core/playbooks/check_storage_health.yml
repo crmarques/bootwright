@@ -1,10 +1,4 @@
 ---
-# Read-only live OSD-health probe for `state-check --probe`. On each managed Ceph
-# seed it reads `ceph osd stat` and `ceph health` and writes a per-cluster result to
-# a controller-side directory; the controller compares the observed OSD count to the
-# declared expectation and reclassifies a degraded cluster (fewer OSDs 'in' than
-# declared, or HEALTH_ERR) as drift. It contacts only the seed and mutates nothing —
-# state-check stays read-only; --probe only adds this live read.
 - name: Probe managed Ceph OSD health
   hosts: bootwright_storage_hosts
   gather_facts: false

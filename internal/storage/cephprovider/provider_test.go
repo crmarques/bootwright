@@ -66,8 +66,6 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 		}}}
 	}
 
-	// A full x.y.z release pins the repository as a version and derives the
-	// matching container image.
 	provider := Select(oss("19.2.1", ""), nil, secret.Index{}, "/context/secrets")
 	if provider.Community.Version != "19.2.1" || provider.Community.Release != "" {
 		t.Fatalf("version not classified: %#v", provider.Community)
@@ -87,7 +85,6 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 		t.Fatalf("image var = %v, want derived image", vars["image"])
 	}
 
-	// A release name leaves the image unpinned (floats).
 	nameProvider := Select(oss("squid", ""), nil, secret.Index{}, "/context/secrets")
 	if nameProvider.Community.Release != "squid" || nameProvider.Image != "" {
 		t.Fatalf("name release derived an image: %#v image=%q", nameProvider.Community, nameProvider.Image)
@@ -96,7 +93,6 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 		t.Fatalf("name release must omit image var")
 	}
 
-	// An explicit image overrides the derived one.
 	pinned := Select(oss("19.2.1", "quay.io/ceph/ceph@sha256:abc"), nil, secret.Index{}, "/context/secrets")
 	if pinned.Image != "quay.io/ceph/ceph@sha256:abc" {
 		t.Fatalf("explicit image not honored: %q", pinned.Image)
@@ -112,13 +108,11 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 		}}}
 	}
 
-	// Default stream (release unset) keeps rhceph-9-tools.
 	def := Select(redhat("", ""), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
 	if got := def[len(def)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
 		t.Fatalf("default tools repo = %q", got)
 	}
 
-	// An explicit stream selects rhceph-<N>-tools and is honored from a major.minor.
 	repos := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
 	if got := repos[len(repos)-1]; got != "rhceph-10-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
 		t.Fatalf("stream tools repo = %q, want rhceph-10-tools", got)
@@ -131,7 +125,6 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 		t.Fatalf("image var missing for redhat: %#v", Vars(provider))
 	}
 
-	// IBM stream selects the matching vendor .repo URL.
 	ibm := func(release string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: v1alpha1.StorageCephDistributionIBM,
@@ -161,13 +154,11 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 		image        string
 		want         string
 	}{
-		// Unset image derives the vendor/upstream repository from the stream.
 		{"ibm default stream", v1alpha1.StorageCephDistributionIBM, "", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
 		{"ibm explicit stream", v1alpha1.StorageCephDistributionIBM, "10", "", "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9"},
 		{"redhat default stream", v1alpha1.StorageCephDistributionRedHat, "", "", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
 		{"oss release name", v1alpha1.StorageCephDistributionOSS, "squid", "", "quay.io/ceph/ceph"},
 		{"oss version", v1alpha1.StorageCephDistributionOSS, "19.2.1", "", "quay.io/ceph/ceph"},
-		// An explicit image pins the base to its repository, tag or digest stripped.
 		{"ibm pinned digest", v1alpha1.StorageCephDistributionIBM, "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:abc", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
 		{"redhat pinned tag", v1alpha1.StorageCephDistributionRedHat, "10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10", "registry.redhat.io/rhceph/rhceph-10-rhel9"},
 		{"oss pinned tag", v1alpha1.StorageCephDistributionOSS, "19.2.1", "quay.io/ceph/ceph:v19.2.1", "quay.io/ceph/ceph"},
@@ -191,8 +182,7 @@ func TestImageRepositoryStripsTagAndDigest(t *testing.T) {
 		"registry.redhat.io/rhceph/rhceph-10-rhel9:10":  "registry.redhat.io/rhceph/rhceph-10-rhel9",
 		"quay.io/ceph/ceph:v19.2.1":                     "quay.io/ceph/ceph",
 		"quay.io/ceph/ceph":                             "quay.io/ceph/ceph",
-		// A registry host:port is preserved; only the final segment's tag is cut.
-		"registry.example.test:5000/ceph/ceph:v1": "registry.example.test:5000/ceph/ceph",
+		"registry.example.test:5000/ceph/ceph:v1":       "registry.example.test:5000/ceph/ceph",
 	}
 	for in, want := range cases {
 		if got := imageRepository(in); got != want {
@@ -275,8 +265,6 @@ func TestSelectRedHatProviderProjectsSatellite(t *testing.T) {
 }
 
 func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {
-	// The ibm item carries registry + license only; its RHSM is sourced from the
-	// referenced redhat/rhel item, yet the projected vars are identical.
 	ents := []v1alpha1.Entitlement{
 		{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},

@@ -35,7 +35,7 @@ spec:
         address: redfish-virtualmedia+https://bmc-metal-master-0.bootwright.test/redfish/v1/Systems/1
         credentialsRef: bmc-credentials
         tls:
-          verify: false # lab-only; use a trusted BMC TLS cert in production
+          verify: false
     boot:
       nicRef: primary
 

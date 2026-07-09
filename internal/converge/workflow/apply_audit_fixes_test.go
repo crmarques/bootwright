@@ -26,15 +26,6 @@ func auditRunOptions(dir string) RunOptions {
 	}
 }
 
-// Note: the scheduler's stop-launching-after-context-cancel behavior (the guard
-// added in apply_scheduler.go) is validated by TestRunApplyTaskGraphStopsLaunching
-// AfterContextCancel in apply_tasks_test.go, owned by a parallel change.
-
-// TestRunApplyTaskGraphStopsOnLeaseTakeover pins that a heartbeat which discovers
-// the run lease was taken over by a newer run aborts THIS run (rather than silently
-// continuing to launch mutating tasks lease-less, the double-mutator the lease is
-// meant to prevent). Without the abort the blocking task below never gets cancelled
-// and the test deadlocks.
 func TestRunApplyTaskGraphStopsOnLeaseTakeover(t *testing.T) {
 	dir := t.TempDir()
 	oldSave := saveRunLease
@@ -56,11 +47,6 @@ func TestRunApplyTaskGraphStopsOnLeaseTakeover(t *testing.T) {
 	}
 }
 
-// TestReconcileOverrideProbeErrorRebuilds pins that under --override an availability
-// probe ERROR (oc missing, or the API refusing connection on a hard-down cluster)
-// does NOT fail the apply: override exists to rebuild an unreachable cluster, so an
-// unverifiable probe leaves the install tasks scheduled to run (rebuild) rather than
-// aborting the whole apply.
 func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	const cluster = "sno-libvirt"
@@ -91,9 +77,6 @@ func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 	}
 }
 
-// TestReconcileContinueProbeErrorNamesRemedy pins that the default (continue) mode
-// refusal on an unverifiable probe names an actionable remedy (--override) rather
-// than dead-ending the operator.
 func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	const cluster = "sno-libvirt"
@@ -124,10 +107,6 @@ func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 	}
 }
 
-// TestReconcileRefusesUnrecordedAvailableCluster pins that a reachable cluster with
-// NO install record is refused rather than silently adopted with today's hashes
-// (which would absorb real install-input drift as installed+in-sync). A cluster with
-// no kubeconfig yet is a fresh install and proceeds normally.
 func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	const cluster = "sno-libvirt"
@@ -161,10 +140,6 @@ func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
 	})
 }
 
-// TestPlanMachinesSubPhaseLibvirt pins that the documented `--stage machines`
-// sub-phase plans on a libvirt substrate: the machine-prepare tasks it schedules
-// require provider.host-ready, which only the fabric phase provides — planning
-// assumes a prior fabric apply rather than hard-failing Lower().
 func TestPlanMachinesSubPhaseLibvirt(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "machines", PhaseNames: []string{ApplyPhaseMachines}}, state)

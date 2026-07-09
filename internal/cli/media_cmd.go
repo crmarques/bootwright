@@ -63,9 +63,6 @@ func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		// Replacing an existing entry is acknowledged by a single --yes (or an
-		// interactive y), matching secret set — no separate --force dance. The
-		// confirmed `exists` flag is what authorizes the store to overwrite.
 		if exists && !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace media %s in %s? [y/N] (default: no): ", name, media.StoreDir())) {
 			return failErr(1, errors.New("media add aborted"))
 		}

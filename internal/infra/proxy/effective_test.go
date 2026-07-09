@@ -277,19 +277,19 @@ func TestBypasses(t *testing.T) {
 		host string
 		want bool
 	}{
-		{"sat.corp.internal", true},              // subdomain of leading-dot domain
-		{"corp.internal", true},                  // the domain itself
-		{"a.b.example.com", true},                // subdomain of bare domain
-		{"example.com", true},                    // bare domain exact
-		{"notexample.com", false},                // not a subdomain
-		{"SAT.CORP.INTERNAL", true},              // case-insensitive
-		{"10.1.2.3", true},                       // inside CIDR
-		{"11.1.2.3", false},                      // outside CIDR
-		{"192.168.1.5", true},                    // exact IP literal
-		{"192.168.1.6", false},                   // different IP
-		{"https://sat.corp.internal/pulp", true}, // URL authority input
-		{"sat.corp.internal:8443", true},         // host:port input
-		{"", false},                              // empty host
+		{"sat.corp.internal", true},
+		{"corp.internal", true},
+		{"a.b.example.com", true},
+		{"example.com", true},
+		{"notexample.com", false},
+		{"SAT.CORP.INTERNAL", true},
+		{"10.1.2.3", true},
+		{"11.1.2.3", false},
+		{"192.168.1.5", true},
+		{"192.168.1.6", false},
+		{"https://sat.corp.internal/pulp", true},
+		{"sat.corp.internal:8443", true},
+		{"", false},
 	}
 	for _, c := range cases {
 		if got := Bypasses(eff, c.host); got != c.want {
@@ -325,10 +325,6 @@ func TestNoProxyForLiteralMatchers(t *testing.T) {
 	}
 }
 
-// TestResolveNoProxyExpandsCIDRForInternalServiceIPs is the regression for the
-// reported rhsm.conf bug: an internal service (mirror/artifact server/Satellite)
-// reachable at an IP inside a no_proxy CIDR must be pinned as a concrete literal
-// so a bypass matcher that cannot handle CIDRs still bypasses it.
 func TestResolveNoProxyExpandsCIDRForInternalServiceIPs(t *testing.T) {
 	env := envWithExternalProxy()
 	env.Spec.InfraComponents.Proxies[0].Connection.NoProxy = []string{"10.0.0.0/8"}
@@ -360,7 +356,6 @@ func TestResolveNoProxyExpandsCIDRForInternalServiceIPs(t *testing.T) {
 			t.Errorf("NoProxy missing pinned literal %q; got %v", want, got.NoProxy)
 		}
 	}
-	// And the literal-only variant keeps those pins but drops the raw CIDR.
 	literal := NoProxyForLiteralMatchers(got)
 	if slices.Contains(literal, "10.0.0.0/8") {
 		t.Errorf("literal variant must not contain the raw CIDR; got %v", literal)

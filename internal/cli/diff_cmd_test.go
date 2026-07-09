@@ -18,10 +18,6 @@ func TestDiffRejectsUnknownStage(t *testing.T) {
 }
 
 func TestDiffAcceptsSubPhaseStages(t *testing.T) {
-	// diff shares apply's stage vocabulary (sub-phase drift checks are
-	// valid for a read-only command), so a sub-phase must pass stage validation
-	// rather than be rejected like destroy rejects it. Isolate HOME so the run
-	// fails (if at all) on a missing context, never on stage parsing.
 	setTestHomeAndRoot(t)
 	for _, stage := range converge.SubPhaseStageNames() {
 		_, stderr, _ := runCLI(t, "diff", "--stage", stage)
@@ -32,8 +28,6 @@ func TestDiffAcceptsSubPhaseStages(t *testing.T) {
 }
 
 func TestDiffRejectsOverride(t *testing.T) {
-	// diff never mutates state, so it carries no --override flag at all;
-	// cobra rejects it as unknown.
 	stdout, stderr, code := runCLI(t, "diff", "--override")
 	if code != 2 {
 		t.Fatalf("diff --override exit = %d, want 2 (stderr=%q)", code, stderr)
@@ -44,8 +38,6 @@ func TestDiffRejectsOverride(t *testing.T) {
 }
 
 func TestDiffAdoptRejectsRecorded(t *testing.T) {
-	// --adopt folds live state into desired YAML, so it cannot ride on the
-	// offline --recorded report; the two are mutually exclusive (usage error).
 	_, stderr, code := runCLI(t, "diff", "--recorded", "--adopt")
 	if code != 2 {
 		t.Fatalf("diff --recorded --adopt exit = %d, want 2 (stderr=%q)", code, stderr)

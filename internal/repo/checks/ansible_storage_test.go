@@ -32,16 +32,9 @@ func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 	}
 }
 
-// Per-sub-object --override rebuild is data-destroying, so it must be gated on the
-// override mode and a proven structural mismatch (the explicit op.structural vs the
-// live object — never the op name), delete the pool/filesystem with the Ceph
-// double-confirmation flag, toggle mon_allow_pool_delete back off even on failure,
-// and fail closed.
 func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml")
 
-	// The pool rebuild decision compares the live pool to the rendered desired
-	// structural identity, gated on the ceph-pool op under override.
 	decide := tasks[findAnsibleTask(t, tasks, "Decide Ceph pool structural override rebuild")]
 	decideFact, ok := decide["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -57,10 +50,6 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 		t.Fatalf("pool rebuild decision must be gated on the ceph-pool op under override, got %v", decide["when"])
 	}
 
-	// The rebuild block is gated on the structural-mismatch decision; it enables pool
-	// deletion, removes the pool with the double-confirmation flag, and re-disables
-	// deletion in an always block so a failed rebuild never leaves the cluster
-	// permissive.
 	rebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted Ceph pool for override")]
 	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
 		t.Fatalf("pool rebuild must be gated on the structural-mismatch decision, got %v", rebuild["when"])
@@ -85,15 +74,11 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 		t.Fatalf("always block must re-disable mon_allow_pool_delete, got %v", disable)
 	}
 
-	// A failed pool deletion aborts the apply instead of recreating over a partly
-	// removed pool.
 	assertTask := tasks[findAnsibleTask(t, tasks, "Fail closed when override Ceph pool deletion failed")]
 	if _, ok := assertTask["ansible.builtin.assert"].(map[string]any); !ok {
 		t.Fatalf("pool deletion failure must be an assert, got %v", assertTask)
 	}
 
-	// CephFS rebuild fails the filesystem before removing it with the
-	// double-confirmation flag.
 	fsRebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")]
 	fsBlock := nestedAnsibleTasks(t, fsRebuild, "block")
 	failIdx := findAnsibleTask(t, fsBlock, "Fail drifted CephFS before override rebuild")
@@ -106,8 +91,6 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 		t.Fatalf("CephFS rebuild must rm with --yes-i-really-really-mean-it, got %v", fsBlock[fsRmIdx])
 	}
 
-	// The CephFS rebuild decision considers BOTH immutable structural pools — the
-	// metadata pool and the default data pool — comparing each to its live value.
 	fsDecide := tasks[findAnsibleTask(t, tasks, "Decide CephFS structural override rebuild")]
 	fsDecideFact, ok := fsDecide["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -121,12 +104,6 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	}
 }
 
-// The erasure-code profile is immutable in Ceph and cannot be removed while a pool
-// uses it, so its --override rebuild runs at the profile op (which precedes the pool
-// create): it compares the live profile to the rendered authored fields and, on a
-// mismatch, tears down the one dependent pool (data-destroying) with the
-// double-confirmation flag, re-disables mon_allow_pool_delete even on failure, fails
-// closed, then deletes the stale profile so the op recreates it.
 func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml")
 
@@ -170,8 +147,6 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 		t.Fatalf("ec-profile pool deletion failure must be an assert, got %v", assertTask)
 	}
 
-	// The stale profile is deleted only after its dependent pool, gated on the same
-	// override + structural-mismatch decision, so the op then recreates it.
 	profileRm := tasks[findAnsibleTask(t, tasks, "Delete structurally drifted erasure-code profile for override rebuild")]
 	if got := fmt.Sprint(profileRm["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
 		t.Fatalf("ec-profile delete must be gated on the structural-mismatch decision, got %v", profileRm["when"])
@@ -182,9 +157,6 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/main.yml"
 	tasks := readAnsibleTasks(t, path)
 
-	// The storage-node gate selects this host's entries from the rendered
-	// storage cluster `hosts` list; the retired `nodes` spelling silently
-	// selects nothing and turns every storage check into a no-op.
 	resolve := tasks[findAnsibleTask(t, tasks, "Resolve storage nodes on this host")]
 	facts, ok := resolve["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -223,8 +195,6 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 
-	// The device-name allowlist must accept stable /dev/disk/by-id, /dev/disk/by-path
-	// and /dev/mapper paths (with a trailing identifier), not just bare prefixes.
 	validate := tasks[findAnsibleTask(t, tasks, "Validate declared Ceph destroy devices")]
 	assertBlock, ok := validate["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -234,8 +204,6 @@ func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 		t.Fatalf("device regex must anchor stable by-id/by-path paths, got %v", assertBlock["that"])
 	}
 
-	// Before any wipe, a mounted/in-use/system device must be refused so a
-	// misdeclared or kernel-reordered /dev/sdX cannot wipe the host disk.
 	probeIdx := findAnsibleTask(t, tasks, "Probe declared Ceph destroy devices for active mounts")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe mounted or in-use Ceph destroy devices")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
@@ -248,10 +216,6 @@ func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 	}
 }
 
-// The day-2 registry-login reconcile re-pushes resolved registry credentials to
-// the mgr cephadm store on every apply (so a rotated credentialsRef takes
-// effect cluster-wide), gated on credentials being resolved, no_log, and run
-// after the cluster exists (after the image-base pin) but before cleanup.
 func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 	idx := findAnsibleTask(t, tasks, "Reconcile cephadm registry login for credential rotation")
@@ -272,10 +236,6 @@ func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
-	// A --override clean rebuild must read the Bootwright ownership marker, decide
-	// 3-factor ownership, enforce the apply-mode gate (which fails closed for a
-	// foreign or co-resident cluster), and only then run the destructive cephadm
-	// rm-cluster --zap-osds, so a cluster Bootwright did not create is never zapped.
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker for override rebuild")
 	decideIdx := findAnsibleTask(t, tasks, "Decide override rebuild ownership")
 	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
@@ -284,8 +244,6 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("override rebuild must read marker, decide ownership, and enforce the apply-mode gate before zapping (read=%d decide=%d gate=%d zap=%d)", readIdx, decideIdx, gateIdx, zapIdx)
 	}
 
-	// The gate is the shared ownership_record apply-mode gate, fed the cluster's
-	// existence and decided ownership; it fails closed (foreign) before the zap.
 	gate := tasks[gateIdx]
 	gateInclude, ok := gate["ansible.builtin.include_role"].(map[string]any)
 	if !ok {
@@ -310,9 +268,6 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("override rebuild zap must be gated on proven ownership, got %v", tasks[zapIdx]["when"])
 	}
 
-	// Ownership is 3-factor: a Bootwright ownership record exists on this seed, this
-	// host is the declared seedHost, and the on-disk conf fsid is present; any
-	// present marker fsid must agree with the conf fsid.
 	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("ownership decision must be a set_fact, got %v", tasks[decideIdx])
@@ -329,16 +284,12 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 		}
 	}
 
-	// The ownership record is written right after bootstrap (before the failure-prone
-	// SSH-trust/service/operation steps) so a partial apply stays classified as owned
-	// and recoverable by re-apply; it is the load-bearing record the gate reads.
 	recordIdx := findAnsibleTask(t, tasks, "Record storage cluster ownership early for recoverability")
 	sshTrustIdx := findAnsibleTask(t, tasks, "Configure cephadm SSH trust")
 	if !(recordIdx < sshTrustIdx) {
 		t.Fatalf("ownership record must be written before the SSH-trust/service steps (record=%d ssh=%d)", recordIdx, sshTrustIdx)
 	}
 
-	// The marker recording that fsid is stamped (root-owned, 0600) on apply.
 	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright Ceph ownership marker")
 	stamp, ok := tasks[stampIdx]["ansible.builtin.copy"].(map[string]any)
 	if !ok {
@@ -363,11 +314,6 @@ func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
 func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 
-	// On the seed, prove 3-factor ownership (a Bootwright ownership record exists,
-	// this host is the declared seedHost, and the on-disk conf fsid is present, with
-	// any marker fsid agreeing) and fail closed before removing the cluster or wiping
-	// devices, so a foreign/co-resident cluster never leads to --zap-osds and
-	// /etc/ceph teardown.
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker on seed host")
 	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright Ceph cluster on seed host")
@@ -385,8 +331,6 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 		t.Fatalf("ceph destroy guard must require proven Bootwright ownership, got %v", refuse["that"])
 	}
 
-	// Ownership is 3-factor: a record on this seed + declared seedHost + the on-disk
-	// conf fsid (any marker fsid agreeing), or no conf at all (nothing to protect).
 	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("ceph destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
@@ -427,18 +371,11 @@ func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 	}
 }
 
-// TestStorageCephadmDestroySkipUnreachableGuards pins the safety contract for
-// --skip-unreachable: the play tolerates unreachable hosts only via the gate var
-// (default keeps the fatal behaviour), and a seed-reachability assert runs before
-// the include_role wipe so a cluster whose seed host is down never reaches the
-// device wipe with ownership unproven.
 func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	if len(plays) != 1 {
 		t.Fatalf("storage destroy plays = %d, want 1", len(plays))
 	}
-	// any_errors_fatal stays literally true even with ignore_unreachable, so a
-	// genuine task failure (the seed assert / ownership refusal) still aborts.
 	if got := plays[0]["any_errors_fatal"]; got != true {
 		t.Fatalf("storage destroy play must keep any_errors_fatal literally true, got %v", got)
 	}
@@ -456,8 +393,6 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 		t.Fatalf("seed-reachability guard must be a hard assert so any_errors_fatal aborts all hosts, got %v", tasks[seedIdx])
 	}
 
-	// A partially-destroyed cluster (a node skipped) must keep its ownership
-	// record so it is not treated as fully gone.
 	destroyTasks := storageCephDestroyTasks(t)
 	removeIdx := findAnsibleTask(t, destroyTasks, "Remove storage cluster ownership record")
 	if got := fmt.Sprint(destroyTasks[removeIdx]["when"]); !strings.Contains(got, "bootwright_storage_cluster_partial") {
@@ -471,22 +406,15 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve devices recorded as Bootwright OSDs for this cluster")
 	checkIdx := findAnsibleTask(t, tasks, "Check declared OSD devices are empty or Bootwright-owned")
 	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright OSD device ownership marker")
-	// The marker records the devices Bootwright claims as OSDs, captured after the
-	// empty-device check, so destroy can later prove a declared device was ours.
-	// The check itself reads the previous apply's marker first: a recorded device
-	// may carry Bootwright's own ceph-volume signatures (owned, half-converged
-	// cluster) without failing the re-apply.
 	if !(readIdx < resolveIdx && resolveIdx < checkIdx && checkIdx < stampIdx) {
 		t.Fatalf("OSD device gate must read and resolve the marker before the device check and stamp after it (read=%d resolve=%d check=%d stamp=%d)", readIdx, resolveIdx, checkIdx, stampIdx)
 	}
 	if got := fmt.Sprint(tasks[readIdx]["failed_when"]); got != "false" {
 		t.Fatalf("OSD marker read must tolerate a missing marker, got failed_when=%v", got)
 	}
-	// Marker-gated so a node with no marker keeps the strict empty-device gate.
 	if got := fmt.Sprint(tasks[resolveIdx]["when"]); !strings.Contains(got, "content is defined") {
 		t.Fatalf("OSD owned-device resolution must be gated on marker content, got when=%v", got)
 	}
-	// Another cluster's (or node's) leftovers must never count as owned.
 	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("OSD owned-device resolution must be a set_fact, got %v", tasks[resolveIdx])
@@ -528,14 +456,9 @@ func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_recorded_osd_devices") {
 		t.Fatalf("OSD device guard must require declared devices to be in the recorded set, got %v", refuse["that"])
 	}
-	// Gated on marker validity so a cluster provisioned before this guard still
-	// destroys (validity defaults false when no marker exists → fall back to the
-	// shape/mount checks).
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_osd_marker_valid") {
 		t.Fatalf("OSD device guard must be gated on marker validity so it falls back when no marker exists, got %v", tasks[refuseIdx]["when"])
 	}
-	// Validity requires a Bootwright marker for THIS cluster and node, mirroring the
-	// install gate: a stale/foreign marker must not seed the wipe-allowlist.
 	resolve := tasks[findAnsibleTask(t, tasks, "Resolve recorded Bootwright OSD devices")]
 	facts, ok := resolve["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -547,8 +470,6 @@ func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
 			t.Fatalf("marker validity must require %s (manager+cluster+node), got %v", want, facts["bootwright_ceph_osd_marker_valid"])
 		}
 	}
-	// The validity fact is only computed when a marker is present, so no marker
-	// leaves it unset → default false → the guard falls back rather than refusing.
 	if got := fmt.Sprint(resolve["when"]); !strings.Contains(got, "content is defined") {
 		t.Fatalf("recorded-device resolution must be gated on a present marker, got %v", resolve["when"])
 	}
@@ -562,19 +483,11 @@ func TestStorageCephadmDestroyReprobesMountsBeforeWipe(t *testing.T) {
 	if !(reprobeIdx < refuseIdx && refuseIdx < wipeIdx) {
 		t.Fatalf("ceph destroy must re-probe mounts and refuse before wiping (reprobe=%d refuse=%d wipe=%d)", reprobeIdx, refuseIdx, wipeIdx)
 	}
-	// The re-probe refusal must sit immediately before the wipe to minimize the
-	// time-of-check/time-of-use window.
 	if refuseIdx+1 != wipeIdx {
 		t.Fatalf("mount re-probe refusal must be the task immediately before the wipe (refuse=%d wipe=%d)", refuseIdx, wipeIdx)
 	}
 }
 
-// TestStorageCephadmDestroySkipsAbsentDevices pins that a declared OSD device
-// which is not present on the host (lsblk "not a block device") is skipped
-// rather than blocking teardown, while a probe that fails for any other reason
-// still fails closed. This lets destroy tolerate config drift (e.g. the profile
-// declaring more OSD disks than were provisioned) without weakening the
-// mounted/in-use and unknown-error refusals.
 func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	classifyIdx := findAnsibleTask(t, tasks, "Classify declared Ceph destroy devices by presence")
@@ -585,8 +498,6 @@ func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 		t.Fatalf("destroy must classify devices, fail closed on unprobeable, then refuse mounted, then wipe (classify=%d unprobeable=%d mount=%d wipe=%d)", classifyIdx, unprobeableIdx, mountRefuseIdx, wipeIdx)
 	}
 
-	// Absent is recognized only from the "not a block device" probe failure, and
-	// the present set is the rc==0 probes; everything else stays unprobeable.
 	classify, ok := tasks[classifyIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("device classification must be a set_fact, got %v", tasks[classifyIdx])
@@ -598,7 +509,6 @@ func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 		t.Fatalf("present devices must be the rc==0 probes, got %v", classify["bootwright_ceph_present_devices"])
 	}
 
-	// A probe failure that is not "absent" must still fail closed.
 	unprobeable, ok := tasks[unprobeableIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("unprobeable guard must be an assert, got %v", tasks[unprobeableIdx])
@@ -607,7 +517,6 @@ func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 		t.Fatalf("unprobeable guard must fail closed on devices that could not be probed, got %v", unprobeable["that"])
 	}
 
-	// The mounted/in-use refusal and the wipe must only ever touch present devices.
 	if got := fmt.Sprint(tasks[mountRefuseIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_present_probe") {
 		t.Fatalf("mounted-device refusal must loop over present probes only, got %v", tasks[mountRefuseIdx]["loop"])
 	}
@@ -654,10 +563,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		}
 	}
 
-	// OS facts are gathered in the context phase (which main.yml runs before the
-	// repository phase) and must precede the provider set_fact: subscription-backed
-	// providers embed {{ ansible_distribution_major_version }} in rendered repo
-	// definitions, and ansible-core 2.21 finalizes that template at set_fact time.
 	contextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context.yml")
 	gatherIdx := findAnsibleTask(t, contextTasks, "Gather storage node OS facts")
 	providerFactIdx := findAnsibleTask(t, contextTasks, "Resolve managed Ceph work paths")
@@ -668,8 +573,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	repositoryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/repository.yml")
 	communityDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure community Ceph package repository")
 	subscriptionDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure subscription-backed Ceph package repository")
-	// Dispatch is keyed on rendered capability flags, not the distribution name,
-	// so the role carries no per-distribution branch (ADR 0002).
 	if got := fmt.Sprint(repositoryTasks[communityDispatchIdx]["when"]); !strings.Contains(got, "community is defined") {
 		t.Fatalf("community repository dispatch must gate on the rendered community block, got when=%v", got)
 	}
@@ -699,9 +602,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok {
 		t.Fatalf("community repo task must run a command, got %v", communityTasks[addRepoIdx])
 	}
-	// A release name renders add-repo --release; a full x.y.z renders add-repo
-	// --version (reproducible). The argv carries both literals behind a data-only
-	// conditional on the rendered community.version, with no distribution branch.
 	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "add-repo") || !strings.Contains(got, "--release") || !strings.Contains(got, "--version") {
 		t.Fatalf("community repo task must run cephadm add-repo with both --release and --version arms, got %v", addRepo["argv"])
 	}
@@ -709,9 +609,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("community repo task must be idempotent via creates, got %v", addRepo["creates"])
 	}
 
-	// Subscription-backed register/refresh must stay no_log, and the licensed
-	// distributions must write the license-acceptance marker before the install
-	// stage pulls the licensed cephadm/ceph packages.
 	subscriptionTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml")
 	rhsmRegister := subscriptionTasks[findAnsibleTask(t, subscriptionTasks, "Register storage node with RHSM")]
 	assertRedactsByDefault(t, "RHSM registration", rhsmRegister["no_log"])
@@ -746,9 +643,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("Ceph prerequisites must run on the current storage host, got delegate_to %v", got)
 	}
 
-	// IBM requires time sync before bootstrap: chronyd is started, then a bounded,
-	// non-fatal waitsync gives the clock a chance to converge before the first
-	// monitor binds, so a disconnected node still proceeds.
 	startServicesIdx := findAnsibleTask(t, dependencyTasks, "Start storage node services")
 	waitSyncIdx := findAnsibleTask(t, dependencyTasks, "Wait for storage node time synchronization")
 	if startServicesIdx >= waitSyncIdx {
@@ -845,24 +739,15 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !strings.Contains(bootstrapArgv, "--registry-json") || strings.Contains(bootstrapArgv, "--registry-password") || strings.Contains(bootstrapArgv, "--registry-username") {
 		t.Fatalf("bootstrap argv must use registry JSON without username/password arguments, got %v", resolveBootstrap)
 	}
-	// A pinned spec.ceph.image must reach cephadm bootstrap as --image so the
-	// running daemons are reproducible, gated on the rendered image being set.
 	if !strings.Contains(bootstrapArgv, "--image") || !strings.Contains(bootstrapArgv, "bootwright_ceph_bootstrap_image") {
 		t.Fatalf("bootstrap argv must conditionally pass --image from the rendered pin, got %v", resolveBootstrap)
 	}
-	// --allow-fqdn-hostname must be passed unconditionally, matching IBM's
-	// recommended bootstrap command: cephadm refuses an FQDN seed hostname
-	// without it, and RHEL/IBM storage nodes routinely use FQDN hostnames.
 	if !strings.Contains(bootstrapArgv, "--allow-fqdn-hostname") {
 		t.Fatalf("bootstrap argv must pass --allow-fqdn-hostname (IBM recommended), got %v", resolveBootstrap)
 	}
-	// --dashboard-password-noupdate is unconditional: bootwright captures the
-	// generated dashboard password install-only, so the forced first-login
-	// rotation would immediately stale the captured secret.
 	if !strings.Contains(bootstrapArgv, "--dashboard-password-noupdate") {
 		t.Fatalf("bootstrap argv must pass --dashboard-password-noupdate, got %v", resolveBootstrap)
 	}
-	// --single-host-defaults is conditional on the rendered bootstrap flag.
 	if !strings.Contains(bootstrapArgv, "--single-host-defaults") || !strings.Contains(bootstrapArgv, "singleHostDefaults") {
 		t.Fatalf("bootstrap argv must conditionally pass --single-host-defaults, got %v", resolveBootstrap)
 	}

@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// validateStorageCephHostOSD checks the OSD device selection: the lean
-// devices shorthand and the drivegroup-shaped osd object are mutually
-// exclusive, both require the osd role, an osd-role host must author one of
-// them (consuming all available devices is the explicit opt-in
-// osd: {dataDevices: {all: true}}, never the omission default), and each
-// device selection must select something coherent.
 func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost, fleetCovered bool) []string {
 	var errs []string
 	if len(node.Devices) > 0 && node.OSD != nil {
@@ -24,8 +18,6 @@ func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost, fle
 		errs = append(errs, fmt.Sprintf("%s.devices requires the %q role", owner, v1alpha1.StorageCephRoleOSD))
 	}
 	errs = append(errs, validateStorageDevicePaths(owner+".devices", node.Devices)...)
-	// A fleet drivegroup that covers this host owns its devices; the host then
-	// authors no per-host selection (and must not — see overlap detection).
 	if fleetCovered && (len(node.Devices) > 0 || node.OSD != nil) {
 		errs = append(errs, fmt.Sprintf("%s authors a per-host osd/devices but is also covered by a fleet osdDrivegroup; a host is owned by one OSD spec", owner))
 	}
@@ -42,9 +34,6 @@ func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost, fle
 	return errs
 }
 
-// storageFleetCoveredHosts returns the set of topology hostnames each fleet
-// osdDrivegroup resolves to, used to relax the per-host device requirement and
-// to enforce one-owner overlap.
 func storageFleetCoveredHosts(cluster v1alpha1.StorageCluster) map[string]bool {
 	covered := map[string]bool{}
 	for _, dg := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
@@ -55,10 +44,6 @@ func storageFleetCoveredHosts(cluster v1alpha1.StorageCluster) map[string]bool {
 	return covered
 }
 
-// validateStorageCephOSDDrivegroups checks the fleet OSD specs: unique serviceIDs,
-// a coherent drivegroup, a placement that resolves to osd-role hosts, and the
-// one-owner rule — no host is claimed by more than one fleet (per-host overlap is
-// caught in validateStorageCephHostOSD).
 func validateStorageCephOSDDrivegroups(prefix string, cluster v1alpha1.StorageCluster) []string {
 	var errs []string
 	seenID := map[string]bool{}
@@ -83,8 +68,6 @@ func validateStorageCephOSDDrivegroups(prefix string, cluster v1alpha1.StorageCl
 	return errs
 }
 
-// validateStorageCephOSDSpec checks one drivegroup-shaped OSD selection (shared
-// by per-host hosts[].osd and fleet osdDrivegroups[].osd).
 func validateStorageCephOSDSpec(owner string, osd *v1alpha1.StorageCephHostOSD) []string {
 	var errs []string
 	if osd.DataDevices == nil {
@@ -129,8 +112,6 @@ func validateStorageCephOSDSpec(owner string, osd *v1alpha1.StorageCephHostOSD) 
 	return errs
 }
 
-// validateStorageServiceOverrides checks the common service-spec escape-hatch
-// fields: CIDR networks and well-formed custom configs.
 func validateStorageServiceOverrides(owner string, o *v1alpha1.StorageCephServiceOverrides) []string {
 	var errs []string
 	for i, cidr := range o.Networks {
@@ -150,10 +131,6 @@ func validateStorageServiceOverrides(owner string, o *v1alpha1.StorageCephServic
 	return errs
 }
 
-// validateStorageCephDeviceSelection checks one drivegroup device filter: the
-// path forms (scalar paths, expanded pathSpecs) and all are mutually exclusive,
-// pathSpecs entries need a path, the size filter must be a coherent drivegroup
-// size range, and the selection must narrow on at least one predicate.
 func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.StorageCephDeviceSelection) []string {
 	var errs []string
 	pathForms := 0
@@ -191,13 +168,6 @@ func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.Storag
 	return errs
 }
 
-// validateStorageDevicePaths checks each authored OSD block-device path so a
-// typo fails at the validate gate instead of much later at wipefs or `ceph orch
-// apply` with an opaque error: every entry must be a non-empty absolute /dev
-// path (permissive of /dev/disk/by-id, /dev/disk/by-path, /dev/mapper, and bare
-// kernel names alike), and no path may repeat within the list — the ownership
-// marker and the device-empty gates key on these strings, so a duplicate would
-// double-count and a relative/empty path would silently mismatch.
 func validateStorageDevicePaths(owner string, paths []string) []string {
 	var errs []string
 	seen := map[string]bool{}
@@ -219,11 +189,6 @@ func validateStorageDevicePaths(owner string, paths []string) []string {
 	return errs
 }
 
-// validateStorageCephDeviceSize guards the cephadm drivegroup size grammar
-// without re-implementing it: a single size (10G) or a low:high range
-// (10G:40G, :40G, 10G:) using ':' as the separator. It rejects only
-// unambiguously malformed values (a '-' separator, or more than one ':') so a
-// typo fails at the validate gate, not at live `ceph orch apply`.
 func validateStorageCephDeviceSize(owner, size string) []string {
 	if size == "" {
 		return nil

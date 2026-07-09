@@ -48,11 +48,6 @@
   register: bootwright_bmc_vmedia_pool_define
 
 - name: Enable autostart on libvirt vmedia storage pool
-  # community.libvirt.virt_pool returns from the `state` branch before it reaches
-  # the autostart handling, so `state: present` + `autostart: true` in one call
-  # silently drops autostart. Set autostart in its own call (no `state`) so the
-  # pool auto-activates after a host reboot instead of coming up inactive and
-  # leaving the emulated BMC unable to attach virtual media until a re-apply.
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
     uri: "{{ bootwright_bmc_libvirt_uri }}"

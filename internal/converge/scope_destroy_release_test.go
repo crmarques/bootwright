@@ -13,14 +13,13 @@ func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileReferenced(t *testing
 	ctxHub := mustContext(t, "hub")
 	ctxSpoke := mustContext(t, "spoke")
 
-	owner := sharedArtifactRecord() // hub owns the base (role empty => owner)
+	owner := sharedArtifactRecord()
 	reference := owner
 	reference.Role = ownership.RoleReference
 	reference.Context = "spoke"
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 	saveRecord(t, ctxSpoke.OwnershipDir, reference)
 
-	// hub (the owner) must be blocked from tearing the base down: spoke references it.
 	decision, err := PlanInfraComponentReleases("hub", []ownership.ResourceRecord{owner})
 	if err != nil {
 		t.Fatalf("plan: %v", err)
@@ -45,12 +44,9 @@ func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileCoOwned(t *testing.T)
 	ctxHub := mustContext(t, "hub")
 	ctxSpoke := mustContext(t, "spoke")
 
-	// No role:reference writer exists yet, so a genuinely shared service reads as two
-	// OWNER records for the same (kind,name,host). hub's teardown must fail closed
-	// because spoke co-owns (still depends on) the same base.
 	owner := sharedArtifactRecord()
 	coOwner := owner
-	coOwner.Context = "spoke" // role empty => owner
+	coOwner.Context = "spoke"
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 	saveRecord(t, ctxSpoke.OwnershipDir, coOwner)
 
@@ -74,8 +70,6 @@ func TestPlanInfraComponentReleasesReleasesReferenceForAllKinds(t *testing.T) {
 	ctxHub := mustContext(t, "hub")
 	ctxSpoke := mustContext(t, "spoke")
 
-	// A reference is released (fragment-only) regardless of component kind, including
-	// a degrading service (load-balancer) the old model could never release.
 	base := ownership.ResourceRecord{
 		Kind: "infra-component", Name: "prov1-lb", Host: "bastion.lab",
 		Owner: ownership.Owner, Labels: map[string]string{"bootwright.kind": "load-balancer"},
@@ -101,7 +95,7 @@ func TestPlanInfraComponentReleasesReleasesReferenceForAllKinds(t *testing.T) {
 func TestPlanInfraComponentReleasesTearsDownWhenSoleOwner(t *testing.T) {
 	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
 	ctxA := mustContext(t, "ctx-a")
-	mustContext(t, "ctx-b") // exists but records nothing
+	mustContext(t, "ctx-b")
 
 	shared := sharedArtifactRecord()
 	saveRecord(t, ctxA.OwnershipDir, shared)

@@ -11,9 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/host/execution"
 )
 
-// BootstrapStep is one labelled command in the controller bootstrap
-// sequence. The CLI runs each step in order and aborts on the first
-// non-zero exit.
 type BootstrapStep struct {
 	Label string
 	Cmd   []string
@@ -35,9 +32,6 @@ var DefaultProcessDeps = ProcessDeps{
 	UID: os.Getuid,
 }
 
-// ParsePythonVersion parses "Python 3.12.4" -> (3, 12). The leading
-// "Python " is optional so callers can also pass already-trimmed
-// version strings.
 func ParsePythonVersion(s string) (major, minor int, err error) {
 	s = strings.TrimPrefix(s, "Python ")
 	parts := strings.SplitN(s, ".", 3)
@@ -125,9 +119,6 @@ func rootManagedCmdWith(deps ProcessDeps, args []string, preserveProxyEnv bool) 
 	return out
 }
 
-// SudoPackageInstallCmd wraps an install command with sudo (and the
-// proxy --preserve-env list when the caller asked for ambient proxy
-// inheritance).
 func SudoPackageInstallCmd(args []string, preserveProxyEnv bool) []string {
 	out := []string{"sudo"}
 	if preserveProxyEnv {
@@ -136,8 +127,6 @@ func SudoPackageInstallCmd(args []string, preserveProxyEnv bool) []string {
 	return append(out, args...)
 }
 
-// SudoPreservedProxyVars is the comma-joined env-var list that sudo
-// should inherit when running install commands behind an HTTP proxy.
 const SudoPreservedProxyVars = "HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy"
 
 func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool, pyvmomiPin string) ([]BootstrapStep, error) {
@@ -263,11 +252,6 @@ func pythonPackageVersion(deps ProcessDeps, pythonBin string, pkg string) string
 	return ""
 }
 
-// MergeBootstrapEnv returns a new env slice with bootstrap-relevant
-// overlays applied: ambient HTTP_PROXY/HTTPS_PROXY/NO_PROXY are
-// stripped (callers re-inject the values they want), then `extra`
-// pairs are appended. Used by the CLI runner that exec's the
-// bootstrap steps.
 func MergeBootstrapEnv(base []string, extra map[string]string) []string {
 	return mergeEnv(stripProxyEnv(base), extra)
 }

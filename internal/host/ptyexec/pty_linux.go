@@ -16,9 +16,6 @@ import (
 	"unsafe"
 )
 
-// processGroupTerminationGrace bounds how long RunCommand waits after signalling
-// the child's session/process group on cancellation before Go force-kills the
-// leader. Matches the non-TTY ansible runner's grace.
 const processGroupTerminationGrace = 5 * time.Second
 
 func RunCommand(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, env []string) error {
@@ -35,11 +32,6 @@ func RunCommand(ctx context.Context, stdout io.Writer, stderr io.Writer, args []
 	cmd.Stderr = slave
 	outputMu := &sync.Mutex{}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
-	// Setsid makes the child a session/process-group leader, so on cancellation
-	// signal the whole group (negative PID) to reap ansible's ssh/python
-	// children rather than only the leader; WaitDelay escalates to a force-kill
-	// if the group does not exit in time. Without this the detached session
-	// would survive shutdown and orphan to PID 1.
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil

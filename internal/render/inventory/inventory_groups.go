@@ -5,11 +5,6 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-// HostGroupCounts returns the number of hosts in each inventory child
-// group for the given state. Used to detect an ansible-playbook
-// invocation that would target only empty groups (which fails with
-// "no hosts to target") and skip it instead. Controller and OCP-install
-// groups contain localhost when clusters are loaded.
 func HostGroupCounts(state v1alpha1.State) map[string]int {
 	return HostGroupCountsWithOwnershipRecords(state, nil)
 }

@@ -7,12 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// A ContainerCluster edit confined to day-2-owned intent (a node label; an added
-// cluster add-on) classifies as RECONCILABLE drift on the install object, so continue
-// proceeds and --override does not reinstall. An install-affecting edit (a node's
-// install role) stays STRUCTURAL. A record written before the structural projection
-// existed falls back to structural (fail-safe: an upgrade never turns a real reinstall
-// into a no-op).
 func TestContainerClusterDay2EditsAreReconcilable(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	mkState := func(labelVal, role string, addons []v1alpha1.ClusterAddon) v1alpha1.State {
@@ -64,7 +58,6 @@ func TestContainerClusterDay2EditsAreReconcilable(t *testing.T) {
 		}
 	}
 
-	// Day-2 edits: a changed node label and an added add-on. Reconcilable, not structural.
 	day2 := classify(t, runsDir, mkState("v2", "worker", []v1alpha1.ClusterAddon{{Metadata: v1alpha1.Metadata{Name: "x"}}}))
 	if day2.Class != ConvergeSafetyDrift {
 		t.Fatalf("day-2 edit should DISPLAY as drift, got %q", day2.Class)
@@ -73,20 +66,18 @@ func TestContainerClusterDay2EditsAreReconcilable(t *testing.T) {
 		t.Fatalf("day-2 label/add-on edit must be reconcilable, not structural: reconcilable=%v structural=%v", day2.HasReconcilableDrift(), day2.HasStructuralDrift())
 	}
 
-	// Install-affecting edit: a node's install role moves the structural hash.
 	roleEdit := classify(t, runsDir, mkState("v1", "master", nil))
 	if !roleEdit.HasStructuralDrift() || roleEdit.HasReconcilableDrift() {
 		t.Fatalf("install-role change must be structural: structural=%v reconcilable=%v", roleEdit.HasStructuralDrift(), roleEdit.HasReconcilableDrift())
 	}
 
-	// Legacy record (no structural hash): a day-2 edit falls back to structural.
 	legacyDir := t.TempDir()
 	for _, task := range installTasks(base) {
 		desired, err := ApplyTaskDesiredHash(task)
 		if err != nil {
 			t.Fatalf("desired hash: %v", err)
 		}
-		saveStateCheckRecord(t, legacyDir, task, desired, ConvergeSafetyOwner) // no structural hash
+		saveStateCheckRecord(t, legacyDir, task, desired, ConvergeSafetyOwner)
 	}
 	legacy := classify(t, legacyDir, mkState("v2", "worker", nil))
 	if !legacy.HasStructuralDrift() || legacy.HasReconcilableDrift() {

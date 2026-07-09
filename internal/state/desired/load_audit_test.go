@@ -18,10 +18,6 @@ spec:
       countPerHost: 1
 `
 
-// L5: a document set containing only a StorageNFSExport is a valid Bootwright
-// input set. The emptiness guard's kind list had drifted out of sync with the
-// decode arm, so such a set was wrongly rejected as "no Bootwright YAML documents
-// found". Loading must succeed and populate the export.
 func TestLoadStorageNFSExportOnlyDocumentSet(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nfs-export.yaml")

@@ -7,9 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// RGW gateways, NFS exports, and StorageExports are stateless services: a config or
-// placement edit must classify as a reconcilable drift (non-empty, stable structural
-// hash), not a structural rebuild that wipes the cluster.
 func TestStatelessCephServicesDeclareStructuralProjection(t *testing.T) {
 	for _, kind := range []string{storageSubObjectKindGateway, storageSubObjectKindNFSExport, storageSubObjectKindExport} {
 		sub := storageSubObject{Kind: kind, Cluster: "ceph", Name: "svc"}
@@ -26,8 +23,6 @@ func TestStatelessCephServicesDeclareStructuralProjection(t *testing.T) {
 	}
 }
 
-// Enabling the mgmt-gateway / dashboard HA or editing a cephadm service passthrough
-// must not move the StorageCluster structural hash (cephadm reconciles it via orch).
 func TestCephManagementEditIsStructurallyReconcilable(t *testing.T) {
 	proj := func(s v1alpha1.State) string {
 		b, err := json.Marshal(storageClusterStructuralHashVars(s, "ceph-bm"))

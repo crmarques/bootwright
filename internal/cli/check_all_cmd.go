@@ -55,16 +55,11 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		}
 		ctx := cf.ctx
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
-		// Trust-on-first-use: only in interactive text runs, and only for hosts
-		// with no recorded key. Dry-run and JSON runs fail closed on missing
-		// trust exactly as before.
 		if trustOnFirstUse && !dryRun {
 			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, nil); err != nil {
 				return failErr(1, err)
 			}
 		}
-		// preflight all is whole-context: no --clusters narrowing, so nil scopes
-		// check every managed-trust machine and declared object's secrets.
 		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, nil, nil); err != nil {
 			return err
 		}

@@ -9,10 +9,6 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
 - name: Warn when the BMC exposes multiple systems and none was selected
-  # A multi-system BMC (blade/chassis, some OpenBMC) exposes more than one
-  # ComputerSystem; falling through to Members|first can target the wrong
-  # system and boot it destructively. Surface it so the operator can pin
-  # boot.redfish.systemId; first-member remains the conventional default.
   ansible.builtin.debug:
     msg: >-
       WARNING: Redfish BMC exposes

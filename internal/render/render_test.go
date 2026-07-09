@@ -14,20 +14,8 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// fixtureRoot is the relative path from internal/render to
-// the canonical good fixtures already used by the desiredstate validator
-// tests. Sharing the fixtures avoids fixture drift and ensures the
-// render pipeline stays in step with what the validator accepts.
 const fixtureRoot = "../state/desired/testdata/good"
 
-// TestAllSucceedsForGoodFixtures runs render.All over each good fixture
-// and asserts the renderer produces all four canonical artifacts
-// (effective-state, lock, inventory, vars) plus per-cluster install
-// assets, with the file modes the rest of the pipeline relies on.
-//
-// This test covers structural invariants across every fixture; byte-level
-// determinism and exact output are pinned per fixture by the golden files
-// in TestRenderGoldenFixtures (golden_test.go).
 func TestAllSucceedsForGoodFixtures(t *testing.T) {
 	entries, err := os.ReadDir(fixtureRoot)
 	if err != nil {
@@ -50,7 +38,7 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 
 			renderedDir := t.TempDir()
 			clustersDir := t.TempDir()
-			secretsDir := t.TempDir() // empty — All() must not consult it
+			secretsDir := t.TempDir()
 			result, err := render.All(renderedDir, clustersDir, secretsDir, state)
 			if err != nil {
 				t.Fatalf("render.All: %v", err)
@@ -64,9 +52,6 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 			} {
 				assertFileMode(t, path, 0o600)
 			}
-			// The rendered directory and every subdir under it hold
-			// operator-facing rendered artifacts. Mode 0700 keeps
-			// local files private and matches the runtime boundary.
 			assertDirMode(t, renderedDir, 0o700)
 			assertDirMode(t, filepath.Dir(result.InventoryPath), 0o700)
 			assertDirMode(t, result.ArtifactsDir, 0o700)
@@ -81,11 +66,6 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 			for _, asset := range result.InstallerAssets {
 				assertFileMode(t, asset.InstallConfigPath, 0o600)
 				assertFileMode(t, asset.AgentConfigPath, 0o600)
-				// Placeholder install-config carries placeholders
-				// only, without leaking secret material.
-				// Placeholder markers MUST be present; real-looking
-				// secret material (PEM keys, base64-style "auth"
-				// values) MUST NOT.
 				body, err := os.ReadFile(asset.InstallConfigPath)
 				if err != nil {
 					t.Fatalf("read placeholder install-config: %v", err)
@@ -119,8 +99,6 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		// _wip holds intentionally-incomplete scratch examples (gitignored);
-		// they are not canonical and are not validated here.
 		if name == "_wip" {
 			continue
 		}
@@ -308,13 +286,6 @@ func vsphereTestMachine(name string) v1alpha1.Machine {
 	}
 }
 
-// TestAllTightensLooseRenderedDirMode verifies render.All chmods a
-// pre-existing rendered directory that was created with looser permissions
-// back down to 0700. The Chmod-after-MkdirAll sequence in render.go is
-// the only thing that guards against a rendered dir created by a user
-// umask of 0022 (which leaves 0755); removing that Chmod would silently
-// expose secret material to other local users. This test fails fast if
-// the Chmod call disappears or its mode constant drifts.
 func TestAllTightensLooseRenderedDirMode(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -413,10 +384,6 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	if !ok {
 		t.Fatalf("imageDigestSources missing or wrong type: %v", cfg["imageDigestSources"])
 	}
-	// bastion SSH address resolves to localhost; ClusterFacingHostAddress
-	// substitutes the gateway of the cluster's api endpoint network
-	// (sno-bridge → 192.168.132.1) so the mirror URL is reachable from
-	// cluster guests.
 	wantMirror := "192.168.132.1:5000/" + v1alpha1.DefaultMirroredReleasePath
 	for _, raw := range sources {
 		src := raw.(map[string]any)
@@ -740,13 +707,6 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 	}
 }
 
-// TestRenderCoreSharedOutputsStayInStep guards the single render body shared by
-// render.All (on-disk context bundle) and the tool-input bundle: the
-// secret-independent, mode-invariant artifacts — effective-state.yaml and the
-// lock — are produced by the shared renderCore, not by either mode's seams, so
-// both entry points must emit them byte-identically. If a future change
-// re-forks the two render bodies, one artifact could drift in one mode and not
-// the other; this test fails first.
 func TestRenderCoreSharedOutputsStayInStep(t *testing.T) {
 	t.Setenv("HOME", "/bootwright-golden/home")
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})

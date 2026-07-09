@@ -17,9 +17,6 @@ func selectionTestState() v1alpha1.State {
 	}
 }
 
-// TestResolveEmptyScopeIsWholeTarget pins that an absent --clusters selection
-// yields an inactive selection with the full render state and no work-set
-// narrowing — the unscoped run path every handler relies on.
 func TestResolveEmptyScopeIsWholeTarget(t *testing.T) {
 	state := selectionTestState()
 	sel, err := Resolve(state, "clusters", "")
@@ -37,11 +34,6 @@ func TestResolveEmptyScopeIsWholeTarget(t *testing.T) {
 	}
 }
 
-// TestResolveContainerOnlyExcludesStorageFromWorkSet is the selection-level
-// expression of the destroy bug fix and the apply/destroy symmetry: a
-// container-only --clusters selection resolves to an empty (non-nil) storage
-// work set, so neither apply provisioning nor destroy teardown touches storage,
-// while the directly-named container root is the selection's container root.
 func TestResolveContainerOnlyExcludesStorageFromWorkSet(t *testing.T) {
 	sel, err := Resolve(selectionTestState(), "clusters", "ocp")
 	if err != nil {
@@ -62,8 +54,6 @@ func TestResolveContainerOnlyExcludesStorageFromWorkSet(t *testing.T) {
 	}
 }
 
-// TestResolveStorageRootIsWorkObject confirms a directly-named storage root is a
-// work object and the single source of StorageWorkNames.
 func TestResolveStorageRootIsWorkObject(t *testing.T) {
 	sel, err := Resolve(selectionTestState(), "clusters", "ceph")
 	if err != nil {
@@ -74,16 +64,12 @@ func TestResolveStorageRootIsWorkObject(t *testing.T) {
 	}
 }
 
-// TestResolveUnknownClusterErrors keeps Resolve a drop-in for the resolvers it
-// replaces: an unknown --clusters name is rejected, not silently dropped.
 func TestResolveUnknownClusterErrors(t *testing.T) {
 	if _, err := Resolve(selectionTestState(), "clusters", "nope"); err == nil {
 		t.Fatal("expected an error for an unknown cluster name")
 	}
 }
 
-// TestResolveRejectsClusterScopeForUnsupportedTarget mirrors ScopeState's
-// unsupported-target guard so the selector and the filter agree.
 func TestResolveRejectsClusterScopeForUnsupportedTarget(t *testing.T) {
 	if _, err := Resolve(selectionTestState(), "bastion", "ocp"); err == nil {
 		t.Fatal("expected --clusters to be rejected for an unsupported target")

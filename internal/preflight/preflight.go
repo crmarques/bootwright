@@ -1,7 +1,3 @@
-// Package preflight collects environmental-readiness checks — bastion tools,
-// installer tools, secret material, SSH host trust, and addon prerequisites —
-// from desired state and the local host. It returns plain Check data;
-// presentation lives with the callers.
 package preflight
 
 import (
@@ -27,8 +23,6 @@ const (
 	checkGroupSecretMaterial  = "Secret material"
 )
 
-// Status mirrors the CLI output status vocabulary for the values preflight
-// checks emit, so rendered text is identical after the boundary mapping.
 type Status string
 
 const (
@@ -47,7 +41,6 @@ type Check struct {
 	Remediation string
 }
 
-// Phase is the slice of a workflow phase preflight scoping needs: its name.
 type Phase struct {
 	Name string
 }
@@ -88,27 +81,14 @@ func pythonVersionCheck(deps Deps) Check {
 	return failCheck(checkGroupControllerTools, name, "not found", "Bootwright cannot run the managed Ansible runtime", "bootwright bastion setup")
 }
 
-// Deps carries the host probes preflight checks use, so tests can inject
-// fakes instead of touching the real host.
 type Deps struct {
-	LookPath         func(name string, extraDirs []string) (string, error)
-	StatPath         func(path string) (os.FileInfo, error)
-	StatExternalPath func(path string) (os.FileInfo, error)
-	CommandOutput    func(name string, args ...string) ([]byte, error)
-	// CommandOutputLocalRoot runs a command as the local-root process itself,
-	// without de-escalating to the invoking caller. Probes that read root-owned
-	// managed-workspace artifacts (a host cluster kubeconfig, the managed Ansible
-	// venv interpreter) must use it: under a sudo self-escalated apply, the plain
-	// CommandOutput de-escalates to the caller (callerio), who cannot traverse the
-	// 0700 root-owned workspace, so a caller-run kubectl/python fails with EACCES
-	// on a file that is in fact present and valid. This mirrors the apply path,
-	// which runs oc/kubectl against the same kubeconfig as root.
+	LookPath               func(name string, extraDirs []string) (string, error)
+	StatPath               func(path string) (os.FileInfo, error)
+	StatExternalPath       func(path string) (os.FileInfo, error)
+	CommandOutput          func(name string, args ...string) ([]byte, error)
 	CommandOutputLocalRoot func(name string, args ...string) ([]byte, error)
 	UID                    func() int
-	// HTTPDo issues API-endpoint probes (vCenter session auth). A nil
-	// value makes each check build a real client honoring the endpoint's
-	// certificate-verification setting.
-	HTTPDo func(req *http.Request, insecureSkipVerify bool) (*http.Response, error)
+	HTTPDo                 func(req *http.Request, insecureSkipVerify bool) (*http.Response, error)
 }
 
 var DefaultDeps = Deps{
@@ -138,12 +118,6 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 	return d.StatPath(path)
 }
 
-// CollectChecks gathers the readiness checks for the selected phases.
-// hostTrustScope, when non-nil, restricts the SSH host-trust check to that set
-// of Machine names — the apply path passes the machines its planned tasks will
-// connect to. A nil scope checks every managed-trust machine in the state.
-// secretScope, when non-nil, restricts secret-material and storage-tool checks
-// to the run's genuine work targets, ignoring render-reference pull-ins.
 func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps, hostTrustScope map[string]bool, secretScope *SecretScope) []Check {
 	var checks []Check
 	addonsNeedAnsible := phaseInScope("add-ons", selected, hasState) && stateHasAddonPlaybookHooks(state)
@@ -164,21 +138,12 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 		checks = append(checks, vspherePyvmomiCheck(deps))
 	}
 	if phaseInScope("base", selected, hasState) {
-		// virtctl is provisioned, version-matched to each host cluster, by the
-		// deps stage (the controller_virtctl role). Require it up front only when
-		// base runs without deps (nothing will provision it); when deps is in
-		// scope — including a full apply with no --stage filter — the provision
-		// task installs it before boot, so a missing virtctl here is not a gate.
 		if stateNeedsKubeVirt(state) && !phaseInScope("deps", selected, hasState) {
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH, or include the deps stage so bootwright provisions it from the host cluster", deps))
 		}
 	}
 	if phaseInScope("add-ons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
-		// A stage-scoped add-ons run (base out of scope) does not install any
-		// cluster, so each binding's target kubeconfig must already be on disk;
-		// gate it here instead of failing per task at requireKubeconfig. A full
-		// apply (base in scope) produces the kubeconfig mid-run, so it is not gated.
 		if !phaseInScope("base", selected, hasState) {
 			checks = append(checks, addonsKubeconfigChecks(state, clustersDir, deps)...)
 		}
@@ -211,8 +176,6 @@ func selectedNeedsAnsible(selected []Phase) bool {
 	return false
 }
 
-// stateHasAddonPlaybookHooks: the add-ons phase runs ansible only when an
-// add-on ships a playbook hook (e.g. the Data Foundation exporter).
 func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
 	for _, addon := range state.ClusterAddons {
 		for _, hook := range addon.Spec.Hooks {
@@ -270,9 +233,6 @@ func binaryCheck(group, name string, extraDirs []string, remediation string, dep
 	return okCheck(group, name, path)
 }
 
-// addonsKubeconfigChecks verifies that every cluster a ClusterAddonBinding
-// targets has its kubeconfig on disk. Used only for a stage-scoped add-ons run,
-// where no cluster install produces it during the run.
 func addonsKubeconfigChecks(state v1alpha1.State, clustersDir string, deps Deps) []Check {
 	var checks []Check
 	seen := map[string]bool{}

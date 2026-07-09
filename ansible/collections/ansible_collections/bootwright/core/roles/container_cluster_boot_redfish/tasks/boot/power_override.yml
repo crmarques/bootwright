@@ -128,13 +128,6 @@
       retries: "{{ bootwright_redfish_power_state_retries | int }}"
   changed_when: false
 
-# A looped include enqueues every probe iteration up front, so a power state
-# that settles in one or two probes still prints power_state_probe.yml as
-# skipped for every remaining iteration. Enter the tail-recursive wrapper
-# instead: it re-checks the reached fact only after each probe, so settled
-# waits never enqueue spare iterations. The probe stays a censored uri GET with
-# a sanitized capture+debug+assert (never `until`, which force-fails a no_log'd
-# task with a censored result on exhaustion).
 - name: Wait for BMC to report PowerState=Off
   ansible.builtin.include_tasks: power_state_wait.yml
   when:

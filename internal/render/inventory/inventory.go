@@ -13,20 +13,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// Inventory builds the Ansible inventory tree per ADR-0002 § role
-// taxonomy. Hosts that back a profile-based machine substrate land in
-// `bootwright_infra_hosts`: libvirt uses its provider host, while KubeVirt
-// and vSphere use localhost because VM operations run through a kubeconfig
-// or the vCenter API. Bare-metal machines are reached through BMCs. Hosts
-// that back provider setup or BMC services land in `bootwright_provider_hosts`.
-// Hosts that back managed InfraComponent services (LB, DNS, proxy, registry,
-// artifacts, NTP) land in `bootwright_infra_component_hosts`. A host can live
-// in several groups. The OCP-install and agent-node layers run on localhost.
-//
-// Two groups instead of one is deliberate: the machine-infra layer
-// playbook targets `bootwright_infra_hosts` directly and no longer
-// needs to filter hosts by machineRef in its task body. Provider and
-// InfraComponent layers target their own host groups for service convergence.
 func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 	return InventoryWithPathOptions(state, PathOptions{SecretsDir: secretsDir})
 }
@@ -68,9 +54,6 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 		if !ok {
 			continue
 		}
-		// A machine with no ssh block is only reachable when it is the local
-		// bastion bootwright runs on (provided-OS, rendered ansible_connection:
-		// local); an ssh-less agent node stays out of the SSH host set.
 		if h.Spec.Access.SSH == nil && !locality.IsControllerLocalMachine(h, localPolicy) {
 			continue
 		}
@@ -136,10 +119,6 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 	}
 }
 
-// Inventory group names emitted by Inventory(). Exported so callers
-// reasoning about Ansible `--limit` (e.g. workflow.Run skipping an
-// invocation that would target only empty groups) don't have to
-// hardcode the strings.
 const (
 	GroupProviderHosts       = "bootwright_provider_hosts"
 	GroupInfraComponentHosts = "bootwright_infra_component_hosts"
@@ -283,9 +262,6 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 			}
 			entry = machineInventoryEntry(providerMachine, env, paths, localPolicy)
 		} else if providerHost == "localhost" {
-			// Controller-driven substrates run machine tasks on the controller
-			// with no Machine object backing the ref: the API-native KubeVirt
-			// and vSphere providers, and bare-metal over the BMC (Redfish).
 			entry = localmachineInventoryEntry()
 		} else {
 			return

@@ -1,22 +1,10 @@
 ---
-# Read-only live Ceph state discovery for `bootwright diff` (live mode). On each
-# managed Ceph seed it runs a battery of `ceph ... --format json` reads and
-# copies each successful result to a controller-side per-cluster directory, plus
-# a discovery marker. The controller compares the observed state against desired
-# state and renders the differences. It contacts only the seed (the one host
-# with the /etc/ceph admin keyring) and mutates nothing — every read is
-# changed_when:false, failed_when:false, so a partially-down or unreachable
-# cluster still returns whatever it can rather than failing the play. Mirrors
-# check_storage_health.yml; the only difference is the breadth of reads.
 - name: Discover managed Ceph cluster state
   hosts: bootwright_storage_hosts
   gather_facts: false
   become: true
   environment: "{{ bootwright_proxy_env | default({}) }}"
   vars:
-    # Each entry is one read: a stable name (the result filename) and the argv
-    # of a read-only ceph command. Extend this list to widen discovery; the
-    # controller ignores reads it does not yet model.
     bootwright_ceph_discovery_reads:
       - name: status
         argv: [ceph, -s, --format, json]

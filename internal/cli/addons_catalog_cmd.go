@@ -181,8 +181,6 @@ func newAddonsDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		if name == "" {
 			return failf(2, "--name is required")
 		}
-		// Accept the same <name>:<version> shorthand add teaches; the store holds
-		// one version per name, so the version is an assertion, not a selector.
 		bare, inlineVersion := nativecatalog.ParseNameVersion(name)
 		output.New(stdout).Command("add-ons delete")
 		dir := nativecatalog.InstalledDir(bare)

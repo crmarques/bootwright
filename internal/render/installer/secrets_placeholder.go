@@ -9,8 +9,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// PlaceholderInstallerSecrets returns sentinel strings for placeholder
-// installer output in place of real material.
 func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster) InstallerSecrets {
 	pullSecret := "{}"
 	if ocp.Spec.Install.PullSecretRef.Name != "" {
@@ -37,11 +35,6 @@ func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClu
 	return out
 }
 
-// PortableInstallerSecrets returns "{{ secret <name>[.<role>] }}" substitution
-// tokens for the context-free portable render. Unlike PlaceholderInstallerSecrets
-// (whose "<bootwright-...-ref:>" sentinels match the context placeholder render),
-// these tokens are meant for a downstream secrets manager to rehydrate. Like the
-// placeholder generator it reads no material and takes no secrets dir.
 func PortableInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster) InstallerSecrets {
 	pullSecret := "{}"
 	if ocp.Spec.Install.PullSecretRef.Name != "" {
@@ -65,10 +58,6 @@ func PortableInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluste
 			Key:  secret.SecretPlaceholder(ref.Name, string(secret.MaterialTLSKey)),
 		}
 	}
-	// vSphere user/password come from one credentials file (no MaterialRole), so
-	// populate VSphereCredentials with .username/.password sub-tokens here; the
-	// existing embed at vSphereVCenterConfig then carries them unchanged instead
-	// of falling back to the "<bootwright-vsphere-*-ref:>" sentinels.
 	if ci, err := ClusterInstallForOCP(state, ocp); err == nil {
 		if names := vSphereCredentialRefNames(state, ci); len(names) > 0 {
 			out.VSphereCredentials = map[string]InstallerUserPass{}
@@ -83,15 +72,6 @@ func PortableInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluste
 	return out
 }
 
-// CheckPortableSupport rejects the install-config secret material the portable
-// render cannot faithfully represent as a single {{ secret }} token: the
-// context render bakes disconnected mirror-registry credentials into the
-// pull-secret JSON and authenticated cluster-install proxy credentials into the
-// proxy URL userinfo. A portable bundle has no token form for either (the
-// pull-secret is already one whole-value token; the proxy URL would need a
-// merged userinfo), so rather than silently omit them — producing an install
-// that cannot reach its mirror or proxy — the portable render fails fast and
-// points the operator at the context render.
 func CheckPortableSupport(state v1alpha1.State, ocp v1alpha1.ContainerCluster) error {
 	env := stateview.Environment(state)
 	if env != nil && v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {

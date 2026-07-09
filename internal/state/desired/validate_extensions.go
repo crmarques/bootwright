@@ -77,9 +77,6 @@ func validateDataFoundationStorageInputSchema(addon string, index int, input v1a
 	}
 	var errs []string
 	prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d].schema", addon, index)
-	// The attachment machinery reads the binding value literally named
-	// exportRef, so the schema must pin that exact property as a required
-	// StorageExport reference.
 	if property, ok := input.Schema.Properties["exportRef"]; !ok {
 		errs = append(errs, prefix+".properties.exportRef is required for dataFoundation storage attachment inputs")
 	} else if property.RefKind != v1alpha1.KindStorageExport {
@@ -174,10 +171,6 @@ func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterA
 	return errs
 }
 
-// validateGlobalPullSecretMergeInputSchema pins the schema of an input carrying
-// the globalPullSecretMerge effect: the merge executor reads the input's single
-// secret-typed property as the registry password, so the schema must declare
-// exactly one property, secret-typed and required.
 func validateGlobalPullSecretMergeInputSchema(addon string, index int, input v1alpha1.ClusterAddonAcceptedInput) []string {
 	hasMergeEffect := false
 	for _, effect := range input.Effects {
@@ -213,14 +206,6 @@ func validateGlobalPullSecretMergeInputSchema(addon string, index int, input v1a
 	return errs
 }
 
-// clusterAddonCapabilityValid reports whether a spec.provides/spec.requires
-// capability is a valid token. The vocabulary is open — a capability is any
-// token-shaped string — so add-on content (not just compiled bootwright) can
-// declare and order on its own capabilities. Three names carry reserved
-// planning semantics in core: kubevirt (host-cluster provisioning of
-// KubeVirt-backed nodes) and dataFoundation (the storage-export attachment
-// effect provider); nmstate is ordering-only. Reserved names are still just
-// tokens here — their special handling lives in the planner, not this validator.
 func clusterAddonCapabilityValid(capability string) bool {
 	return provisioningTokenRe.MatchString(capability)
 }
@@ -251,11 +236,6 @@ func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
 	return errs
 }
 
-// validateClusterAddonRequires checks spec.requires entries against the shared
-// capability vocabulary and rejects duplicates. Unlike provides it imposes no
-// readiness-check requirement. Whether each requirement is actually satisfied by
-// an add-on bound to the same cluster is checked per-binding in
-// validateClusterAddonBindings.
 func validateClusterAddonRequires(extension v1alpha1.ClusterAddon) []string {
 	var errs []string
 	seen := map[string]bool{}
@@ -311,10 +291,6 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 				errs = append(errs, fmt.Sprintf("%s.catalogSource.pollInterval %q is not a valid duration", prefix, catalog.PollInterval))
 			}
 		}
-		// The catalog gate waits on the shipped catalog before the Subscription
-		// applies, so subscribing to a different catalog would make the gate
-		// meaningless; normalize defaults subscription.source to the shipped
-		// catalog's name when unset.
 		if catalog.Name != "" && olm.Subscription.Source != "" && olm.Subscription.Source != catalog.Name {
 			errs = append(errs, fmt.Sprintf("%s.subscription.source %q must match catalogSource.name %q", prefix, olm.Subscription.Source, catalog.Name))
 		}
@@ -358,10 +334,6 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 		if customResourceString(metadata, "name") == "" {
 			errs = append(errs, itemPrefix+".metadata.name is required")
 		}
-		// Desired state must never embed secret bytes (the security.md invariant).
-		// OLM custom resources are applied via stdin, so an inline kind=Secret
-		// would be written verbatim (and logged) with zero diagnostic. Reject it
-		// and steer operators to reference a secret they provide at apply time.
 		if customResourceString(resource, "kind") == "Secret" {
 			if _, ok := resource["data"]; ok {
 				errs = append(errs, itemPrefix+" is a kind=Secret carrying inline data; desired state must not embed secret bytes — provide the Secret at apply time instead of inlining it")
@@ -370,10 +342,6 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 				errs = append(errs, itemPrefix+" is a kind=Secret carrying inline stringData; desired state must not embed secret bytes — provide the Secret at apply time instead of inlining it")
 			}
 		}
-		// metadata.namespace is intentionally optional: cluster-scoped custom
-		// resources (e.g. the kubernetes-nmstate NMState instance) have none, and
-		// oc apply ignores a namespace set on a cluster-scoped resource anyway.
-		// Namespaced custom resources still set it so they land in the right place.
 	}
 	return errs
 }
@@ -663,12 +631,6 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateBindingCapabilityOrdering reports, for one binding, spec.requires
-// capabilities that no add-on bound to the same cluster provides (the common
-// "requires nmstate but no nmstate add-on is bound" mistake) and any
-// requires/provides cycle among the bound add-ons. Both are scoped to the
-// binding because order resolution (plan.orderByCapabilities) is per binding.
-// Shape errors on the capability strings are reported by validateClusterAddon*.
 func validateBindingCapabilityOrdering(binding v1alpha1.ClusterAddonBinding, addons map[string]v1alpha1.ClusterAddon, state v1alpha1.State) []string {
 	var errs []string
 	var names []string
@@ -698,10 +660,6 @@ func validateBindingCapabilityOrdering(binding v1alpha1.ClusterAddonBinding, add
 				continue
 			}
 			seen[capability] = true
-			// Ordering is resolved per binding (plan.orderByCapabilities), so the
-			// provider must be in this binding — a provider in a sibling binding on
-			// the same cluster cannot be ordered against. The message says "this
-			// binding", not "this cluster", to point the user at the real fix.
 			if len(providedBy[capability]) == 0 {
 				errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s requires capability %q but no add-on in this binding provides it", binding.Metadata.Name, names[r], capability))
 				continue
@@ -772,8 +730,6 @@ func validateClusterAddonInputValues(prefix string, values map[string]any, schem
 				errs = append(errs, owner+" is required")
 				continue
 			}
-			// secret values resolve against Environment spec.secrets in the
-			// comprehensive secret walk; refKind values resolve here.
 			if property.RefKind != "" && !loaded[resourceKey{kind: property.RefKind, name: nameValue}] {
 				errs = append(errs, fmt.Sprintf("%s %q does not match any %s", owner, nameValue, property.RefKind))
 			}

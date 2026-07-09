@@ -14,13 +14,8 @@ type StoragePlacementPolicySpec struct {
 }
 
 type StoragePlacementCephSpec struct {
-	FailureDomain string `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
-	RuleName      string `yaml:"ruleName,omitempty" json:"ruleName,omitempty"`
-	// CrushDeviceClass pins the replicated CRUSH rule to one device class
-	// (ssd/hdd/nvme), the optional trailing argument of
-	// `crush rule create-replicated <name> default <failureDomain> [<class>]`.
-	// The class is fixed at rule creation; route a pool to a different class by
-	// authoring a new ruleName.
+	FailureDomain    string                  `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
+	RuleName         string                  `yaml:"ruleName,omitempty" json:"ruleName,omitempty"`
 	CrushDeviceClass string                  `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
 	Replicated       StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
 }

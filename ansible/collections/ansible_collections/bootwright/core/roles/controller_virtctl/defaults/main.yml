@@ -1,14 +1,7 @@
 ---
 bootwright_virtctl_install_dir: /usr/local/bin
 bootwright_virtctl_tmp_parent: /tmp
-# The KubeVirt host cluster kubeconfig; the task playbook sets it from
-# bootwright_clusters_dir and the host cluster name. Required.
 bootwright_virtctl_kubeconfig: ""
-# Optional disconnected-lab override. Empty means fetch from the host cluster's
-# OpenShift Virtualization ConsoleCLIDownload (verified against that cluster's
-# ingress CA); when set, the role downloads
-# <base>/<server-version>/virtctl-linux-amd64.tar.gz instead, verified against
-# the controller trust store.
 bootwright_virtctl_mirror_base: ""
 bootwright_virtctl_console_clidownload: virtctl-clidownloads-kubevirt-hyperconverged
 bootwright_virtctl_packages:

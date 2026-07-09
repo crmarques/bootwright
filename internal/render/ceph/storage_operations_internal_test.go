@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestCephFilesystemAttachesNonDefaultDataPools covers F26: `ceph fs new` wires
-// only the default data pool, so every additional declared data pool must be
-// attached with `ceph fs add_data_pool`, and the default pool must not be added
-// CephFS standby HA and subvolume groups render as native `ceph fs set` /
-// `ceph fs subvolumegroup create` ops, and the MDS serviceSpec common fields
-// land as top-level keys on the cephadm mds service doc.
 func TestCephFSStandbySubvolumeAndMDSServiceSpecRender(t *testing.T) {
 	uid := 1000
 	cluster := v1alpha1.StorageCluster{
@@ -79,7 +73,6 @@ func TestCephFSStandbySubvolumeAndMDSServiceSpecRender(t *testing.T) {
 	}
 }
 
-// a second time.
 func TestCephFilesystemAttachesNonDefaultDataPools(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -121,10 +114,6 @@ func TestCephFilesystemAttachesNonDefaultDataPools(t *testing.T) {
 	}
 }
 
-// The create-pool and create-cephfs operations carry the sub-object's immutable
-// identity in a `structural` block, the only desired-state difference that warrants
-// a data-destroying --override rebuild. Size/crush/application are NOT structural —
-// they reconcile in place.
 func TestStorageOperationsCarryStructuralIdentity(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -177,16 +166,11 @@ func TestStorageOperationsCarryStructuralIdentity(t *testing.T) {
 	if got := structuralByName["create-cephfs-fs1"]; got["metadataPool"] != "fs1-meta" || got["defaultDataPool"] != "fs1-data" {
 		t.Fatalf("create-cephfs-fs1 structural = %v, want metadataPool fs1-meta / defaultDataPool fs1-data", got)
 	}
-	// In-place ops must NOT carry structural (they reconcile, never destroy).
 	if _, ok := structuralByName["set-pool-size-rbd"]; ok {
 		t.Fatal("set-pool-size must not carry structural identity")
 	}
 }
 
-// An erasure-coded pool must converge as erasure-coded: profile created before
-// the pool, `erasure <profile>` on the create, no replicated set-size/min-size
-// (size derives from k+m), and allow_ec_overwrites for data-bearing roles so
-// RBD/CephFS clients can actually write.
 func TestErasureCodedPoolRendersProfileAndErasureCreate(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -250,10 +234,6 @@ func TestErasureCodedPoolRendersProfileAndErasureCreate(t *testing.T) {
 	}
 }
 
-// The erasure-code profile knobs render with native erasure-code-profile set
-// spellings (plugin/technique/crush-device-class/crush-root/stripe_unit and
-// sorted opaque parameters), and EVERY profile field — including parameters —
-// joins the structural identity so an immutable-profile change rebuilds.
 func TestErasureProfileFidelityRendersAndIsStructural(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -301,9 +281,6 @@ func TestErasureProfileFidelityRendersAndIsStructural(t *testing.T) {
 		t.Fatalf("structural.parameters = %v, want opaque params included", params)
 	}
 
-	// The ec-profile op carries a live-comparable structural identity (authored
-	// fields keyed by their `erasure-code-profile get` spellings) so the role can
-	// rebuild the profile and its dependent pool when a field drifts.
 	if ecStructural["pool"] != "ec" || ecStructural["profile"] != "ec-profile" {
 		t.Fatalf("ec-profile structural must name its pool and profile, got %v", ecStructural)
 	}
@@ -324,10 +301,6 @@ func TestErasureProfileFidelityRendersAndIsStructural(t *testing.T) {
 	}
 }
 
-// The per-pool steady-state intents render with their native ceph spellings:
-// autoscaler via `pool set`, quota via the distinct `set-quota` verb (an
-// authored 0 is the native no-limit), compression via `pool set compression_*`,
-// and a placement policy's device class as the trailing create-replicated arg.
 func TestPoolTuningAndCrushDeviceClassRender(t *testing.T) {
 	maxBytes := int64(0)
 	bulk := true
@@ -394,10 +367,6 @@ func TestPoolTuningAndCrushDeviceClassRender(t *testing.T) {
 	}
 }
 
-// Stretch mode requires the connectivity election strategy before
-// enable_stretch_mode, and a CRUSH rule that places two replicas per data
-// site — a two-step rule create-replicated cannot express, rendered as a
-// structured stretch-crush-rule operation the role compiles into the CRUSH map.
 func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -466,8 +435,6 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 	}
 }
 
-// The drivegroup-shaped host osd selection renders 1:1 into the cephadm OSD
-// service spec, and free-form host labels render alongside the roles.
 func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	rotational := false
 	cluster := v1alpha1.StorageCluster{
@@ -522,11 +489,6 @@ func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	}
 }
 
-// The extended drivegroup fidelity fields render into the cephadm OSD spec with
-// their native spellings: spec-level filter_logic / tpm2 / data_allocate_fraction
-// / block_db_size / db_slots, device-selection model / vendor, the expanded
-// pathSpecs paths form with per-device crush_device_class, and the top-level
-// unmanaged key (a sibling of spec/placement, not inside spec).
 func TestDrivegroupOSDExtendedFieldsRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -597,9 +559,6 @@ func TestDrivegroupOSDExtendedFieldsRender(t *testing.T) {
 	}
 }
 
-// OSD serviceOverrides render the cephadm common service-spec escape-hatch keys
-// (networks, extra_container_args, custom_configs) as top-level keys on the OSD
-// doc — unreachable for the reserved osd type otherwise.
 func TestOSDServiceOverridesRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -640,8 +599,6 @@ func TestOSDServiceOverridesRender(t *testing.T) {
 	}
 }
 
-// A fleet osdDrivegroup renders ONE OSD service with the authored serviceID
-// spanning all resolved osd-role hosts, instead of one per-host doc.
 func TestFleetOSDDrivegroupRendersSingleSpanningSpec(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -682,10 +639,6 @@ func TestFleetOSDDrivegroupRendersSingleSpanningSpec(t *testing.T) {
 	}
 }
 
-// OSD device consumption is explicit opt-in: the authored
-// osd: {dataDevices: {all: true}} renders a per-host OSD service, and an
-// osd-role host without a device selection (unreachable for validated state)
-// renders no OSD service — there is no implicit all-devices grouping.
 func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -734,10 +687,6 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	}
 }
 
-// Authoring loki/promtail renders the role-less services, but WITHOUT a
-// retention_time (that key exists only on cephadm's PrometheusSpec; MonitoringSpec
-// -- loki/promtail -- rejects it) and WITHOUT any dashboard set-loki-api-host op
-// (no such mgr dashboard command exists; emitting it would fail every apply).
 func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -775,9 +724,6 @@ func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
 	}
 }
 
-// A management gateway carrying TLS or oauth2-proxy is deferred to the dedicated
-// secret-bearing apply step: the static late-services render emits only the
-// keepalive ingress, never a mgmt-gateway doc that would inline secrets.
 func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
 	mk := func(tls *v1alpha1.StorageCephManagementTLS) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
@@ -794,12 +740,10 @@ func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
 			}},
 		}
 	}
-	// No secrets: the static render still emits the mgmt-gateway.
 	plain := mk(nil)
 	if !hasServiceType(CephadmLateServicesSpec(v1alpha1.State{}, plain), "mgmt-gateway") {
 		t.Fatal("a secret-free management gateway must render in late services")
 	}
-	// With TLS: the gateway is deferred; only the ingress renders statically.
 	withTLS := mk(&v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}})
 	docs := CephadmLateServicesSpec(v1alpha1.State{}, withTLS)
 	if hasServiceType(docs, "mgmt-gateway") {
@@ -819,9 +763,6 @@ func hasServiceType(docs []any, serviceType string) bool {
 	return false
 }
 
-// A first-class NFS export renders the nfs service + ingress (backend
-// nfs.<id>) into the late service specs and each export as an idempotent
-// `ceph nfs export create cephfs|rgw` operation keyed by <serviceID>|<pseudo>.
 func TestNFSExportServiceAndExportsRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -878,10 +819,6 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 	}
 }
 
-// An RGW realm/zone binding emits idempotent radosgw-admin creates plus a
-// period commit in the storage phase (before the rgw service applies), renders
-// rgw_realm/rgw_zonegroup/rgw_zone into the service spec, and seeds per-RGW
-// config under client.rgw.<id>.
 func TestRGWRealmZoneAndConfigRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -942,11 +879,6 @@ func TestRGWRealmZoneAndConfigRender(t *testing.T) {
 	}
 }
 
-// A second gateway that shares a realm but declares its own zonegroup/zone must
-// still get those created (the first gateway's realm-create must not swallow
-// them), only the first zonegroup/zone of a realm is --master/--default, and the
-// realm's period is committed AFTER the later gateway's zonegroup/zone so its rgw
-// daemons reference a zone that exists.
 func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -980,12 +912,10 @@ func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
 		order = append(order, name)
 	}
 
-	// The realm is created once, --default; the FIRST zonegroup/zone are master.
 	eastZG, _ := byName["create-rgw-zonegroup-zg-east"]["command"].([]string)
 	if !reflect.DeepEqual(eastZG, []string{"radosgw-admin", "zonegroup", "create", "--rgw-zonegroup=zg-east", "--rgw-realm=corp", "--master", "--default"}) {
 		t.Fatalf("first zonegroup create = %v", eastZG)
 	}
-	// The SECOND gateway's zonegroup/zone must be created too (the bug: skipped).
 	westZG, ok := byName["create-rgw-zonegroup-zg-west"]["command"].([]string)
 	if !ok {
 		t.Fatal("second gateway sharing the realm must still create its own zonegroup")
@@ -1000,7 +930,6 @@ func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
 	if !reflect.DeepEqual(westZone, []string{"radosgw-admin", "zone", "create", "--rgw-zone=west-1", "--rgw-zonegroup=zg-west", "--rgw-realm=corp"}) {
 		t.Fatalf("peer zone = %v", westZone)
 	}
-	// The single period commit for the realm must follow BOTH zone creates.
 	idx := func(name string) int {
 		for i, n := range order {
 			if n == name {
@@ -1014,10 +943,6 @@ func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
 	}
 }
 
-// The mon-only stretch tiebreaker must NOT get a cephadm host-spec CRUSH
-// location (that would add a third failure-domain bucket and make
-// enable_stretch_mode fail EINVAL); data-site hosts get their site bucket nested
-// under root=default.
 func TestStretchTiebreakerOmitsCRUSHLocation(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -1053,9 +978,6 @@ func TestStretchTiebreakerOmitsCRUSHLocation(t *testing.T) {
 	}
 }
 
-// The nfs-export idempotency key is <serviceID>|<pseudo>; the generated apply.sh
-// must single-quote it so the '|' is not parsed as a shell pipe (which under
-// set -euo pipefail aborts the whole script).
 func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
 	op := operationWithIdempotency("object-gateway", "create-nfs-export-lab-nfs-shared", "nfs-export", "lab-nfs|/shared",
 		"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", "lab-nfs", "--pseudo-path", "/shared", "--fsname", "cephfs", "--path", "/")
@@ -1070,10 +992,6 @@ func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
 	}
 }
 
-// A management gateway carrying secrets is omitted from the native-CLI bundle but
-// the keepalive ingress that fronts it is not; apply.sh must warn (a [todo]
-// naming the missing mgmt-gateway step) so the operator knows the VIP has no
-// backend until the gateway is applied by hand.
 func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 	mgmt := &v1alpha1.StorageCephManagement{
 		DNSName: "dash.example.com",
@@ -1095,7 +1013,6 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 		t.Fatalf("apply.sh must warn about the omitted secret-bearing mgmt-gateway:\n%s", script)
 	}
 
-	// A management gateway WITHOUT secrets is in the bundle, so no warning fires.
 	plainCluster := cluster
 	plainCluster.Spec.Ceph.Management = &v1alpha1.StorageCephManagement{DNSName: "dash.example.com", Ingress: mgmt.Ingress}
 	plain := CephApplyScript(v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{plainCluster}}, plainCluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
@@ -1104,9 +1021,6 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 	}
 }
 
-// The bootstrap ceph.conf seeds public_network plus the global/mon/osd config
-// sections (no masks, no mgr/mds/client) so cephadm's auto-created pools honor
-// the declared defaults; the post-bootstrap ceph config set ops still run.
 func TestBootstrapConfAssimilatesGlobalMonOSDConfig(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -1126,8 +1040,6 @@ func TestBootstrapConfAssimilatesGlobalMonOSDConfig(t *testing.T) {
 	}
 }
 
-// Declared spec.ceph.config options render as deterministic `ceph config set`
-// operations (sorted by section then key), additive-only by design.
 func TestCephConfigOptionsRenderAsConfigSetOperations(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -1156,9 +1068,6 @@ func TestCephConfigOptionsRenderAsConfigSetOperations(t *testing.T) {
 	}
 }
 
-// Monitoring services place by their roles exactly like mon/mgr; knobs render
-// 1:1 into the service spec; passthrough services render verbatim; declared
-// mgr modules become idempotent enable operations.
 func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},

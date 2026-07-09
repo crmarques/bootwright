@@ -1,10 +1,4 @@
 ---
-# Self-contained shared bastion service: one artifact-server container can be
-# referenced by several Bootwright contexts. When the Go destroy planner finds another
-# context still references this component it lists it in
-# bootwright_infra_component_release_records; we then RELEASE it — skip every
-# destructive step but still drop this context's ownership record — so the shared
-# container and its published artifacts survive for the other contexts.
 - name: Resolve shared-service release decision for boot artifact server
   ansible.builtin.set_fact:
     bootwright_component_release: >-
@@ -36,9 +30,6 @@
     state: disabled
     permanent: true
     immediate: true
-  # Tolerate firewalld errors during teardown (e.g. firewalld not running), the
-  # same as every sibling destroy role; a best-effort port close must not abort
-  # the rest of the destroy.
   failed_when: false
   loop: "{{ bootwright_component.listeners | default([]) }}"
   loop_control:

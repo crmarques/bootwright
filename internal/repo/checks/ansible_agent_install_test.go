@@ -311,8 +311,6 @@ func TestAgentISOPublishTokenizedValuesAreRedactedFromMessages(t *testing.T) {
 	}
 }
 
-// TestContainerClusterDestroySkipUnreachable pins that the OCP teardown also
-// tolerates unreachable nodes only via the gate var (default unchanged).
 func TestContainerClusterDestroySkipUnreachable(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_destroy.yml")
 	if len(plays) != 1 {
@@ -646,9 +644,6 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	if !(recordIdx < cleanMediaIdx && cleanMediaIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
 		t.Fatalf("wait_install must fetch credentials before removing generated ISO artifacts")
 	}
-	// Media cleanup is pure dispatch: the include_role name is the rendered
-	// cleanupMediaRole, and the loop selects every component that carries one --
-	// no enumeration of specific boot roles.
 	assertIncludeRoleName(t, tasks[cleanMediaIdx], "{{ bootwright_cleanup_media_component.cleanupMediaRole }}")
 	if got := tasks[cleanMediaIdx]["loop"]; !strings.Contains(fmt.Sprint(got), "selectattr('cleanupMediaRole', 'defined')") {
 		t.Fatalf("media cleanup must loop over components with a cleanupMediaRole, got %v", got)

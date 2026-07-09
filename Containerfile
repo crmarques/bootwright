@@ -31,10 +31,6 @@ RUN --mount=type=cache,id=bootwright-dnf-cache,target=/var/cache/dnf,sharing=loc
         make \
         git
 
-# Pin the Go toolchain to the version go.mod requires by copying it from the
-# official image instead of letting `go` download it at build time. The runtime
-# download targets storage.googleapis.com, which fails behind a TLS-intercepting
-# proxy; the registry pull used here goes through the same path as the base image.
 COPY --from=gotoolchain /usr/local/go /usr/local/go
 
 RUN go version
@@ -49,10 +45,6 @@ RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
     go mod download
 
-# Resolve the Galaxy collections in a layer keyed only on the collection
-# requirements. Ansible role/playbook edits change the bundle's contents but not
-# its dependency set, so isolating the network download here keeps it cached
-# across ordinary source changes.
 COPY Makefile Makefile
 COPY ansible/collections/requirements.yml ansible/collections/requirements.yml
 COPY ansible/collections/requirements.lock.yml ansible/collections/requirements.lock.yml
@@ -64,9 +56,6 @@ RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharin
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
     make sync-bundle
 
-# Copy only the inputs `make build` consumes. Docs, examples, specs, images,
-# tests and .git are deliberately excluded (see .dockerignore) so edits to them
-# never invalidate the bundle and compile layers below.
 COPY api api
 COPY cmd cmd
 COPY internal internal
@@ -74,20 +63,11 @@ COPY add-ons add-ons
 COPY ansible ansible
 COPY scripts scripts
 
-# Re-pack the bundle with the full ansible tree. The collection download above
-# is already cached, so this only rezips local sources; keying it on the source
-# COPYs (not on VERSION) keeps version churn from re-running it.
 RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharing=locked \
     --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
     make sync-bundle
 
-# Compile in a layer of its own so the per-commit VERSION/GIT_COMMIT change only
-# re-links the binary (dependency objects stay in the go-build cache) instead of
-# re-running the bundle sync. VERSION/GIT_COMMIT come from the build args the
-# Makefile passes; .git is copied here (last, since it changes every commit and
-# this layer already re-runs each commit) so a raw `docker build` without those
-# args can still self-stamp the version via git describe.
 COPY .git .git
 ARG VERSION
 ARG GIT_COMMIT

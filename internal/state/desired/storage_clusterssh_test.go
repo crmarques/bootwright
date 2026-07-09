@@ -6,8 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// setArbiterAccessKey points the arbiter Machine at its own access key, leaving
-// the data nodes on the shared ceph-node-ssh key.
 func setArbiterAccessKey(state *v1alpha1.State, keyRef string) {
 	for i := range state.Machines {
 		if state.Machines[i].Metadata.Name == "ceph-arbiter" {
@@ -16,8 +14,6 @@ func setArbiterAccessKey(state *v1alpha1.State, keyRef string) {
 	}
 }
 
-// clusterSSHSecret builds a first-class Secret of the given type carrying a
-// generated source, the shape the cephadm cluster-identity ref resolves to.
 func clusterSSHSecret(name, secretType string) v1alpha1.Secret {
 	return v1alpha1.Secret{
 		Metadata: v1alpha1.Metadata{Name: name},

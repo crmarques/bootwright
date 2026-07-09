@@ -89,7 +89,6 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 		"Kubeconfig: " + kubeconfigPath,
 		"Password file: " + passwordPath,
 		"Show password: sudo cat " + passwordPath,
-		// The node cross-link tells the operator how to shell into each node.
 		"Node master-0: bootwright cluster rsh --name sno-libvirt --node master-0",
 	} {
 		if !strings.Contains(stdout, want) {

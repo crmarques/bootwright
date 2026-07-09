@@ -110,9 +110,6 @@
     - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
     - item.address | default('') | length > 0
 
-# The bootstrap (storage) stage runs with skip_prereqs and is the actual
-# consumer of the ceph CLI; guarantee it here so the orchestration steps
-# below work even when the prereq stage installed an older tooling set.
 - name: Ensure Ceph client tooling is present for cephadm orchestration
   ansible.builtin.package:
     name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"

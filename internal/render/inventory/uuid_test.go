@@ -2,18 +2,6 @@ package inventory
 
 import "testing"
 
-// TestAnsibleUUIDv5MatchesToUUIDFilter pins the renderer's UUIDv5
-// implementation to the values Ansible's `to_uuid` Jinja filter
-// produces under its default namespace. substrate_libvirt and
-// boot_redfish derive libvirt domain UUIDs / Redfish System IDs from
-// `(cluster.name ~ '-' ~ machine.name) | to_uuid`; if the renderer
-// ever drifted from that filter, the Go-projected Redfish System ID
-// would no longer match the running libvirt domain and InsertMedia
-// would target the wrong /Systems/<id>.
-//
-// Expected values were generated with:
-//
-//	python3 -c 'import uuid; print(uuid.uuid5(uuid.UUID("361E6D51-FAEC-444A-9079-341386DA8E2E"), "sno-libvirt-master-0"))'
 func TestAnsibleUUIDv5MatchesToUUIDFilter(t *testing.T) {
 	cases := []struct {
 		name string

@@ -1,7 +1,4 @@
 ---
-# OpenShift install layer. Runs on the localhost controller and drives the
-# agent installer per cluster. Rendered boot driver roles dispatch per machine
-# and may call into provider-host services (BMC, libvirt) over SSH.
 
 - name: Install clusters via openshift-install agent
   hosts: bootwright_ocp_hosts
@@ -18,8 +15,6 @@
         tasks_from: facts
 
   tasks:
-    # install_agent owns the full per-cluster agent flow: create ISO -> boot each
-    # machine via its boot driver -> wait for install complete.
     - name: Install agent per cluster
       ansible.builtin.include_role:
         name: bootwright.core.container_cluster_agent_install

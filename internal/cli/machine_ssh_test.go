@@ -56,11 +56,9 @@ func TestBuildMachineSSHInvocation(t *testing.T) {
 	if indexOf(inv.Args, "StrictHostKeyChecking=accept-new") < 0 {
 		t.Fatalf("accept-new arg missing in %v", inv.Args)
 	}
-	// BatchMode would suppress interactive prompts; an operator shell must not set it.
 	if indexOf(inv.Args, "BatchMode=yes") >= 0 {
 		t.Fatalf("BatchMode must not be set for an interactive session: %v", inv.Args)
 	}
-	// The target and the trailing command are the last args, in order.
 	last := inv.Args[len(inv.Args)-2:]
 	if last[0] != "root@10.0.0.10" || last[1] != "uptime" {
 		t.Fatalf("tail = %v, want [root@10.0.0.10 uptime]", last)
@@ -152,7 +150,6 @@ func TestMachineRshExecsInteractiveShell(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("machine rsh exited %d, stderr=%q", code, stderr)
 	}
-	// An interactive shell ends at the target, with no trailing command.
 	if gotArgs[len(gotArgs)-1] != "core@provider-01.example.test" {
 		t.Fatalf("rsh argv should end at the target, got %v", gotArgs)
 	}

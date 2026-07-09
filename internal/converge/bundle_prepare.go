@@ -4,9 +4,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 )
 
-// PrepareWorkflowBundle resolves or extracts the embedded Ansible bundle.
-// The bundle directory and version marker are owned by the CLI (the marker is
-// stamped from build-time version metadata), so both arrive as parameters.
 func PrepareWorkflowBundle(bundleDir, versionMarker string, skipExtract bool) (bundle.AnsibleBundleResult, error) {
 	if skipExtract {
 		return bundle.AnsibleBundleResult{Dir: bundleDir, Reused: true}, nil

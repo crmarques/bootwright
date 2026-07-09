@@ -7,8 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// ossCommunityChecksumCluster is an oss-distribution StorageCluster carrying the
-// given spec.ceph.community.checksum, isolating the checksum validation path.
 func ossCommunityChecksumCluster(checksum string) v1alpha1.StorageCluster {
 	return v1alpha1.StorageCluster{
 		Spec: v1alpha1.StorageClusterSpec{

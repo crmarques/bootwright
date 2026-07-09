@@ -18,8 +18,6 @@ import (
 
 const defaultHostTrustScanTimeout = 5 * time.Second
 
-// Deps injects the host-key scanning dependencies so callers and tests can
-// fake ssh-keyscan.
 type Deps struct {
 	Scan     func(context.Context, string, time.Duration) ([]ScannedKey, error)
 	LookPath func(string, []string) (string, error)
@@ -159,16 +157,6 @@ func EvaluateHost(ctx context.Context, machine v1alpha1.Machine, store Store, re
 	return report, record, true, nil
 }
 
-// scanHostKeyCommand builds the accept-new probe that records the target's
-// host key into knownHostsPath. It uses `ssh` rather than `ssh-keyscan`
-// deliberately: ssh-keyscan ignores the controller's crypto policy (it still
-// offers curve25519 in KEXINIT even under FIPS), so a FIPS backend refuses the
-// exchange and no key is ever returned. `ssh` Includes
-// /etc/crypto-policies/back-ends/openssh.config, so it negotiates a
-// FIPS-approved KEX and records the key the connection actually used. Auth is
-// expected to fail here (no identity offered) — accept-new pins the host key
-// before auth, so the recorded known_hosts file is the source of truth. Mirrors
-// roles/machine_os_install_anaconda/tasks/ssh_trust.yml.
 func scanHostKeyCommand(address string, seconds int, knownHostsPath string) execution.Command {
 	return execution.Command{
 		Name: "ssh",
@@ -202,15 +190,11 @@ func ScanHostKeys(ctx context.Context, address string, timeout time.Duration) ([
 
 	runCtx, cancel := context.WithTimeout(ctx, timeout+time.Second)
 	defer cancel()
-	// The ssh exit code is deliberately ignored: auth fails without an
-	// identity, but accept-new still records the host key before auth.
 	_, _ = execution.OSRunner{}.Output(runCtx, scanHostKeyCommand(address, seconds, knownHostsPath))
 
 	recorded, err := os.ReadFile(knownHostsPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			// Handshake never reached host-key exchange (e.g. unreachable):
-			// no key recorded, so the caller reports "no host keys returned".
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read recorded host key for %s: %w", address, err)
@@ -229,10 +213,6 @@ func ManagedTrustMachines(state v1alpha1.State, policy locality.Policy) []v1alph
 	return machines
 }
 
-// MachinesInScope keeps only the machines whose name is present in scope. A nil
-// scope imposes no restriction and returns the input unchanged. It narrows the
-// managed host-trust surface to the machines a scoped run will actually connect
-// to, so a trust record is required only where a scheduled task SSHes.
 func MachinesInScope(machines []v1alpha1.Machine, scope map[string]bool) []v1alpha1.Machine {
 	if scope == nil {
 		return machines

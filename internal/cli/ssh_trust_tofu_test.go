@@ -12,8 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/sshtrust"
 )
 
-// hostTrustScanDeps fakes ssh-keyscan with a fixed address -> public-key map;
-// scanning an address outside the map fails.
 func hostTrustScanDeps(keys map[string]string) sshtrust.Deps {
 	return sshtrust.Deps{
 		LookPath: func(name string, _ []string) (string, error) {
@@ -218,7 +216,6 @@ func TestTrustOnFirstUseFlagSurface(t *testing.T) {
 
 func TestPreflightJSONAndDryRunNeverPrompt(t *testing.T) {
 	initHostTrustTestContext(t)
-	// Any unexpected first-use scan errors instead of reaching the network.
 	setHostTrustTestDeps(t, nil)
 
 	stdout, stderr, code := runCLI(t, "preflight", "infra", "--output", "json")

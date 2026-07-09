@@ -51,9 +51,8 @@ func TestStateCheckClassifiesDriftAbsenceAndMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desired hash: %v", err)
 	}
-	saveStateCheckRecord(t, runsDir, match, matchHash, ConvergeSafetyOwner)      // applied with current desired state
-	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner) // desired state changed since apply
-	// absent: no record at all -> never applied
+	saveStateCheckRecord(t, runsDir, match, matchHash, ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 
 	report, err := StateCheck([]ApplyTask{match, drift, absent}, ApplyTarget{}, v1alpha1.State{}, runsDir)
 	if err != nil {
@@ -81,10 +80,6 @@ func TestStateCheckClassifiesDriftAbsenceAndMatch(t *testing.T) {
 
 func TestStateCheckGranularDriftMixedResources(t *testing.T) {
 	runsDir := t.TempDir()
-	// Four resources under one present root (container/demo): one matched, one
-	// drifted, one foreign, one never applied. A present root must report the
-	// out-of-sync resources granularly (not collapse to a single absence) and keep
-	// the matched count distinct.
 	matched := stateCheckTask("container-cluster.demo", "containerCluster", "demo", "container")
 	drift := stateCheckTask("addon.demo.virt", "clusterAddon", "demo", "container")
 	foreign := stateCheckTask("machineinfra.demo.node0", "machineInfra", "demo", "container")
@@ -97,7 +92,6 @@ func TestStateCheckGranularDriftMixedResources(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, matched, matchHash, ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
-	// missing: no record -> never applied, but the root is otherwise present.
 
 	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, ApplyTarget{}, v1alpha1.State{}, runsDir)
 	if err != nil {
@@ -150,13 +144,6 @@ func TestStateCheckForeignOwner(t *testing.T) {
 	}
 }
 
-// TestStateCheckSharedResourceKeyTasksMatch covers F2/F14: distinct tasks that
-// share an apply-time ResourceKey (the scheduler mutual-exclusion lock) must each
-// keep their own converge-safety record. A provider task and a machine-infra
-// finalize task on one host both carry "host:bastion:mutating"; recorded with
-// their own desired hashes after a clean apply, state-check must report both as
-// matched, not drift. With the record key derived from ResourceKeys, the two
-// collided on one file and this reported drift.
 func TestStateCheckSharedResourceKeyTasksMatch(t *testing.T) {
 	runsDir := t.TempDir()
 	shared := []string{"host:bastion:mutating"}
@@ -182,8 +169,6 @@ func TestStateCheckSharedResourceKeyTasksMatch(t *testing.T) {
 	}
 }
 
-// storageSubObjectTestState builds a managed StorageCluster with two pools and
-// one export, all referencing it, for the sub-object granularity tests.
 func storageSubObjectTestState(cluster string) v1alpha1.State {
 	ref := v1alpha1.LocalObjectReference{Name: cluster}
 	return v1alpha1.State{
@@ -198,11 +183,6 @@ func storageSubObjectTestState(cluster string) v1alpha1.State {
 	}
 }
 
-// TestStateCheckGranularStorageSubObjectDrift covers the storage-granularity gap:
-// on a present (applied) StorageCluster, state-check must name the specific pool
-// or export that drifted or is missing, not collapse the whole cluster to one
-// line. Sub-objects carry their own converge-safety records, so the report reads
-// them independently of the cluster task.
 func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
 	runsDir := t.TempDir()
 	const cluster = "ceph"
@@ -213,16 +193,15 @@ func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desired hash: %v", err)
 	}
-	saveStateCheckRecord(t, runsDir, clusterTask, clusterHash, ConvergeSafetyOwner) // cluster applied, matches
+	saveStateCheckRecord(t, runsDir, clusterTask, clusterHash, ConvergeSafetyOwner)
 
 	rbd := storageSubObject{storageSubObjectKindPool, cluster, "rbd"}
 	rbdHash, err := storageSubObjectDesiredHash(state, rbd)
 	if err != nil {
 		t.Fatalf("sub-object desired hash: %v", err)
 	}
-	saveSubObjectRecord(t, runsDir, rbd.resourceID(), rbdHash, ConvergeSafetyOwner)                                                                       // pool rbd: match
-	saveSubObjectRecord(t, runsDir, storageSubObject{storageSubObjectKindPool, cluster, "cephfs-data"}.resourceID(), "sha256:stale", ConvergeSafetyOwner) // pool cephfs-data: drift
-	// export odf: no record -> missing
+	saveSubObjectRecord(t, runsDir, rbd.resourceID(), rbdHash, ConvergeSafetyOwner)
+	saveSubObjectRecord(t, runsDir, storageSubObject{storageSubObjectKindPool, cluster, "cephfs-data"}.resourceID(), "sha256:stale", ConvergeSafetyOwner)
 
 	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir)
 	if err != nil {
@@ -238,7 +217,6 @@ func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
 	if root.Name != cluster || root.Absent {
 		t.Fatalf("present storage cluster must report granularly, not as one absence, got %+v", root)
 	}
-	// 1 cluster task + 2 pools + 1 export = 4 resources; cluster and rbd matched.
 	if root.Total != 4 || root.Matched != 2 {
 		t.Fatalf("expected total 4 matched 2, got total=%d matched=%d", root.Total, root.Matched)
 	}
@@ -260,15 +238,11 @@ func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
 	}
 }
 
-// TestStateCheckStorageSubObjectsCollapseWhenClusterAbsent keeps the succinct-root-
-// absence behavior: a never-applied StorageCluster (cluster task and every declared
-// sub-object missing) reports one absence, not a per-pool/per-export flood.
 func TestStateCheckStorageSubObjectsCollapseWhenClusterAbsent(t *testing.T) {
 	runsDir := t.TempDir()
 	const cluster = "ceph"
 	state := storageSubObjectTestState(cluster)
 	clusterTask := stateCheckTask("storage."+cluster, "storageCluster", cluster, "storage")
-	// No records at all -> cluster task and every sub-object missing.
 
 	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir)
 	if err != nil {

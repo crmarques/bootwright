@@ -12,10 +12,6 @@ type RHSM struct {
 	Satellite         RHSMSatellite
 }
 
-// RHSMSatellite is the resolved form of a corporate Red Hat Satellite the RHSM
-// registration is redirected to. Hostname is empty when registration uses the
-// public Red Hat CDN. TrustBundlePath is the materialized Satellite CA on the
-// controller (basenamed by the install marker so it stays stable across runs).
 type RHSMSatellite struct {
 	Hostname        string
 	ContentBaseURL  string
@@ -41,7 +37,6 @@ type Resolved struct {
 	License  License
 }
 
-// Find returns the Entitlement named name from the loaded set, if present.
 func Find(ents []v1alpha1.Entitlement, name string) (v1alpha1.Entitlement, bool) {
 	if name == "" {
 		return v1alpha1.Entitlement{}, false
@@ -54,11 +49,6 @@ func Find(ents []v1alpha1.Entitlement, name string) (v1alpha1.Entitlement, bool)
 	return v1alpha1.Entitlement{}, false
 }
 
-// Resolve materializes the Entitlement named name into subscription, registry
-// and license facts with secret material resolved to on-disk paths. ents is the
-// lookup and rhelEntitlementRef-follow domain; idx resolves secret material to
-// on-disk paths, keeping the secret-by-name invariant. provider/product are
-// derived from spec.type so the day-2 cephadm render is unchanged.
 func Resolve(ents []v1alpha1.Entitlement, idx secret.Index, name, defaultRegistryURL, secretsDir string) (Resolved, bool) {
 	entitlement, ok := Find(ents, name)
 	if !ok {
@@ -70,10 +60,6 @@ func Resolve(ents []v1alpha1.Entitlement, idx secret.Index, name, defaultRegistr
 		Provider: provider,
 		Product:  product,
 	}
-	// An entitlement either carries rhsm inline (redhat-rhel, redhat-ceph) or,
-	// for ibm-storage-ceph, defers it to a referenced redhat-rhel entitlement.
-	// Either way the resolved RHSM is populated identically, so downstream
-	// rendering does not distinguish the two.
 	rhsm := entitlement.Spec.RHSM
 	if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
 		if rhel, ok := Find(ents, entitlement.Spec.RHELEntitlementRef.Name); ok {

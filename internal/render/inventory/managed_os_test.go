@@ -65,10 +65,6 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if image["sourceOnTarget"] != true {
 		t.Fatalf("sourceOnTarget = %v, want true for controller-local provider host", image["sourceOnTarget"])
 	}
-	// The renderer owns the shared-source dedup identity and the effective source
-	// path. This image carries no checksum, so its sourceId is the validated media
-	// key; the controller-local install reads the media in place, so the effective
-	// path is the media path itself rather than the staged _source/ ISO.
 	if image["sourceId"] != "rhel-9.7-x86_64-dvd.iso" {
 		t.Fatalf("image sourceId = %v, want the media key", image["sourceId"])
 	}
@@ -103,9 +99,6 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if _, ok := packages["languages"]; ok {
 		t.Fatalf("kickstart packages.languages = %v, want removed (folded into localization)", packages["languages"])
 	}
-	// The 006 profile keeps English messages (language defaults to en_US.UTF-8)
-	// with Brazilian formatting/keyboard/timezone. instLangs unions language and
-	// formats so the pt_BR locale data is installed and can never be pruned.
 	localization := ks["localization"].(map[string]any)
 	if localization["language"] != "en_US.UTF-8" || localization["keyboard"] != "br-abnt2" || localization["timezone"] != "America/Sao_Paulo" {
 		t.Fatalf("kickstart localization = %v", localization)
@@ -153,8 +146,6 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if storage["rootDisk"] != "vda" {
 		t.Fatalf("kickstart storage = %v", storage)
 	}
-	// rootDisk is the only key ks.cfg.j2 reads; wipe and rootDevice were dead vars
-	// that only fed the marker hash and must no longer be emitted.
 	if _, ok := storage["wipe"]; ok {
 		t.Fatalf("kickstart storage must omit dead wipe var, got %v", storage)
 	}
@@ -198,11 +189,6 @@ func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
 	}
 }
 
-// TestManagedOSInstallVarsFromBootISOFixture pins the boot-ISO variant: the 010
-// fixture declares an Anaconda packageSource.mirror, so rendering must emit
-// image.mediaType=boot, the BaseOS install tree as installer.sourceURL (driving
-// a Kickstart `url --url=` instead of `cdrom`), and the AppStream repository as
-// an additional `repo` entry.
 func TestManagedOSInstallVarsFromBootISOFixture(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "010-ceph-3nodes-libvirt-boot-iso")})
 	if err != nil {
@@ -243,10 +229,6 @@ func TestManagedOSInstallVarsFromBootISOFixture(t *testing.T) {
 	}
 }
 
-// TestManagedOSInstallImageSourceIdentityAndPath pins the renderer-owned
-// shared-source identity and effective source path that the
-// machine_os_install_anaconda role consumes verbatim. The role no longer
-// re-derives either: it reads image.sourceId and image.effectiveSourcePath.
 func TestManagedOSInstallImageSourceIdentityAndPath(t *testing.T) {
 	const sha = "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd"
 
@@ -321,9 +303,6 @@ func TestManagedOSInstallRendersFIPSKernelArgs(t *testing.T) {
 	if got := installer["kernelArgs"].([]string); !reflect.DeepEqual(got, []string{"fips=1"}) {
 		t.Fatalf("installer.kernelArgs = %v", got)
 	}
-	// FIPS rides solely on installer.kernelArgs; the kickstart security block must
-	// NOT carry a fips key (ks.cfg.j2 never reads one, so emitting it would be a
-	// dead, misleading contract surface).
 	security := osInstall["kickstart"].(map[string]any)["security"].(map[string]any)
 	if _, ok := security["fips"]; ok {
 		t.Fatalf("kickstart security must omit fips (delivered via kernelArgs), got %v", security["fips"])
@@ -357,13 +336,6 @@ func TestManagedOSInstallUsesImageSourceURL(t *testing.T) {
 	}
 }
 
-// TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint pins the fail-closed
-// render path: a hostedTree packageSource with no resolvable
-// artifactServerEndpoint must leave installer.sourceURL unset (so the boot ISO
-// install fails loudly on a package-less cdrom rather than
-// mis-installing) and must not emit image.installTree. The cluster-install
-// validator rejects this configuration up front; the renderer only has to fail
-// safe, not panic.
 func TestManagedOSInstallHostedTreeFailsClosedWithoutEndpoint(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
@@ -487,9 +459,6 @@ func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
 		t.Fatalf("satellite.caPath = %v", satellite["caPath"])
 	}
 
-	// The Satellite CA path resolves into the per-run secrets dir, so the install
-	// marker must basename it: two renders with different secrets dirs must
-	// produce the same desiredHash or a re-apply would falsely reinstall.
 	hashA := render("/context/secrets/run-a")["marker"].(map[string]any)["desiredHash"]
 	hashB := render("/context/secrets/run-b")["marker"].(map[string]any)["desiredHash"]
 	if hashA == "" || hashA != hashB {
@@ -525,8 +494,6 @@ func TestManagedOSInstallRoutesThroughMachineOSInstallProxy(t *testing.T) {
 	if got := proxyVars["url"]; got != "http://proxy.example.test:8080" {
 		t.Fatalf("installer.proxy.url = %v", got)
 	}
-	// The credential lives behind a path the kickstart reads at apply time, so
-	// the proxy password never lands in vars.yaml (mirrors rhsm secret paths).
 	if got := proxyVars["credentialsPath"]; got != "/context/secrets/proxy-credentials" {
 		t.Fatalf("installer.proxy.credentialsPath = %v", got)
 	}
@@ -585,11 +552,6 @@ func TestManagedStorageOSMachinesEnterInfraInventory(t *testing.T) {
 	}
 }
 
-// TestManagedOSInstallMarkerHashStableAcrossSecretsDir covers F1: the on-host
-// install marker must hash WHAT is installed, not WHERE the per-run runtime
-// secrets live. Rendering the same desired state with two different (per-run)
-// secrets directories must produce an identical marker desiredHash; otherwise a
-// re-apply trips the role's reinstall-only guard and --override wipes the disks.
 func TestManagedOSInstallMarkerHashStableAcrossSecretsDir(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
@@ -614,8 +576,6 @@ func firstManagedOSMarkerHash(t *testing.T, vars map[string]any) string {
 }
 
 func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
-	// An absent group falls back to the pre-field baseline, omits formats, and
-	// still installs the active locale's data via instLangs (=language).
 	base := machineInstallLocalizationVars(v1alpha1.MachineInstallLocalization{})
 	if base["language"] != "en_US.UTF-8" || base["keyboard"] != "us" || base["timezone"] != "UTC" {
 		t.Fatalf("default localization = %v", base)
@@ -626,10 +586,6 @@ func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
 	if got := base["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
 		t.Fatalf("default localization instLangs = %v, want [en_US.UTF-8]", got)
 	}
-	// English messages with Brazilian regional formatting: language stays the
-	// message locale, formats carries the regional locale, and instLangs unions
-	// language + formats + additionalLocales (deduped, language first) so no
-	// active locale's data can be pruned by --inst-langs.
 	split := machineInstallLocalizationVars(v1alpha1.MachineInstallLocalization{
 		Language:          "en_US.UTF-8",
 		Formats:           "pt_BR.UTF-8",

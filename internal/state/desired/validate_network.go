@@ -21,9 +21,6 @@ func validateNetworkConfigs(state v1alpha1.State) []Finding {
 			errs = append(errs, diag(object, "", fmt.Sprintf("duplicate NetworkConfig %q", n.Metadata.Name)))
 		}
 		seen[n.Metadata.Name] = true
-		// validateNetworkConfigSpec is shared with machine network-template
-		// validation under a different owner prefix, so it stays message-based
-		// and is adapted here; its findings reparse through the CLI as before.
 		errs = append(errs, notes(validateNetworkConfigSpec(object+" spec", n.Spec, nameResolutionNames))...)
 	}
 	return errs

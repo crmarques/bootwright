@@ -12,9 +12,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// installerProxyConfig builds the install-config.yaml proxy block from
-// the (effective env proxy, managed proxy URL, credentialed URLs)
-// inputs. Returns nil when no proxy is in play.
 func installerProxyConfig(eff *proxy.Effective, secrets InstallerSecrets, managedURL string) map[string]any {
 	if eff == nil && managedURL == "" {
 		return nil
@@ -40,8 +37,6 @@ func installerProxyConfig(eff *proxy.Effective, secrets InstallerSecrets, manage
 	return out
 }
 
-// pickURL prefers a credentialed URL (already has user:pass inlined),
-// falls back to the operator-declared URL, then the derived managed URL.
 func pickURL(declared, derived, withCreds string) string {
 	if withCreds != "" {
 		return withCreds
@@ -99,12 +94,6 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInstall
 	return fmt.Sprintf("%s:%d", host, port)
 }
 
-// mirrorRegistryHost resolves the cluster-facing host of the managed mirror
-// registry. It prefers a declared endpoint address (parity with
-// artifactServer) or an explicit, routable bind address so a loopback bastion
-// SSH alias never silently resolves the mirror to the network gateway; only
-// when nothing is declared does it fall back to the machine's SSH/route
-// address.
 func mirrorRegistryHost(state v1alpha1.State, entry v1alpha1.EnvironmentRegistryComponent, registry *v1alpha1.RegistryComponent, ci v1alpha1.ClusterInstall) string {
 	if host := registryEndpointAddress(state, registry, entry.EndpointRef.Name); host != "" {
 		return host
@@ -115,9 +104,6 @@ func mirrorRegistryHost(state v1alpha1.State, entry v1alpha1.EnvironmentRegistry
 	return proxy.ClusterFacingMachineAddress(state, registry.MachineRef.Name, ci)
 }
 
-// registryEndpointAddress resolves a declared endpoints[] address on the
-// registry machine, matching stateview's managed-service endpoint resolution:
-// a named endpoint wins, otherwise a sole endpoint is used.
 func registryEndpointAddress(state v1alpha1.State, registry *v1alpha1.RegistryComponent, endpointName string) string {
 	if endpointName != "" {
 		for _, endpoint := range registry.Endpoints {
@@ -217,17 +203,11 @@ func ClusterInstallForOCP(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (
 	return v1alpha1.ClusterInstall{}, fmt.Errorf("%s: no machines or install infrastructure declared", ocp.Metadata.Name)
 }
 
-// InstallerNodeRole maps an authored host role to the install-pool role
-// (master or worker); an infra host installs as a worker. Exported so the
-// inventory renderer can keep load-balancer/install vars on the install role
-// while the desired role (infra) drives only the day-2 node-config step.
 func InstallerNodeRole(role string) string {
 	return installerNodeRole(role)
 }
 
 func installerNodeRole(role string) string {
-	// OpenShift installs only master and worker pools; an infra host is a worker
-	// at install time and is promoted to infra day-2.
 	if role == v1alpha1.NodeRoleWorker || role == v1alpha1.NodeRoleInfra {
 		return "worker"
 	}
@@ -244,14 +224,10 @@ func nodeRoleCount(ocp v1alpha1.ContainerCluster, role string) int {
 	return count
 }
 
-// computeReplicaCount is the install-time worker pool size: authored workers
-// plus infra hosts (which install as workers).
 func computeReplicaCount(ocp v1alpha1.ContainerCluster) int {
 	return nodeRoleCount(ocp, v1alpha1.NodeRoleWorker) + nodeRoleCount(ocp, v1alpha1.NodeRoleInfra)
 }
 
-// pullSecretPlaceholder encodes the SecretRef name as the auths-key of
-// a JSON pull-secret so the placeholder file is still parseable JSON.
 func pullSecretPlaceholder(ref string) string {
 	data, err := json.Marshal(map[string]any{
 		"auths": map[string]any{
@@ -291,9 +267,6 @@ func cloneYAMLValue(v any) any {
 	}
 }
 
-// ArtifactServerEndpointURL resolves the base URL of an artifact-server
-// endpoint; external components answer with their configured URL, managed
-// components derive it from the resolved listener and host.
 func ArtifactServerEndpointURL(state v1alpha1.State, server artifacts.Server, endpointName string) string {
 	if server.Entry.Management == v1alpha1.EnvironmentComponentExternal {
 		endpoint, ok := artifacts.ExternalEndpoint(server, endpointName)

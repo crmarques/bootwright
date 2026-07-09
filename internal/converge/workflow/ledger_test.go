@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// leaseLiveness is the single decision tree shared by leaseFresh (the advisory
-// pre-mutation check) and AssessRunActivity (the acquisition/status gate). This
-// table locks its four arms so the two mutual-exclusion gates cannot drift apart.
 func TestLeaseLiveness(t *testing.T) {
 	host, _ := os.Hostname()
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
@@ -167,9 +164,6 @@ func TestAssessRunActivity(t *testing.T) {
 		t.Fatalf("fresh lease activity = %+v, want active with lease", active)
 	}
 
-	// Mark the lease as taken on another host so the heartbeat-age rule governs: a
-	// live local process now reads active regardless of heartbeat age, so an aged
-	// heartbeat only declares a run stale when its process is not checkable here.
 	lease.Hostname = "other-host"
 	lease.HeartbeatAt = now.Add(-ApplyLeaseStaleAfter - time.Second)
 	if err := SaveRunLease(dir, lease); err != nil {

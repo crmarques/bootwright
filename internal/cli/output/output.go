@@ -176,8 +176,6 @@ func (p *Printer) ProgressBar(label string, done int, total int, fields []Progre
 	p.wrote = true
 }
 
-// progressBarLine renders the bar line shared by ProgressBar and RenderFrame,
-// without a trailing newline or leading indent.
 func progressBarLine(label string, done int, total int, fields []ProgressField) string {
 	if total < 0 {
 		total = 0
@@ -327,29 +325,19 @@ func (p *Printer) CommandLine(label string, args []string) {
 	p.wrote = true
 }
 
-// DiffLineKind classifies one line of a git-diff-style rendering.
 type DiffLineKind int
 
 const (
-	// DiffContext is an unchanged line (rendered plain, space-prefixed).
 	DiffContext DiffLineKind = iota
-	// DiffAdd is a line present in real state but not desired (green, "+").
 	DiffAdd
-	// DiffDel is a line present in desired state but not real (red, "-").
 	DiffDel
 )
 
-// DiffLine is one rendered diff line: its kind and its text (without the
-// +/-/space prefix, which the renderer adds).
 type DiffLine struct {
 	Kind DiffLineKind
 	Text string
 }
 
-// DiffObjectHeader opens a per-object diff section, git's "diff --git a/… b/…"
-// analogue: a bold title naming the resource, optionally with a one-line note
-// (e.g. "drifted", "only on cluster"). It writes the "--- desired" / "+++ real
-// (cluster)" file markers so the block reads as a unified diff.
 func (p *Printer) DiffObjectHeader(title, note string) {
 	if p == nil || p.w == nil {
 		return
@@ -367,9 +355,6 @@ func (p *Printer) DiffObjectHeader(title, note string) {
 	p.wrote = true
 }
 
-// DiffHunk writes a hunk header ("@@ <label> @@" in cyan, git's hunk-header
-// color) grouping the lines that follow under one facet, e.g. a pool or the OSD
-// device selection.
 func (p *Printer) DiffHunk(label string) {
 	if p == nil || p.w == nil {
 		return
@@ -378,10 +363,6 @@ func (p *Printer) DiffHunk(label string) {
 	p.wrote = true
 }
 
-// DiffLines writes a run of diff lines, coloring add lines green and delete
-// lines red through the same style gate as every other output (so NO_COLOR /
-// TERM=dumb / non-TTY / piped output strip color and yield a plain unified diff
-// consumable by review tooling).
 func (p *Printer) DiffLines(lines []DiffLine) {
 	if p == nil || p.w == nil || len(lines) == 0 {
 		return
@@ -511,7 +492,6 @@ func ShellQuote(args []string) string {
 	return strings.Join(quoted, " ")
 }
 
-// Step is one unit of work shown in a RunFrame.
 type Step struct {
 	ID     string
 	Label  string
@@ -519,16 +499,11 @@ type Step struct {
 	Detail string
 }
 
-// StepGroup is a titled set of steps, e.g. one cluster or the "infra" group.
 type StepGroup struct {
 	Title string
 	Steps []Step
 }
 
-// RunFrame is one progress snapshot: a header progress bar plus grouped steps.
-// It is source-agnostic so apply, destroy, preflight, and `status --watch` can
-// all feed the same RunView. Done/Total/Counts drive the bar; Groups drive the
-// step list.
 type RunFrame struct {
 	BarLabel string
 	Done     int
@@ -537,15 +512,6 @@ type RunFrame struct {
 	Groups   []StepGroup
 }
 
-// RenderFrame writes a RunFrame (header progress bar + grouped step list) and
-// returns the number of physical terminal rows it occupied. width<=0 disables
-// wrap accounting (one row per logical line). collapse summarizes titled groups
-// whose every step finished cleanly to a single line — wanted for the live
-// in-place redraw (so the operator's eye lands on the groups still working)
-// but not for a one-shot `status` report, which prints the full record.
-// Callers that redraw in place clear the returned row count before writing the
-// next frame. RenderFrame is the only frame writer, so all frame byte output
-// stays in this allowlisted file.
 func (p *Printer) RenderFrame(frame RunFrame, width int, collapse bool) int {
 	if p == nil || p.w == nil {
 		return 0
@@ -563,11 +529,6 @@ func (p *Printer) RenderFrame(frame RunFrame, width int, collapse bool) int {
 			emit("")
 		}
 		if summary, done := finishedGroupSummary(group); collapse && done {
-			// Every step of a titled group reached a clean terminal state: collapse
-			// it to its heading plus a one-line summary so the operator's eye lands
-			// on the groups still doing work instead of scanning a wall of DONE
-			// steps. Groups with a failed/blocked/pending/running step (or no
-			// title, e.g. the destroy group) stay fully expanded.
 			emit("  " + p.style(group.Title+"  "+summary, color.Bold))
 			continue
 		}
@@ -582,10 +543,6 @@ func (p *Printer) RenderFrame(frame RunFrame, width int, collapse bool) int {
 	return rows
 }
 
-// finishedGroupSummary reports a collapsed one-line summary for a titled group
-// whose every step finished cleanly (DONE/SKIPPED/CANCELLED, none failed,
-// blocked, pending, or running). It returns ("", false) when the group must
-// stay expanded.
 func finishedGroupSummary(group StepGroup) (string, bool) {
 	if group.Title == "" || len(group.Steps) == 0 {
 		return "", false
@@ -624,17 +581,11 @@ func (p *Printer) stepLine(step Step) string {
 	return "    " + p.statusLabel(step.Status) + " " + label
 }
 
-// newBufferPrinter returns a Printer that writes to an in-memory buffer with the
-// given color setting, so a caller (RunView) can render a frame once, measure
-// and compare it, then write the result to the real terminal with color intact.
 func newBufferPrinter(colored bool) (*Printer, *bytes.Buffer) {
 	buf := &bytes.Buffer{}
 	return &Printer{w: buf, color: colored, wrote: true}, buf
 }
 
-// physicalRows reports how many terminal rows a logical line occupies once
-// wrapped to width columns. width<=0 means width is unknown (no wrap
-// accounting), so the line counts as one row.
 func physicalRows(line string, width int) int {
 	if width <= 0 {
 		return 1
@@ -651,13 +602,11 @@ func physicalRows(line string, width int) int {
 	return rows
 }
 
-// visibleWidth counts the rune width of a line, skipping ANSI CSI escape
-// sequences (ESC[ ... letter) so colored lines measure the same as plain ones.
 func visibleWidth(s string) int {
 	n := 0
 	i := 0
 	for i < len(s) {
-		if s[i] == 0x1b { // ESC
+		if s[i] == 0x1b {
 			i++
 			if i < len(s) && s[i] == '[' {
 				i++

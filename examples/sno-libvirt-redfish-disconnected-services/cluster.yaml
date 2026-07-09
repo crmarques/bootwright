@@ -12,9 +12,6 @@ spec:
     nodeSSH:
       keyPairRef: sno-disconnected-cluster-admin-ssh-key
     endpoints:
-      # Single-node OpenShift has no load balancer or VIP: the API and ingress
-      # are served on the node's own IP (Machine spec.addresses ip), so both
-      # endpoints resolve there.
       api:
         address: 192.168.132.40
         source:

@@ -2,14 +2,6 @@
 - name: Persist proxy settings on host
   when: bootwright_proxy_enabled
   block:
-    # Trust the egress proxy's TLS-inspection CA before any HTTPS work runs on
-    # this host. A proxy that re-signs HTTPS (SSL-bump) presents its own CA on
-    # every origin, so without this get_url/dnf/podman fail certificate
-    # verification ("unable to get local issuer certificate"). Installing the
-    # bundle into the system anchors covers every managed host that egresses
-    # through the proxy, matching docs/advanced/disconnected-proxy.md — not just
-    # Ceph storage nodes. Converges both ways: the anchor is removed when no
-    # inspecting proxy declares a trustBundleRef.
     - name: Trust corporate proxy CA on host
       ansible.builtin.copy:
         src: "{{ bootwright_proxy_trust_bundle_ref }}"
@@ -68,8 +60,6 @@
       no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_proxy_credentialed_url) }}"
       when: not bootwright_proxy_credentialed_url
 
-    # Strip bare-URL leftovers from older runs; env vars from /etc/environment
-    # beat /root/.pip/pip.conf, causing pip to skip Proxy-Authorization → 407.
     - name: Remove stale /etc/environment proxy block when credentials are in URLs
       ansible.builtin.blockinfile:
         path: /etc/environment
@@ -89,10 +79,6 @@
         path: /etc/dnf/dnf.conf
       register: bootwright_proxy_dnf_stat
 
-    # dnf gets the proxy from http(s)_proxy/no_proxy in the task environment
-    # (bootwright_proxy_env), not a proxy= line: dnf.conf has no no_proxy
-    # directive, so a config proxy would force noProxy hosts through the proxy
-    # too. Strip any proxy= a prior bootwright run wrote.
     - name: Strip dnf proxy line
       ansible.builtin.lineinfile:
         path: /etc/dnf/dnf.conf
@@ -105,8 +91,6 @@
         path: /etc/yum.conf
       register: bootwright_proxy_yum_stat
 
-    # Same as dnf above: yum reads the proxy from the environment, never from a
-    # yum.conf proxy= line. Strip any proxy= a prior bootwright run wrote.
     - name: Strip yum proxy line (RHEL 7 / legacy)
       ansible.builtin.lineinfile:
         path: /etc/yum.conf
@@ -141,9 +125,6 @@
         state: absent
       when: not bootwright_proxy_has_url
 
-    # No containers.conf.d drop-in is written: podman reads it for rootless
-    # too, so 0600 breaks non-root `podman` and 0644 leaks credentials.
-    # Containers get HTTP_PROXY via play-level bootwright_proxy_env instead.
     - name: Remove legacy containers.conf proxy drop-in
       ansible.builtin.file:
         path: /etc/containers/containers.conf.d/10-bootwright-proxy.conf
@@ -162,8 +143,6 @@
       when: bootwright_proxy_legacy_containers_conf.stat.exists
       failed_when: false
 
-    # Older versions locked containers.conf to 0600 to hide credentials;
-    # restore 0644 so non-root users can run `podman info`.
     - name: Restore distro mode on /etc/containers/containers.conf
       ansible.builtin.file:
         path: /etc/containers/containers.conf
@@ -197,8 +176,6 @@
         daemon_reexec: true
       when: bootwright_proxy_systemd_dropin.changed
 
-    # Fail fast: dnf's --setopt=timeout doesn't cover TCP connect, so a
-    # silently-dropped SYN would hang the first dnf task without a probe.
     - name: Verify proxy TCP reachability
       ansible.builtin.wait_for:
         host: "{{ bootwright_proxy_primary | urlsplit('hostname') }}"
@@ -206,9 +183,6 @@
         timeout: 10
       when: bootwright_proxy_has_url
 
-# Strip prior artifacts when disabled: systemd's DefaultEnvironment keeps
-# injecting HTTPS_PROXY into sshd sessions otherwise, so later ansible runs
-# hit a now-absent proxy and fail with 407.
 - name: Remove stale proxy settings when disabled
   ansible.builtin.import_tasks: cleanup.yml
   when: not bootwright_proxy_enabled

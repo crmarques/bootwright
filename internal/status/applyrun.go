@@ -8,17 +8,11 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// ApplyPhase is one fleet phase of a cluster's apply run, aggregated from the
-// ledger tasks that make it up. Status uses the workflow task vocabulary; the
-// CLI maps it to display statuses.
 type ApplyPhase struct {
 	Label  string
 	Status workflow.TaskStatus
 }
 
-// ApplyClusterKind derives the cluster root kind from its ledger tasks:
-// v1alpha1.KindContainerCluster, v1alpha1.KindStorageCluster, or the generic
-// "Cluster" when the tasks carry no cluster kind.
 func ApplyClusterKind(tasks []workflow.TaskLedgerEntry) string {
 	kind := ""
 	for _, task := range tasks {
@@ -35,18 +29,10 @@ func ApplyClusterKind(tasks []workflow.TaskLedgerEntry) string {
 	return "Cluster"
 }
 
-// ApplyClusterPhases groups a cluster's ledger tasks into the fleet phases the
-// dashboards report, each with its aggregated task status.
 func ApplyClusterPhases(ledger workflow.RunLedger, cluster string) []ApplyPhase {
 	tasks := ledger.TasksForCluster(cluster)
 	switch ApplyClusterKind(tasks) {
 	case v1alpha1.KindStorageCluster:
-		// One "Infrastructure" phase covers host standup and storage prep. The
-		// previous "Prepare" phase was computed from the identical task filter, so
-		// it could never differ — drop it rather than show two columns that always
-		// move in lockstep. Consumption (e.g. a Data Foundation add-on attaching
-		// the exported storage) runs inside the consuming cluster's add-on tasks,
-		// so it reports under that cluster, not here.
 		return []ApplyPhase{
 			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra))},
 			{Label: "Provision", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster))},
@@ -63,9 +49,6 @@ func ApplyClusterPhases(ledger workflow.RunLedger, cluster string) []ApplyPhase 
 	}
 }
 
-// ApplyFailedPhase names the first phase of the task's cluster that is failed,
-// blocked, or cancelled, so failure summaries point at a fleet phase instead of
-// a raw task ID.
 func ApplyFailedPhase(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
 	for _, phase := range ApplyClusterPhases(ledger, task.Cluster) {
 		switch phase.Status {
@@ -76,7 +59,6 @@ func ApplyFailedPhase(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) 
 	return "Work"
 }
 
-// ApplyProgressDone counts the run's tasks that reached a terminal state.
 func ApplyProgressDone(ledger workflow.RunLedger) int {
 	done := 0
 	for _, task := range ledger.Tasks {
@@ -88,8 +70,6 @@ func ApplyProgressDone(ledger workflow.RunLedger) int {
 	return done
 }
 
-// ApplyFailureReason extracts the concise operator-facing reason from a task's
-// recorded failure text.
 func ApplyFailureReason(failure string) string {
 	lines := strings.Split(failure, "\n")
 	for _, line := range lines {
@@ -107,10 +87,6 @@ func ApplyFailureReason(failure string) string {
 	return "task failed"
 }
 
-// ApplyBlockingRoot walks a blocked task's dependencies breadth-first to the
-// first failed ancestor (the true root cause), falling back to the nearest
-// blocked/cancelled ancestor. This lets a transitively-blocked child task point
-// at the host parent's failed install rather than at its own sibling.
 func ApplyBlockingRoot(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) (workflow.TaskLedgerEntry, bool) {
 	visited := map[string]bool{}
 	queue := append([]string(nil), task.Dependencies...)
@@ -156,9 +132,6 @@ func filterApplyTasksByKind(tasks []workflow.TaskLedgerEntry, kinds ...string) [
 	return out
 }
 
-// applyPhaseStatus aggregates the phase's task statuses: any failure dominates,
-// then blocked, then cancelled; a mix of pending and finished work reads as
-// running; an all-skipped phase reads skipped.
 func applyPhaseStatus(tasks []workflow.TaskLedgerEntry) workflow.TaskStatus {
 	if len(tasks) == 0 {
 		return workflow.TaskStatusPending
@@ -192,17 +165,13 @@ func trimApplyDetail(value string) string {
 	return middleEllipsisDetail(strings.TrimSpace(value), 180)
 }
 
-// middleEllipsisDetail shortens an over-long single-line detail to limit runes by
-// eliding the MIDDLE, so a trailing actionable clause (e.g. "rerun with --override
-// to rebuild it") survives next to the leading description instead of being cut off
-// by tail truncation. Rune-based so a multibyte character is never split.
 func middleEllipsisDetail(value string, limit int) string {
 	r := []rune(value)
 	if len(r) <= limit {
 		return value
 	}
 	const tail = 44
-	head := limit - tail - 1 // room for the ellipsis rune
+	head := limit - tail - 1
 	if head < 1 {
 		return string(r[:limit])
 	}

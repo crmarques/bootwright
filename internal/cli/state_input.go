@@ -29,10 +29,6 @@ func loadOptionalDesiredState(cf *commonFlags) (v1alpha1.State, error) {
 	return desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
 }
 
-// loadDesiredStateLocalOnly loads desired state without the locality (root)
-// enforcement a normal run does — it only reads the user-owned input YAML. Shell
-// completion callbacks use it: they run as the unprivileged user and must not
-// escalate, and any failure just yields no completions.
 func loadDesiredStateLocalOnly(cf *commonFlags) (v1alpha1.State, error) {
 	ctx, err := cf.resolveLocalOnly()
 	if err != nil {

@@ -26,11 +26,6 @@
     bootwright_creds_var: bootwright_vsphere_credentials
     bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere.server }}"
 
-# A foreign VM that happens to match the <cluster>-<machine> naming on this
-# vCenter must not be deleted. Read the VM annotation and require the
-# Bootwright ownership marker for this context, cluster, and machine before
-# touching it (mirrors the libvirt domain-XML marker check). A missing VM
-# keeps destroy idempotent.
 - name: Read vSphere VM ownership annotation
   community.vmware.vmware_guest_info:
     hostname: "{{ bootwright_vsphere.server }}"
@@ -47,9 +42,6 @@
   failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# failed_when: false rewrites the registered .failed to false, so presence
-# must come from the success-only `instance` return instead — a missing VM
-# keeps destroy idempotent.
 - name: Resolve vSphere VM presence
   ansible.builtin.set_fact:
     bootwright_vsphere_vm_present: "{{ bootwright_vsphere_destroy_info.instance is defined }}"
@@ -65,10 +57,6 @@
   changed_when: false
   when: bootwright_vsphere_vm_present | bool
 
-# --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a VM
-# that matches the <cluster>-<machine> naming but carries a missing or mismatched
-# annotation marker — e.g. after the desired-state names changed post-apply — is
-# still deleted. Without it, the marker mismatch fails closed as before.
 - name: Refuse to delete a non-Bootwright vSphere VM
   ansible.builtin.assert:
     that:
@@ -129,9 +117,6 @@
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_vsphere_vm_present | bool
 
-# The vsphere media role records every uploaded ISO under a vsphere-vmedia
-# ownership record before attach; destroy reads those attributes back so
-# datastore media never outlives the machine.
 - name: Select recorded vSphere virtual media for this machine
   ansible.builtin.set_fact:
     bootwright_vsphere_vmedia_records: >-
@@ -193,8 +178,6 @@
       name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
       paths:
         - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
-        # Shared per-cluster source-ISO cache (staged once for the whole group).
-        # Cleared with the cluster so the source DVD is never left orphaned.
         - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
       attributes: {}
   when: bootwright_component.osManaged | default(false) | bool

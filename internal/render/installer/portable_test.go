@@ -10,11 +10,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// TestPortableInstallerSecretsEmitsJinjaTokens pins that the portable generator
-// renders pull-secret, node SSH and serving-certificate refs as
-// {{ secret <name>[.<role>] }} tokens (not the "<bootwright-...-ref:>" sentinels
-// PlaceholderInstallerSecrets uses), and that a portable TLS token lands in the
-// Secret's stringData verbatim rather than the base64 data block.
 func TestPortableInstallerSecretsEmitsJinjaTokens(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -56,8 +51,6 @@ func TestPortableInstallerSecretsEmitsJinjaTokens(t *testing.T) {
 		t.Error("portable PullSecret leaked the <bootwright-...> sentinel format")
 	}
 
-	// The portable cert/key tokens must be detected as placeholders so they land
-	// in stringData verbatim (base64-encoding them into data would corrupt them).
 	tlsManifest := apiServingCertManifest(t, installer.InstallerManifests(*ocp, secrets))
 	if _, ok := tlsManifest["data"]; ok {
 		t.Fatalf("portable TLS Secret must not carry base64 data: %v", tlsManifest)
@@ -71,9 +64,6 @@ func TestPortableInstallerSecretsEmitsJinjaTokens(t *testing.T) {
 	}
 }
 
-// TestPortableInstallerSecretsVSphereCredentials pins that vCenter credentials
-// render as .username/.password sub-tokens carried through the existing
-// vSphereVCenterConfig embed.
 func TestPortableInstallerSecretsVSphereCredentials(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "007-sno-vsphere")})
 	if err != nil {
@@ -103,9 +93,6 @@ func TestPortableInstallerSecretsVSphereCredentials(t *testing.T) {
 	}
 }
 
-// TestCheckPortableSupport pins the fail-fast guard: a clean cluster is
-// supported, but an authenticated cluster-install proxy (whose credentials have
-// no portable token form) is rejected.
 func TestCheckPortableSupport(t *testing.T) {
 	base, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -147,8 +134,6 @@ func apiServingCertManifest(t *testing.T, manifests []installer.InstallerManifes
 	return nil
 }
 
-// flattenStrings concatenates every string leaf in a config map so a test can
-// substring-assert without a YAML dependency.
 func flattenStrings(v any) string {
 	var b strings.Builder
 	var walk func(any)

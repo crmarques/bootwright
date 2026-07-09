@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// writeCluster lays out a discovery directory for one cluster with a marker and
-// the given reads, mirroring what discover_storage_state.yml produces.
 func writeCluster(t *testing.T, root, cluster string, probed bool, reads map[string]string) {
 	t.Helper()
 	dir := filepath.Join(root, cluster)
@@ -135,7 +133,6 @@ func TestLoadDecodesCoreFacets(t *testing.T) {
 		t.Fatalf("ec pool applications wrong: %v", apps)
 	}
 
-	// Pool crush_rule id resolves to a rule name via the crush rule dump.
 	var rbd Pool
 	for _, p := range pools {
 		if p.Name == "rbd" {
@@ -151,7 +148,6 @@ func TestLoadDecodesCoreFacets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(rules) != 2 || rules[1].FailureDomain() != "host" {
-		// rules sorted by name: rbd-rule, replicated_rule
 		t.Fatalf("crush rule failure-domain wrong: %+v", rules)
 	}
 
@@ -233,8 +229,6 @@ func TestOSDDevicesByHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// srv1 has two single-device OSDs; srv2's two OSDs share and split devices,
-	// deduplicated and sorted; the host-less row is dropped.
 	if got := byHost["srv1"]; strings.Join(got, ",") != "sdb,sdc" {
 		t.Fatalf("srv1 devices: got %v want [sdb sdc]", got)
 	}
@@ -262,7 +256,6 @@ func TestOSDDevicesByHostAbsentRead(t *testing.T) {
 
 func TestLoadSkipsDirWithoutMarker(t *testing.T) {
 	root := t.TempDir()
-	// A stray subdirectory with a JSON file but no marker must not become a cluster.
 	if err := os.MkdirAll(filepath.Join(root, "stray"), 0o700); err != nil {
 		t.Fatal(err)
 	}

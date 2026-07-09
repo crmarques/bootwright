@@ -1,6 +1,3 @@
-# Monitor-only tie-breaker (profile ceph-mon, no OSDs): mon only. A libvirt VM
-# installed with RHEL 9.7 as Bootwright-managed OS. Shares the ceph-node-ssh key
-# and root user with its peers — one SSH identity per StorageCluster.
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
@@ -11,7 +8,6 @@ spec:
 
   substrate:
     providerRef: lab-libvirt-provider
-    # Monitor-only profile: no OSD data disks.
     profileRef: ceph-mon
 
   os:

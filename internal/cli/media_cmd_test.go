@@ -59,9 +59,6 @@ func TestMediaCLIRejectsInvalidAndDuplicate(t *testing.T) {
 	if _, stderr, code = runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", source); code != 0 {
 		t.Fatalf("initial add failed: %q", stderr)
 	}
-	// A duplicate add is a single-gate replace (no --force): with no --yes and a
-	// non-interactive stdin the confirmation is declined, so the add aborts and the
-	// stored bytes are untouched.
 	replacement := filepath.Join(t.TempDir(), "replacement.iso")
 	if err := os.WriteFile(replacement, []byte("replacement bytes"), 0o644); err != nil {
 		t.Fatal(err)

@@ -16,14 +16,6 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
-# IBM Storage Ceph requires time synchronization before bootstrap: unsynchronized
-# monitor clocks raise clock-skew health warnings and can disrupt quorum. chronyd
-# is started above; give it a bounded chance to converge (up to 6 checks, 10s
-# apart) so the first monitor bootstraps against a synced clock. Non-fatal by
-# design — a node that cannot reach an NTP source (a disconnected site) still
-# proceeds, and cephadm surfaces any residual skew as a health warning rather
-# than the install hanging here. Gated on chronyd actually being a managed
-# service so a host that synchronizes time another way is left alone.
 - name: Wait for storage node time synchronization
   ansible.builtin.command:
     argv:

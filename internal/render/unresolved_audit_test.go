@@ -9,12 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// TestResolveInstallerFailsBeforeWriteOnUnresolvedEndpointBind proves the
-// installer entry point — the one that inlines secret material into the
-// install-config openshift-install consumes — is guarded by the same
-// second-enforcement-line check as the other render entry points. Without the
-// guard its VIPs degrade to empty on an unresolved endpoint bind; with it the
-// call fails before writing anything to the cluster work dir.
 func TestResolveInstallerFailsBeforeWriteOnUnresolvedEndpointBind(t *testing.T) {
 	state := v1alpha1.State{
 		InfraComponents: []v1alpha1.InfraComponent{{
@@ -61,12 +55,6 @@ func TestResolveInstallerFailsBeforeWriteOnUnresolvedEndpointBind(t *testing.T) 
 	}
 }
 
-// TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage proves render.All
-// refuses to render when a machine slated for a managed-OS install carries a
-// MachineImage whose ISO URL fails media.Resolve. Without the check
-// machineOSInstallVars returns nil for it and the machine is silently dropped
-// from the managed-OS install group; with it the render fails before writing
-// anything, naming the unresolvable reference.
 func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 	state := v1alpha1.State{
 		Machines: []v1alpha1.Machine{{
@@ -130,8 +118,6 @@ func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 		t.Fatalf("render.All wrote %d entries before failing, want 0", len(entries))
 	}
 
-	// A resolvable ISO URL clears this specific check: the same machine no
-	// longer contributes an unresolved-media event.
 	state.MachineImages[0].Spec.BootMedia = "https://example.com/rhel-boot.iso"
 	if _, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state); err != nil && strings.Contains(err.Error(), "does not resolve to installable media") {
 		t.Fatalf("render.All still reports unresolvable media for a resolvable URL: %v", err)

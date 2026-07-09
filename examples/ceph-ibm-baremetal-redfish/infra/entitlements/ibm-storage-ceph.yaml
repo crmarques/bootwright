@@ -2,18 +2,12 @@ apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
 metadata:
   name: ibm-storage-ceph
-# IBM Storage Ceph product access: logs each node into cp.icr.io/cp (registry,
-# default URL) for the IBM images, accepts the product license, and names the
-# rhel entitlement via rhelEntitlementRef for the RHEL subscription it depends
-# on (an inline rhsm arm on an ibm-storage-ceph entitlement is rejected).
 spec:
   type: ibm-storage-ceph
 
   rhelEntitlementRef: rhel
 
   registry:
-    # url defaults to cp.icr.io/cp; override only for a mirror. Username "cp" +
-    # IBM entitlement key go in ibm-ceph-registry.
     credentialsRef: ibm-ceph-registry
 
   license:

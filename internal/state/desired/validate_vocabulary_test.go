@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// TestDiagnosticsSpeakAuthoredFieldVocabulary greps the validator sources for
-// retired field spellings so a diagnostic can never again point users at a
-// YAML path that does not exist in the current API. Every denylist entry
-// names the authored field that replaced it.
 func TestDiagnosticsSpeakAuthoredFieldVocabulary(t *testing.T) {
 	denylist := map[string]string{
 		"spec.nodes":        "ContainerCluster hosts live under spec.hosts",

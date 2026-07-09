@@ -40,9 +40,6 @@ func CheckController(_ v1alpha1.State, _ Policy) Result {
 }
 
 func IsControllerLocalMachine(machine v1alpha1.Machine, policy Policy) bool {
-	// A provided-OS Machine with no ssh block declares it is the local bastion
-	// bootwright runs on: there is no remote address to connect to, so it is
-	// reached with a local connection regardless of the runtime policy.
 	if v1alpha1.MachineOSProvided(machine) && machine.Spec.Access.SSH == nil {
 		return true
 	}

@@ -34,11 +34,6 @@ type Store struct {
 	Current string `yaml:"current,omitempty" json:"current,omitempty"`
 }
 
-// Context describes one shared context under the Bootwright root. Every
-// directory, including InputDir, is Bootwright-owned under BaseDir: `context
-// init`/`context update` copy the operator's source directory into InputDir so
-// the context is self-contained and survives deletion of the source. InputPaths
-// is the load set the desired-state loader reads, always {InputDir}.
 type Context struct {
 	Name               string   `yaml:"-" json:"name"`
 	BaseDir            string   `yaml:"-" json:"baseDir"`
@@ -227,11 +222,6 @@ func ContextExists(name string) (bool, error) {
 	return isUsableContext(ctx)
 }
 
-// ContextBaseDirPresent reports whether the context's shared base directory
-// exists on this host, irrespective of whether it is a usable
-// Bootwright-managed context. Deletion uses it to tell "no shared files to
-// remove, just clean the caller's registry pointer" apart from a
-// present-but-unmanaged directory, which RequireExistingContext still rejects.
 func ContextBaseDirPresent(name string) (bool, error) {
 	ctx, err := NewContext(name)
 	if err != nil {
@@ -278,10 +268,6 @@ func RequireExistingContext(name string) (Context, error) {
 	return ctx, nil
 }
 
-// ResolveExistingContext returns an existing, Bootwright-managed context. Its
-// InputDir/InputPaths are intrinsic (the owned input/ directory under BaseDir),
-// so resolution is just the managed-context check; readiness of the copied
-// input is validated separately by ValidateInputDir.
 func ResolveExistingContext(name string) (Context, error) {
 	return RequireExistingContext(name)
 }

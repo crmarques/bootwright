@@ -189,13 +189,6 @@
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
     - bootwright_component.boot.redfish.artifactCertificate.import | default(false) | bool
 
-# A looped include enqueues every iteration up front, so a first-attempt
-# success still prints all of insert_attempt.yml's tasks as skipped for each
-# spare loop item. Seed the attempt counter and enter the tail-recursive
-# wrapper instead: it re-evaluates the retry condition only after each attempt
-# finishes, so spare attempts are never enqueued. The retries >= 1 guard keeps
-# the current behavior for insert_media_retries: 0 (range(1, 1) ran zero
-# attempts and failed the assert below).
 - name: Initialize Redfish virtual media insert attempt
   ansible.builtin.set_fact:
     bootwright_redfish_insert_media_attempt: 1
@@ -255,4 +248,3 @@
       TaskState={{ bootwright_redfish_vmedia_status.insertTaskState | default('<not reported>', true) }},
       TaskStatus={{ bootwright_redfish_vmedia_status.insertTaskStatus | default('<not reported>', true) }},
       TaskMounted={{ bootwright_redfish_vmedia_status.insertTaskMounted | default(false) }}.
-

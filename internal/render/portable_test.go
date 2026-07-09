@@ -11,10 +11,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// TestToolInputsPortableRendersSecretPlaceholders renders the context-free
-// portable bundle and asserts every secret reference is a {{ secret <name> }}
-// token, with no real secret material, no context-secrets-dir path, no leftover
-// "<bootwright-...>" placeholder, and no leak of the placeholder sentinel.
 func TestToolInputsPortableRendersSecretPlaceholders(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -49,11 +45,6 @@ func TestToolInputsPortableRendersSecretPlaceholders(t *testing.T) {
 	})
 }
 
-// portableForbidden is the whole-tree leak blocklist a portable bundle must
-// never contain: the NUL-wrapped sentinel, the context "<bootwright-...>"
-// placeholder dialect, real PEM material, and the context-only Ansible
-// extra-var {{ bootwright_clusters_dir }} (a path no context-free consumer can
-// resolve).
 var portableForbidden = []string{
 	secretstore.PlaceholderSecretsDir,
 	"<bootwright-",
@@ -61,10 +52,6 @@ var portableForbidden = []string{
 	"bootwright_clusters_dir",
 }
 
-// TestToolInputsPortableTokenizesNestedKubeVirtStorageEntitlements renders a
-// rich topology (nested KubeVirt-on-managed-host clusters + managed Ceph + ODF
-// + RHSM entitlements) and asserts every secret-bearing surface tokenizes and
-// nothing context-bound leaks.
 func TestToolInputsPortableTokenizesNestedKubeVirtStorageEntitlements(t *testing.T) {
 	fixture := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
 	state, err := desiredstate.LoadNormalizeValidate([]string{fixture})
@@ -80,9 +67,9 @@ func TestToolInputsPortableTokenizesNestedKubeVirtStorageEntitlements(t *testing
 
 	vars := readFile(t, result.VarsPath)
 	for _, want := range []string{
-		"-kubeconfig }}",                // KubeVirt host-cluster kubeconfig (context path -> token)
-		".ssh-private }}",               // storage cluster SSH private key
-		"organizationPath: '{{ secret ", // RHSM entitlement
+		"-kubeconfig }}",
+		".ssh-private }}",
+		"organizationPath: '{{ secret ",
 	} {
 		if !strings.Contains(vars, want) {
 			t.Errorf("vars.yaml missing portable token %q", want)
@@ -98,10 +85,6 @@ func TestToolInputsPortableTokenizesNestedKubeVirtStorageEntitlements(t *testing
 	})
 }
 
-// TestToolInputsPortableFailsFastOnDisconnectedMirror pins that a cluster whose
-// install-config needs disconnected mirror-registry auth (which has no portable
-// token form) is rejected up front rather than rendered into a silently
-// incomplete bundle.
 func TestToolInputsPortableFailsFastOnDisconnectedMirror(t *testing.T) {
 	fixture := filepath.Join("..", "..", "examples", "sno-libvirt-redfish-disconnected-services")
 	state, err := desiredstate.LoadNormalizeValidate([]string{fixture})
@@ -117,8 +100,6 @@ func TestToolInputsPortableFailsFastOnDisconnectedMirror(t *testing.T) {
 	}
 }
 
-// TestToolInputsPortableOnTightensModes pins that the portable render still
-// flows through the same security seam: every directory 0700, every file 0600.
 func TestToolInputsPortableOnTightensModes(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {

@@ -3,47 +3,10 @@ kind: Environment
 metadata:
   name: ceph-ibm-baremetal-redfish
 spec:
-  # DNS suffix for node hostnames, the RGW S3 endpoint, and the dashboard VIP.
-  # The node FQDNs are <machine>.<storageCluster>.<baseDomain>, e.g.
-  # ceph-1.ceph-ibm.example.com — these must exist in the external DNS (below).
   baseDomain: example.com
-
-  # Refuse any `destroy` touching this environment unless --override is passed,
-  # so a routine `destroy --yes` cannot tear down real bare-metal hosts by
-  # accident. Decommission/rebuild must pass --override deliberately.
 
   safety:
     destroyProtection: requiredOverride
-
-  # Single-cluster environment, so no fleet selection list is needed: every
-  # loaded cluster is active. (Add a storageClusters selection list only when
-  # one tree holds several clusters and you want apply to touch a subset. Note a
-  # bare-metal storage cluster relies on the bastion artifact server for its OS
-  # install, and that machine survives a selection only via the cluster graph.)
-  # ---------------------------------------------------------------------------
-  # Secrets are referenced by name only; bytes live in the encrypted context
-  # store and are written with `bootwright secret set` / `secret generate`.
-  # See the README for the exact set commands.
-  # ---------------------------------------------------------------------------
-
-  # ---------------------------------------------------------------------------
-  # Two entitlements, decoupled by concern, now first-class objects under
-  # infra/entitlements/. IBM Storage Ceph runs on RHEL it does not itself
-  # entitle, so the RHEL subscription is its own redhat-rhel Entitlement (rhel)
-  # and the ibm-storage-ceph Entitlement references it via rhelEntitlementRef.
-  # ---------------------------------------------------------------------------
-
-  # ---------------------------------------------------------------------------
-  # Infrastructure services. Everything here except the artifact server is
-  # EXTERNAL (existing site infrastructure that Bootwright only consumes):
-  #   - artifactServers  managed: Bootwright runs an HTTPS server on the bastion
-  #                      that serves the RHEL install media to each BMC over
-  #                      Redfish virtual media (selected by the install profile).
-  #   - proxies          external: the corporate forward proxy nodes use to reach
-  #                      RHSM, cp.icr.io, and IBM's repo host.
-  #   - nameResolution   external: the site DNS resolvers (two, for redundancy).
-  #   - ntp              external: the site NTP servers (two, for redundancy).
-  # ---------------------------------------------------------------------------
 
   infraComponents:
     artifactServers:
@@ -58,8 +21,6 @@ spec:
           httpProxy: http://proxy.example.com:3128
           httpsProxy: http://proxy.example.com:3128
           noProxy:
-            # Never proxy local traffic: the site domain, the node network, and
-            # the BMC network. Add any internal mirror/registry hosts here too.
             - .example.com
             - 10.20.30.0/24
             - 10.20.40.0/24
@@ -67,8 +28,6 @@ spec:
             proxyAuthRef: proxy-credentials
 
     nameResolution:
-      # Existing site resolvers. They MUST already serve the node FQDNs, the RGW
-      # endpoint, the dashboard VIP, and the BMC names — see the README.
       - name: dns-1
         management: external
         address: 10.20.30.2
@@ -77,7 +36,6 @@ spec:
         address: 10.20.30.3
 
     ntp:
-      # Existing site NTP servers (chrony sources on every managed node).
       - name: ntp-1
         management: external
         address: ntp1.example.com
@@ -85,14 +43,8 @@ spec:
         management: external
         address: ntp2.example.com
 
-  # Send Bootwright's own node-side operations (RHSM registration, repo enable,
-  # cp.icr.io login, cephadm image pulls) through the proxy declared above.
-
   proxyFor:
     bootwright: default
-
-  # Default artifact server for consumers. The install profile declares which
-  # endpoint each BMC uses for Redfish virtual media.
 
   defaults:
     artifactServerRef: default

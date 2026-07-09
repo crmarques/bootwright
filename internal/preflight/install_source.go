@@ -15,20 +15,6 @@ const (
 	packageSourceRepoMetadata = "repodata/repomd.xml"
 )
 
-// packageSourceReachabilityChecks probes the package install trees a boot-ISO
-// managed-OS machine depends on. A boot ISO carries no packages, so Anaconda
-// fetches them from the Anaconda packageSource during install; an unreachable
-// mirror or a wrong install-tree
-// path otherwise fails minutes deep in the machines phase with an opaque
-// Anaconda error. Surfacing it here points the operator at the mirror up front.
-//
-// The probe is best-effort: the install *target*, not the controller, is the
-// authoritative fetcher, so a controller that cannot reach the mirror (a
-// different network, a self-signed TLS chain it does not trust) only warns,
-// while a mirror that answers but serves no repodata at the path (a wrong
-// install-tree URL) fails outright. redhatCDN package sources are skipped — the
-// CDN needs entitlement auth to probe, and its credentials are already covered
-// by the entitlement secret-material checks.
 func packageSourceReachabilityChecks(state v1alpha1.State, selected []Phase, deps Deps, secretScope *SecretScope) []Check {
 	if !phaseInScope("machines", selected, true) {
 		return nil
@@ -45,9 +31,6 @@ func packageSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 		}
 		mirror := profile.Spec.Installer.Anaconda.PackageSource.GetMirror()
 		if mirror == nil {
-			// A full DVD carries its own packages; redhatCDN reachability hides
-			// behind entitlement auth; a hostedTree is served locally by
-			// bootwright. None is probed here — only an operator-hosted mirror.
 			continue
 		}
 		for _, base := range packageMirrorURLs(mirror) {
@@ -62,8 +45,6 @@ func packageSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 	return checks
 }
 
-// packageMirrorURLs lists the install-tree and repository base URLs that
-// Anaconda fetches packages from, in declaration order (primary tree first).
 func packageMirrorURLs(mirror *v1alpha1.MachineInstallPackageMirror) []string {
 	var urls []string
 	if mirror.BaseURL != "" {
@@ -78,10 +59,6 @@ func packageMirrorURLs(mirror *v1alpha1.MachineInstallPackageMirror) []string {
 }
 
 func packageSourceMirrorCheck(baseURL string, deps Deps) Check {
-	// A baseURL carrying yum variables ($basearch/$releasever/...) is resolved by
-	// Anaconda on the install target, not the controller. Probing the literal
-	// unexpanded path would 404 and hard-fail a source the target can install
-	// from, so report it INFO (operator-resolved) instead of probing.
 	if strings.ContainsRune(baseURL, '$') {
 		return infoCheck(checkGroupPackageSource, baseURL, "contains a yum variable (e.g. $basearch/$releasever); the install target expands it at install time, so the controller cannot probe this URL")
 	}

@@ -127,8 +127,6 @@ func TestMaterializeRuntimeRemovesPartialPlaintextOnError(t *testing.T) {
 	if err := store.Write(second, []byte("second-secret\n")); err != nil {
 		t.Fatalf("Write second: %v", err)
 	}
-	// Corrupt the second material (sorted after the first) so its decrypt fails
-	// mid-loop, after the first has already been written as plaintext.
 	path := store.materialPath(second)
 	env := readTestEnvelope(t, path)
 	ciphertext, err := base64.StdEncoding.DecodeString(env.Ciphertext)

@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// The GitHub README is rendered from the repo root and now points at the
-// published site's assets under docs/assets/images/ instead of keeping a
-// duplicate top-level images/ copy. Guard that every local image the README
-// references still resolves to a real file so the README art never 404s.
 var readmeImageSrc = regexp.MustCompile(`<img[^>]*\bsrc="([^"]+)"`)
 
 func TestReadmeImagesResolve(t *testing.T) {

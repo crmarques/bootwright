@@ -6,11 +6,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// vSphereCredentialRefNames lists, in binding order without duplicates, the
-// vCenter credentialsRef names every vSphere provider the cluster's machines
-// bind declares. It mirrors loadVSphereCredentials' traversal but reads no
-// material, so the portable render can mint a {{ secret <name> }} token per
-// vCenter without a secrets directory.
 func vSphereCredentialRefNames(state v1alpha1.State, ci v1alpha1.ClusterInstall) []string {
 	var names []string
 	seen := map[string]bool{}
@@ -34,11 +29,6 @@ func vSphereCredentialRefNames(state v1alpha1.State, ci v1alpha1.ClusterInstall)
 	return names
 }
 
-// loadVSphereCredentials resolves the vCenter user/password material for
-// every vSphere provider the cluster's machines bind, so the real
-// install-config carries credentials instead of secret-ref placeholders. It
-// shares vSphereCredentialRefNames' traversal so the real and portable renders
-// never diverge on which vCenters get credentials.
 func loadVSphereCredentials(state v1alpha1.State, ci v1alpha1.ClusterInstall, resolver secret.Resolver) (map[string]InstallerUserPass, error) {
 	out := map[string]InstallerUserPass{}
 	for _, name := range vSphereCredentialRefNames(state, ci) {

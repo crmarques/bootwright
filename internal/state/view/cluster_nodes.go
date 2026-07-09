@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// ClusterNode is one node of a cluster resolved for access: the Machine that
-// backs it, its role, its registered hostname, and — for a container node — its
-// ordinal among same-role nodes in declaration order. Kind distinguishes the
-// container vs storage topology it came from.
 type ClusterNode struct {
 	MachineName string
 	Role        string
@@ -19,13 +15,6 @@ type ClusterNode struct {
 	Kind        string
 }
 
-// ClusterNodes returns the nodes of a container OR storage cluster in
-// declaration order, or (nil, false) when no cluster of that name exists. A
-// container node's Ordinal is its index among same-role nodes (master-0,
-// master-1, worker-0, …); a storage node carries its Ceph role list instead,
-// since a Ceph host fills several roles and has no single-role ordinal. A
-// storage cluster with no ceph topology yields (nil, true): the cluster exists
-// but binds no SSH-reachable node.
 func ClusterNodes(state v1alpha1.State, clusterName string) ([]ClusterNode, bool) {
 	if clusterName == "" {
 		return nil, false
@@ -71,8 +60,6 @@ func ClusterNodes(state v1alpha1.State, clusterName string) ([]ClusterNode, bool
 	return nil, false
 }
 
-// HasRole reports whether a node fills the given role — matching a container
-// node's single role or any of a storage node's Ceph roles.
 func (n ClusterNode) HasRole(role string) bool {
 	if len(n.Roles) > 0 {
 		for _, r := range n.Roles {

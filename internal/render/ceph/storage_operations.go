@@ -6,12 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// CephOperations assembles the StorageOperations document for a managed cluster
-// by appending each operation family in rendered order: the cluster topology
-// (networks/config/stretch), the CRUSH rules, the pools, the filesystems, the
-// mgr-module/logging wiring, the object-gateway realm/zone/admin ops, and the
-// NFS exports. Ordering across families is significant — the apply role runs
-// operations in slice order by phase.
 func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]any {
 	var ops []map[string]any
 	ops = append(ops, cephTopologyOperations(cluster)...)
@@ -42,8 +36,6 @@ func sortedKeys[V any](m map[string]V) []string {
 
 func operationInPhase(phase, name string, command ...string) map[string]any {
 	if command == nil {
-		// A structured operation (role-implemented, no argv) must render
-		// `command: []`, not null: the role filters on `command | length`.
 		command = []string{}
 	}
 	return map[string]any{

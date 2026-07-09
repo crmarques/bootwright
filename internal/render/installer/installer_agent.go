@@ -16,9 +16,6 @@ func SortedNodes(nodes []v1alpha1.OCPHostSpec) []v1alpha1.OCPHostSpec {
 	return out
 }
 
-// agentHosts renders agent-config.yaml's hosts[] block and picks the
-// rendezvous IP. The rendezvous host is the first master node in sorted
-// hostname order.
 func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) ([]any, string) {
 	nodes := SortedNodes(ocp.Spec.Hosts)
 	hosts := make([]any, 0, len(nodes))

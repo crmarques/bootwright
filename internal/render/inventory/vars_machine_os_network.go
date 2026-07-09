@@ -39,37 +39,12 @@ func machineInstallNetworkVars(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	return network
 }
 
-// machineInstallDesiredNetwork returns the node's full resolved nmstate. The
-// kickstart brings up only the routed interface (enough to install and be
-// reachable); the managed-OS network task applies this document post-install so
-// every interface, VLAN, route, and MTU the desired state declares is realized -
-// nmstate sets the bond MTU the kickstart's merged bond+VLAN line cannot.
 func machineInstallDesiredNetwork(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
 	config := installer.AgentNetworkConfig(state, ci, m, clusterName)
 	markEthernetMACIdentity(config)
 	return config
 }
 
-// markEthernetMACIdentity sets `identifier: mac-address` on every ethernet
-// interface that carries a mac-address, so the post-install `nmstatectl apply`
-// binds those ports to their permanent MAC instead of by kernel name.
-//
-// AgentNetworkConfig stamps each ethernet port with the machine's authored
-// (permanent) hardware MAC. Under nmstate's default name-based identity that MAC
-// is a desired property nmstate verifies against the port's *running* MAC after
-// apply. But every port enslaved into an active-backup bond has its running MAC
-// overwritten to the bond's shared MAC at enslavement, so the running MAC of each
-// member (the bond MAC) never equals its authored permanent MAC and the verify
-// step fails - `nmstatectl apply --no-commit` rolls the whole document back.
-// `identifier: mac-address` matches the port by its permanent MAC (stable and
-// what the machine authored) and, per nmstate's bond-attach fix, verifies against
-// the in-config MAC rather than the bond-overwritten running one, so the bonded
-// case converges. It does not rename the kernel interface (the name becomes the
-// NM profile id), so it introduces no link flap on the already-running OS.
-//
-// This is scoped to the managed-OS document: the OCP agent-config path consumes
-// AgentNetworkConfig directly and the map here is a fresh per-call clone, so the
-// added field never reaches agent-config.yaml.
 func markEthernetMACIdentity(config map[string]any) {
 	interfaces, ok := config["interfaces"].([]any)
 	if !ok {
@@ -122,13 +97,6 @@ func kickstartPrimaryInterface(config map[string]any) map[string]any {
 	return nil
 }
 
-// kickstartNetworkInterfaces renders the minimal install-time network: only the
-// primary routed interface, enough for Anaconda to reach the install source and
-// for the node to be reachable over SSH after reboot. MTU, secondary interfaces,
-// and the rest of the nmstate document are applied post-install from
-// osInstall.network.desiredState - the kickstart's merged bond+VLAN line cannot
-// set the bond MTU anyway. --bondslaves creates the bond and its port
-// connections, so no separate per-slave stanzas are emitted.
 func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 	interfaces := networkConfigInterfacesByName(config)
 	primary := kickstartPrimaryInterfaceEntry(config)
@@ -158,8 +126,6 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 		}
 		if baseEntry := interfaces[base]; baseEntry != nil {
 			addBondFields(stanza, baseEntry)
-			// An ethernet parent keeps kickstart's MAC-based device binding
-			// when the NIC's MAC is known; a bond parent is a logical name.
 			if baseType, _ := baseEntry["type"].(string); baseType == "ethernet" {
 				if mac, _ := baseEntry["mac-address"].(string); mac != "" {
 					stanza["device"] = mac
@@ -226,10 +192,6 @@ func kickstartBondOptions(aggregation map[string]any) string {
 	return strings.Join(parts, ",")
 }
 
-// kickstartPrimaryInterfaceEntry picks the interface the installer brings up:
-// the one carrying the default route when the nmstate document declares one
-// (a Ceph node's cluster VLAN also holds a static IP, but only the routed
-// public VLAN can reach the install source), else the first with an IPv4.
 func kickstartPrimaryInterfaceEntry(config map[string]any) map[string]any {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {
@@ -256,9 +218,6 @@ func kickstartPrimaryInterfaceEntry(config map[string]any) map[string]any {
 	return first
 }
 
-// networkConfigDefaultRouteInterface only honors the IPv4 default route: the
-// kickstart stanza is built from the ipv4 family, so a dual-stack document's
-// ::/0 route must not steer interface selection toward a v6-only path.
 func networkConfigDefaultRouteInterface(config map[string]any) string {
 	routes, ok := config["routes"].(map[string]any)
 	if !ok {
@@ -340,9 +299,6 @@ func networkConfigGatewayFromMap(config map[string]any) string {
 		if !ok {
 			continue
 		}
-		// kickstart's --gateway rides a --bootproto=static --ip=<v4> line, so
-		// only the IPv4 default route may supply it; a dual-stack document's
-		// ::/0 next-hop would put an IPv6 gateway on the v4 family.
 		if destination, _ := route["destination"].(string); destination != "0.0.0.0/0" {
 			continue
 		}

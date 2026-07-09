@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// Excluded clusters skip Validate entirely, so the ghost objects below stay
-// deliberately minimal: selection must drop them before validation would
-// reject them.
 const ghostStorageClusterYAML = `apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
 metadata:
@@ -78,19 +75,12 @@ func TestLoadReportsNoExclusionsWithoutEnvironmentSelection(t *testing.T) {
 	}
 }
 
-// TestEnvironmentResourceDirectorySkipsAnsibleContent covers mc#2: a selected
-// resource directory must skip operator Ansible content (playbooks/roles/
-// collections) exactly like plain discovery does, so the same tree does not
-// validate under discovery yet die under spec.resources selection on a
-// playbook's top-level sequence.
 func TestEnvironmentResourceDirectorySkipsAnsibleContent(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	delete(files, "environment.yaml")
 	nested := map[string]string{
-		"environment.yaml": newEnvironmentYAMLWithResources("infra"),
-		// A playbook is a top-level YAML sequence with no apiVersion; strict
-		// decode would reject it, so the walk must skip the ansible-content dir.
+		"environment.yaml":         newEnvironmentYAMLWithResources("infra"),
 		"infra/playbooks/site.yml": "- hosts: all\n  tasks: []\n",
 	}
 	for name, content := range files {
@@ -102,9 +92,6 @@ func TestEnvironmentResourceDirectorySkipsAnsibleContent(t *testing.T) {
 	}
 }
 
-// TestKnownResourceKindCoversRegistry covers go-architecture#2: knownResourceKind
-// must accept every authored kind (it is derived from AuthoredKindAccessors),
-// including the two the old hand-enumerated switch had already dropped.
 func TestKnownResourceKindCoversRegistry(t *testing.T) {
 	for _, kind := range supportedKinds() {
 		if !knownResourceKind(kind) {
@@ -116,8 +103,6 @@ func TestKnownResourceKindCoversRegistry(t *testing.T) {
 	}
 }
 
-// TestUnsupportedKindErrorListsSupported covers api-author-ux#5: a kind typo
-// error must name the accepted kinds so a casing/plural mistake is visible.
 func TestUnsupportedKindErrorListsSupported(t *testing.T) {
 	dir := t.TempDir()
 	writeClusterSelectionFile(t, dir, "bad.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: Machin\nmetadata: { name: x }\nspec: {}\n")

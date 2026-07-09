@@ -62,13 +62,6 @@
     - bootwright_ceph_op_idempotency_kind in ['crush-rule', 'stretch-crush-rule']
     - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json | map(attribute='rule_name') | list)
 
-# The stretch CRUSH rule must place two replicas per data site:
-#   step choose firstn 0 type <failureDomain>
-#   step chooseleaf firstn 2 type host
-# `ceph osd crush rule create-replicated` cannot express that two-step rule, so
-# it is compiled into the CRUSH map directly. crushtool is not installed on the
-# host (only cephadm + ceph-common), so the de/compile steps run inside the
-# cephadm shell container with the work directory mounted.
 - name: Create stretch CRUSH rule in CRUSH map
   when:
     - bootwright_ceph_op_idempotency_kind == 'stretch-crush-rule'
@@ -325,4 +318,3 @@
     - bootwright_ceph_op_idempotency_kind == 'rgw-user'
     - bootwright_ceph_rgw_user_info is defined
     - bootwright_ceph_rgw_user_info.rc | default(1) == 0
-

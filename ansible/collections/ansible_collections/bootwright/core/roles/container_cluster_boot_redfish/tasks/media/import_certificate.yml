@@ -1,35 +1,10 @@
 ---
-# Make the BMC trust the artifact server's TLS certificate so it accepts the
-# virtual-media HTTPS fetch. This file discovers which trust-store mechanism the
-# BMC exposes, then dispatches to the matching per-method task file:
-#   - standard        -> a DMTF Certificates collection on the VirtualMedia member
-#                        (media/import_certificate/standard.yml).
-#   - security_service -> the Redfish manager SecurityService OEM action
-#                        #SecurityService.ImportRemoteHttpsServerRootCA, exposed by
-#                        Huawei/xFusion iBMC and compatible BMCs
-#                        (media/import_certificate/security_service.yml).
-# Adding another OEM trust-store mechanism is a new method name here plus a
-# media/import_certificate/<method>.yml task file -- no vendor branch in the
-# shared flow. The assert below fails clearly when the BMC exposes neither, so the
-# operator can fall back to ignoreVerification or a BMC-trusted artifact server
-# certificate. Credentials/TLS/timeout for every ansible.builtin.uri call are
-# supplied role-wide by the module_defaults block in tasks/main.yml.
 - name: Resolve artifact server certificate source
   ansible.builtin.set_fact:
     bootwright_redfish_artifact_cert_host: "{{ bootwright_component.boot.redfish.artifactCertificate.host }}"
     bootwright_redfish_artifact_cert_port: "{{ bootwright_component.boot.redfish.artifactCertificate.port }}"
   changed_when: false
 
-# Read the artifact server's leaf TLS certificate straight off the live HTTPS
-# endpoint with the openssl client, rather than community.crypto.get_certificate:
-# that module needs the cryptography Python library on the host that executes it,
-# and the bare-metal nodes are not yet provisioned, so these Redfish tasks run on
-# the controller driving the BMCs -- a host that is not guaranteed to ship it.
-# openssl is already a Bootwright dependency (the artifact server role installs it
-# to mint this very certificate). Empty stdin makes s_client return as soon as it
-# has presented the certificate; `timeout` bounds a TCP-open-but-unresponsive
-# endpoint so a misconfigured artifact server fails fast instead of hanging the
-# play (community.crypto.get_certificate defaulted to a 10s socket timeout).
 - name: Retrieve the artifact server certificate
   ansible.builtin.command:
     argv:
@@ -44,10 +19,6 @@
     stdin: ""
   register: bootwright_redfish_artifact_cert_probe
   changed_when: false
-  # s_client exits non-zero on the artifact server's self-signed/untrusted cert
-  # (and on a `timeout` kill), but it still prints the certificate it received.
-  # Treat the run as successful whenever a complete certificate was captured, and
-  # fail only when a non-zero exit left us with no certificate to import.
   failed_when: >-
     bootwright_redfish_artifact_cert_probe.rc != 0
     and ('END CERTIFICATE' not in (bootwright_redfish_artifact_cert_probe.stdout | default('')))
@@ -143,9 +114,6 @@
       certificate into. Use ignoreVerification, or serve a BMC-trusted artifact
       server certificate, instead.
 
-# Dispatch to the discovered method's dedicated task file. The shared flow above
-# owns discovery; each method file owns its request/response shape and cleanup
-# bookkeeping. cert_method is a discovered capability, not a configured vendor.
 - name: Import the artifact certificate via the discovered trust-store method
   ansible.builtin.include_tasks: "import_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"
   when: (bootwright_redfish_artifact_cert_method | length) > 0

@@ -9,19 +9,13 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// fakeNodeRunner satisfies extensionoc.OCRunner: it returns success for node
-// names in registered and a NotFound-style error for everything else, counting
-// calls per node so a late-join can be simulated.
 type fakeNodeRunner struct {
 	registered map[string]bool
 	calls      map[string]int
-	// readyAfter makes a node "register" only once it has been probed this many
-	// times, simulating a late-joining worker.
 	readyAfter map[string]int
 }
 
 func (f *fakeNodeRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
-	// args are: get node <name> -o name
 	name := args[2]
 	if f.calls == nil {
 		f.calls = map[string]int{}
@@ -115,7 +109,6 @@ func TestNodeConfigNodeNames(t *testing.T) {
 
 func TestWaitNodesRegisteredMissingNodeFails(t *testing.T) {
 	runner := &fakeNodeRunner{registered: map[string]bool{"infra-01": true}}
-	// attempts=1 so the missing node fails immediately with no wait.
 	err := waitNodesRegistered(context.Background(), runner, "kc", "hub", []string{"infra-01", "typo-02"}, 1, 0)
 	if err == nil {
 		t.Fatal("expected failure for the unregistered node")

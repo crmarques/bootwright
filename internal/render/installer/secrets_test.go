@@ -401,11 +401,6 @@ func TestBakeProxyCredentials(t *testing.T) {
 			if got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
-			// Sanity-check that the encoded URL round-trips and the
-			// password (which may contain reserved chars) decodes back
-			// to the original — guards against future "raw" embedding
-			// regressions that would leak literal `:` or `/` into the
-			// userinfo segment and break HTTP_PROXY parsers downstream.
 			u, err := url.Parse(got)
 			if err != nil {
 				t.Fatalf("baked URL does not parse: %v", err)
@@ -418,9 +413,6 @@ func TestBakeProxyCredentials(t *testing.T) {
 	}
 }
 
-// TestLoadInstallerSecretsOKDRendersFakePullSecret pins the pull-secret-free
-// OKD path: rather than the literal "{}" (which openshift-install rejects with
-// "auths required"), the renderer emits OKD's conventional fake credential.
 func TestLoadInstallerSecretsOKDRendersFakePullSecret(t *testing.T) {
 	secretsDir := t.TempDir()
 	writeEncryptedSecret(t, secretsDir, "ssh", secretstore.MaterialSSHPublic, "ssh-ed25519 AAAA generated\n")
@@ -461,16 +453,11 @@ func TestLoadInstallerSecretsOKDRendersFakePullSecret(t *testing.T) {
 	if secrets.PullSecret != fakeOKDPullSecret {
 		t.Fatalf("PullSecret = %q, want fake OKD pull secret %q", secrets.PullSecret, fakeOKDPullSecret)
 	}
-	// The emitted secret must pass the same auths check openshift-install runs.
 	if err := validatePullSecret(secrets.PullSecret, "okd"); err != nil {
 		t.Fatalf("fake OKD pull secret fails auths validation: %v", err)
 	}
 }
 
-// TestAdditionalTrustBundleRefsFoldsClusterInstallProxyCA pins that a
-// TLS-inspecting cluster-install proxy's CA is auto-folded into
-// additionalTrustBundle (mirroring the mirror-CA fold), and that a plain proxy
-// without a trust bundle contributes nothing.
 func TestAdditionalTrustBundleRefsFoldsClusterInstallProxyCA(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
@@ -502,9 +489,6 @@ func TestAdditionalTrustBundleRefsFoldsClusterInstallProxyCA(t *testing.T) {
 	}
 }
 
-// TestEffectiveMirrorRegistryURLPrefersDeclaredEndpoint pins that a declared
-// registry endpoint address wins over the SSH/route heuristic, so a loopback
-// bastion SSH alias never silently resolves the mirror to a network gateway.
 func TestEffectiveMirrorRegistryURLPrefersDeclaredEndpoint(t *testing.T) {
 	env := &v1alpha1.Environment{
 		Metadata: v1alpha1.Metadata{Name: "env"},

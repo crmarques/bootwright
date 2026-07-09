@@ -57,9 +57,6 @@ func TestEntitlementValidation(t *testing.T) {
 			}},
 			want: "spec.type is required",
 		},
-		// The former invalid-provider / invalid-product / invalid-provider-product
-		// cases collapsed into a single spec.type enum check: the provider/product
-		// axis no longer exists, so an unknown discriminator is the only shape.
 		{
 			name: "invalid-type",
 			entitlements: []v1alpha1.Entitlement{{
@@ -159,9 +156,6 @@ func TestEntitlementValidation(t *testing.T) {
 			want: `does not match any Entitlement`,
 		},
 		{
-			// Was ibm-rhel-ref-wrong-product referencing a community/ceph item;
-			// community no longer exists, so the wrong-type target is now a
-			// redhat-ceph entitlement (still not the redhat-rhel type IBM needs).
 			name: "ibm-rhel-ref-wrong-type",
 			entitlements: []v1alpha1.Entitlement{
 				{

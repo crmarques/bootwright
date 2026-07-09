@@ -3,15 +3,8 @@ kind: NetworkConfig
 metadata:
   name: ceph-net
 spec:
-  # Single flat network carrying both the Ceph public (client + monitor) and
-  # cluster (OSD replication) traffic. Split them onto a second NIC/bond for a
-  # production build; this example keeps one interface for clarity.
   machineNetwork:
     - cidr: 10.20.30.0/24
-
-  # Resolve via the external site DNS servers declared in environment.yaml.
-  # Bootwright injects their addresses (10.20.30.2, 10.20.30.3) as the node
-  # resolvers; only the search domain is set in the template below.
 
   nameResolutionRefs:
     - dns-1
@@ -34,9 +27,6 @@ spec:
             - example.com
       routes:
         config:
-          # Default route via the site gateway. It must reach the proxy, the
-          # external DNS/NTP, and (through the proxy) RHSM, cp.icr.io, and IBM's
-          # repo host.
           - destination: 0.0.0.0/0
             next-hop-address: 10.20.30.1
             next-hop-interface: primary

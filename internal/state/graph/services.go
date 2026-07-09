@@ -225,10 +225,6 @@ func SharedDestroyConflicts(state v1alpha1.State, selected []string) []DestroySc
 	return ResolveMachineServices(state).ScopeConflicts(selected)
 }
 
-// selfContainedSharedServiceSlots render their config from the InfraComponent or
-// provider spec, which survives a --clusters scope in full (mergeFilteredStates
-// keeps InfraComponents and Environment). A scoped apply re-provisions them with
-// identical config, so it cannot degrade the unscoped consumers.
 var selfContainedSharedServiceSlots = map[string]bool{
 	v1alpha1.ComponentSlotArtifactServer: true,
 	v1alpha1.ComponentSlotProxy:          true,
@@ -236,16 +232,6 @@ var selfContainedSharedServiceSlots = map[string]bool{
 	v1alpha1.ProviderServiceKindBMC:      true,
 }
 
-// SharedServiceDegradesUnderScope reports whether provisioning a shared machine
-// service under a --clusters scoped apply would degrade the unscoped consumers'
-// view of it. Degrading services (load balancer, name resolution, NTP) render
-// their whole config from the in-state cluster/machine set — haproxy backends,
-// dnsmasq node records, chrony allow lists — so a scoped apply drops the unscoped
-// clusters' entries and overwrites the running shared config. Self-contained
-// services render from the spec, which scoping keeps in full, so a scoped apply
-// re-provisions them identically. Unknown slots default to degrading (the apply is
-// refused) so a new shared service must be explicitly classified self-contained
-// before a scoped apply is allowed to provision it.
 func SharedServiceDegradesUnderScope(slot string) bool {
 	return !selfContainedSharedServiceSlots[slot]
 }
@@ -327,13 +313,6 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 	return out
 }
 
-// storageArtifactServerConsumers registers the artifact server a storage
-// cluster's bare-metal managed-OS install publishes through (for Redfish virtual
-// media) as a machine service the cluster consumes. Without it a scoped apply
-// (`--clusters <storage>`) would drop the artifact server's host machine, so the
-// install ISO stage path resolves empty and the managed-OS role fails with an
-// opaque empty-path error. This mirrors the container-cluster artifact consumer
-// in clusterMachineServiceConsumers.
 func storageArtifactServerConsumers(state v1alpha1.State, cluster v1alpha1.StorageCluster) []MachineServiceConsumer {
 	ci, ok := stateview.StorageClusterArtifactInstall(state, cluster)
 	if !ok {

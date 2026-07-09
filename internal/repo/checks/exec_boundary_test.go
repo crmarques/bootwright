@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// TestOSExecConfinedToHostAndAnsibleRunner pins the local-process seam:
-// production code launches processes through internal/host/execution's Runner
-// (or the other host primitives and the converge ansible runner that own the
-// low-level mechanics); nothing else may import os/exec directly.
 func TestOSExecConfinedToHostAndAnsibleRunner(t *testing.T) {
 	allowedPrefixes := []string{
 		"internal/host/",

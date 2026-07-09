@@ -22,11 +22,6 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	}
 }
 
-// A scoped apply refuses only the shared services a scoped provision would
-// DEGRADE (load balancer, name resolution, NTP — their config is rendered from the
-// in-state cluster/machine set). Self-contained shared services (artifact server,
-// proxy, registry) render from the spec, which scoping keeps in full, so they are
-// allowed through and must not appear in the refusal.
 func TestValidateScopedApplySharedServicesRefusesOnlyDegradingKinds(t *testing.T) {
 	state := cliStateWithAllSharedMachineServices()
 	for _, target := range []string{"infra", "all"} {
@@ -57,12 +52,8 @@ func TestValidateScopedApplySharedServicesRefusesOnlyDegradingKinds(t *testing.T
 	}
 }
 
-// --through fabric|deps|base resolve to the synthetic "through-<phase>" prefix
-// scopes (converge.ApplyThroughScope); the cluster-scope filter must narrow them
-// to the named cluster roots exactly like the canonical --stage scopes rather
-// than rejecting --clusters as an unsupported target.
 func TestScopeStateForApplyNarrowsThroughPrefixScopes(t *testing.T) {
-	state := cliStateWithSharedDNS() // cluster-a, cluster-b
+	state := cliStateWithSharedDNS()
 	for _, target := range []string{"through-fabric", "through-deps", "through-base"} {
 		t.Run(target, func(t *testing.T) {
 			scoped, err := ScopeStateForApply(state, target, "cluster-a")
@@ -77,9 +68,6 @@ func TestScopeStateForApplyNarrowsThroughPrefixScopes(t *testing.T) {
 	}
 }
 
-// A through-<phase> prefix scope always begins at fabric, so it provisions the
-// shared machine layer and must trigger the same shared-service narrowing guard
-// as --stage infra/fabric/machines.
 func TestValidateScopedApplySharedServicesFailsForThroughPrefixScopes(t *testing.T) {
 	state := cliStateWithSharedDNS()
 	for _, target := range []string{"through-fabric", "through-deps", "through-base"} {
@@ -95,8 +83,6 @@ func TestValidateScopedApplySharedServicesFailsForThroughPrefixScopes(t *testing
 	}
 }
 
-// Cluster-workload-only scopes do not re-provision the shared machine layer, so
-// narrowing them with --clusters stays exempt from the shared-service guard.
 func TestValidateScopedApplySharedServicesAllowsClusterWorkloadScopes(t *testing.T) {
 	state := cliStateWithSharedDNS()
 	for _, target := range []string{"clusters", "deps", "base", "add-ons"} {

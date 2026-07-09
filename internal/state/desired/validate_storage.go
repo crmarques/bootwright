@@ -12,11 +12,8 @@ import (
 )
 
 var (
-	// cephOSSReleaseNamePattern matches an upstream Ceph release codename (squid).
-	cephOSSReleaseNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
-	// cephOSSReleaseVersionPattern matches a full upstream x.y.z version.
-	cephOSSReleaseVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	// cephSubscriptionStreamPattern matches a redhat/ibm product stream (9, 9.1).
+	cephOSSReleaseNamePattern     = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
+	cephOSSReleaseVersionPattern  = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	cephSubscriptionStreamPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
 )
 
@@ -114,10 +111,6 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	return errs
 }
 
-// validateStorageCephSingleHostDefaults gates the --single-host-defaults
-// bootstrap flag: it is only coherent for a one-host, non-stretch topology, and
-// it owns the three osd_pool/crush defaults at bootstrap — so declaring those in
-// spec.ceph.config[global] would conflict.
 func validateStorageCephSingleHostDefaults(prefix string, cluster v1alpha1.StorageCluster) []string {
 	if !cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults {
 		return nil
@@ -150,7 +143,6 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.addressRef", cluster, adm.Bootstrap.Host, adm.Bootstrap.AddressRef.Name, machines, adm.AddressRef.Name)...)
 	}
 	if ref := adm.ClusterSSHKeyRef.Name; ref != "" {
-		// The cephadm cluster identity must be a declared sshKeyPair Secret.
 		if s, ok := stateview.Secret(state, ref); !ok {
 			errs = append(errs, fmt.Sprintf("%s.clusterSSHKeyRef %q is not a declared Secret", prefix, ref))
 		} else if s.Spec.Type != v1alpha1.SecretTypeSSHKeyPair {
@@ -160,8 +152,6 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 	return errs
 }
 
-// validateStorageSecretRef checks that a required secret ref is set and
-// resolves to a declared Secret.
 func validateStorageSecretRef(owner, ref string, state v1alpha1.State) []string {
 	if ref == "" {
 		return []string{owner + " is required"}
@@ -172,11 +162,6 @@ func validateStorageSecretRef(owner, ref string, state v1alpha1.State) []string 
 	return nil
 }
 
-// storageSiteRequirement reports why this cluster's topology hosts must
-// declare a site, or "" when site is optional. A site only has effect in
-// stretch mode (where it becomes the cephadm CRUSH location) and under
-// site-narrowed placements (which select hosts by it); requiring it
-// otherwise would force an inert token on single-site clusters.
 func storageSiteRequirement(state v1alpha1.State, cluster v1alpha1.StorageCluster) string {
 	if cluster.Spec.Ceph == nil {
 		return ""
@@ -241,10 +226,6 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 	sshUser := ""
 	sshKeyRef := ""
 	sshSeen := false
-	// An explicit cephadm cluster SSH key is the cluster's shared identity, so
-	// each node may connect with its own access key (e.g. a provided-OS arbiter
-	// reached over an operator-authorized key). Without it, the cluster identity
-	// is borrowed from the first host's access key, so every node must share it.
 	uniformAccessKeyRequired := cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name == ""
 	for i, node := range nodes {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
@@ -316,9 +297,6 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 	return errs
 }
 
-// validateStorageCephConfig checks the declared ceph config options: sections
-// must be valid `ceph config set` who-targets, and keys owned by other spec
-// fields (the networks CIDRs) are rejected — one owner per fact.
 func validateStorageCephConfig(prefix string, config map[string]map[string]string) []string {
 	var errs []string
 	for _, section := range sortedKeys(config) {
@@ -344,11 +322,6 @@ func validateStorageCephConfig(prefix string, config map[string]map[string]strin
 	return errs
 }
 
-// validCephConfigSection accepts a `ceph config set` who-target, optionally
-// suffixed with a single CRUSH mask: <who>/class:<value> or
-// <who>/<crush-bucket-type>:<value> (host, rack, datacenter, ...). The bucket
-// type is not enumerated — like the stretch failureDomain, any CRUSH type is
-// valid — so the mask only has to be a non-empty key:value with no second slash.
 func validCephConfigSection(section string) bool {
 	base := section
 	if idx := strings.Index(section, "/"); idx >= 0 {
@@ -358,7 +331,6 @@ func validCephConfigSection(section string) bool {
 			return false
 		}
 		colon := strings.Index(mask, ":")
-		// key:value with both sides non-empty.
 		if colon <= 0 || colon == len(mask)-1 {
 			return false
 		}
@@ -396,9 +368,6 @@ func validateStorageCephMgrModules(prefix string, modules []string) []string {
 	return errs
 }
 
-// validateStorageCephMonitoring checks each authored monitoring service: its
-// placement must resolve (role holders or authored placement) — an authored
-// block whose spec could never render would be silently ignored otherwise.
 func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluster) []string {
 	monitoring := cluster.Spec.Ceph.Monitoring
 	if monitoring == nil {
@@ -450,11 +419,6 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 	return errs
 }
 
-// validateStorageCephManagement checks the management HA surface: a dnsName to
-// publish and report, a valid frontend port, a complete VIP ingress whose
-// placement resolves to ingress-role hosts (the same rules as the RGW ingress),
-// and the TLS/oauth2-proxy auth surface (enableAuth and oauth2Proxy are paired,
-// and every secret ref resolves).
 func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	mgmt := cluster.Spec.Ceph.Management
 	if mgmt == nil {
@@ -473,10 +437,6 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 	}
 	errs = append(errs, validateStorageIngressVIP(prefix+".ingress", ingress.Address, ingress.PrefixLength)...)
 	errs = append(errs, validateStoragePlacementHosts(prefix+".ingress.placement", ingress.Placement, cluster, true, v1alpha1.StorageCephRoleIngress)...)
-	// On a stretch cluster the HA dashboard VIP is the whole point of the
-	// mgmt-gateway ingress, so its placement must cover each data site the same
-	// way the RGW/MDS placements do; narrowing it to one site would let the VIP
-	// die with that site while still validating clean.
 	if storageClusterStretchEnabled(cluster) {
 		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress)...)
 	}
@@ -484,10 +444,6 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
 		errs = append(errs, validateStorageSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, state)...)
 	}
-	// enableAuth and oauth2Proxy are paired: the mgmt-gateway delegates auth to a
-	// deployed oauth2-proxy, so enableAuth without it emits a flag whose daemon
-	// never deploys (the dashboard would be unprotected or reconcile would fail),
-	// and an oauth2Proxy block without enableAuth deploys an unused daemon.
 	authOn := mgmt.EnableAuth != nil && *mgmt.EnableAuth
 	switch {
 	case authOn && mgmt.OAuth2Proxy == nil:
@@ -513,9 +469,6 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 	return errs
 }
 
-// validateStorageCephServices checks the cephadm service-spec passthrough:
-// the service type must not collide with a first-class surface (one owner per
-// service), and the placement must be authored explicitly.
 func validateStorageCephServices(prefix string, cluster v1alpha1.StorageCluster) []string {
 	reserved := map[string]bool{
 		"host": true, "mon": true, "mgr": true, "osd": true, "mds": true,
@@ -613,11 +566,6 @@ func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1a
 	return errs
 }
 
-// validateStorageIngressVIP checks a keepalived-backed ingress VIP: a parseable
-// IP and a prefix length in range for its address family (1-32 for IPv4, 1-128
-// for IPv6). A non-IP address or an out-of-range prefix would otherwise flow
-// verbatim into the rendered ingress virtual_ip and the dnsmasq record, failing
-// only at live `ceph orch apply`/keepalived instead of at validate.
 func validateStorageIngressVIP(owner, address string, prefixLength int) []string {
 	var errs []string
 	ip := net.ParseIP(address)
@@ -640,17 +588,8 @@ func validateStorageIngressVIP(owner, address string, prefixLength int) []string
 	return errs
 }
 
-// validateStorageServiceIDUniqueness enforces that the cephadm service each
-// StorageObjectGateway (rgw) and StorageNFSExport (nfs) renders is unique by
-// serviceType/serviceID within its StorageCluster. cephadm keys a service by
-// type and id, so two gateways (or two NFS services) with the same serviceID on
-// one cluster render two `ceph orch apply` docs that collapse to a single
-// last-write-wins service, silently dropping the earlier one's placement/port/
-// zone binding — the same uniqueness the services[] passthrough and OSD
-// drivegroups already enforce.
 func validateStorageServiceIDUniqueness(state v1alpha1.State) []string {
 	var errs []string
-	// cluster -> "serviceType/serviceID" -> first owner description.
 	seen := map[string]map[string]string{}
 	mark := func(cluster, serviceType, serviceID, owner string) {
 		if cluster == "" || serviceID == "" {
@@ -759,8 +698,6 @@ func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alph
 		return v1alpha1.StorageCephHost{}, false
 	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		// Authored host references (bootstrap.host, placements, tiebreaker) name
-		// a node by its machine name or its registered hostname; both resolve.
 		if node.Hostname == name || node.MachineRef.Name == name {
 			return node, true
 		}

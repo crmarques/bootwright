@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// TestLedgerNextStepsDestroyTargetRetriesAsDestroy pins L4: a failed run whose
-// ledger target was stamped by destroy ("<stage> destroy") must retry as
-// `bootwright destroy` — never a re-apply of what a teardown just failed to
-// remove — and keep its stage and cluster scope.
 func TestLedgerNextStepsDestroyTargetRetriesAsDestroy(t *testing.T) {
 	ledger := workflow.RunLedger{Target: "clusters destroy", Scope: "dc1", Status: workflow.RunStatusFailed}
 	steps := LedgerNextSteps(ledger, workflow.RunActivity{}, nil)
@@ -21,8 +17,6 @@ func TestLedgerNextStepsDestroyTargetRetriesAsDestroy(t *testing.T) {
 	}
 }
 
-// TestLedgerNextStepsFullDestroyRetriesAsDestroy covers the full-destroy label
-// ("all destroy"), which carries no --stage.
 func TestLedgerNextStepsFullDestroyRetriesAsDestroy(t *testing.T) {
 	ledger := workflow.RunLedger{Target: "all destroy", Status: workflow.RunStatusFailed}
 	steps := LedgerNextSteps(ledger, workflow.RunActivity{}, nil)
@@ -31,9 +25,6 @@ func TestLedgerNextStepsFullDestroyRetriesAsDestroy(t *testing.T) {
 	}
 }
 
-// TestLedgerNextStepsSubPhaseApplyKeepsStage pins L4's second half: a sub-phase
-// apply target threads back through as --stage instead of widening to a full
-// apply.
 func TestLedgerNextStepsSubPhaseApplyKeepsStage(t *testing.T) {
 	ledger := workflow.RunLedger{Target: "machines", Status: workflow.RunStatusFailed}
 	steps := LedgerNextSteps(ledger, workflow.RunActivity{}, nil)
@@ -42,8 +33,6 @@ func TestLedgerNextStepsSubPhaseApplyKeepsStage(t *testing.T) {
 	}
 }
 
-// TestLedgerNextStepsThroughApplyKeepsThrough covers a --through prefix scope,
-// which threads back through as --through rather than an invalid --stage.
 func TestLedgerNextStepsThroughApplyKeepsThrough(t *testing.T) {
 	ledger := workflow.RunLedger{Target: "through-base", Status: workflow.RunStatusFailed}
 	steps := LedgerNextSteps(ledger, workflow.RunActivity{}, nil)
@@ -52,8 +41,6 @@ func TestLedgerNextStepsThroughApplyKeepsThrough(t *testing.T) {
 	}
 }
 
-// TestLedgerNextStepsFamilyApplyKeepsStageAndScope guards the pre-existing
-// family-stage mapping (infra|clusters) is retained.
 func TestLedgerNextStepsFamilyApplyKeepsStageAndScope(t *testing.T) {
 	ledger := workflow.RunLedger{Target: "clusters", Scope: "dc1", Status: workflow.RunStatusFailed}
 	steps := LedgerNextSteps(ledger, workflow.RunActivity{}, nil)

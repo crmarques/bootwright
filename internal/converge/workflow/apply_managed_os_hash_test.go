@@ -7,11 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// The managedMachineOS structural hash must reflect ONLY the OS-install identity.
-// A pool add, an OSD-device add, or a machine BMC/substrate edit changes the full
-// state but not the installed OS, so the structural projection is unchanged and the
-// edit classifies reconcilable-in-place instead of a disk-wipe reinstall refusal.
-// A change to the machine's OS install profile IS a reinstall and must move it.
 func TestManagedMachineOSStructuralHashIgnoresNonOSEdits(t *testing.T) {
 	proj := func(s v1alpha1.State) string {
 		b, err := json.Marshal(managedMachineOSStructuralHashVars(s, "ceph-bm"))

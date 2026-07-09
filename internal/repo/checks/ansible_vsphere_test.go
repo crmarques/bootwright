@@ -8,10 +8,6 @@ import (
 
 const vsphereSubstrateTaskRoot = "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks"
 
-// TestVSphereSubstrateDestroyRequiresOwnershipMarker pins the destroy
-// safety contract: a VM addressed by computed name is deleted only after
-// its annotation proves the Bootwright ownership marker for this context,
-// cluster, and machine — mirroring the libvirt domain-XML marker check.
 func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 	tasks := readAnsibleTasks(t, vsphereSubstrateTaskRoot+"/destroy.yml")
 	assertIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright vSphere VM")
@@ -25,9 +21,6 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 			t.Fatalf("vsphere destroy ownership assertion missing marker %q", marker)
 		}
 	}
-	// --force-unowned relaxes the refusal so a renamed/unmarked VM is still
-	// deleted; without it the marker mismatch stays fail-closed and gated on
-	// VM presence for idempotency.
 	assertWhen := fmt.Sprint(tasks[assertIdx]["when"])
 	if !strings.Contains(assertWhen, "bootwright_vsphere_vm_present") {
 		t.Fatalf("vsphere destroy guard must stay gated on VM presence, got when=%v", tasks[assertIdx]["when"])
@@ -40,18 +33,11 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 	if !strings.Contains(when, "bootwright_vsphere_vm_present") {
 		t.Fatalf("Delete vSphere VM must be gated on VM presence so destroy stays idempotent, got when=%v", deleteTask["when"])
 	}
-	// failed_when: false rewrites the registered .failed to false, so the
-	// presence fact must come from the success-only `instance` return —
-	// gating on .failed makes a missing VM hard-fail the ownership assert.
 	if !strings.Contains(body, "bootwright_vsphere_destroy_info.instance is defined") {
 		t.Fatal("vsphere destroy must derive VM presence from the success-only `instance` return, not the rewritten .failed")
 	}
 }
 
-// TestVSphereFileTasksUseHostnameParameter pins the vsphere_file argument
-// contract: the module accepts `hostname`, not `host`, and the cleanup
-// tasks run with failed_when: false — a wrong parameter name silently
-// leaves uploaded ISOs on the datastore forever.
 func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 	for _, rel := range []string{
 		vsphereSubstrateTaskRoot + "/destroy.yml",
@@ -78,11 +64,6 @@ func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 	}
 }
 
-// TestMachineInfraDestroyDispatchesManagedOSSubstrates pins the managed-OS
-// teardown path: managed-OS machines live in the managed OS install groups,
-// not in bootwright_clusters, and API-native substrates (vsphere) are
-// unreachable through the recorded-resource sweep — the destroy playbook
-// must dispatch their substrate destroy role per machine.
 func TestMachineInfraDestroyDispatchesManagedOSSubstrates(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml")
 	for _, want := range []string{
@@ -114,9 +95,6 @@ func flattenAnsibleTasks(tasks []map[string]any) []map[string]any {
 	return out
 }
 
-// TestVSphereSubstrateRecordsOwnershipAttributesAtCreate pins the
-// recorded-before-rename contract: the apply path records the vCenter
-// identity and ISO staging attributes the destroy path reads back.
 func TestVSphereSubstrateRecordsOwnershipAttributesAtCreate(t *testing.T) {
 	body := readRepoFile(t, vsphereSubstrateTaskRoot+"/ownership.yml")
 	if !strings.Contains(body, "bootwright_ownership_kind: vsphere-machine") {
@@ -133,11 +111,6 @@ func TestVSphereSubstrateRecordsOwnershipAttributesAtCreate(t *testing.T) {
 	}
 }
 
-// TestVSphereTasksPinVenvInterpreterAndRedactCredentials pins two
-// cross-cutting contracts on every community.vmware task: the module must
-// import pyvmomi from the interpreter that runs ansible-playbook (the
-// managed venv) instead of the discovered system python, and tasks that
-// carry vCenter credentials must not log them.
 func TestVSphereTasksPinVenvInterpreterAndRedactCredentials(t *testing.T) {
 	for _, rel := range []string{
 		vsphereSubstrateTaskRoot + "/probe.yml",
@@ -169,11 +142,6 @@ func TestVSphereTasksPinVenvInterpreterAndRedactCredentials(t *testing.T) {
 	}
 }
 
-// TestVSphereCleanupRemovesVirtualMediaDrive pins that full cleanup removes the
-// CD/DVD device entirely (state: absent) rather than only disconnecting the
-// medium (type: none) — a disconnect-only cleanup leaves the drive on the VM,
-// which surfaces as a lingering /dev/sr0 in the guest. The fragile live removal
-// falls back to a disconnect so the medium is at least detached.
 func TestVSphereCleanupRemovesVirtualMediaDrive(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/cleanup.yml")
 	if !strings.Contains(body, "state: absent") {

@@ -5,20 +5,12 @@ import (
 )
 
 type Phase struct {
-	Name        string
-	NeedsRoot   bool
-	Description string
-	// AnsibleLimit is the inventory --limit a single-phase (sub-phase) run
-	// targets; a sub-phase scope inherits it. Empty means no limit (add-ons runs
-	// no ansible). The family scopes carry their own AnsibleLimit directly.
+	Name         string
+	NeedsRoot    bool
+	Description  string
 	AnsibleLimit string
 }
 
-// phases are the five sub-phases of the two families. infra = fabric + machines;
-// clusters = deps + base + add-ons. Each maps to several task playbooks, so a phase
-// carries no single apply playbook — the task graph is authoritative. NeedsRoot is
-// coarse: base and add-ons mix root work (container
-// install, add-on ownership) with non-root work (ceph bootstrap), so it stays true.
 var phases = map[string]Phase{
 	PhaseFabric: {
 		Name:         PhaseFabric,
@@ -51,11 +43,6 @@ var phases = map[string]Phase{
 	},
 }
 
-// PhasesForState used to derive NeedsRoot from substrate kind. In the
-// new shape every machine substrate (libvirt/baremetal/vsphere/kubevirt)
-// converges through provider-host root-escalation in some form, so the
-// default `NeedsRoot: true` is left in place. Kept as a structural hook
-// for future per-phase nuance.
 func PhasesForState(selected []Phase, _ v1alpha1.State) []Phase {
 	return selected
 }
@@ -74,11 +61,6 @@ func UseControllingTTYForWorkflow(selected []Phase, askBecomePass bool) bool {
 	return !askBecomePass && RootPhaseCount(selected) > 0
 }
 
-// SelectedTargetsClusters reports whether the selected phases include cluster
-// bringup work (`deps` builds the agent ISO, `base` boots and waits for install).
-// Used to gate ResolveInstaller: the install_agent role consumes secret-inlined
-// installer inputs under the per-cluster runtime work dir, so apply paths that
-// drive that role must inline secrets before handing off to Ansible.
 func SelectedTargetsClusters(selected []Phase) bool {
 	for _, p := range selected {
 		if p.Name == PhaseDeps || p.Name == PhaseBase {

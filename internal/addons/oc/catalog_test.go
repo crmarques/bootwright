@@ -46,9 +46,6 @@ func cataloguedOLMPlan(timeout string) extensionplan.ExtensionPlan {
 	}
 }
 
-// catalogPhasedRunner reports the CatalogSource connection as pending until
-// readyAfter catalog reads have occurred, then READY. readyAfter <= 0 never
-// becomes READY. CSV reads always report Succeeded.
 type catalogPhasedRunner struct {
 	events       []string
 	catalogReads int
@@ -89,16 +86,13 @@ func (r *catalogPhasedRunner) Run(_ context.Context, _ string, args []string, in
 	}
 }
 
-// TestApplyOLMCatalogGateBeforeSubscription proves a shipped catalogSource is
-// applied first and its READY gate falls between the CatalogSource apply and
-// the Subscription apply — the Subscription never races the catalog startup.
 func TestApplyOLMCatalogGateBeforeSubscription(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
-	runner := &catalogPhasedRunner{readyAfter: 2} // ≥1 pending gate poll before READY
+	runner := &catalogPhasedRunner{readyAfter: 2}
 	if _, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
 		StartedAt: time.Now(), PollInterval: time.Millisecond,
@@ -130,7 +124,7 @@ func TestApplyOLMCatalogGateTimeoutRecordsGateFailureNotApplyFailure(t *testing.
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
-	runner := &catalogPhasedRunner{readyAfter: 0} // never READY
+	runner := &catalogPhasedRunner{readyAfter: 0}
 	plan := cataloguedOLMPlan("50ms")
 	_, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",

@@ -1,17 +1,4 @@
 ---
-# Wire the controller's own resolver to this cluster's managed name resolution
-# BEFORE the DNS gate. openshift-install polls the API from the controller, so
-# the controller must resolve api/api-int/*.apps. The renderer projects
-# bootwright_current_cluster.controllerNameResolvers = [{bindAddress, domain}]
-# for every managed nameResolution component the cluster's node networks
-# reference; external/operator-owned resolution yields no entries and this
-# stage is a no-op.
-#
-# A systemd-resolved routing-domain drop-in is used rather than per-link DNS:
-# the gate runs before nodes boot, when the cluster bridge has no carrier, so a
-# DNS server bound to that bridge link would not be consulted. The bind address
-# is controller-reachable (a local address in the single-host lab), so it
-# answers regardless of link state.
 
 - name: Wire controller resolver to managed name resolution
   when: bootwright_current_cluster.controllerNameResolvers | default([]) | length > 0

@@ -10,13 +10,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestDocsSnippetsStrictDecode guards every YAML snippet shipped under
-// docs/, specs/, and test/e2e/ the way examples are guarded: each fenced
-// yaml block that authors a full document (a top-level apiVersion key)
-// must decode through the same strict loader that reads user input, so a
-// renamed field or a rejected ref form in a snippet fails CI instead of
-// failing the reader's copy-paste. Fragments without apiVersion are
-// illustrative and skipped.
 func TestDocsSnippetsStrictDecode(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	roots := []string{
@@ -62,15 +55,10 @@ func TestDocsSnippetsStrictDecode(t *testing.T) {
 }
 
 type docSnippet struct {
-	// line is the 1-based line number of the opening fence in the
-	// markdown file, so failures point at the authored snippet.
 	line int
 	body string
 }
 
-// fullDocument reports whether the snippet authors at least one complete
-// API document. Indented apiVersion keys (nested manifests, readiness
-// checks) do not count; only a top-level key marks a loadable document.
 func (s docSnippet) fullDocument() bool {
 	for _, line := range strings.Split(s.body, "\n") {
 		if strings.HasPrefix(line, "apiVersion:") {
@@ -80,8 +68,6 @@ func (s docSnippet) fullDocument() bool {
 	return false
 }
 
-// yamlSnippets extracts the contents of every ```yaml fenced code block
-// in the markdown file at path.
 func yamlSnippets(t *testing.T, path string) []docSnippet {
 	t.Helper()
 	data, err := os.ReadFile(path)

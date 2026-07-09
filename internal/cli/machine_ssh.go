@@ -17,9 +17,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// machineSSHDeps isolates the process-boundary calls the ssh commands make — the
-// ssh lookup and the exec that replaces this process — so tests exercise the
-// argv construction without spawning a real ssh client.
 type machineSSHDeps struct {
 	lookPath func(string) (string, error)
 	exec     func(argv0 string, argv []string, env []string) error
@@ -30,17 +27,12 @@ var defaultMachineSSHDeps = machineSSHDeps{
 	exec:     syscall.Exec,
 }
 
-// sshInvocation is the fully resolved ssh command line: the client path, the
-// argv (argv[0] == "ssh"), and the environment to run it with.
 type sshInvocation struct {
 	Path string
 	Args []string
 	Env  []string
 }
 
-// newMachineRshCmd opens an interactive SSH shell on a declared Machine. It is
-// the machine-first entrance to the shared ssh engine; `cluster rsh` is the
-// cluster-first one. Running a single command instead is `machine exec`.
 func newMachineRshCmd() *cobra.Command {
 	name := ""
 	cmd := &cobra.Command{
@@ -69,9 +61,6 @@ private key, and the context host-key trust store recorded by
 	return cmd
 }
 
-// newMachineExecCmd runs a single command on a declared Machine over SSH,
-// returning its output. Its trailing command (after --) is the only difference
-// from `machine rsh`; both share runSSHToMachine.
 func newMachineExecCmd() *cobra.Command {
 	name := ""
 	cmd := &cobra.Command{
@@ -99,9 +88,6 @@ interactive shell instead with 'machine rsh'.
 	return cmd
 }
 
-// runSSHToMachine is the machine-first entry to the shared ssh engine: it loads
-// desired state, then hands off to execSSHToMachine. It never returns on success
-// — exec replaces this process image.
 func runSSHToMachine(cf *commonFlags, machineName string, cmdArgs []string) error {
 	state, err := loadDesiredState(cf)
 	if err != nil {
@@ -110,11 +96,6 @@ func runSSHToMachine(cf *commonFlags, machineName string, cmdArgs []string) erro
 	return execSSHToMachine(cf.ctx, state, machineName, cmdArgs)
 }
 
-// execSSHToMachine is the one ssh resolve+exec engine behind every rsh/exec
-// command (machine- and cluster-first alike): it finds the ssh client, builds
-// the invocation for machineName from already-loaded state, and exec-replaces
-// this process with ssh. cmdArgs empty ⇒ interactive shell; non-empty ⇒ that
-// command runs on the Machine. On success it does not return.
 func execSSHToMachine(ctx workspace.Context, state v1alpha1.State, machineName string, cmdArgs []string) error {
 	sshPath, err := defaultMachineSSHDeps.lookPath("ssh")
 	if err != nil {
@@ -124,21 +105,12 @@ func execSSHToMachine(ctx workspace.Context, state v1alpha1.State, machineName s
 	if err != nil {
 		return failErr(1, err)
 	}
-	// exec replaces this process image with ssh, so on success it never
-	// returns; the caller's terminal becomes ssh's directly.
 	if err := defaultMachineSSHDeps.exec(invocation.Path, invocation.Args, invocation.Env); err != nil {
 		return failErr(1, fmt.Errorf("exec ssh: %w", err))
 	}
 	return nil
 }
 
-// buildMachineSSHInvocation assembles the ssh command line for a Machine from
-// desired state and the context, resolving the same address, user, key, and
-// host-key trust store the Ansible inventory uses — so an operator ssh reaches a
-// Machine exactly the way an apply does. Unlike the inventory it omits
-// BatchMode: an operator shell needs interactive prompts. StrictHostKeyChecking
-// is accept-new so a Machine not yet recorded by `machine trust` still connects
-// (and is recorded) while a changed key is still refused.
 func buildMachineSSHInvocation(state v1alpha1.State, ctx workspace.Context, name string, extraArgs []string, sshPath string) (sshInvocation, error) {
 	machine, ok := stateview.Machine(state, name)
 	if !ok {
@@ -168,9 +140,6 @@ func buildMachineSSHInvocation(state v1alpha1.State, ctx workspace.Context, name
 	return sshInvocation{Path: sshPath, Args: args, Env: os.Environ()}, nil
 }
 
-// machineSSHUser is the login user for a Machine's ssh session: the declared
-// user, or root by default — matching the managed-OS install path's default so
-// `machine ssh` and the installer agree on who they log in as.
 func machineSSHUser(machine v1alpha1.Machine) string {
 	if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
 		return machine.Spec.Access.SSH.User
@@ -178,12 +147,6 @@ func machineSSHUser(machine v1alpha1.Machine) string {
 	return "root"
 }
 
-// machineSSHKnownHostsPath resolves the host-key trust file for a Machine: its
-// per-Machine knownHostsRef secret when set, else the context-wide managed trust
-// store that `machine trust` writes. The ref-vs-managed decision is shared with
-// the inventory renderer through sshtrust.MachineKnownHostsPath so both verify
-// against the same recorded keys; only the managed-store location differs (a live
-// context here, render's PathOptions there).
 func machineSSHKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, ctx workspace.Context) string {
 	return sshtrust.MachineKnownHostsPath(machine, idx, ctx.SecretsDir, sshtrust.KnownHostsPathForContext(ctx.BaseDir))
 }

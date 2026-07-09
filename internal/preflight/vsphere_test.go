@@ -59,10 +59,6 @@ func vsphereCheckTestState(t *testing.T) (v1alpha1.State, string) {
 	return state, t.TempDir()
 }
 
-// TestVSphereVCenterSessionCheck pins the live vCenter probe: a session
-// login with the resolved user:password material, honoring the per-vCenter
-// certificate-verification opt-out, classifying 2xx as OK and 401 as a
-// credentials failure.
 func TestVSphereVCenterSessionCheck(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
 	const sessionID = "session-token-42"
@@ -115,10 +111,6 @@ func TestVSphereVCenterSessionCheck(t *testing.T) {
 	}
 }
 
-// TestVSphereVCenterSessionCheckReadsContextStoreMaterial pins the probe's
-// credential source: generated credentials live encrypted in the context
-// store, so the probe must resolve them like the install-config loader
-// does instead of raw-reading the envelope file.
 func TestVSphereVCenterSessionCheckReadsContextStoreMaterial(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
 	state.Secrets[0].Spec.Source = v1alpha1.SecretSource{
@@ -140,9 +132,6 @@ func TestVSphereVCenterSessionCheckReadsContextStoreMaterial(t *testing.T) {
 	}
 }
 
-// TestVSphereVCenterSessionCheckWarnsWithoutMaterial pins the degraded
-// path: unreadable credential material downgrades the probe to a warning
-// because the secret-material checks already fail loudly.
 func TestVSphereVCenterSessionCheckWarnsWithoutMaterial(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
 	state.Secrets[0].Spec.Source = v1alpha1.SecretSource{File: &v1alpha1.SecretFileSource{Path: "missing-file"}}
@@ -164,9 +153,6 @@ func findCheckByName(checks []Check, name string) (Check, bool) {
 	return Check{}, false
 }
 
-// TestVSphereVCenterInsecureTLSWarns pins that a vCenter probe opting out of
-// certificate verification emits a distinct WARN naming that basic-auth
-// credentials transit unverified TLS, mirroring the BMC two-leg posture.
 func TestVSphereVCenterInsecureTLSWarns(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
 	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
@@ -177,7 +163,6 @@ func TestVSphereVCenterInsecureTLSWarns(t *testing.T) {
 		t.Fatalf("insecure vCenter probe = %+v, want a WARN naming unverified TLS", checks)
 	}
 
-	// A verifying probe emits no such warning.
 	state.InfraProviders[0].Spec.VSphere.VCenters[0].DisableCertificateVerification = false
 	checks = vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
@@ -187,9 +172,6 @@ func TestVSphereVCenterInsecureTLSWarns(t *testing.T) {
 	}
 }
 
-// TestVSphereVCenterDedupesByCredentials pins that two providers sharing a
-// vCenter server with different credentials are each probed, so a bad second
-// credential surfaces at preflight rather than mid-convergence.
 func TestVSphereVCenterDedupesByCredentials(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
 	state.Secrets = append(state.Secrets, v1alpha1.Secret{

@@ -1,5 +1,3 @@
 ---
-# Agent and install ISOs are ~1 GiB; datastore uploads ride the vCenter
-# HTTP folder API, so give slow lab links a generous ceiling.
 bootwright_vsphere_media_upload_timeout: 1800
 bootwright_vsphere_python: "{{ ansible_playbook_python }}"

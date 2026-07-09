@@ -56,10 +56,6 @@ func DirForSecrets(secretsDir string) string {
 	if strings.TrimSpace(secretsDir) == "" {
 		return ""
 	}
-	// The managed trust store is a context artifact, not a named secret, so it
-	// has no portable placeholder form. In placeholder mode return "" and let
-	// callers omit the managed known_hosts / trust-dir entirely; an explicit
-	// known-hosts SecretRef still tokenizes via ResolveMaterialPath.
 	if secret.IsPlaceholderSecretsDir(secretsDir) {
 		return ""
 	}
@@ -117,13 +113,6 @@ func Load(path string) (Store, error) {
 	return store, nil
 }
 
-// ValidateAddressConsistency fails closed when two records pin the same address
-// to different keys. OpenSSH accepts any matching known_hosts entry for a host,
-// so emitting two divergent lines for one address would let a peer present
-// *either* key and still pass StrictHostKeyChecking — silently weakening the
-// trust-on-first-use pin from "exactly this key" to "either key". The store is
-// keyed by Machine name, but two Machines may resolve to one address, so the
-// invariant is enforced here at the single point that writes known_hosts.
 func (s Store) ValidateAddressConsistency() error {
 	type hostKey struct{ keyType, publicKey string }
 	pinned := map[string]hostKey{}

@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestInterfaceAddressResolvesTemplateInterface covers the phantom-interface guard:
-// interfaceAddresses[].interface must name an interface the effective NetworkConfig
-// template declares, else the inject silently mints a typeless phantom carrying the
-// install IP.
 func TestInterfaceAddressResolvesTemplateInterface(t *testing.T) {
 	config := v1alpha1.MachineNetworkConfig{
 		NetworkConfigRef:   v1alpha1.LocalObjectReference{Name: "net"},
@@ -29,9 +25,6 @@ func TestInterfaceAddressResolvesTemplateInterface(t *testing.T) {
 	}
 }
 
-// TestInterfaceAddressFamilyMatchesLiteral covers the family/literal guard: a v6
-// literal with the family omitted (defaults to ipv4) is rejected; matching family is
-// accepted.
 func TestInterfaceAddressFamilyMatchesLiteral(t *testing.T) {
 	v6 := []v1alpha1.MachineAddress{{Name: "ip", Address: "fd00:132::20"}}
 
@@ -104,7 +97,6 @@ func TestValidateUniqueMachineNICMACs(t *testing.T) {
 	if !containsSubstring(validateUniqueMachineNICMACs(clash), "is declared by more than one Machine (worker-1, worker-2)") {
 		t.Fatalf("expected duplicate NIC MAC rejection")
 	}
-	// Case-insensitive: an upper-case copy still collides.
 	caseClash := v1alpha1.State{Machines: []v1alpha1.Machine{
 		machineWithNICMAC("worker-1", "52:54:00:41:31:10"),
 		machineWithNICMAC("worker-2", "52:54:00:41:31:10"),
@@ -150,7 +142,6 @@ func TestVSphereAuthoredMACRangeValidation(t *testing.T) {
 	if containsSubstring(validateMachineHardware("Machine/node spec.hardware", ok, provider, true), "vCenter manually-assigned") {
 		t.Fatalf("in-range vSphere MAC rejected")
 	}
-	// A baremetal provider must not apply the vCenter range.
 	bm := v1alpha1.InfraProvider{Metadata: v1alpha1.Metadata{Name: "rack"}, Spec: v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerBareMetal}}
 	if containsSubstring(validateMachineHardware("Machine/node spec.hardware", bad, bm, true), "vCenter manually-assigned") {
 		t.Fatalf("baremetal provider incorrectly applied vCenter MAC range")
@@ -164,7 +155,6 @@ func TestMachineInstallStringListInternalWhitespace(t *testing.T) {
 	if errs := validateMachineInstallStringList("pkg", []string{"vim", "cephadm"}); len(errs) != 0 {
 		t.Fatalf("clean token list rejected: %v", errs)
 	}
-	// The leading/trailing message still fires unchanged for edge whitespace.
 	if !containsSubstring(validateMachineInstallStringList("pkg", []string{" vim"}), "must not contain leading or trailing whitespace") {
 		t.Fatalf("expected leading-whitespace rejection")
 	}
@@ -192,7 +182,6 @@ func TestMachineInstallOSFloor(t *testing.T) {
 	if !containsSubstring(validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{Family: "centos", Version: "9"}), "is not supported") {
 		t.Fatalf("expected non-rhel family rejection")
 	}
-	// Empty fields are the caller's non-empty checks, not this one's.
 	if errs := validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{}); len(errs) != 0 {
 		t.Fatalf("empty OS rejected here: %v", errs)
 	}

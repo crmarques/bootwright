@@ -11,11 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-// TestStateCheckSurfacesSkippedOwnershipRecords pins the orphan-visibility fix:
-// state-check loads ownership records through the warnings-aware loader (as
-// destroy does), so a record that cannot be decoded is reported as a load
-// warning naming the bad file instead of having its orphan vanish silently from
-// the report whose whole job is to surface orphans.
 func TestStateCheckSurfacesSkippedOwnershipRecords(t *testing.T) {
 	const contextName = "ctx"
 	ownershipDir := t.TempDir()
@@ -51,8 +46,6 @@ func TestStateCheckSurfacesSkippedOwnershipRecords(t *testing.T) {
 	}
 }
 
-// TestStateCheckNoLoadWarningsWhenRecordsClean keeps the silent-on-success
-// contract: a clean ownership store produces no load warnings.
 func TestStateCheckNoLoadWarningsWhenRecordsClean(t *testing.T) {
 	const contextName = "ctx"
 	ownershipDir := t.TempDir()

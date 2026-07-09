@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// TestReplaceInputDirWithAddonsSnapshotsStoreContent proves registered native
-// add-on directories are copied into the input snapshot under
-// add-ons/_store/<name>, so the context stays self-contained after the store
-// changes.
 func TestReplaceInputDirWithAddonsSnapshotsStoreContent(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))

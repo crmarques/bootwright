@@ -11,13 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/addons/hooks"
 )
 
-// validateClusterAddonHooks checks each spec.hooks entry: the lifecycle / run /
-// failureMode / limit vocabularies, the relative-and-contained playbook /
-// vendored-directory / manifest paths (the manifestSet.path convention), a
-// resolvable non-controller target when a playbook is shipped, output shape, and
-// that every manifest token resolves to a declared output, accepted-input
-// property, listed secretRef, or export-details ref. secretRefs are resolved
-// centrally in validateSecretReferences.
 func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterAddon) []string {
 	if len(extension.Spec.Hooks) == 0 {
 		return nil
@@ -54,9 +47,6 @@ func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterA
 			}
 			errs = append(errs, validateHookTarget(prefix, extension, hook, machines, containers, storage)...)
 		} else {
-			// Outputs are only captured from a playbook run, and a target only
-			// selects playbook hosts — on a manifest-only hook both would validate
-			// clean and then fail (or silently do nothing) at apply time.
 			if len(hook.Outputs) > 0 {
 				errs = append(errs, prefix+".outputs requires a playbook (only a playbook run can produce outputs)")
 			}

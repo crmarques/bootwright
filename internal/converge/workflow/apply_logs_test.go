@@ -13,8 +13,6 @@ func TestApplyClusterLogPathLivesBesideRunLog(t *testing.T) {
 	if got != want {
 		t.Fatalf("ApplyClusterLogPath = %q, want %q", got, want)
 	}
-	// The per-cluster log sits in the same directory as the shared run log so a
-	// single run is self-contained.
 	if filepath.Dir(got) != filepath.Dir(ApplyRunLogPath(runsDir, "apply-1")) {
 		t.Fatalf("cluster log %q not beside run log %q", got, ApplyRunLogPath(runsDir, "apply-1"))
 	}

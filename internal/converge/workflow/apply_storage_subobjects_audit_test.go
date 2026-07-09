@@ -16,10 +16,6 @@ func storageSubObjectTestNFSExport(name string) v1alpha1.StorageNFSExport {
 	}
 }
 
-// H3: a StorageNFSExport is an independent sub-object, like a pool. Adding one must
-// not change the owning StorageCluster's convergence hash (else an additive NFS-export
-// change would flip the whole cluster to drift and fail-close a reconcile apply); the
-// export instead enumerates as its own sub-object keyed "StorageNFSExport/<cluster>.<name>".
 func TestStorageClusterHashIgnoresNFSExportSubObject(t *testing.T) {
 	base := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{{Metadata: v1alpha1.Metadata{Name: "demo"}}},
@@ -64,10 +60,6 @@ func TestStorageClusterHashIgnoresNFSExportSubObject(t *testing.T) {
 	}
 }
 
-// M1: a pool references its StoragePlacementPolicy by name, and the renderer folds the
-// policy's replication into the live pool. Editing the referenced policy's replicated
-// size must therefore change the pool sub-object's desired hash, so state-check and the
-// apply drift gate see the change.
 func TestStoragePoolHashTracksReferencedPlacementPolicy(t *testing.T) {
 	pool := storageSubObjectTestPool("p1", 3)
 	pool.Spec.PlacementPolicyRef = v1alpha1.LocalObjectReference{Name: "fast"}
@@ -94,8 +86,6 @@ func TestStoragePoolHashTracksReferencedPlacementPolicy(t *testing.T) {
 		t.Fatal("editing the referenced placement policy's replicated size must change the pool sub-object hash")
 	}
 
-	// A pool with no placementPolicyRef keeps the pool.Spec-only payload: a policy
-	// edit it does not reference must not perturb its hash.
 	plainPool := storageSubObjectTestPool("p2", 3)
 	plainSub := storageSubObject{storageSubObjectKindPool, "demo", "p2"}
 	plainBefore := v1alpha1.State{

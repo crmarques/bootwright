@@ -44,9 +44,6 @@ func assertOrderingDependsOn(t *testing.T, task ApplyTask, dep string) {
 	t.Fatalf("%s orderingDependencies = %v, want to include %q", task.Entry.ID, task.Entry.OrderingDependencies, dep)
 }
 
-// TestPlanProvisioningPlaybookAfterBaseWaitsForClusterInstall verifies an
-// after: base playbook targeting a cluster runs after that cluster's base-phase
-// install (boot + wait), and carries the run: onChange skip and cluster label.
 func TestPlanProvisioningPlaybookAfterBaseWaitsForClusterInstall(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.ProvisioningPlaybooks = []v1alpha1.ProvisioningPlaybook{
@@ -71,9 +68,6 @@ func TestPlanProvisioningPlaybookAfterBaseWaitsForClusterInstall(t *testing.T) {
 	}
 }
 
-// TestPlanProvisioningPlaybookBeforeDepsGatesDepsTasks verifies a before: deps
-// playbook gates the cluster's deps tasks (they depend on it) and itself lands
-// after the previous machines stage.
 func TestPlanProvisioningPlaybookBeforeDepsGatesDepsTasks(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.ProvisioningPlaybooks = []v1alpha1.ProvisioningPlaybook{
@@ -92,9 +86,6 @@ func TestPlanProvisioningPlaybookBeforeDepsGatesDepsTasks(t *testing.T) {
 	}
 }
 
-// TestPlanProvisioningPlaybookBeforeContinueUsesOrderingDependency verifies a
-// before playbook with failureMode: continue gates the phase via a soft ordering
-// dependency (the phase proceeds even if the playbook fails).
 func TestPlanProvisioningPlaybookBeforeContinueUsesOrderingDependency(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	hook := provisioningPlaybook("pre-deps", v1alpha1.ProvisioningStageDeps, v1alpha1.ProvisioningPlaybookTimingBefore,
@@ -114,24 +105,19 @@ func TestPlanProvisioningPlaybookBeforeContinueUsesOrderingDependency(t *testing
 	}
 }
 
-// TestPlanProvisioningPlaybookSkippedOutOfStage verifies a machines-anchored
-// playbook is not planned when the run's --stage does not include machines.
 func TestPlanProvisioningPlaybookSkippedOutOfStage(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.ProvisioningPlaybooks = []v1alpha1.ProvisioningPlaybook{
 		provisioningPlaybook("machines-hook", v1alpha1.ProvisioningStageMachines, v1alpha1.ProvisioningPlaybookTimingAfter,
 			v1alpha1.ProvisioningPlaybookTarget{Clusters: []string{"sno-libvirt"}}),
 	}
-	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state) // deps/base/add-ons only
+	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	assertTaskMissing(t, tasks, "playbook.machines-hook")
 }
 
-// TestPlanProvisioningPlaybookSkippedWhenTargetOutOfScope verifies a playbook
-// whose target resolves to nothing in scope is skipped rather than run fleet-wide
-// (an empty --limit would target every host).
 func TestPlanProvisioningPlaybookSkippedWhenTargetOutOfScope(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.ProvisioningPlaybooks = []v1alpha1.ProvisioningPlaybook{
@@ -145,8 +131,6 @@ func TestPlanProvisioningPlaybookSkippedWhenTargetOutOfScope(t *testing.T) {
 	assertTaskMissing(t, tasks, "playbook.ghost")
 }
 
-// TestPlanProvisioningPlaybookDisabledNotPlanned verifies enabled: false keeps
-// the object out of the plan.
 func TestPlanProvisioningPlaybookDisabledNotPlanned(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	hook := provisioningPlaybook("disabled", v1alpha1.ProvisioningStageBase, v1alpha1.ProvisioningPlaybookTimingAfter,

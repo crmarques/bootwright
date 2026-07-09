@@ -43,9 +43,6 @@ func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
 	}
 }
 
-// TestSecretShowWithoutPartListsAvailableParts verifies that showing an SSH key
-// pair without --part fails with guidance naming the parts it provides instead
-// of a bare "not found", and does not leak the private material.
 func TestSecretShowWithoutPartListsAvailableParts(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
@@ -67,8 +64,6 @@ func TestSecretShowWithoutPartListsAvailableParts(t *testing.T) {
 	}
 }
 
-// TestSecretCheckGatesOnMissingSecrets verifies `secret check` fails while a
-// declared context secret is unset and passes once it is provided.
 func TestSecretCheckGatesOnMissingSecrets(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
@@ -83,8 +78,6 @@ func TestSecretCheckGatesOnMissingSecrets(t *testing.T) {
 	if _, stderr, code = runCLI(t, "secret", "generate"); code != 0 {
 		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
 	}
-	// 001-sno-libvirt also declares a file:-sourced bastion SSH key; provide it
-	// alongside the pull secret so check reports a complete set.
 	sshDir := filepath.Join(os.Getenv("HOME"), ".ssh")
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -111,8 +104,6 @@ func TestSecretCheckGatesOnMissingSecrets(t *testing.T) {
 	}
 }
 
-// TestSecretGenerateRenewReplacesGeneratedMaterial verifies `--renew` rewrites
-// existing generated material instead of reusing it.
 func TestSecretGenerateRenewReplacesGeneratedMaterial(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	pubPath := filepath.Join(ctx.SecretsDir, "sno-libvirt-cluster-admin-ssh-key.pub")

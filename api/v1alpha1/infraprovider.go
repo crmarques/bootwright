@@ -37,9 +37,6 @@ type BareMetalDefaultsSpec struct {
 	BMC *BMCDefaults `yaml:"bmc,omitempty" json:"bmc,omitempty"`
 }
 
-// BMCDefaults are bare-metal BMC settings inherited by every Machine bound to the
-// provider that omits them. CredentialsRef stays per-machine (not defaulted here);
-// TLS and VirtualMedia inherit (see internal/state/desired applyBareMetalBMCDefaults).
 type BMCDefaults struct {
 	CredentialsRef SecretRef        `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
 	TLS            *BMCTLS          `yaml:"tls,omitempty" json:"tls,omitempty"`
@@ -54,10 +51,6 @@ type InfraProviderVSphere struct {
 	MachineProfiles []MachineProfile       `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
 }
 
-// VSphereISOStaging names the datastore location boot and install ISOs are
-// uploaded to. An absent block stages ISOs on the machine's failure-domain
-// topology.datastore under the stock folder; either field overrides its
-// default independently.
 type VSphereISOStaging struct {
 	Datastore string `yaml:"datastore,omitempty" json:"datastore,omitempty"`
 	Folder    string `yaml:"folder,omitempty" json:"folder,omitempty"`
@@ -71,11 +64,6 @@ type InfraProviderKubeVirt struct {
 	MachineProfiles []MachineProfile      `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
 }
 
-// NetworkAttachmentCapability is a presence union over the provider arm
-// vocabulary: exactly one arm is authored and there is no type discriminator
-// because the parent InfraProvider's spec.type already fixes the kind —
-// validation rejects an arm that does not match it. See the package comment
-// for the two union grammars.
 type NetworkAttachmentCapability struct {
 	Name      string                      `yaml:"name" json:"name"`
 	Libvirt   *NetworkAttachmentLibvirt   `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
@@ -92,19 +80,10 @@ type NetworkAttachmentVSphere struct {
 	Portgroup string `yaml:"portgroup" json:"portgroup"`
 }
 
-// NetworkAttachmentKubeVirt and its KubeVirtNetworkRef live in
-// networkattachment_kubevirt.go.
-
 type NetworkAttachmentBareMetal struct {
 	VLAN int `yaml:"vlan,omitempty" json:"vlan,omitempty"`
 }
 
-// MachineProfile is the shared VM shape across libvirt, vSphere, and KubeVirt
-// providers. Fields a provider's adapter does not consume are rejected at
-// validation: template and failureDomainRef are vSphere-only (failureDomainRef
-// must resolve against spec.vsphere.failureDomains[].name; an empty template
-// creates a blank machine and a set template clones from it), and dataDisks
-// are consumed by the libvirt and vsphere adapters.
 type MachineProfile struct {
 	Name             string               `yaml:"name" json:"name"`
 	CPU              int                  `yaml:"cpu,omitempty" json:"cpu,omitempty"`
@@ -128,8 +107,6 @@ type VSphereVCenter struct {
 	DisableCertificateVerification bool      `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
 }
 
-// VSphereFailureDomain places machines on one declared vCenter: server must
-// equal a spec.vsphere.vcenters[].server.
 type VSphereFailureDomain struct {
 	Name     string                 `yaml:"name" json:"name"`
 	Region   string                 `yaml:"region,omitempty" json:"region,omitempty"`
@@ -152,18 +129,10 @@ type VSphereNodeNetworking struct {
 	Internal *VSphereNetworkSubnet `yaml:"internal,omitempty" json:"internal,omitempty"`
 }
 
-// VSphereNetworkSubnet mirrors the openshift install-config vSphere
-// nodeNetworking subnet 1:1: networkSubnetCidr is the upstream key verbatim
-// (hence the lowercased Cidr, deviating from the house CIDR casing) and
-// renders unchanged into install-config.
 type VSphereNetworkSubnet struct {
 	NetworkSubnetCIDR []string `yaml:"networkSubnetCidr,omitempty" json:"networkSubnetCidr,omitempty"`
 }
 
-// BMCEmulationDefaults tunes the BMC emulation a libvirt provider runs for
-// its machines. An absent block keeps emulation on with stock defaults;
-// enabled defaults to true and false is the opt-out, per the package-comment
-// enable/disable idiom.
 type BMCEmulationDefaults struct {
 	Enabled                        *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Protocol                       string   `yaml:"protocol,omitempty" json:"protocol,omitempty"`

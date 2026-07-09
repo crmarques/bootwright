@@ -7,11 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestSNOLibvirtExampleMaterializesDefaults guards the smallest shipped
-// example. The slimmed YAML omits the api-int endpoint, install.platform,
-// spec.networking, distribution.type, and the machine attachmentRef;
-// normalize must materialize every documented default so the effective
-// state matches what the example authored before slimming.
 func TestSNOLibvirtExampleMaterializesDefaults(t *testing.T) {
 	state, err := LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "sno-libvirt-redfish")})
 	if err != nil {

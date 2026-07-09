@@ -7,10 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// A shared-fabric edit (an InfraProvider/InfraComponent/NetworkConfig) must not move
-// a ContainerCluster's install structural hash — otherwise one edit to a shared
-// object refuses the whole fleet as a reinstall. A change to the cluster's own host
-// set still moves it.
 func TestOCPStructuralHashIgnoresFabricEdits(t *testing.T) {
 	proj := func(s v1alpha1.State) string {
 		b, err := json.Marshal(containerClusterInstallStructuralHashVars(s))

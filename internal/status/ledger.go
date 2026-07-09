@@ -26,18 +26,6 @@ func LedgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, e
 	}
 }
 
-// ledgerRetryCommand renders the retry hint by mapping the ledger's recorded
-// target back to the verb and scope flags that produced it, so the hint re-runs
-// the SAME operation:
-//   - a destroy-labelled target (destroy stamps "<stage> destroy", e.g.
-//     "clusters destroy", via ExecuteDestroyGraph) retries as `bootwright
-//     destroy`, never a re-apply of what a teardown just failed to remove;
-//   - a `--through` prefix scope ("through-<phase>") retries with `--through`;
-//   - a family or sub-phase stage (infra|clusters|fabric|machines|deps|base|
-//     add-ons) retries with `--stage`, so a narrow sub-phase rerun keeps its
-//     scope instead of silently widening to a full apply;
-//   - the remaining scope names (all, container-cluster, storage-cluster) carry
-//     no stage flag.
 func ledgerRetryCommand(ledger workflow.RunLedger) string {
 	command := "bootwright apply"
 	if stage, ok := ledgerDestroyStage(ledger.Target); ok {
@@ -56,11 +44,6 @@ func ledgerRetryCommand(ledger workflow.RunLedger) string {
 	return command + " --yes"
 }
 
-// ledgerDestroyStage reports whether a ledger target was written by destroy —
-// destroy stamps "<stage> destroy" (see internal/converge ExecuteDestroyGraph) —
-// and returns the family stage to thread back into the destroy retry ("" for a
-// full destroy, whose target is "all destroy"). Apply targets never carry the
-// "destroy" token, which cleanly separates the two verbs.
 func ledgerDestroyStage(target string) (string, bool) {
 	fields := strings.Fields(target)
 	destroy := false
@@ -82,10 +65,6 @@ func ledgerDestroyStage(target string) (string, bool) {
 	return "", true
 }
 
-// ledgerTargetIsApplyStage reports whether an apply ledger target maps directly
-// to a single `--stage` value (the two families plus the five sub-phases). The
-// remaining apply scope names (all, container-cluster, storage-cluster) and the
-// through-<phase> prefixes are handled separately by ledgerRetryCommand.
 func ledgerTargetIsApplyStage(target string) bool {
 	switch target {
 	case "infra", "clusters", "fabric", "machines", "deps", "base", "add-ons":

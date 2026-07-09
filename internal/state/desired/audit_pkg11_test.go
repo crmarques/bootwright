@@ -8,9 +8,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestValidateStorageServiceIDUniqueness covers the cephadm service-collision
-// guard: two rgw gateways (or two nfs services) sharing a serviceID on one
-// cluster render one last-write-wins service, so the duplicate must be rejected.
 func TestValidateStorageServiceIDUniqueness(t *testing.T) {
 	gw := func(name, cluster, id string) v1alpha1.StorageObjectGateway {
 		return v1alpha1.StorageObjectGateway{
@@ -36,7 +33,6 @@ func TestValidateStorageServiceIDUniqueness(t *testing.T) {
 		t.Fatalf("distinct serviceIDs must pass, got %v", got)
 	}
 
-	// The same serviceID on a different cluster is fine (services are scoped).
 	crossCluster := v1alpha1.State{StorageObjectGateways: []v1alpha1.StorageObjectGateway{
 		gw("east", "ceph-a", "lab"), gw("west", "ceph-b", "lab"),
 	}}
@@ -44,7 +40,6 @@ func TestValidateStorageServiceIDUniqueness(t *testing.T) {
 		t.Fatalf("same serviceID on different clusters must pass, got %v", got)
 	}
 
-	// NFS services collide the same way.
 	nfsDup := v1alpha1.State{StorageNFSExports: []v1alpha1.StorageNFSExport{
 		{Metadata: v1alpha1.Metadata{Name: "a"}, Spec: v1alpha1.StorageNFSExportSpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"}, Ceph: v1alpha1.StorageNFSExportCephSpec{ServiceID: "nas"}}},
 		{Metadata: v1alpha1.Metadata{Name: "b"}, Spec: v1alpha1.StorageNFSExportSpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"}, Ceph: v1alpha1.StorageNFSExportCephSpec{ServiceID: "nas"}}},
@@ -54,34 +49,25 @@ func TestValidateStorageServiceIDUniqueness(t *testing.T) {
 	}
 }
 
-// TestValidateStorageMDSStandbyFeasible covers the MDS standby coherence gate: a
-// placement that cannot supply active+standby daemons is rejected, a sufficient
-// one passes.
 func TestValidateStorageMDSStandbyFeasible(t *testing.T) {
 	twoHosts := []string{"h1", "h2"}
-	// activeCount 2 on a 2-host placement leaves no room for the wanted standby.
 	unsat := v1alpha1.StorageCephFSMetadataServices{ActiveCount: 2, StandbyCountWanted: 1}
 	if got := strings.Join(validateStorageMDSStandbyFeasible("p", unsat, twoHosts), "; "); !strings.Contains(got, "MDS_INSUFFICIENT_STANDBY") {
 		t.Fatalf("unsatisfiable standby intent should be rejected, got %q", got)
 	}
-	// standby-replay needs one daemon per active rank on top of the actives.
 	replay := v1alpha1.StorageCephFSMetadataServices{ActiveCount: 2, StandbyReplay: true}
 	if got := validateStorageMDSStandbyFeasible("p", replay, twoHosts); len(got) == 0 {
 		t.Fatal("standby-replay needing 4 daemons on 2 hosts should be rejected")
 	}
-	// A 3-host placement satisfies activeCount 1 + standbyCountWanted 1.
 	ok := v1alpha1.StorageCephFSMetadataServices{ActiveCount: 1, StandbyCountWanted: 1}
 	if got := validateStorageMDSStandbyFeasible("p", ok, []string{"h1", "h2", "h3"}); len(got) != 0 {
 		t.Fatalf("satisfiable standby intent must pass, got %v", got)
 	}
-	// An unresolved placement is left to the placement validator, not double-reported.
 	if got := validateStorageMDSStandbyFeasible("p", unsat, nil); len(got) != 0 {
 		t.Fatalf("empty placement must be skipped here, got %v", got)
 	}
 }
 
-// TestValidateStorageIngressVIP covers the ingress VIP address/prefix parsing
-// guard shared by the management and RGW ingresses.
 func TestValidateStorageIngressVIP(t *testing.T) {
 	if got := validateStorageIngressVIP("p", "10.0.0.9", 24); len(got) != 0 {
 		t.Fatalf("valid IPv4 VIP must pass, got %v", got)
@@ -97,8 +83,6 @@ func TestValidateStorageIngressVIP(t *testing.T) {
 	}
 }
 
-// TestValidateManagementIngressStretchCoverage covers extending the stretch
-// data-site coverage rule to the HA dashboard VIP placement.
 func TestValidateManagementIngressStretchCoverage(t *testing.T) {
 	cluster := storageValidationState().StorageClusters[0]
 	mgmtWith := func(sites []string) *v1alpha1.StorageCephManagement {
@@ -122,8 +106,6 @@ func TestValidateManagementIngressStretchCoverage(t *testing.T) {
 	}
 }
 
-// TestValidateStretchDataSitesDerivedMessage covers the enriched diagnostic when
-// dataSites (often derived) does not resolve to exactly two sites.
 func TestValidateStretchDataSitesDerivedMessage(t *testing.T) {
 	cluster := storageValidationState().StorageClusters[0]
 	cluster.Spec.Ceph.Topology.Stretch.DataSites = []string{"dc1", "dc2", "dc4"}
@@ -133,8 +115,6 @@ func TestValidateStretchDataSitesDerivedMessage(t *testing.T) {
 	}
 }
 
-// TestEndpointNetworkMatchesDedupesByConfig covers the overlapping-CIDR fix: two
-// overlapping machineNetwork CIDRs of ONE owner count as a single match, not two.
 func TestEndpointNetworkMatchesDedupesByConfig(t *testing.T) {
 	ci := v1alpha1.ClusterInstall{
 		Metadata: v1alpha1.Metadata{Name: "c"},
@@ -151,8 +131,6 @@ func TestEndpointNetworkMatchesDedupesByConfig(t *testing.T) {
 	}
 }
 
-// TestVIPCollidesWithNodeInstallIP covers rejecting a multi-node API/ingress VIP
-// that equals a node's static install IP, while leaving SNO (single node) alone.
 func TestVIPCollidesWithNodeInstallIP(t *testing.T) {
 	node := func(name, cidr, addr string, withIface bool) v1alpha1.InstallMachine {
 		m := v1alpha1.InstallMachine{
@@ -179,7 +157,6 @@ func TestVIPCollidesWithNodeInstallIP(t *testing.T) {
 		t.Fatalf("VIP equal to a node IP should be rejected on a multi-node cluster, got %q", got)
 	}
 
-	// SNO: the single node's own IP is the legitimate endpoint address.
 	sno := v1alpha1.ClusterInstall{
 		Metadata: v1alpha1.Metadata{Name: "sno"},
 		Machines: []v1alpha1.InstallMachine{node("m0", "192.168.140.0/24", "192.168.140.20", true)},
@@ -189,9 +166,6 @@ func TestVIPCollidesWithNodeInstallIP(t *testing.T) {
 	}
 }
 
-// TestNormalizeClusterNetworkFamilyDefaults covers deriving the cluster/service
-// network defaults from the machine-network family so a v6-only estate does not
-// silently get IPv4 defaults.
 func TestNormalizeClusterNetworkFamilyDefaults(t *testing.T) {
 	build := func(cidr string) v1alpha1.State {
 		return v1alpha1.State{
@@ -228,8 +202,6 @@ func TestNormalizeClusterNetworkFamilyDefaults(t *testing.T) {
 	}
 }
 
-// TestValidateEnvironmentResourcesDuplicates covers the trimmed validator: the
-// path-shape arms moved to load, leaving the cross-entry duplicate check.
 func TestValidateEnvironmentResourcesDuplicates(t *testing.T) {
 	dup := v1alpha1.Environment{
 		Metadata: v1alpha1.Metadata{Name: "env"},
@@ -247,8 +219,6 @@ func TestValidateEnvironmentResourcesDuplicates(t *testing.T) {
 	}
 }
 
-// TestValidateClusterAddonOLMRejectsInlineSecret covers rejecting plaintext
-// secret bytes inlined into an OLM custom resource.
 func TestValidateClusterAddonOLMRejectsInlineSecret(t *testing.T) {
 	addonWith := func(cr map[string]any) v1alpha1.ClusterAddon {
 		return v1alpha1.ClusterAddon{
@@ -275,7 +245,6 @@ func TestValidateClusterAddonOLMRejectsInlineSecret(t *testing.T) {
 	if got := strings.Join(validateClusterAddonOLM(data), "; "); !strings.Contains(got, "must not embed secret bytes") {
 		t.Fatalf("inline Secret data should be rejected, got %q", got)
 	}
-	// A non-Secret custom resource carrying data/stringData is untouched.
 	cm := addonWith(map[string]any{
 		"apiVersion": "v1", "kind": "ConfigMap",
 		"metadata": map[string]any{"name": "cfg"},

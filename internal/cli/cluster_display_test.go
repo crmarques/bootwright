@@ -8,10 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// multidcDisplayState mirrors the canonical mixed fleet: one Ceph storage
-// cluster, two bare-metal OpenShift parents, and two KubeVirt-hosted children,
-// each child's nodes backed by a KubeVirt provider whose HostClusterRef names
-// its parent.
 func multidcDisplayState() v1alpha1.State {
 	provider := func(name, typ, host string) v1alpha1.InfraProvider {
 		spec := v1alpha1.InfraProviderSpec{Type: typ}
@@ -97,8 +93,6 @@ func TestApplyRunFrameTitlesUseSubstrateDescriptor(t *testing.T) {
 	}, time.Now())
 
 	frame := applyRunFrame(ledger, displays)
-	// No infra task here, so the parent group leads, ordered before its child, and
-	// each title names the substrate.
 	if frame.Groups[0].Title != "dc1-metal-ocp (OpenShift · bare metal)" {
 		t.Fatalf("parent group title = %q", frame.Groups[0].Title)
 	}
@@ -114,12 +108,10 @@ func TestApplyBlockedReasonNamesHostParent(t *testing.T) {
 		{ID: "wait.dc1-child-ocp", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install dc1-child-ocp", Cluster: "dc1-child-ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"boot.dc1-child-ocp"}},
 	}, time.Now())
 
-	// The directly-blocked child task points at the failed host parent.
 	boot, _ := ledger.Task("boot.dc1-child-ocp")
 	if got := applyBlockedReason(ledger, boot); got != "host cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
 		t.Fatalf("blocked reason = %q", got)
 	}
-	// A transitively-blocked child task still resolves to the parent, not the sibling.
 	wait, _ := ledger.Task("wait.dc1-child-ocp")
 	if got := applyBlockedReason(ledger, wait); got != "host cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
 		t.Fatalf("transitive blocked reason = %q", got)

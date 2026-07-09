@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// The continue-mode refusal states, per object, the worst-case consequence of a
-// rebuild and the exact remedy (revert, or the --override path) — the "unmapped change
-// = stop with guidance" contract. A managed-OS reinstall names disk wipe; a
-// StorageCluster names the OSD wipe; both point at revert-or-override.
 func TestContinueDriftRefusalNamesConsequenceAndRemedy(t *testing.T) {
 	runsDir := t.TempDir()
 	osMachine := classifyTask("os.demo", ApplyTaskKindManagedMachineOS, "demo")
@@ -26,9 +22,9 @@ func TestContinueDriftRefusalNamesConsequenceAndRemedy(t *testing.T) {
 	}
 	msg := err.Error()
 	for _, want := range []string{
-		"os.demo", "disks wiped", // machine reinstall consequence
-		"StorageCluster/demo", "OSD data", // Ceph wipe consequence
-		"revert", "--override", // the remedy
+		"os.demo", "disks wiped",
+		"StorageCluster/demo", "OSD data",
+		"revert", "--override",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("refusal must contain %q: %v", want, msg)

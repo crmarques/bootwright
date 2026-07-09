@@ -10,19 +10,6 @@ import (
 
 const bootwrightCollectionRoleRoot = "ansible/collections/ansible_collections/bootwright/core/roles"
 
-// assertRedactsByDefault asserts a task's no_log still hides output when the
-// operator has not opted into --verbose: either the literal bool true, or a
-// template gated on bootwright_no_log defaulting to redact. Qualifying
-// directives are rewritten from the literal `true` into either
-//
-//	{{ bootwright_no_log | default(true) | bool }}
-//
-// or, for credential-gated tasks,
-//
-//	{{ (bootwright_no_log | default(true) | bool) and (<original gate>) }}
-//
-// so the security guarantee — redact by default when the var is unset — is
-// preserved while still allowing an explicit opt-out.
 func assertRedactsByDefault(t *testing.T, name string, noLog any) {
 	t.Helper()
 	if noLog == true {
@@ -201,9 +188,6 @@ func findAnsibleTaskIndex(tasks []map[string]any, name string) int {
 	return -1
 }
 
-// findAnsibleTaskByPrefix matches tasks whose name begins with prefix, for
-// tasks that append a dynamic suffix (e.g. a "({{ ... }} configured)" count)
-// to their name.
 func findAnsibleTaskByPrefix(t *testing.T, tasks []map[string]any, prefix string) int {
 	t.Helper()
 	for i, task := range tasks {

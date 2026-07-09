@@ -79,9 +79,6 @@ func ProviderMachineProfiles(provider v1alpha1.InfraProvider) []v1alpha1.Machine
 	return nil
 }
 
-// VSphereProfileFailureDomain resolves the failure domain a vSphere profile
-// places machines on: the named one, or the sole declared domain when the
-// ref is empty (validation requires the ref on multi-domain providers).
 func VSphereProfileFailureDomain(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.MachineProfile) (v1alpha1.VSphereFailureDomain, bool) {
 	if spec == nil {
 		return v1alpha1.VSphereFailureDomain{}, false
@@ -100,8 +97,6 @@ func VSphereProfileFailureDomain(spec *v1alpha1.InfraProviderVSphere, profile v1
 	return v1alpha1.VSphereFailureDomain{}, false
 }
 
-// VSphereVCenterForServer selects the declared vCenter a failure domain's
-// server names (validation requires the match).
 func VSphereVCenterForServer(spec *v1alpha1.InfraProviderVSphere, server string) (v1alpha1.VSphereVCenter, bool) {
 	if spec == nil {
 		return v1alpha1.VSphereVCenter{}, false
@@ -151,9 +146,6 @@ func InstallMachineFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine
 	return clusterNodeFromMachine(machine)
 }
 
-// StorageClusterArtifactInstall builds the ClusterInstall view used by storage
-// managed-OS rendering. Artifact endpoint intent stays on the selected
-// MachineInstallProfile consumers.
 func StorageClusterArtifactInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster) (v1alpha1.ClusterInstall, bool) {
 	if cluster.Spec.Ceph == nil {
 		return v1alpha1.ClusterInstall{}, false
@@ -291,14 +283,6 @@ func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInstall) 
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		// The first machineNetwork entry decides OCP's primary IP family, and
-		// the installer emits CIDRs in this traversal order. When a cluster's
-		// v4 and v6 machine networks live in separate NetworkConfig objects,
-		// order any object carrying an IPv4 machineNetwork ahead of a v6-only
-		// one so the primary family defaults to IPv4 regardless of how the
-		// objects happen to be named (a rename must not silently flip it).
-		// Same-family objects fall back to name order, so single-stack fixtures
-		// are unaffected.
 		if vi, vj := networkConfigHasIPv4(out[i]), networkConfigHasIPv4(out[j]); vi != vj {
 			return vi
 		}

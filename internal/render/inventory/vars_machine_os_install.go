@@ -18,10 +18,6 @@ import (
 
 var managedOSSourceIDUnsafeRE = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
-// managedOSSSHLoginPasswordHash is a stable SHA-512 crypt hash of a discarded
-// high-entropy random value. Anaconda must leave the account unlocked for
-// OpenSSH/PAM to accept public-key auth, while sshd password auth remains
-// controlled separately by spec.customizations.ssh.passwordAuthentication.
 const managedOSSSHLoginPasswordHash = "$6$bwmossshlogin$Ol7r6C1RKzV8XE5IhNM4r2XrCBVflPt5NX.xLZ51oqBSBQMN/cmkAP0nHExtyEB7NiXgGuYuU9PQwUDnJIo.x."
 
 func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName string, paths PathOptions) map[string]any {
@@ -42,23 +38,12 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	env := stateview.Environment(state)
 	idx := secret.NewIndex(state)
-	// Resolve the machineOSInstall proxy once. Each install fetch (rhsm, the
-	// install-tree url, each repo) is proxied only when its target host is not
-	// bypassed by no_proxy — Anaconda has no no_proxy directive, so the bypass
-	// decision is made here at render time and threaded down per directive.
 	var eff *proxy.Effective
 	if env != nil {
 		eff = proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall))
 	}
 	packageSource := profile.Spec.Installer.Anaconda.PackageSource
 	sourceURL, imageRepositories, rhsm := machineInstallPackageSourceVars(packageSource, state.Entitlements, idx, paths.SecretsDir, eff)
-	// hostedTree overrides the package source: bootwright extracts fromMedia (a
-	// DVD) into the selected artifact server and the installing node fetches
-	// GPG-signed packages from that tree over hostedTree.artifactServerEndpoint.
-	// The DVD .treeinfo already advertises BaseOS + AppStream, so one tree URL
-	// replaces any repositories. An unresolvable tree leaves sourceURL empty so
-	// the boot ISO install fails loudly (cdrom on a package-less ISO) instead of
-	// mis-installing; validation rejects that up front.
 	var hostedTree map[string]any
 	if packageSource.GetHostedTree() != nil {
 		treeURL, tree, _ := machineOSHostedTreeVars(state, packageSource)
@@ -77,9 +62,6 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		}
 	}
 	if len(rhsm) > 0 {
-		// The rhsm registration and content fetch target the Satellite (when set)
-		// or the public Red Hat CDN; proxy them only when that host is not bypassed
-		// by no_proxy, so an internal Satellite in no_proxy registers directly.
 		if installTargetProxied(eff, rhsmRegistrationHost(rhsm)) {
 			rhsm["proxied"] = true
 		}
@@ -123,10 +105,6 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"user":           sshUser,
 			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
 		}
-		// The managed trust store has no portable form: in placeholder mode these
-		// resolve empty, so omit the keys rather than emit blank values (matching
-		// how machineInventoryEntry / storageClusterSSHVars already guard them). An
-		// explicit known-hosts SecretRef still tokenizes via machineKnownHostsPath.
 		if knownHosts := machineKnownHostsPath(machine, paths); knownHosts != "" {
 			ssh["knownHostsPath"] = knownHosts
 		}
@@ -136,27 +114,16 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		out["ssh"] = ssh
 	}
 	desiredNetwork := machineInstallDesiredNetwork(state, ci, m, clusterName)
-	// The post-install network task applies the desired state with nmstatectl, so
-	// the tool must be on the installed system. Inject it into the install package
-	// set before the marker is computed: adding a package is an install-content
-	// change, so it belongs in the marker (enabling post-install networking on an
-	// owned node re-triggers the install that lays nmstate down).
 	if len(desiredNetwork) > 0 {
 		ensureKickstartPackage(out, "nmstate")
 	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
-	// The desired network state itself is applied idempotently every run and is
-	// deliberately NOT part of the install marker: a network change re-applies
-	// nmstate as a day-2 operation and must never force a destructive OS reinstall.
 	if len(desiredNetwork) > 0 {
 		out["network"] = map[string]any{"desiredState": desiredNetwork}
 	}
 	return out
 }
 
-// ensureKickstartPackage adds pkg to the kickstart install package list when not
-// already present, so a feature that needs a tool on the installed system can
-// require it without every MachineInstallProfile having to list it.
 func ensureKickstartPackage(osInstall map[string]any, pkg string) {
 	kickstart, ok := osInstall["kickstart"].(map[string]any)
 	if !ok {
@@ -182,12 +149,6 @@ func managedOSSSHUser(machine v1alpha1.Machine) string {
 	return "root"
 }
 
-// machineOSInstallImageVars renders the normalize-materialized mediaType
-// as-is; the boot.iso filename derivation lives in the normalize phase. It also
-// owns the shared-source dedup identity (sourceId) and the effective source ISO
-// path: every machine in an OS group installs from one source ISO staged once
-// per (cluster, image), so the role consumes these rather than re-deriving the
-// identity and path policy itself.
 func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool, clusterName string) map[string]any {
 	normalizedChecksum, _ := media.NormalizeSHA256(checksum)
 	useSourceOnTarget := sourceOnTarget && (resolved.Key != "" || resolved.Kind == "file")
@@ -220,10 +181,6 @@ func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum stri
 	return out
 }
 
-// managedOSSourceID is the shared-source dedup identity: the sha256 checksum
-// when known (already normalized, no sha256: prefix), else the validated media
-// key, else a sanitized original reference (a URL or file path has characters a
-// filename cannot carry), else "source".
 func managedOSSourceID(checksum, key, original string) string {
 	if checksum != "" {
 		return checksum
@@ -238,12 +195,6 @@ func managedOSSourceID(checksum, key, original string) string {
 }
 
 func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.InstallMachine) bool {
-	// Resolve the host that actually drives the managed-OS install, mirroring
-	// managedOSTaskHost: libvirt machines install on their provider host, while
-	// API-native substrates (KubeVirt, vSphere) and bare-metal over the BMC all
-	// run from the controller (localhost). When that host is the controller, a
-	// file/media-library source already lives on it, so the copy-to-provider
-	// step is pure waste — skip it and point mkksiso at the source in place.
 	host := managedOSTaskHost(state, m)
 	machine, ok := stateview.Machine(state, host)
 	if !ok {
@@ -252,9 +203,6 @@ func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.Instal
 	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
 }
 
-// machineOSMediaType derives the render-only image.mediaType the Ansible role
-// keys its mkksiso path on: a full DVD (no packageSource) carries its packages,
-// anything with a packageSource is a small boot ISO.
 func machineOSMediaType(source *v1alpha1.MachineInstallPackageSource) string {
 	if source == nil {
 		return v1alpha1.MachineImageMediaTypeDVD
@@ -262,11 +210,6 @@ func machineOSMediaType(source *v1alpha1.MachineInstallPackageSource) string {
 	return v1alpha1.MachineImageMediaTypeBoot
 }
 
-// machineInstallPackageSourceVars projects the packageSource arm into the
-// kickstart install-source vars (sourceURL, repositories, rhsm): mirror →
-// BaseURL + repo entries; redhatCDN → resolved rhsm; nil (a full DVD) and
-// hostedTree both return empty (nil installs via cdrom, and the caller overlays
-// the derived tree URL for hostedTree).
 func machineInstallPackageSourceVars(source *v1alpha1.MachineInstallPackageSource, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string, eff *proxy.Effective) (string, []any, map[string]any) {
 	rhsm := map[string]any{}
 	if source == nil {
@@ -293,10 +236,6 @@ func machineInstallPackageSourceVars(source *v1alpha1.MachineInstallPackageSourc
 	return "", nil, rhsm
 }
 
-// rhsmSatelliteVars projects a resolved corporate Satellite redirect into the
-// nested install/day-2 vars map (hostname, contentBaseURL, caPath). It returns
-// nil when registration targets the public Red Hat CDN, so callers omit the
-// satellite key entirely and existing CDN renders stay byte-identical.
 func rhsmSatelliteVars(satellite entitlements.RHSMSatellite) map[string]any {
 	if satellite.Hostname == "" {
 		return nil
@@ -318,8 +257,6 @@ func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository, eff
 			"id":      repo.ID,
 			"baseURL": repo.BaseURL,
 		}
-		// Omit proxied when the repo host is bypassed (or there is no proxy) so a
-		// no-proxy render stays byte-identical; the kickstart defaults it to false.
 		if installTargetProxied(eff, repo.BaseURL) {
 			entry["proxied"] = true
 		}
@@ -328,11 +265,6 @@ func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository, eff
 	return out
 }
 
-// machineInstallHostname is the OS hostname written at install. For a cluster
-// node it mirrors the hostname its cluster topology registers (normalize
-// already resolved that to the FQDN, an explicit pin, or the bare name), so the
-// installed hostname can never drift from the name cephadm/the installer
-// expects. A machine no cluster node-binds keeps its bare name.
 func machineInstallHostname(state v1alpha1.State, machine v1alpha1.Machine) string {
 	if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok {
 		return hostname
@@ -348,10 +280,6 @@ func machineInstallStorageVars(profile v1alpha1.MachineInstallProfile, state v1a
 			rootDevice = hints.DeviceName
 		}
 	}
-	// ks.cfg.j2 reads only storage.rootDisk (clearpart --all is unconditional, so
-	// customizations.storage.wipe is inert, and rootDevice is unused). Emitting only
-	// the consumed key keeps the vars contract - and the install marker hash derived
-	// from it - free of dead, misleading fields.
 	out := map[string]any{
 		"rootDisk": strings.TrimPrefix(rootDevice, "/dev/"),
 	}

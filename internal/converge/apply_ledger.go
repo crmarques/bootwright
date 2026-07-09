@@ -7,9 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// StaleApplyCancellation reports that a stale in-flight apply ledger was
-// marked cancelled before a new mutation; the CLI turns it into the
-// user-facing warning.
 type StaleApplyCancellation struct {
 	RunID  string
 	Detail string

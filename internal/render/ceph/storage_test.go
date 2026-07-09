@@ -35,8 +35,6 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 		t.Fatalf("storage cluster asset = %q, want ceph-storage", asset.StorageClusterName)
 	}
 
-	// public_network has no cephadm bootstrap flag; it is seeded via the
-	// rendered initial ceph.conf handed to `cephadm bootstrap --config`.
 	if asset.BootstrapConfPath == "" {
 		t.Fatal("BootstrapConfPath empty for a cluster with publicCIDRs")
 	}
@@ -73,8 +71,6 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	if !reflect.DeepEqual(monHosts, wantMons) {
 		t.Fatalf("mon hosts = %v, want %v", monHosts, wantMons)
 	}
-	// Placement defaults resolve from topology roles (and sites narrowing);
-	// these must match the previously explicit host lists byte for byte.
 	allServiceHosts := []string{"ceph-dc1-0.ceph-storage.bootwright.test", "ceph-dc1-1.ceph-storage.bootwright.test", "ceph-dc1-2.ceph-storage.bootwright.test", "ceph-dc2-0.ceph-storage.bootwright.test", "ceph-dc2-1.ceph-storage.bootwright.test", "ceph-dc2-2.ceph-storage.bootwright.test"}
 	mds := serviceDoc(t, lateServices, "mds", "odf-cephfs")
 	if got := stringSlice(t, mds["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, allServiceHosts) {
@@ -105,8 +101,6 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	operations := readYAMLDoc(t, asset.OperationsPath)
 	ops := operations["operations"].([]any)
 	assertOperationPhase(t, ops, "create-crush-rule-stretch-rule", "topology")
-	// The stretch rule is a structured operation (no argv): the role compiles
-	// the two-step rule into the CRUSH map, keyed on the stretch-crush-rule kind.
 	assertOperationIdempotency(t, ops, "create-crush-rule-stretch-rule", "stretch-crush-rule", "stretch-rule")
 	assertOperationCommand(t, ops, "set-election-strategy", []string{"ceph", "mon", "set", "election_strategy", "connectivity"})
 	assertOperationCommand(t, ops, "set-public-network", []string{"ceph", "config", "set", "global", "public_network", "192.168.141.0/24,192.168.142.0/24,192.168.143.0/24"})
@@ -118,9 +112,6 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")
 	assertOperationCommand(t, ops, "create-cephfs-odf-cephfs", []string{"ceph", "fs", "new", "odf-cephfs", "odf-cephfs-metadata", "odf-cephfs-data"})
 	assertOperationCommand(t, ops, "set-cephfs-max-mds-odf-cephfs", []string{"ceph", "fs", "set", "odf-cephfs", "max_mds", "2"})
-	// The compiled data-foundation credential producer is gone: the ODF↔Ceph
-	// integration ships as addon content now, so no data-foundation op family
-	// may render.
 	for _, item := range ops {
 		op := item.(map[string]any)
 		if op["phase"] == "data-foundation" {
@@ -129,9 +120,6 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	}
 	assertOperationPhase(t, ops, "create-rgw-admin-user-odf-rgw", "object-gateway")
 	assertOperationIdempotency(t, ops, "create-rgw-admin-user-odf-rgw", "rgw-user", "bootwright-odf-rgw-admin")
-	// The standalone gateway does not capture the admin keys, so the op must
-	// carry an explicit redaction flag to keep `user create`/`user info` output
-	// (keys[].access_key/secret_key) out of the apply logs.
 	assertOperationNoLog(t, ops, "create-rgw-admin-user-odf-rgw")
 }
 
@@ -201,8 +189,6 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := clusterSSH["knownHostsPath"]; got != filepath.Join("/context", "trust", "ssh", "known_hosts") {
 		t.Fatalf("cluster ssh known hosts = %v", got)
 	}
-	// The compiled data-foundation consumer is deleted: the storage cluster
-	// vars must no longer fan bindings or a capture result path to Ansible.
 	if _, ok := cluster["dataFoundationBindings"]; ok {
 		t.Fatalf("storage cluster vars still carry dataFoundationBindings: %#v", cluster["dataFoundationBindings"])
 	}
@@ -494,10 +480,6 @@ func assertOperationIdempotency(t *testing.T, ops []any, name, kind, resourceNam
 	t.Fatalf("operation %s not found in %#v", name, ops)
 }
 
-// TestCephadmLateServicesRendersManagementHA covers the native HA management
-// surface: spec.ceph.management renders a mgmt-gateway (reverse-proxy, bare VIP)
-// and an ingress in keepalive_only mode (CIDR VIP, mgmt-gateway backend) on the
-// resolved ingress hosts. This is the IBM Storage Ceph supported pattern.
 func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
@@ -563,9 +545,6 @@ func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
 	}
 }
 
-// docsFromSpecs round-trips rendered service specs through YAML so the in-memory
-// []any/[]string values become the []any/map[string]any shapes the doc helpers
-// expect — and so the assertions exercise the actual serialized output.
 func docsFromSpecs(t *testing.T, specs []any) []map[string]any {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "specs.yaml")

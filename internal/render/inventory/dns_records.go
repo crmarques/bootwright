@@ -16,8 +16,6 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 	hostRecords := []dnsmasqRecord{}
 	domainRecords := []dnsmasqRecord{}
 	baseDomain := clusterBaseDomain(state)
-	// Container-cluster endpoints (api/api-int/apps) plus any additional ingress
-	// hosts pinned to the cluster ingress VIP.
 	for _, ocp := range state.ContainerClusters {
 		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil || !clusterUsesNameResolution(state, ci, entryName) {
@@ -51,22 +49,12 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 			}
 		}
 	}
-	// Node A records: every machine this resolver serves, published by its
-	// registered FQDN and by its bare name, so the hostname cephadm and the
-	// installer use — e.g. the alertmanager host the Ceph dashboard dials —
-	// resolves cluster-wide, for storage-only environments as much as OpenShift.
 	hostRecords = append(hostRecords, nodeHostRecords(state, entryName)...)
-	// Object-gateway S3 endpoints: the gateway owns both its public dnsName and
-	// its ingress VIP, so publish that mapping for resolvers its cluster uses.
 	hostRecords = append(hostRecords, gatewayHostRecords(state, entryName)...)
-	// Ceph management VIP: the storage cluster owns its management dnsName and
-	// the mgmt-gateway ingress VIP, so publish that mapping the same way.
 	hostRecords = append(hostRecords, managementHostRecords(state, entryName)...)
 	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords)
 }
 
-// nodeHostRecords builds the FQDN and bare-name A records for every machine
-// whose network config references the named resolver.
 func nodeHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 	var records []dnsmasqRecord
 	for _, machine := range state.Machines {
@@ -85,8 +73,6 @@ func nodeHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 	return records
 }
 
-// gatewayHostRecords publishes each object gateway's public dnsName at its first
-// ingress VIP, for resolvers used by the gateway's storage cluster.
 func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 	var records []dnsmasqRecord
 	for _, gw := range state.StorageObjectGateways {
@@ -103,8 +89,6 @@ func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord 
 	return records
 }
 
-// managementHostRecords publishes each storage cluster's management dnsName at
-// its mgmt-gateway ingress VIP, for resolvers the cluster's nodes use.
 func managementHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 	var records []dnsmasqRecord
 	for _, sc := range state.StorageClusters {
@@ -135,12 +119,6 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	return false
 }
 
-// ClusterControllerNameResolvers projects the managed dnsmasq resolvers a
-// cluster's node networks reference, as {bindAddress, domain} pairs. The
-// controller wires its own resolver to these before the agent-install gate so
-// `openshift-install` (which polls the API from the controller) resolves the
-// cluster endpoints. Only managed entries with a usable bind address are
-// returned; external/operator-owned name resolution stays the operator's job.
 func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
 	env := stateview.Environment(state)
 	if env == nil {
@@ -172,9 +150,6 @@ func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterIns
 			continue
 		}
 		bind := component.Spec.NameResolution.BindAddress
-		// Wildcard binds ("", 0.0.0.0, ::) are not routable resolver
-		// addresses; emitting DNS=:: into the controller's
-		// systemd-resolved drop-in leaves it unable to resolve api/api-int.
 		if bind == "" || bind == "0.0.0.0" || bind == "::" || seen[bind] {
 			continue
 		}
@@ -187,8 +162,6 @@ func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterIns
 	return out
 }
 
-// machineUsesNameResolution reports whether a machine's network config — named
-// or inline — references the named resolver.
 func machineUsesNameResolution(state v1alpha1.State, machine v1alpha1.Machine, entryName string) bool {
 	if entryName == "" {
 		return false

@@ -23,14 +23,6 @@ type ManifestResource struct {
 	Content    []byte
 }
 
-// OLMResources is the full ordered resource list for an OLM add-on: the
-// shipped CatalogSource (if any), the operator-install set (Namespace,
-// OperatorGroup, Subscription), then the declared custom resources. It is the
-// canonical ordering that DesiredHash folds into the add-on hash, so callers
-// that need the groups separately (the apply path gates on the catalog's
-// READY connection before the Subscription and on the operator's CSV before
-// the custom resources) use CatalogResources + OperatorResources +
-// CustomResources, whose concatenation is byte-identical to this.
 func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	catalog, err := CatalogResources(extension)
 	if err != nil {
@@ -47,10 +39,6 @@ func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	return append(append(catalog, operator...), custom...), nil
 }
 
-// CatalogResources returns the add-on's shipped CatalogSource (empty when the
-// add-on subscribes to a catalog the cluster already serves). It lands in the
-// subscription's sourceNamespace, ahead of everything else, so the catalog
-// registry can start while the operator-install set applies.
 func CatalogResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	if extension.Spec.OLM == nil || extension.Spec.OLM.CatalogSource == nil {
 		return nil, nil
@@ -84,9 +72,6 @@ func CatalogResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, erro
 	})}, nil
 }
 
-// OperatorResources returns the operator-install set (Namespace if create,
-// OperatorGroup if set, then the Subscription) in OLMResources order. The
-// Subscription is always present.
 func OperatorResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	if extension.Spec.OLM == nil {
 		return nil, nil
@@ -145,7 +130,6 @@ func OperatorResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, err
 	return out, nil
 }
 
-// CustomResources returns only the spec.olm.customResources, in declared order.
 func CustomResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	if extension.Spec.OLM == nil {
 		return nil, nil
@@ -179,14 +163,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 			Prune:           policy.Prune,
 			ContinueOnError: policy.ContinueOnError,
 		},
-		// Binding inputs are part of the add-on's desired state (hooks and
-		// effects resolve against them); omitempty keeps recorded hashes stable
-		// for add-ons whose bindings supply none.
-		Inputs: inputs,
-		// The Extension field already serializes the hook specs; HookDigest folds
-		// in the shipped content (playbook, vendored trees, manifest templates) so
-		// editing a shipped playbook without touching the add-on YAML still moves
-		// the desired hash and re-runs the add-on.
+		Inputs:     inputs,
 		HookDigest: hookContentDigest(extension),
 	}
 	switch extension.Spec.Type {
@@ -269,9 +246,6 @@ func stringValue(value any) string {
 	return s
 }
 
-// hookContentDigest folds every hook's shipped-content digest into one value for
-// the add-on desired hash, so a change to any hook's playbook, vendored tree, or
-// manifest template re-runs the add-on. Order follows spec.hooks.
 func hookContentDigest(extension v1alpha1.ClusterAddon) string {
 	if len(extension.Spec.Hooks) == 0 {
 		return ""

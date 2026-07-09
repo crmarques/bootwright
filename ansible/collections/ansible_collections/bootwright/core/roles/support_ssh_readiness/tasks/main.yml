@@ -1,21 +1,4 @@
 ---
-# Shared post-boot SSH readiness probe: waits for the node's SSH TCP port,
-# then verifies the configured private key authenticates. Read-only — every
-# probe is changed_when: false and no host state is mutated.
-#
-# Driven by the rendered boot.readiness block plus explicit caller vars:
-#   bootwright_ssh_ready_readiness                rendered readiness mapping ({} tolerated)
-#   bootwright_ssh_ready_node_name                node name for failure reporting
-#   bootwright_ssh_ready_address                  probe address ('' skips all probes)
-#   bootwright_ssh_ready_default_port             port when readiness.ssh.port is unset
-#   bootwright_ssh_ready_key_path                 private key path ('' skips auth verification)
-#   bootwright_ssh_ready_known_hosts_path         throwaway known_hosts for the auth probe
-#   bootwright_ssh_ready_port_timeout_seconds     TCP port wait timeout
-#   bootwright_ssh_ready_connect_timeout_seconds  per-attempt SSH connect timeout
-#   bootwright_ssh_ready_auth_retries             auth probe retries
-#   bootwright_ssh_ready_auth_delay_seconds       delay between auth probe retries
-#   bootwright_ssh_ready_reject_hint              substrate-specific guidance appended
-#                                                 to the key-rejection failure message
 
 - name: Resolve post-boot readiness behavior
   ansible.builtin.set_fact:
@@ -38,9 +21,6 @@
         bootwright_ssh_ready_user: "{{ (bootwright_ssh_ready_readiness.ssh | default({})).user | default('core') }}"
       changed_when: false
 
-    # During internal local-root runs the key probe must execute as the
-    # invoking user — file-backed keys live in the caller's home, which
-    # root may not read on every filesystem.
     - name: Resolve node SSH auth probe key execution context
       ansible.builtin.set_fact:
         bootwright_ssh_ready_key_exec_user: >-

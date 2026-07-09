@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-// TestPrepareScopedWorkflowDestroyCountsOwnershipRecords guards the destroy
-// confirmation prompt against ownership-record-driven teardown. When the desired
-// state no longer declares any hosts but the context ownership store still records
-// provider resources, workflow.Run tears those down; the plan's noRemoteWork flag
-// (which suppresses the "Continue with destroy?" prompt and the become-password
-// prompt) must therefore count the recorded hosts, mirroring workflow.Run.
 func TestPrepareScopedWorkflowDestroyCountsOwnershipRecords(t *testing.T) {
 	records := []ownership.ResourceRecord{{
 		Kind: "libvirt-domain",

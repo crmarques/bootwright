@@ -1,7 +1,3 @@
-// Package status derives observe-stage analysis — the status report data
-// model, installer freshness, ledger summarization, next-step recommendations,
-// and state-check classification — from desired state and on-disk context
-// artifacts. It returns plain data; presentation lives with the callers.
 package status
 
 import (
@@ -30,17 +26,12 @@ type Report struct {
 	ApplyRunActivity *ApplyRunActivity   `json:"applyRunActivity,omitempty"`
 }
 
-// StorageCluster is the JSON shape of a declared storage cluster in the status
-// report, so a managed Ceph cluster is reported alongside the container
-// clusters instead of only as a desired-state count.
 type StorageCluster struct {
 	Name       string `json:"name"`
 	Type       string `json:"type,omitempty"`
 	Management string `json:"management,omitempty"`
 }
 
-// SetupCheck is the JSON shape of a context readiness check in the status
-// report.
 type SetupCheck struct {
 	Group       string `json:"group"`
 	Name        string `json:"name"`
@@ -50,7 +41,6 @@ type SetupCheck struct {
 	Remediation string `json:"remediation,omitempty"`
 }
 
-// SecretEntry is the JSON shape of a declared secret's local material status.
 type SecretEntry struct {
 	Name    string   `json:"name"`
 	Type    string   `json:"type"`
@@ -174,8 +164,6 @@ func BuildClusters(state v1alpha1.State, renderedDir, clustersDir string) []Clus
 	return out
 }
 
-// BuildStorageClusters lists declared storage clusters (name, type, management)
-// for the status report, sorted by name.
 func BuildStorageClusters(state v1alpha1.State) []StorageCluster {
 	out := make([]StorageCluster, 0, len(state.StorageClusters))
 	for _, cluster := range state.StorageClusters {

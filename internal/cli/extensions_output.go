@@ -32,9 +32,6 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	p.Tasks(lines)
 }
 
-// printProvisioningPlaybookDryRun lists the operator-supplied playbooks the plan
-// will run, in a curated "Playbooks" section (the tasks also appear in the
-// generic per-task plan lines).
 func printProvisioningPlaybookDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	var lines []cliout.TaskLine
 	for _, task := range tasks {

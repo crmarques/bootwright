@@ -10,8 +10,6 @@ import (
 )
 
 func TestConfirmPreservesBufferedStdinAcrossPrompts(t *testing.T) {
-	// Two piped answers over one stdin: the first confirm must consume only its
-	// own line and leave the second answer for the next prompt.
 	in := strings.NewReader("y\nyes\n")
 	if !confirm(in, io.Discard, "first? ") {
 		t.Fatal("first confirm should accept 'y'")

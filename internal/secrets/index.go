@@ -6,46 +6,28 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// Index is the resolution view of every declared secret: for each name it
-// answers where the material lives (context store vs operator file) and, for a
-// file source, the on-disk path per material role. It is the single seam
-// between the desired-state Secret objects and path resolution, so the resolver
-// and every render/preflight consumer depend on Index rather than on where
-// secrets happen to be declared.
 type Index struct {
 	secrets map[string]indexedSecret
-	// mode is Environment.spec.secretStorage.mode ("" | source | context); it
-	// governs whether file-sourced material is read in place or copied into the
-	// per-context store.
-	mode string
+	mode    string
 }
 
 type sourceArm int
 
 const (
-	// armContext keeps material only in the per-context store (contextStore
-	// source, or an omitted source).
 	armContext sourceArm = iota
-	// armFile reads material from operator-owned files.
 	armFile
-	// armGenerated mints material into the per-context store.
 	armGenerated
 )
 
 type indexedSecret struct {
-	arm       sourceArm
-	sourceDir string
-	// Raw (pre-resolution) operator file paths per material role; populated
-	// only for armFile. primaryFile also serves the zero/unknown role.
+	arm            sourceArm
+	sourceDir      string
 	primaryFile    string
 	tlsKeyFile     string
 	sshPrivateFile string
 	sshPublicFile  string
 }
 
-// NewIndex builds the resolution view from loaded state. The material bytes are
-// never read here — only the Secret declarations that say where each secret
-// comes from. spec.type fixes which file-source keys populate which role.
 func NewIndex(state v1alpha1.State) Index {
 	idx := Index{secrets: make(map[string]indexedSecret, len(state.Secrets))}
 	if len(state.Environments) > 0 {
@@ -82,9 +64,6 @@ func NewIndex(state v1alpha1.State) Index {
 	return idx
 }
 
-// useContextPath reports whether a role's material resolves to the per-context
-// store rather than an operator file: contextStore and generated secrets always
-// live in the store, and context storage mode forces file secrets in too.
 func (idx Index) useContextPath(name string, role MaterialRole) bool {
 	entry, ok := idx.secrets[name]
 	if !ok {
@@ -96,9 +75,6 @@ func (idx Index) useContextPath(name string, role MaterialRole) bool {
 	return entry.arm != armFile
 }
 
-// sourceFilePath resolves a role's operator-file path, or ("", false) when the
-// secret has no file source for that role. The zero/unknown role uses the
-// primary file, mirroring the file-source material layout.
 func (idx Index) sourceFilePath(name string, role MaterialRole) (string, bool) {
 	entry, ok := idx.secrets[name]
 	if !ok || entry.arm != armFile {
@@ -120,8 +96,6 @@ func (idx Index) sourceFilePath(name string, role MaterialRole) (string, bool) {
 	return path, err == nil
 }
 
-// usesExternalSource reports whether a role reads an operator file (as opposed
-// to the per-context store).
 func (idx Index) usesExternalSource(name string, role MaterialRole) bool {
 	entry, ok := idx.secrets[name]
 	if !ok || entry.arm != armFile {

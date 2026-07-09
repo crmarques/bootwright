@@ -86,12 +86,6 @@ func environmentResourceDirectoryFiles(env v1alpha1.Environment, index int, ref,
 				if _, skip := nonWorkspaceDirs[base]; skip {
 					return filepath.SkipDir
 				}
-				// Mirror discoverFiles: operator-supplied Ansible content
-				// (playbooks/roles/collections) is referenced by path from a
-				// ProvisioningPlaybook, not decoded as Bootwright objects, so a
-				// selected resource directory must skip it too — otherwise the
-				// same tree validates under plain discovery but dies here on a
-				// playbook's top-level sequence.
 				if _, skip := ansibleContentDirs[base]; skip {
 					return filepath.SkipDir
 				}
@@ -446,10 +440,6 @@ func scanResourceInventoryFile(file string, out map[resourceKey]string) {
 	}
 }
 
-// knownResourceKind reports whether kind is an authored Bootwright kind. It
-// derives membership from the single-source AuthoredKindAccessors registry
-// (guard-tested for completeness) rather than a hand-enumerated switch that
-// silently drifts as kinds are added.
 func knownResourceKind(kind string) bool {
 	for _, accessor := range v1alpha1.AuthoredKindAccessors() {
 		if accessor.Kind == kind {

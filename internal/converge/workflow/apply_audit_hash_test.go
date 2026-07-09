@@ -16,9 +16,6 @@ func structuralJSON(t *testing.T, v any) string {
 	return string(data)
 }
 
-// Promoting an installed worker to role: infra must leave the install structural
-// hash byte-identical (the promotion is a reconfigure-only day-2 op), while
-// master<->worker stays a genuine reinstall.
 func TestInstallStructuralHashRoleProjection(t *testing.T) {
 	mk := func(role string) v1alpha1.State {
 		return v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
@@ -41,10 +38,6 @@ func TestInstallStructuralHashRoleProjection(t *testing.T) {
 	}
 }
 
-// Ceph day-2 reconfigures (config keys, mgr modules, monitoring tuning) and fabric
-// edits (a node's BMC address) must not move the StorageCluster structural hash —
-// none re-bootstraps a running cluster. A change to real cluster identity (the seed
-// host) must move it.
 func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	base := func() v1alpha1.State {
 		return v1alpha1.State{
@@ -62,7 +55,6 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	}
 	want := structuralJSON(t, storageClusterStructuralHashVars(base(), "ceph"))
 
-	// Reconfigure edits — must not move the structural hash.
 	cfg := base()
 	cfg.StorageClusters[0].Spec.Ceph.Config["global"]["mon_max_pg_per_osd"] = "400"
 	cfg.StorageClusters[0].Spec.Ceph.MgrModules = []string{"dashboard", "balancer"}
@@ -71,7 +63,6 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 		t.Fatalf("ceph reconfigure/fabric edit must not move the structural hash:\n base=%s\n edit=%s", want, got)
 	}
 
-	// Identity edit — the seed host — must move the structural hash.
 	id := base()
 	id.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.Host = "seed-b"
 	if got := structuralJSON(t, storageClusterStructuralHashVars(id, "ceph")); got == want {
@@ -79,8 +70,6 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	}
 }
 
-// The machine prepare/finalize tasks must carry a structural projection so a
-// reconcilable day-2 edit does not falsely refuse the run as a machine disk wipe.
 func TestMachinePrepareFinalizeTasksCarryStructuralHash(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)

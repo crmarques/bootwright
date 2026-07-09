@@ -23,8 +23,7 @@ type CommandRunner struct {
 	LogPath string
 	Stdout  io.Writer
 	Stderr  io.Writer
-	// Runner substitutes the local process launcher in tests; nil runs on the OS.
-	Runner execution.Runner
+	Runner  execution.Runner
 }
 
 func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string, input []byte) ([]byte, error) {
@@ -41,11 +40,6 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 		cmd.Stdin = bytes.NewReader(input)
 	}
 	var stdout, stderr bytes.Buffer
-	// tee keeps the captured buffer (used for the log and the failure-path error)
-	// while streaming to the caller's writer only when one is set. A quiet runner
-	// (nil writers) suppresses live console output — readiness polls use one so
-	// expected NotFound/"no matches for kind" lines don't reach the terminal —
-	// without losing the log file or error diagnostics.
 	cmd.Stdout = tee(&stdout, r.Stdout)
 	cmd.Stderr = tee(&stderr, r.Stderr)
 	err := r.runner().Run(ctx, cmd)
@@ -63,10 +57,6 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	if logErr != nil {
 		return stdout.Bytes(), fmt.Errorf("append oc log %s: %w", r.LogPath, logErr)
 	}
-	// oc routinely writes deprecation/TLS/auth warnings to stderr on a successful
-	// `get -o json`; returning the combined buffer would corrupt JSON that callers
-	// unmarshal, so the success path yields stdout only. stderr stays in the log
-	// and in the failure-path error above.
 	return stdout.Bytes(), nil
 }
 
@@ -77,9 +67,6 @@ func (r CommandRunner) runner() execution.Runner {
 	return execution.OSRunner{}
 }
 
-// tee returns a writer that always captures into buf and additionally streams
-// to w when w is non-nil. It avoids io.MultiWriter's panic on a nil writer so a
-// quiet runner can leave Stdout/Stderr unset.
 func tee(buf *bytes.Buffer, w io.Writer) io.Writer {
 	if w == nil {
 		return buf

@@ -1,23 +1,4 @@
 ---
-# The install-time kickstart brought up only the routed interface - enough for
-# Anaconda to install and for the node to be reachable over SSH. Apply the full
-# desired-state nmstate now so nmstate realizes every interface, VLAN, route, and
-# MTU the desired state declares, including the bond MTU the kickstart's merged
-# bond+VLAN line cannot set. nmstate is present because the renderer injects it
-# into the install packages whenever a desired state exists.
-#
-# The apply is rollback-guarded. `nmstatectl apply --no-commit --timeout` stages the
-# new state behind a NetworkManager checkpoint that auto-reverts if it is not
-# committed within the window. The checkpoint is owned by the NM daemon (not the
-# nmstatectl process or its D-Bus/SSH connection - NM has no rollback-on-disconnect),
-# so it survives session #1 closing and a SEPARATE controller->node SSH commits it:
-# if the reconfigure severs our control path the commit never lands and the node
-# rolls back on its own. nmstate also verifies the applied state (including MTU on
-# every layer) and self-rolls-back on verification failure, so a bad apply fails
-# here rather than landing a wrong network. nmstate rejects overlapping checkpoints,
-# so we roll back any stale checkpoint from an interrupted prior run before staging.
-# This runs every converge (fresh install or already-owned node) and reconciles
-# drift idempotently. Requires root + the NetworkManager backend (never --kernel).
 
 - name: Stage managed OS desired network state on the controller
   ansible.builtin.copy:
@@ -52,9 +33,6 @@
   changed_when: false
   failed_when: bootwright_os_nmstate_apply.rc != 0
 
-# A fresh controller->node SSH: if the apply severed connectivity this fails fast
-# (ConnectTimeout) and the staged checkpoint auto-reverts, so the play fails loudly
-# instead of leaving the node on an unreachable network.
 - name: Commit managed OS network once connectivity is confirmed
   ansible.builtin.command:
     argv:

@@ -13,9 +13,6 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 		if !ok {
 			return
 		}
-		// rhsm is either inline or, for ibm-storage-ceph, deferred to a
-		// referenced redhat-rhel entitlement; collect its secrets from
-		// whichever carries it so they stay required.
 		rhsm := entitlement.Spec.RHSM
 		if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
 			if rhel, ok := entitlementsByName[entitlement.Spec.RHELEntitlementRef.Name]; ok {

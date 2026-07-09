@@ -6,10 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// ApplyWorkObjects must report only the objects a scoped apply provisions: the
-// selected container cluster's nodes, but neither the data-foundation-attached
-// managed StorageCluster nor its nodes, which are render references pulled in
-// for the attachment only.
 func TestApplyWorkObjectsExcludesRenderReferenceStorage(t *testing.T) {
 	state := dataFoundationAttachmentState()
 
@@ -31,7 +27,6 @@ func TestApplyWorkObjectsExcludesRenderReferenceStorage(t *testing.T) {
 	}
 }
 
-// Co-selecting the storage cluster makes it (and its nodes) work objects again.
 func TestApplyWorkObjectsIncludesCoSelectedStorage(t *testing.T) {
 	state := dataFoundationAttachmentState()
 

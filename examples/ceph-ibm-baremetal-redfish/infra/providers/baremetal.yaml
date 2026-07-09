@@ -6,15 +6,10 @@ spec:
   type: baremetal
 
   baremetal:
-    # The nodes boot themselves from the Redfish virtual-media ISO Bootwright
-    # mounts via each Machine's BMC; Bootwright drives the power/boot flow but
-    # runs no PXE/DHCP of its own.
     boot:
       method: external
 
   networkAttachments:
-    # The physical machine network. vlan 0 = untagged access port; set the real
-    # VLAN id here if the Ceph nodes sit on a tagged fabric.
     - name: ceph-net
       baremetal:
         vlan: 0

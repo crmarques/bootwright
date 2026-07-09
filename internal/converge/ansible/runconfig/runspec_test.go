@@ -70,11 +70,9 @@ func TestNewRunSpecAppendsVendoredRolesAndCollections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRunSpec: %v", err)
 	}
-	// An absolute playbook path passes through unjoined.
 	if spec.Playbook != absPlaybook {
 		t.Fatalf("Playbook = %q, want absolute passthrough %q", spec.Playbook, absPlaybook)
 	}
-	// Bundle collections stay first; the vendored dir appends after the separator.
 	bundleCollections := filepath.Join(bundleDir, "collections")
 	wantCollections := bundleCollections + string(os.PathListSeparator) + filepath.Join(root, "input", "collections")
 	if spec.CollectionsPath != wantCollections {

@@ -9,11 +9,6 @@ import (
 )
 
 func endpointNetworkMatches(ci v1alpha1.ClusterInstall, networkConfigs map[string]v1alpha1.NetworkConfig, ip net.IP) []string {
-	// Dedupe by the owning NetworkConfig (or machine) name, not by CIDR: two
-	// overlapping machineNetwork CIDRs in ONE config (e.g. a /24 inside a /23)
-	// must count as a single match, otherwise the "matches multiple selected
-	// NetworkConfigs" diagnostic names the same config twice and misattributes
-	// the overlap to several configs.
 	matched := map[string]bool{}
 	for _, name := range stateview.ClusterConsumedNetworkConfigs(ci) {
 		networkConfig, ok := networkConfigs[name]
@@ -64,8 +59,6 @@ func cidrContainsIP(cidr string, ip net.IP) bool {
 	return false
 }
 
-// selectedMachineNetworkCIDRs returns the machineNetwork CIDRs of the
-// NetworkConfig a machine's network config selects (by ref or inline spec).
 func selectedMachineNetworkCIDRs(config v1alpha1.MachineNetworkConfig, networks map[string]v1alpha1.NetworkConfig) []string {
 	var cidrs []string
 	if config.NetworkConfigRef.Name != "" {
@@ -83,9 +76,6 @@ func selectedMachineNetworkCIDRs(config v1alpha1.MachineNetworkConfig, networks 
 	return cidrs
 }
 
-// addressInAnyCIDR reports whether address is contained by one of cidrs. A
-// malformed address returns true so the dedicated address-format check owns that
-// error rather than double-reporting it here.
 func addressInAnyCIDR(cidrs []string, address string) bool {
 	ip := net.ParseIP(address)
 	if ip == nil {

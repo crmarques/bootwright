@@ -5,12 +5,6 @@ import (
 	"encoding/hex"
 )
 
-// ansibleUUIDNamespace mirrors Ansible's UUID_NAMESPACE_ANSIBLE so that
-// any name passed through `ansibleUUIDv5` matches what the `to_uuid`
-// Jinja filter produces inside the playbooks. substrate_libvirt names
-// libvirt domains with `(cluster.name ~ '-' ~ machine.name) | to_uuid`;
-// the renderer must use the same id so boot_redfish can target the
-// resulting domain by Redfish System ID without re-discovery.
 var ansibleUUIDNamespace = [16]byte{
 	0x36, 0x1e, 0x6d, 0x51,
 	0xfa, 0xec,
@@ -19,9 +13,6 @@ var ansibleUUIDNamespace = [16]byte{
 	0x34, 0x13, 0x86, 0xda, 0x8e, 0x2e,
 }
 
-// ansibleUUIDv5 returns the UUIDv5 of name under Ansible's default
-// namespace, formatted 8-4-4-4-12. Equivalent to `value | to_uuid` in
-// a playbook.
 func ansibleUUIDv5(name string) string {
 	h := sha1.New()
 	h.Write(ansibleUUIDNamespace[:])

@@ -89,7 +89,6 @@ spec:
 		byRel[edit.RelPath] = string(edit.Content)
 	}
 
-	// Pool size updated surgically, authored comment preserved.
 	pool, ok := byRel["pools/rbd.yaml"]
 	if !ok {
 		t.Fatalf("expected an edit to pools/rbd.yaml, got %v", keysOf(byRel))
@@ -104,7 +103,6 @@ spec:
 		t.Fatalf("stale size left in pool file:\n%s", pool)
 	}
 
-	// Config value updated in the cluster file.
 	cluster, ok := byRel["cluster.yaml"]
 	if !ok {
 		t.Fatalf("expected an edit to cluster.yaml, got %v", keysOf(byRel))
@@ -113,7 +111,6 @@ spec:
 		t.Fatalf("config value not updated:\n%s", cluster)
 	}
 
-	// New pool synthesized as a sibling file.
 	extra, ok := byRel["extra.yaml"]
 	if !ok {
 		t.Fatalf("expected a new extra.yaml, got %v", keysOf(byRel))
@@ -197,8 +194,6 @@ spec:
 	if !ok {
 		t.Fatalf("expected an edit to cluster.yaml, got %v", keysOf(byRel))
 	}
-	// The out-of-band OSD device is appended to srv1; existing pins and the
-	// authored comment survive.
 	for _, want := range []string{"/dev/sdb", "/dev/sdc", "/dev/sdd", "authored device comment"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("cluster.yaml missing %q:\n%s", want, out)
@@ -207,7 +202,6 @@ spec:
 	if !anyContains(summary.Applied, "srv1 pin +[sdd]") {
 		t.Fatalf("expected srv1 pin in Applied, got %v", summary.Applied)
 	}
-	// srv2's all:true selection is advised, never rewritten.
 	if !anyContains(summary.Detected, "srv2") || !anyContains(summary.Detected, "filter/all") {
 		t.Fatalf("expected srv2 filter/all advisory in Detected, got %v", summary.Detected)
 	}
@@ -216,11 +210,6 @@ spec:
 	}
 }
 
-// TestSynthesizePoolFileRefusesErasure pins that diff --adopt does not synthesize
-// a StoragePool file for a live erasure-coded pool: live discovery exposes only
-// the profile name, not the k/m chunk counts, so a synthesized file would write
-// spec.ceph.type=erasure with no erasure block and fail the next load/validate.
-// It must be reported as detected-but-not-adopted instead.
 func TestSynthesizePoolFileRefusesErasure(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata:   v1alpha1.Metadata{Name: "ceph"},
@@ -239,7 +228,6 @@ func TestSynthesizePoolFileRefusesErasure(t *testing.T) {
 		t.Fatal("synthesizePoolFile must refuse an erasure-coded pool, got nil error")
 	}
 
-	// A replicated pool still synthesizes a valid file.
 	replPool := cephdiff.ObjectDiff{
 		Key:   "rbd-pool",
 		State: cephdiff.ObjectRealOnly,

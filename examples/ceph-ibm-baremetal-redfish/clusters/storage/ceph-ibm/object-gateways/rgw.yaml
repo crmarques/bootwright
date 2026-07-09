@@ -5,9 +5,6 @@ metadata:
 spec:
   storageClusterRef: ceph-ibm
 
-  # Public S3 endpoint. Resolves to the ingress VIP below (10.20.30.80); this
-  # name must exist in the external DNS.
-
   public:
     dnsName: rgw.ceph-ibm.example.com
     scheme: http
@@ -15,21 +12,15 @@ spec:
 
   ceph:
     serviceID: ceph-ibm
-    # Name the realm/zonegroup/zone (all-or-nothing). Bootwright creates them and
-    # commits the period before the RGW deploys; a named single-site zone is
-    # stable and ready to grow into multisite without a rebuild.
     realm: ceph-ibm
     zoneGroup: ceph-ibm
     zone: ceph-ibm-1
-    # RGW daemons on both full nodes.
     placement:
       hosts:
         - ceph-1
         - ceph-2
       countPerHost: 1
     frontendPort: 8080
-    # cephadm ingress (haproxy + keepalived) fronts the two RGW daemons with a
-    # single floating VIP on the node network.
     ingresses:
       - name: rgw
         address: 10.20.30.80

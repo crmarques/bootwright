@@ -7,10 +7,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Bootwright desired-state API. Every fact has one home; references flow
-// upward (cluster -> provider/component -> host). The binding rules live in
-// specs/state-model.md.
-
 const (
 	APIVersion = "bootwright.io/v1alpha1"
 
@@ -36,13 +32,11 @@ const (
 	KindProvisioningPlaybook   = "ProvisioningPlaybook"
 	KindSecret                 = "Secret"
 
-	// Provisioner kinds (machine production).
 	ProvisionerLibvirt   = "libvirt"
 	ProvisionerVSphere   = "vsphere"
 	ProvisionerKubeVirt  = "kubevirt"
 	ProvisionerBareMetal = "baremetal"
 
-	// Machine canonical capability tags.
 	MachineCapabilityOpenShiftNode    = "openshift-node"
 	MachineCapabilityLibvirt          = "libvirt"
 	MachineCapabilityContainerRuntime = "container-runtime"
@@ -55,19 +49,12 @@ const (
 	MachineCapabilityCephAdmin        = "ceph-admin"
 	MachineCapabilityCephNode         = "ceph-node"
 	MachineInstallOSFamilyRHEL        = "rhel"
-	// MediaType spellings are render-internal now (the schema has no mediaType
-	// field): render emits image.mediaType so the Ansible role can pick the
-	// mkksiso path. dvd = packages ride on bootMedia; boot = a small boot ISO.
 	MachineImageMediaTypeDVD          = "dvd"
 	MachineImageMediaTypeBoot         = "boot"
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 	MachineInstallPackageEnvMinimal   = "minimal"
 
-	// Localization baselines applied when a MachineInstallProfile leaves the
-	// corresponding customizations.localization field unset. They match the
-	// values the kickstart template rendered before the field existed, so an
-	// absent group is a no-op.
 	MachineInstallDefaultLanguage = "en_US.UTF-8"
 	MachineInstallDefaultKeyboard = "us"
 	MachineInstallDefaultTimezone = "UTC"
@@ -76,37 +63,24 @@ const (
 	MachineInstallSELinuxPermissive = "permissive"
 	MachineInstallSELinuxDisabled   = "disabled"
 
-	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"
 	InstallModeDisconnected = "disconnected"
 
-	// Cluster distributions.
 	DistributionOpenShift = "openshift"
 	DistributionOKD       = "okd"
 
-	// OpenShift install method (currently only `agent`).
 	OCPInstallMethodAgent = "agent"
 
-	// Node roles as rendered into agent-config.yaml.
 	NodeRoleMaster = "master"
 	NodeRoleWorker = "worker"
-	// NodeRoleInfra is an authoring role only: OpenShift has no install-time
-	// infra role, so an infra host installs as a worker and Bootwright promotes
-	// it day-2 (the node-role.kubernetes.io/infra label, a NoSchedule taint, and
-	// the infra MachineConfigPool). See OCPHostSpec.
-	NodeRoleInfra = "infra"
+	NodeRoleInfra  = "infra"
 
-	// InfraNodeRoleLabel is the OpenShift node-role label Bootwright applies to
-	// every infra host day-2; it also keys the infra MachineConfigPool selector.
 	InfraNodeRoleLabel = "node-role.kubernetes.io/infra"
 
-	// Kubernetes node taint effects, validated on OCPHostSpec.Taints.
 	TaintEffectNoSchedule       = "NoSchedule"
 	TaintEffectPreferNoSchedule = "PreferNoSchedule"
 	TaintEffectNoExecute        = "NoExecute"
 
-	// Installer platform render types. The baremetal spelling is the
-	// install-config platform key, used verbatim as type value and arm key.
 	PlatformTypeBareMetal = "baremetal"
 	PlatformTypeVSphere   = "vsphere"
 	PlatformTypeNone      = "none"
@@ -116,7 +90,6 @@ const (
 	ProvisioningNetworkManaged   = "managed"
 	ProvisioningNetworkUnmanaged = "unmanaged"
 
-	// Standard endpoint slot names.
 	EndpointAPI     = "api"
 	EndpointAPIInt  = "api-int"
 	EndpointIngress = "ingress"
@@ -125,8 +98,6 @@ const (
 	EndpointSourceExternal       = "external"
 	EndpointSourceInfraComponent = "infraComponent"
 
-	// Standard component slot names. The authored slot values double as the
-	// InfraComponent spec.type discriminator and equal the populated arm key.
 	ComponentSlotLoadBalancer   = "loadBalancer"
 	ComponentSlotArtifactServer = "artifactServer"
 	ComponentSlotProxy          = "proxy"
@@ -134,31 +105,13 @@ const (
 	ComponentSlotNTP            = "ntp"
 	ComponentSlotRegistry       = "registry"
 
-	// Service kinds that are rendered for Ansible but are not authored
-	// InfraComponent slots: the per-cluster machines service and the
-	// provider BMC service.
 	ServiceKindMachines    = "machines"
 	ProviderServiceKindBMC = "bmc"
 
-	// EnvironmentComponentNone is the reserved component name/ref sentinel
-	// (never a management value); External and Managed are the only accepted
-	// Environment.spec.infraComponents entry management values. Managed:
-	// this context provisions the service and may destroy it. External: a
-	// non-bootwright endpoint bootwright only consumes (a raw URL/address).
-	// A future "reference" value (consume a sibling context's owned service
-	// and contribute additive entries without provisioning the base) is not
-	// yet accepted by the validators; do not author it. The live cross-context
-	// ownership role is ComponentRoleReference below, a separate concept.
 	EnvironmentComponentNone     = "none"
 	EnvironmentComponentExternal = "external"
 	EnvironmentComponentManaged  = "managed"
 
-	// ComponentRole names the two lifecycle roles a bootwright context can
-	// hold over a shared infra-component, stamped on the ownership record's
-	// role field. owner provisions and may destroy the base; reference only
-	// contributes/consumes. An absent role reads as owner (backward compatible
-	// with records written before the field existed). The Ansible ownership
-	// role writes the same literals; keep the two in sync.
 	ComponentRoleOwner     = "owner"
 	ComponentRoleReference = "reference"
 
@@ -174,14 +127,10 @@ const (
 	SSHKeyPairTypeECDSAP384 = "ecdsa-p384"
 	SSHKeyPairTypeECDSAP521 = "ecdsa-p521"
 
-	// Entitlement spec.type discriminator values (the authored vocabulary).
 	EntitlementTypeRedHatRHEL     = "redhat-rhel"
 	EntitlementTypeRedHatCeph     = "redhat-ceph"
 	EntitlementTypeIBMStorageCeph = "ibm-storage-ceph"
 
-	// Provider and product spellings are no longer authored; the resolver
-	// derives them from spec.type (EntitlementTypeProviderProduct) for the
-	// cephadm ansible vars, so these remain only as the emitted values.
 	EntitlementProviderRedHat = "redhat"
 	EntitlementProviderIBM    = "ibm"
 
@@ -189,9 +138,6 @@ const (
 	EntitlementProductRHEL           = "rhel"
 	EntitlementProductIBMStorageCeph = "ibm-storage-ceph"
 
-	// InfraComponent arm implementation choices (spec.<arm>.implementation):
-	// which software realises the component. One spelling set, shared with
-	// the Environment componentImages catalog.
 	InfraComponentTypeHAProxy        = "haproxy"
 	InfraComponentTypeSquid          = "squid"
 	InfraComponentTypeDnsmasq        = "dnsmasq"
@@ -201,59 +147,40 @@ const (
 	DefaultPullSecretName             = "openshift-pull-secret"
 	DefaultClusterAdminSSHKeyNamePart = "cluster-admin-ssh-key"
 
-	// Stock openshift-install pod and service networks materialized by
-	// normalize when spec.networking omits them.
 	DefaultClusterNetworkCIDR       = "10.128.0.0/14"
 	DefaultClusterNetworkHostPrefix = 23
 	DefaultServiceNetworkCIDR       = "172.30.0.0/16"
 
-	// Default validity window for generated self-signed certificates.
 	DefaultCertificateDays = 3650
 
-	// Image digest source policies.
 	ImageSourcePolicyNever = "NeverContactSource"
 	ImageSourcePolicyAllow = "AllowContactingSource"
 
-	// OpenShift release sources Bootwright derives for the disconnected
-	// install path.
 	OCPReleaseSourceQuayOCPRelease = "quay.io/openshift-release-dev/ocp-release"
 	OCPReleaseSourceQuayARTDev     = "quay.io/openshift-release-dev/ocp-v4.0-art-dev"
 	DefaultMirroredReleasePath     = "openshift/release-images"
 
-	// Service defaults used by rendered runtime components. Providers
-	// declare only WHERE+HOW the service runs; renderers own the
-	// listening surface unless a cluster-side component exposes it.
 	DefaultBMCProtocol           = "redfish"
 	DefaultBMCEmulator           = "sushy-tools"
 	DefaultBMCBindAddress        = "0.0.0.0"
 	DefaultBMCEmulationStartPort = 8000
-	// DefaultArtifactsHTTPPort is the default port of the artifact server's
-	// HTTPS listener (8443 is the HTTPS convention); the "HTTP" in the name is
-	// historical and does not imply a plaintext listener.
-	DefaultArtifactsHTTPPort  = 8443
-	DefaultSquidPort          = 3128
-	DefaultMirrorRegistryPort = 5000
-	DefaultDNSPort            = 53
-	DefaultNTPPort            = 123
-	DefaultServiceBindAddress = "0.0.0.0"
+	DefaultArtifactsHTTPPort     = 8443
+	DefaultSquidPort             = 3128
+	DefaultMirrorRegistryPort    = 5000
+	DefaultDNSPort               = 53
+	DefaultNTPPort               = 123
+	DefaultServiceBindAddress    = "0.0.0.0"
 
 	ArtifactServerProtocolHTTP  = "http"
 	ArtifactServerProtocolHTTPS = "https"
 
-	// TLS protocol version names, lowest to highest, as accepted by
-	// ArtifactServerTLS.minVersion and emitted into nginx ssl_protocols.
 	TLSVersion10 = "TLSv1"
 	TLSVersion11 = "TLSv1.1"
 	TLSVersion12 = "TLSv1.2"
 	TLSVersion13 = "TLSv1.3"
 
-	// Component image catalog — closed set of (component type, implementation)
-	// pairs that Environment.spec.componentImages may pin. Categories are the
-	// ComponentSlot* values; implementations the InfraComponentType* values,
-	// plus the artifact server's sole implementation:
 	ComponentImageTypeArtifactsHTTP = "http"
 
-	// ClusterAddon union: type value == populated arm key.
 	ClusterAddonTypeOLM         = "olm"
 	ClusterAddonTypeManifestSet = "manifestSet"
 
@@ -271,28 +198,18 @@ const (
 	ClusterAddonProvidesNMState                     = "nmstate"
 	ClusterAddonInputSchemaTypeObject               = "object"
 	ClusterAddonInputEffectStorageExportAttachment  = "storageExportAttachment"
-	// ClusterAddonInputEffectGlobalPullSecretMerge merges a binding-supplied
-	// registry credential (e.g. an IBM entitlement key) into the bound
-	// cluster's global pull secret before the add-on's resources apply.
-	ClusterAddonInputEffectGlobalPullSecretMerge = "globalPullSecretMerge"
+	ClusterAddonInputEffectGlobalPullSecretMerge    = "globalPullSecretMerge"
 
-	// ClusterAddonHook lifecycle vocabulary — the points in the add-on apply a
-	// hook may anchor to. ClusterAddonHookLifecycles() is the ordered accessor.
 	ClusterAddonHookPreApply          = "preApply"
 	ClusterAddonHookPostOperatorReady = "postOperatorReady"
 	ClusterAddonHookPostReady         = "postReady"
 
-	// ClusterAddonHook target limit: run against the first reachable resolved
-	// machine (default) or all of them.
 	ClusterAddonHookTargetLimitFirstReachable = "firstReachable"
 	ClusterAddonHookTargetLimitAll            = "all"
 
-	// ClusterAddonHook output format: text (default, raw) or json (captured bytes
-	// must parse as JSON).
 	ClusterAddonHookOutputFormatText = "text"
 	ClusterAddonHookOutputFormatJSON = "json"
 
-	// DefaultClusterAddonHookTimeout bounds a hook playbook run when unset.
 	DefaultClusterAddonHookTimeout = "10m"
 
 	StorageClusterTypeCeph = "ceph"
@@ -304,15 +221,8 @@ const (
 	StorageCephDistributionRedHat = "redhat"
 	StorageCephDistributionIBM    = "ibm"
 
-	// StorageCephCommunityDefaultRelease is the upstream Ceph release Bootwright
-	// pins for the community (oss) distribution when spec.ceph.release is unset.
-	// cephadm maps it to the matching package repo and container image.
 	StorageCephCommunityDefaultRelease = "squid"
 
-	// StorageCephSubscriptionDefaultStream is the product stream Bootwright
-	// selects for the subscription-backed (redhat, ibm) distributions when
-	// spec.ceph.release is unset. It names the rhceph-<N>-tools and
-	// ibm-storage-ceph-<N> repositories.
 	StorageCephSubscriptionDefaultStream = "9"
 
 	StorageCephRoleMON          = "mon"
@@ -333,62 +243,40 @@ const (
 	StoragePoolRoleCephFSData     = "cephfs-data"
 	StoragePoolRoleRGW            = "rgw"
 
-	// pg_autoscale_mode values.
 	StoragePoolAutoscaleModeOn   = "on"
 	StoragePoolAutoscaleModeOff  = "off"
 	StoragePoolAutoscaleModeWarn = "warn"
 
-	// rbd mirroring modes.
 	StoragePoolMirroringModeImage = "image"
 	StoragePoolMirroringModePool  = "pool"
 
-	// NFS export access types.
 	StorageNFSAccessReadWrite = "RW"
 	StorageNFSAccessReadOnly  = "RO"
 	StorageNFSAccessNone      = "NONE"
 
-	// compression_mode values.
 	StoragePoolCompressionModeNone       = "none"
 	StoragePoolCompressionModePassive    = "passive"
 	StoragePoolCompressionModeAggressive = "aggressive"
 	StoragePoolCompressionModeForce      = "force"
 
-	// StorageExport union: type value == populated arm key.
 	StorageExportTypeDataFoundation = "dataFoundation"
 
-	// ProvisioningPlaybook stage vocabulary — the five provisioning sub-phases a
-	// ProvisioningPlaybook may anchor to, matching the --stage sub-phase names.
-	// ProvisioningStages() is the ordered accessor; internal/converge pins its
-	// SubPhaseStageNames() to it via a guard test.
 	ProvisioningStageFabric   = "fabric"
 	ProvisioningStageMachines = "machines"
 	ProvisioningStageDeps     = "deps"
 	ProvisioningStageBase     = "base"
 	ProvisioningStageAddOns   = "add-ons"
 
-	// ProvisioningPlaybook timing: before or after the anchor stage's built-in
-	// work (default after).
 	ProvisioningPlaybookTimingBefore = "before"
 	ProvisioningPlaybookTimingAfter  = "after"
 
-	// ProvisioningPlaybook run mode: onChange (default) skips an unchanged run,
-	// always re-runs every apply.
 	ProvisioningPlaybookRunOnChange = "onChange"
 	ProvisioningPlaybookRunAlways   = "always"
 
-	// ProvisioningPlaybook failure mode: fail (default) blocks the anchor phase,
-	// continue records the failure and lets the phase proceed.
 	ProvisioningPlaybookFailureFail     = "fail"
 	ProvisioningPlaybookFailureContinue = "continue"
 )
 
-// StorageCephRoles is the complete spec.ceph.topology.hosts[].roles
-// vocabulary, the single source of truth for the StorageCephRole constants
-// above: validation accepts exactly these values, and the renderer derives
-// service placement from them (mon/mgr/osd daemons, mds/rgw/ingress
-// placement defaults, and the prometheus/grafana/alertmanager monitoring
-// services). node-exporter has no role on purpose: cephadm deploys it on
-// every host.
 func StorageCephRoles() []string {
 	return []string{
 		StorageCephRoleMON,
@@ -403,17 +291,10 @@ func StorageCephRoles() []string {
 	}
 }
 
-// StorageCephRHELVersions is the set of RHEL releases the subscription-backed
-// (redhat, ibm) Ceph distributions support on storage nodes. It is the single
-// source of truth: the Ceph provider advertises it and validation accepts
-// exactly these node OS versions, so the advertised and accepted sets cannot
-// drift.
 func StorageCephRHELVersions() []string {
 	return []string{"9.6", "9.7", "10", "10.0", "10.1"}
 }
 
-// StorageCephSupportsRHELVersion reports whether version is a supported RHEL
-// release for the subscription-backed Ceph distributions.
 func StorageCephSupportsRHELVersion(version string) bool {
 	for _, v := range StorageCephRHELVersions() {
 		if v == version {
@@ -427,7 +308,6 @@ func ClusterAdminSSHKeyName(clusterName string) string {
 	return clusterName + "-" + DefaultClusterAdminSSHKeyNamePart
 }
 
-// State is the loaded fleet.
 type State struct {
 	Environments             []Environment            `yaml:"environments,omitempty" json:"environments,omitempty"`
 	Entitlements             []Entitlement            `yaml:"entitlements,omitempty" json:"entitlements,omitempty"`
@@ -462,17 +342,6 @@ type Metadata struct {
 	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
-// LocalObjectReference names an object in the loaded state or a named
-// sub-entry inside one; the field comment states the resolution namespace. It
-// is authored and rendered as a plain name string — the Ref suffix on the
-// field carries the "this is a reference" signal; the wrapper exists only so
-// Go keeps the resolution namespace distinct from ordinary strings and every
-// reference rejects the {name: ...} object form with one shared error. Two
-// deliberate exceptions: Environment spec.containerClusters and
-// spec.storageClusters are fleet selection lists, not references, so they
-// stay plain strings without the Ref suffix; and kubevirt networkRef is the
-// sole object-form reference (KubeVirtNetworkRef, an external GVK + two-part
-// identity).
 type LocalObjectReference struct {
 	Name string `yaml:"name" json:"name"`
 }
@@ -496,8 +365,6 @@ func (r LocalObjectReference) MarshalJSON() ([]byte, error) { return json.Marsha
 
 func (r LocalObjectReference) IsZero() bool { return r.Name == "" }
 
-// SecretRef names a secret declared in Environment.spec.secrets. Like
-// LocalObjectReference it is authored and rendered as a plain name string.
 type SecretRef struct {
 	Name string `yaml:"name" json:"name"`
 }

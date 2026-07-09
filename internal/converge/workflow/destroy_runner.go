@@ -9,10 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 )
 
-// runOneDestroyTask renders the task's inputs and runs its destroy playbook,
-// writing ansible output to the task log. It is the destroy counterpart of
-// runOneApplyTask: no install-state or convergence recording happens here —
-// post-destroy record resets are owned by the CLI after the run completes.
 func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	taskOpts := opts
@@ -27,8 +23,6 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	taskOpts.Forks = task.Forks
 	taskOpts.ArtifactsRoot = filepath.Join(taskRoot, "artifacts")
 	taskOpts.OutputLogPath = TaskLogPath(runsDir, runID, task.Entry.ID)
-	// The scheduler holds the run lease for the whole graph; individual tasks
-	// must not try to re-acquire it.
 	taskOpts.AcquireRunLease = false
 	if runnerFactory == nil {
 		runnerFactory = func(stdout io.Writer, stderr io.Writer) ansible.Runner {

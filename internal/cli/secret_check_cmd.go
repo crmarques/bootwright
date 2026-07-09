@@ -11,11 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 )
 
-// newSecretCheckCmd reports whether every declared Environment.spec.secrets
-// entry has present local material. It is read-only and exits non-zero when any
-// declared secret is still missing, so automation can gate on a complete secret
-// set. Run `bootwright secret generate` first to materialize generated and
-// file:-sourced material.
 func newSecretCheckCmd(stdout io.Writer) *cobra.Command {
 	var outputFormat string
 	cmd := &cobra.Command{

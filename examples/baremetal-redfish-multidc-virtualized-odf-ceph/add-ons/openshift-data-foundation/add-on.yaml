@@ -10,8 +10,6 @@ spec:
 
   accepts:
     inputs:
-      # The add-on installs external mode only, so the StorageExport to attach
-      # is not optional: a binding that omits it fails validation.
       - name: external-storage
         required: true
         schema:
@@ -42,12 +40,6 @@ spec:
       source: redhat-operators
 
   hooks:
-    # The ODF <-> Ceph integration ships with the add-on: after the operator's
-    # CSV succeeds, the hook fetches Rook's external-cluster-details exporter
-    # from the ConfigMap the operator publishes, runs it on a Ceph node of the
-    # referenced StorageExport's cluster (creating the CSI clients), captures
-    # the JSON payload, and applies the external-mode consumer manifests.
-    # run: always keeps rotated mon endpoints/keys converging on every apply.
     - name: attach-external-storage
       lifecycle: postOperatorReady
       playbook: playbooks/export-external-details.yaml

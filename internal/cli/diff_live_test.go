@@ -60,7 +60,6 @@ func TestPrintLiveDiffRendersGitStyle(t *testing.T) {
 			t.Fatalf("live diff output missing %q:\n%s", want, got)
 		}
 	}
-	// backups is desired-only: it must show as a removal, never an addition.
 	if strings.Contains(got, "+type: replicated") {
 		t.Fatalf("desired-only field rendered as an addition:\n%s", got)
 	}

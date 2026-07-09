@@ -14,8 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/host/localroot"
 )
 
-// testIndex wraps a single Environment plus its now-first-class Secrets into the
-// resolution Index the Resolve* functions take.
 func testIndex(env *v1alpha1.Environment, secrets ...v1alpha1.Secret) Index {
 	return NewIndex(v1alpha1.State{Environments: []v1alpha1.Environment{*env}, Secrets: secrets})
 }

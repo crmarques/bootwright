@@ -29,7 +29,6 @@ func TestContainerClusterSubstrate(t *testing.T) {
 	if got := ContainerClusterSubstrate(state, child); got.Provider != v1alpha1.ProvisionerKubeVirt || got.Host != "parent" {
 		t.Fatalf("child substrate = %+v, want kubevirt/parent", got)
 	}
-	// A cluster with no resolvable machines yields an empty substrate.
 	if got := ContainerClusterSubstrate(state, v1alpha1.ContainerCluster{}); got.Provider != "" {
 		t.Fatalf("empty cluster substrate = %+v, want empty", got)
 	}

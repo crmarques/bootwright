@@ -11,15 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/addons/nativecatalog"
 )
 
-// resolveRegisteredAddons appends machine-registered native add-ons
-// (`bootwright add-ons add`) for the binding/profile addonRefs that no
-// authored ClusterAddon matches. The registered directory loads like any
-// authored add-on dir — SourcePath anchors its shipped playbooks/manifests —
-// and context init later snapshots it into the context input tree, after
-// which the in-tree copy resolves the reference and the store is not
-// consulted. A store that is absent or unreadable (a rootless run cannot
-// traverse the root-owned Bootwright dir) falls through to the normal
-// unresolved-reference validation error.
 func resolveRegisteredAddons(state *v1alpha1.State) error {
 	authored := map[string]bool{}
 	for _, addon := range state.ClusterAddons {
@@ -61,12 +52,6 @@ func resolveRegisteredAddons(state *v1alpha1.State) error {
 	return nil
 }
 
-// unresolvedAddonRemedy appends an actionable hint to the unresolved addonRef
-// validation finding when the native catalog ships the referenced name: either
-// register it, or — when the machine store could not even be inspected (a
-// rootless run cannot traverse the root-owned Bootwright dir) — run as root so
-// an already-registered copy can load. Names the catalog does not ship get no
-// hint; they are typos or missing authored add-ons.
 func unresolvedAddonRemedy(name string) string {
 	inCatalog := false
 	if entries, err := nativecatalog.Entries(); err == nil {
@@ -81,8 +66,6 @@ func unresolvedAddonRemedy(name string) string {
 	return addonRemedyForState(name, inCatalog, statErr)
 }
 
-// addonRemedyForState is the filesystem-free decision, split out so tests need
-// not fake the machine store.
 func addonRemedyForState(name string, inCatalog bool, statErr error) string {
 	if !inCatalog {
 		return ""

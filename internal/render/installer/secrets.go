@@ -14,23 +14,15 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// fakeOKDPullSecret is OKD's conventional placeholder pull secret for the
-// pull-secret-free install path: openshift-install requires a non-empty
-// auths map, and this fake credential (id:pass) satisfies that check without
-// authenticating to any real registry.
 const fakeOKDPullSecret = `{"auths":{"fake":{"auth":"aWQ6cGFzcwo="}}}`
 
-// InstallerSecrets holds secret material inlined into install-config.yaml
-// when ResolveInstaller is run with a real secrets directory.
 type InstallerSecrets struct {
-	PullSecret  string
-	SSHKey      string
-	TrustBundle string
-	ProxyHTTP   string
-	ProxyHTTPS  string
-	TLSPairs    map[string]InstallerTLSSecret
-	// VSphereCredentials carries vCenter user/password material keyed by
-	// credentialsRef name; an absent entry keeps the placeholder render.
+	PullSecret         string
+	SSHKey             string
+	TrustBundle        string
+	ProxyHTTP          string
+	ProxyHTTPS         string
+	TLSPairs           map[string]InstallerTLSSecret
 	VSphereCredentials map[string]InstallerUserPass
 }
 
@@ -63,11 +55,6 @@ func LoadInstallerSecretsForContext(contextName string, state v1alpha1.State, oc
 		}
 		out.PullSecret = pullSecret
 	} else {
-		// openshift-install (including OKD's variant) rejects an install-config
-		// whose pullSecret has an empty auths map ("auths required"), so a
-		// literal "{}" fails late at `agent create image`. OKD's convention for
-		// the pull-secret-free path is a fake credential; emit it so the
-		// rendered install-config is actually usable.
 		out.PullSecret = fakeOKDPullSecret
 	}
 
@@ -204,10 +191,6 @@ func additionalTrustBundleRefs(state v1alpha1.State, ocp v1alpha1.ContainerClust
 		if reg := env.Spec.Registries; reg != nil && reg.Mirror != nil && reg.Mirror.TrustBundleRef.Name != "" {
 			refs = append(refs, reg.Mirror.TrustBundleRef)
 		}
-		// A TLS-inspecting cluster-install proxy re-signs egress with its own CA,
-		// so that CA must land in additionalTrustBundle (mirroring the mirror-CA
-		// fold) or the install trusts the mirror but not the proxy it egresses
-		// through.
 		if eff := proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerContainerClusterInstall)); eff != nil && eff.TrustBundle.Name != "" {
 			refs = append(refs, eff.TrustBundle)
 		}

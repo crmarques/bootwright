@@ -37,7 +37,7 @@ func TestValidateNodesAcceptsInfraRole(t *testing.T) {
 
 func TestValidateNodesComputeReplicasIncludeInfra(t *testing.T) {
 	ocp, machines := infraValidationCluster()
-	ocp.Spec.Compute = []v1alpha1.MachinePoolSpec{{Replicas: 2}} // worker(1) + infra(1)
+	ocp.Spec.Compute = []v1alpha1.MachinePoolSpec{{Replicas: 2}}
 	if errs := validateNodes(ocp, machines); len(errs) != 0 {
 		t.Fatalf("compute replicas should count worker+infra, got: %v", errs)
 	}
@@ -63,10 +63,6 @@ func TestValidateNodesRejectsBadTaintEffect(t *testing.T) {
 	}
 }
 
-// A hostname with uppercase or an underscore is not a valid RFC1123 subdomain:
-// openshift-install rejects it at ISO creation and it can never match the
-// lowercase kubelet-registered Node name, so validate must reject it up front.
-// A lowercase dotted name stays valid.
 func TestValidateNodesRejectsNonRFC1123Hostname(t *testing.T) {
 	ocp, machines := infraValidationCluster()
 	ocp.Spec.Hosts[0].Hostname = "Master_0"
@@ -81,10 +77,6 @@ func TestValidateNodesRejectsNonRFC1123Hostname(t *testing.T) {
 	}
 }
 
-// OpenShift requires the primary (first-entry) IP family of clusterNetwork and
-// serviceNetwork to match; a v4-primary clusterNetwork with a v6-primary
-// serviceNetwork validates clean today and fails only inside openshift-install,
-// so validate must reject the mismatch and pass a consistent family.
 func TestValidateClusterNetworkIPFamilies(t *testing.T) {
 	cluster := func(clusterCIDR, serviceCIDR string) v1alpha1.ContainerCluster {
 		return v1alpha1.ContainerCluster{
@@ -103,7 +95,6 @@ func TestValidateClusterNetworkIPFamilies(t *testing.T) {
 	if errs := validateClusterNetworkIPFamilies(cluster("10.128.0.0/14", "172.30.0.0/16")); len(errs) != 0 {
 		t.Fatalf("matching v4 primaries must pass, got: %v", errs)
 	}
-	// A consistent v6-primary dual-stack head also passes (both lists v6 first).
 	if errs := validateClusterNetworkIPFamilies(cluster("fd01::/48", "fd00::/112")); len(errs) != 0 {
 		t.Fatalf("matching v6 primaries must pass, got: %v", errs)
 	}

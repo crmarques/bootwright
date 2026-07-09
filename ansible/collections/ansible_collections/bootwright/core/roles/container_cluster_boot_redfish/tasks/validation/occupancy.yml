@@ -1,17 +1,4 @@
 ---
-# Pre-boot occupancy guard for a FIRST install (this cluster is in
-# bootwright_ocp_first_install_clusters, i.e. bootwright holds no record of ever
-# provisioning it). Powering the host from the agent virtual media next would run
-# coreos-installer and DISK-WIPE the target host, so before doing that to a machine
-# bootwright has never provisioned, refuse if the BMC reports the host is already
-# running an OS — a mis-pointed BMC address, a host repurposed from another cluster,
-# or a re-apply after the controller records were lost.
-#
-# Best-effort and FAIL-OPEN: a BMC that does not populate BootProgress (older Redfish
-# or an OEM value), a non-200 response, or any query error proceeds exactly as before
-# — only a definite PowerState=On + BootProgress.LastState=OSRunning blocks. An owned
-# cluster (a legitimate re-provision) is never in the first-install list and never
-# reaches this task, so re-imaging your own drifted cluster is unaffected.
 - name: Query Redfish system for pre-boot occupancy
   ansible.builtin.uri:
     url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"

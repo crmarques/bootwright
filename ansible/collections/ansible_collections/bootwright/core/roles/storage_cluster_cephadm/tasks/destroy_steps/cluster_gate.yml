@@ -9,15 +9,6 @@
   failed_when: false
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 
-# Before removing the cephadm cluster and wiping /etc/ceph on the seed, prove the
-# cluster is one Bootwright created. Ownership is 3-factor: the on-disk ceph.conf
-# carries an fsid AND a Bootwright storage-cluster ownership record exists on this
-# seed AND this host is the declared seedHost; a present marker's fsid must agree
-# with the conf fsid. Refuse to --zap-osds and tear down a cluster that is not owned
-# (a foreign or co-resident cluster). The fsid is read from the on-disk conf, not
-# live `ceph fsid`, so a DOWN owned cluster stays classifiable and removable. The
-# destroy play runs any_errors_fatal, so a seed refusal aborts before any node wipes
-# its OSD devices. A seed with no ceph.conf at all has nothing to protect (owned).
 - name: Read Bootwright Ceph ownership marker on seed host
   ansible.builtin.slurp:
     src: "{{ bootwright_ceph_ownership_marker_path }}"
@@ -103,9 +94,6 @@
       VM ownership markers only; it does not relax this Ceph cluster ownership gate.)
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 
-# Tear down by the live fsid when the cluster answers, else the on-disk conf fsid so
-# a DOWN owned cluster is still removable (cephadm rm-cluster operates on local
-# daemons/state by fsid, not the live cluster).
 - name: Resolve Ceph cluster fsid for teardown on seed host
   ansible.builtin.set_fact:
     bootwright_ceph_destroy_fsid: >-
@@ -125,21 +113,12 @@
       - "{{ bootwright_ceph_destroy_fsid }}"
   register: bootwright_cephadm_rm_cluster
   changed_when: bootwright_cephadm_rm_cluster.rc == 0
-  # Ownership is proven above; a real rm-cluster failure must not fall through to
-  # wiping OSD devices with the cephadm cluster still partly present. Fail closed.
   failed_when: bootwright_cephadm_rm_cluster.rc != 0
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
 
-# cephadm rm-cluster is host-local: run above it stops and removes only the SEED's
-# daemons/state. Non-seed hosts keep their mon/mgr/mds/osd systemd units and podman
-# containers running until they are also torn down, so wiping their declared devices
-# (wipe_and_cleanup) while daemons still hold them leaves restart-looping units and
-# stale device-mapper maps. Run rm-cluster per non-seed host too — keyed on the same
-# cluster fsid and the seed's proven ownership — before any device wipe. Fail closed
-# for the same reason as the seed: never wipe devices with daemons still up.
 - name: Remove cephadm cluster on non-seed hosts
   ansible.builtin.command:
     argv:
@@ -156,4 +135,3 @@
     - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
     - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
     - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length > 0
-

@@ -19,7 +19,6 @@ func TestClusterNodesContainerOrdinals(t *testing.T) {
 	if !ok || len(nodes) != 3 {
 		t.Fatalf("ClusterNodes = %+v, ok=%v", nodes, ok)
 	}
-	// Ordinal counts within a role, in declaration order.
 	if nodes[0].Ordinal != 0 || nodes[1].Ordinal != 1 || nodes[2].Ordinal != 0 {
 		t.Fatalf("ordinals = %d,%d,%d", nodes[0].Ordinal, nodes[1].Ordinal, nodes[2].Ordinal)
 	}

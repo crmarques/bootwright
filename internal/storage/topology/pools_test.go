@@ -6,9 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// poolReplicasFixture builds a state with one stretch and one non-stretch
-// cluster plus a placement policy, so the pool-resolution helpers can be
-// exercised against both topologies and policy-derived defaults.
 func poolReplicasFixture() v1alpha1.State {
 	return v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{

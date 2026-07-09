@@ -77,11 +77,6 @@ func applyProgressFields(ledger workflow.RunLedger) []output.ProgressField {
 	return fields
 }
 
-// applyBlockedReason explains why a task is blocked in fleet terms. It walks the
-// dependency chain to the actual failed root and, when that root lives in
-// another cluster (the KubeVirt host parent), names that cluster — so a blocked
-// child reads "host cluster dc1-metal-ocp not ready" instead of leaking a raw
-// internal task ID or blaming a sibling task one hop up.
 func applyBlockedReason(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
 	if dep, ok := status.ApplyBlockingRoot(ledger, task); ok {
 		label := applyTaskDisplayLabel(dep.Label)

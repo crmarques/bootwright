@@ -73,9 +73,6 @@ func TestCatalogResourcesEmptyWithoutShippedCatalog(t *testing.T) {
 	}
 }
 
-// TestOLMResourcesPrependShippedCatalog pins the canonical ordering: the
-// shipped CatalogSource leads, so the DesiredHash payload and the apply path
-// agree that the catalog precedes the operator-install set.
 func TestOLMResourcesPrependShippedCatalog(t *testing.T) {
 	resources, err := OLMResources(cataloguedExtension())
 	if err != nil {

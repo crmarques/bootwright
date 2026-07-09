@@ -12,18 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/host/safefs"
 )
 
-// A context owns its input: `context init` and `context update` copy the
-// operator's source directory into ctx.InputDir under the shared context
-// directory, so every command reads the copy and the context survives deletion
-// of the source. The whole tree is copied (not just YAML) because file:-sourced
-// secrets and SSH keys resolve relative to the loaded YAML's directory, so
-// referenced non-YAML material must come along.
-
-// ResolveWorkspaceDir resolves a source path argument to its absolute, cleaned
-// form (expanding ~ and relative paths against the caller's environment) and
-// verifies it is an existing directory outside the Bootwright state directory
-// and not a symlink. Call it before any sudo re-exec so the source is resolved
-// against the caller's environment, not root's.
 func ResolveWorkspaceDir(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", errors.New("a source directory is required; pass -f <dir>")
@@ -55,26 +43,10 @@ func ResolveWorkspaceDir(path string) (string, error) {
 	return resolved, nil
 }
 
-// ReplaceInputDir rebuilds ctx.InputDir from sourceDir, copying the whole tree
-// so the context is self-contained. The new tree is built in a sibling staging
-// directory under BaseDir (same filesystem, so installs are renames) and swapped
-// in only once fully populated. The existing input tree is moved aside first and
-// removed only after the new tree is installed, so the destructive delete never
-// runs before a valid replacement exists: a crash leaves either the old tree or
-// the new tree present, and a rare interruption between the two renames is caught
-// by ValidateInputDir with a repopulate remediation. Symlinks are rejected; VCS
-// and dependency directories are skipped; copied directories are 0700 and files
-// 0600 under the root-managed 0700 tree.
 func ReplaceInputDir(ctx Context, sourceDir string) error {
 	return ReplaceInputDirWithAddons(ctx, sourceDir, nil)
 }
 
-// ReplaceInputDirWithAddons is ReplaceInputDir plus a set of registered
-// native add-on directories (name -> machine-local store dir) snapshotted
-// into the input tree under add-ons/_store/<name>, so the context stays
-// self-contained: deleting or re-registering a store add-on never changes an
-// existing context. The copy lands in the same staging tree, keeping the
-// all-or-nothing swap.
 func ReplaceInputDirWithAddons(ctx Context, sourceDir string, addonDirs map[string]string) error {
 	if err := ValidateName(ctx.Name); err != nil {
 		return err
@@ -98,10 +70,6 @@ func ReplaceInputDirWithAddons(ctx Context, sourceDir string, addonDirs map[stri
 		_ = os.RemoveAll(staging)
 		return err
 	}
-	// Move any existing input tree aside (same-filesystem rename) before the swap
-	// so the old tree is destroyed only after the new one is installed. rename(2)
-	// cannot replace a populated directory, so the aside move is what frees the
-	// target for the staging rename.
 	aside := staging + ".old"
 	oldMoved := false
 	if _, err := os.Lstat(ctx.InputDir); err == nil {
@@ -116,7 +84,6 @@ func ReplaceInputDirWithAddons(ctx Context, sourceDir string, addonDirs map[stri
 	}
 	if err := os.Rename(staging, ctx.InputDir); err != nil {
 		if oldMoved {
-			// Restore the old tree so the context is never left without an input dir.
 			_ = os.Rename(aside, ctx.InputDir)
 		}
 		_ = os.RemoveAll(staging)
@@ -128,10 +95,6 @@ func ReplaceInputDirWithAddons(ctx Context, sourceDir string, addonDirs map[stri
 	return nil
 }
 
-// copyAddonDirs snapshots registered native add-on directories into the
-// staged input tree under add-ons/_store/<name> (dirs 0700, files 0600, same
-// symlink rejection as the input copy). Names come from validated
-// ClusterAddon metadata.name values; each must be a plain path segment.
 func copyAddonDirs(staging string, addonDirs map[string]string) error {
 	if len(addonDirs) == 0 {
 		return nil
@@ -155,8 +118,6 @@ func copyAddonDirs(staging string, addonDirs map[string]string) error {
 	return nil
 }
 
-// copyInputTree recursively copies src into dst, skipping VCS and dependency
-// directories, rejecting symlinks, and writing directories 0700 / files 0600.
 func copyInputTree(src, dst string) error {
 	entries, err := os.ReadDir(src)
 	if err != nil {
@@ -188,11 +149,6 @@ func copyInputTree(src, dst string) error {
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("input source %s is not a regular file", srcPath)
 		}
-		// Open with O_NOFOLLOW and read from the descriptor rather than
-		// re-resolving the path: this closes the TOCTOU window between the Lstat
-		// symlink check above and the read, so a final component swapped for a
-		// symlink after the check makes the open fail instead of being followed
-		// out of the source tree.
 		f, err := os.OpenFile(srcPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 		if err != nil {
 			return fmt.Errorf("open %s: %w", srcPath, err)
@@ -209,9 +165,6 @@ func copyInputTree(src, dst string) error {
 	return nil
 }
 
-// skipInputDir mirrors the desired-state loader's directory traversal: dot
-// directories (including .git) and dependency directories are never part of the
-// authored input set, so they are not copied into the context.
 func skipInputDir(name string) bool {
 	if strings.HasPrefix(name, ".") {
 		return true
@@ -223,10 +176,6 @@ func skipInputDir(name string) bool {
 	return false
 }
 
-// ValidateInputDir fails with a named error when ctx.InputDir — the owned copy
-// of the operator's source — is missing or unreadable. init/update always
-// populate it, so a missing input directory means a half-created or corrupted
-// context, with a copy-in remediation rather than a missing external workspace.
 func ValidateInputDir(ctx Context) error {
 	dir := strings.TrimSpace(ctx.InputDir)
 	if dir == "" {

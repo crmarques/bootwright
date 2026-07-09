@@ -7,10 +7,6 @@ import (
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
-// TestResolveFollowsRHELEntitlementRef verifies that an ibm-storage-ceph
-// entitlement, which carries no inline rhsm arm, resolves its RHSM material
-// from the referenced redhat-rhel entitlement while keeping its own registry
-// and license arms.
 func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 	ents := []v1alpha1.Entitlement{
 		{
@@ -50,7 +46,6 @@ func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 		t.Fatalf("license accepted = %v", resolved.License.Accepted)
 	}
 
-	// The referenced redhat-rhel entitlement still resolves its rhsm inline.
 	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
 		t.Fatal("Resolve(rhel) not found")
@@ -60,9 +55,6 @@ func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
 	}
 }
 
-// TestResolveCarriesSatellite verifies a corporate Satellite redirect on an
-// rhsm arm resolves its hostname/content URL and materialized CA path, and that
-// an ibm-storage-ceph entitlement inherits it through rhelEntitlementRef.
 func TestResolveCarriesSatellite(t *testing.T) {
 	ents := []v1alpha1.Entitlement{
 		{
@@ -109,7 +101,6 @@ func TestResolveCarriesSatellite(t *testing.T) {
 		t.Fatalf("ibm satellite via rhelEntitlementRef = %#v", ibm.RHSM.Satellite)
 	}
 
-	// Without a satellite block, the resolved redirect stays empty (public CDN).
 	bare := []v1alpha1.Entitlement{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.EntitlementSpec{

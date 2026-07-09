@@ -75,9 +75,6 @@ type renderStorageCluster struct {
 	Attachments          []string `json:"attachments,omitempty"`
 }
 
-// renderStorageClusters projects rendered StorageAssets into the JSON report
-// shape shared by `render storage --output json` and the top-level tool-input
-// render, so the two never spell the same paths differently.
 func renderStorageClusters(assets []render.StorageAsset) []renderStorageCluster {
 	clusters := make([]renderStorageCluster, 0, len(assets))
 	for _, asset := range assets {

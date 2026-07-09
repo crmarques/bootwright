@@ -12,10 +12,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// walkAnsibleTaskFiles invokes fn with the repo-relative (slash) path of every
-// .yml file under a role tasks/ directory in the bootwright.core collection. It
-// mirrors the walk in TestShellTasksDeclareChangeAndFailure so the fitness
-// tests below cover exactly the same task-file surface.
 func walkAnsibleTaskFiles(t *testing.T, fn func(rel string)) {
 	t.Helper()
 	root := filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot))
@@ -38,12 +34,6 @@ func walkAnsibleTaskFiles(t *testing.T, fn func(rel string)) {
 	}
 }
 
-// assertPatchThenSurface locks in the H1/F2/F3/F4 audit fix: a tolerated
-// cert-verification PATCH/POST (failed_when-swallowed or status-tolerant) must
-// be followed by a task that re-surfaces a privilege refusal by asserting or
-// warning on the tolerated call's registered result status. Deleting the
-// surfacing task, moving it before the PATCH, or renaming the registered var
-// out from under it all fail here.
 func assertPatchThenSurface(t *testing.T, rel string, tasks []map[string]any, patchName, registerVar, surfaceName, surfaceModule string) {
 	t.Helper()
 
@@ -70,19 +60,9 @@ func assertPatchThenSurface(t *testing.T, rel string, tasks []map[string]any, pa
 	}
 }
 
-// TestRedfishCertVerificationRefusalsSurface locks the F2/F3/F4 fix: the
-// container_cluster_boot_redfish role no longer swallows a cert-verification
-// PATCH/POST refusal at the per-resource VerifyCertificate disable, the
-// always-block restores, or the DMTF import. Each tolerated call is paired with a
-// following assert/debug that re-surfaces the tolerated call's HTTP status, so a
-// privilege-denied (401/403) no longer proceeds silently with verification ON.
-// (The manager-level HttpsTransferCertVerification disable in boot/media_insert.yml
-// is covered by the boot role's own tests.)
 func TestRedfishCertVerificationRefusalsSurface(t *testing.T) {
 	root := bootwrightCollectionRoleRoot + "/container_cluster_boot_redfish/tasks"
 
-	// insert_attempt.yml: per-resource VerifyCertificate:false disable PATCH,
-	// followed by a privilege assert.
 	insertAttempt := readAnsibleTasks(t, root+"/media/insert_attempt.yml")
 	assertPatchThenSurface(t, "media/insert_attempt.yml", insertAttempt,
 		"Disable HTTPS certificate verification for virtual-media fetch",
@@ -91,9 +71,6 @@ func TestRedfishCertVerificationRefusalsSurface(t *testing.T) {
 		"ansible.builtin.assert",
 	)
 
-	// restore_certificate_verification.yml runs in the role always-block, so each
-	// restore PATCH surfaces via a debug warning (a hard fail there would mask the
-	// original boot error).
 	restore := readAnsibleTasks(t, root+"/media/restore_certificate_verification.yml")
 	assertPatchThenSurface(t, "media/restore_certificate_verification.yml", restore,
 		"Restore virtual media fetch certificate verification",
@@ -108,9 +85,6 @@ func TestRedfishCertVerificationRefusalsSurface(t *testing.T) {
 		"ansible.builtin.debug",
 	)
 
-	// import_certificate/standard.yml: the DMTF import POST tolerates any status
-	// (failed_when:false) so its no_log does not bury the BMC refusal reason, then
-	// a following assert re-surfaces it credential-safely.
 	std := readAnsibleTasks(t, root+"/media/import_certificate/standard.yml")
 	importName := "Import the artifact certificate via the DMTF VirtualMedia store"
 	importIdx := findAnsibleTaskIndex(std, importName)
@@ -128,20 +102,10 @@ func TestRedfishCertVerificationRefusalsSurface(t *testing.T) {
 	)
 }
 
-// TestValidateCertsFalseIsAllowlisted locks the L14 audit finding: an
-// unconditional `validate_certs: false` disables TLS verification with no
-// operator opt-in, so it is confined to a spec-accepted allowlist. Every other
-// site drives validate_certs from a templated, operator-gated expression
-// (bmc/redfish.validateCerts, vsphere.disableCertificateVerification) which
-// this literal-false scan deliberately ignores. A future silent hardcoded
-// disable in any other task file fails here.
 func TestValidateCertsFalseIsAllowlisted(t *testing.T) {
 	allowed := map[string]bool{
-		// Managed self-signed artifact-server reachability probes (staged agent
-		// ISO HEAD/Range fetch checks) delegated to the stage host.
 		bootwrightCollectionRoleRoot + "/container_cluster_agent_install/tasks/iso/publish_target.yml": true,
-		// Artifact-server readiness wait against the local self-signed listener.
-		bootwrightCollectionRoleRoot + "/infra_component_artifact_server_http/tasks/main.yml": true,
+		bootwrightCollectionRoleRoot + "/infra_component_artifact_server_http/tasks/main.yml":          true,
 	}
 
 	literalFalse := regexp.MustCompile(`validate_certs:\s*false\b`)
@@ -168,8 +132,6 @@ type getURLTaskRef struct {
 	body map[string]any
 }
 
-// collectGetURLTasks appends every ansible.builtin.get_url / get_url task in
-// tasks (recursing into block/rescue/always) to out.
 func collectGetURLTasks(rel string, tasks []map[string]any, out *[]getURLTaskRef) {
 	for _, task := range tasks {
 		for _, key := range []string{"ansible.builtin.get_url", "get_url"} {
@@ -194,15 +156,7 @@ func collectGetURLTasks(rel string, tasks []map[string]any, out *[]getURLTaskRef
 	}
 }
 
-// TestGetURLDownloadsPinChecksums locks the M9 audit finding: every remote
-// get_url fetch either content-verifies the download with a checksum: key
-// (possibly conditional via omit) or is on a small documented accepted-list of
-// inherently unpinnable content. The community cephadm bootstrap binary — which
-// is fetched then executed — MUST carry a checksum, and does so via the M9 fix;
-// dropping it moves it off the "has checksum" set and fails here.
 func TestGetURLDownloadsPinChecksums(t *testing.T) {
-	// Keyed "<rel>\x00<name>". Accepted-unpinnable content cannot be
-	// content-addressed at author time; the rationale documents why.
 	acceptedUnpinnable := map[string]string{
 		bootwrightCollectionRoleRoot + "/controller_openshift_tools/tasks/main.yml\x00Download OpenShift CLI checksums":                         "this IS the sha256sum.txt manifest the sibling tarball fetches pin against; pinning it would be circular",
 		bootwrightCollectionRoleRoot + "/controller_virtctl/tasks/main.yml\x00Download virtctl archive":                                         "version-matched virtctl fetched from the live host-cluster ConsoleCLIDownload; the URL and bytes are cluster-derived at run time with no published digest",
@@ -251,8 +205,6 @@ func TestGetURLDownloadsPinChecksums(t *testing.T) {
 	}
 }
 
-// goFuncBody returns the source text of the Go function whose declaration starts
-// with signature, up to the next top-level func declaration.
 func goFuncBody(t *testing.T, src, signature string) string {
 	t.Helper()
 	idx := strings.Index(src, signature)
@@ -266,13 +218,6 @@ func goFuncBody(t *testing.T, src, signature string) string {
 	return rest
 }
 
-// TestDesiredStateKindsCompleteInLoadGuards locks the L5 audit finding: the
-// "no Bootwright YAML documents found" emptiness guard and the sortState
-// function in internal/state/desired/load.go each hand-maintain a per-kind list.
-// A desired-state kind that drifts out of either (as StorageNFSExports did)
-// silently breaks emptiness detection or load ordering. This reflects over every
-// exported slice field of v1alpha1.State and requires each to be referenced in
-// both functions.
 func TestDesiredStateKindsCompleteInLoadGuards(t *testing.T) {
 	src := readRepoFile(t, "internal/state/desired/load.go")
 	emptyGuard := goFuncBody(t, src, "func loadFiles(files []string) (v1alpha1.State, error) {")

@@ -9,11 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
-// This file re-exports the externally consumed surface of the render
-// emission families (installer, inventory, ceph) so callers outside
-// internal/render keep importing the root render package only.
-
-// Types.
 type (
 	InstallerAsset           = installer.InstallerAsset
 	InstallerManifest        = installer.InstallerManifest
@@ -22,7 +17,6 @@ type (
 	StorageAsset             = ceph.StorageAsset
 )
 
-// Constants.
 const (
 	InstallerRelativeDir = installer.InstallerRelativeDir
 	RuntimeRelativeDir   = installer.RuntimeRelativeDir
@@ -35,8 +29,6 @@ const (
 	GroupBootHosts           = inventory.GroupBootHosts
 	GroupStorageHosts        = inventory.GroupStorageHosts
 )
-
-// Installer emission.
 
 func InstallerAssets(clustersDir string, state v1alpha1.State) []InstallerAsset {
 	return installer.InstallerAssets(clustersDir, state)
@@ -61,8 +53,6 @@ func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClu
 func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
 	return installer.InstallerSecretInputStatsForContext(contextName, state, ocp, secretsDir)
 }
-
-// Inventory and vars emission.
 
 func ComponentPins(state v1alpha1.State) []inventory.ComponentPin {
 	return inventory.ComponentPins(state)

@@ -8,7 +8,6 @@ import (
 )
 
 func newContainerClusterObject(name string) workflow.ObjectClassification {
-	// A zero-value counts map means Recorded() is false — a greenfield/created object.
 	return workflow.ObjectClassification{Kind: workflow.ObjectKindContainerCluster, Label: "ContainerCluster/" + name}
 }
 
@@ -20,9 +19,6 @@ func stateWithClusters(names ...string) v1alpha1.State {
 	return st
 }
 
-// CheckApplyRenameOrphan fails closed only on the rename SIGNATURE: a full apply
-// that creates a new cluster while another remains provisioned but undeclared. It
-// must not fire for a scoped apply, a fully-declared fleet, or a pure orphan.
 func TestCheckApplyRenameOrphan(t *testing.T) {
 	dir := t.TempDir()
 	if err := workflow.SaveClusterInstallRecord(dir, workflow.ClusterInstallRecord{

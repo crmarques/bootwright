@@ -1,10 +1,4 @@
 ---
-# Bare-metal "substrate" — no provisioning work happens on the
-# provider machine. The machine-infra layer runs this role per machine to
-# record the per-cluster manifest and validate the BMC credentialsRef
-# exists locally. Actual BMC interaction happens in
-# bootwright.core.container_cluster_boot_redfish on the controller during the
-# install layer.
 
 - name: Resolve baremetal manifest paths
   ansible.builtin.set_fact:

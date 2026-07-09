@@ -1,31 +1,10 @@
 ---
 - name: Destroy managed Ceph storage
   hosts: bootwright_storage_hosts
-  # Fact-gathering is deferred to an explicit task after reachability is
-  # classified. The implicit gather connects to every host before any task runs,
-  # and under any_errors_fatal an unreachable host aborts the whole play there
-  # with a raw SSH error — even with ignore_unreachable — so a never-provisioned
-  # cluster (all nodes down) could never be torn down. Deferring it lets the
-  # reachability probe below classify hosts first and fail closed with guidance
-  # (default) or skip unreachable hosts (--skip-unreachable) before any connect.
   gather_facts: false
   become: true
-  # Play-level default for connecting tasks. The reachability probe overrides it
-  # with a task-level ignore_unreachable: true so classification runs even by
-  # default; with gather_facts: false there is no implicit gather to abort under
-  # any_errors_fatal, so this only shapes the post-classification tasks (off by
-  # default, on under --skip-unreachable).
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
-  # A seed-host ownership refusal (a foreign or unverifiable Ceph cluster) must
-  # abort the whole destroy before any node wipes its OSD devices. Kept literally
-  # true: a genuine task failure (the seed ownership assert, the seed-reachability
-  # gate, or the default reachability gate below) aborts every host before any
-  # wipe. Unreachable hosts are tolerated only on the probe/gather tasks that opt
-  # in with ignore_unreachable, so an unreachable host is classified, not fatal.
   any_errors_fatal: true
-  # Teardown package/podman work reaches the egress proxy through the task
-  # environment; bootwright no longer writes a proxy= line into dnf.conf/yum.conf,
-  # so resolve the proxy facts here and apply them play-wide.
   environment: "{{ bootwright_proxy_env | default({}) }}"
   vars:
     bootwright_selected_storage_cluster: >-
@@ -37,10 +16,6 @@
         | first
         | default({})
       }}
-  # Proxy facts resolve in pre_tasks, but every task is controller-side (set_fact
-  # and a delegate_to: localhost credential slurp — nothing connects to the managed
-  # host), so with gather_facts: false this runs without contacting an unreachable
-  # host, and the env is ready before the reachability probe and the teardown.
   pre_tasks:
     - name: Resolve proxy environment
       ansible.builtin.import_role:
@@ -51,35 +26,18 @@
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') | length == 0
 
-    # A scoped --clusters destroy narrows the storage teardown to the
-    # directly-selected storage roots (bootwright_destroy_storage_scope). A
-    # render-reference StorageCluster pulled into the render-inclusive state for
-    # a container cluster's data-foundation attachment is rendered into this
-    # group but not selected, so end its hosts before any OSD wipe. The var is
-    # defined whenever a --clusters narrowing is in force and holds the exact
-    # allowlist: an empty value tears down no storage at all (a container-only
-    # scope). Undefined means no narrowing (tear down every rendered managed
-    # storage host).
     - name: End hosts outside the selected storage clusters
       ansible.builtin.meta: end_host
       when:
         - bootwright_destroy_storage_scope is defined
         - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
 
-    # --- Reachability classification -------------------------------------
-    # Probe every in-scope host first. ignore_unreachable keeps an unreachable
-    # host in the play (recorded as unreachable) instead of letting it abort
-    # under any_errors_fatal, so the gates below decide what to do with it.
     - name: Probe storage host reachability before teardown
       ansible.builtin.ping:
       register: bootwright_storage_reachable_probe
       ignore_unreachable: true
       failed_when: false
 
-    # Fail closed by default: an unreachable storage host aborts with actionable
-    # guidance (not a raw SSH error). assert is controller-side, so it evaluates
-    # even on the unreachable host; any_errors_fatal turns it into a whole-play
-    # abort before any wipe. --skip-unreachable opts out of this gate.
     - name: Require storage hosts reachable unless --skip-unreachable
       ansible.builtin.assert:
         that:
@@ -98,11 +56,6 @@
         - bootwright_destroy_skip_unreachable | default(false) | bool
         - bootwright_storage_reachable_probe.unreachable | default(false) | bool
 
-    # Gather facts on the hosts that survived classification (reachable and
-    # in-scope). The play defers the implicit gather to here; ignore_unreachable
-    # under --skip-unreachable tolerates a host that flapped down after the probe.
-    # When every node was unreachable and skipped, no host remains and the wipe
-    # below is a clean no-op (a never-provisioned cluster has nothing to wipe).
     - name: Gather facts on reachable storage hosts
       ansible.builtin.setup:
         gather_subset:
@@ -110,12 +63,6 @@
           - min
       ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
 
-    # Ownership is proven only on the seed host (cluster_gate). If the seed is the
-    # node that is down, no ownership check runs yet the reachable nodes would
-    # still reach the device wipe (the wipe tasks are not individually
-    # ownership-gated). Fail closed: require the seed to be reachable before any
-    # wipe. Runs on every reachable in-scope host; any_errors_fatal turns a single
-    # failure into a whole-play abort, so no node wipes when a seed is unreachable.
     - name: Require the Ceph seed host to be reachable before any device wipe
       ansible.builtin.assert:
         that:
@@ -128,10 +75,6 @@
           cluster manually after verifying it is safe to destroy.
       when: bootwright_destroy_skip_unreachable | default(false) | bool
 
-    # Flag this cluster as partially destroyed when any of its nodes was skipped
-    # as unreachable: the per-node ownership-record removal in wipe_and_cleanup is
-    # gated on this so a partially-destroyed cluster keeps its controller-side
-    # ownership record (it is not treated as fully gone).
     - name: Flag storage clusters left partial by unreachable nodes
       ansible.builtin.set_fact:
         bootwright_storage_cluster_partial: >-
@@ -161,11 +104,6 @@
         name: bootwright.core.storage_cluster_cephadm
         tasks_from: destroy.yml
 
-    # Summarize a partial teardown (nodes skipped as unreachable) for the operator
-    # and for the controller. The result file round-trips on the controller
-    # (delegate_to: localhost), mirroring the apply-side storage-result.json, and
-    # bootwright reads it to mark the affected storage clusters partially
-    # destroyed so they are not treated as fully gone.
     - name: Summarize storage hosts skipped as unreachable
       vars:
         bootwright_storage_skipped_entries: >-

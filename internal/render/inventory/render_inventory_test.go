@@ -11,16 +11,10 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// inventoryWithLocalityPolicy builds an inventory with an explicit locality
-// policy and no ownership records — the shape these tests exercise — over the
-// canonical builder.
 func inventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localPolicy locality.Policy) map[string]any {
 	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, localPolicy, nil)
 }
 
-// TestInventoryStructure pins the Ansible inventory groups that the
-// layer playbooks select against (ansibleLimitForScope wires these into
-// the --limit flag). Renaming a group here is a breaking change.
 func TestInventoryStructure(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -137,10 +131,6 @@ func TestInventoryOmitsAnsibleUserWhenMachineSSHUserUnset(t *testing.T) {
 	if !ok || bastion.Spec.Access.SSH == nil {
 		t.Fatal("Machine/bastion spec.access.ssh missing")
 	}
-	// The bastion omits access.ssh.user; it must NOT be defaulted from the
-	// invoking process (that made rendered artifacts non-deterministic), so the
-	// inventory carries no ansible_user and Ansible connects as the user running
-	// the playbook (root after the sudo re-exec).
 	if got := bastion.Spec.Access.SSH.User; got != "" {
 		t.Fatalf("Machine.spec.access.ssh.user = %q, want empty (no process-user default)", got)
 	}
@@ -241,16 +231,12 @@ func TestInventoryUsesLocalConnectionForBastionWithoutSSH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	// A provided-OS bastion may omit its ssh block to declare it is the local
-	// bastion bootwright runs on.
 	for i := range state.Machines {
 		if state.Machines[i].Metadata.Name == "bastion" {
 			state.Machines[i].Spec.Access.SSH = nil
 		}
 	}
 
-	// A policy that matches no address, to prove the local connection comes from
-	// the absent ssh block, not from controller address resolution.
 	inv := inventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
 		Hostname:       func() (string, error) { return "somewhere-else", nil },
 		InterfaceAddrs: func() ([]net.Addr, error) { return nil, nil },
@@ -452,9 +438,6 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 	}
 }
 
-// TestHostGroupCountsLibvirtManaged pins the symmetric case: a libvirt
-// fixture with managed services produces non-zero counts for provider,
-// infra component, and infra groups, so the workflow does not skip ansible.
 func TestHostGroupCountsLibvirtManaged(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {

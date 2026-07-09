@@ -34,10 +34,6 @@
   changed_when: false
   failed_when: false
 
-# Disk-path membership alone is not proof of ownership: a foreign domain could
-# store a disk under the context root. Read each domain's XML and require the
-# Bootwright ownership marker for this context before sweeping it, so the sweep
-# never undefines a VM that Bootwright did not create.
 - name: Inspect libvirt domain ownership metadata
   ansible.builtin.command:
     argv:
@@ -67,9 +63,6 @@
     label: "{{ item.bootwright_libvirt_domain_name | default('') }}"
   when:
     - item.rc | default(1) == 0
-    # Prefix-agnostic match: a managed-OS install round-trips the domain through
-    # ElementTree, which rewrites the bootwright namespace prefix (e.g. ns0:), so
-    # key on the element's local name rather than the literal <bootwright:context>.
     - (item.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
   changed_when: false
 
@@ -90,9 +83,6 @@
     - item.bootwright_libvirt_domain_name in bootwright_libvirt_context_owned_domains
   changed_when: false
 
-# A FOREIGN (non-Bootwright-owned) domain may also store a disk under the context
-# root. Detecting that decides whether the whole root can be swept or only the
-# owned subtrees, so a foreign disk parked under the root is never deleted.
 - name: Detect foreign libvirt domains using current-context storage
   ansible.builtin.set_fact:
     bootwright_libvirt_context_foreign_storage: >-
@@ -112,10 +102,6 @@
     bootwright_libvirt_context_owned_machine_dirs: []
   changed_when: false
 
-# For each Bootwright-owned domain, collect the directories of its disks under the
-# context root (the last whitespace-delimited field of each `domblklist --details`
-# row is the source path). These per-machine subtrees are the only ones removed
-# when a foreign domain co-resides under the root.
 - name: Collect owned current-context libvirt machine directories
   ansible.builtin.set_fact:
     bootwright_libvirt_context_owned_machine_dirs: >-
@@ -166,19 +152,12 @@
     - "'Domain not found' not in (bootwright_libvirt_context_domain_undefine.stderr | default(''))"
     - "'failed to get domain' not in (bootwright_libvirt_context_domain_undefine.stderr | default(''))"
 
-# Common case (no foreign domain stores a disk under the context root): the root
-# holds only Bootwright-owned and orphaned disks, so removing the whole root is
-# safe and also reclaims orphans.
 - name: Remove current-context libvirt storage directory
   ansible.builtin.file:
     path: "{{ bootwright_libvirt_context_storage_root }}"
     state: absent
   when: bootwright_libvirt_context_foreign_storage | default([]) | length == 0
 
-# A foreign (non-Bootwright) domain stores a disk under the context root: remove
-# only the Bootwright-owned machine subtrees so the foreign disk is preserved.
-# Orphan subtrees (no live domain) are left for a manual sweep rather than risk the
-# foreign disk; the warning below surfaces this.
 - name: Remove owned current-context libvirt machine directories
   ansible.builtin.file:
     path: "{{ item }}"

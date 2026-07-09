@@ -32,11 +32,6 @@ func machineInstallLocalizationVars(loc v1alpha1.MachineInstallLocalization) map
 	if timezone == "" {
 		timezone = v1alpha1.MachineInstallDefaultTimezone
 	}
-	// instLangs is the set of locales whose data must exist on the installed
-	// system: the message language, the optional regional formats locale, and any
-	// explicit extras, deduped with language first. It renders as %packages
-	// --inst-langs, which is authoritative over which locales survive in
-	// `locale -a`, so the active locale can never be pruned.
 	instLangs := []string{language}
 	seen := map[string]bool{language: true}
 	for _, locale := range append([]string{loc.Formats}, loc.AdditionalLocales...) {
@@ -51,8 +46,6 @@ func machineInstallLocalizationVars(loc v1alpha1.MachineInstallLocalization) map
 		"timezone":  timezone,
 		"instLangs": instLangs,
 	}
-	// Only emit formats when the profile splits regional formatting from the
-	// message language; an empty value leaves formatting following language.
 	if loc.Formats != "" {
 		out["formats"] = loc.Formats
 	}
@@ -78,9 +71,5 @@ func machineInstallSecurityVars(security v1alpha1.MachineInstallSecurity) map[st
 			"enabled": *security.Firewall.Enabled,
 		}
 	}
-	// FIPS is NOT emitted here: ks.cfg.j2 consumes only selinux and firewall, and
-	// FIPS is delivered via installer.kernelArgs=[fips=1] (mkksiso --cmdline), which
-	// Anaconda uses to configure the installed system in FIPS mode. A kickstart
-	// security.fips key would be a dead, misleading contract surface.
 	return out
 }

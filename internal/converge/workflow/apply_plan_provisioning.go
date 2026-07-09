@@ -14,19 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// planProvisioningPlaybookActivities injects each in-scope ProvisioningPlaybook
-// into the capability DAG as an ordinary ansible ApplyTask, anchored to its
-// stage with before/after timing. It must run after every core activity is
-// added (so the phase index below is complete) and before graph.Lower().
-//
-//   - after:  the playbook waits for the anchor stage's core tasks in scope.
-//   - before: every anchor-stage core task in scope waits for the playbook, and
-//     the playbook waits for the previous stage's core tasks so it lands on the
-//     stage boundary rather than at t0.
-//
-// A playbook plans only when its stage is in the run's phase set (the --stage
-// filter) and its target resolves to at least one in-scope host (the --clusters
-// filter); otherwise it is skipped.
 func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, target ApplyTarget) error {
 	playbooks := selectedProvisioningPlaybooks(state)
 	if len(playbooks) == 0 {
@@ -74,7 +61,6 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 		if timing == v1alpha1.ProvisioningPlaybookTimingAfter {
 			activity.ExplicitDependencies = append(activity.ExplicitDependencies, anchorIDs...)
 		} else {
-			// before: land on the boundary by waiting for the previous stage's work.
 			if prev, ok := previousProvisioningStage(stage); ok {
 				activity.ExplicitDependencies = append(activity.ExplicitDependencies, phaseTaskIDsInScope(index, prev, orderClusters, fleetWide)...)
 			}
@@ -83,9 +69,6 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 			return err
 		}
 		if timing == v1alpha1.ProvisioningPlaybookTimingBefore {
-			// Gate each anchor-stage core task on the playbook. failureMode: fail
-			// gates hard (a failed playbook blocks the stage); continue gates via an
-			// ordering dependency (the stage proceeds regardless).
 			hard := v1alpha1.ProvisioningPlaybookFailureMode(p) == v1alpha1.ProvisioningPlaybookFailureFail
 			for _, anchorID := range anchorIDs {
 				if hard {
@@ -103,8 +86,6 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 	return nil
 }
 
-// selectedProvisioningPlaybooks returns the enabled playbooks sorted by
-// (stage, timing, order, name) for deterministic planning.
 func selectedProvisioningPlaybooks(state v1alpha1.State) []v1alpha1.ProvisioningPlaybook {
 	out := make([]v1alpha1.ProvisioningPlaybook, 0, len(state.ProvisioningPlaybooks))
 	for _, p := range state.ProvisioningPlaybooks {
@@ -129,9 +110,6 @@ func selectedProvisioningPlaybooks(state v1alpha1.State) []v1alpha1.Provisioning
 	return out
 }
 
-// phaseTaskIndex buckets the core activities already in the graph by phase and
-// cluster ("" = fleet-wide, e.g. fabric services). It reads the graph snapshot
-// so the hook planner needs no phase index threaded through every call site.
 func phaseTaskIndex(graph *ActivityGraph) map[string]map[string][]string {
 	index := map[string]map[string][]string{}
 	for _, act := range graph.ActivitySnapshot() {
@@ -148,9 +126,6 @@ func phaseTaskIndex(graph *ActivityGraph) map[string]map[string][]string {
 	return index
 }
 
-// applyTaskKindPhase maps a core ApplyTask kind to the provisioning stage it
-// belongs to. It is the inverse of the phase gates in PlanApplyTasksChecked and
-// the anchor set a ProvisioningPlaybook wires against.
 func applyTaskKindPhase(kind string) (string, bool) {
 	switch kind {
 	case ApplyTaskKindProvider, ApplyTaskKindInfraComponentServices:
@@ -168,9 +143,6 @@ func applyTaskKindPhase(kind string) (string, bool) {
 	}
 }
 
-// phaseTaskIDsInScope returns the core task IDs of a phase restricted to the
-// playbook's scope: always the fleet-wide bucket, plus either every cluster's
-// tasks (fleetWide) or only the named clusters' tasks.
 func phaseTaskIDsInScope(index map[string]map[string][]string, phase string, clusters []string, fleetWide bool) []string {
 	byCluster := index[phase]
 	if byCluster == nil {
@@ -224,11 +196,6 @@ func clusterKindSets(state v1alpha1.State) (containers, storage map[string]bool)
 	return containers, storage
 }
 
-// resolveProvisioningTarget resolves a playbook's target to an ansible --limit
-// and the cluster set used for ordering. It returns ok=false when nothing in the
-// run's scope matches (an empty limit would target every host, so such a playbook
-// is skipped, not run fleet-wide). fleetWide is true when the target names host
-// groups or unowned machines, meaning ordering wires against the whole phase.
 func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alpha1.ProvisioningPlaybook, containers, storage map[string]bool) (limit string, orderClusters []string, fleetWide bool, ok bool) {
 	var tokens []string
 	clusterSet := map[string]bool{}
@@ -309,9 +276,6 @@ func provisioningPlaybookLabel(p v1alpha1.ProvisioningPlaybook, stage, timing st
 	return "playbook " + p.Metadata.Name + " (" + timing + " " + stage + ")"
 }
 
-// provisioningPlaybookCluster returns the single owning cluster when the playbook
-// targets exactly one (for per-cluster logs); otherwise "" (the infrastructure
-// root).
 func provisioningPlaybookCluster(p v1alpha1.ProvisioningPlaybook, orderClusters []string) string {
 	if len(orderClusters) == 1 && len(p.Spec.Target.HostGroups) == 0 {
 		return orderClusters[0]
@@ -352,9 +316,6 @@ func provisioningRequiresCapabilities(p v1alpha1.ProvisioningPlaybook, timing st
 	return provisioningCapabilities(p.Spec.Requires, p.Spec.Stage, timing)
 }
 
-// provisioningCapabilities namespaces inter-playbook provides/requires by the
-// (stage, timing) bucket so a capability name is only shared within one bucket,
-// matching the validation contract.
 func provisioningCapabilities(names []string, stage, timing string) []CapabilityRef {
 	out := make([]CapabilityRef, 0, len(names))
 	for _, name := range names {
@@ -366,10 +327,6 @@ func provisioningCapabilities(names []string, stage, timing string) []Capability
 	return out
 }
 
-// provisioningPlaybookHashVars is the run: onChange hash projection: the declared
-// inputs plus a content digest of the playbook and vendored trees, so an edit to
-// the playbook file (without an object change) re-runs it, while an unrelated
-// fleet edit does not.
 type provisioningPlaybookHashVars struct {
 	Stage           string                              `json:"stage"`
 	Timing          string                              `json:"timing"`
@@ -410,10 +367,6 @@ func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) provisioningPl
 	}
 }
 
-// provisioningContentDigest is a best-effort sha256 over the referenced playbook
-// file and vendored directories. Missing files contribute nothing (validation
-// already requires them for a real apply); the digest is a bonus that makes an
-// edited playbook re-run under run: onChange.
 func provisioningContentDigest(p v1alpha1.ProvisioningPlaybook) string {
 	base := filepath.Dir(p.SourcePath)
 	h := sha256.New()

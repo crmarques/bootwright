@@ -7,11 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// Scaling out a Ceph cluster (adding an OSD host) or rebalancing a mon/mgr/mds
-// daemon by editing host roles is reconciled in place by `ceph orch apply`, so it
-// must NOT move the StorageCluster structural hash — otherwise apply refuses it and
-// --override wipes the cluster's OSDs. A change to cluster identity (the public
-// network) must still move it.
 func TestCephScaleOutIsStructurallyReconcilable(t *testing.T) {
 	proj := func(s v1alpha1.State) string {
 		b, err := json.Marshal(storageClusterStructuralHashVars(s, "ceph-bm"))
@@ -37,7 +32,7 @@ func TestCephScaleOutIsStructurallyReconcilable(t *testing.T) {
 	t.Run("rebalance mon/mgr roles is reconcilable", func(t *testing.T) {
 		s := bareMetalManagedOSState()
 		s.StorageClusters[0].Spec.Ceph.Networks = v1alpha1.StorageCephNetworks{PublicCIDRs: []string{"10.10.10.0/24"}}
-		s.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Roles = []string{v1alpha1.StorageCephRoleOSD} // drop MON from ceph-2
+		s.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Roles = []string{v1alpha1.StorageCephRoleOSD}
 		if proj(s) != want {
 			t.Fatal("editing host roles (daemon rebalance) must not move the structural hash")
 		}

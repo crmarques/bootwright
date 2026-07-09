@@ -28,8 +28,6 @@ func runStatusJSON(stdout io.Writer, cf *commonFlags) error {
 func buildStatusReport(cf *commonFlags) (status.Report, bool, error) {
 	ctx, err := cf.resolve()
 	if err != nil {
-		// Context missing or not ready: report the setup checks (the surface
-		// that used to be `context validate`) instead of failing opaquely.
 		vctx, checks := currentContextValidation()
 		report := status.Report{
 			Context: status.Context{

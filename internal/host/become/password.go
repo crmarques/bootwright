@@ -10,8 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/host/safefs"
 )
 
-// InheritedPasswordFile returns the BECOME password file handed down by a
-// prompted parent sudo session, or "" when no usable file was inherited.
 func InheritedPasswordFile() string {
 	if strings.TrimSpace(os.Getenv(SudoAuthEnv)) != AuthPrompted {
 		return ""
@@ -35,10 +33,6 @@ func WritePasswordFile(password string) (string, func(), error) {
 	if password == "" {
 		return "", nil, errors.New("BECOME password cannot be empty")
 	}
-	// Materialize the plaintext BECOME password under a 0700 per-run directory
-	// (not bare in the shared, world-writable /tmp), mirroring the secret-staging
-	// path and the spec's short-lived-plaintext contract: 0700 directory, 0600
-	// file, removed by cleanup.
 	dir, err := os.MkdirTemp("", "bootwright-become-")
 	if err != nil {
 		return "", nil, fmt.Errorf("create BECOME password directory: %w", err)

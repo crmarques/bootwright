@@ -5,7 +5,6 @@ metadata:
 spec:
   os:
     family: rhel
-    # IBM Storage Ceph supports RHEL 9.6, 9.7, 10, or 10.1 on storage nodes.
     version: "9.7"
     architecture: x86_64
 
@@ -14,13 +13,7 @@ spec:
       imageRef: rhel-9-x86-64-dvd
 
   customizations:
-    # hostname.source defaults to clusterFQDN: each node's OS hostname becomes
-    # <machine>.<storageCluster>.<baseDomain> (e.g. ceph-3.ceph-ibm.bootwright.test).
-    # cephadm registers that name and the lab-dns component resolves it, so the
-    # mgr dashboard can reach the monitoring stack (Prometheus/Grafana/
-    # Alertmanager). Set source: machineName here to keep bare node names.
     ssh:
-      # Authorize the generated ceph-node-ssh public key for root login.
       authorizeMachineSSHKey: true
       passwordAuthentication: false
     storage:
@@ -28,9 +21,6 @@ spec:
         source: machineRootDeviceHints
       wipe: true
     packages:
-      # Minimal base. cephadm/ceph are NOT on the RHEL DVD — the
-      # storage_cluster_cephadm role installs them after RHSM registration
-      # enables the repos. We only stage the runtime prerequisites here.
       environment: minimal
       installWeakDeps: false
       excludeDocs: true
@@ -53,8 +43,4 @@ spec:
       firewall:
         enabled: true
       fips:
-        # Install RHEL in FIPS mode: Bootwright adds fips=1 to the installer
-        # kernel command line so Anaconda lays the system down FIPS-enabled.
-        # Required because the ceph-ibm cluster declares
-        # spec.ceph.security.fips.enabled (clusters/storage/ceph-ibm/cluster.yaml).
         enabled: true

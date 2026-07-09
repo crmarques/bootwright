@@ -5,9 +5,6 @@ import (
 	"os"
 )
 
-// DirPermsWarning returns a one-line warning when the local secrets
-// directory exists with permission bits other than 0700, or "" when it is
-// absent or compliant.
 func DirPermsWarning(secretsDir string) string {
 	if secretsDir == "" {
 		return ""
@@ -23,8 +20,6 @@ func DirPermsWarning(secretsDir string) string {
 	return fmt.Sprintf("%s has mode %#o; expected 0700 (run chmod 0700 %s)", secretsDir, mode, secretsDir)
 }
 
-// StrictDirCheck enforces 0700 on the secrets-dir and 0600 on every file
-// inside.
 func StrictDirCheck(secretsDir string) error {
 	if secretsDir == "" {
 		return nil

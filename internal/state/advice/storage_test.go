@@ -9,9 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// adviceCephCluster builds a minimal managed Ceph StorageCluster whose hosts
-// carry the given role sets; StorageAdvisories reads only the Ceph topology,
-// distribution, and image, so nothing else needs populating.
 func adviceCephCluster(name, distribution, image string, roleSets ...[]string) v1alpha1.StorageCluster {
 	hosts := make([]v1alpha1.StorageCephHost, 0, len(roleSets))
 	for i, roles := range roleSets {
@@ -124,14 +121,11 @@ func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
 		Registries: &v1alpha1.EnvironmentRegistriesSpec{Mirror: &v1alpha1.EnvironmentRegistryMirrorSpec{URL: "mirror.test:5000"}},
 	}}
 
-	// IBM is flagged even when connected (its cephadm defaults point at
-	// registry.redhat.io, which an IBM entitlement cannot pull).
 	ibm := adviceState(healthy("ibm", v1alpha1.StorageCephDistributionIBM))
 	if got := findingsWith(StorageAdvisories(ibm), "sidecar"); len(got) != 1 {
 		t.Fatalf("ibm cluster must flag unpinned sidecars, got %+v", StorageAdvisories(ibm))
 	}
 
-	// A connected oss cluster is silent; a disconnected one is flagged.
 	ossConnected := adviceState(healthy("oss", v1alpha1.StorageCephDistributionOSS))
 	if got := findingsWith(StorageAdvisories(ossConnected), "sidecar"); len(got) != 0 {
 		t.Fatalf("connected oss cluster must not flag sidecars, got %+v", got)
@@ -142,14 +136,12 @@ func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
 		t.Fatalf("disconnected oss cluster must flag sidecars, got %+v", StorageAdvisories(ossDisconnected))
 	}
 
-	// Pinning any sidecar image suppresses the advisory.
 	pinned := healthy("ibm-pinned", v1alpha1.StorageCephDistributionIBM)
 	pinned.Spec.Ceph.Config = map[string]map[string]string{"mgr": {"mgr/cephadm/container_image_prometheus": "mirror.test:5000/prometheus:v2"}}
 	if got := findingsWith(StorageAdvisories(adviceState(pinned)), "sidecar"); len(got) != 0 {
 		t.Fatalf("a cluster pinning sidecar images must be silent, got %+v", got)
 	}
 
-	// Disabled monitoring suppresses the advisory.
 	noMon := healthy("ibm-nomon", v1alpha1.StorageCephDistributionIBM)
 	disabled := false
 	noMon.Spec.Ceph.Monitoring = &v1alpha1.StorageCephMonitoring{Enabled: &disabled}
@@ -161,7 +153,7 @@ func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
 func TestStorageAdvisoriesExemptStretchFromMonCount(t *testing.T) {
 	cluster := adviceCephCluster("stretch", v1alpha1.StorageCephDistributionOSS, "",
 		[]string{"mon", "mgr"}, []string{"mon", "mgr"},
-		[]string{"mon"}, []string{"mon"}, // 4 mons (even) — would warn if not stretch
+		[]string{"mon"}, []string{"mon"},
 	)
 	cluster.Spec.Ceph.Topology.Stretch = &v1alpha1.StorageCephStretch{FailureDomain: "datacenter"}
 	if got := findingsWith(StorageAdvisories(adviceState(cluster)), "mon role"); len(got) != 0 {
@@ -195,9 +187,6 @@ func TestStorageAdvisoriesNoticeStretchPoolInheritance(t *testing.T) {
 	if got.Severity != SeverityInfo {
 		t.Fatalf("stretch-pool notice must be INFO, got %q", got.Severity)
 	}
-	// The replication figures must come from the topology constants, not a
-	// literal: derive the expected substring from the constants so a future
-	// change to them changes both the renderer and this notice in lockstep.
 	wantSize := fmt.Sprintf("size %d/minSize %d", topology.StretchReplicatedPoolSize, topology.StretchReplicatedPoolMinSize)
 	if !strings.Contains(got.Finding, wantSize) {
 		t.Fatalf("stretch-pool notice must cite the topology constants %q, got %q", wantSize, got.Finding)
@@ -251,18 +240,12 @@ func TestStorageAdvisoriesSkipExternalClusters(t *testing.T) {
 	}
 }
 
-// TestStorageAdvisoriesQuorumGuidanceIsDistributionNeutral guards against
-// re-branding general Ceph quorum/HA guidance as IBM-specific. Monitor quorum
-// and manager standby sizing are universal Ceph properties — the oss and redhat
-// distribution examples surface these same advisories — so the wording must not
-// claim "IBM Storage Ceph recommends" regardless of the selected distribution.
 func TestStorageAdvisoriesQuorumGuidanceIsDistributionNeutral(t *testing.T) {
 	for _, distribution := range []string{
 		v1alpha1.StorageCephDistributionOSS,
 		v1alpha1.StorageCephDistributionRedHat,
 		v1alpha1.StorageCephDistributionIBM,
 	} {
-		// A single host fires both the sub-quorum mon and the single-mgr advisory.
 		cluster := adviceCephCluster("q", distribution, "", []string{"mon", "mgr", "osd"})
 		got := StorageAdvisories(adviceState(cluster))
 		mon := findingsWith(got, "mon role")

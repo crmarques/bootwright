@@ -7,12 +7,6 @@ import (
 	"testing"
 )
 
-// TestRenderOutputDirClustersAcceptsStorageCluster is the regression guard for
-// the multi-kind scope fix: the top-level tool-input render (here the portable
-// --input-dir variant) resolves --clusters against BOTH the ContainerCluster and
-// StorageCluster name spaces, matching its flag help and `apply`. Before the fix
-// it hard-wired the container-cluster target, so naming a StorageCluster failed
-// with "unknown cluster(s)" even though the bundle covers storage.
 func TestRenderOutputDirClustersAcceptsStorageCluster(t *testing.T) {
 	setTestHomeAndRoot(t)
 	outputDir := filepath.Join(t.TempDir(), "rendered")
@@ -42,9 +36,6 @@ func TestRenderOutputDirClustersAcceptsStorageCluster(t *testing.T) {
 	}
 }
 
-// TestRenderOutputDirClustersRejectsUnknown confirms the widened scope still
-// rejects a name that is neither a ContainerCluster nor a StorageCluster, and now
-// lists the storage roots as available.
 func TestRenderOutputDirClustersRejectsUnknown(t *testing.T) {
 	setTestHomeAndRoot(t)
 	outputDir := filepath.Join(t.TempDir(), "rendered")
@@ -65,8 +56,6 @@ func TestRenderOutputDirClustersRejectsUnknown(t *testing.T) {
 	}
 }
 
-// TestRenderToolInputsInstallerJSON confirms the tool-input JSON projects the
-// per-ContainerCluster installer inputs for a container-only bundle.
 func TestRenderToolInputsInstallerJSON(t *testing.T) {
 	setTestHomeAndRoot(t)
 	outputDir := filepath.Join(t.TempDir(), "rendered")
@@ -94,9 +83,6 @@ func TestRenderToolInputsInstallerJSON(t *testing.T) {
 	}
 }
 
-// TestRenderStorageJSON exercises `render storage --output json`, the parity gap
-// this change closes (its sibling `render installer`/`render effective` already
-// had --output json), and with it the shared StorageRenderState scoping.
 func TestRenderStorageJSON(t *testing.T) {
 	setTestHomeAndRoot(t)
 	if _, stderr, code := runCLI(t, "context", "init", "--name", "st", "-f", fixturePath("006-ceph-3nodes-libvirt-managed-os")); code != 0 {

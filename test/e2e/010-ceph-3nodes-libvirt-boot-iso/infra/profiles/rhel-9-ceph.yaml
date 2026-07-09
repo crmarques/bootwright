@@ -33,8 +33,6 @@ spec:
       installWeakDeps: false
       excludeDocs: true
       install:
-        # cephadm is not on the RHEL install media; the storage_cluster_cephadm
-        # role installs it post-provision after configuring the Ceph repo.
         - podman
         - lvm2
         - chrony

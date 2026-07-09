@@ -1,10 +1,4 @@
 ---
-# Converges one dnsmasq capability on this provider host. The renderer
-# projects `bootwright_component` with:
-#   { kind, providerName, name, machineRef, machineAddress,
-#     realisation: 'dnsmasq', hostRecords: [...], domainRecords: [...] }
-# This role writes a dnsmasq config that resolves endpoint host records
-# and apps-domain records for every cluster assigned to this DNS capability.
 
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
@@ -60,13 +54,6 @@
     command:
       - --conf-file=/etc/dnsmasq.conf
 
-# podman_container state=started succeeds the moment the container is created,
-# even if dnsmasq then exits and crash-loops under restart_policy. When the
-# rendered listen-address exists on this host, confirm the container is actually
-# Running so a genuine crash (bad config, port conflict) fails loudly instead of
-# a misleading green. The check is skipped while the listen-address is still
-# absent — a dnsmasq bound to a substrate bridge created by the later machines
-# phase legitimately cannot start yet and self-heals via the restart policy.
 - name: Confirm dnsmasq container is running
   containers.podman.podman_container_info:
     name: "{{ bootwright_dnsmasq_container_name }}"

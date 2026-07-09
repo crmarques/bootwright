@@ -1,9 +1,4 @@
 ---
-# Coerce a package ownership record's requiredBy field into a list. Older records
-# may have persisted requiredBy as a bare scalar string rather than a list, so a
-# scalar is wrapped (and an empty/absent value becomes []).
-# Input:  bootwright_ownership_required_by_raw
-# Output: bootwright_ownership_required_by_list
 - name: Coerce requiredBy record field to a list
   ansible.builtin.set_fact:
     bootwright_ownership_required_by_list: >-

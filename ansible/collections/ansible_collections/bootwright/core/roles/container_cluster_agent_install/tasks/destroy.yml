@@ -29,9 +29,6 @@
   loop_control:
     label: "{{ item }}"
 
-# Reverse the controller resolver wiring set up by the agent install
-# (stage/controller_resolver.yml): drop the systemd-resolved drop-in and reload
-# so the controller's DNS returns to its pre-install state.
 - name: Remove controller resolver drop-in
   ansible.builtin.file:
     path: "{{ bootwright_controller_resolver_dropin_path }}"

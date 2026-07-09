@@ -7,11 +7,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// This file holds the pure desired-state lookups the apply planners share:
-// resolving a machine's substrate host, its exclusive resource keys, provider
-// type, and the cluster/machine name sets. They read state and never touch the
-// graph, so they are the stable vocabulary the per-domain planners build on.
-
 func clusterHostNeedsSubstratePrepare(state v1alpha1.State, clusterName, host string) bool {
 	cluster, ok := containerClusterByName(state, clusterName)
 	if !ok {

@@ -14,8 +14,6 @@ spec:
     - clusters
     - add-ons
 
-  # Secrets and entitlements are first-class objects (secrets.yaml, infra/entitlements/).
-
   infraComponents:
     artifactServers:
       - name: default

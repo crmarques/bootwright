@@ -8,5 +8,4 @@ spec:
   placementPolicyRef: replicated-host
 
   ceph:
-    # CephFS data pool.
     role: cephfs-data

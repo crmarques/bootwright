@@ -5,9 +5,6 @@ import (
 	"strings"
 )
 
-// splitObjectFiles emits one File per YAML document in body, named
-// dir+<metadata.name>.yaml, so scaffolded output keeps one object per file (the
-// authoring layout specs/state-model.md defines).
 func splitObjectFiles(dir, body string) ([]File, error) {
 	docs := splitYAMLDocuments(body)
 	files := make([]File, 0, len(docs))

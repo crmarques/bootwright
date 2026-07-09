@@ -1,16 +1,7 @@
 ---
-# vSphere device config has no separate persistent layer and the substrate
-# enforces disk-first boot order, so an attached ISO cannot re-enter the
-# installer after the disk becomes bootable: cleanup_persistent is a no-op
-# and full cleanup removes the CD device and the uploaded media.
 - name: Clean up vSphere virtual media
   when: bootwright_vsphere_media_action == 'cleanup'
   block:
-    # Remove the whole CD/DVD device so the provisioned guest is left with no
-    # leftover optical drive (no /dev/sr0). Live CD device removal via
-    # vmware_guest is historically fragile and can be rejected on a powered-on
-    # VM; the rescue then at least disconnects the medium so the drive clears on
-    # a later powered-off reconcile.
     - name: Remove vSphere virtual media drive
       block:
         - name: Remove vSphere virtual media drive

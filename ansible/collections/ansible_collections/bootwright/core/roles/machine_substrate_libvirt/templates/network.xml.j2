@@ -1,7 +1,3 @@
-{# Extract the IP-shaped resolved NTP sources; DHCP option 42 (RFC 2132)
-   carries IPv4 addresses only, so any hostname-only entries are skipped
-   here and reach the host via agent-config's additionalNTPSources
-   instead. #}
 {% set _ntp_ips = (bootwright_resolved_ntp_sources | default([])) | select('match', '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$') | list %}
 <network{% if _ntp_ips %} xmlns:dnsmasq='http://libvirt.org/schemas/network/dnsmasq/1.0'{% endif %}>
   <name>{{ bootwright_libvirt_network_name }}</name>
@@ -12,12 +8,6 @@
     </nat>
   </forward>
   <bridge name='{{ bootwright_libvirt_bridge }}' stp='on' delay='0'/>
-  {# Disable libvirt's built-in dnsmasq DNS server (sets port=0 in the
-     spawned dnsmasq). DHCP still works. Without this, libvirt's
-     bind-dynamic dnsmasq grabs :53 on every address aliased onto the
-     bridge (gateway + LB VIPs from bootwright.core.cluster_network_load_balancer_vips) and
-     blocks our podman dnsmasq container, which serves the cluster's
-     api/api-int/ingress records. #}
   <dns enable='no'/>
   <ip address='{{ bootwright_libvirt_network.gateway }}' prefix='{{ bootwright_libvirt_network.cidr.split("/") | last }}'>
     <dhcp>

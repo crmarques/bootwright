@@ -7,24 +7,11 @@ import (
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
 
-// PlanApplyTasksChecked builds the apply DAG for a scope. It composes the
-// per-domain planners (each in its own file) rather than inlining every phase:
-// graph setup and prior-phase availability here, then the storage-cluster chain
-// (apply_plan_storage.go), the container-cluster chain (apply_plan_container.go),
-// add-ons/attachments/node-config, and operator provisioning playbooks. Each
-// stage returns the per-cluster task IDs the next stage depends on, so the
-// dependency wiring stays visible at this level while the activity construction
-// lives with its domain. The pure desired-state lookups the planners share live
-// in apply_plan_facts.go, and the destructive-identity hash projection in
-// apply_plan_hash.go.
 func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTask, error) {
 	phaseSet := map[string]bool{}
 	for _, phase := range target.PhaseNames {
 		phaseSet[phase] = true
 	}
-	// deps and base are shared by storage and container clusters; ClusterKind
-	// lets a single-kind scope plan only its kind so the unified gates do not
-	// pull in the other kind's tasks.
 	includeStorage := target.ClusterKind != ApplyClusterKindContainer
 	includeContainer := target.ClusterKind != ApplyClusterKindStorage
 	graph := NewActivityGraph()
@@ -37,21 +24,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return nil, err
 		}
 	}
-	// A scoped sub-phase run assumes the phases it does NOT include already ran, so
-	// mark the capabilities those phases land as available. Without this a documented
-	// sub-phase (e.g. `--stage machines`) fails Lower() with "requires unavailable
-	// capability provider.host-ready:<host>" (or the KubeVirt host-cluster caps),
-	// mirroring how base-only ISO reuse and addAvailableMachineOSCapabilities already
-	// assume a prior run for capabilities their phase does not plan.
 	addAvailablePriorPhaseCapabilities(graph, state, phaseSet, kubeVirtReqsByCluster)
 	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, phaseSet)
 	if err != nil {
 		return nil, err
 	}
 
-	// Storage-cluster chain: managed-OS install (machines) -> cephadm prereqs
-	// (deps) -> bootstrap + operations (base). Each stage feeds the next its
-	// per-cluster task IDs.
 	managedOSDepsByCluster, err := planStorageManagedOSInstallActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs)
 	if err != nil {
 		return nil, err
@@ -65,9 +43,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		return nil, err
 	}
 
-	// Container-cluster chain: machine infra (machines) -> agent ISO + per-host
-	// virtctl (deps) -> boot + install-wait (base). virtctl readiness is computed
-	// once and shared by the virtctl provision and the child boot ordering.
 	clusterNames := applyClusterNames(state)
 	infraDepsByCluster, err := planContainerMachineInfraActivities(graph, state, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, machineServiceTaskIDs)
 	if err != nil {
@@ -92,9 +67,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return nil, err
 		}
 	}
-	// ProvisioningPlaybooks anchor to any of the five phases, so they plan after
-	// every core activity is added — the phase index they wire against reads the
-	// completed graph snapshot.
 	if err := planProvisioningPlaybookActivities(graph, state, phaseSet, target); err != nil {
 		return nil, err
 	}
@@ -116,13 +88,8 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 		}
 		for _, extension := range binding.Addons {
 			extension := extension
-			// One task per addon installs (oc apply) and then waits for the addon
-			// to report ready; it provides the capabilities downstream tasks need.
 			id := "addon." + binding.Cluster + "." + extension.Name
 			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
-			// A hook that targets another cluster (its own Ceph nodes, or another
-			// container cluster) must run after that cluster is provisioned. Add the
-			// storage.<ceph> / wait.<ocp> edges the hook's fromInput chain resolves to.
 			hookDeps := hookCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
 			addonDeps := appendUniqueStrings(append([]string(nil), deps...), hookDeps...)
 			if err := graph.Add(Activity{
@@ -150,18 +117,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 	return nil
 }
 
-// addAvailablePriorPhaseCapabilities marks the capabilities landed by phases that
-// are NOT in the planned phaseSet as already-available, so a scoped sub-phase run
-// (e.g. `--stage machines`) plans against the assumption that its excluded phases
-// already ran — the same prior-run assumption the base-only ISO-reuse path makes.
-// It only adds a capability whose provider is genuinely absent from this graph
-// (the phase that provides it is out of scope): ActivityGraph.Lower prefers an
-// available capability over an in-graph provider, so adding one that a planned
-// phase provides would silently drop the ordering dependency. The phaseSet guards
-// below encode exactly that "provider not planned" condition.
 func addAvailablePriorPhaseCapabilities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, kubeVirtReqsByCluster map[string][]CapabilityRef) {
-	// Fabric lands the provider-host services (provider.host-ready / service-ready)
-	// and the infra-component service endpoints that machine-prepare tasks require.
 	if !phaseSet[ApplyPhaseFabric] {
 		members := render.HostGroupMembers(state)
 		for _, host := range members[render.GroupProviderHosts] {
@@ -172,8 +128,6 @@ func addAvailablePriorPhaseCapabilities(graph *ActivityGraph, state v1alpha1.Sta
 			graph.AddAvailable(serviceEndpointReadyCapability(host))
 		}
 	}
-	// KubeVirt child machine/ISO/boot tasks require the parent host cluster installed
-	// (landed by base) and its kubevirt-providing add-on (landed by add-ons).
 	clusterInstalledKind := clusterInstalledCapability("").Kind
 	kubevirtAddonKind := addonProvidesCapability("", v1alpha1.ClusterAddonProvidesKubeVirt).Kind
 	baseInScope := phaseSet[ApplyPhaseBase]

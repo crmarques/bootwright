@@ -28,11 +28,6 @@
     - name: Wait for declared Ceph OSDs to be created
       ansible.builtin.include_tasks: bootstrap_steps/osd_readiness.yml
 
-    # osd_readiness only anchors mon hosts that carry OSDs. A stretch cluster's
-    # tiebreaker/arbiter has no OSDs, so its mon can still be deploying when the
-    # topology ops run — `ceph mon set_location`/`enable_stretch_mode` error for a
-    # mon absent from the monmap. Poll until the tiebreaker mon has joined so those
-    # fail-closed, no-retry ops do not miss on a slow arbiter rollout.
     - name: Identify the stretch tiebreaker mon
       ansible.builtin.set_fact:
         bootwright_ceph_stretch_tiebreaker: >-

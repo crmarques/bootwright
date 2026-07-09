@@ -128,8 +128,6 @@ func TestBastionGroupExposesSetup(t *testing.T) {
 	if !strings.Contains(stdout, "setup") {
 		t.Fatalf("bastion --help missing subcommand %q:\n%s", "setup", stdout)
 	}
-	// The read-only dependency check lives only under preflight; the bastion
-	// group no longer carries a duplicate "check" subcommand.
 	if _, _, code = runCLI(t, "bastion", "check"); code == 0 {
 		t.Fatalf("bastion check should be removed in favor of preflight bastion, got exit 0:\n%s", stdout)
 	}
@@ -145,17 +143,11 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
-	// --override authorizes Bootwright-owned destructive rebuilds; its help text
-	// must name that scope (managed-OS VM reinstall, Ceph wipe-and-rebuild) rather
-	// than understating it as install-mismatch checks. Match single tokens so the
-	// assertion survives cobra line wrapping.
 	for _, want := range []string{"--override", "reinstall", "wipe-and-rebuild"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("apply --override help must name its destructive scope, missing %q:\n%s", want, stdout)
 		}
 	}
-	// Match the removed --scope flag at its token boundary (trailing space) so
-	// the assertion still rejects a resurrected --scope.
 	for _, reject := range []string{"--scope ", "--cluster ", "--scoped-validation", "--check", "--stream-ansible", "--ansible-playbook", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("apply help exposes removed flag or help section %q:\n%s", reject, stdout)
@@ -233,9 +225,6 @@ func TestDestroyRejectsRemovedStagesAndFlags(t *testing.T) {
 }
 
 func TestStageRejectionMessagesListCanonicalVocabulary(t *testing.T) {
-	// Lock the exact --stage error wording so the family/sub-phase vocabularies in
-	// internal/converge stay the single source the CLI error messages, flag help,
-	// and completion all derive from. A drift here means one surface fell behind.
 	_, applyErr, applyCode := runCLI(t, "apply", "--stage", "bogus", "--dry-run")
 	if applyCode != 2 || !strings.Contains(applyErr, "--stage must be one of infra, clusters, fabric, machines, deps, base, add-ons") {
 		t.Fatalf("apply --stage bogus code=%d stderr=%q, want full apply vocabulary", applyCode, applyErr)
@@ -244,7 +233,6 @@ func TestStageRejectionMessagesListCanonicalVocabulary(t *testing.T) {
 	if destroyCode != 2 || !strings.Contains(destroyErr, "--stage must be one of infra, clusters (sub-phases fabric, machines, deps, base, add-ons are apply-only)") {
 		t.Fatalf("destroy --stage bogus code=%d stderr=%q, want family list + apply-only note", destroyCode, destroyErr)
 	}
-	// --through derives the same canonical vocabulary as --stage.
 	_, throughErr, throughCode := runCLI(t, "apply", "--through", "bogus", "--dry-run")
 	if throughCode != 2 || !strings.Contains(throughErr, "--through must be one of infra, clusters, fabric, machines, deps, base, add-ons") {
 		t.Fatalf("apply --through bogus code=%d stderr=%q, want full through vocabulary", throughCode, throughErr)
@@ -359,8 +347,6 @@ func TestValidateReportsEnvironmentExcludedClusters(t *testing.T) {
 		t.Fatalf("selection covering every cluster still warns:\n%s", stdout)
 	}
 
-	// An excluded cluster skips validation entirely, so the minimal ghost
-	// object must surface as a warning instead of failing or vanishing.
 	ghost := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata:\n  name: ghost-ceph\nspec:\n  type: ceph\n"
 	if err := os.WriteFile(filepath.Join(inputDir, "ghost-storage-cluster.yaml"), []byte(ghost), 0o600); err != nil {
 		t.Fatal(err)
@@ -398,7 +384,6 @@ func TestValidateReportsEnvironmentExcludedClusters(t *testing.T) {
 func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
 	setTestHomeAndRoot(t)
 
-	// No stretch cluster, no notice.
 	stdout, stderr, code := runCLI(t, "validate", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("validate exited %d, stdout=%q stderr=%q", code, stdout, stderr)
@@ -407,9 +392,6 @@ func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
 		t.Fatalf("stretch-less input still notices stretch pools:\n%s", stdout)
 	}
 
-	// The multidc example authors topology.stretch plus policy-less pools,
-	// which inherit the stretch rule and replication invisibly to their own
-	// YAML — validate must say so in one line.
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
 	stdout, stderr, code = runCLI(t, "validate", "-f", example)
 	if code != 0 {
@@ -429,9 +411,6 @@ func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
 		}
 	}
 
-	// The same notice must reach `--output json` under .advisories: it now
-	// flows through advice.StorageAdvisories like every other advisory, so text
-	// and JSON can no longer diverge.
 	stdout, stderr, code = runCLI(t, "validate", "-f", example, "--output", "json")
 	if code != 0 {
 		t.Fatalf("validate --output json exited %d, stdout=%q stderr=%q", code, stdout, stderr)
@@ -458,10 +437,6 @@ func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
 	}
 }
 
-// TestValidateReportsDeclaredSecretStatus locks in that `validate` against the
-// current context names the declared secrets and flags the missing ones, instead
-// of silently passing. Missing material is a non-fatal WARN: offline validate
-// still succeeds.
 func TestValidateReportsDeclaredSecretStatus(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
@@ -480,8 +455,6 @@ func TestValidateReportsDeclaredSecretStatus(t *testing.T) {
 		}
 	}
 
-	// Validating explicit -f input has no context secrets directory to inspect,
-	// so it must not pretend to report secret status.
 	stdout, stderr, code = runCLI(t, "validate", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("validate -f exited %d, stderr=%q\nstdout:\n%s", code, stderr, stdout)
@@ -491,11 +464,6 @@ func TestValidateReportsDeclaredSecretStatus(t *testing.T) {
 	}
 }
 
-// TestDispatcherCompletionListsSubcommandsOnce guards the shell-completion
-// regression where a dispatcher's ValidArgs mirrored its subcommand names, so
-// completion listed every subcommand twice — once described from the subcommand
-// walk, once bare from ValidArgs. Each subcommand must appear exactly once, with
-// its description.
 func TestDispatcherCompletionListsSubcommandsOnce(t *testing.T) {
 	setTestHomeAndRoot(t)
 	for _, parent := range []string{"context", "render", "bastion"} {
@@ -515,8 +483,6 @@ func TestDispatcherCompletionListsSubcommandsOnce(t *testing.T) {
 				name, desc = line[:i], line[i+1:]
 			}
 			seen[name]++
-			// The bare ValidArgs duplicate carried no description; requiring one
-			// proves the surviving entry is the described subcommand.
 			if desc == "" {
 				t.Fatalf("%s completion %q has no description (bare ValidArgs duplicate?):\n%s", parent, name, stdout)
 			}
@@ -532,9 +498,6 @@ func TestDispatcherCompletionListsSubcommandsOnce(t *testing.T) {
 	}
 }
 
-// TestContextInitOutputIsConcise locks in that context init confirms what
-// happened without dumping every per-context directory path. It still names the
-// owned input directory and the bundle step.
 func TestContextInitOutputIsConcise(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
@@ -746,9 +709,6 @@ func TestScopedApplyDryRunJSON(t *testing.T) {
 	}
 }
 
-// --through resolves an endpoint to a synthetic "through-<phase>" prefix scope;
-// combining it with --clusters must narrow that prefix to the named cluster
-// roots instead of rejecting --clusters as an unsupported target.
 func TestApplyThroughWithClusterScopeDryRunJSON(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -769,7 +729,6 @@ func TestApplyThroughWithClusterScopeDryRunJSON(t *testing.T) {
 	if report.Target != "through-deps" || report.Action != "apply" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
-	// The cumulative prefix stops at deps: base and addons must be omitted.
 	for _, omitted := range []string{"base", "add-ons"} {
 		if slices.Contains(report.Phases, omitted) {
 			t.Fatalf("through-deps plan unexpectedly includes %q: %#v", omitted, report.Phases)
@@ -878,9 +837,6 @@ func TestDestroyStageInfraDryRunJSONEnablesContextSweepOnlyWhenUnscoped(t *testi
 	}
 }
 
-// TestDestroyForceUnownedEmitsExtraVar pins that --force-unowned (and only that
-// flag) feeds the bootwright_destroy_force_unowned extra-var the machine
-// substrate destroy roles read to relax their per-VM ownership-marker refusals.
 func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
@@ -892,7 +848,6 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 		t.Fatalf("destroy help must document --force-unowned:\n%s", help)
 	}
 
-	// Without the flag the destroy carries no force-unowned extra-var.
 	stdout, stderr, code := runCLI(t,
 		"destroy",
 		"--stage", "infra",
@@ -911,7 +866,6 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 		t.Fatalf("destroy without --force-unowned must not emit the force extra-var: %#v", report.ExtraVars)
 	}
 
-	// With --force-unowned the machine-substrate ownership-bypass var is set.
 	stdout, stderr, code = runCLI(t,
 		"destroy",
 		"--stage", "infra",
@@ -932,10 +886,6 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 	}
 }
 
-// TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar pins that
-// --skip-unreachable is gated behind --override and, when authorized, feeds the
-// bootwright_destroy_skip_unreachable extra-var the node-targeting destroy plays
-// read to tolerate powered-off hosts.
 func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
@@ -947,7 +897,6 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 		t.Fatalf("destroy help must document --skip-unreachable:\n%s", help)
 	}
 
-	// Without --override the flag is refused (a skipped node is a partial teardown).
 	_, stderr, code = runCLI(t,
 		"destroy",
 		"--stage", "infra",
@@ -962,7 +911,6 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 		t.Fatalf("destroy --skip-unreachable without --override must explain the requirement, got stderr=%q", stderr)
 	}
 
-	// Without the flag, no skip extra-var even with --override.
 	stdout, stderr, code := runCLI(t,
 		"destroy",
 		"--stage", "infra",
@@ -982,7 +930,6 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 		t.Fatalf("destroy without --skip-unreachable must not emit the skip extra-var: %#v", report.ExtraVars)
 	}
 
-	// With --skip-unreachable --override the gate var is set.
 	stdout, stderr, code = runCLI(t,
 		"destroy",
 		"--stage", "infra",
@@ -1004,11 +951,6 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 	}
 }
 
-// TestDestroyFullDryRunJSONPlansClustersThenInfra locks in that `destroy`
-// without --stage tears down the whole context: the JSON dry-run reports the
-// ordered task chain (clusters then infra) and enables the orphan-reclaim
-// context sweep, instead of failing with "--stage must be one of infra,
-// clusters".
 func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -1052,8 +994,6 @@ func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
 	}
 }
 
-// TestDestroyFullDryRunTextSucceeds confirms the text full-destroy dry-run runs
-// the task-graph preview path (no single playbook) and exits cleanly.
 func TestDestroyFullDryRunTextSucceeds(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -1097,9 +1037,6 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	}
 }
 
-// TestDestroyClustersInfersStageFromClusterScope locks in that `destroy
-// --clusters <names>` (no --stage) targets the clusters stage instead of
-// failing with "--stage must be one of infra, clusters".
 func TestDestroyClustersInfersStageFromClusterScope(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -1222,22 +1159,11 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 	if report.DestroySafety.OverrideRequired || !report.DestroySafety.Override {
 		t.Fatalf("destroy safety = %+v, want override supplied and no requirement remaining", report.DestroySafety)
 	}
-	// destroyProtection is enforced in Go; no inert destroy-override extra-var is
-	// passed to Ansible (no role consumes it). Guard against reintroducing it.
 	if slices.Contains(report.ExtraVars, "bootwright_destroy_override=true") {
 		t.Fatalf("extra vars should not carry an inert destroy override: %+v", report.ExtraVars)
 	}
 }
 
-// The destroy-protection gate on apply --override is scope- and drift-aware: it
-// fires only when the selected scope would DESTRUCTIVELY rebuild a drifted,
-// protected resource (a cluster, storage, or machine). A greenfield scope (here a
-// freshly initialized context — the cluster is unrecorded, so override creates it
-// rather than rebuilding) has nothing destructive to rebuild, so the gate does NOT
-// fire. The run still fails closed downstream (missing host trust under --yes), but
-// never at the protection gate. The gate's firing/exemption logic is covered
-// precisely by workflow.TestOverrideDestructiveDriftedObjects and
-// converge.TestCheckApplyOverrideDestroyProtectionScopeAware.
 func TestProtectedApplyOverrideGreenfieldNotGatedByProtection(t *testing.T) {
 	initProtectedTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -1251,9 +1177,6 @@ func TestProtectedApplyOverrideGreenfieldNotGatedByProtection(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("apply --override unexpectedly succeeded (no real infra)\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	// The fix: a non-destructive (greenfield) override scope is no longer blocked by
-	// destroy protection, so the operator is not trapped in a drift→override→destroy
-	// loop. The failure must come from elsewhere, not the protection gate.
 	for _, unwanted := range []string{"destroy-protected", "destructively rebuild"} {
 		if strings.Contains(stderr, unwanted) {
 			t.Fatalf("greenfield apply --override must not be blocked by destroy protection; stderr contained %q:\n%s", unwanted, stderr)
@@ -1272,8 +1195,6 @@ func TestProtectedApplyOverrideDryRunPreviews(t *testing.T) {
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
-	// Dry-run/plan is read-only and must still preview the override plan even on a
-	// protected environment; only a real mutating apply --override is refused.
 	if code != 0 {
 		t.Fatalf("protected apply --override --dry-run should preview, exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
@@ -1490,9 +1411,6 @@ func TestApplyKubeVirtParentAndChildSelectionAccepted(t *testing.T) {
 	}
 }
 
-// TestScopedRunValidatesWholeInput pins the behavior after --scoped-validation
-// was removed: every scoped apply/destroy validates the whole input, so a broken
-// out-of-scope object blocks the run, and the removed flag is rejected.
 func TestScopedRunValidatesWholeInput(t *testing.T) {
 	setTestHomeAndRoot(t)
 	if stdout, stderr, code := runCLI(t, "context", "init", "--name", "test", "-f", fixturePath("001-sno-libvirt")); code != 0 {
@@ -1502,16 +1420,11 @@ func TestScopedRunValidatesWholeInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Inject a StorageCluster that fails validation (spec.type must be ceph) and
-	// is independent of the sno-libvirt container cluster. Written after context
-	// init because init validates the input.
 	orphan := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata:\n  name: orphan-ceph\nspec:\n  type: bogus\n"
 	if err := os.WriteFile(filepath.Join(ctx.InputDir, "orphan-storage-cluster.yaml"), []byte(orphan), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	// Whole-input validation catches the broken StorageCluster and blocks the
-	// scoped apply, naming the offending object.
 	stdout, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false")
 	if code == 0 {
 		t.Fatalf("scoped apply ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
@@ -1520,12 +1433,10 @@ func TestScopedRunValidatesWholeInput(t *testing.T) {
 		t.Fatalf("apply error does not name the out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
 	}
 
-	// Destroy validates the whole input too and stays blocked.
 	if stdout, stderr, code := runCLI(t, "destroy", "--clusters", "sno-libvirt", "--dry-run", "--output", "json", "--ask-become-pass=false"); code == 0 {
 		t.Fatalf("scoped destroy ignored the broken out-of-scope StorageCluster, stdout=%q stderr=%q", stdout, stderr)
 	}
 
-	// The removed --scoped-validation flag is rejected.
 	if _, stderr, code := runCLI(t, "apply", "--clusters", "sno-libvirt", "--scoped-validation", "--ask-become-pass=false"); code == 0 || !strings.Contains(stderr, "unknown flag") {
 		t.Fatalf("apply --scoped-validation should be an unknown flag, code=%d stderr=%q", code, stderr)
 	}
@@ -1624,8 +1535,6 @@ func TestContextInitCopiesWorkspaceIntoContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The context owns its input: InputDir is the copied input/ directory under
-	// the context base, never the source path.
 	wantInput := filepath.Join(ctx.BaseDir, workspace.InputDirName)
 	if ctx.InputDir != wantInput || len(ctx.InputPaths) != 1 || ctx.InputPaths[0] != wantInput {
 		t.Fatalf("input = %q %v, want %q", ctx.InputDir, ctx.InputPaths, wantInput)
@@ -1636,7 +1545,6 @@ func TestContextInitCopiesWorkspaceIntoContext(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ctx.BaseDir, "input-source.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("context init still wrote a recorded-path file: %v", err)
 	}
-	// The context is self-contained: deleting the source must not break it.
 	if err := os.RemoveAll(source); err != nil {
 		t.Fatal(err)
 	}
@@ -1668,7 +1576,6 @@ func TestContextInitYesDropsAndRecreates(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	// --yes drops the existing context entirely, so prior state does not survive.
 	if _, err := os.Stat(droppedSecret); !os.IsNotExist(err) {
 		t.Fatalf("context init --yes preserved dropped context state: %v", err)
 	}
@@ -1706,8 +1613,6 @@ func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 	if !strings.Contains(stderr, "field retiredField not found") {
 		t.Fatalf("stderr missing strict decode error: %q", stderr)
 	}
-	// Validation happens before any destructive step, so an invalid replacement
-	// leaves the existing context — its state and input — untouched.
 	if body, err := os.ReadFile(keptSecret); err != nil || string(body) != "kept\n" {
 		t.Fatalf("invalid replacement dropped context state: %q err=%v", body, err)
 	}
@@ -1810,12 +1715,10 @@ func TestSourceEditsRequireContextUpdate(t *testing.T) {
 	if err := os.WriteFile(srcEnv, append(data, []byte(marker)...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The context owns a copy, so editing the source has no effect until update.
 	inputEnv := filepath.Join(ctx.InputDir, "environment.yaml")
 	if before, err := os.ReadFile(inputEnv); err != nil || strings.Contains(string(before), marker) {
 		t.Fatalf("source edit leaked into the context input before update (err=%v)", err)
 	}
-	// context update copies the edited source in; the next read sees it.
 	if _, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", source, "--yes"); code != 0 {
 		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
 	}
@@ -1840,7 +1743,6 @@ func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 	if err := os.WriteFile(keptSecret, []byte("kept\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A new source carrying an extra file; update replaces the input wholesale.
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
 	if err := os.WriteFile(filepath.Join(replacement, "extra-note.txt"), []byte("note\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -1852,11 +1754,9 @@ func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ctx.InputDir, "extra-note.txt")); err != nil {
 		t.Fatalf("context update did not copy the new source into input/: %v", err)
 	}
-	// update preserves the rest of the context (secrets, runs, ...).
 	if body, err := os.ReadFile(keptSecret); err != nil || string(body) != "kept\n" {
 		t.Fatalf("context update dropped context state: %q err=%v", body, err)
 	}
-	// update keeps the current-context selection.
 	if out, _, _ := runCLI(t, "context", "current", "--short"); out != "test\n" {
 		t.Fatalf("context update changed current context: %q", out)
 	}
@@ -1880,7 +1780,6 @@ func TestContextUpdateSnapshotsPreviousInput(t *testing.T) {
 	if !strings.Contains(stdout, "saved to history") {
 		t.Fatalf("context update did not report a history snapshot:\n%s", stdout)
 	}
-	// The pre-update input is recoverable from the context's input history.
 	entries, err := os.ReadDir(workspace.InputHistoryDir(ctx))
 	if err != nil {
 		t.Fatalf("read input history: %v", err)
@@ -1914,8 +1813,6 @@ func TestContextUpdateAbortsWithoutConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Edit the source so a replacement would be observable, then decline the
-	// prompt by leaving stdin empty (no --yes).
 	const marker = "# context-update marker\n"
 	srcEnv := filepath.Join(source, "environment.yaml")
 	data, err := os.ReadFile(srcEnv)
@@ -1932,7 +1829,6 @@ func TestContextUpdateAbortsWithoutConfirmation(t *testing.T) {
 	if !strings.Contains(stderr, "aborted") {
 		t.Fatalf("stderr missing abort notice: %q", stderr)
 	}
-	// The declined update must leave the existing input untouched.
 	inputEnv := filepath.Join(ctx.InputDir, "environment.yaml")
 	if after, err := os.ReadFile(inputEnv); err != nil || strings.Contains(string(after), marker) {
 		t.Fatalf("aborted update still replaced the context input (err=%v)", err)
@@ -1958,7 +1854,6 @@ func TestContextUpdateProceedsWithInteractiveYes(t *testing.T) {
 	if err := os.WriteFile(srcEnv, append(data, []byte(marker)...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Answering the prompt with "y" replaces the input, same as --yes.
 	if _, stderr, code := runCLIWithInput(t, "y\n", "context", "update", "--name", "test", "-f", source); code != 0 {
 		t.Fatalf("context update with interactive yes exited %d, stderr=%q", code, stderr)
 	}
@@ -2095,9 +1990,6 @@ func TestContextDeletePurgeClearsDanglingSelectionWhenSharedDirMissing(t *testin
 		t.Fatalf("user A context delete --purge exited %d, stderr=%q", code, stderr)
 	}
 
-	// User B is now left with a dangling current pointer to a context whose
-	// shared directory no longer exists. Deleting it must clean the local
-	// registry instead of failing on the missing shared directory.
 	t.Setenv("HOME", homeB)
 	stdout, stderr, code = runCLI(t, "context", "delete", "--name", "lab", "--purge", "--yes")
 	if code != 0 {
@@ -2395,8 +2287,6 @@ func TestStatusReportsReadyAndMissingSetupChecks(t *testing.T) {
 	if !strings.Contains(stdout, "[MISSING] input") {
 		t.Fatalf("stdout missing input MISSING:\n%s", stdout)
 	}
-	// The named input-dir error must identify the context, the input directory,
-	// and the repopulate remediation.
 	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update --name test -f", "context init --name test -f <dir> --yes"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("stderr %q missing %q", stderr, want)
@@ -2485,8 +2375,6 @@ func TestContextBackedCommandRequiresReadyContext(t *testing.T) {
 	if code == 0 {
 		t.Fatal("validate unexpectedly ran with a missing workspace")
 	}
-	// A missing input directory is a hard, named error: it names the context,
-	// the input directory, and the repopulate remediation.
 	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update --name test -f"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("stderr %q missing %q", stderr, want)
@@ -2503,8 +2391,6 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"context", "current"}, want: true},
 		{args: []string{"context", "use", "--name", "lab"}, want: true},
 		{args: []string{"context", "init", "--name", "lab", "-f", "."}, want: false},
-		// context update self-escalates inside the command, like init, so the
-		// generic gate must not double-escalate.
 		{args: []string{"context", "update", "--name", "lab", "-f", "."}, want: false},
 		{args: []string{"context", "delete", "--name", "lab"}, want: false},
 		{args: []string{"context", "delete", "--name", "lab", "--purge"}, want: false},
@@ -2516,8 +2402,6 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"secret", "set", "--name", "openshift-pull-secret", "--pull-secret", "/home/user/pull-secret.json"}, want: false},
 		{args: []string{"secret"}, want: false},
 		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
-		// A --name command without --name (the retired positional form or a
-		// missing flag) stays rootless so cobra rejects it as the caller.
 		{args: []string{"secret", "show", "pull-secret"}, want: false},
 		{args: []string{"secret", "delete", "--name", "manual-secret"}, want: true},
 		{args: []string{"secret", "delete", "manual-secret"}, want: false},
@@ -2530,31 +2414,18 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"media", "remove", "--name", "rhel.iso"}, want: true},
 		{args: []string{"media", "remove", "rhel.iso"}, want: false},
 		{args: []string{"media", "rm", "--name", "rhel.iso"}, want: true},
-		// Bare `cluster` only prints help, so it must not escalate; its
-		// subcommands read root-owned cluster artifacts and stay rootful.
 		{args: []string{"cluster"}, want: false},
 		{args: []string{"cluster", "list"}, want: true},
 		{args: []string{"cluster", "info"}, want: true},
 		{args: []string{"cluster", "kubeconfig", "--name", "managed-01"}, want: true},
-		// cluster rsh/exec exec the ssh client as root; a missing --name stays
-		// rootless so cobra rejects it as the caller.
 		{args: []string{"cluster", "rsh", "--name", "managed-01"}, want: true},
 		{args: []string{"cluster", "rsh"}, want: false},
 		{args: []string{"cluster", "exec", "--name", "managed-01", "--", "uptime"}, want: true},
-		// Bare `bastion` only prints help; setup reads the root-owned context and
-		// mutates the host, so it stays rootful. The read-only check moved to
-		// preflight bastion.
 		{args: []string{"bastion"}, want: false},
 		{args: []string{"bastion", "setup"}, want: true},
-		// Bare `machine` only prints help; `machine trust` writes the root-owned
-		// context trust store and `machine list` reads the root-owned state and
-		// ownership records, so they stay rootful.
 		{args: []string{"machine"}, want: false},
 		{args: []string{"machine", "trust"}, want: true},
 		{args: []string{"machine", "list"}, want: true},
-		// `machine rsh`/`machine exec` exec the client as root to read the
-		// root-owned key, but a missing --name is a malformed invocation cobra
-		// rejects rootlessly.
 		{args: []string{"machine", "rsh", "--name", "ceph-0"}, want: true},
 		{args: []string{"machine", "rsh"}, want: false},
 		{args: []string{"machine", "exec", "--name", "ceph-0", "--", "uptime"}, want: true},
@@ -2563,9 +2434,6 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"validate"}, want: true},
 		{args: []string{"validate", "--output", "json"}, want: true},
-		// An unknown flag (e.g. --source-dir for -f) or stray positional is a
-		// malformed validate cobra rejects; the gate stays rootless so the user
-		// sees "unknown flag" instead of a doomed sudo password prompt.
 		{args: []string{"validate", "--source-dir", "./lab-input"}, want: false},
 		{args: []string{"validate", "./lab-input"}, want: false},
 		{args: []string{"validate", "--output"}, want: false},
@@ -2574,15 +2442,11 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"preflight", "--help"}, want: false},
 		{args: []string{"apply"}, want: true},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
-		// An omitted --stage is a whole-context full destroy (clusters then infra),
-		// which is rootful and must read the root-owned context before teardown.
 		{args: []string{"destroy"}, want: true},
 		{args: []string{"destroy", "--yes"}, want: true},
 		{args: []string{"destroy", "--stage", "infra"}, want: true},
 		{args: []string{"destroy", "--stage", "clusters"}, want: true},
-		// A bogus explicit --stage fails stage validation before any context read.
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
-		// An invalid positional escalates then fails NoArgs, matching `apply`.
 		{args: []string{"destroy", "cluster"}, want: true},
 		{args: []string{"destroy", "--clusters", "ceph-ibm"}, want: true},
 		{args: []string{"destroy", "--clusters=ceph-ibm"}, want: true},
@@ -2651,8 +2515,6 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		want bool
 	}{
 		{args: []string{"bastion", "setup"}, want: true},
-		// preflight is read-only: it escalates to read the context but must never
-		// prompt for a sudo become password the way setup does.
 		{args: []string{"preflight", "bastion"}, want: false},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--stage", "clusters"}, want: true},
@@ -3179,8 +3041,6 @@ func TestContextInitPassesWorkspacePathAndSyncsRegistryAroundSudo(t *testing.T) 
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	// The recorded source must be the caller's resolved workspace path, so
-	// the sudo child receives the original directory, never a staged copy.
 	if !slices.Contains(gotArgs, source) {
 		t.Fatalf("sudo args missing resolved workspace path %q: %v", source, gotArgs)
 	}
@@ -4437,11 +4297,6 @@ func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	}
 }
 
-// A scoped container-cluster apply attaches to its data-foundation Ceph but,
-// per ADR-0004, does not implicitly provision it: the managed StorageCluster is
-// pulled into the plan state only as a render reference, so its provisioning
-// tasks must not be scheduled unless it is co-selected (see the mixed-selection
-// test, which names ceph-storage and does schedule them).
 func TestApplyClustersDryRunJSONContainerOnlyDoesNotProvisionAttachedStorage(t *testing.T) {
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
@@ -4535,9 +4390,6 @@ func TestApplyOverrideDoesNotBypassActiveRunLease(t *testing.T) {
 		t.Fatalf("SaveRunLease: %v", err)
 	}
 
-	// --override authorizes Bootwright-owned destructive rebuilds; it must not
-	// bypass an active run lease. The apply must fail closed before contacting
-	// any host or starting a workflow.
 	stdout, stderr, code := runCLI(t,
 		"apply", "--stage", "clusters",
 		"--clusters", "sno-libvirt",
@@ -4765,11 +4617,6 @@ func localRootEnvValue(args []string, key string) string {
 	return ""
 }
 
-// initTestContext copies the fixture into a temp source directory and runs
-// `context init` for context "test", which copies it into the context's owned
-// input/ directory. The returned context's InputDir/InputPaths point at that
-// copy, so tests editing files under InputDir mutate the input the next command
-// reads.
 func initTestContext(t *testing.T, fixtureName string) workspace.Context {
 	t.Helper()
 	workspaceDir := copyFixtureYAML(t, fixtureName)
@@ -4846,9 +4693,6 @@ func requireSingleClusterFreshness(t *testing.T, report statusReport, want strin
 	}
 }
 
-// TestArgsRequestJSONHonorsFlagTerminator pins that argsRequestJSON selects JSON
-// error output only for a genuine --output json flag, and treats anything after
-// the "--" terminator as a positional (never a JSON request).
 func TestArgsRequestJSONHonorsFlagTerminator(t *testing.T) {
 	cases := []struct {
 		name string
@@ -4871,10 +4715,6 @@ func TestArgsRequestJSONHonorsFlagTerminator(t *testing.T) {
 	}
 }
 
-// TestMediaAddReplaceIsSingleGate pins that replacing an existing ISO is
-// acknowledged by a single --yes (or an interactive y), with no separate
-// --force flag — matching secret set. Regression guard for the old two-flag
-// (--force plus --yes/prompt) dance.
 func TestMediaAddReplaceIsSingleGate(t *testing.T) {
 	setTestHomeAndRoot(t)
 
@@ -4901,7 +4741,6 @@ func TestMediaAddReplaceIsSingleGate(t *testing.T) {
 		t.Fatalf("write source iso: %v", err)
 	}
 
-	// Declining the single prompt aborts the replace — no --force involved.
 	_, stderr, code = runCLIWithInput(t, "n\n", "media", "add", "--name", "rhel.iso", "--from-file", src)
 	if code == 0 {
 		t.Fatalf("declined media replace must fail; stderr=%q", stderr)
@@ -4910,7 +4749,6 @@ func TestMediaAddReplaceIsSingleGate(t *testing.T) {
 		t.Fatalf("declined media replace must report aborted; stderr=%q", stderr)
 	}
 
-	// A single --yes acknowledges the replace with no --force.
 	_, stderr, code = runCLI(t, "media", "add", "--name", "rhel.iso", "--from-file", src, "--yes")
 	if code != 0 {
 		t.Fatalf("media add replace with --yes exited %d, stderr=%q", code, stderr)

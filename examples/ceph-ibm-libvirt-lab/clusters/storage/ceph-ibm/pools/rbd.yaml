@@ -8,5 +8,4 @@ spec:
   placementPolicyRef: replicated-host
 
   ceph:
-    # Block storage (RBD).
     role: rbd

@@ -7,8 +7,6 @@ import (
 )
 
 func TestContextSecretSetHints(t *testing.T) {
-	// bmc-credentials sorts before openshift-pull-secret, but every missing
-	// context secret must be emitted and the pull secret must surface first.
 	hints := ContextSecretSetHints([]string{"bmc-credentials", v1alpha1.DefaultPullSecretName})
 	if len(hints) != 2 {
 		t.Fatalf("expected 2 hints, got %d: %v", len(hints), hints)

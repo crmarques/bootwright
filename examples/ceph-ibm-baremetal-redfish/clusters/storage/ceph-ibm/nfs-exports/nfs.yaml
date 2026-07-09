@@ -7,14 +7,10 @@ spec:
 
   ceph:
     serviceID: ceph-ibm
-    # No nfs topology role, so placement is explicit. NFS-Ganesha on both full
-    # nodes; cephadm auto-provisions the backing .nfs pool.
     placement:
       hosts:
         - ceph-1
         - ceph-2
-    # Floating VIP fronting nfs.ceph-ibm, distinct from the RGW (.80) and
-    # management (.81) VIPs.
     ingresses:
       - name: nfs
         address: 10.20.30.82
@@ -27,7 +23,6 @@ spec:
             - ceph-2
 
   exports:
-    # CephFS export (FSAL CEPH) of the shared filesystem at a pseudo path.
     - pseudo: /shared
       filesystemRef: cephfs
       path: /

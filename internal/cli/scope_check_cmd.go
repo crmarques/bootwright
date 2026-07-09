@@ -50,10 +50,6 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.Name + " preflight"}})
 		}
-		// Resolve the cluster selection through the same component apply uses, so
-		// scoped preflight narrows the same way (ScopeStateForApply render set,
-		// work-object readiness scopes) — a green scoped apply implies a green
-		// scoped preflight and vice-versa.
 		sel, err := clusteraccess.Resolve(state, scope.Name, flags.clusterScope)
 		if err != nil {
 			return failErr(1, err)
@@ -73,9 +69,6 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 			selected := converge.PhasesForState(scope.Phases(), state)
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, nil, "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
-		// Trust-on-first-use: only in interactive text runs, and only for hosts
-		// with no recorded key. Dry-run and JSON runs fail closed on missing
-		// trust exactly as before.
 		if trustOnFirstUse && !dryRun {
 			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, hostTrustScope); err != nil {
 				return failErr(1, err)

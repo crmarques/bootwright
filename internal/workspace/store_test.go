@@ -249,8 +249,6 @@ func TestReplaceInputDirCopiesTreeAndSurvivesSourceDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A source tree with YAML, a referenced non-YAML file (e.g. a file:-sourced
-	// secret), a nested directory, and a VCS directory that must be skipped.
 	source := t.TempDir()
 	writeFile(t, filepath.Join(source, "environment.yaml"), "kind: Environment\n")
 	writeFile(t, filepath.Join(source, "pull-secret.txt"), "secret-bytes\n")
@@ -260,7 +258,6 @@ func TestReplaceInputDirCopiesTreeAndSurvivesSourceDeletion(t *testing.T) {
 	if err := ReplaceInputDir(ctx, source); err != nil {
 		t.Fatal(err)
 	}
-	// The whole tree (not just YAML) is copied so referenced material survives.
 	mustExist(t, filepath.Join(ctx.InputDir, "environment.yaml"))
 	mustExist(t, filepath.Join(ctx.InputDir, "pull-secret.txt"))
 	mustExist(t, filepath.Join(ctx.InputDir, "nested", "machine.yaml"))
@@ -271,14 +268,12 @@ func TestReplaceInputDirCopiesTreeAndSurvivesSourceDeletion(t *testing.T) {
 		t.Fatalf("copied file mode = %#o, want 0600", mode)
 	}
 
-	// Deleting the source must not affect the self-contained context.
 	if err := os.RemoveAll(source); err != nil {
 		t.Fatal(err)
 	}
 	mustExist(t, filepath.Join(ctx.InputDir, "environment.yaml"))
 	mustExist(t, filepath.Join(ctx.InputDir, "pull-secret.txt"))
 
-	// A second update fully replaces the input; stale files do not linger.
 	second := t.TempDir()
 	writeFile(t, filepath.Join(second, "only.yaml"), "kind: Environment\n")
 	if err := ReplaceInputDir(ctx, second); err != nil {
@@ -288,7 +283,6 @@ func TestReplaceInputDirCopiesTreeAndSurvivesSourceDeletion(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ctx.InputDir, "environment.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("ReplaceInputDir kept stale input from the previous source: %v", err)
 	}
-	// No staging directory is left behind under the context base directory.
 	entries, err := os.ReadDir(ctx.BaseDir)
 	if err != nil {
 		t.Fatal(err)

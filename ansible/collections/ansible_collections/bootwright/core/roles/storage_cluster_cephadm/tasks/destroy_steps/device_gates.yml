@@ -1,9 +1,4 @@
 ---
-# A declared device that is mounted, holds the root/boot filesystem, or is
-# otherwise in use is not a Bootwright OSD device; wiping it would be irreversible
-# data loss from a misdeclared or kernel-reordered /dev/sdX name. Probe live state
-# and fail closed before any destructive wipe (the device-name regex only proves
-# shape, not ownership or that the device is safe to zap).
 - name: Probe declared Ceph destroy devices for active mounts
   ansible.builtin.command:
     argv:
@@ -19,11 +14,6 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
-# A declared device that does not exist on this host (lsblk reports "not a block
-# device") has nothing to wipe — skip it so config drift (e.g. the profile now
-# declares more OSD disks than were provisioned) cannot block teardown. A probe
-# that fails for any other reason stays fatal: fail closed rather than risk
-# wiping the wrong device. Every later wipe gate runs over the present set only.
 - name: Classify declared Ceph destroy devices by presence
   ansible.builtin.set_fact:
     bootwright_ceph_present_probe: >-
@@ -77,15 +67,6 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
-# Each apply records the exact devices Bootwright provisioned as OSDs on this node.
-# Refuse to wipe a declared device that is not in that recorded set: it was added
-# to the node's devices list out of band (never an OSD here) and may hold foreign
-# data. Trust the marker only when it is a Bootwright marker for THIS cluster and
-# node (mirroring the install gate) — a stale marker left by a different
-# cluster/node, or any non-Bootwright JSON at the path, must not seed the
-# wipe-allowlist and so make destroy and apply disagree about which disks are ours.
-# When no marker exists, or it is not valid for this cluster/node, fall back to the
-# shape and mount checks above rather than failing a legitimate destroy.
 - name: Read Bootwright OSD device ownership marker
   ansible.builtin.slurp:
     src: "{{ bootwright_ceph_osd_marker_path }}"

@@ -3,5 +3,4 @@ kind: Namespace
 metadata:
   name: bootwright-dc1-child-ocp
   labels:
-    # Selected by the dc1-child-net ClusterUserDefinedNetwork namespaceSelector.
     bootwright.io/cudn: dc1-child-net

@@ -12,10 +12,6 @@ import (
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// TestVSphereFixtureRendersMachineComponentAndBootVars pins the component
-// shape machine_substrate_vsphere and the vsphere boot/media roles consume:
-// resolved placement, credentialsPath, ISO staging, the controller-local
-// task host, the datastore-path fetchUrl, and the vCenter-range MAC.
 func TestVSphereFixtureRendersMachineComponentAndBootVars(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "007-sno-vsphere")})
 	if err != nil {
@@ -49,8 +45,6 @@ func TestVSphereFixtureRendersMachineComponentAndBootVars(t *testing.T) {
 		t.Fatalf("vsphere failureDomain = %v", got)
 	}
 	topology := vsphere["topology"].(map[string]any)
-	// Authored inventory paths reduce to object names for the
-	// name-resolving community.vmware parameters; folders stay paths.
 	if got := topology["datastore"]; got != "datastore1" {
 		t.Fatalf("vsphere topology datastore = %v, want the object name", got)
 	}
@@ -94,8 +88,6 @@ func TestVSphereFixtureRendersMachineComponentAndBootVars(t *testing.T) {
 		t.Fatalf("agentIso fetchUrl = %q, want %q", fetchURL, wantFetch)
 	}
 
-	// vSphere ISOs reach machines through a datastore upload, never the
-	// HTTP publish/probe contract.
 	if targets, _ := cluster["agentIsoPublishTargets"].([]any); len(targets) != 0 {
 		t.Fatalf("agentIsoPublishTargets = %v, want empty for vsphere machines", targets)
 	}

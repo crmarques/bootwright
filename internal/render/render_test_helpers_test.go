@@ -75,9 +75,6 @@ func assertDirMode(t *testing.T, path string, want os.FileMode) {
 	}
 }
 
-// compile-time check that render.Result hasn't lost the fields the
-// CLI prints and the workflow passes downstream — quietly removing one
-// would mask the breakage; surface it here at compile time.
 var _ = fmt.Sprintf("%s %s %s %s %s",
 	render.Result{}.EffectiveStatePath,
 	render.Result{}.LockPath,

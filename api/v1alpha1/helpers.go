@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-// Derived-value helpers: pure functions that compute a rendered fact from an
-// authored object plus the API defaults above. They have no home on a single
-// kind (renderers and normalize call them across kinds), so they live here
-// rather than on any one type file.
-
 func InstallMode(cluster ContainerCluster) string {
 	if cluster.Spec.Install.Mode == "" {
 		return InstallModeConnected
@@ -73,10 +68,6 @@ func DefaultReleaseImageDigestSources(cluster ContainerCluster, mirrorURL string
 			Mirrors:      []string{mirrorURL + "/" + DefaultMirroredReleasePath},
 			SourcePolicy: ImageSourcePolicyNever,
 		}}
-		// A digest pin against the stock ocp-release repo still needs the
-		// ocp-v4.0-art-dev mapping: release *component* images live under the
-		// art-dev source in the single-repo `oc adm release mirror` layout, so
-		// without it disconnected nodes resolve components past the mirror.
 		if source == OCPReleaseSourceQuayOCPRelease {
 			sources = append(sources, ImageDigestSource{
 				Source:       OCPReleaseSourceQuayARTDev,
@@ -103,11 +94,8 @@ func DefaultReleaseImageDigestSources(cluster ContainerCluster, mirrorURL string
 	}
 }
 
-// BoolPtr is a one-liner pointer constructor used by normalize.
 func BoolPtr(v bool) *bool { return &v }
 
-// StandardLoadBalancerPorts returns the (frontend, backend) port pairs
-// the renderer wires for a given endpoint name when configuring HAProxy.
 func StandardLoadBalancerPorts(endpoint string) [][2]int {
 	switch endpoint {
 	case EndpointAPI:
@@ -121,8 +109,6 @@ func StandardLoadBalancerPorts(endpoint string) [][2]int {
 	}
 }
 
-// StandardEndpointBackendRole returns the node role that backs the
-// endpoint (api / apiInt go to control planes; ingress is unrestricted).
 func StandardEndpointBackendRole(endpoint string) string {
 	switch endpoint {
 	case EndpointAPI, EndpointAPIInt:

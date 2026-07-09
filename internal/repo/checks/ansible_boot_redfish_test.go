@@ -30,11 +30,6 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		}
 	}
 
-	// The final cleanup must detach the whole optical drive, not just eject the
-	// medium, so the provisioned guest is left with no leftover /dev/sr0. The
-	// "all" mode drops the source requirement so the now-empty drive is also
-	// detached; live hot-unplug stays non-fatal while the persistent config is
-	// authoritative.
 	for _, want := range []string{
 		"mode=$7",
 		"if [ \"$mode\" = \"all\" ]; then",
@@ -85,9 +80,6 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		"add_cdrom(devices, source_iso",
 		"set_boot_order(root, boot_order)",
 		"devices = [\"cdrom\", \"hd\"] if boot_order == \"cdrom-first\" else [\"hd\", \"cdrom\"]",
-		// The parse/serialize round-trip must keep the bootwright metadata prefix,
-		// or it re-emits as ns0: and the destroy ownership guard stops recognizing
-		// the marker it just round-tripped.
 		"ET.register_namespace(\"bootwright\", \"https://bootwright.io/libvirt/metadata/1.0\")",
 	} {
 		if !strings.Contains(insertScript, want) {
@@ -140,8 +132,6 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a command task", mainTasks[insertIdx]["name"])
 	}
-	// stagePath embeds the agent-ISO publish token, so the insert command must
-	// redact its output with no_log to keep the token out of stdout/logs.
 	assertRedactsByDefault(t, fmt.Sprint(mainTasks[insertIdx]["name"]), mainTasks[insertIdx]["no_log"])
 	insertArgv := fmt.Sprint(insertCommand["argv"])
 	for _, want := range []string{"bootwright_libvirt_media_helper_path", "bootwright_component.boot.agentIso.stagePath", "bootwright_libvirt_media_boot_order"} {
@@ -290,8 +280,6 @@ func TestSupportSSHReadinessAuthProbeUsesCallerDuringInternalSudo(t *testing.T) 
 	}
 }
 
-// supportSSHReadinessProbeTasks returns the SSH-probe block of the shared
-// support_ssh_readiness role, the readiness fragment the boot drivers include.
 func supportSSHReadinessProbeTasks(t *testing.T) []map[string]any {
 	t.Helper()
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/support_ssh_readiness/tasks/main.yml")
@@ -521,14 +509,6 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	assertIncludeRoleName(t, postTasks[sshReadinessIdx], "bootwright.core.support_ssh_readiness")
 
-	// The subsequent-disk-boot override (Continuous/Hdd) must not fire on the
-	// managed-OS (Anaconda) path: it renders readiness.type=none, so the SSH
-	// probe above is a no-op and this PATCH would land ~1-2s after power-on --
-	// before UEFI consumes the one-time Once/Cd override -- clobbering it back to
-	// disk on an iBMC that reads BootSourceOverride live during POST, so Anaconda
-	// never boots. Gate every disk-override task on a fact that requires the SSH
-	// readiness gate (readiness.type=ssh) that proves the live ISO booted, and on
-	// setBootSource so externally-managed boot order is never forced to Hdd.
 	gateFacts, ok := postTasks[diskBootGateIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", postTasks[diskBootGateIdx]["name"])
@@ -569,11 +549,6 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("%s must not enqueue spare probe iterations, got loop=%v", powerTasks[idx]["name"], powerTasks[idx]["loop"])
 		}
 	}
-	// The power waits are tail-recursive: the probe body (power_state_probe.yml)
-	// stays a censored GET with a sanitized capture/report/assert -- never `until`,
-	// which would force-fail a no_log'd task with a censored result on retry
-	// exhaustion. The wrapper advances the seeded attempt and recurses only while
-	// unreached and within the retry budget, so a settled wait enqueues nothing.
 	powerWaitTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_wait.yml")
 	runProbeIdx := findAnsibleTask(t, powerWaitTasks, "Run Redfish power state probe")
 	advanceProbeIdx := findAnsibleTask(t, powerWaitTasks, "Advance Redfish power state probe attempt")
@@ -612,10 +587,6 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if _, ok := powerTasks[retryInsertIdx]["loop"]; ok {
 		t.Fatalf("virtual media retry must not enqueue spare loop iterations, got loop=%v", powerTasks[retryInsertIdx]["loop"])
 	}
-	// The retry is tail-recursive: seed the attempt counter, then the wrapper
-	// re-includes itself only while unattached and within the retry budget, so a
-	// first-attempt success never enqueues (and prints as skipped) a spare copy of
-	// the insert_attempt transaction.
 	seedInsertIdx := findAnsibleTask(t, powerTasks, "Initialize Redfish virtual media insert attempt")
 	if seedInsertIdx > retryInsertIdx {
 		t.Fatalf("virtual media insert attempt counter must be seeded before the retry wrapper")
@@ -935,11 +906,6 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if _, ok := standardBody["WriteProtected"]; ok {
 		t.Fatalf("standard InsertMedia body must not send WriteProtected by default, got %v", standardBody)
 	}
-	// The standard InsertMedia body must stay canonical (Image, Inserted,
-	// TransferProtocolType). VerifyCertificate must never be injected as an action
-	// parameter: xFusion/iBMC exposes the resource property but 501s a PATCH to it
-	// and 400s an InsertMedia action carrying it. Verification is disabled via the
-	// per-resource and SecurityService PATCHes instead.
 	if _, ok := standardBody["VerifyCertificate"]; ok {
 		t.Fatalf("standard InsertMedia body must not carry VerifyCertificate (iBMC 400s on it), got %v", standardBody)
 	}
@@ -1275,9 +1241,6 @@ func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s has no uri body", tasks[idx]["name"])
 		}
-		// Credentials/TLS are supplied role-wide via ansible.builtin.uri module_defaults
-		// (asserted in TestBootRedfishDispatchesMediaBackendBeforeInsert); each MAC-probe
-		// uri must still reference the credential path so its output stays hidden.
 		for _, want := range []string{
 			"bootwright_redfish_cred_path",
 		} {
@@ -1355,19 +1318,12 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 		}
 	}
 
-	// The shared import file owns discovery of both trust-store mechanisms and
-	// dispatches to a per-method task file; it must not inline a vendor branch.
 	imp := readRepoFile(t, root+"/media/import_certificate.yml")
 	for _, want := range []string{
-		// Retrieve the artifact cert with the openssl client (no cryptography
-		// Python library on the executor) and extract the leaf PEM.
 		"s_client",
 		"-----BEGIN CERTIFICATE-----",
-		// Discover both mechanisms: DMTF collection and the SecurityService OEM
-		// import/delete actions.
 		"#SecurityService.ImportRemoteHttpsServerRootCA",
 		"#SecurityService.DeleteRemoteHttpsServerRootCA",
-		// Dispatch to the discovered method's dedicated task file.
 		`include_tasks: "import_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"`,
 	} {
 		if !strings.Contains(imp, want) {
@@ -1375,8 +1331,6 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 		}
 	}
 
-	// Standard DMTF method: POST the PEM to the VirtualMedia Certificates
-	// collection and record the reference for cleanup.
 	impStd := readRepoFile(t, root+"/media/import_certificate/standard.yml")
 	for _, want := range []string{
 		"CertificateString",
@@ -1388,8 +1342,6 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 		}
 	}
 
-	// SecurityService OEM method: import the PEM to a fixed RootCertId slot and
-	// record it for cleanup.
 	impOEM := readRepoFile(t, root+"/media/import_certificate/security_service.yml")
 	for _, want := range []string{
 		"'RootCertId': (bootwright_redfish_security_service_root_cert_id | int)",
@@ -1399,15 +1351,10 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 			t.Fatalf("import_certificate/security_service.yml missing %q", want)
 		}
 	}
-	// The SecurityService import action takes RootCertId and Usage as mutually
-	// exclusive forms; sending both is non-conformant and rejected with HTTP 403.
-	// We pin a fixed RootCertId slot for deterministic cleanup, so Usage must not
-	// appear.
 	if strings.Contains(impOEM, "'Usage'") {
 		t.Fatalf("import_certificate/security_service.yml must not send Usage alongside RootCertId; the iBMC rejects the conflicting pair (403)")
 	}
 
-	// The shared remove file dispatches to the same discovered method.
 	rem := readRepoFile(t, root+"/media/remove_certificate.yml")
 	if want := `include_tasks: "remove_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"`; !strings.Contains(rem, want) {
 		t.Fatalf("remove_certificate.yml missing %q", want)

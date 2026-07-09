@@ -39,11 +39,6 @@ func WriteNewFile(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
-// EnsureDir creates path (with any missing parents) and tightens it to mode. It
-// is the single owner of the create-then-tighten idiom for the root-managed
-// private trees: MkdirAll leaves an existing directory's mode untouched, so the
-// explicit Chmod keeps the directory at the requested permissions even when it
-// pre-existed with looser ones.
 func EnsureDir(path string, mode os.FileMode) error {
 	if err := os.MkdirAll(path, mode); err != nil {
 		return fmt.Errorf("create directory %s: %w", path, err)
@@ -54,10 +49,6 @@ func EnsureDir(path string, mode os.FileMode) error {
 	return nil
 }
 
-// WriteFileEnsuringDir atomically writes data to path, first creating the parent
-// directory and tightening it to 0700. It is the shared save path for state and
-// secret records; see EnsureDir for why the parent is re-chmod'd even when it
-// already existed.
 func WriteFileEnsuringDir(path string, data []byte, mode os.FileMode) error {
 	if err := EnsureDir(filepath.Dir(path), 0o700); err != nil {
 		return err

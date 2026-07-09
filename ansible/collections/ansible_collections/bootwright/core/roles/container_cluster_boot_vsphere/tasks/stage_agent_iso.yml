@@ -4,10 +4,6 @@
     path: "{{ bootwright_vsphere_boot_stage_path }}"
   register: bootwright_vsphere_boot_stage_stat
 
-# The cluster flow generates one agent ISO per cluster in the local
-# install work dir; stage it at the rendered per-provider vmedia path so
-# the media role and ownership cleanup see one uniform layout. The
-# managed-OS flow arrives with the install ISO already staged there.
 - name: Stage generated agent ISO for vSphere upload
   when: not (bootwright_vsphere_boot_stage_stat.stat.exists | default(false))
   block:
@@ -41,4 +37,3 @@
         owner: root
         group: root
         mode: "0600"
-

@@ -20,10 +20,6 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 		Stdout:  stdout,
 		Stderr:  stderr,
 	}
-	// readRunner serves readiness polls, the idempotency pre-check, and the CSV
-	// gate. It keeps the apply log (same LogPath) but writes nothing to the
-	// console, so expected NotFound / "no matches for kind" poll output does not
-	// surface as alarming error lines during a normal apply.
 	readRunner := extensionoc.CommandRunner{LogPath: logPath}
 	cfg := extensionoc.RunConfig{
 		ClustersDir:  opts.ClustersDir,
@@ -39,8 +35,6 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	var err error
 	switch task.Entry.Kind {
 	case ApplyTaskKindClusterAddon:
-		// Install the add-on, then wait for it to report ready. The task is only
-		// "skipped" (nothing converged) when both phases are no-ops.
 		var applied, waited extensionoc.TaskResult
 		applied, err = extensionoc.Apply(ctx, runner, cfg, *task.Extension)
 		if err == nil {

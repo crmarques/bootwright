@@ -92,10 +92,6 @@ func (r *recordingApplyRunner) snapshot() ([]string, int) {
 	return append([]string(nil), r.calls...), r.maxActive
 }
 
-// cancelOnRunApplyRunner cancels the run context the first time it is invoked,
-// recording every playbook it is asked to run. It exercises the scheduler's
-// "stop launching after cancellation" path: only the task that triggered the
-// cancel must have launched.
 type cancelOnRunApplyRunner struct {
 	cancel func()
 	mu     sync.Mutex
@@ -202,16 +198,12 @@ func TestApplyTaskDesiredHashFabricVarsIgnoreUnrelatedState(t *testing.T) {
 		DesiredHashVars: []any{map[string]any{"machineRef": "host-a", "kind": "loadBalancer"}},
 	}
 
-	// An unrelated cluster appears in State, but the host's rendered fabric vars
-	// are unchanged: state-check must NOT report this fabric host as drifted.
 	unrelated := base
 	unrelated.State = v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{
 		{Metadata: v1alpha1.Metadata{Name: "cluster-a"}},
 		{Metadata: v1alpha1.Metadata{Name: "cluster-b"}},
 	}}
 
-	// The host's own rendered vars change (e.g. a new load-balancer frontend): the
-	// fabric host MUST report drift.
 	relevant := base
 	relevant.DesiredHashVars = []any{map[string]any{"machineRef": "host-a", "kind": "loadBalancer", "frontends": []any{"vip"}}}
 
@@ -397,11 +389,9 @@ func TestOverrideDestructiveKindProtectedCoversStoragePool(t *testing.T) {
 	if got := OverrideDestructiveKindProtected([]ObjectClassification{pool}, protected); len(got) != 1 || got[0] != "StoragePool/ceph.rbd" {
 		t.Fatalf("a protected StorageCluster must gate a structurally-drifted pool rebuild, got %v", got)
 	}
-	// Negative: pool not in the protected set -> not gated.
 	if got := OverrideDestructiveKindProtected([]ObjectClassification{pool}, map[string]bool{}); len(got) != 0 {
 		t.Fatalf("unprotected pool must not be gated, got %v", got)
 	}
-	// Negative: reconcilable-only drift is not destructive -> not gated.
 	reconcilable := pool
 	reconcilable.counts = map[ConvergeSafetyClassification]int{ConvergeSafetyDrift: 1}
 	reconcilable.reconcilable = 1
@@ -440,8 +430,6 @@ func TestRunApplyTaskGraphStopsLaunchingAfterContextCancel(t *testing.T) {
 	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
-	// The graph does not complete (second never runs), so an error is expected;
-	// the point is that no task launched after the cancellation.
 	_ = err
 	calls := runner.snapshot()
 	if len(calls) != 1 || calls[0] != "first" {
@@ -455,8 +443,6 @@ func TestRunApplyTaskGraphStopsLaunchingAfterContextCancel(t *testing.T) {
 func TestRestoreClusterInstallRecordOnSkipRemovesPhantom(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	now := time.Now()
-	// A start-mark stamped installing/booting for a cluster with no prior record
-	// (a fresh nodeBoot that then no-op skipped because no hosts matched).
 	phantom := ClusterInstallRecord{Cluster: "c", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseBooting, UpdatedAt: now.UTC()}
 	if err := SaveClusterInstallRecord(clustersDir, phantom); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
@@ -988,11 +974,6 @@ func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 
-	// base-only (`apply --stage base`): the iso task lives in the deps phase and
-	// is not planned, so boot/wait must NOT carry a dependency on it. Otherwise
-	// the scheduler blocks on iso.<cluster> "(missing)" and the surgical rerun the
-	// flag is meant to support fails. The rerun reuses the ISO a prior deps run
-	// published.
 	baseOnly, err := PlanApplyTasksChecked(ApplyTarget{Name: "base", PhaseNames: []string{ApplyPhaseBase}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked base-only: %v", err)
@@ -1001,7 +982,6 @@ func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
 	assertTaskDeps(t, baseOnly, "boot.sno-libvirt")
 	assertTaskDeps(t, baseOnly, "wait.sno-libvirt", "boot.sno-libvirt")
 
-	// deps+base together: the iso task is planned, so boot orders behind it.
 	depsBase, err := PlanApplyTasksChecked(ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked deps+base: %v", err)
@@ -1021,16 +1001,9 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 	assertTaskDeps(t, tasks, "storage.ceph", "storageinfra.ceph")
 	assertTaskDeps(t, tasks, "iso.demo")
 	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
-	// The attachment is owned by the add-on's hooks inside its addon task; no
-	// compiled attachment task exists (see
-	// TestPlanApplyAllPlansNoCompiledAttachmentTask). This hookless add-on has
-	// no fromInput target, so it orders only behind its cluster install wait.
 	assertTaskDeps(t, tasks, "addon.demo.odf", "wait.demo")
 }
 
-// TestPlanApplyAllPlansNoCompiledAttachmentTask pins the migration: the
-// storage-export attachment is applied by the consuming add-on's own hooks
-// inside its addon task, so no separate compiled attachment task is planned.
 func TestPlanApplyAllPlansNoCompiledAttachmentTask(t *testing.T) {
 	state := storageAttachmentPlanningState()
 
@@ -1075,8 +1048,6 @@ func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		// _wip holds intentionally-incomplete scratch examples (gitignored);
-		// they are not canonical and are not validated here.
 		if name == "_wip" {
 			continue
 		}
@@ -1095,11 +1066,6 @@ func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
 	}
 }
 
-// TestDataFoundationExamplesPlanAddonOwnedAttachments pins the migrated shape:
-// no compiled attachment tasks; the exporter-hook add-on (managed Ceph) pulls
-// a storage.<ceph> dependency onto its own addon task via the hook's fromInput
-// target, while the manifest-only add-on (imported Ceph, fromSecretRef) needs
-// no Ceph-side dependency at all.
 func TestDataFoundationExamplesPlanAddonOwnedAttachments(t *testing.T) {
 	cases := []struct {
 		example        string
@@ -1145,13 +1111,8 @@ func TestDataFoundationExamplesPlanAddonOwnedAttachments(t *testing.T) {
 			for _, cluster := range tc.clusters {
 				addonID := "addon." + cluster + "." + tc.addon
 				if tc.wantStorageJob {
-					// The exporter hook's fromInput target pulls the managed
-					// Ceph apply in as a direct dependency of the addon task.
 					assertTaskHasDeps(t, tasks, addonID, tc.storageTask)
 				}
-				// The add-on orders behind its cluster's install readiness —
-				// directly, or through the binding's addon chain (e.g. behind
-				// a preceding openshift-virtualization addon task).
 				assertTaskDependsTransitively(t, tasks, addonID, "wait."+cluster)
 			}
 		})
@@ -1320,8 +1281,6 @@ func TestPlanApplyClustersSkipsUnselectedKubeVirtHostDependencies(t *testing.T) 
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	assertTaskDeps(t, tasks, "iso.child-ocp")
-	// A pre-existing (unselected) host cluster still gets a deps-stage virtctl
-	// provision, but with no prerequisites — the host is assumed ready.
 	assertTaskDeps(t, tasks, "virtctl.metal-ocp")
 }
 
@@ -1332,10 +1291,7 @@ func TestPlanApplyProvisionsVirtctlPerHostBeforeBoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	// One virtctl provision per distinct host cluster, gated behind that host's
-	// readiness (install + the KubeVirt-providing addon) — same gate boot waits on.
 	assertTaskDeps(t, tasks, "virtctl.metal-ocp", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
-	// Every child boot waits for its host's virtctl provision.
 	boot := assertTaskPresent(t, tasks, "boot.child-ocp")
 	found := false
 	for _, dep := range boot.Entry.Dependencies {
@@ -1349,17 +1305,12 @@ func TestPlanApplyProvisionsVirtctlPerHostBeforeBoot(t *testing.T) {
 }
 
 func TestPlanApplyBaseOnlyDoesNotProvisionVirtctl(t *testing.T) {
-	// Pre-existing host (unselected): a base-only run has no addon/deps tasks, so
-	// boot requires no host capabilities and nothing provisions virtctl.
 	state := kubeVirtChildPlanningState(false)
 
 	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "base", PhaseNames: []string{ApplyPhaseBase}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	// Without deps in scope nothing provisions virtctl, so no provision task is
-	// planned and boot must not wait on a task that does not exist. The preflight
-	// keeps the hard virtctl binary check for this base-without-deps case instead.
 	assertTaskMissing(t, tasks, "virtctl.metal-ocp")
 	boot := assertTaskPresent(t, tasks, "boot.child-ocp")
 	for _, dep := range boot.Entry.Dependencies {
@@ -1717,9 +1668,6 @@ func assertTaskDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) 
 	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
 }
 
-// assertTaskHasDeps asserts the named task's dependencies CONTAIN each wanted
-// entry (subset, order-free) — for real-example graphs whose addon tasks also
-// carry capability-ordering edges this test does not pin.
 func assertTaskHasDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) {
 	t.Helper()
 	for _, task := range tasks {
@@ -1740,9 +1688,6 @@ func assertTaskHasDeps(t *testing.T, tasks []ApplyTask, id string, want ...strin
 	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
 }
 
-// assertTaskDependsTransitively asserts the named task orders behind target
-// through the dependency graph — directly or via intermediate tasks (an addon
-// chain, a capability edge).
 func assertTaskDependsTransitively(t *testing.T, tasks []ApplyTask, id, target string) {
 	t.Helper()
 	deps := map[string][]string{}

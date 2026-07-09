@@ -12,11 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-// ValidateKubeVirtClusterSelection checks that every selected ContainerCluster
-// whose machines live on a KubeVirt provider either co-selects its host
-// cluster or finds it already installed and KubeVirt-ready. The CLI resolves
-// the --clusters selection to containerNames (via internal/clusteraccess)
-// before calling in.
 func ValidateKubeVirtClusterSelection(state v1alpha1.State, containerNames []string, clustersDir string) error {
 	selected := map[string]bool{}
 	for _, name := range containerNames {

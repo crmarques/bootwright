@@ -31,15 +31,11 @@ func TestNearestFieldName(t *testing.T) {
 	if got := nearestFieldName("baseDomainn", fields); got != "baseDomain" {
 		t.Errorf("close typo: got %q want baseDomain", got)
 	}
-	// A wholly unrelated key must not be "corrected" to something arbitrary.
 	if got := nearestFieldName("completelyUnrelatedKey", fields); got != "" {
 		t.Errorf("distant key: got %q want empty", got)
 	}
 }
 
-// TestRewriteKnownFieldErrorAppendsSuggestion drives the real decode path: a
-// typo'd EnvironmentSpec key is still rejected (existing contract) AND now
-// carries a did-you-mean hint.
 func TestRewriteKnownFieldErrorAppendsSuggestion(t *testing.T) {
 	var node yaml.Node
 	doc := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: env\nspec:\n  baseDomainn: example.com\n"
@@ -60,8 +56,6 @@ func TestRewriteKnownFieldErrorAppendsSuggestion(t *testing.T) {
 	}
 }
 
-// TestRewriteKnownFieldErrorNoSuggestionForDistantField ensures an unrelated
-// unknown key is left as the plain rejection with no misleading suggestion.
 func TestRewriteKnownFieldErrorNoSuggestionForDistantField(t *testing.T) {
 	var node yaml.Node
 	doc := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: env\nspec:\n  zzzzzzzzzzTotallyUnrelated: x\n"

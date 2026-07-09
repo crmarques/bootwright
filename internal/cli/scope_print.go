@@ -48,9 +48,6 @@ func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, 
 	}
 }
 
-// printWorkflowEnd writes a single-line completion banner after a successful
-// workflow run. Failure details are reported by the caller that owns the
-// command's output mode.
 func printWorkflowEnd(w io.Writer, workflowName string) {
 	output.NewContinuation(w).Summary(output.StatusOK, workflowName, "complete")
 }
@@ -157,10 +154,6 @@ func confirm(in io.Reader, prompt io.Writer, message string) bool {
 		return false
 	}
 	fmt.Fprint(prompt, message)
-	// Read exactly one line straight from the shared stdin without wrapping it in
-	// a fresh bufio.Reader: a per-call buffered reader would swallow every byte
-	// past this line, so a later prompt over the same piped stdin would see a
-	// spurious EOF and silently reject a correct answer.
 	line, err := readSingleLine(in)
 	if err != nil && line == "" {
 		return false
@@ -169,9 +162,6 @@ func confirm(in io.Reader, prompt io.Writer, message string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-// readSingleLine reads up to and including the next newline one byte at a time,
-// leaving any following bytes in the underlying reader for the next consumer. A
-// trailing line with no newline is returned on EOF.
 func readSingleLine(in io.Reader) (string, error) {
 	if br, ok := in.(*bufio.Reader); ok {
 		return br.ReadString('\n')

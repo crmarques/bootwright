@@ -11,9 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 )
 
-// versionString and gitCommit are stamped at build time via -ldflags.
-// Default values keep `go build ./...` and `go test ./...` working
-// without the Makefile.
 var (
 	versionString = "dev"
 	gitCommit     = "unknown"

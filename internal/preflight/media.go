@@ -10,16 +10,6 @@ import (
 
 const checkGroupInstallerMedia = "Installer media"
 
-// installerMediaChecks verifies that every controller-local install ISO a
-// managed-OS machine references (a "local-media:" managed-store entry or a
-// "file://" path) is present on the controller before the machines phase runs.
-// The machine_os_install_anaconda role copies that source ISO from the
-// controller (remote_src: false) to build the Kickstart install media with
-// mkksiso, so a missing file otherwise fails deep into a run — minutes per node
-// — with an opaque Ansible "Could not find or access ... on the Ansible
-// Controller" error. Surfacing it here points the operator at "bootwright media
-// add" up front. "http(s)://" images download on the provider host and need no
-// controller-local file, so they are skipped.
 func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, secretScope *SecretScope) []Check {
 	if !phaseInScope("machines", selected, true) {
 		return nil
@@ -41,8 +31,6 @@ func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, sec
 		for _, ref := range machineInstallMediaRefs(image, profile) {
 			resolved, err := media.Resolve(ref)
 			if err != nil || resolved.Path == "" {
-				// A bad reference is a validate-phase concern; an empty path is an
-				// http(s):// image the provider host fetches itself.
 				continue
 			}
 			if seen[resolved.Path] {
@@ -56,8 +44,6 @@ func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, sec
 	return checks
 }
 
-// machineInstallMediaRefs lists the local ISO references an install needs
-// staged on the controller: bootMedia always, plus the hostedTree DVD when set.
 func machineInstallMediaRefs(image v1alpha1.MachineImage, profile v1alpha1.MachineInstallProfile) []string {
 	refs := []string{image.Spec.BootMedia}
 	if t := profile.Spec.Installer.Anaconda.PackageSource.GetHostedTree(); t != nil {

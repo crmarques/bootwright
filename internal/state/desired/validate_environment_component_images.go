@@ -8,16 +8,9 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// imageVersionTag accepts a version-like tag: it must START with a digit (or a
-// leading "v"), so mutable tags that merely contain a digit — "edge-1",
-// "latest-2", "nightly20240101" — are rejected as floating references.
 var imageVersionTag = regexp.MustCompile(`^v?[0-9][\w.+-]*$`)
 var imageSHA256Digest = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
 
-// componentImageCatalog enumerates the (component type, implementation) pairs
-// that Environment.spec.componentImages may pin, keyed by the same component
-// type vocabulary as InfraComponent spec.type. Adding a new pair is the same
-// gesture that adds a new managed-service image consumer.
 var componentImageCatalog = map[string]map[string]bool{
 	v1alpha1.ComponentSlotLoadBalancer:   {v1alpha1.InfraComponentTypeHAProxy: true},
 	v1alpha1.ComponentSlotRegistry:       {v1alpha1.InfraComponentTypeMirrorRegistry: true},

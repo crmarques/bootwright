@@ -59,8 +59,6 @@ spec:
 	}
 }
 
-// A context-store secret omits its source block on marshal (empty source arm
-// selects contextStore), keeping the common case terse.
 func TestSecretContextStoreOmitsSource(t *testing.T) {
 	secret := Secret{
 		APIVersion: APIVersion,

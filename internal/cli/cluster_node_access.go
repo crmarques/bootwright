@@ -11,11 +11,6 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-// clusterNodeMachine resolves --name/--node to the Machine name backing the
-// selected node. An empty selector connects to the only node of a single-node
-// cluster; otherwise it errors with the node roster so the operator can pick
-// one. A no-match / ambiguous selector likewise errors with the roster. Callers
-// treat every error here as a usage error (exit 2).
 func clusterNodeMachine(state v1alpha1.State, clusterName, selector string) (string, error) {
 	nodes, ok := stateview.ClusterNodes(state, clusterName)
 	if !ok || len(nodes) == 0 {
@@ -34,11 +29,6 @@ func clusterNodeMachine(state v1alpha1.State, clusterName, selector string) (str
 	return machine, nil
 }
 
-// resolveClusterNode maps a --node selector to a backing Machine name, trying in
-// order: exact Machine name, node hostname (full FQDN or its short left-most
-// label), then <role>-<ordinal> (ordinal counted among same-role nodes in
-// declaration order). A selector matching more than one node by hostname is
-// rejected as ambiguous.
 func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string, error) {
 	for _, n := range nodes {
 		if n.MachineName == selector {
@@ -72,8 +62,6 @@ func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string,
 	return "", fmt.Errorf("no node %q in this cluster", selector)
 }
 
-// shortHostLabel returns a hostname's left-most label — the short name before
-// the first dot, or the whole string when it carries no domain.
 func shortHostLabel(hostname string) string {
 	if i := strings.IndexByte(hostname, '.'); i >= 0 {
 		return hostname[:i]
@@ -81,9 +69,6 @@ func shortHostLabel(hostname string) string {
 	return hostname
 }
 
-// parseRoleOrdinal splits a "<role>-<ordinal>" selector (master-0, worker-2)
-// into its role and zero-based index. It requires a non-empty role prefix and a
-// trailing "-<digits>".
 func parseRoleOrdinal(selector string) (string, int, bool) {
 	i := strings.LastIndexByte(selector, '-')
 	if i <= 0 || i == len(selector)-1 {
@@ -96,9 +81,6 @@ func parseRoleOrdinal(selector string) (string, int, bool) {
 	return selector[:i], ordinal, true
 }
 
-// clusterNodeRoster formats the cluster's nodes for a selection error or the
-// info cross-link: one line per node with its selector hint, backing Machine,
-// and hostname.
 func clusterNodeRoster(nodes []stateview.ClusterNode) string {
 	var b strings.Builder
 	for _, n := range nodes {
@@ -115,9 +97,6 @@ func clusterNodeRoster(nodes []stateview.ClusterNode) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// nodeSelectorHint is the friendliest stable --node value for a node: its
-// <role>-<ordinal> for a container node, else its Machine name (Ceph hosts fill
-// several roles, so role-ordinal is not a stable single selector there).
 func nodeSelectorHint(n stateview.ClusterNode) string {
 	if n.Kind == stateview.MachineClusterKindContainer && n.Role != "" {
 		return fmt.Sprintf("%s-%d", n.Role, n.Ordinal)
@@ -125,9 +104,6 @@ func nodeSelectorHint(n stateview.ClusterNode) string {
 	return n.MachineName
 }
 
-// printClusterNodeAccess prints the ready-to-run `cluster rsh` command for each
-// node of a cluster, so the command operators run to see access details also
-// tells them how to shell into any node.
 func printClusterNodeAccess(p *cliout.Printer, state v1alpha1.State, clusterName string) {
 	nodes, ok := stateview.ClusterNodes(state, clusterName)
 	if !ok || len(nodes) == 0 {
@@ -144,9 +120,6 @@ func printClusterNodeAccess(p *cliout.Printer, state v1alpha1.State, clusterName
 	p.Fields(fields)
 }
 
-// revealValue returns a captured secret's cleartext for --secrets output, or a
-// short note when the file is missing or unreadable (the paths and 'sudo cat'
-// hint the default output already carries remain the fallback).
 func revealValue(path string, artifact clusteraccess.Artifact) string {
 	if !artifact.Present {
 		return "(missing)"

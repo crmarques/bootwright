@@ -3,38 +3,13 @@ kind: Environment
 metadata:
   name: ceph-ibm-libvirt-lab
 spec:
-  # DNS suffix for node hostnames and the RGW S3 endpoint.
   baseDomain: bootwright.test
-
-  # Refuse any `destroy` touching this environment unless --override is passed,
-  # so a routine `destroy --yes` (or a scripted run) cannot tear it down by
-  # accident. Decommission/rebuild must pass --override deliberately.
 
   safety:
     destroyProtection: requiredOverride
 
-  # Activate this storage cluster. (No ContainerCluster: this lab is Ceph-only.)
-
   storageClusters:
     - ceph-ibm
-
-  # ---------------------------------------------------------------------------
-  # Secrets are referenced by name only; bytes live in the encrypted context
-  # store and are written with `bootwright secret set` / `secret generate`.
-  # See the README for the exact set commands.
-  # ---------------------------------------------------------------------------
-
-  # ---------------------------------------------------------------------------
-  # Two entitlements, decoupled by concern, now first-class objects under
-  # infra/entitlements/. IBM Storage Ceph runs on RHEL it does not itself
-  # entitle, so the RHEL subscription is its own redhat-rhel Entitlement (rhel)
-  # and the ibm-storage-ceph Entitlement references it via rhelEntitlementRef.
-  # ---------------------------------------------------------------------------
-
-  # Self-contained lab DNS on the libvirt host. The dnsmasq component serves lab
-  # records and forwards public names (cp.icr.io, RHSM, NTP pools). Time sync is
-  # handled by each node's own chronyd (enabled in the install profile), reaching
-  # public NTP through the NAT'd libvirt network — no managed NTP component.
 
   infraComponents:
     nameResolution:

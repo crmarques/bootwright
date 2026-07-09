@@ -13,11 +13,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// localRootShutdownGrace bounds how long the caller waits for the rootful child
-// to finish its own signal-driven shutdown (which reaps the ansible process
-// group, itself bounded by a shorter grace) before force-killing sudo. It is a
-// backstop for a wedged child, not the normal exit path — kept well above the
-// runner's process-group grace so a healthy shutdown is never truncated.
 const localRootShutdownGrace = 60 * time.Second
 
 type localRootGateDeps struct {
@@ -38,8 +33,6 @@ func ensureLocalRootForArgs(ctx context.Context, args []string, stdin io.Reader,
 	if !localRootGate.enabled || localRootGate.geteuid() == 0 {
 		return 0, false, nil
 	}
-	// Classify by the real command, ignoring a leading global flag (--context),
-	// but forward the original args verbatim to the sudo child.
 	decisionArgs := stripLeadingGlobalFlags(args)
 	if !argsNeedLocalRoot(decisionArgs) {
 		return 0, false, nil
@@ -93,12 +86,6 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	// On Ctrl-C the terminal delivers the signal to the whole foreground
-	// process group (this process, sudo, and the rootful child), so the child
-	// receives it directly (or via sudo's use_pty relay) and reaps its ansible
-	// process group before exiting. Do not SIGKILL sudo on cancel — that would
-	// strand the child's cleanup — just wait for the chain to drain, with a
-	// backstop force-kill if the child wedges.
 	cmd.Cancel = func() error { return nil }
 	cmd.WaitDelay = localRootShutdownGrace
 	if err := cmd.Run(); err != nil {

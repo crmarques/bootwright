@@ -174,12 +174,6 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 	}
 }
 
-// statusWatchRefreshPreamble returns what to emit before each --watch refresh.
-// On a TTY it redraws in place like watch(1) — home the cursor and clear the
-// screen so each refresh replaces the previous report instead of stacking a
-// fresh multi-section report onto scrollback every interval. Piped output cannot
-// redraw, so it delimits each refresh (after the first) with a timestamped
-// separator to keep the appended reports parseable.
 func statusWatchRefreshPreamble(tty, first bool, now time.Time) string {
 	switch {
 	case tty:
@@ -197,9 +191,6 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 	}
 	p.Section("Clusters")
 	displays := buildClusterDisplays(state)
-	// Storage clusters left partially destroyed by a --skip-unreachable teardown
-	// (powered-off nodes skipped) carry a marker on their kept ownership record;
-	// surface it so the cluster is not read as cleanly torn down.
 	partialStorage, _ := converge.PartiallyDestroyedStorageClusters(ownershipDir, contextName)
 	freshness := status.LoadEffectiveStateFreshness(state, renderedDir)
 	addons := status.BuildAddons(state, clustersDir)
@@ -216,9 +207,6 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 	}
 	for _, name := range orderClusterNames(allNames, displays) {
 		if sc, ok := storages[name]; ok {
-			// Storage clusters get a row of their own so a managed Ceph cluster is
-			// not invisible next to the container clusters. The name badge is
-			// neutral INFO, not a green OK that would read as "installed".
 			p.Status(cliout.StatusInfo, name, storageStatusDetail(sc))
 			if skipped, partial := partialStorage[name]; partial {
 				detail := "partially destroyed: unreachable nodes skipped, devices not wiped; re-run destroy or wipe manually"
@@ -233,8 +221,6 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 		sub := stateview.ContainerClusterSubstrate(state, ocp)
 		detail := fmt.Sprintf("%s  installMode=%s install=%s",
 			containerDescriptor(v1alpha1.DistributionType(ocp), sub), v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
-		// INFO (neutral), not OK: the name line is identity, not health — the
-		// installer-freshness line below is the real readiness signal.
 		p.Status(cliout.StatusInfo, name, detail)
 		installer := status.InstallerInstallConfigPath(clustersDir, name)
 		result := status.FreshnessForInstaller(freshness, installer)

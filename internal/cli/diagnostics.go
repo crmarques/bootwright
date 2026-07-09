@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// Diagnostic is the user-facing shape for a validation failure. Message keeps
-// the exact validator text; the other fields make CLI and CI output easier to
-// route back to the owning object and field. This presentation shaping lives in
-// the CLI (the only consumer), not in the validator: the validator returns the
-// plain messages via desiredstate.ValidationError and the CLI reconstructs the
-// routable fields here.
 type Diagnostic struct {
 	Object      string `json:"object,omitempty"`
 	Field       string `json:"field,omitempty"`
@@ -23,10 +17,6 @@ type Diagnostic struct {
 	Message     string `json:"message"`
 }
 
-// diagnosticsFromError extracts structured CLI diagnostics from err. A
-// desiredstate.ValidationError carries the validator's messages; any other
-// error is reconstructed from its Error() string so callers can add command
-// context without losing machine-readable details.
 func diagnosticsFromError(err error) []Diagnostic {
 	if err == nil {
 		return nil
@@ -42,12 +32,6 @@ func diagnosticsFromError(err error) []Diagnostic {
 	return []Diagnostic{diagnosticFromMessage(err.Error())}
 }
 
-// diagnosticFromFinding renders a validator finding. When the validator named
-// the owning object/field at the source, those take precedence over the
-// message reconstruction; otherwise the message is parsed as before. The
-// message-derived rule/value still apply, so a structured finding produces the
-// same diagnostic as the legacy reparse for conforming messages and a correct
-// one where the heuristic would have guessed wrong.
 func diagnosticFromFinding(finding desiredstate.Finding) Diagnostic {
 	diagnostic := diagnosticFromMessage(finding.Message)
 	if finding.Object != "" {
@@ -65,20 +49,12 @@ func diagnosticFromFinding(finding desiredstate.Finding) Diagnostic {
 	return diagnostic
 }
 
-// suggestsRemoval reports whether a validator message describes a field that is
-// conditionally unsupported or required-empty. No value of such a field is
-// valid, so the fix is to remove it (or change the mode that gates it), not to
-// "set it to a valid value".
 func suggestsRemoval(message string) bool {
 	return strings.Contains(message, "only supported") ||
 		strings.Contains(message, "must be empty") ||
 		strings.Contains(message, "is not supported")
 }
 
-// fieldRemediation renders the fix hint for a field-scoped diagnostic. A
-// conditionally-unsupported / must-be-empty field cannot be set to any valid
-// value, so the correct fix is removal; every other field-scoped error is a bad
-// value the operator should correct.
 func fieldRemediation(object, field, message string) string {
 	if suggestsRemoval(message) {
 		if object != "" {
@@ -156,10 +132,8 @@ func diagnosticFromDecodeMessage(message string) (Diagnostic, bool) {
 			remediation = known
 		}
 		return Diagnostic{
-			Object: "ContainerCluster",
-			Field:  fieldPath,
-			// Value stays empty: a rejected unknown field has no offending
-			// value, and Value must consistently mean "the invalid value".
+			Object:      "ContainerCluster",
+			Field:       fieldPath,
 			Rule:        fieldPath + " is not accepted on ContainerCluster install intent",
 			Remediation: remediation,
 			Message:     message,

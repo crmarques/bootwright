@@ -107,10 +107,6 @@
       provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
       Package fallback result: {{ (bootwright_ceph_common_package_install | default({})).msg | default('not attempted') }}
 
-# Registry trust and login are configured in phases/registry.yml, before this
-# stage, so podman (installed in the dependencies stage) is present and every
-# node can pull the Ceph container images cephadm orchestrates.
-
 - name: Authorize cephadm cluster SSH key on storage node
   ansible.posix.authorized_key:
     user: "{{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}"
@@ -121,15 +117,6 @@
   when:
     - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
 
-# A signature on a declared device normally means foreign data: fail before
-# claiming it. The one exception is Bootwright's own previous provisioning —
-# every apply stamps the marker below before bootstrap, so a marker recording
-# this cluster/node/device proves the signatures are a prior apply's ceph-volume
-# LVM, and cephadm reconciles those OSDs in place (this is how an owned,
-# half-converged cluster stays recoverable by re-apply). No marker, another
-# cluster's marker, or an unrecorded device still fails closed, mirroring the
-# destroy device-ownership guard. A recorded device whose content was replaced
-# out of band degrades to ceph-volume's own refusal to consume non-Ceph data.
 - name: Read Bootwright OSD device ownership marker
   ansible.builtin.slurp:
     src: "{{ bootwright_ceph_osd_marker_path }}"
@@ -150,13 +137,6 @@
     bootwright_ceph_osd_marker_doc: "{{ bootwright_ceph_osd_marker_probe.content | b64decode | from_json }}"
   when: (bootwright_ceph_osd_marker_probe | default({})).content is defined
 
-# --reclaim-devices recovers owned OSD disks whose on-node marker a managed-OS
-# reinstall erased: the data disks still carry this cluster's ceph LVM but the
-# empty-device gate below would refuse them (the marker that would exempt them is
-# gone). Wipe exactly the operator-named devices in-band — gated on the device being
-# a declared OSD device of a controller-owned cluster and not mounted or in use — so
-# the gate then sees them empty and cephadm re-creates the OSDs. Wiping is
-# irreversible; the controller emitted the data-loss warning before this ran.
 - name: Resolve OSD devices to reclaim on this host
   ansible.builtin.set_fact:
     bootwright_ceph_reclaim_here: >-
@@ -250,13 +230,6 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
-# A device this node previously provisioned as an OSD (recorded in the marker) that
-# is no longer in the declared devices list is a REMOVAL. cephadm never auto-removes
-# an OSD — dropping it from the drivegroup spec would silently orphan a running OSD —
-# so removing an OSD device is not an in-place reconcile. Refuse when the device is
-# still present AND still carries data (its OSD is still there), directing the
-# operator to drain it first. A removed device that is absent or already wiped
-# (drained out of band) passes: the new marker below simply stops recording it.
 - name: Resolve declared-removed Bootwright OSD devices
   ansible.builtin.set_fact:
     bootwright_ceph_removed_osd_devices: >-
@@ -295,10 +268,6 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
-# Record the empty devices Bootwright is claiming as OSDs on this node so destroy
-# can refuse to wipe a device later added to the declared list out of band. Stamped
-# on every apply so it tracks legitimate device additions, and removed by the
-# destroy flow. Consumed by the destroy device-ownership guard.
 - name: Ensure Bootwright state directory for OSD device marker
   ansible.builtin.file:
     path: "{{ bootwright_ceph_osd_marker_path | dirname }}"

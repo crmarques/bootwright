@@ -56,7 +56,6 @@ func TestMergedDockerConfigAuthAddsEntryPreservingOthers(t *testing.T) {
 func TestMergedDockerConfigAuthIdempotentOnMatchingCredential(t *testing.T) {
 	auth := base64.StdEncoding.EncodeToString([]byte("cp:ENTITLEMENT"))
 	existing := dockerConfig(t, map[string]map[string]string{
-		// Extra fields alongside a matching credential must not trigger a write.
 		"cp.icr.io": {"auth": auth, "email": "ops@example.com"},
 	})
 	_, changed, err := mergedDockerConfigAuth(existing, "cp.icr.io", "cp", "ENTITLEMENT")

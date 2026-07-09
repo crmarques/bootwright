@@ -9,12 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// The storage --override safety helpers key on the aggregated object kind
-// ("StorageCluster"), not the lowercase task-kind constant. This regression test
-// classifies a real structurally-drifted, owned StorageCluster and asserts the
-// helpers actually match it — a kind-constant mismatch silently returned empty,
-// disabling the Ceph OSD-wipe data-loss warning, the reconcilable-only zap
-// suppression, and the --reclaim-devices ownership gate.
 func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -50,10 +44,6 @@ func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 		t.Fatal("OwnedStorageClusters must name the recorded owned StorageCluster (kind-constant regression)")
 	}
 
-	// The positive rebuild-authorization token MUST name exactly the clusters the
-	// data-loss warning lists — a single source of truth so the operator is never
-	// warned about one set and wiped on another. Assert the token names are the
-	// warned labels with the "StorageCluster/" prefix stripped.
 	authorized := RebuildAuthorizedStorageClusters(objects)
 	if len(authorized) == 0 {
 		t.Fatal("RebuildAuthorizedStorageClusters must positively authorize the structurally-drifted StorageCluster's --override wipe")
@@ -69,14 +59,6 @@ func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 	}
 }
 
-// A healthy owned StorageCluster with NO desired drift must never be authorized for
-// a destructive --override wipe: the positive rebuild-authorization token stays
-// empty, so the seed role's rm-cluster --zap-osds gate (which requires membership)
-// leaves the cluster's OSD data intact and reconciles it idempotently in place.
-// This is the StorageCluster healthy-match skip — the parity of the ContainerCluster
-// install-state healthy-skip that Ceph previously lacked (apply --override zapped a
-// no-drift owned cluster because the gate was drift-keyed opt-out, not authorization
-// opt-in).
 func TestRebuildAuthorizationSkipsHealthyMatchStorageCluster(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -86,8 +68,6 @@ func TestRebuildAuthorizationSkipsHealthyMatchStorageCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	// Record every storage task as reconciled against the SAME desired state, so a
-	// re-classification reads a clean match (no structural, no reconcilable drift).
 	for _, task := range tasks {
 		switch task.Entry.Kind {
 		case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:

@@ -67,9 +67,6 @@ func (g *ActivityGraph) Add(activity Activity) error {
 	return nil
 }
 
-// AddDependency appends dependsOn to an already-added activity's hard explicit
-// dependencies. The ProvisioningPlaybook planner uses it to gate a core phase
-// task on a before-timing playbook after every core activity is in the graph.
 func (g *ActivityGraph) AddDependency(id, dependsOn string) error {
 	activity, ok := g.activities[id]
 	if !ok {
@@ -80,10 +77,6 @@ func (g *ActivityGraph) AddDependency(id, dependsOn string) error {
 	return nil
 }
 
-// AddOrderingDependency appends dependsOn to an already-added activity's soft
-// ordering dependencies (wait-until-terminal, run regardless). Used to gate a
-// core phase task on a before-timing playbook whose failureMode is continue, so
-// the phase proceeds even if the playbook fails.
 func (g *ActivityGraph) AddOrderingDependency(id, dependsOn string) error {
 	activity, ok := g.activities[id]
 	if !ok {
@@ -94,9 +87,6 @@ func (g *ActivityGraph) AddOrderingDependency(id, dependsOn string) error {
 	return nil
 }
 
-// ActivitySnapshot returns the activities added so far, in insertion order. The
-// ProvisioningPlaybook planner reads it to bucket core tasks by phase without
-// threading a phase index through every planner call site.
 func (g *ActivityGraph) ActivitySnapshot() []Activity {
 	out := make([]Activity, 0, len(g.order))
 	for _, id := range g.order {
@@ -217,10 +207,6 @@ func addonProvidesCapability(cluster, capability string) CapabilityRef {
 	return CapabilityRef{Kind: "addon.provides:" + capability, Name: cluster}
 }
 
-// virtctlProvisionedCapability marks that a KubeVirt host cluster's
-// version-matched virtctl has been installed on the controller. The boot task of
-// every child cluster running on that host requires it, so booting waits for the
-// deps-stage provision activity.
 func virtctlProvisionedCapability(hostCluster string) CapabilityRef {
 	return CapabilityRef{Kind: "kubevirt.virtctl-provisioned", Name: hostCluster}
 }

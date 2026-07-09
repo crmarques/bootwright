@@ -1,10 +1,4 @@
 ---
-# The empty SATA CD-ROM is pre-created on first create only, so the vsphere
-# media role reconfigures iso_path on the existing device — vmware_guest CD
-# device add/remove on live VMs is the historically fragile path, and a
-# reconcile of an existing VM must never touch the CD (resetting it would
-# hot-eject mounted install media). An empty template clones nothing: the
-# VM is created blank and boots install media.
 - name: Apply vSphere virtual machine
   community.vmware.vmware_guest:
     hostname: "{{ bootwright_vsphere.server }}"
@@ -36,12 +30,6 @@
   register: bootwright_vsphere_apply
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# Disk-first ordering is the libvirt disk-first analogue: a blank disk has
-# no bootable EFI entry so firmware falls through to the install CD, and the
-# first boot after the install comes from disk even while the media is still
-# attached — no mid-install eject is ever needed. The VM is addressed by
-# moid: boot_manager has no folder scoping, and name_match=first could hit
-# a same-named foreign VM elsewhere in the inventory.
 - name: Resolve vSphere virtual machine identity
   ansible.builtin.set_fact:
     bootwright_vsphere_vm_moid: "{{ bootwright_vsphere_apply.instance.moid | default(bootwright_vsphere_probe.instance.moid | default('')) }}"

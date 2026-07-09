@@ -30,9 +30,6 @@ func TestRunOptionsForContextSeedsSharedFields(t *testing.T) {
 	if len(opts.State.Environments) != 1 {
 		t.Fatalf("state not seeded")
 	}
-	// The shared seeder must leave every run-specific field zero; callers overlay
-	// them. This guards against a field silently migrating into (or out of) the
-	// shared mapping and changing one of the five run paths.
 	if opts.Playbook != "" || opts.DryRun || opts.Check || opts.AcquireRunLease ||
 		opts.ArtifactsBaseName != "" || opts.OutputLogPath != "" || opts.StreamAnsible ||
 		opts.UseControllingTTY || opts.ResolveInstaller || opts.AskBecomePass ||

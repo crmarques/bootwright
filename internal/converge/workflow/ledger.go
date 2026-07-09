@@ -60,13 +60,9 @@ type RunLedger struct {
 }
 
 type RunLease struct {
-	RunID    string `json:"runId"`
-	Hostname string `json:"hostname,omitempty"`
-	PID      int    `json:"pid"`
-	// ProcessStart is a per-process identity token (the process start time) that,
-	// together with PID, distinguishes the lease's own process from an unrelated
-	// process that later reused the same PID. Empty when the platform cannot
-	// supply one; the alive check then falls back to the heartbeat-age rule.
+	RunID        string    `json:"runId"`
+	Hostname     string    `json:"hostname,omitempty"`
+	PID          int       `json:"pid"`
 	ProcessStart string    `json:"processStart,omitempty"`
 	StartedAt    time.Time `json:"startedAt"`
 	HeartbeatAt  time.Time `json:"heartbeatAt"`
@@ -87,26 +83,18 @@ type RunActivity struct {
 }
 
 type TaskLedgerEntry struct {
-	ID            string     `json:"id"`
-	Kind          string     `json:"kind"`
-	Label         string     `json:"label"`
-	Cluster       string     `json:"cluster,omitempty"`
-	ClusterKind   string     `json:"clusterKind,omitempty"`
-	Node          string     `json:"node,omitempty"`
-	Host          string     `json:"host,omitempty"`
-	ResourceKeys  []string   `json:"resourceKeys,omitempty"`
-	HostSlotKey   string     `json:"hostSlotKey,omitempty"`
-	HostSlotCount int        `json:"hostSlotCount,omitempty"`
-	Status        TaskStatus `json:"status"`
-	Dependencies  []string   `json:"dependencies,omitempty"`
-	// OrderingDependencies sequence this task AFTER the named tasks without
-	// blocking on their outcome: the task waits until each is terminal (any of
-	// OK/Skipped/Failed/Blocked/Cancelled) and then runs regardless. Hard
-	// Dependencies, by contrast, must reach OK/Skipped or this task is blocked.
-	// Destroy uses ordering deps so a failed stage preserves teardown order yet
-	// still lets the independent later stages make maximal progress; each step
-	// carries its own ownership/safety gate, so the chain order is correctness,
-	// not a safety boundary.
+	ID                   string     `json:"id"`
+	Kind                 string     `json:"kind"`
+	Label                string     `json:"label"`
+	Cluster              string     `json:"cluster,omitempty"`
+	ClusterKind          string     `json:"clusterKind,omitempty"`
+	Node                 string     `json:"node,omitempty"`
+	Host                 string     `json:"host,omitempty"`
+	ResourceKeys         []string   `json:"resourceKeys,omitempty"`
+	HostSlotKey          string     `json:"hostSlotKey,omitempty"`
+	HostSlotCount        int        `json:"hostSlotCount,omitempty"`
+	Status               TaskStatus `json:"status"`
+	Dependencies         []string   `json:"dependencies,omitempty"`
 	OrderingDependencies []string   `json:"orderingDependencies,omitempty"`
 	StartedAt            *time.Time `json:"startedAt,omitempty"`
 	EndedAt              *time.Time `json:"endedAt,omitempty"`
@@ -219,21 +207,12 @@ func RemoveRunLease(runsDir string) error {
 	return nil
 }
 
-// ErrLeaseNotOwned signals that the on-disk lease belongs to a different run than
-// the caller expected: it was taken over after this run stalled past the stale
-// window. It is a no-op signal, not a hard failure — callers must not touch the
-// new holder's lease and should stop refreshing/removing it.
 var ErrLeaseNotOwned = errors.New("apply lease is held by another run")
 
 func isLeaseNotOwned(err error) bool {
 	return errors.Is(err, ErrLeaseNotOwned)
 }
 
-// SaveRunLeaseIfOwner refreshes the lease only while the on-disk lease still
-// belongs to lease.RunID. A run that stalled past the stale window and was taken
-// over must not blindly overwrite the new holder's lease when its heartbeat
-// resumes; it returns ErrLeaseNotOwned instead so the caller stops. Used by the
-// heartbeat tick in place of the blind SaveRunLease overwrite.
 func SaveRunLeaseIfOwner(runsDir string, lease RunLease) error {
 	existing, found, err := LoadRunLease(runsDir)
 	if err != nil {
@@ -245,10 +224,6 @@ func SaveRunLeaseIfOwner(runsDir string, lease RunLease) error {
 	return SaveRunLease(runsDir, lease)
 }
 
-// RemoveRunLeaseIfOwner removes the lease only while it still belongs to runID. A
-// finishRun/cleanup path that resumes after a takeover must not delete the new
-// holder's lease; it returns ErrLeaseNotOwned instead. A missing lease is not an
-// error (nothing to remove).
 func RemoveRunLeaseIfOwner(runsDir, runID string) error {
 	existing, found, err := LoadRunLease(runsDir)
 	if err != nil {
@@ -263,15 +238,6 @@ func RemoveRunLeaseIfOwner(runsDir, runID string) error {
 	return RemoveRunLease(runsDir)
 }
 
-// leaseLiveness is the single source of truth for whether a lease's run is still
-// alive, given the caller has already handled the missing-lease and different-run
-// cases. The four arms are: a live local process is active regardless of heartbeat
-// age (a long privileged step outlasting the ~2-minute heartbeat window is still
-// mutating hosts, so a stale heartbeat alone must not invite a takeover); a lease
-// with no heartbeat, or whose local process is provably gone, is stale; otherwise
-// the heartbeat-age window decides. Both the advisory pre-mutation check
-// (leaseFresh) and the acquisition/status gate (AssessRunActivity) call this so the
-// two mutual-exclusion gates cannot disagree on what counts as a live run.
 func leaseLiveness(lease RunLease, now time.Time) (RunActivityState, string) {
 	if localLeaseProcessAlive(lease) {
 		return RunActivityActive, "apply lease process is running"
@@ -288,21 +254,11 @@ func leaseLiveness(lease RunLease, now time.Time) (RunActivityState, string) {
 	return RunActivityActive, "apply lease heartbeat is fresh"
 }
 
-// leaseFresh reports whether an on-disk lease belongs to a run that is still
-// alive. It shares leaseLiveness with AssessRunActivity but works from the lease
-// alone, so it can gate mutating runs that do not maintain a ledger.
 func leaseFresh(lease RunLease, now time.Time) bool {
 	state, _ := leaseLiveness(lease, now)
 	return state == RunActivityActive
 }
 
-// AcquireRunLease atomically claims the run lease for a mutating run. It fails
-// closed when another run holds a fresh lease, so two mutators that both raced
-// past the advisory pre-mutation check cannot proceed together. A stale lease
-// (dead process or expired heartbeat) is claimed by renaming it aside — only one
-// of several racing takeovers can win that rename — before the lease is created
-// with an O_EXCL exclusive open. The lease is the single point of mutual
-// exclusion between scheduler applies and Run-based destroys.
 func AcquireRunLease(runsDir string, lease RunLease, now time.Time) error {
 	path := LeasePath(runsDir)
 	existing, found, err := LoadRunLease(runsDir)
@@ -313,9 +269,6 @@ func AcquireRunLease(runsDir string, lease RunLease, now time.Time) error {
 		if leaseFresh(existing, now) {
 			return fmt.Errorf("a mutating run (%s) is still running; inspect it with bootwright status --watch", existing.RunID)
 		}
-		// Atomically claim the stale lease: renaming the path aside succeeds for
-		// at most one racer (the source vanishes for the rest), so no two
-		// takeovers can both go on to recreate the lease.
 		staleClaim := path + ".stale-" + lease.RunID
 		if err := os.Rename(path, staleClaim); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("claim stale apply lease: %w", err)
@@ -385,8 +338,6 @@ func AssessRunActivity(runsDir string, ledger RunLedger, now time.Time) (RunActi
 	if lease.RunID != ledger.RunID {
 		return RunActivity{State: RunActivityStale, Detail: fmt.Sprintf("apply lease belongs to %s", lease.RunID), Lease: &lease}, nil
 	}
-	// The lease belongs to this run: the shared four-arm freshness decision (also
-	// used by leaseFresh) determines active vs stale.
 	state, detail := leaseLiveness(lease, now)
 	return RunActivity{State: state, Detail: detail, Lease: &lease}, nil
 }
@@ -407,18 +358,6 @@ func localLeaseProcessMissing(lease RunLease) bool {
 	return lease.PID <= 0 || !runLeaseProcessAlive(lease.PID)
 }
 
-// localLeaseProcessAlive reports whether the lease was taken on this host and its
-// own process is verifiably still running. A remote-host lease (hostname differs,
-// or unset) is not checkable locally and returns false so the caller falls back
-// to the heartbeat-age rule; the hostname guard also ensures the local process
-// table is never probed for a foreign-host lease.
-//
-// A live PID alone is not trusted: PIDs are reused, so after a hard crash an
-// unrelated process could hold the lease's PID and wedge the lease forever. The
-// lease's ProcessStart identity token must also match the live PID's current
-// start-time token; a missing token (older lease or a platform without one) or a
-// mismatch means the process is not provably ours, so this returns false and the
-// heartbeat-age rule decides — restoring the stale self-heal for reused PIDs.
 func localLeaseProcessAlive(lease RunLease) bool {
 	if lease.Hostname == "" {
 		return false
@@ -451,8 +390,6 @@ func CancelRunLedger(runsDir string, ledger RunLedger, reason string, now time.T
 	if err := SaveRunLedger(runsDir, ledger); err != nil {
 		return ledger, err
 	}
-	// Ownership-checked so cancelling a stale ledger whose lease was already taken
-	// over by a new run does not delete the new holder's lease.
 	if err := RemoveRunLeaseIfOwner(runsDir, ledger.RunID); err != nil && !isLeaseNotOwned(err) {
 		return ledger, err
 	}

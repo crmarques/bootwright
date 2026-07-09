@@ -1,9 +1,4 @@
 ---
-# Self-contained shared bastion service: one Squid proxy container can be referenced by
-# several Bootwright contexts. When another context still references it the Go destroy
-# planner lists it in bootwright_infra_component_release_records; we then RELEASE it —
-# skip every destructive step but still drop this context's ownership record — so the
-# shared proxy survives for the other contexts.
 - name: Resolve shared-service release decision for Squid proxy
   ansible.builtin.set_fact:
     bootwright_component_release: >-

@@ -68,19 +68,9 @@ func validateContainerClusters(state v1alpha1.State) []string {
 	return errs
 }
 
-// validateClusterPlatformWithDerivation wraps validateClusterPlatform with
-// the spec.install.platform derivation contract: normalize materializes the
-// platform from the single provider type behind the cluster's nodes, so an
-// omitted platform that survives to validation means derivation could not
-// pick one. When the nodes bind machines across multiple provider types,
-// emit the specific conflict instead of the generic "type is required".
 func validateClusterPlatformWithDerivation(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	owner := fmt.Sprintf("ContainerCluster/%s spec.install.platform", ocp.Metadata.Name)
 	if installPlatformOmitted(ocp.Spec.Install.Platform) && len(ocp.Spec.Hosts) > 0 {
-		// An unresolved machineRef is the root cause of a non-derivable platform.
-		// That machineRef error is already reported at the host level, so suppress
-		// the misleading "platform.type is required" that would otherwise steer the
-		// operator to author a platform they do not need.
 		if clusterHasUnresolvedMachineRef(state, ocp) {
 			return nil
 		}
@@ -92,9 +82,6 @@ func validateClusterPlatformWithDerivation(state v1alpha1.State, ocp v1alpha1.Co
 	return validateClusterPlatform(owner, ocp.Spec.Install.Platform, len(ocp.Spec.Hosts) > 0)
 }
 
-// clusterHasUnresolvedMachineRef reports whether any host names a Machine that is
-// not in the loaded state; that dangling reference, not a missing platform, is the
-// real error to surface.
 func clusterHasUnresolvedMachineRef(state v1alpha1.State, ocp v1alpha1.ContainerCluster) bool {
 	present := make(map[string]bool, len(state.Machines))
 	for _, m := range state.Machines {
@@ -157,14 +144,6 @@ func validateClusterNetworking(ocp v1alpha1.ContainerCluster) []string {
 	return errs
 }
 
-// validateClusterNetworkIPFamilies enforces OpenShift's cross-list IP-family
-// contract: the primary (first-entry) IP family of clusterNetwork and
-// serviceNetwork must match. openshift-install rejects a mismatch at create time
-// — dual-stack requires every networking list to share one primary family, and a
-// single-stack cluster requires one consistent family across both lists — so
-// catch it at validate instead of mid-apply from the installer. Per-CIDR syntax
-// is already checked by validateClusterNetworking; this only compares the primary
-// entries once both parse.
 func validateClusterNetworkIPFamilies(ocp v1alpha1.ContainerCluster) []string {
 	networking := ocp.Spec.Networking
 	if networking == nil || len(networking.ClusterNetwork) == 0 || len(networking.ServiceNetwork) == 0 {
@@ -185,8 +164,6 @@ func validateClusterNetworkIPFamilies(ocp v1alpha1.ContainerCluster) []string {
 	return nil
 }
 
-// cidrIPFamily reports the IP family ("IPv4"/"IPv6") of a CIDR, and ok=false when
-// it does not parse (a syntax error validateClusterNetworking already reports).
 func cidrIPFamily(cidr string) (string, bool) {
 	ip, _, err := net.ParseCIDR(strings.TrimSpace(cidr))
 	if err != nil {
@@ -224,12 +201,6 @@ func validateDistribution(ocp v1alpha1.ContainerCluster) []string {
 	return errs
 }
 
-// validateContainerClusterFIPS gates a FIPS-declared cluster. FIPS renders
-// fips: true into the install-config, which lays down RHCOS in FIPS mode; it is
-// a Red Hat OpenShift feature, so the community okd distribution (SCOS) is
-// rejected — the parallel of the Ceph oss gate. No node OS gate is needed: OCP
-// nodes are RHCOS installed by the same install-config, not a separately
-// declared MachineInstallProfile.
 func validateContainerClusterFIPS(ocp v1alpha1.ContainerCluster) []string {
 	if !ocp.Spec.Security.FIPS.Enabled {
 		return nil
@@ -256,11 +227,6 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 		} else if seenHostnames[node.Hostname] {
 			errs = append(errs, fmt.Sprintf("%s.hostname %q is duplicated", prefix, node.Hostname))
 		} else if !dnsSubdomain.MatchString(node.Hostname) {
-			// The hostname renders verbatim into agent-config (openshift-install
-			// rejects a non-RFC1123 name at ISO creation, mid-apply) and is the
-			// day-2 Node object name; kubelets register lowercase names, so an
-			// uppercase or underscore/trailing-dash name is either rejected or
-			// silently misses the real Node. Reject it at validate.
 			errs = append(errs, fmt.Sprintf("%s.hostname %q must be a lowercase RFC1123 subdomain (lowercase alphanumerics, '-' and '.')", prefix, node.Hostname))
 		}
 		seenHostnames[node.Hostname] = true
@@ -297,8 +263,6 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	for _, pool := range ocp.Spec.Compute {
 		workerReplicas += pool.Replicas
 	}
-	// Infra hosts install in the worker pool, so the compute replica count
-	// covers workers and infra together.
 	if computeNodes := worker + infra; len(ocp.Spec.Compute) > 0 && workerReplicas != computeNodes {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.compute worker replicas %d does not match worker+infra node count %d",
 			ocp.Metadata.Name, workerReplicas, computeNodes))
@@ -306,8 +270,6 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	return errs
 }
 
-// validateNodePlacement checks the optional day-2 node labels and taints: label
-// keys must be non-empty and taint effects must be a valid Kubernetes effect.
 func validateNodePlacement(prefix string, node v1alpha1.OCPHostSpec) []string {
 	var errs []string
 	for key := range node.Labels {
@@ -391,12 +353,6 @@ func containerEndpointRefName(role string) string {
 
 func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	var errs []string
-	// Normalize fills pullSecretRef for openshift clusters whenever an
-	// Environment is loaded (Environment default, else the
-	// openshift-pull-secret convention), so an empty ref here means the state
-	// has no Environment — already its own validation failure. Keep the guard
-	// for direct Validate callers, without an inheritance hint that can never
-	// apply on this path.
 	if v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef is required for openshift", ocp.Metadata.Name))
 	}

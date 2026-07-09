@@ -12,10 +12,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestRunPreparedDestroyTaskGraphRunsStepsToLogs runs a real (empty-limit)
-// destroy graph against a fake ansible-playbook and asserts the teardown runs
-// every step, routes ansible output to the per-task log (never the terminal),
-// and produces an ok ledger.
 func TestRunPreparedDestroyTaskGraphRunsStepsToLogs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a POSIX shell script")
@@ -42,8 +38,6 @@ echo destroy-stderr-line >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 	}
-	// Empty limit so the fake ansible actually runs (a real limit against an
-	// empty inventory would correctly skip as no-hosts).
 	tasks, err := PlanDestroyTasks("infra", state, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -79,8 +73,6 @@ echo destroy-stderr-line >&2
 			t.Fatalf("task %s log missing ansible output:\n%s", task.ID, logData)
 		}
 	}
-	// Destroy tasks carry no Entry.Cluster (they use ResourceKeys), so the shared
-	// scheduler must not emit the per-cluster apply lifecycle markers for them.
 	runLog, err := os.ReadFile(ApplyRunLogPath(runsDir, ledger.RunID))
 	if err != nil {
 		t.Fatalf("read run log: %v", err)

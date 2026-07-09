@@ -1,10 +1,4 @@
 ---
-# The secret-bearing management gateway (TLS cert and/or oauth2-proxy front door)
-# is applied here, separately from the static late-services spec, so the cert and
-# OIDC secrets are read from the controller-side secret files and inlined only
-# into a 0600 spec on the seed (cleaned up with the work dir) — never into a
-# locally-rendered file. The render emits the secret-free keepalive ingress in the
-# late-services spec; this step owns the mgmt-gateway (and oauth2-proxy) doc.
 - name: Assemble secret-bearing management service specs
   ansible.builtin.set_fact:
     bootwright_ceph_management_specs: >-

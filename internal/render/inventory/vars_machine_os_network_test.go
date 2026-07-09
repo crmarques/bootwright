@@ -12,9 +12,6 @@ func nmstateIPv4(ip string, prefix int) map[string]any {
 	}
 }
 
-// The routed public VLAN and the unrouted cluster VLAN both hold static IPs;
-// only the one carrying the default route can reach the install source, so it
-// must win regardless of interface declaration order.
 func TestKickstartNetworkInterfacesPrefersDefaultRouteVLAN(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
@@ -65,11 +62,6 @@ func TestKickstartNetworkInterfacesPrefersDefaultRouteVLAN(t *testing.T) {
 	}
 }
 
-// The install-time kickstart stays minimal: one merged bond+VLAN stanza for the
-// routed interface, no MTU and no separate per-slave stanzas. --bondslaves builds
-// the bond and its port connections, and MTU (which the merged kickstart line
-// cannot set on the bond) is left to the post-install nmstate apply. The nmstate
-// here still carries mtu 9000 on every layer; the kickstart deliberately drops it.
 func TestKickstartNetworkInterfacesMinimalBondVLANPrimaryOnly(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
@@ -127,8 +119,6 @@ func TestKickstartNetworkInterfacesMinimalBondVLANPrimaryOnly(t *testing.T) {
 	}
 }
 
-// A dual-stack document lists ::/0 before 0.0.0.0/0: the IPv4-only kickstart
-// stanza must follow the IPv4 default route (and gateway), not the v6 one.
 func TestKickstartNetworkPrefersIPv4DefaultRoute(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
@@ -167,10 +157,6 @@ func TestKickstartNetworkPrefersIPv4DefaultRoute(t *testing.T) {
 	}
 }
 
-// A default route whose next-hop-interface carries no IPv4 address (or names a
-// missing interface) must not drop the stanza list: the first interface with
-// an IPv4 still renders, keeping the static estate off the legacy dhcp
-// fallback line.
 func TestKickstartNetworkInterfacesFallsBackWhenRoutedInterfaceHasNoIPv4(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
@@ -194,9 +180,6 @@ func TestKickstartNetworkInterfacesFallsBackWhenRoutedInterfaceHasNoIPv4(t *test
 	}
 }
 
-// A VLAN over a plain NIC binds --device to the parent's MAC (kickstart's
-// stable device identity), and a VLAN whose nmstate name differs from the
-// derived <parent>.<id> default spells --interfacename explicitly.
 func TestKickstartNetworkInterfacesVLANOverEthernet(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{

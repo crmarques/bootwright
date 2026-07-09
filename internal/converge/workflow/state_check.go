@@ -6,23 +6,14 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// StateCheckResource is one resource in the selected apply graph whose recorded
-// convergence state differs from the current desired state.
 type StateCheckResource struct {
 	ResourceID     string                       `json:"resourceID"`
 	Kind           string                       `json:"kind"`
 	Label          string                       `json:"label"`
 	Classification ConvergeSafetyClassification `json:"classification"`
-	// Reconcilable is true for a drifted resource whose drift converges in place
-	// (an OSD-device add, a storage set-* edit, a ContainerCluster day-2 edit, any
-	// reconfigure-only re-apply) rather than a destructive rebuild. It is false for a
-	// match/missing/foreign resource and for structural (rebuild) drift, so a reader
-	// tells a safe reconcile from a wipe-and-rebuild without running apply.
-	Reconcilable bool `json:"reconcilable,omitempty"`
+	Reconcilable   bool                         `json:"reconcilable,omitempty"`
 }
 
-// StateCheckRoot summarizes one selected root (a ContainerCluster, a
-// StorageCluster, or the shared infrastructure) against recorded reality.
 type StateCheckRoot struct {
 	Kind      string               `json:"kind"`
 	Name      string               `json:"name"`
@@ -32,33 +23,13 @@ type StateCheckRoot struct {
 	Resources []StateCheckResource `json:"resources,omitempty"`
 }
 
-// StateCheckReport is the result of a non-mutating desired-vs-recorded state
-// check over the selected apply graph.
 type StateCheckReport struct {
-	Roots  []StateCheckRoot `json:"roots"`
-	InSync bool             `json:"inSync"`
-	// Undeclared lists Bootwright-owned resources still recorded in the ownership
-	// store but no longer present in desired state (orphans left by removing an object
-	// without destroying it). Reported, never mutated; a full `destroy` reclaims them.
-	Undeclared []UndeclaredResource `json:"undeclared,omitempty"`
-	// LoadWarnings carries per-record skip reasons for records that could not be
-	// read, decoded, or validated: both ownership records (whose orphan would
-	// otherwise silently vanish from the report that exists to find orphans) and
-	// convergence-safety records (a single corrupt file under runs/safety/ must not
-	// brick this read-only report — the resource is skipped and the file named here
-	// instead). Reported, never fatal; the apply-time gate stays fail-loud.
-	LoadWarnings []string `json:"loadWarnings,omitempty"`
+	Roots        []StateCheckRoot     `json:"roots"`
+	InSync       bool                 `json:"inSync"`
+	Undeclared   []UndeclaredResource `json:"undeclared,omitempty"`
+	LoadWarnings []string             `json:"loadWarnings,omitempty"`
 }
 
-// StateCheck classifies every task in the selected apply graph, plus each
-// StorageCluster's declared sub-objects (pools, filesystems, object gateways,
-// exports), against the durable convergence-safety evidence recorded by the last
-// apply, without running playbooks, probing, or writing records. Each resource
-// resolves to match (applied with the current desired state), drift (desired
-// state changed since it was applied), foreign (a non-Bootwright owner recorded
-// it), or missing (never applied). A root whose resources are all missing is
-// reported as one absence instead of a flood of per-resource missing lines; a
-// present root reports only the resources that are not in sync.
 func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, runsDir string) (StateCheckReport, error) {
 	type rootAcc struct {
 		kind, name string
@@ -114,22 +85,6 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		accumulate(rootFor(kind, name), class, stateCheckResource(task, class, reconcilable))
 	}
 
-	// Expand each StorageCluster's sub-objects against their own durable records
-	// (MarkStorageSubObjectsConvergeSafety writes one per sub-object, keyed
-	// "<Kind>/<cluster>.<name>"), so a present storage cluster reports which
-	// specific pool or export drifted or is missing instead of collapsing to one
-	// StorageCluster line. Sub-objects share their owning cluster's
-	// "storage/<cluster>" root, so a never-applied cluster — cluster task and
-	// every sub-object missing — still collapses to a single absence.
-	//
-	// Classified only for storage clusters the selected graph actually plans a
-	// StorageCluster task for, mirroring the apply preflight exactly
-	// (ClassifyApplyObjects expands sub-objects per StorageCluster task). A stage
-	// that plans no storage (e.g. --stage infra) and a managed StorageCluster
-	// pulled in only as a data-foundation render reference (no provisioning task,
-	// ADR-0004) both carry no task here, so neither reports spurious pool/export
-	// drift the identically-scoped apply would never touch (a state check exiting 3
-	// where apply is a clean no-op).
 	storagePlanned := map[string]bool{}
 	for _, task := range tasks {
 		if task.Entry.Kind == ApplyTaskKindStorageCluster {
@@ -181,11 +136,6 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 	return report, nil
 }
 
-// classifyApplyTaskStateLenient is the read-only state-check variant of
-// classifyApplyTaskState: a corrupt or unreadable converge-safety record for the
-// task is returned as a non-empty warning (naming the file) and the task is
-// skipped by the caller, instead of aborting the whole state-check report. The
-// strict classifyApplyTaskState stays fail-loud for apply's preflight gate.
 func classifyApplyTaskStateLenient(task ApplyTask, runsDir string) (ConvergeSafetyClassification, string, error) {
 	desiredHash, err := ApplyTaskDesiredHash(task)
 	if err != nil {
@@ -204,9 +154,6 @@ func classifyApplyTaskStateLenient(task ApplyTask, runsDir string) (ConvergeSafe
 	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), "", nil
 }
 
-// classifyStorageSubObjectLenient mirrors classifyApplyTaskStateLenient for a
-// StorageCluster sub-object, degrading a corrupt record to a warning rather than
-// bricking the read-only report.
 func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject, runsDir string) (ConvergeSafetyClassification, string, error) {
 	desiredHash, err := storageSubObjectDesiredHash(state, sub)
 	if err != nil {

@@ -1,12 +1,3 @@
-// Package cephadopt folds the live state of a managed Ceph cluster back into
-// authored desired-state YAML — the engine behind `bootwright diff --adopt`. It
-// decides which observed facets are cleanly representable and auto-adoptable
-// (replicated pool sizing, declared ceph config values, additive OSD-device
-// pins, cluster-only pools) and reports everything else as detected-but-not-
-// adopted so the operator edits it deliberately. It never rewrites or removes an
-// existing entry, and it writes only through the workspace input-mutation
-// component, which snapshots history first. The CLI supplies the live comparison
-// and renders the returned Summary; the adoption policy lives here.
 package cephadopt
 
 import (
@@ -23,19 +14,11 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// ProbedStorage is one managed storage cluster's live comparison the adopt engine
-// folds in: the cluster name and the facet-diff report the discovery produced.
-// The caller passes only clusters it actually reached, in a deterministic order.
 type ProbedStorage struct {
 	Cluster string
 	Report  cephdiff.Report
 }
 
-// Summary reports the outcome of `diff --adopt`: the history snapshot taken
-// before writing, the edits applied, the new object files created, and the
-// differences detected but deliberately not auto-adopted (which the operator
-// edits by hand). Detected keeps adopt honest: it never silently drops a
-// difference it cannot safely fold in.
 type Summary struct {
 	Snapshot string   `json:"snapshot,omitempty"`
 	Applied  []string `json:"applied,omitempty"`
@@ -47,31 +30,17 @@ func (s Summary) Empty() bool {
 	return len(s.Applied) == 0 && len(s.NewFiles) == 0
 }
 
-// nodeEdit mutates the desired-state document whose metadata.name matches
-// objectName. In its scalar form it sets value at the mapping-key path, creating
-// intermediate mappings. In its sequence-append form (appendValues set) it
-// appends each value (as a !!str scalar, skipping ones already present) to the
-// sequence at hostPath within the spec.ceph.topology.hosts[] element identified
-// by hostRef — the purely additive OSD-device pin, which never rewrites or
-// removes an existing entry.
 type nodeEdit struct {
 	objectName string
 	path       []string
 	value      string
-	tag        string // "!!int" for numeric fields, "!!str" for string fields
+	tag        string
 
-	hostRef      string   // machineRef.name / hostname of the target hosts[] element
-	hostPath     []string // sequence path within that host (e.g. devices)
+	hostRef      string
+	hostPath     []string
 	appendValues []string
 }
 
-// Adopt folds the live state of probed managed storage clusters into desired YAML
-// through the centralized workspace.ApplyInputEdits (which snapshots history
-// first). Only the cleanly-representable facets are auto-adopted — replicated
-// pool sizing, declared ceph config values, and pools that exist only on the
-// cluster; everything else is reported as detected-but-not-adopted so the
-// operator can edit it deliberately. It returns the summary and never mutates
-// files outside the context input tree.
 func Adopt(ctx workspace.Context, state v1alpha1.State, probed []ProbedStorage) (Summary, error) {
 	edits, summary, err := ComputeEdits(ctx, state, probed)
 	if err != nil {
@@ -91,8 +60,6 @@ func Adopt(ctx workspace.Context, state v1alpha1.State, probed []ProbedStorage) 
 	return summary, nil
 }
 
-// ComputeEdits is the pure adoption policy: it decides which live facets fold in
-// and returns the input edits plus a summary, without writing anything.
 func ComputeEdits(ctx workspace.Context, state v1alpha1.State, probed []ProbedStorage) ([]workspace.InputEdit, Summary, error) {
 	var summary Summary
 	clusterByName := map[string]v1alpha1.StorageCluster{}
@@ -108,8 +75,6 @@ func ComputeEdits(ctx workspace.Context, state v1alpha1.State, probed []ProbedSt
 		poolByCluster[cluster][pool.Metadata.Name] = pool
 	}
 
-	// Mutations grouped by absolute source file, and new object files by absolute
-	// target path.
 	fileEdits := map[string][]nodeEdit{}
 	newFiles := map[string][]byte{}
 
@@ -129,8 +94,6 @@ func ComputeEdits(ctx workspace.Context, state v1alpha1.State, probed []ProbedSt
 				}
 			}
 		}
-		// Filter/all osd hosts are not drift, so they carry no facet object; report
-		// each as a reconstruction advisory naming the devices to pin by hand.
 		for _, adv := range storage.Report.UnpinnedOSDHosts {
 			summary.Detected = append(summary.Detected, fmt.Sprintf("%s: osd host %s consumes [%s] via a filter/all selection — pin osd.dataDevices.paths for exact reconstruction", storage.Cluster, adv.Host, strings.Join(adv.Devices, " ")))
 		}
@@ -155,15 +118,10 @@ func ComputeEdits(ctx workspace.Context, state v1alpha1.State, probed []ProbedSt
 		}
 		edits = append(edits, workspace.InputEdit{RelPath: rel, Content: content})
 	}
-	// Deterministic order for stable history and output.
 	sort.Slice(edits, func(i, j int) bool { return edits[i].RelPath < edits[j].RelPath })
 	return edits, summary, nil
 }
 
-// adoptPools folds replicated pool sizing changes into the declaring pool's file
-// and synthesizes a new StoragePool file for a pool that exists only on the
-// cluster. Structural changes (type, erasure profile) and other tunables are
-// detected, not auto-adopted.
 func adoptPools(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, fileEdits map[string][]nodeEdit, newFiles map[string][]byte, summary *Summary) {
 	for _, object := range facet.Objects {
 		switch object.State {
@@ -208,8 +166,6 @@ func adoptConfig(facet cephdiff.FacetDiff, cluster v1alpha1.StorageCluster, file
 		if !ok {
 			continue
 		}
-		// public_network / cluster_network are owned by spec.ceph.networks, not
-		// config; adopting them under config would be rejected on the next load.
 		if section == "global" && (key == "public_network" || key == "cluster_network") {
 			summary.Detected = append(summary.Detected, fmt.Sprintf("%s: %s is owned by spec.ceph.networks — adjust there", cluster.Metadata.Name, key))
 			continue
@@ -229,13 +185,6 @@ func adoptConfig(facet cephdiff.FacetDiff, cluster v1alpha1.StorageCluster, file
 	}
 }
 
-// adoptOSDDevices folds real OSD device layout into desired state. The only
-// auto-adopt is purely additive: when a host that pins explicit per-host device
-// paths has grown OSDs on further devices out of band, those devices are
-// appended to its declared list so a rebuild is faithful. A device that
-// disappeared (a declared path no longer backing an OSD), a host whose devices
-// come from a drivegroup or pathSpecs, and a declared-but-absent host are all
-// reported for deliberate hand-editing — never rewritten or removed.
 func adoptOSDDevices(facet cephdiff.FacetDiff, clusterName string, cluster v1alpha1.StorageCluster, fileEdits map[string][]nodeEdit, summary *Summary) {
 	for _, object := range facet.Objects {
 		field, ok := osdDevicesField(object)
@@ -272,7 +221,6 @@ func adoptOSDDevices(facet cephdiff.FacetDiff, clusterName string, cluster v1alp
 	}
 }
 
-// osdDevicesField returns the object's "devices" field.
 func osdDevicesField(object cephdiff.ObjectDiff) (cephdiff.FieldDiff, bool) {
 	for _, field := range object.Fields {
 		if field.Name == "devices" {
@@ -282,11 +230,6 @@ func osdDevicesField(object cephdiff.ObjectDiff) (cephdiff.FieldDiff, bool) {
 	return cephdiff.FieldDiff{}, false
 }
 
-// hostDeviceSequencePath returns the desired-state sequence a host's OSD data
-// devices are declared under and whether appending to it is safe: the `devices`
-// shorthand or osd.dataDevices.paths. A host whose devices come from a covering
-// drivegroup or from pathSpecs (per-device CRUSH class) is not safely appendable
-// and returns canAppend=false.
 func hostDeviceSequencePath(host v1alpha1.StorageCephHost) (path []string, canAppend bool) {
 	if len(host.Devices) > 0 {
 		return []string{"devices"}, true
@@ -297,8 +240,6 @@ func hostDeviceSequencePath(host v1alpha1.StorageCephHost) (path []string, canAp
 	return nil, false
 }
 
-// subtractFields returns the space-separated tokens of a that are absent from b,
-// sorted.
 func subtractFields(a, b string) []string {
 	inB := map[string]bool{}
 	for _, tok := range strings.Fields(b) {
@@ -314,8 +255,6 @@ func subtractFields(a, b string) []string {
 	return out
 }
 
-// devicePaths maps kernel basenames back to their /dev/<name> device paths, the
-// form a plain per-host device list already uses.
 func devicePaths(basenames []string) []string {
 	out := make([]string, len(basenames))
 	for i, name := range basenames {
@@ -324,18 +263,10 @@ func devicePaths(basenames []string) []string {
 	return out
 }
 
-// synthesizePoolFile builds a minimal StoragePool object for a pool discovered on
-// the cluster but not declared, and returns its target path (a sibling of the
-// cluster's source file) and marshaled YAML.
 func synthesizePoolFile(cluster v1alpha1.StorageCluster, object cephdiff.ObjectDiff) (string, []byte, error) {
 	if cluster.SourcePath == "" {
 		return "", nil, fmt.Errorf("cluster source file unknown")
 	}
-	// An erasure-coded pool needs a full spec.ceph.erasure block (k/m at minimum),
-	// but live discovery exposes only the profile name — not the chunk counts — so
-	// a synthesized EC pool would write ceph.type=erasure with no erasure block and
-	// fail the next load/validate. Refuse it here; the caller reports it as
-	// detected-but-not-adopted for deliberate hand-authoring.
 	for _, field := range object.Fields {
 		if field.Name == "type" && field.Real == v1alpha1.StoragePoolTypeErasureCode {
 			return "", nil, fmt.Errorf("erasure-coded pool needs a hand-authored spec.ceph.erasure profile (dataChunks/codingChunks); adopt cannot reconstruct it")

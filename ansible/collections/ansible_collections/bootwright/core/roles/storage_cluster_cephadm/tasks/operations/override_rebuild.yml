@@ -1,13 +1,4 @@
 ---
-# --override may rebuild a sub-object whose IMMUTABLE identity drifted from desired —
-# a pool's type/erasure profile, a CephFS's metadata pool — because Ceph cannot
-# change these in place. This is DATA-DESTROYING for that sub-object, so it runs only
-# under override mode and only on a proven structural mismatch against the LIVE
-# cluster (the explicit op.structural carried by the rendered create operation vs the
-# probed live object). A sub-object whose only drift is replica size/min-size/crush/
-# application is reconciled in place by the set-* operations and is NEVER destroyed
-# here. create/continue never reach this branch. After a rebuild deletes the object,
-# the skip-if-exists probe below sees it absent and the create operation recreates it.
 - name: Inspect existing Ceph pools for structural override rebuild
   ansible.builtin.command:
     argv:
@@ -35,9 +26,6 @@
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
     - (bootwright_apply_mode | default('continue')) == 'override'
 
-# Recreate only when the pool exists AND its live type (1=replicated, 3=erasure) no
-# longer matches the desired structural type. If the live type cannot be read we do
-# NOT recreate (fail-safe: fall through to the in-place reconcile, never destroy).
 - name: Decide Ceph pool structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_pool_recreate: >-
@@ -82,8 +70,6 @@
       changed_when: true
       failed_when: false
   always:
-    # Re-disable pool deletion even if the rm failed, so a half-finished rebuild never
-    # leaves the cluster permissive. Failure is surfaced by the assert below.
     - name: Re-disable Ceph pool deletion after override rebuild
       ansible.builtin.command:
         argv:
@@ -133,12 +119,6 @@
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
     - (bootwright_apply_mode | default('continue')) == 'override'
 
-# The default data pool is also a structural identity Ceph cannot change in place,
-# but `ceph fs ls` does not expose its ordering. `ceph fs get` does: the FIRST entry
-# of the live filesystem's mdsmap data_pools is the default. Resolve that pool id to
-# a name (via `ceph osd pool ls detail`) so it can be compared to the desired
-# default data pool. Any unreadable input leaves the resolved name empty, so the
-# decision below never rebuilds on it (fail-safe).
 - name: Inspect existing CephFS detail for default-data-pool override rebuild
   ansible.builtin.command:
     argv:
@@ -184,10 +164,6 @@
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
     - (bootwright_apply_mode | default('continue')) == 'override'
 
-# Recreate when the filesystem exists AND a readable, immutable structural field
-# differs from desired: the metadata pool OR the default data pool. Each is checked
-# only when its live value is readable (fail-safe: an unreadable live value never
-# triggers a destructive rebuild).
 - name: Decide CephFS structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_fs_recreate: >-
@@ -237,16 +213,6 @@
       changed_when: true
       failed_when: bootwright_ceph_op_fs_rm.rc != 0
 
-# --override may rebuild an erasure-coded pool whose IMMUTABLE EC profile drifted
-# from desired (k/m/plugin/technique/crush-*/stripe_unit/opaque parameters). Ceph
-# cannot change an EC profile in place, and the profile cannot be removed while a
-# pool uses it, so the rebuild runs at THIS op (the profile create precedes the
-# pool create): tear down the one pool that uses the profile (DATA-DESTROYING for
-# that pool), delete the stale profile, and let this op's idempotency probe see the
-# profile absent and recreate it (with its full topology-derived command), and the
-# create-pool op recreate the pool against the new profile. A profile whose authored
-# fields all match, or whose live state cannot be read, is left untouched (fail-safe:
-# never destroy). create/continue never reach this branch.
 - name: Inspect existing Ceph erasure-code profile for structural override rebuild
   ansible.builtin.command:
     argv:
@@ -273,12 +239,6 @@
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
     - (bootwright_apply_mode | default('continue')) == 'override'
 
-# Recreate only when the profile exists (readable) AND at least one authored field
-# differs from its live value. The live profile is narrowed to the authored keys
-# before the compare, so Ceph's defaulted keys (w, packetsize, ...) never force a
-# rebuild; an authored key missing from the live profile reads as a mismatch. An
-# unreadable/absent profile does NOT recreate (fail-safe: a missing profile is just
-# a create, never a destructive rebuild).
 - name: Decide Ceph erasure-code profile structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_ec_recreate: >-
@@ -323,8 +283,6 @@
       changed_when: true
       failed_when: false
   always:
-    # Re-disable pool deletion even if the rm failed, so a half-finished rebuild
-    # never leaves the cluster permissive. Failure is surfaced by the assert below.
     - name: Re-disable Ceph pool deletion after erasure-code profile override rebuild
       ansible.builtin.command:
         argv:
@@ -349,9 +307,6 @@
     - (bootwright_apply_mode | default('continue')) == 'override'
     - bootwright_ceph_op_ec_recreate | default(false) | bool
 
-# With the pool gone the profile is unused and can be deleted; this op's idempotency
-# probe then sees it absent and recreates it with the desired fields, and the
-# create-pool op recreates the pool against the new profile.
 - name: Delete structurally drifted erasure-code profile for override rebuild
   ansible.builtin.command:
     argv:

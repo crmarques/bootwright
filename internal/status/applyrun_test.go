@@ -39,8 +39,6 @@ func TestApplyClusterPhasesAggregateContainerAndStorageStates(t *testing.T) {
 	if phasePresent(storage, "Prepare") {
 		t.Fatalf("storage cluster should not expose a duplicate Prepare phase: %+v", storage)
 	}
-	// Storage-export consumption runs inside the consuming cluster's add-on
-	// task, so the storage cluster no longer reports a Publish phase.
 	if phasePresent(storage, "Publish") {
 		t.Fatalf("storage cluster should not expose a Publish phase: %+v", storage)
 	}

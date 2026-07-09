@@ -11,11 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-// TestCatalogIndexMatchesEmbeddedContent pins the index <-> embed FS
-// consistency both ways: every index entry/version has embedded content
-// (Entries checks that), and every embedded top-level directory is indexed —
-// a new catalog dir missing from catalog.yaml or the go:embed pattern fails
-// here instead of silently vending nothing.
 func TestCatalogIndexMatchesEmbeddedContent(t *testing.T) {
 	entries, err := Entries()
 	if err != nil {
@@ -119,7 +114,6 @@ func TestInstallListRemoveRoundTrip(t *testing.T) {
 		t.Fatalf("InstalledAddons = %+v", installed)
 	}
 
-	// A local edit is reported as drift.
 	if err := os.WriteFile(filepath.Join(dir, "add-on.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\n"), 0o600); err != nil {
 		t.Fatalf("edit vended file: %v", err)
 	}
@@ -131,7 +125,6 @@ func TestInstallListRemoveRoundTrip(t *testing.T) {
 		t.Fatalf("edited add-on must report Modified: %+v", installed)
 	}
 
-	// Re-install replaces the whole directory (fresh content, fresh marker).
 	if _, err := Install(release); err != nil {
 		t.Fatalf("re-Install: %v", err)
 	}

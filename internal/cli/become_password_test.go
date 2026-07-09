@@ -49,8 +49,6 @@ func TestPrepareBecomePasswordFileRejectsEmptyPassword(t *testing.T) {
 }
 
 func TestReadSudoPasswordEOFExplainsRootRequirement(t *testing.T) {
-	// Force the non-interactive path (no controlling TTY) so the read falls
-	// through to the empty stdin and returns the wrapped EOF error.
 	old := openControllingTTY
 	t.Cleanup(func() { openControllingTTY = old })
 	openControllingTTY = func() (*os.File, error) { return nil, errors.New("no tty") }

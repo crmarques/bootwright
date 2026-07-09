@@ -237,12 +237,6 @@ func (s *ContextStore) Rotate() error {
 	return s.removeUnusedKeys(metadata.ActiveKeyID)
 }
 
-// MaterializeSelected materializes only the named materials into targetDir,
-// otherwise identical to MaterializeRuntime. It is the scoped-secrets primitive
-// for ClusterAddon hook runs: a hook receives only its declared secretRefs (and,
-// for its connection dir, only the target machines' SSH key material), never the
-// whole store. Names not present in the store are silently skipped (a missing
-// secret is reported by preflight, not here).
 func (s *ContextStore) MaterializeSelected(targetDir string, names []string) (err error) {
 	want := map[string]bool{}
 	for _, name := range names {
@@ -273,10 +267,6 @@ func (s *ContextStore) materialize(targetDir string, include func(MaterialStatus
 	if err := os.Chmod(targetDir, 0o700); err != nil {
 		return fmt.Errorf("chmod runtime secrets directory %s: %w", targetDir, err)
 	}
-	// Plaintext copies are written one material at a time. If a later material
-	// fails to decrypt or write, remove everything written so far: callers
-	// register their own cleanup defer only on the success path, so without this
-	// a failed materialization would leave partial plaintext secrets on disk.
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(targetDir)

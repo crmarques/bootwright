@@ -23,11 +23,7 @@ type ExtensionPlan struct {
 	Cluster   string
 	Extension v1alpha1.ClusterAddon
 	Policy    addons.ClusterAddonPolicy
-	// Inputs are the binding-supplied values for this add-on. They are part of
-	// the add-on's desired state (hooks and effects resolve against them), so
-	// the desired hash folds them in — editing an input re-applies an
-	// otherwise-ready add-on.
-	Inputs []v1alpha1.ClusterAddonBindingInput
+	Inputs    []v1alpha1.ClusterAddonBindingInput
 }
 
 type ResourceSummary struct {
@@ -51,9 +47,6 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 			Cluster: cluster,
 			Policy:  addons.DefaultPolicy(),
 		}
-		// Appending mirrors inputs.EffectiveBindingAddons, which merges duplicate
-		// addonRef entries — the hash must see the same input list the executor
-		// resolves.
 		inputsByName := map[string][]v1alpha1.ClusterAddonBindingInput{}
 		for _, addon := range binding.Spec.Addons {
 			if addon.AddonRef.Name != "" {
@@ -90,14 +83,6 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 	return out, nil
 }
 
-// orderByCapabilities returns the add-ons stably reordered so each add-on
-// declaring spec.requires comes after the in-binding add-ons that provide those
-// capabilities. It is a stable topological sort: add-ons with no requires/
-// provides edge between them keep their original (binding/profile-expansion)
-// order — only a requirement that would otherwise resolve too late forces a
-// move. A requires whose capability no add-on in the binding provides imposes
-// no edge here (validation reports the unsatisfied requirement separately); a
-// requires/provides cycle is an error.
 func orderByCapabilities(plans []ExtensionPlan) ([]ExtensionPlan, error) {
 	n := len(plans)
 	if n < 2 {
@@ -124,8 +109,6 @@ func orderByCapabilities(plans []ExtensionPlan) ([]ExtensionPlan, error) {
 			}
 		}
 	}
-	// Kahn's algorithm, draining ready nodes in original index order so the
-	// result is deterministic and preserves binding order for independent add-ons.
 	emitted := make([]bool, n)
 	out := make([]ExtensionPlan, 0, n)
 	for len(out) < n {

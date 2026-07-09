@@ -118,10 +118,6 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 		if vc.Server == "" {
 			errs = append(errs, owner+".server is required")
 		} else if vcenterServers[vc.Server] {
-			// Render dedupes vcenters by server keeping the first entry, so a
-			// second entry for the same vCenter silently drops its datacenters
-			// and credentialsRef from install-config. Multiple datacenters
-			// belong in one entry's datacenters list.
 			errs = append(errs, fmt.Sprintf("%s.server %q is duplicated; list multiple datacenters for one vCenter under a single vcenters[] entry's datacenters", owner, vc.Server))
 		} else {
 			vcenterServers[vc.Server] = true
@@ -148,8 +144,6 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 		if fd.Name == "" {
 			errs = append(errs, owner+".name is required")
 		} else if failureDomains[fd.Name] {
-			// A duplicate name would also break the single-domain implicit
-			// failureDomainRef resolution, which counts declared entries.
 			errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, fd.Name))
 		} else {
 			failureDomains[fd.Name] = true
@@ -214,16 +208,6 @@ func validateProviderKubeVirt(prefix string, spec *v1alpha1.InfraProviderKubeVir
 	return errs
 }
 
-// validateMachineProfiles validates the shared MachineProfile shape and
-// rejects fields the selected provider's adapter ignores, instead of
-// accepting state that diverges from what the operator authored (the
-// MachinePoolSpec precedent): template and failureDomainRef drive only the
-// vSphere adapter, and dataDisks are provisioned only by the libvirt and
-// vsphere adapters. failureDomains carries
-// spec.vsphere.failureDomains[].name for vSphere providers so
-// failureDomainRef resolves like every other reference; with a single
-// declared failure domain an empty ref resolves to it, so the ref is
-// mandatory only on multi-failure-domain providers.
 func validateMachineProfiles(prefix, providerType string, profiles []v1alpha1.MachineProfile, failureDomains map[string]bool) []string {
 	var errs []string
 	seen := map[string]bool{}
@@ -239,10 +223,6 @@ func validateMachineProfiles(prefix, providerType string, profiles []v1alpha1.Ma
 			errs = append(errs, owner+" cpu/memoryMiB/diskGiB must be non-negative")
 		}
 		if providerType == v1alpha1.ProvisionerVSphere {
-			// The vSphere adapter feeds cpu/memoryMiB/diskGiB straight into
-			// vmware_guest hardware and a disk[0].size_gb; a cloned template
-			// inherits nothing from omitted values, so 0 renders an unbootable
-			// 0-cpu/0-memory/0-disk VM that vCenter rejects deep in apply.
 			if profile.CPU <= 0 || profile.MemoryMiB <= 0 || profile.DiskGiB <= 0 {
 				errs = append(errs, owner+" cpu/memoryMiB/diskGiB must be greater than zero for vsphere machine profiles")
 			}
@@ -329,9 +309,6 @@ func validateProviderNetworkAttachment(provider v1alpha1.InfraProvider, attachme
 		} else if !IsDNSLabel(ref.Namespace) {
 			errs = append(errs, fmt.Sprintf("%s.kubevirt.networkRef.namespace %q is not a DNS label", prefix, ref.Namespace))
 		}
-		// Bootwright references the network object by GVK; it does not own its
-		// schema. It only requires that the api group is resolvable: known kinds
-		// default their group, an unknown kind must spell it out.
 		if ref.EffectiveAPIGroup() == "" {
 			errs = append(errs, fmt.Sprintf("%s.kubevirt.networkRef.apiGroup is required for kind %q", prefix, ref.EffectiveKind()))
 		}

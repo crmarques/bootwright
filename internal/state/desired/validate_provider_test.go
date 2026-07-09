@@ -7,11 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestMachineProfilesRejectForeignProviderFields covers F64: template and
-// failureDomainRef drive only the vSphere adapter, and dataDisks are
-// provisioned only by the libvirt and vsphere adapters. Authoring them on
-// another provider must be rejected at validation rather than silently
-// ignored (the MachinePoolSpec precedent).
 func TestMachineProfilesRejectForeignProviderFields(t *testing.T) {
 	profile := v1alpha1.MachineProfile{
 		Name:             "p",
@@ -60,12 +55,6 @@ func TestMachineProfilesRejectForeignProviderFields(t *testing.T) {
 	}
 }
 
-// TestVSphereMachineProfileFields covers F24/F18/F34/F64 on the vSphere arm:
-// template plus a resolving failureDomainRef are accepted, a dangling
-// failureDomainRef gets the standard dangling-reference error, dataDisks are
-// accepted because the vSphere adapter provisions them, and an empty
-// failureDomainRef is rejected only when several failure domains are
-// declared (a single one resolves implicitly).
 func TestVSphereMachineProfileFields(t *testing.T) {
 	prefix := "InfraProvider/v spec.vsphere.machineProfiles"
 	failureDomains := map[string]bool{"dc1-zone-a": true}
@@ -81,9 +70,6 @@ func TestVSphereMachineProfileFields(t *testing.T) {
 		t.Fatalf("valid vSphere profile should be accepted, got %v", errs)
 	}
 
-	// A profile that omits cpu/memoryMiB/diskGiB (the "inherit the template's
-	// shape" mistake) renders 0-cpu/0-memory/0-disk into vmware_guest and must
-	// be rejected at validate rather than deep in Ansible.
 	zeroSized := valid
 	zeroSized.CPU, zeroSized.MemoryMiB, zeroSized.DiskGiB = 0, 0, 0
 	errsZero := validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{zeroSized}, failureDomains)
@@ -129,9 +115,6 @@ func TestVSphereMachineProfileFields(t *testing.T) {
 	}
 }
 
-// TestVSphereISOStagingValidation covers the isoStaging override block: an
-// authored block must carry at least one override, and either field alone is
-// enough because the other keeps its default.
 func TestVSphereISOStagingValidation(t *testing.T) {
 	base := v1alpha1.InfraProviderVSphere{
 		VCenters: []v1alpha1.VSphereVCenter{{
@@ -172,8 +155,6 @@ func TestVSphereISOStagingValidation(t *testing.T) {
 		}
 	}
 
-	// A duplicate failure-domain name would break the single-domain
-	// implicit failureDomainRef resolution, which counts declared entries.
 	duplicated := base
 	duplicated.FailureDomains = append(append([]v1alpha1.VSphereFailureDomain(nil), base.FailureDomains...), base.FailureDomains[0])
 	errs = validateProviderVSphere("spec.vsphere", &duplicated)
@@ -183,9 +164,6 @@ func TestVSphereISOStagingValidation(t *testing.T) {
 	}
 }
 
-// TestVSphereDuplicateVCenterServer covers the duplicate vcenters[].server
-// guard: render dedupes vcenters by server keeping the first entry, so a second
-// entry for the same vCenter silently drops its datacenters and credentialsRef.
 func TestVSphereDuplicateVCenterServer(t *testing.T) {
 	spec := v1alpha1.InfraProviderVSphere{
 		VCenters: []v1alpha1.VSphereVCenter{
@@ -206,10 +184,6 @@ func TestVSphereDuplicateVCenterServer(t *testing.T) {
 	}
 }
 
-// TestBareMetalProviderBMCDefaults covers the provider-default BMC arm: a
-// cert-only default (no credentialsRef) is accepted (the require is relaxed),
-// and a virtualMedia.tls block must obey the same invariants as the per-machine
-// one, reported against the provider path.
 func TestBareMetalProviderBMCDefaults(t *testing.T) {
 	mk := func(bmc *v1alpha1.BMCDefaults) v1alpha1.InfraProvider {
 		return v1alpha1.InfraProvider{

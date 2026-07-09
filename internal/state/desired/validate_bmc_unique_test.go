@@ -13,15 +13,12 @@ func machineWithBMC(name, address string) v1alpha1.Machine {
 	return m
 }
 
-// Two Machines pointing at the same BMC endpoint is a fat-finger that would drive —
-// and could disk-wipe — the wrong physical host, so validation must fail closed.
-// Distinct addresses (and VM machines with no BMC) must pass.
 func TestValidateUniqueBMCAddresses(t *testing.T) {
 	dup := v1alpha1.State{Machines: []v1alpha1.Machine{
 		machineWithBMC("node-a", "https://10.0.0.5"),
 		machineWithBMC("node-b", "https://10.0.0.5"),
 		machineWithBMC("node-c", "https://10.0.0.6"),
-		machineWithBMC("vm-1", ""), // VM substrate: no BMC, ignored
+		machineWithBMC("vm-1", ""),
 	}}
 	errs := validateUniqueBMCAddresses(dup)
 	if len(errs) != 1 {
@@ -44,11 +41,6 @@ func TestValidateUniqueBMCAddresses(t *testing.T) {
 	}
 }
 
-// Equivalent Redfish spellings that the boot renderer normalizes to one endpoint
-// must collide in the guard: distinct transport scheme prefixes
-// (redfish+https / redfish-virtualmedia+https / redfish) and a trailing
-// /redfish/v1/Systems/<id> suffix all drive the same physical BMC at apply, so
-// two Machines spelling it differently would disk-wipe the wrong host.
 func TestValidateUniqueBMCAddressesNormalizesEquivalentSpellings(t *testing.T) {
 	dup := v1alpha1.State{Machines: []v1alpha1.Machine{
 		machineWithBMC("node-a", "redfish+https://bmc-1/redfish/v1/Systems/1"),
@@ -66,8 +58,6 @@ func TestValidateUniqueBMCAddressesNormalizesEquivalentSpellings(t *testing.T) {
 		t.Fatalf("redfish:// and https:// of one BMC must collide, got %d: %v", len(errs), errs)
 	}
 
-	// Genuinely different hosts (different System IDs on the same controller)
-	// must still pass — the guard normalizes, it does not over-collapse.
 	distinct := v1alpha1.State{Machines: []v1alpha1.Machine{
 		machineWithBMC("node-a", "redfish+https://bmc-3/redfish/v1/Systems/1"),
 		machineWithBMC("node-b", "redfish+https://bmc-3/redfish/v1/Systems/2"),

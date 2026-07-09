@@ -5,17 +5,6 @@ import (
 	"os"
 )
 
-// RunView renders a live progress frame. On an interactive terminal it redraws
-// the frame in place on every Render; otherwise (piped output, CI, or under
-// --stream-ansible) it emits one append-only transition line per step as it
-// becomes RUNNING or reaches a terminal status, with no cursor control.
-//
-// A reporter builds a RunFrame from its domain object (an apply/destroy ledger)
-// and calls Render on every state change, then Finish once at the end.
-//
-// RunView is NOT safe for concurrent use. The apply/destroy scheduler drives it
-// from a single goroutine that reads task events serially, so no locking is
-// needed here.
 type RunView struct {
 	w          io.Writer
 	p          *Printer
@@ -28,8 +17,6 @@ type RunView struct {
 	stream     bool
 }
 
-// NewRunView builds a view bound to w, detecting interactivity and width up
-// front.
 func NewRunView(w io.Writer) *RunView {
 	v := &RunView{
 		w:       w,
@@ -43,8 +30,6 @@ func NewRunView(w io.Writer) *RunView {
 	return v
 }
 
-// Streaming forces append-only transition mode regardless of TTY, so the frame
-// does not fight raw ansible output for the cursor under --stream-ansible.
 func (v *RunView) Streaming() *RunView {
 	if v != nil {
 		v.stream = true
@@ -56,8 +41,6 @@ func (v *RunView) inPlace() bool {
 	return v != nil && v.tty && !v.stream
 }
 
-// Render draws the current frame: an in-place redraw on a TTY, else transition
-// lines for any newly RUNNING or terminal steps.
 func (v *RunView) Render(frame RunFrame) {
 	if v == nil || v.w == nil {
 		return
@@ -81,8 +64,6 @@ func (v *RunView) Render(frame RunFrame) {
 	v.open = true
 }
 
-// Finish draws the final frame and clears the in-place redraw state so the
-// caller's Summary section prints cleanly below.
 func (v *RunView) Finish(frame RunFrame) {
 	if v == nil || v.w == nil {
 		return
@@ -103,8 +84,6 @@ func (v *RunView) Finish(frame RunFrame) {
 	v.last = ""
 }
 
-// renderTransitions emits one line per step that newly became RUNNING or
-// terminal since the last frame, deduplicated by (step ID, status).
 func (v *RunView) renderTransitions(frame RunFrame) {
 	for _, group := range frame.Groups {
 		for _, step := range group.Steps {

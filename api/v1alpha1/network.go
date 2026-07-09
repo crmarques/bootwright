@@ -1,7 +1,5 @@
 package v1alpha1
 
-// NetworkConfig
-
 type NetworkConfig struct {
 	APIVersion string            `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string            `yaml:"kind" json:"kind"`
@@ -11,10 +9,7 @@ type NetworkConfig struct {
 }
 
 type NetworkConfigSpec struct {
-	MachineNetwork []MachineNetworkCIDR `yaml:"machineNetwork,omitempty" json:"machineNetwork,omitempty"`
-	// NameResolutionRefs names Environment
-	// spec.infraComponents.nameResolution[] entries; the resolved
-	// addresses feed the NMState dns-resolver server list and installer DNS.
+	MachineNetwork     []MachineNetworkCIDR   `yaml:"machineNetwork,omitempty" json:"machineNetwork,omitempty"`
 	NameResolutionRefs []LocalObjectReference `yaml:"nameResolutionRefs,omitempty" json:"nameResolutionRefs,omitempty"`
 	Template           NetworkConfigTemplate  `yaml:"template,omitempty" json:"template,omitempty"`
 }

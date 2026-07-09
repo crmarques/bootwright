@@ -11,40 +11,26 @@ import (
 	"testing"
 )
 
-// allowedImports is the per-package import allowlist for production code
-// (test files are exempt). Keys and values are package paths relative to the
-// module root. A package may import only the internal packages in its row;
-// "*" allows everything (the presentation composition root). The matrix is
-// total: every package with non-test Go files must have a row, and every row
-// must correspond to an existing package, so it cannot silently go stale.
 var allowedImports = map[string][]string{
 	"api/v1alpha1":   {},
 	"cmd/bootwright": {"internal/cli"},
 
-	// Presentation. cli is the composition root; only cli may import output.
 	"internal/cli":        {"*"},
 	"internal/cli/output": {},
 
-	// Desired state: load/validate, point lookups, service graph, examples.
-	// nativecatalog mirrors the infra/media precedent: the loader resolves
-	// machine-registered native add-ons like validate resolves local-media refs.
 	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 	"internal/state/graph":    {"api/v1alpha1", "internal/addons/inputs", "internal/infra/artifacts", "internal/roles", "internal/state/view"},
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},
 
-	// Read-only advisory analysis over a validated State (operator-facing,
-	// returns plain data; separate from the load/validate contract).
 	"internal/state/advice": {"api/v1alpha1", "internal/storage/topology"},
 
-	// Shared components.
 	"internal/roles":     {"api/v1alpha1"},
 	"internal/workspace": {"internal/host/localroot", "internal/host/managedroot", "internal/host/safefs"},
 	"internal/secrets":   {"api/v1alpha1", "internal/host/callerio", "internal/host/localroot", "internal/host/safefs", "internal/state/view", "internal/storage/topology", "internal/workspace"},
 	"internal/sshtrust":  {"api/v1alpha1", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/secrets"},
 	"internal/ownership": {"internal/host/safefs"},
 
-	// Infra resolvers over state.
 	"internal/infra/artifacts": {"api/v1alpha1", "internal/state/view"},
 	"internal/infra/locality":  {"api/v1alpha1", "internal/state/view"},
 	"internal/infra/media":     {"internal/host/managedroot", "internal/workspace"},
@@ -53,7 +39,6 @@ var allowedImports = map[string][]string{
 	"internal/entitlements": {"api/v1alpha1", "internal/secrets"},
 	"internal/nmstate":      {},
 
-	// Host primitives: generic, importable by everyone, import only host/*.
 	"internal/host/become":      {"internal/host/safefs"},
 	"internal/host/callerio":    {"internal/host/localroot"},
 	"internal/host/execution":   {},
@@ -63,14 +48,11 @@ var allowedImports = map[string][]string{
 	"internal/host/safefs":      {},
 	"internal/host/shellquote":  {},
 
-	// Render: root is the only published surface; families are fs-free and
-	// one-way (inventory -> installer, inventory -> ceph).
 	"internal/render":           {"api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/infra/media", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/render/inventory", "internal/roles", "internal/secrets", "internal/state/view", "internal/storage/topology"},
 	"internal/render/ceph":      {"api/v1alpha1", "internal/addons/inputs", "internal/host/shellquote", "internal/storage/topology"},
 	"internal/render/installer": {"api/v1alpha1", "internal/infra/artifacts", "internal/infra/proxy", "internal/nmstate", "internal/secrets", "internal/state/view"},
 	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
 
-	// Convergence: root orchestrates; subpackages never import the root.
 	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/storage/cephstate", "internal/workspace"},
 	"internal/converge/ansible":           {"internal/host/callerio", "internal/host/localroot", "internal/host/ptyexec"},
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
@@ -78,7 +60,6 @@ var allowedImports = map[string][]string{
 	"internal/converge/bundle":            {},
 	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/topology"},
 
-	// Storage and addons.
 	"internal/storage":              {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view"},
 	"internal/storage/cephadopt":    {"api/v1alpha1", "internal/storage/cephdiff", "internal/storage/topology", "internal/workspace"},
 	"internal/storage/cephprovider": {"api/v1alpha1", "internal/entitlements", "internal/secrets"},
@@ -94,8 +75,6 @@ var allowedImports = map[string][]string{
 	"internal/addons/records":       {"internal/host/safefs"},
 	"internal/addons/render":        {"api/v1alpha1", "internal/addons", "internal/addons/hooks"},
 
-	// Operator-facing application services. They return plain data; cli
-	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).
 	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/topology", "internal/workspace"},
 	"internal/status":        {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/clusteraccess", "internal/converge/workflow", "internal/ownership", "internal/render", "internal/state/graph", "internal/state/view"},
 	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/host/shellquote", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
@@ -103,11 +82,9 @@ var allowedImports = map[string][]string{
 
 type packageImports struct {
 	files   []string
-	imports map[string][]string // internal import -> files using it
+	imports map[string][]string
 }
 
-// collectProductionImports walks non-test Go files under api/, cmd/, and
-// internal/ and groups their module-internal imports by package directory.
 func collectProductionImports(t *testing.T) map[string]*packageImports {
 	t.Helper()
 	root := repoRoot(t)
@@ -198,9 +175,6 @@ func TestImportMatrixIsTotalAndRespected(t *testing.T) {
 	}
 }
 
-// TestHostPrimitivesAreGeneric keeps internal/host free of domain knowledge:
-// host packages may import only other host packages (and stdlib), never the
-// schema or any domain package.
 func TestHostPrimitivesAreGeneric(t *testing.T) {
 	for pkg, info := range collectProductionImports(t) {
 		if !strings.HasPrefix(pkg, "internal/host/") {
@@ -214,9 +188,6 @@ func TestHostPrimitivesAreGeneric(t *testing.T) {
 	}
 }
 
-// TestOnlyCLIImportsOutput enforces the output invariant structurally: all
-// human-facing text flows through internal/cli/output, and only the
-// presentation layer may build it. Services return plain data.
 func TestOnlyCLIImportsOutput(t *testing.T) {
 	outputPath := modulePath + "/internal/cli/output"
 	for _, ref := range collectGoImports(t) {
@@ -236,11 +207,6 @@ func TestOnlyCLIImportsOutput(t *testing.T) {
 	}
 }
 
-// TestRunOptionsConstructedOnlyInConvergeRoot keeps the workflow executor's
-// RunOptions entrypoint behind the converge facade: presentation and other
-// services must call converge.RunScopePreflight / ExecuteApply / ExecuteDestroy
-// rather than hand-building workflow.RunOptions and calling workflow.Run. The
-// converge root (and the workflow engine that defines RunOptions) are exempt.
 func TestRunOptionsConstructedOnlyInConvergeRoot(t *testing.T) {
 	root := repoRoot(t)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
@@ -281,8 +247,6 @@ func TestRunOptionsConstructedOnlyInConvergeRoot(t *testing.T) {
 	}
 }
 
-// TestRoleNamesOnlyInRolesRegistry keeps internal/roles the single source of
-// bootwright.core role and playbook names in Go production code.
 func TestRoleNamesOnlyInRolesRegistry(t *testing.T) {
 	for pkg, info := range collectProductionImports(t) {
 		if pkg == "internal/roles" {

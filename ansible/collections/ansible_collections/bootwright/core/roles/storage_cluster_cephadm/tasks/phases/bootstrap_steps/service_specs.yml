@@ -13,10 +13,6 @@
     - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
     - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
 
-# ceph orch apply reconciles to the spec and exposes no stable changed/ok
-# signal, so these declarative steps set changed_when: true by design.
-# Convergence drift is computed in Go from desired-hash vs recorded reality,
-# not from this recap.
 - name: Apply Ceph host spec
   ansible.builtin.command:
     argv:

@@ -1,6 +1,4 @@
 ---
-# Mirror of main.yml for teardown. Consumes the same renderer-projected
-# `attachment` block per frontend — no cluster-network lookup here.
 
 - name: Resolve libvirt-attached VIP targets
   ansible.builtin.include_tasks: resolve_targets.yml
@@ -16,12 +14,6 @@
       - "{{ item.attachment.libvirt.bridge }}"
   register: bootwright_vip_unplumb
   changed_when: bootwright_vip_unplumb.rc == 0
-  # Tolerate the address already being gone — frontends that share a
-  # VIP (e.g. api + apiInt on the same address) emit one detach entry
-  # each, and the second `ip address del` would otherwise fail
-  # "Address not found" (newer iproute2) / "Cannot assign requested
-  # address" (older). "Cannot find device" tolerates the bridge being
-  # gone too.
   failed_when:
     - bootwright_vip_unplumb.rc != 0
     - "'Address not found' not in (bootwright_vip_unplumb.stderr | default(''))"

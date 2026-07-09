@@ -1,18 +1,4 @@
 ---
-# Manager SecurityService OEM trust-store method: import the artifact server's
-# certificate as a remote-HTTPS-server root CA through the Redfish manager
-# SecurityService #SecurityService.ImportRemoteHttpsServerRootCA action. Exposed by
-# Huawei/xFusion iBMC and compatible BMCs; selected by media/import_certificate.yml
-# when that action is advertised. All request/response shape specific to this OEM
-# action lives here, so a new OEM method drops in as a sibling file.
-# Credentials/TLS/timeout come from the role-wide ansible.builtin.uri
-# module_defaults set in tasks/main.yml.
-#
-# The import action takes RootCertId and Usage as mutually exclusive forms:
-# RootCertId writes the cert to a specific slot (replacing any occupant), while
-# Usage auto-allocates a slot tagged by purpose. Sending both is non-conformant
-# and the BMC rejects it (HTTP 403). We pin a fixed slot so the matching removal
-# task can delete it deterministically by RootCertId, so send RootCertId alone.
 - name: Build SecurityService remote-HTTPS-server root-CA import body
   ansible.builtin.set_fact:
     bootwright_redfish_security_service_import_body: >-
@@ -35,20 +21,10 @@
     return_content: true
     status_code: [200, 201, 202, 204]
   register: bootwright_redfish_artifact_cert_import_security_service
-  # Don't let the uri module's status_code mismatch raise the bare
-  # "Status code was 403 ..." here: that message carries no BMC detail, and the
-  # task's no_log (which protects url_password) buries the response body that
-  # explains the refusal. Tolerate any status, then surface the BMC message in a
-  # credential-safe assert below.
   failed_when: false
   changed_when: (bootwright_redfish_artifact_cert_import_security_service.status | default(0) | int) in [200, 201, 202, 204]
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-# A non-2xx here is the BMC refusing the action, not a malformed request: the
-# body is a documented-valid form (Type/Content/RootCertId, RootCertId in the
-# iBMC 5..8 range). The reason lives in the response body the import task's
-# no_log hides, so re-surface it. Only status/json/content/msg are interpolated
-# -- none of which carry url_password -- so the credential stays redacted.
 - name: Confirm the SecurityService root-CA import was accepted
   ansible.builtin.assert:
     that:

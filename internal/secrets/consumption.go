@@ -5,10 +5,6 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// Consumption predicates classify how the desired state consumes a named
-// secret. Materialization, listing, and encryption decisions all derive the
-// material roles for a secret from these answers.
-
 func ConsumedAsTLS(name string, state v1alpha1.State) bool {
 	for _, cluster := range state.ContainerClusters {
 		serving := cluster.Spec.Install.ServingCertificates
@@ -62,9 +58,6 @@ func ConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		// The explicit cephadm cluster identity key is consumed by the cluster
-		// itself (Bootwright authorizes it on every host), independent of any
-		// node's access key.
 		if cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name == name {
 			return true
 		}

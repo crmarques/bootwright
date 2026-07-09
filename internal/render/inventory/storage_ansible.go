@@ -11,9 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-// StorageSeedHostName is the inventory host name of the cephadm bootstrap seed
-// node. It is the seed node's regular per-node host name; the seed is not named
-// differently from the other storage nodes.
 func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
 	seedNode := ""
 	if cluster.Spec.Ceph != nil {
@@ -66,12 +63,6 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 	return StorageNodeHostName(cluster.Metadata.Name, nodeName)
 }
 
-// storageOSDReadinessVars renders what the seed's post-apply readiness poll can
-// assert about OSD creation: an exact expected OSD count when every managed OSD
-// selection names explicit devices, an "at least one" floor when a filter/all
-// selection makes the count host-resolved, or skip when no managed OSD service
-// creates OSDs. It converts a fire-and-forget `ceph orch apply` into a checked
-// step so a zero/short-OSD cluster fails the apply instead of reporting success.
 func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 	mode, count := cephrender.OSDReadinessExpectation(cluster)
 	return map[string]any{
@@ -81,9 +72,6 @@ func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 }
 
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
-	// The Ansible inventory identifies nodes by machine name (stable, and the
-	// token the bootstrap seedHost is authored with); cephadm's fully-qualified
-	// hostname lives only in the rendered cephadm specs.
 	nodeName := node.MachineRef.Name
 	entry := map[string]any{}
 	if machine, ok := topology.NodeMachine(state, cluster, nodeName); ok && machine.Spec.Access.SSH != nil {
@@ -142,13 +130,6 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	return out
 }
 
-// storageClusterSSHVars renders the cephadm cluster SSH identity: the key
-// cephadm distributes and reaches every host with. When spec.ceph.cephadm
-// .clusterSSHKeyRef is set it is the explicit source (independent of any node's
-// access key), and the controller-side known_hosts is the cluster-wide managed
-// trust store so it covers every host cephadm adds. Omitted, it falls back to
-// the first topology host's access SSH key — the legacy behavior the
-// uniform-key validation backs.
 func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
 	if len(cluster.Spec.Ceph.Topology.Hosts) == 0 {
 		return nil
@@ -189,12 +170,6 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	return out
 }
 
-// storageManagementVars renders the secret-bearing management gateway
-// (TLS and/or oauth2-proxy) the static render defers: the resolved gateway
-// placement and VIP plus the staged secret file paths. The dedicated
-// management-services apply step assembles the cephadm spec from these, inlining
-// the secrets, so they never appear in a locally-rendered file. Returns nil when
-// the gateway carries no secrets (the static render handles it).
 func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
 	if !cephrender.ManagementHasSecrets(cluster) {
 		return nil
@@ -255,13 +230,7 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			"hostname":      node.MachineRef.Name,
 			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
 			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
-			// devices carries every explicit OSD block-device path — the devices
-			// shorthand AND the drivegroup osd: form's data/db/wal paths (and any
-			// covering fleet osdDrivegroup) — so the device-empty gate, the OSD
-			// ownership marker, and the destroy wipe cover the drivegroup form too,
-			// not only the shorthand. It is gate/marker-only; the rendered OSD spec
-			// reads node.Devices/node.OSD directly.
-			"devices": cephrender.OSDGateDevicePaths(cluster, node),
+			"devices":       cephrender.OSDGateDevicePaths(cluster, node),
 		})
 	}
 	return out

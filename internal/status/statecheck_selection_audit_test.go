@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-// TestStateCheckStageAddonsRejectsStorageClusterLikeApply pins M11: state-check
-// threads the resolved stage target (e.g. "add-ons") into clusteraccess.Resolve
-// instead of a hardcoded "all". add-ons is a container-cluster-scoped target, so
-// a StorageCluster name is not a valid --clusters value there — apply rejects it
-// and state-check must reject it identically. Under the hardcoded "all" the same
-// storage name was wrongly accepted.
 func TestStateCheckStageAddonsRejectsStorageClusterLikeApply(t *testing.T) {
 	state := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{{
@@ -32,10 +26,6 @@ func TestStateCheckStageAddonsRejectsStorageClusterLikeApply(t *testing.T) {
 	}
 }
 
-// TestStateCheckClusterRootTargetAcceptsStorageCluster is the accept side of the
-// same parity: a cluster-root target ("all") does accept a StorageCluster name,
-// so the resolved-target threading is what differentiates the two — the storage
-// name is never rejected as unknown under a root-scoped target.
 func TestStateCheckClusterRootTargetAcceptsStorageCluster(t *testing.T) {
 	state := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{{

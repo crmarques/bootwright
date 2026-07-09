@@ -22,12 +22,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// addonHookExecutor implements extensionoc.HookRunner. It runs an add-on's
-// shipped hooks (ansible playbooks and/or templated manifests) at each lifecycle
-// point, resolving targets from binding-input refs, materializing only the
-// scoped secrets a hook declares, capturing declared outputs, and applying the
-// hook's templated manifests to the bound cluster. It is the generic engine that
-// replaces the compiled Data Foundation attachment path.
 type addonHookExecutor struct {
 	stdout, stderr io.Writer
 	runsDir        string
@@ -42,8 +36,6 @@ type addonHookExecutor struct {
 	inputs         []v1alpha1.ClusterAddonBindingInput
 }
 
-// extensionPlanView is the slice of the add-on plan the hook executor needs,
-// decoupling it from the extensionplan package's concrete type.
 type extensionPlanView struct {
 	Name    string
 	Cluster string
@@ -69,9 +61,6 @@ func newAddonHookExecutor(stdout, stderr io.Writer, runsDir, runID string, opts 
 	}
 }
 
-// Run executes the add-on's hooks at the lifecycle in declared order. A hook
-// failure blocks (returns a HookError) under failureMode: fail, or is recorded
-// and skipped under continue.
 func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) error {
 	for _, hook := range hooks.At(e.plan.Addon, lifecycle) {
 		err := e.runHook(ctx, hook)
@@ -120,8 +109,6 @@ func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAd
 	})
 }
 
-// hookDigest combines the hook's shipped-content digest with its resolved inputs
-// and target so a change to either re-runs an onChange hook.
 func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) string {
 	projection := struct {
 		Content   string                              `json:"content"`
@@ -148,10 +135,6 @@ func (e *addonHookExecutor) hookConverged(name, digest string) bool {
 	return ok && hook.Status == extensionrecords.RecordStatusReady && hook.Digest == digest
 }
 
-// applyHookManifests renders each templated manifest against the hook's captured
-// outputs, binding inputs, scoped secrets, and export details, then oc applies it
-// to the bound cluster. Manifests with reclaimRendered have their plaintext
-// removed after the apply.
 func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha1.ClusterAddonHook, outputs map[string]string) error {
 	if len(hook.Manifests) == 0 {
 		return nil
@@ -262,9 +245,6 @@ func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outpu
 		"bootwright_bound_cluster=" + cluster,
 		"bootwright_hook_outputs_dir=" + outputsDir,
 		"bootwright_hook_secrets_dir=" + secretsDir,
-		// Controller-local path to the bound cluster's kubeconfig, so a playbook
-		// can drive the just-installed operator (fetch a published script, read a
-		// CR) from delegate_to: localhost tasks; it is not readable on targets.
 		"bootwright_kubeconfig=" + kubeconfig,
 	}
 	pairs = append(pairs, jsonVarPair("bootwright_hook_refs", refs))
@@ -301,10 +281,6 @@ func hookSecretNames(hook v1alpha1.ClusterAddonHook) []string {
 	return names
 }
 
-// hookCrossClusterDependencies returns the DAG edges an add-on's hooks need
-// because they target a cluster other than the bound one: storage.<ceph> for a
-// referenced Ceph cluster and wait.<ocp> for another container cluster. It is a
-// pure plan-time state walk over the binding's resolved inputs.
 func hookCrossClusterDependencies(state v1alpha1.State, binding extensionplan.BindingPlan, addonName string, addon v1alpha1.ClusterAddon, installPhasePlanned bool, storageDepsByCluster map[string][]string) []string {
 	if len(addon.Spec.Hooks) == 0 {
 		return nil

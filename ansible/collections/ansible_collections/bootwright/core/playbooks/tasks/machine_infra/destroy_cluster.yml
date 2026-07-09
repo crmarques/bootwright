@@ -1,5 +1,4 @@
 ---
-# Per-cluster substrate teardown.
 
 - name: Resolve current cluster
   ansible.builtin.set_fact:

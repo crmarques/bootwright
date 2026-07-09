@@ -2,9 +2,6 @@ apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
 metadata:
   name: ibm-storage-ceph
-# IBM Storage Ceph product access only: images from cp.icr.io/cp and the product
-# license. It names the rhel entitlement for the RHEL subscription it depends on
-# (an inline rhsm arm on an ibm-storage-ceph entitlement is rejected).
 spec:
   type: ibm-storage-ceph
 

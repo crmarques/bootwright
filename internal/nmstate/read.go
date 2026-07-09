@@ -1,13 +1,5 @@
 package nmstate
 
-// Readers over a rendered NMState config map. They live here, with the merge,
-// because they understand the same NMState document shape; rendering and
-// validation consume them rather than re-walking interfaces/dns-resolver by
-// hand. They take a plain map[string]any so the package keeps its zero-import,
-// schema-free footprint.
-
-// NetworkConfigPrimaryIP returns the first IPv4 (else IPv6) interface address in
-// an NMState config, or "" when none is present.
 func NetworkConfigPrimaryIP(config map[string]any) string {
 	if ip := networkConfigInterfaceIP(config, "", "ipv4"); ip != "" {
 		return ip
@@ -61,8 +53,6 @@ func networkConfigFamilyIP(entry map[string]any, family string) string {
 	return ""
 }
 
-// NetworkConfigDNSServers returns the dns-resolver servers declared in an
-// NMState config, in document order.
 func NetworkConfigDNSServers(config map[string]any) []string {
 	rawResolver, ok := config["dns-resolver"].(map[string]any)
 	if !ok {

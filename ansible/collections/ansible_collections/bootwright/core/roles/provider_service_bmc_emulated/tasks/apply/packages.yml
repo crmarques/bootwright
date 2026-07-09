@@ -48,10 +48,6 @@
     creates: "{{ bootwright_bmc_root }}/venv/bin/python"
 
 - name: Install sushy-tools into virtualenv
-  # Use the pip module with an explicit version rather than command + creates:
-  # the creates guard was pinned to the sushy-emulator entrypoint, so a bump to
-  # bootwright_sushy_tools_version was never reconciled on an already-provisioned
-  # host. pip reinstalls when the pinned version differs and reports changed.
   ansible.builtin.pip:
     name: sushy-tools
     version: "{{ bootwright_sushy_tools_version }}"

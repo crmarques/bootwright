@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// The destructive-override data-loss seatbelt: a non-interactive (--yes) run that
-// would destructively rebuild a machine or cluster fails closed unless --allow-destroy
-// is given; an interactive run (falls through to the data-loss confirm), --allow-destroy,
-// or an empty destructive set all pass.
 func TestDestructiveOverrideYesGuard(t *testing.T) {
 	objs := []string{"Machine/db1", "StorageCluster/ceph"}
 	cases := []struct {

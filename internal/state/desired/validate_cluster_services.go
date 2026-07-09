@@ -31,9 +31,6 @@ func validateLoadBalancerBindAddresses(prefix string, binds []v1alpha1.LoadBalan
 			seen[bind.Name] = true
 		}
 	}
-	// A non-empty endpoint source.bindAddressRef is a name reference and must
-	// resolve regardless of bind count; the single-bind shortcut applies only
-	// when the endpoint leaves source.bindAddressRef empty.
 	for ref := range referenced {
 		if !seen[ref] {
 			errs = append(errs, fmt.Sprintf("%s source.bindAddressRef %q does not match any bindAddresses[].name", prefix, ref))
@@ -42,10 +39,6 @@ func validateLoadBalancerBindAddresses(prefix string, binds []v1alpha1.LoadBalan
 	return errs
 }
 
-// validateLoadBalancerBindAddressUse flags named bindAddresses that no
-// endpoint source.bindAddressRef selects. It applies only to multi-bind load
-// balancers: a single bindAddress is implicitly selected by endpoints that
-// omit source.bindAddressRef.
 func validateLoadBalancerBindAddressUse(prefix string, binds []v1alpha1.LoadBalancerBindAddress, referenced map[string]bool) []string {
 	if len(binds) < 2 {
 		return nil

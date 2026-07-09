@@ -1,6 +1,4 @@
 ---
-# Trusted collection dependencies. Keep this list exact-pinned and keep
-# requirements.lock.yml aligned with the embedded collection manifests.
 collections:
   - name: https://galaxy.ansible.com/download/community-general-12.6.0.tar.gz
     type: url

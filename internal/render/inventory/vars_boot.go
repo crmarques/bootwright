@@ -38,8 +38,6 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha
 	return machineBootVarsWithISO(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName), ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint)
 }
 
-// sshReadinessVars is the shared post-boot readiness probe every substrate uses:
-// wait for the core user's ssh to answer on port 22.
 func sshReadinessVars() map[string]any {
 	return map[string]any{
 		"type": "ssh",
@@ -123,17 +121,11 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	stageDir := fmt.Sprintf("/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/%s/vmedia", m.Source.ProviderRef.Name)
 	return map[string]any{
 		"redfish": map[string]any{
-			"baseUrl":        fmt.Sprintf("http://%s:%d", hostAddr, port),
-			"systemId":       systemID,
-			"credentialsRef": credRef,
-			"validateCerts":  false,
-			"setBootSource":  false,
-			// The emulated sushy-tools BMC builds its VirtualMedia driver
-			// lazily on the first /Systems/<id>/VirtualMedia GET, initializing
-			// a shared sqlite state DB under a WAL lock that parallel boots
-			// race. This flag tells the boot role to serialize and retry that
-			// first probe through the cold-init lock. Real per-server BMCs
-			// share no such state, so they leave it unset (default false).
+			"baseUrl":             fmt.Sprintf("http://%s:%d", hostAddr, port),
+			"systemId":            systemID,
+			"credentialsRef":      credRef,
+			"validateCerts":       false,
+			"setBootSource":       false,
 			"vmediaColdInitRetry": true,
 		},
 		"readiness": sshReadinessVars(),
@@ -153,11 +145,6 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	}
 }
 
-// vsphereBootVars renders the boot block for vCenter-managed machines. The
-// ISO is staged on the controller and uploaded to the staging datastore by
-// the vsphere media role, so stageHost is localhost and fetchUrl is the
-// datastore attach path ("[datastore] folder/<token>/<iso>") rather than an
-// HTTP location — vsphere machines never join agentIsoPublishTargets.
 func vsphereBootVars(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.MachineProfile, m v1alpha1.InstallMachine, isoBasename string) map[string]any {
 	fd, ok := stateview.VSphereProfileFailureDomain(spec, profile)
 	if !ok {
@@ -188,10 +175,6 @@ func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.Artifa
 		"validateCerts":  bmc.TLS.VerifyEnabled(),
 		"setBootSource":  true,
 	}
-	// The rendered boot.redfish.artifactCertificate contract (ignoreVerification/
-	// import/removeAfterBoot) is unchanged for the ansible role; only its source
-	// schema changed (bmc.virtualMedia.tls). Provider defaults are merged onto the
-	// machine in Normalize, so this reads one effective value.
 	if vm := bmc.VirtualMedia; vm != nil && vm.TLS != nil {
 		certificate := map[string]any{
 			"ignoreVerification": !vm.TLS.VerifyEnabled(),
@@ -220,8 +203,6 @@ func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.Artifa
 	}
 }
 
-// artifactCertificatePort mirrors the scheme defaults the BMC uses for the
-// certificate fetch when the endpoint URL carries no explicit port.
 func artifactCertificatePort(origin *url.URL) string {
 	if port := origin.Port(); port != "" {
 		return port
@@ -252,9 +233,6 @@ func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInstall, oc
 	targets := map[string]map[string]any{}
 	var keys []string
 	for _, m := range ci.Machines {
-		// vSphere agent ISOs reach machines through a datastore upload by
-		// the vsphere media role; their fetchUrl is a datastore path, not
-		// the HTTP location this publish/probe contract requires.
 		if provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name); ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere {
 			continue
 		}
@@ -316,13 +294,6 @@ func normalizeRedfishURL(addr string) (baseURL, systemID string) {
 	return bracketRedfishHost(strings.TrimRight(s, "/")), ""
 }
 
-// bracketRedfishHost wraps a bare IPv6 literal authority in square brackets so
-// consumers that join "/redfish/v1/Systems" onto the base URL — and Python
-// urlsplit inside the Ansible reachability probe — parse the host correctly.
-// An unbracketed "fd00:140::99" otherwise has its trailing group misread as a
-// port ("Port could not be cast to integer value as '140::99'"), failing the
-// BMC probe far from the authoring mistake. Already-bracketed hosts, IPv4
-// literals, and DNS names pass through untouched.
 func bracketRedfishHost(base string) string {
 	i := strings.Index(base, "://")
 	if i < 0 {

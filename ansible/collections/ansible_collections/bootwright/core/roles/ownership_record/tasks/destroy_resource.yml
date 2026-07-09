@@ -12,16 +12,6 @@
     bootwright_ownership_destroy_name: "{{ bootwright_ownership_record.name }}"
     bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_record.attributes | default({}) }}"
     bootwright_ownership_destroy_paths: "{{ bootwright_ownership_record.paths | default([]) }}"
-    # A shared infra-component this context only REFERENCES (the Go destroy planner
-    # found the owner context still runs the base) is RELEASED: skip the physical
-    # teardown of the shared container, firewall ports, and owned paths below, but
-    # still remove this context's reference record at the end. Release is honored for
-    # ANY infra-component kind, matching PlanInfraComponentReleases, which releases a
-    # reference regardless of component kind (additive contributions are always
-    # caller-scoped); keep the two in sync. Membership in the planner's release set is
-    # the sole gate — that set only ever carries reference-role records — so this never
-    # affects libvirt domains/networks (a different kind) or a non-shared infra-component
-    # (absent from the set, so still torn down).
     bootwright_ownership_destroy_release: >-
       {{ bootwright_ownership_record.kind == 'infra-component'
          and bootwright_infra_component_release_records is defined
@@ -97,9 +87,6 @@
   failed_when: false
   loop:
     - "{{ bootwright_ownership_destroy_attrs.redfishUnit | default('') }}"
-    # Records persisted before the vMedia attr rename carry lowercase
-    # vmediaUnit/vmediaPort; read both spellings so destroy still cleans up
-    # services recorded by earlier applies.
     - "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default(bootwright_ownership_destroy_attrs.vmediaUnit) | default('') }}"
   loop_control:
     label: "{{ item }}"
@@ -124,8 +111,6 @@
   loop:
     - "{{ bootwright_ownership_destroy_attrs.port | default('') }}"
     - "{{ (bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0 else '' }}"
-    # Records persisted before the vMedia attr rename carry lowercase
-    # vmediaPort; read both spellings so the recorded firewall port closes.
     - "{{ (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string | length) > 0 else '' }}"
   loop_control:
     label: "{{ item }}"
@@ -143,14 +128,7 @@
   when:
     - not bootwright_ownership_destroy_release
     - item | length > 0
-    # Reject `..` so a corrupted or stale record path cannot escape the
-    # allowlisted roots via traversal (e.g. /var/lib/../../etc/... or
-    # <state-root>/../../etc), regardless of which root clause below it matches.
     - "'..' not in item"
-    # System prefixes Bootwright owns, plus the context-owned state roots so the
-    # cleanup also works when the context lives under a non-default root (e.g.
-    # /srv/bootwright) instead of /var/lib/bootwright. Each root clause is guarded
-    # on a non-empty value so an undefined var can never match every path.
     - >-
       item is match('^/(var/lib/|var/log/|etc/systemd/system/|etc/sysctl.d/|etc/pki/ca-trust/source/anchors/|tmp/bootwright-)')
       or (bootwright_provider_state_dir | default('') | length > 0 and item.startswith(bootwright_provider_state_dir ~ '/'))

@@ -16,10 +16,6 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 		errs = append(errs, prefix+".failureDomain is required")
 	}
 	if len(stretch.DataSites) != 2 {
-		// dataSites is optional: when omitted, normalize derives it from every
-		// non-tiebreaker host site, so an OSD-only extra site lands here and trips
-		// this check. Show the current (possibly derived) value and point at the
-		// remedy rather than implying the operator authored the wrong count.
 		errs = append(errs, fmt.Sprintf("%s.dataSites must name exactly two data sites, got %d %v; if this was derived from spec.ceph.topology.hosts, author spec.ceph.topology.stretch.dataSites explicitly to name the two data sites and exclude OSD-only or tiebreaker sites", prefix, len(stretch.DataSites), stretch.DataSites))
 	}
 	dataSites := map[string]bool{}
@@ -39,12 +35,6 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 	} else if dataSites[stretch.Tiebreaker.Site] {
 		errs = append(errs, fmt.Sprintf("%s.tiebreaker.site %q must be distinct from dataSites", prefix, stretch.Tiebreaker.Site))
 	}
-	// Resolve the tiebreaker host through the same machine-name-or-hostname
-	// resolver every other storage reference uses (storageCephNodeByName).
-	// normalize FQDN-qualifies node.Hostname while tiebreaker.host keeps the
-	// authored token, so a raw `node.Hostname == tiebreaker.host` compare
-	// silently skipped the mon-only/no-OSD/site safety checks for the common
-	// machine-name authoring form.
 	if stretch.Tiebreaker.Host == "" {
 		errs = append(errs, prefix+".tiebreaker.host is required")
 	} else if node, ok := storageCephNodeByName(cluster, stretch.Tiebreaker.Host); ok {

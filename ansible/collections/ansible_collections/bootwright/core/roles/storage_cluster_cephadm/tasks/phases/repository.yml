@@ -1,13 +1,4 @@
 ---
-# Storage node OS facts are gathered in phases/context.yml (which always runs
-# first) so the rendered subscription-backed repos that embed the distribution
-# major version finalize cleanly; the gathered facts remain available here.
-#
-# Distribution dispatch is driven by the rendered provider capability flags, not
-# by the distribution name: community-source distributions carry a `community`
-# block, subscription-backed distributions set `requiresRHSM`. This keeps the
-# role free of per-distribution name branches (see ADR 0002) — a new
-# distribution is a renderer/table change, not a new `when:` clause here.
 - name: Validate community Ceph storage node OS
   ansible.builtin.assert:
     that:
@@ -32,15 +23,6 @@
 - name: Load Ceph storage node OS variables
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
-# Trust the egress proxy's TLS-inspection CA before any package work. A proxy
-# that re-signs HTTPS (SSL-bump) presents its own CA on cdn.redhat.com and every
-# other origin, so without this general HTTPS fails certificate verification
-# ("unable to get local issuer certificate"). This installs the CA into the SYSTEM
-# trust store, which covers get_url, podman, and third-party .repo fetches (whose
-# sslcacert defaults to the system bundle). The RHSM CDN repos are a separate case
-# — they pin sslcacert=redhat-uep.pem, so subscription.yml additionally points
-# repo_ca_cert at the system bundle this rebuilds. Runs before both the community
-# and subscription repository stages so the merged bundle exists first.
 - name: Trust corporate proxy CA on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_proxy_trust_bundle_ref }}"

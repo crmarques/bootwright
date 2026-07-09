@@ -1,27 +1,14 @@
 ---
 - name: Destroy OpenShift agent install state
   hosts: bootwright_ocp_hosts
-  # This teardown is entirely controller-side: bootwright_ocp_hosts resolves to
-  # localhost (see internal/render/inventory ocpReferencedHosts). The OpenShift
-  # agent install state — the generated ISO, manifests and per-cluster artifacts
-  # — lives on the controller, not on the cluster nodes, so there is no managed
-  # host to reach and no device to wipe. A never-provisioned cluster simply has
-  # no controller state to remove and the destroy is a clean no-op; there is no
-  # node reachability to classify here, so --skip-unreachable has no effect.
   gather_facts: true
   gather_subset:
     - "!all"
     - min
   become: true
-  # Harmless pass-through of the destroy gate var: localhost is always reachable,
-  # so this never changes behavior, but it keeps the flag plumbed uniformly with
-  # the storage/machine teardown plays that do classify real nodes.
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
-  # Every task below is controller-side (set_fact and a delegate_to: localhost
-  # credential slurp). Resolve the proxy facts so any package/podman work reaches
-  # the egress proxy through the task environment.
   pre_tasks:
     - name: Resolve proxy environment
       ansible.builtin.import_role:

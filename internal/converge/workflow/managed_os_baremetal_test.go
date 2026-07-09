@@ -7,12 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-// bareMetalManagedOSState is a managed Ceph cluster whose nodes install their
-// OS on a bare-metal substrate (os.provided=false + installProfileRef, no
-// substrate profile). The machines phase must schedule a managed-OS install
-// task whose --limit group actually contains the nodes; if the inventory drops
-// bare-metal nodes from the group, the task is planned but skipped at runtime
-// with "no hosts to target".
 func bareMetalManagedOSState() v1alpha1.State {
 	node := func(name, address string) v1alpha1.Machine {
 		return v1alpha1.Machine{
@@ -84,8 +78,6 @@ func TestMachinesPhasePlansReachableManagedOSTaskForBareMetal(t *testing.T) {
 		t.Fatalf("machines plan did not schedule a managed-OS install task: %v", taskKinds(tasks))
 	}
 
-	// The task is limited to this inventory group; the run skips it when the
-	// group resolves to zero hosts. Bare-metal nodes must populate it.
 	counts := render.HostGroupCountsWithOwnershipRecords(state, nil)
 	if got := counts[osTask.Limit]; got != 3 {
 		t.Fatalf("managed-OS task limit %q resolves to %d hosts, want 3 (task would be skipped)", osTask.Limit, got)

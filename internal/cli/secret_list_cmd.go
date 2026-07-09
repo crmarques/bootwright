@@ -107,7 +107,6 @@ type secretPathEntry struct {
 	externalSource bool
 }
 
-// secretTypeLabel is the "<source>:<type>" display label for a declared Secret.
 func secretTypeLabel(s v1alpha1.Secret) string {
 	source := "context"
 	switch {
@@ -119,9 +118,6 @@ func secretTypeLabel(s v1alpha1.Secret) string {
 	return source + ":" + s.Spec.Type
 }
 
-// secretPathEntriesForSecret lists the material roles a Secret carries, keyed by
-// its type: sshKeyPair carries a private and public half, tlsCertificate a cert
-// and key, every other type a single primary material.
 func secretPathEntriesForSecret(s v1alpha1.Secret, idx secret.Index, secretsDir string) []secretPathEntry {
 	name := s.Metadata.Name
 	entry := func(role secret.MaterialRole) secretPathEntry {

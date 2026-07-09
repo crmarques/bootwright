@@ -38,8 +38,8 @@ only when the user explicitly requests that full gate.
   leaving them "for later" or commented out.
 - No unused imports or unused local variables. Never silence the
   compiler with blank-identifier (`_`) imports unless the import is
-  genuinely needed for its side effects; in that case add a one-line
-  `// why` comment.
+  genuinely needed for its side effects; in that case record the reason
+  in `.agents/knowledge/`, not in a comment.
 - No unused parameters. Remove parameters that are never read inside
   the function body. The single exception is when the parameter is
   required to satisfy an interface, an embedded function type, or an
@@ -53,41 +53,38 @@ only when the user explicitly requests that full gate.
 - No speculative abstractions. Three similar lines is better than a
   premature interface, generic helper, or options struct introduced
   "just in case".
-- No comments by default. Code is the documentation; names and
-  structure must carry the meaning. Applies to all languages in this
-  repo (Go `//`, Python/shell/YAML/Jinja2 `#`, multi-line forms).
-  Specifically forbidden:
-  - Comments that explain, restate, or re-narrate what the code does.
-    A reader can read the code; the comment adds noise, not signal.
-  - "Fix"/"bug"/"after refactor"/"changed because…" notes left over
-    from edits. The diff and commit history record that. Delete the
-    comment and rely on the surrounding code reading cleanly.
-  - `// removed`, `# kept for compatibility`, `// see PR #…`,
-    or `// TODO` markers that do not point to a tracked work item.
-  - Block comments above a function/task/play that re-narrate its body.
-  - Header banners ("# ===== Section =====") or decorative dividers.
-  A comment is allowed only in these narrow cases:
-  1. **Non-obvious *why***: a hidden constraint, subtle invariant, or
-     workaround whose intent cannot be inferred from the code (e.g.
-     "openEuler squid 7.5 refuses to run as root — must set UID 1000").
-     If the *why* fits in the code (rename a var, split a function,
-     extract a constant), do that first and skip the comment.
-  2. **Section separator inside a long file** where the structure is
-     otherwise hard to scan — a single short label (`# --- defaults`
-     or `// --- request handling`), not a paragraph. Prefer splitting
-     the file if it is long enough to need many separators.
-  3. **Variable/option enumeration**: when a value is one of a small
-     fixed set and the set is not obvious from types or schema, list
-     the allowed values next to the declaration (e.g.
-     `mode: standalone  # standalone | external`). Do not write
-     this for free-form strings or values the type system already
-     constrains.
-  Knowledge that explains *why a class of bug exists* (incidents,
-  upstream quirks, environmental gotchas) belongs in
-  `.agents/knowledge/`, not in source comments. When you discover such
-  knowledge, write or update a knowledge file and link it from
-  `.agents/knowledge/KNOWLEDGE.md`; do not duplicate the explanation
-  inline in the code.
+- No comments. Code is the documentation; names and structure carry the
+  meaning. Applies to every language in this repo (Go `//`, Python/shell/
+  YAML `#`, multi-line forms) and to every kind of comment — explanations,
+  rationale ("why"), fix/refactor notes, TODOs, section banners, field
+  docs, godoc, and option enumerations alike. The guard tests in
+  `internal/repo/checks/comment_policy_test.go` enforce this for Go, YAML
+  (ansible/examples/test/e2e/add-ons/.github), Makefile, Containerfile,
+  and shell.
+  The only comments allowed are machine-read directives, which are not
+  prose: `//go:build`, `//go:embed`, `//go:generate`, `//nolint`,
+  `//lint:`, `// #nosec`, `// +marker`, `# noqa`, `# shellcheck`,
+  `# yamllint`, `# ansible-lint`, `# syntax=`, shebang lines, and
+  editor/coding modelines.
+  Every piece of information a comment would have carried has a proper
+  home; put it there instead, in the same change:
+  - Incident/root-cause/vendor-quirk/constraint knowledge (anything that
+    explains *why* code is shaped a certain way or why a class of bug
+    exists) → a file in `.agents/knowledge/` plus an index row in
+    `.agents/knowledge/KNOWLEDGE.md`.
+  - Design decisions with durable rationale → an ADR in `specs/adr/`.
+  - Schema/field semantics, defaults, allowed values, cross-field
+    invariants → `specs/state-model.md` or the kind's page under
+    `docs/concepts/`.
+  - Rendered-variable contracts for Ansible roles → the collection's
+    `docs/vars-contract.md`.
+  If the *why* fits in the code (rename a var, split a function, extract
+  a constant, tighten a type), do that first — a knowledge file is for
+  what the code genuinely cannot say.
+  Exception: comment-like lines that are *content*, not commentary, stay —
+  `#` lines inside Jinja2 templates render into output files (kickstart,
+  config files) and belong to the rendered artifact; `#` lines emitted by
+  Go string literals into generated scripts are data.
 
 ## Ansible Idempotency And Destructive Safety
 
