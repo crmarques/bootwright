@@ -254,7 +254,7 @@ func addonBindingInputs(state v1alpha1.State, bindingName, addonName string) (v1
 	return v1alpha1.ClusterAddonBinding{}, nil
 }
 
-func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outputsDir, secretsDir string, refs map[string]any, inputs []v1alpha1.ClusterAddonBindingInput) []string {
+func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outputsDir, secretsDir, kubeconfig string, refs map[string]any, inputs []v1alpha1.ClusterAddonBindingInput) []string {
 	pairs := []string{
 		"bootwright_hook_name=" + hook.Name,
 		"bootwright_hook_lifecycle=" + hook.Lifecycle,
@@ -262,6 +262,10 @@ func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outpu
 		"bootwright_bound_cluster=" + cluster,
 		"bootwright_hook_outputs_dir=" + outputsDir,
 		"bootwright_hook_secrets_dir=" + secretsDir,
+		// Controller-local path to the bound cluster's kubeconfig, so a playbook
+		// can drive the just-installed operator (fetch a published script, read a
+		// CR) from delegate_to: localhost tasks; it is not readable on targets.
+		"bootwright_kubeconfig=" + kubeconfig,
 	}
 	pairs = append(pairs, jsonVarPair("bootwright_hook_refs", refs))
 	pairs = append(pairs, jsonVarPair("bootwright_hook_inputs", bindingInputValues(inputs)))

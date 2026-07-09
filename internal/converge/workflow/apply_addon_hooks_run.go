@@ -76,7 +76,8 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 		return nil, err
 	}
 
-	extraVars := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, e.resolveHookRefs(), e.inputs)
+	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
+	extraVars := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, kubeconfig, e.resolveHookRefs(), e.inputs)
 	timeout := hookTimeout(hook)
 	if err := e.runHookAnsible(ctx, hook, inventoryPath, varsPath, hookRoot, targets, extraVars, timeout); err != nil {
 		return nil, err
