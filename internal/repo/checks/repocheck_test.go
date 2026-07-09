@@ -213,7 +213,7 @@ func TestRuntimeBundleUseNewSchemaTerms(t *testing.T) {
 }
 
 func TestDesiredStateExamplesSpaceSpecBlocks(t *testing.T) {
-	for _, rel := range desiredStateYAMLPaths(t, "examples", "test/e2e", "internal/state/desired/testdata/good") {
+	for _, rel := range desiredStateYAMLPaths(t, "add-ons", "examples", "test/e2e", "internal/state/desired/testdata/good") {
 		t.Run(rel, func(t *testing.T) {
 			assertSpecBlocksSpaced(t, rel, readRepoFile(t, rel))
 		})
@@ -233,7 +233,7 @@ func TestDesiredStateExamplesSpaceSpecBlocks(t *testing.T) {
 }
 
 func TestDesiredStateExamplesUseCurrentAddressAndInstallFields(t *testing.T) {
-	for _, rel := range desiredStateYAMLPaths(t, "examples", "test/e2e", "internal/state/desired/testdata/good") {
+	for _, rel := range desiredStateYAMLPaths(t, "add-ons", "examples", "test/e2e", "internal/state/desired/testdata/good") {
 		t.Run(rel, func(t *testing.T) {
 			assertNoRetiredDesiredStateFields(t, rel, readRepoFile(t, rel))
 		})
@@ -256,7 +256,7 @@ func TestDesiredStateExamplesUseCurrentAddressAndInstallFields(t *testing.T) {
 }
 
 func TestDesiredStateYAMLUsesBlockStyleCollections(t *testing.T) {
-	for _, rel := range desiredStateYAMLPaths(t, "examples", "test/e2e", "internal/state/desired/testdata/good") {
+	for _, rel := range desiredStateYAMLPaths(t, "add-ons", "examples", "test/e2e", "internal/state/desired/testdata/good") {
 		t.Run(rel, func(t *testing.T) {
 			assertNoFlowStyleCollections(t, rel, readRepoFile(t, rel))
 		})

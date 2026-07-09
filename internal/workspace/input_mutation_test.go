@@ -200,7 +200,7 @@ func TestReplaceInputSnapshotsPriorTree(t *testing.T) {
 	source := t.TempDir()
 	writeFile(t, filepath.Join(source, "environment.yaml"), "kind: Environment\n# replacement\n")
 
-	snapshot, err := ReplaceInput(ctx, source, "context update")
+	snapshot, err := ReplaceInput(ctx, source, "context update", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

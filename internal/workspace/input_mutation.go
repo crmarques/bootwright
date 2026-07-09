@@ -164,14 +164,15 @@ func ApplyInputEdits(ctx Context, reason string, edits []InputEdit) (string, err
 }
 
 // ReplaceInput snapshots the current input, then replaces the whole tree from
-// sourceDir. It is the entry point for `context update`, giving a wholesale
-// replacement the same history guarantee as an object-level edit.
-func ReplaceInput(ctx Context, sourceDir, reason string) (string, error) {
+// sourceDir (plus any referenced registered native add-ons). It is the entry
+// point for `context update`, giving a wholesale replacement the same history
+// guarantee as an object-level edit.
+func ReplaceInput(ctx Context, sourceDir, reason string, addonDirs map[string]string) (string, error) {
 	snapshot, err := SnapshotInput(ctx, reason)
 	if err != nil {
 		return "", err
 	}
-	if err := ReplaceInputDir(ctx, sourceDir); err != nil {
+	if err := ReplaceInputDirWithAddons(ctx, sourceDir, addonDirs); err != nil {
 		return snapshot, err
 	}
 	return snapshot, nil

@@ -1,0 +1,80 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-data-foundation
+spec:
+  type: olm
+
+  provides:
+    - dataFoundation
+
+  accepts:
+    inputs:
+      - name: external-storage
+        schema:
+          type: object
+          required:
+            - exportRef
+          properties:
+            exportRef:
+              refKind: StorageExport
+        effects:
+          - type: storageExportAttachment
+            provider: dataFoundation
+
+  olm:
+    namespace:
+      name: openshift-storage
+      create: true
+      labels:
+        openshift.io/cluster-monitoring: "true"
+    operatorGroup:
+      name: openshift-storage
+      targetNamespaces:
+        - openshift-storage
+    subscription:
+      name: odf-operator
+      package: odf-operator
+      channel: stable-4.21
+      source: redhat-operators
+
+  hooks:
+    # The ODF <-> Ceph integration ships with the add-on: after the operator's
+    # CSV succeeds, the hook runs Rook's external-cluster-details exporter on
+    # a Ceph node of the referenced StorageExport's cluster (creating the CSI
+    # clients), captures the JSON payload, and applies the external-mode
+    # consumer manifests. run: always keeps rotated mon endpoints/keys
+    # converging on every apply.
+    - name: attach-external-storage
+      lifecycle: postOperatorReady
+      playbook: playbooks/export-external-details.yaml
+      target:
+        fromInput:
+          input: external-storage
+          property: exportRef
+      run: always
+      outputs:
+        - name: externalDetails
+          file: external-cluster-details.json
+          secret: true
+          format: json
+      manifests:
+        - path: manifests/rook-ceph-external-cluster-details.yaml
+          reclaimRendered: true
+        - path: manifests/ocs-external-storagecluster.yaml
+        - path: manifests/ocs-external-storagesystem.yaml
+
+  readiness:
+    timeout: 45m
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-storage
+        subscription: odf-operator
+      - type: condition
+        apiVersion: ocs.openshift.io/v1
+        kind: StorageCluster
+        namespace: openshift-storage
+        name: ocs-external-storagecluster
+        condition:
+          type: Available
+          status: "True"

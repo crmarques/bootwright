@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/internal/addons/nativecatalog"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -84,7 +85,7 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 		// Route through the centralized input-mutation component so the current
 		// input is snapshotted into history before it is discarded, exactly as
 		// `diff --adopt` does — the operator can recover the pre-update state.
-		snapshot, err := workspace.ReplaceInput(ctx, source, "context update")
+		snapshot, err := workspace.ReplaceInput(ctx, source, "context update", nativecatalog.ReferencedStoreAddons(state))
 		if err != nil {
 			return failErr(1, err)
 		}

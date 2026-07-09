@@ -115,6 +115,23 @@ func argsNeedLocalRoot(args []string) bool {
 			// cobra rejects it as the caller.
 			return false
 		}
+	case "add-ons":
+		// The registered add-ons store lives under the root-owned Bootwright
+		// dir, mirroring media: add/delete escalate only with a --name value,
+		// list always escalates (it reads the store's registered state).
+		if len(args) == 1 {
+			return false
+		}
+		switch args[1] {
+		case "add", "delete":
+			return argsHaveNameValue(args[2:])
+		case "list":
+			return true
+		default:
+			// Unknown subcommand (a typo like `add-ons lst`): stay rootless so
+			// cobra rejects it as the caller.
+			return false
+		}
 	case "cluster":
 		// Bare `cluster` is a pure dispatcher that only prints help, so it must
 		// not escalate.

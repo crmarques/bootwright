@@ -74,6 +74,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	addGroup(root, groupSetup,
 		newContextCmd(stdin, stdout, stderr),
 		newExampleCmd(stdout),
+		newAddonsCatalogCmd(stdin, stdout),
 		newSecretCmd(stdin, stdout, stderr),
 		newMediaCmd(stdin, stdout),
 	)

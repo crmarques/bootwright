@@ -211,9 +211,8 @@ func selectedNeedsAnsible(selected []Phase) bool {
 	return false
 }
 
-// stateHasAddonPlaybookHooks reports whether any add-on ships a playbook hook —
-// the add-ons phase then runs ansible (e.g. the Data Foundation exporter hook
-// on a Ceph node).
+// stateHasAddonPlaybookHooks: the add-ons phase runs ansible only when an
+// add-on ships a playbook hook (e.g. the Data Foundation exporter).
 func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
 	for _, addon := range state.ClusterAddons {
 		for _, hook := range addon.Spec.Hooks {

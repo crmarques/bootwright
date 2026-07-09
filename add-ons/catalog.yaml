@@ -1,0 +1,20 @@
+# Native add-on catalog index. This directory is the repo-shipped catalog
+# behind `bootwright add-ons list|add|delete` — NOT a desired-state input
+# directory (your workspace's add-ons/ directory is your input). Every entry
+# name is a directory here; every version is a subdirectory of it containing
+# add-on.yaml plus its manifests/ and playbooks/ content.
+entries:
+  - name: openshift-data-foundation
+    description: Red Hat OpenShift Data Foundation in external mode, attaching a Bootwright StorageExport
+    defaultVersion: "4.21"
+    versions:
+      - version: "4.21"
+        channel: stable-4.21
+        notes: Subscribes to the cluster's redhat-operators catalog.
+  - name: fusion-data-foundation
+    description: IBM Fusion Data Foundation in external mode, attaching a Bootwright StorageExport
+    defaultVersion: "4.18"
+    versions:
+      - version: "4.18"
+        channel: stable-4.18
+        notes: Ships the IBM catalog; operand images need the IBM entitlement key in the cluster pull secret (the ibm-entitlement input merges it).

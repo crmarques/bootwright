@@ -563,6 +563,49 @@ spec:
             exportRef: imported-ceph-odf
 ```
 
+## Native add-on catalog
+
+Bootwright ships a built-in catalog of ready-made add-ons — currently
+`openshift-data-foundation` (Red Hat OpenShift Data Foundation) and
+`fusion-data-foundation` (IBM Fusion Data Foundation), both attaching a
+Bootwright `StorageExport` in external mode. Instead of authoring the add-on
+directory yourself, register a catalog release on the machine:
+
+```text
+bootwright add-ons list
+bootwright add-ons add --name openshift-data-foundation
+bootwright add-ons add --name fusion-data-foundation:4.18
+bootwright add-ons delete --name fusion-data-foundation
+```
+
+`add --name` accepts the `<name>:<version>` shorthand or a separate
+`--version`; omitted, the entry's default version is used. Registered add-ons
+live like managed media: a machine-local store under the Bootwright root, one
+registered version per name (re-registering another version replaces it, after
+a `--yes`/confirm). `delete` refuses a directory that was not registered by
+`add-ons add`.
+
+A registered add-on is an artifact, not a deployment: it resolves any
+`ClusterAddonBinding` `addonRef` that no authored `ClusterAddon` in your input
+matches, and clusters only get it when you bind it. `context init`/`update`
+snapshot each referenced registered add-on into the context input (under
+`add-ons/_store/<name>/`), so the context is self-contained — deleting or
+re-registering a store add-on never changes an existing context. An authored
+add-on with the same name always wins over the registered one.
+
+!!! note "Rootless validate and the store"
+    The store lives under the root-owned Bootwright directory, so a rootless
+    `bootwright validate -f <dir>` cannot see it and reports an unresolved
+    `addonRef`. Run it with sudo, or rely on `context init`, which resolves
+    and snapshots registered add-ons as root.
+
+!!! note "IBM Fusion Data Foundation entitlement"
+    FDF operand images pull from IBM's entitled registry (`cp.icr.io`). The
+    catalog add-on ships the IBM CatalogSource and accepts an optional
+    `ibm-entitlement` input whose secret is merged into the cluster's global
+    pull secret (the `globalPullSecretMerge` effect above). If your cluster
+    pull secret already carries the entitlement, omit the input.
+
 ## Where to go next
 
 - [KubeVirt child clusters](../advanced/kubevirt.md) — depending on the

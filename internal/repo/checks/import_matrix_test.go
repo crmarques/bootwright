@@ -26,7 +26,9 @@ var allowedImports = map[string][]string{
 	"internal/cli/output": {},
 
 	// Desired state: load/validate, point lookups, service graph, examples.
-	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
+	// nativecatalog mirrors the infra/media precedent: the loader resolves
+	// machine-registered native add-ons like validate resolves local-media refs.
+	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 	"internal/state/graph":    {"api/v1alpha1", "internal/addons/inputs", "internal/infra/artifacts", "internal/roles", "internal/state/view"},
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},
@@ -86,6 +88,7 @@ var allowedImports = map[string][]string{
 	"internal/addons":               {},
 	"internal/addons/hooks":         {"api/v1alpha1", "internal/addons/inputs"},
 	"internal/addons/inputs":        {"api/v1alpha1"},
+	"internal/addons/nativecatalog": {"add-ons", "api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/workspace"},
 	"internal/addons/oc":            {"api/v1alpha1", "internal/addons", "internal/addons/hooks", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
 	"internal/addons/plan":          {"api/v1alpha1", "internal/addons", "internal/addons/render"},
 	"internal/addons/records":       {"internal/host/safefs"},

@@ -66,6 +66,16 @@ func ResolveWorkspaceDir(path string) (string, error) {
 // and dependency directories are skipped; copied directories are 0700 and files
 // 0600 under the root-managed 0700 tree.
 func ReplaceInputDir(ctx Context, sourceDir string) error {
+	return ReplaceInputDirWithAddons(ctx, sourceDir, nil)
+}
+
+// ReplaceInputDirWithAddons is ReplaceInputDir plus a set of registered
+// native add-on directories (name -> machine-local store dir) snapshotted
+// into the input tree under add-ons/_store/<name>, so the context stays
+// self-contained: deleting or re-registering a store add-on never changes an
+// existing context. The copy lands in the same staging tree, keeping the
+// all-or-nothing swap.
+func ReplaceInputDirWithAddons(ctx Context, sourceDir string, addonDirs map[string]string) error {
 	if err := ValidateName(ctx.Name); err != nil {
 		return err
 	}
@@ -81,6 +91,10 @@ func ReplaceInputDir(ctx Context, sourceDir string) error {
 		return fmt.Errorf("create input staging directory under %s: %w", ctx.BaseDir, err)
 	}
 	if err := copyInputTree(source, staging); err != nil {
+		_ = os.RemoveAll(staging)
+		return err
+	}
+	if err := copyAddonDirs(staging, addonDirs); err != nil {
 		_ = os.RemoveAll(staging)
 		return err
 	}
@@ -110,6 +124,33 @@ func ReplaceInputDir(ctx Context, sourceDir string) error {
 	}
 	if oldMoved {
 		_ = os.RemoveAll(aside)
+	}
+	return nil
+}
+
+// copyAddonDirs snapshots registered native add-on directories into the
+// staged input tree under add-ons/_store/<name> (dirs 0700, files 0600, same
+// symlink rejection as the input copy). Names come from validated
+// ClusterAddon metadata.name values; each must be a plain path segment.
+func copyAddonDirs(staging string, addonDirs map[string]string) error {
+	if len(addonDirs) == 0 {
+		return nil
+	}
+	root := filepath.Join(staging, "add-ons", "_store")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", root, err)
+	}
+	for name, dir := range addonDirs {
+		if name == "" || name != filepath.Base(name) || strings.HasPrefix(name, ".") {
+			return fmt.Errorf("registered add-on name %q is not a plain path segment", name)
+		}
+		dst := filepath.Join(root, name)
+		if err := os.Mkdir(dst, 0o700); err != nil {
+			return fmt.Errorf("create %s: %w", dst, err)
+		}
+		if err := copyInputTree(dir, dst); err != nil {
+			return err
+		}
 	}
 	return nil
 }

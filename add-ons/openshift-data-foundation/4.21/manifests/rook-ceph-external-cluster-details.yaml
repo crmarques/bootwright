@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rook-ceph-external-cluster-details
+  namespace: openshift-storage
+  annotations:
+    bootwright.io/addon: openshift-data-foundation
+    bootwright.io/addon-input: external-storage
+    bootwright.io/storage-export: "{{ input external-storage.exportRef }}"
+    bootwright.io/container-cluster-ref: "{{ cluster }}"
+type: Opaque
+stringData:
+  external_cluster_details: "{{ output externalDetails }}"

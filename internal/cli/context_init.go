@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/internal/addons/nativecatalog"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/state/desired"
@@ -92,7 +93,7 @@ context entirely and recreate it from the source.`,
 		if err := workspace.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
-		if err := workspace.ReplaceInputDir(ctx, source); err != nil {
+		if err := workspace.ReplaceInputDirWithAddons(ctx, source, nativecatalog.ReferencedStoreAddons(state)); err != nil {
 			return failErr(1, err)
 		}
 		bundle, bundleSkipped, err := prepareInitialBundle()

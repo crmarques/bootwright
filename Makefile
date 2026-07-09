@@ -28,7 +28,7 @@ E2E_APPLY_FLAGS ?=
 E2E_CLEAN ?= sudo rm -rf
 # ADRs intentionally describe the abandoned shape in their Context
 # sections; exclude /specs/adr from the stale-term sweep.
-DEFINITION_CHECK_PATHS = README.md docs specs/state-model.md specs/architecture.md specs/domain.md specs/security.md specs/index.md specs/README.md test $(wildcard examples)
+DEFINITION_CHECK_PATHS = README.md docs specs/state-model.md specs/architecture.md specs/domain.md specs/security.md specs/index.md specs/README.md test add-ons $(wildcard examples)
 
 ANSIBLE_SRC_DIR = ansible
 EMBED_BUNDLE_ARCHIVE = internal/converge/bundle/ansible_bundle.zip
@@ -52,7 +52,7 @@ ANSIBLE_GALAXY_ENV = \
 	ANSIBLE_REMOTE_TEMP=$(ANSIBLE_REMOTE_TEMP_DIR) \
 	ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) \
 	ANSIBLE_COLLECTIONS_PATHS=$(EMBED_COLLECTIONS_ABS_DIR)
-GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
+GOFMT_FILES = $(shell find add-ons api cmd internal -type f -name '*.go' -print)
 GO_TEST_PACKAGES ?= ./...
 GO_TEST_CHECK_FLAGS ?= -vet=off
 # internal/cli is a large integration-style package; under -race it runs ~12min
@@ -224,7 +224,7 @@ check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gof
 	$(GO) test $(GO_TEST_PACKAGES)
 
 check-go-source-visibility:
-	@ignored=$$(find api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
+	@ignored=$$(find add-ons api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
 	if [ -n "$$ignored" ]; then \
 		printf '%s\n' 'Go source files are ignored by git and will be missing from GitHub Actions:'; \
 		printf '  %s\n' $$ignored; \
