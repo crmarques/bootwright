@@ -83,7 +83,6 @@ spec:
         - path: manifests/rook-ceph-external-cluster-details.yaml
           reclaimRendered: true
         - path: manifests/ocs-external-storagecluster.yaml
-        - path: manifests/ocs-external-storagesystem.yaml
 
   readiness:
     timeout: 45m
