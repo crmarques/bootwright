@@ -1,33 +1,102 @@
-# Runs Rook's ceph-external-cluster-details-exporter.py on a Ceph node of the
-# StorageExport's cluster (resolved via the hook's fromInput target) and
-# captures its JSON output as the hook's declared externalDetails output. The
-# exporter creates the CSI clients (idempotently) and prints the Rook
-# external-cluster-details payload. The script ships with Rook/ODF; place it on
-# the Ceph admin node or override bootwright_exporter_script with its path.
+# Attaches Data Foundation to the StorageExport's Ceph cluster end to end: a
+# controller-local task reads Rook's ceph-external-cluster-details-exporter.py
+# from the ConfigMap the just-installed operator publishes (Data Foundation
+# 4.19+ ships it only there), the script is staged onto a Ceph node resolved
+# from the hook's fromInput target and executed inside cephadm shell (creating
+# the CSI clients idempotently), and its JSON payload is captured as the hook's
+# declared externalDetails output. Set bootwright_exporter_script to a
+# pre-placed path on the Ceph node to skip the retrieval, or
+# bootwright_exporter_use_cephadm_shell: false to run the script with the
+# node's own python3/rados bindings.
 - name: Export Data Foundation external cluster details
   hosts: all
   gather_facts: false
   become: true
   vars:
-    bootwright_exporter_script: ceph-external-cluster-details-exporter.py
+    bootwright_exporter_script: ""
+    bootwright_exporter_configmap: rook-ceph-external-cluster-script-config
+    bootwright_exporter_namespace: openshift-storage
+    bootwright_exporter_use_cephadm_shell: true
+    bootwright_exporter_staged_path: /tmp/bootwright-ceph-external-cluster-details-exporter.py
     bootwright_df: "{{ bootwright_hook_refs.exportRef.spec.dataFoundation }}"
+    bootwright_exporter_args:
+      - --format
+      - json
+      - --rbd-data-pool-name
+      - "{{ bootwright_df.rbdPoolRef.name }}"
+      - --cephfs-filesystem-name
+      - "{{ bootwright_df.filesystemRef.name }}"
+      - --k8s-cluster-name
+      - "{{ bootwright_bound_cluster }}"
   tasks:
-    - name: Run the Rook external cluster details exporter
+    - name: Read the exporter script the operator publishes
+      when: bootwright_exporter_script | length == 0
+      delegate_to: localhost
+      become: false
       ansible.builtin.command:
         argv:
-          - python3
-          - "{{ bootwright_exporter_script }}"
-          - --format
-          - json
-          - --rbd-data-pool-name
-          - "{{ bootwright_df.rbdPoolRef.name }}"
-          - --cephfs-filesystem-name
-          - "{{ bootwright_df.filesystemRef.name }}"
-          - --k8s-cluster-name
-          - "{{ bootwright_bound_cluster }}"
+          - oc
+          - --kubeconfig
+          - "{{ bootwright_kubeconfig }}"
+          - --namespace
+          - "{{ bootwright_exporter_namespace }}"
+          - get
+          - configmap
+          - "{{ bootwright_exporter_configmap }}"
+          - --output
+          - jsonpath={.data.script}
+      register: bootwright_exporter_configmap_read
+      changed_when: false
+
+    - name: Assert the operator published the exporter script
+      when: bootwright_exporter_script | length == 0
+      delegate_to: localhost
+      become: false
+      ansible.builtin.assert:
+        that:
+          - bootwright_exporter_configmap_read.stdout | length > 0
+        fail_msg: >-
+          ConfigMap {{ bootwright_exporter_namespace }}/{{ bootwright_exporter_configmap }}
+          has no data.script; the Data Foundation operator publishes the
+          external-cluster exporter there once its CSV succeeds. Pre-place the
+          script on a Ceph node and set bootwright_exporter_script to its path
+          to skip the retrieval.
+
+    - name: Stage the exporter script on the Ceph node
+      when: bootwright_exporter_script | length == 0
+      ansible.builtin.copy:
+        content: "{{ bootwright_exporter_configmap_read.stdout | b64decode }}"
+        dest: "{{ bootwright_exporter_staged_path }}"
+        mode: "0600"
+
+    - name: Resolve the exporter script path
+      ansible.builtin.set_fact:
+        bootwright_exporter_path: "{{ bootwright_exporter_script if bootwright_exporter_script | length > 0 else bootwright_exporter_staged_path }}"
+
+    - name: Resolve the exporter command
+      ansible.builtin.set_fact:
+        bootwright_exporter_argv: "{{ ['python3', bootwright_exporter_path] + bootwright_exporter_args }}"
+
+    # cephadm shell guarantees the ceph CLI, cluster config, admin keyring, and
+    # python rados bindings the exporter needs; Bootwright-managed (cephadm)
+    # Ceph nodes do not carry those on the host itself.
+    - name: Wrap the exporter in cephadm shell
+      when: bootwright_exporter_use_cephadm_shell | bool
+      ansible.builtin.set_fact:
+        bootwright_exporter_argv: "{{ ['cephadm', 'shell', '--mount', bootwright_exporter_path ~ ':' ~ bootwright_exporter_path, '--'] + bootwright_exporter_argv }}"
+
+    - name: Run the Rook external cluster details exporter
+      ansible.builtin.command:
+        argv: "{{ bootwright_exporter_argv }}"
       register: bootwright_external_details
       changed_when: true
       no_log: true
+
+    - name: Remove the staged exporter script
+      when: bootwright_exporter_script | length == 0
+      ansible.builtin.file:
+        path: "{{ bootwright_exporter_staged_path }}"
+        state: absent
 
     - name: Capture the declared externalDetails output
       ansible.builtin.copy:
