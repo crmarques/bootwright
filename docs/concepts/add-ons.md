@@ -384,7 +384,7 @@ everywhere else in the input tree.
 | `hooks[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
 | `hooks[].run` | No | `onChange` | `onChange` skips a hook whose content and inputs are unchanged; `always` re-runs every apply. |
 | `hooks[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |
-| `hooks[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. |
+| `hooks[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the hook; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
 | `hooks[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
 
 The `target` selects machines a playbook runs against — exactly one of
@@ -595,7 +595,9 @@ bootwright add-ons delete --name fusion-data-foundation
 ```
 
 `add --name` accepts the `<name>:<version>` shorthand or a separate
-`--version`; omitted, the entry's default version is used. Registered add-ons
+`--version`; omitted, the entry's default version is used. `delete --name`
+takes the same shorthand — its version is an assertion against the registered
+one, not a selector. Registered add-ons
 live like managed media: a machine-local store under the Bootwright root, one
 registered version per name (re-registering another version replaces it, after
 a `--yes`/confirm). `delete` refuses a directory that was not registered by

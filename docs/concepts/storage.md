@@ -591,9 +591,10 @@ spec:
     The export itself never gathers credentials. Either the operator supplies
     the external-cluster-details JSON as a secret (`fromSecretRef` — the only
     option for external Ceph, where Bootwright manages no nodes), or the
-    consuming [add-on](add-ons.md) ships a hook that runs Rook's
-    external-cluster-details exporter on a node of the managed Ceph cluster and
-    consumes the captured output. See the add-ons page for the hook shapes.
+    consuming [add-on](add-ons.md) ships a hook that fetches Rook's
+    external-cluster-details exporter from the installed operator, runs it on a
+    node of the managed Ceph cluster, and consumes the captured output. See the
+    add-ons page for the hook shapes.
 
 ## Where to go next
 
