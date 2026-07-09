@@ -479,64 +479,6 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	}
 }
 
-func bareMetalProvider(name string) v1alpha1.InfraProvider {
-	return v1alpha1.InfraProvider{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.InfraProviderSpec{
-			Type:      v1alpha1.ProvisionerBareMetal,
-			BareMetal: &v1alpha1.InfraProviderBareMetal{},
-		},
-	}
-}
-
-func bareMetalMachine(name, provider string) v1alpha1.Machine {
-	return v1alpha1.Machine{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.MachineSpec{
-			Substrate: v1alpha1.MachineSubstrate{
-				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
-			},
-			Hardware: v1alpha1.MachineHardware{
-				NICs: []v1alpha1.MachineNIC{{Name: "primary", MACAddress: "52:54:00:00:00:01"}},
-				Boot: v1alpha1.MachineHardwareBoot{NICRef: v1alpha1.LocalObjectReference{Name: "primary"}},
-				Management: v1alpha1.MachineHardwareManagement{
-					BMC: v1alpha1.BMCSpec{Address: "redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1"},
-				},
-			},
-			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
-		},
-	}
-}
-
-func profiledMachine(name, provider, providerType string) v1alpha1.Machine {
-	machine := v1alpha1.Machine{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.MachineSpec{
-			Substrate: v1alpha1.MachineSubstrate{
-				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
-			},
-			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
-		},
-	}
-	if providerType == v1alpha1.ProvisionerLibvirt {
-		machine.Spec.Substrate.ProfileRef = v1alpha1.LocalObjectReference{Name: "worker"}
-	}
-	return machine
-}
-
-func containerClusterWithMachine(name, machine string) v1alpha1.ContainerCluster {
-	return v1alpha1.ContainerCluster{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.ContainerClusterSpec{
-			Hosts: []v1alpha1.OCPHostSpec{{
-				Hostname:   "master-0",
-				Role:       "master",
-				MachineRef: v1alpha1.LocalObjectReference{Name: machine},
-			}},
-		},
-	}
-}
-
 func TestNormalizeDefaultsInfraComponentProxy(t *testing.T) {
 	state := v1alpha1.State{
 		InfraComponents: []v1alpha1.InfraComponent{{
