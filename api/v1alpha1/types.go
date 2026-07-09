@@ -271,6 +271,10 @@ const (
 	ClusterAddonProvidesNMState                     = "nmstate"
 	ClusterAddonInputSchemaTypeObject               = "object"
 	ClusterAddonInputEffectStorageExportAttachment  = "storageExportAttachment"
+	// ClusterAddonInputEffectGlobalPullSecretMerge merges a binding-supplied
+	// registry credential (e.g. an IBM entitlement key) into the bound
+	// cluster's global pull secret before the add-on's resources apply.
+	ClusterAddonInputEffectGlobalPullSecretMerge = "globalPullSecretMerge"
 
 	// ClusterAddonHook lifecycle vocabulary — the points in the add-on apply a
 	// hook may anchor to. ClusterAddonHookLifecycles() is the ordered accessor.

@@ -59,6 +59,7 @@ func validateClusterAddonAccepts(extension v1alpha1.ClusterAddon) []string {
 		errs = append(errs, validateClusterAddonInputSchema(prefix+".schema", input.Schema)...)
 		errs = append(errs, validateClusterAddonInputEffects(prefix+".effects", input.Effects)...)
 		errs = append(errs, validateDataFoundationStorageInputSchema(extension.Metadata.Name, i, input)...)
+		errs = append(errs, validateGlobalPullSecretMergeInputSchema(extension.Metadata.Name, i, input)...)
 	}
 	return errs
 }
@@ -151,10 +152,62 @@ func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterA
 			if effect.Provider != v1alpha1.ClusterAddonProvidesDataFoundation {
 				errs = append(errs, fmt.Sprintf("%s.provider %q must be %q when type is %q", owner, effect.Provider, v1alpha1.ClusterAddonProvidesDataFoundation, effect.Type))
 			}
+			if effect.Registry != "" || effect.Username != "" {
+				errs = append(errs, fmt.Sprintf("%s.registry and username are only valid when type is %q", owner, v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge))
+			}
+		case v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge:
+			if effect.Provider != "" {
+				errs = append(errs, fmt.Sprintf("%s.provider is only valid when type is %q", owner, v1alpha1.ClusterAddonInputEffectStorageExportAttachment))
+			}
+			if effect.Registry == "" {
+				errs = append(errs, fmt.Sprintf("%s.registry is required when type is %q", owner, effect.Type))
+			}
+			if effect.Username == "" {
+				errs = append(errs, fmt.Sprintf("%s.username is required when type is %q", owner, effect.Type))
+			}
 		case "":
 			errs = append(errs, owner+".type is required")
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q is not supported", owner, effect.Type))
+		}
+	}
+	return errs
+}
+
+// validateGlobalPullSecretMergeInputSchema pins the schema of an input carrying
+// the globalPullSecretMerge effect: the merge executor reads the input's single
+// secret-typed property as the registry password, so the schema must declare
+// exactly one property, secret-typed and required.
+func validateGlobalPullSecretMergeInputSchema(addon string, index int, input v1alpha1.ClusterAddonAcceptedInput) []string {
+	hasMergeEffect := false
+	for _, effect := range input.Effects {
+		if effect.Type == v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge {
+			hasMergeEffect = true
+			break
+		}
+	}
+	if !hasMergeEffect {
+		return nil
+	}
+	var errs []string
+	prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d].schema", addon, index)
+	if len(input.Schema.Properties) != 1 {
+		errs = append(errs, prefix+".properties must declare exactly one secret property for globalPullSecretMerge inputs")
+		return errs
+	}
+	for name, property := range input.Schema.Properties {
+		if !property.Secret {
+			errs = append(errs, fmt.Sprintf("%s.properties.%s must set secret: true for globalPullSecretMerge inputs", prefix, name))
+		}
+		requiresProperty := false
+		for _, required := range input.Schema.Required {
+			if required == name {
+				requiresProperty = true
+				break
+			}
+		}
+		if !requiresProperty {
+			errs = append(errs, fmt.Sprintf("%s.required must include %q for globalPullSecretMerge inputs", prefix, name))
 		}
 	}
 	return errs

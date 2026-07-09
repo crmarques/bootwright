@@ -33,6 +33,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 		PollInterval: 0,
 		ReadRunner:   readRunner,
 		Hooks:        newAddonHookExecutor(stdout, stderr, runsDir, runID, opts, task, runnerFactory),
+		Effects:      newAddonEffectExecutor(stdout, stderr, runsDir, runID, opts, task),
 	}
 	var result extensionoc.TaskResult
 	var err error

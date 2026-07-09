@@ -49,6 +49,12 @@ type ClusterAddonInputProperty struct {
 type ClusterAddonInputEffect struct {
 	Type     string `yaml:"type" json:"type"`
 	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
+	// Registry and Username shape the globalPullSecretMerge effect: the value
+	// of the input's single secret property becomes the password of an
+	// `auths[registry]` entry (user `username`) merged into the bound
+	// cluster's global pull secret. Both are rejected on other effect types.
+	Registry string `yaml:"registry,omitempty" json:"registry,omitempty"`
+	Username string `yaml:"username,omitempty" json:"username,omitempty"`
 }
 
 type ClusterAddonOLMSpec struct {

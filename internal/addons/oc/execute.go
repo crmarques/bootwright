@@ -41,6 +41,29 @@ func (e *HookError) Error() string {
 
 func (e *HookError) summary() string { return e.Error() }
 
+// EffectRunner executes an add-on's compiled input effects that act on the
+// bound cluster before any resource applies (currently the global pull-secret
+// merge). The concrete implementation lives in internal/converge/workflow (it
+// needs the secret store and binding inputs). A nil EffectRunner is a no-op.
+type EffectRunner interface {
+	Run(ctx context.Context) error
+}
+
+// EffectError marks an input-effect failure so the caller records an
+// effect-specific, non-secret summary rather than naming an oc apply target.
+// Detail must hold no secret bytes.
+type EffectError struct {
+	Effect string
+	Input  string
+	Detail string
+}
+
+func (e *EffectError) Error() string {
+	return fmt.Sprintf("input effect %q (input %q) failed: %s", e.Effect, e.Input, e.Detail)
+}
+
+func (e *EffectError) summary() string { return e.Error() }
+
 type TaskResult struct {
 	Skipped bool
 	Reason  string
@@ -60,6 +83,9 @@ type RunConfig struct {
 	// Hooks, when set, executes the add-on's lifecycle hooks (preApply,
 	// postOperatorReady, postReady). Nil disables hooks.
 	Hooks HookRunner
+	// Effects, when set, executes the add-on's compiled input effects (the
+	// global pull-secret merge) before any resource applies. Nil disables them.
+	Effects EffectRunner
 }
 
 func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
@@ -78,6 +104,30 @@ func (c RunConfig) runHooks(ctx context.Context, lifecycle string) error {
 	return c.Hooks.Run(ctx, lifecycle)
 }
 
+// runEffects executes the add-on's compiled input effects, or no-ops when no
+// executor is wired (add-ons without effects, unit tests).
+func (c RunConfig) runEffects(ctx context.Context) error {
+	if c.Effects == nil {
+		return nil
+	}
+	return c.Effects.Run(ctx)
+}
+
+// hasGlobalPullSecretMergeEffect reports whether any accepted input declares
+// the global pull-secret merge. Registry credentials must converge on every
+// apply (the merge is idempotent and cheap), so such an add-on never takes the
+// already-ready short-circuit — the same rule run: always hooks follow.
+func hasGlobalPullSecretMergeEffect(extension v1alpha1.ClusterAddon) bool {
+	for _, input := range extension.Spec.Accepts.Inputs {
+		for _, effect := range input.Effects {
+			if effect.Type == v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (TaskResult, error) {
 	if err := requireKubeconfig(cfg.Kubeconfig); err != nil {
 		return TaskResult{}, err
@@ -94,7 +144,8 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	// blocks the pre-check short-circuit (applyExtension re-runs, idempotently, and
 	// the executor skips unchanged onChange hooks by their own per-hook digest).
 	if len(plan.Extension.Spec.Readiness.Checks) > 0 &&
-		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) {
+		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) &&
+		!hasGlobalPullSecretMergeEffect(plan.Extension) {
 		if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
 			record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 			if err != nil {
@@ -136,6 +187,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		var gate *csvGateError
 		var catalogGate *catalogGateError
 		var hookErr *HookError
+		var effectErr *EffectError
 		switch {
 		case errors.As(err, &gate):
 			record.LastObserved = gate.summary()
@@ -143,6 +195,8 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 			record.LastObserved = catalogGate.summary()
 		case errors.As(err, &hookErr):
 			record.LastObserved = hookErr.summary()
+		case errors.As(err, &effectErr):
+			record.LastObserved = effectErr.summary()
 		default:
 			record.LastObserved = applyFailureSummary(failedID)
 		}
@@ -237,6 +291,11 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 // "no matches for kind", forcing the operator to re-run apply to converge.
 func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
 	kubeconfig := cfg.Kubeconfig
+	// Input effects run first: a pull-secret merge must land before anything
+	// (the shipped catalog, the operator, preApply-hook workloads) pulls images.
+	if err := cfg.runEffects(ctx); err != nil {
+		return observed, "", err
+	}
 	if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPreApply); err != nil {
 		return observed, "", err
 	}

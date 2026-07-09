@@ -250,8 +250,10 @@ Each input has a name, an object schema, and optional built-in effects. The
 | `accepts.inputs[].schema.required[]` | No | — | Required property names. Each must be non-empty, unique, and declared in `properties`. |
 | `accepts.inputs[].schema.properties.<name>.refKind` | One of `refKind`/`secret` per property | — | Property value must name a loaded object of this Bootwright kind. |
 | `accepts.inputs[].schema.properties.<name>.secret` | One of `refKind`/`secret` per property | — | Property value must name an `Environment` secret. |
-| `accepts.inputs[].effects[].type` | Yes within an effect | — | Built-in effect type; currently only `storageExportAttachment`. |
+| `accepts.inputs[].effects[].type` | Yes within an effect | — | Built-in effect type: `storageExportAttachment` or `globalPullSecretMerge`. |
 | `accepts.inputs[].effects[].provider` | For `storageExportAttachment` | — | Effect provider; must be `dataFoundation` for `storageExportAttachment`. |
+| `accepts.inputs[].effects[].registry` | For `globalPullSecretMerge` | — | Registry host whose credential is merged into the cluster's global pull secret. |
+| `accepts.inputs[].effects[].username` | For `globalPullSecretMerge` | — | Registry username the merged credential authenticates as. |
 
 !!! note "Each property names exactly one resolution"
     A property under `schema.properties` must set exactly one of `refKind` or
@@ -259,13 +261,26 @@ Each input has a name, an object schema, and optional built-in effects. The
     known Bootwright kind.
 
 !!! note "Data Foundation storage attachment contract"
-    The only built-in effect type is `storageExportAttachment`, and its
-    `effects[].provider` must be `dataFoundation`. The attachment machinery
-    reads the binding value under a property literally named `exportRef`, so an
-    input carrying this effect must declare a `schema.properties.exportRef` with
-    `refKind: StorageExport`, list `exportRef` in `schema.required[]`, and
-    declare *no other properties*. Any extra property on such an input is
-    rejected.
+    A `storageExportAttachment` effect's `provider` must be `dataFoundation`.
+    The attachment machinery reads the binding value under a property literally
+    named `exportRef`, so an input carrying this effect must declare a
+    `schema.properties.exportRef` with `refKind: StorageExport`, list
+    `exportRef` in `schema.required[]`, and declare *no other properties*. Any
+    extra property on such an input is rejected.
+
+!!! note "Global pull-secret merge contract"
+    An input carrying a `globalPullSecretMerge` effect must declare exactly one
+    property, marked `secret: true` and listed in `schema.required[]`. Before
+    any of the add-on's resources apply, Bootwright merges an
+    `auths[<registry>]` entry — user `<username>`, password = the referenced
+    secret's value — into the bound cluster's `openshift-config/pull-secret`,
+    replacing a stale entry for that registry and leaving every other entry
+    untouched. The merge is idempotent and re-checked on every apply, so such
+    an add-on never takes the already-ready skip. When the binding omits the
+    input, the merge is skipped and the credential is expected to be in the
+    pull secret already (e.g. included at install time). This is how an add-on
+    from an entitled registry (an IBM entitlement key for `cp.icr.io`) becomes
+    installable without manual pull-secret surgery.
 
 A Data Foundation add-on advertising the capability and accepting an export
 attachment:
