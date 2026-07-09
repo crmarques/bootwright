@@ -167,11 +167,11 @@ func TestDesiredHashTracksManifestContent(t *testing.T) {
 	}
 	policy := addons.ClusterAddonPolicy{FieldManager: addons.DefaultClusterAddonFieldManager}
 
-	first, err := extensionrender.DesiredHash(extension, policy)
+	first, err := extensionrender.DesiredHash(extension, policy, nil)
 	if err != nil {
 		t.Fatalf("DesiredHash first: %v", err)
 	}
-	second, err := extensionrender.DesiredHash(extension, policy)
+	second, err := extensionrender.DesiredHash(extension, policy, nil)
 	if err != nil {
 		t.Fatalf("DesiredHash second: %v", err)
 	}
@@ -181,12 +181,63 @@ func TestDesiredHashTracksManifestContent(t *testing.T) {
 	if err := os.WriteFile(manifest, []byte("apiVersion: v1\nkind: ConfigMap\nmetadata: { name: banner }\ndata: { changed: \"true\" }\n"), 0o600); err != nil {
 		t.Fatalf("rewrite manifest: %v", err)
 	}
-	changed, err := extensionrender.DesiredHash(extension, policy)
+	changed, err := extensionrender.DesiredHash(extension, policy, nil)
 	if err != nil {
 		t.Fatalf("DesiredHash changed: %v", err)
 	}
 	if changed == first {
 		t.Fatal("hash did not change after manifest content changed")
+	}
+}
+
+func TestDesiredHashTracksBindingInputChanges(t *testing.T) {
+	extension := testExtension("virt")
+	policy := addons.ClusterAddonPolicy{FieldManager: addons.DefaultClusterAddonFieldManager}
+	inputsA := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph-a"}}}
+	inputsB := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph-b"}}}
+
+	without, err := extensionrender.DesiredHash(extension, policy, nil)
+	if err != nil {
+		t.Fatalf("DesiredHash without inputs: %v", err)
+	}
+	withA, err := extensionrender.DesiredHash(extension, policy, inputsA)
+	if err != nil {
+		t.Fatalf("DesiredHash inputs A: %v", err)
+	}
+	withB, err := extensionrender.DesiredHash(extension, policy, inputsB)
+	if err != nil {
+		t.Fatalf("DesiredHash inputs B: %v", err)
+	}
+	if without == withA || withA == withB {
+		t.Fatalf("hash did not track binding inputs: without=%s a=%s b=%s", without, withA, withB)
+	}
+}
+
+func TestBindingPlansCarryBindingInputs(t *testing.T) {
+	state := v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "demo"}}},
+		ClusterAddons:     []v1alpha1.ClusterAddon{testExtension("virt")},
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
+			Metadata: v1alpha1.Metadata{Name: "binding"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+				Addons: []v1alpha1.ClusterAddonBindingAddon{{
+					AddonRef: v1alpha1.LocalObjectReference{Name: "virt"},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph"}}},
+				}},
+			},
+		}},
+	}
+	plans, err := extensionplan.BindingPlans(state)
+	if err != nil {
+		t.Fatalf("BindingPlans: %v", err)
+	}
+	if len(plans) != 1 || len(plans[0].Addons) != 1 {
+		t.Fatalf("plans = %v, want one binding with one addon", plans)
+	}
+	inputs := plans[0].Addons[0].Inputs
+	if len(inputs) != 1 || inputs[0].Name != "external-storage" || inputs[0].Values["exportRef"] != "ceph" {
+		t.Fatalf("plan inputs = %v, want the binding-supplied external-storage input", inputs)
 	}
 }
 
@@ -196,11 +247,11 @@ func TestDesiredHashTracksOLMCustomResourceChanges(t *testing.T) {
 	second.Spec.OLM.CustomResources[0]["spec"] = map[string]any{"featureGate": "enabled"}
 	policy := addons.ClusterAddonPolicy{FieldManager: addons.DefaultClusterAddonFieldManager}
 
-	firstHash, err := extensionrender.DesiredHash(first, policy)
+	firstHash, err := extensionrender.DesiredHash(first, policy, nil)
 	if err != nil {
 		t.Fatalf("DesiredHash first: %v", err)
 	}
-	secondHash, err := extensionrender.DesiredHash(second, policy)
+	secondHash, err := extensionrender.DesiredHash(second, policy, nil)
 	if err != nil {
 		t.Fatalf("DesiredHash second: %v", err)
 	}

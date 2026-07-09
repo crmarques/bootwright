@@ -132,7 +132,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err := requireKubeconfig(cfg.Kubeconfig); err != nil {
 		return TaskResult{}, err
 	}
-	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy)
+	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy, plan.Inputs)
 	if err != nil {
 		return TaskResult{}, err
 	}
@@ -218,7 +218,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err := requireKubeconfig(cfg.Kubeconfig); err != nil {
 		return TaskResult{}, err
 	}
-	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy)
+	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy, plan.Inputs)
 	if err != nil {
 		return TaskResult{}, err
 	}

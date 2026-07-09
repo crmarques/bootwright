@@ -23,6 +23,11 @@ type ExtensionPlan struct {
 	Cluster   string
 	Extension v1alpha1.ClusterAddon
 	Policy    addons.ClusterAddonPolicy
+	// Inputs are the binding-supplied values for this add-on. They are part of
+	// the add-on's desired state (hooks and effects resolve against them), so
+	// the desired hash folds them in — editing an input re-applies an
+	// otherwise-ready add-on.
+	Inputs []v1alpha1.ClusterAddonBindingInput
 }
 
 type ResourceSummary struct {
@@ -46,6 +51,12 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 			Cluster: cluster,
 			Policy:  addons.DefaultPolicy(),
 		}
+		inputsByName := map[string][]v1alpha1.ClusterAddonBindingInput{}
+		for _, addon := range binding.Spec.Addons {
+			if addon.AddonRef.Name != "" {
+				inputsByName[addon.AddonRef.Name] = addon.Inputs
+			}
+		}
 		for _, name := range names {
 			extension, ok := extensions[name]
 			if !ok {
@@ -57,6 +68,7 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 				Cluster:   cluster,
 				Extension: extension,
 				Policy:    addons.DefaultPolicy(),
+				Inputs:    inputsByName[name],
 			})
 		}
 		ordered, err := orderByCapabilities(plan.Addons)

@@ -157,18 +157,19 @@ func CustomResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error
 	return out, nil
 }
 
-func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPolicy) (string, error) {
+func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPolicy, inputs []v1alpha1.ClusterAddonBindingInput) (string, error) {
 	type manifestFile struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
 	payload := struct {
-		APIVersion string                `json:"apiVersion"`
-		Extension  v1alpha1.ClusterAddon `json:"extension"`
-		Policy     desiredHashPolicy     `json:"policy"`
-		Resources  []map[string]any      `json:"resources,omitempty"`
-		Manifests  []manifestFile        `json:"manifests,omitempty"`
-		HookDigest string                `json:"hookDigest,omitempty"`
+		APIVersion string                              `json:"apiVersion"`
+		Extension  v1alpha1.ClusterAddon               `json:"extension"`
+		Policy     desiredHashPolicy                   `json:"policy"`
+		Inputs     []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
+		Resources  []map[string]any                    `json:"resources,omitempty"`
+		Manifests  []manifestFile                      `json:"manifests,omitempty"`
+		HookDigest string                              `json:"hookDigest,omitempty"`
 	}{
 		APIVersion: v1alpha1.APIVersion,
 		Extension:  extension,
@@ -178,6 +179,10 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 			Prune:           policy.Prune,
 			ContinueOnError: policy.ContinueOnError,
 		},
+		// Binding inputs are part of the add-on's desired state (hooks and
+		// effects resolve against them); omitempty keeps recorded hashes stable
+		// for add-ons whose bindings supply none.
+		Inputs: inputs,
 		// The Extension field already serializes the hook specs; HookDigest folds
 		// in the shipped content (playbook, vendored trees, manifest templates) so
 		// editing a shipped playbook without touching the add-on YAML still moves

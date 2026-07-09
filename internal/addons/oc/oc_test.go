@@ -594,7 +594,7 @@ func readyExtensionPlan() extensionplan.ExtensionPlan {
 
 func writeReadyExtensionRecord(t *testing.T, clustersDir string, plan extensionplan.ExtensionPlan) {
 	t.Helper()
-	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy)
+	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy, plan.Inputs)
 	if err != nil {
 		t.Fatalf("DesiredHash: %v", err)
 	}
