@@ -171,35 +171,41 @@ func newAddonsDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var name string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete --name <name>",
+		Use:   "delete --name <name>[:<version>]",
 		Short: "Delete a registered add-on from the machine-local store",
 		Args:  cobra.NoArgs,
 	}
-	cmd.Flags().StringVar(&name, "name", "", "registered add-on name (required)")
+	cmd.Flags().StringVar(&name, "name", "", "registered add-on name, optionally <name>:<version> (required)")
 	addYesFlag(cmd, &yes, "delete")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if name == "" {
 			return failf(2, "--name is required")
 		}
+		// Accept the same <name>:<version> shorthand add teaches; the store holds
+		// one version per name, so the version is an assertion, not a selector.
+		bare, inlineVersion := nativecatalog.ParseNameVersion(name)
 		output.New(stdout).Command("add-ons delete")
-		dir := nativecatalog.InstalledDir(name)
+		dir := nativecatalog.InstalledDir(bare)
 		marker, found, err := nativecatalog.ReadMarker(dir)
 		if err != nil {
 			return failErr(1, err)
 		}
 		if !found {
 			if _, statErr := os.Stat(dir); errors.Is(statErr, os.ErrNotExist) {
-				return failf(1, "add-on %q is not registered", name)
+				return failf(1, "add-on %q is not registered", bare)
 			}
 			return failf(1, "%s was not registered by bootwright add-ons add; remove it manually", dir)
+		}
+		if inlineVersion != "" && marker.Version != inlineVersion {
+			return failf(1, "add-on %q is registered at version %s, not %s", bare, marker.Version, inlineVersion)
 		}
 		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete registered add-on %s %s from %s? Existing contexts keep their snapshotted copy. [y/N] (default: no): ", marker.Name, marker.Version, dir)) {
 			return failErr(1, errors.New("add-ons delete aborted"))
 		}
-		if err := nativecatalog.Remove(name); err != nil {
+		if err := nativecatalog.Remove(bare); err != nil {
 			return failErr(1, err)
 		}
-		output.NewContinuation(stdout).Summary(output.StatusOK, name, "removed "+dir)
+		output.NewContinuation(stdout).Summary(output.StatusOK, bare, "removed "+dir)
 		return nil
 	}
 	return cmd

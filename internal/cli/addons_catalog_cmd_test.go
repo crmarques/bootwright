@@ -68,7 +68,13 @@ func TestAddonsCLIListAddDelete(t *testing.T) {
 		t.Fatalf("list after add: code=%d %q", code, stdout)
 	}
 
-	_, stderr, code = runCLI(t, "add-ons", "delete", "--name", "openshift-data-foundation", "--yes")
+	// delete accepts the same colon shorthand add teaches; a version that does
+	// not match the registered one is an error, a matching one deletes.
+	_, stderr, code = runCLI(t, "add-ons", "delete", "--name", "openshift-data-foundation:9.99", "--yes")
+	if code != 1 || !strings.Contains(stderr, "registered at version 4.21, not 9.99") {
+		t.Fatalf("delete version mismatch: code=%d stderr=%q", code, stderr)
+	}
+	_, stderr, code = runCLI(t, "add-ons", "delete", "--name", "openshift-data-foundation:4.21", "--yes")
 	if code != 0 {
 		t.Fatalf("add-ons delete exited %d, stderr=%q", code, stderr)
 	}
