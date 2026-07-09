@@ -51,4 +51,6 @@ __pycache__/
 .bootwright/
 
 # Local scratch area for work-in-progress example fleets (untracked).
-examples/_wip/
+# Kept as a sibling of examples/ (not under it) so example-scoped make checks
+# never traverse the placeholder templates here.
+examples-wip/
