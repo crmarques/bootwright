@@ -574,7 +574,7 @@ directory yourself, register a catalog release on the machine:
 ```text
 bootwright add-ons list
 bootwright add-ons add --name openshift-data-foundation
-bootwright add-ons add --name fusion-data-foundation:4.18
+bootwright add-ons add --name fusion-data-foundation:4.21
 bootwright add-ons delete --name fusion-data-foundation
 ```
 

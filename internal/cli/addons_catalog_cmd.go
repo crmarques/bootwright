@@ -126,7 +126,7 @@ func newAddonsAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		Args:  cobra.NoArgs,
 		Example: `  bootwright add-ons add --name openshift-data-foundation
   bootwright add-ons add --name openshift-data-foundation:4.21
-  bootwright add-ons add --name fusion-data-foundation --version 4.18 --yes`,
+  bootwright add-ons add --name fusion-data-foundation --version 4.21 --yes`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "catalog add-on name, optionally <name>:<version> (required)")
 	cmd.Flags().StringVar(&version, "version", "", "catalog version (default: the entry's default version)")
