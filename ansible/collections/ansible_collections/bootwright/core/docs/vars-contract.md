@@ -565,3 +565,69 @@ time. Managed OS tasks select the storage group's full pseudo-host group so VM
 creation, OS install, SSH wait, and trust recording run in Ansible host fanout.
 Managed storage prereq tasks run against the storage-node inventory group and
 reserve seed-only cephadm work for the final storage task.
+
+## Add-On Hook Vars
+
+Add-on hooks (`ClusterAddon.spec.hooks[]`) run through a separate, narrower engine
+than the core layer tasks and `ProvisioningPlaybook`s above
+(`internal/converge/workflow`, `runHookAnsible`). A hook playbook does **not**
+receive the full `bootwright_*` vars contract documented in this file — there is
+no `bootwright_environment`, `bootwright_machines`, `bootwright_clusters`, or any
+other top-level fact. It runs against an ad-hoc inventory of only the hook's
+resolved target machines, with an empty `vars.yaml`, and a small curated set of
+extra vars.
+
+### Hook inventory
+
+The engine writes a one-off inventory (`writeHookInventory`) holding only the
+machines the hook's `target` resolved to — never the rendered fleet inventory.
+Each host carries just its SSH connection facts:
+
+| Host var | Shape |
+| --- | --- |
+| `ansible_host` | The target machine's resolved SSH address. |
+| `bootwright_host_name` | The target `Machine` name (the hook's per-host label). |
+| `ansible_user` | The machine's `access.ssh.user`, when set. |
+| `ansible_ssh_private_key_file` | Path to the materialized SSH private key, when set. |
+| `ansible_ssh_common_args` | `-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<trusted known_hosts>`. |
+
+The `vars.yaml` handed to the run is empty (`{}`); every hook fact arrives as an
+`-e` extra var instead.
+
+### Hook extra vars
+
+`hookExtraVarPairs` projects exactly these facts (and nothing else):
+
+| Fact | Shape |
+| --- | --- |
+| `bootwright_hook_name` | The hook's `name`. |
+| `bootwright_hook_lifecycle` | The hook's `lifecycle` (`preApply`, `postOperatorReady`, `postReady`). |
+| `bootwright_addon_name` | The bound `ClusterAddon` name. |
+| `bootwright_bound_cluster` | The bound `ContainerCluster` name. |
+| `bootwright_hook_outputs_dir` | Controller-local directory the playbook writes its declared `outputs[]` files into. |
+| `bootwright_hook_secrets_dir` | Controller-local directory holding only the hook's declared `secretRefs` (never the whole store). |
+| `bootwright_kubeconfig` | Controller-local path to the bound cluster's kubeconfig. |
+| `bootwright_hook_refs` | JSON: resolved `refKind` input objects keyed by property name (e.g. `exportRef` → the referenced `StorageExport` object), so a play can read `bootwright_hook_refs.exportRef.spec...`. |
+| `bootwright_hook_inputs` | JSON: binding input name → its values map. |
+
+The hook's own `extraVars` map, when set, is appended as one additional JSON `-e`
+value. The outputs directory, secrets directory, and kubeconfig are
+**controller-local** paths, not readable on the target hosts: read and write them
+from `delegate_to: localhost` tasks. That is also how a hook drives the bound
+cluster's API — for example `oc --kubeconfig {{ bootwright_kubeconfig }}` runs on
+the controller.
+
+### Target limit and timeout
+
+`target.limit` selects how the play covers the resolved machines:
+
+- `firstReachable` (default) runs the play against each target host in order,
+  `--limit`ed to one host at a time, and stops at the first host whose run
+  succeeds (the exporter admin-node pattern); it fails only when every host fails.
+- `all` runs one play against every resolved host with no `--limit`.
+
+Each run is bounded by the hook's `timeout` (a Go duration, default `10m`); a run
+that exceeds it is cancelled and the hook fails. Declared `outputs[]` are captured
+from `bootwright_hook_outputs_dir` after the run (secret outputs persisted `0600`
+under the cluster secrets area, non-secret under runtime); see
+`docs/concepts/add-ons.md` for the manifest-token surface that consumes them.
