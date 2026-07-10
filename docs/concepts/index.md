@@ -40,7 +40,7 @@ retired `v1alpha1` shapes — a retired field is rejected, not translated.
 
 ## Object ownership
 
-Each of the eighteen authored kinds owns one slice of operational fact. The
+Each of the twenty-one authored kinds owns one slice of operational fact. The
 links point to the domain page where each kind is documented in full.
 
 | Kind | Owns |

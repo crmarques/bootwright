@@ -19,7 +19,7 @@ publication of fleet content is out of scope for this repository.
 
 ## Operating Model
 
-Operators author desired state as twenty YAML kinds:
+Operators author desired state as twenty-one YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |

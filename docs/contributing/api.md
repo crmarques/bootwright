@@ -31,13 +31,18 @@ behind these extension points, read [Architecture](architecture.md).
 Bootwright is a desired-state loader, validator, renderer, and idempotent apply
 pipeline. The flow is `load and strict decode -> normalize defaults -> validate
 ownership and references -> render effective state and tool inputs -> apply`. A
-new extension almost always touches one or more of these layers:
+new extension almost always touches one or more of these layers and subsystems:
 
 | Layer | Package | What it owns |
 | --- | --- | --- |
 | Desired-state API | `api/v1alpha1` | The typed `bootwright.io/v1alpha1` kinds, their capability arms, and decode-time shape. |
-| Validation and normalization | desired-state validators | Cross-field rules, ownership checks, and normalize-injected defaults. |
+| Validation and normalization | `internal/state` | Cross-field rules, ownership checks, and normalize-injected defaults (its `desired` package). |
+| Cross-kind state | `internal/state` | Stateless views and cross-kind joins (`view`), the multi-kind graph and scoped-apply conflicts (`graph`), example scaffolding (`scaffold`), and non-blocking best-practice advisories (`advice`). |
 | Rendering | the render packages | Turning validated state into installer, provider, and storage CLI inputs. |
+| Entitlements | `internal/entitlements` | Resolving `Entitlement` declarations into subscription, registry-credential, and license references. |
+| Secrets | `internal/secrets` | The context secret store: declared-secret resolution, AES-256-GCM encryption, and generated credentials, certificates, and SSH key pairs. |
+| Storage domain | `internal/storage/{topology,cephprovider,cephstate,cephdiff,cephadopt}` | Ceph resolution and apply-result state: topology and placement (`topology`), package/image/registry source per distribution (`cephprovider`), live read-only observation (`cephstate`), desired-vs-live diff (`cephdiff`), and the `diff --adopt` fold-back (`cephadopt`). |
+| Add-on subsystem | `internal/addons/{plan,render,oc,records,inputs,hooks,nativecatalog}` | Post-install add-on apply: binding/profile expansion and input effects (`plan`, `inputs`), plan and manifest rendering (`render`), the `oc` apply boundary (`oc`), hook helpers (`hooks`), non-secret apply records (`records`), and the built-in catalog plus machine-local store (`nativecatalog`). |
 | Dispatch registry | `internal/roles` | Role names and `RoleContract`s for substrate, BMC, boot, service, and storage work. |
 | Orchestration | `internal/converge/workflow` | The dependency graph, locking, run ledger, and apply/destroy phases. |
 | Execution | `ansible/` (`bootwright.core` collection) | The roles that do per-host work, recording ownership as they mutate. |
@@ -148,11 +153,13 @@ Most read-only verbs must not contact hosts at all. Two deliberate carve-outs:
 
 !!! warning "Honour the existing flag vocabulary"
     Reuse the established narrowing flags rather than inventing parallel ones.
-    `--stage` accepts only `infra` or `clusters`; `--clusters` takes a
-    comma-separated list of `ContainerCluster` *and* `StorageCluster` names from
-    one shared namespace, so each bare name must resolve to exactly one cluster
-    root. A new verb that narrows scope should accept the same flags with the
-    same meaning.
+    `--stage` accepts the two families `infra` and `clusters` and, on `apply`,
+    `plan`, and `state-check`, their five ordered sub-phases (`fabric`,
+    `machines`, `deps`, `base`, `add-ons`); `destroy --stage` takes only the two
+    families. `--clusters` takes a comma-separated list of `ContainerCluster`
+    *and* `StorageCluster` names from one shared namespace, so each bare name must
+    resolve to exactly one cluster root. A new verb that narrows scope should
+    accept the same flags with the same meaning.
 
 The binding rules for the read-only contract — and for every flag a verb may
 accept — are in `specs/state-model.md` (CLI Contract). New verbs are expected to

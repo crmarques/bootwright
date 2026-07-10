@@ -40,7 +40,7 @@ machines. To bound blast radius:
 - The playbook and vendored directories are relative paths contained within the
   object's file directory (no absolute paths, `..`, or symlinks) — the
   `ClusterAddon` `manifestSet.path` rules.
-- `secretRefs` resolve against `Environment.spec.secrets` and are read by the
+- `secretRefs` resolve against declared `Secret` objects and are read by the
   playbook from `{{ bootwright_secrets_dir }}/<name>`; secret values never reach
   the command line.
 

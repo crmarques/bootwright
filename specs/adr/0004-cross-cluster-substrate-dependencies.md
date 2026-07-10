@@ -26,8 +26,8 @@ The KubeVirt `InfraProvider` sets exactly one host reference, alongside its
 `machineProfiles[]`:
 
 - `hostClusterRef` for a Bootwright-managed `ContainerCluster`
-- `kubeconfigRef` for an external virtualization cluster kubeconfig declared in
-  `Environment.spec.secrets`
+- `kubeconfigRef` for an external virtualization cluster kubeconfig, resolved
+  from a declared `Secret` object
 
 Virtualization-cluster capabilities are advertised by `ClusterAddon.spec.provides`
 (accepted values have since grown to `kubevirt`, `dataFoundation`, and `nmstate`).

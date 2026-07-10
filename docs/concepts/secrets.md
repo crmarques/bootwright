@@ -338,7 +338,7 @@ referenced by name from storage and OS install inputs — for example
 `StorageCluster.spec.ceph.entitlementRef` names one. `metadata.name` and
 `spec.type` are always required; `spec.type` is the discriminator, and the
 `rhsm`, `registry`, `license`, and `rhelEntitlementRef` arms become required per
-type. The secrets it names live on `Environment.spec.secrets`.
+type. The secrets it names are declared as first-class `Secret` objects.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |

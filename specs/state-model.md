@@ -1,7 +1,7 @@
 # Desired-State Model
 
 Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and
-twenty user-authored kinds. The schema intentionally tracks the inputs
+twenty-one user-authored kinds. The schema intentionally tracks the inputs
 consumed by `openshift-install` for agent installs, Bootwright-managed machine
 OS installation, and cephadm for external Ceph storage.
 
@@ -10,7 +10,7 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Kinds
 
-The twenty kinds and the fact each owns are listed in `domain.md` (Operating
+The twenty-one kinds and the fact each owns are listed in `domain.md` (Operating
 Model). This document specifies each kind's fields, validation, and the CLI
 contract.
 
@@ -637,6 +637,17 @@ Rules:
   or images.
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
+- `cephadm.clusterSSHKeyRef`, when set, names the `sshKeyPair` `Secret` that
+  becomes cephadm's own cluster management identity — the key Bootwright
+  authorizes on, and cephadm distributes to and uses to reach, every host. It is
+  independent of each `Machine`'s `access.ssh.keyRef` (how Bootwright connects to
+  run the install phase) and must resolve to a declared `sshKeyPair` `Secret`.
+  Omitted, the cluster SSH identity defaults to the first topology host's
+  `access.ssh` key, which requires every node to share that one access key.
+- `cephadm.clusterSSHUser` is the OS user cephadm manages every host as (`cephadm
+  --ssh-user`) and must exist on every topology host. It defaults to `root` when
+  `clusterSSHKeyRef` is set, and is ignored — the first host's `access.ssh` user
+  is used — when `clusterSSHKeyRef` is omitted.
 - `cephadm.bootstrap.host` names a storage topology host. The rendered
   cephadm `--mon-ip` is always an address of this host: the address named by
   `bootstrap.addressRef`, defaulting to `cephadm.addressRef` and finally the
@@ -1105,7 +1116,9 @@ Rules:
 - `spec.playbook` is required, a `.yml`/`.yaml` file path relative to the
   `ProvisioningPlaybook` file, contained within its directory (no absolute paths,
   `..`, or symlinks) — the `ClusterAddon` `manifestSet.path` rules. `rolesPath`
-  and `collectionsPath` are optional relative directories under the same rules.
+  and `collectionsPath` are optional relative directories under the same rules,
+  and must not be named `vendor` or `node_modules` (directories `context init`'s
+  tree copy skips, so the vendored content would silently vanish).
 - Operator Ansible content lives under `playbooks/`, `roles/`, and `collections/`
   directories; the loader skips those subtrees (they are Ansible content, not
   authored Bootwright objects) while `context init` still copies them so
@@ -1116,9 +1129,9 @@ Rules:
   its storage group), `machines` (a `Machine` → its node inventory host(s)), or
   `hostGroups` (raw inventory group names). These are selection lists, not
   references. A target may not name the bootwright controller / localhost
-  (`localhost`, `bootwright_ocp_hosts`, `bootwright_controller_hosts`): a
-  controller-targeted playbook would run operator code as root over every
-  context's secrets.
+  (`localhost`, `127.0.0.1`, `bootwright_ocp_hosts`,
+  `bootwright_controller_hosts`): a controller-targeted playbook would run
+  operator code as root over every context's secrets.
 - `spec.provides`/`spec.requires` order playbooks within the same
   `(stage, timing)` bucket: every `requires` must be met by another enabled
   playbook's `provides` in the same bucket, `provides` are unique, and the graph

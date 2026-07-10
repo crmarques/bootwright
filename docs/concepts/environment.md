@@ -164,8 +164,8 @@ arms become required per type (see [Required arms](#required-arms)). It is
 referenced by name from `StorageCluster.spec.ceph.entitlementRef`,
 `MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN.entitlementRef`,
 and — for `ibm-storage-ceph` — from another entitlement's
-`spec.rhelEntitlementRef`. The secrets it names live on
-`Environment.spec.secrets`.
+`spec.rhelEntitlementRef`. The secrets it names are declared as first-class
+`Secret` objects.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
