@@ -26,3 +26,9 @@ changes, also run the checks from `definition-stewardship`.
 - If `make check-fast` cannot run or fails, report the blocker instead of a
   successful handoff.
 - Report any validation command that could not be run, including the reason.
+- When validating behavior by running `bootwright`, use the repo-built binary
+  (`make build`, then `./bin/bootwright`), not whatever is on `PATH`: the
+  installed binary lags `main`, and its strict loader rejects newer schema
+  (a stale binary fails on inputs that use fields it does not yet know, such
+  as a `required` marker), producing a false negative that is not a real
+  defect.

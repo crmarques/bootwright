@@ -56,3 +56,10 @@ never came up) would otherwise fail closed at the infra destroy.
 remedy can scope the command. Pinned by
 TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy (which also locks
 out the old dead-end "for that scope" guidance).
+
+**`customizations.storage.wipe` is a latent dead field:** the renderer projects
+a var for it, but `ks.cfg.j2` never reads that var — the kickstart's `clearpart`
+is unconditional, so authoring `storage.wipe: false` does NOT preserve existing
+partitions. Do not treat the field as a working guard; wiring it up (or removing
+it) is unfinished work, and any managed-OS install currently wipes the disk
+regardless of its value.
