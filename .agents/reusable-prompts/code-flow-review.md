@@ -1,16 +1,22 @@
 # Full Flow Bug and Intent Drift Review
 
 You are a senior engineer reviewing **Bootwright**, a desired-state orchestrator
-for OpenShift and OKD cluster provisioning. Start from user-authored input files
-and trace the whole implementation path to the final user-visible and
-machine-consumed output, finding bugs, unimplemented intent, spec drift, stale
-assumptions, unsafe side effects, and Go↔Ansible contract mismatches.
+that converges versioned YAML into OpenShift, OKD, and Ceph fleets — machines and
+managed machine-OS installs, shared infrastructure services, OpenShift or OKD
+container clusters, Ceph storage clusters, exported storage surfaces, and
+cluster-bound bootstrap add-ons. Start from user-authored input files and trace the
+whole implementation path to the final user-visible and machine-consumed output,
+finding bugs, unimplemented intent, spec drift, stale assumptions, unsafe side
+effects, and Go↔Ansible contract mismatches.
 
 This is the **dynamic end-to-end pass**: does the real flow turn real input into
 correct output? For static implementation quality use `code-review.md`; for a deep
 security pass `security-audit.md`; for package boundaries `architecture.md`; for
-schema/UX `specs-ux.md`. Every finding here should name the smallest safe fix, the
-tests that prove it, and the files likely touched.
+schema/UX `specs-ux.md`; for provisioning-execution depth
+`provisioning-logic-review.md`; for idempotency and destructive-safety
+`idempotency-safety-audit.md`; for lifecycle transitions across many scenarios
+`state-lifecycle-scenario-review.md`. Every finding here should name the smallest
+safe fix, the tests that prove it, and the files likely touched.
 
 Review-only by default — do not edit unless the user asks you to fix findings now.
 Do not run `make check` while reviewing; use targeted read-only commands
@@ -21,25 +27,27 @@ fixes in a temporary worktree and run `make check-fast` after the edit set.
 ## Input and the Example Baseline
 
 The user should provide one or more of: desired-state files or directories; an
-example, fixture, or import source; a command flow (`preflight`, `render`,
-`apply --stage infra|clusters`); or the expected intent / final output to verify.
-If the starting point is missing, infer a narrow scope from the conversation or ask
-one blocking question — do not invent a scenario when the review depends on
-concrete input.
+example, fixture, or import source; a command flow (`validate`, `preflight all`,
+`render effective|installer|storage`, `plan`, `diff`, `apply --stage infra|clusters`);
+or the expected intent / final output to verify. If the starting point is missing,
+infer a narrow scope from the conversation or ask one blocking question — do not
+invent a scenario when the review depends on concrete input.
 
 Regardless of how narrow the request is, the **full `examples/` set is the
 mandatory drift and regression baseline**. Enumerate every example directory and
 every YAML input, and for each build an inventory: input files and authored kinds;
 the effective resource selection on `Environment` and any files intentionally
-excluded from decoding (e.g. manifest-set payloads); selected container clusters,
-storage clusters, add-on bindings, providers, machines, network configs, infra
-components, storage objects, and add-ons; and the command flows the example
+excluded from decoding (e.g. `ClusterAddon` manifest-set payloads); selected
+entitlements, secrets, machines (with images and install profiles), network configs,
+infra providers and components, container clusters, storage clusters (with pools,
+filesystems, object gateways, NFS/exports, placement policies), add-ons (catalog,
+bindings, profiles), and provisioning playbooks; and the command flows the example
 represents (`validate`, `preflight all`, `render effective|installer|storage`,
-`apply --stage infra|clusters`, full `apply`, and relevant destroy/status/access).
-Mentally execute every represented flow to its final side effect, and compare
-examples against each other to surface stale patterns, duplicated flow logic,
-provider leaks, and missing coverage. Use the requested input as the primary focus,
-but never sample one happy path and generalize.
+`plan`, `diff`, `apply --stage infra|clusters`, full `apply`, and relevant
+destroy/status/cluster access). Mentally execute every represented flow to its final
+side effect, and compare examples against each other to surface stale patterns,
+duplicated flow logic, provider leaks, and missing coverage. Use the requested input
+as the primary focus, but never sample one happy path and generalize.
 
 ## The Two Tests Every Finding Must Pass
 
@@ -90,10 +98,19 @@ drive official tools, secrets, output routing, clean-break `v1alpha1`, definitio
 verify their current form in `specs/`. Prompt-specific additions:
 
 - **One owner per fact.** Do not patch drift by duplicating a fact across layers.
-- **State checking.** A well-named command must let the operator compare selected
-  desired state with the recorded last apply without mutation. Trace both `--override` and
-  no-override behavior where supported; override must not make this read-only
-  check mutate or hide drift.
+- **State checking.** `diff` is the non-mutating desired-vs-real check: live by
+  default, `--recorded` compares against the last recorded apply offline, `--adopt`
+  folds discovered live state back into desired YAML, and `--stage`/`--through`/
+  `--clusters` scope it. Trace that no diff mode mutates cluster state except the
+  explicit `--adopt` YAML/history write, and that it neither explodes an absent root
+  into noisy child diffs nor hides missing/undeclared live resources once the root
+  exists.
+- **Override pair.** `--override` on `apply`/`destroy` authorizes Bootwright-owned
+  destructive rebuilds (drifted-owned rebuild, managed-OS reinstall, owned-Ceph
+  wipe-and-rebuild, protected destroy); `--allow-destroy` and `--skip-unreachable`
+  gate the data-loss cases, `--expect-new` is its greenfield opposite. Confirm
+  override never touches foreign objects, skips objects already matching desired
+  state, and never turns a read-only inspect into a mutation.
 - **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
   rendering, storage intent, planning, locking, ledgers, status, orchestration;
   Ansible executes configuration and installation on the bastion and targets.
@@ -119,13 +136,16 @@ Walk each reviewed flow in order, then record it in the matrix below:
 7. **Planning and orchestration.** Verify task-graph dependencies, scopes,
    concurrency locks, install records, apply ledgers, leases, and status data.
 8. **Desired-vs-real state check.** If the flow includes state inspection, trace
-   the non-mutating command that compares desired and real state. Confirm it
-   reports absent selected roots succinctly, but reports granular drift when roots
-   exist, such as missing declared resources or undeclared live Ceph pools,
-   add-ons, VMs, services, endpoints, or storage exports.
-9. **Override pair.** For commands accepting `--override`, trace the same scenario
-   with and without it. Confirm only the documented unsafe-mismatch behavior
-   changes, and no read-only flow mutates or suppresses drift.
+   `diff` (live, `--recorded`, and `--adopt`) — the non-mutating command that
+   compares desired and real state. Confirm it reports absent selected roots
+   succinctly, but reports granular drift when roots exist, such as missing declared
+   resources or undeclared live Ceph pools, add-ons, VMs, services, endpoints, or
+   storage exports; and that only `--adopt` writes (to desired YAML plus history).
+9. **Override pair.** For `apply`/`destroy` accepting `--override` (and the
+   `--allow-destroy`/`--skip-unreachable`/`--expect-new` gates), trace the same
+   scenario with and without it. Confirm only the documented unsafe-mismatch
+   behavior changes, override skips already-matching and foreign objects, and no
+   read-only flow mutates or suppresses drift.
 10. **Go↔Ansible contract.** Check every var, generated path, inventory group, host
    target, role input, and expected output Ansible consumes.
 11. **Ansible execution.** Review playbooks, roles, tasks, handlers, templates,
