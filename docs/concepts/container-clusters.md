@@ -75,9 +75,11 @@ spec:
 | `distribution.release.channel` | No | — | Optional release channel for the OpenShift release path. |
 | `distribution.release.image` | No | — | Explicit release image (the OKD / pinned-install path). |
 
-`version` and `channel` drive the OpenShift release feed; `image` is the
-explicit-image path and is the usual way to pin a release or install OKD without
-a channel feed.
+A release is pinned by `version` (or `image`); `channel` is recorded metadata
+that does not by itself select a release, so authoring `channel` without
+`version` pins nothing. `image` is the explicit-image path and is the usual way
+to pin a release or install OKD. `channel` is rejected for
+`distribution.type: okd`.
 
 !!! warning "Release fields are install-time intent, not a day-2 upgrade"
     `distribution.release.*` selects what bootwright installs. Editing it on an

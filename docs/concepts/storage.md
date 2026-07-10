@@ -151,7 +151,7 @@ Distribution requirements:
 | `monitoring.grafana` | No | — | Per-service tuning; placement derives from the `grafana` role. |
 | `monitoring.alertmanager` | No | — | Per-service tuning; placement derives from the `alertmanager` role. |
 | `monitoring.nodeExporter` | No | every host (cephadm behavior) | node-exporter has no topology role; an authored block narrows by explicit placement only. |
-| `monitoring.loki` | No | — | Centralized-logging aggregator (`service_type: loki`); role-less, placement authored explicitly. Authoring it also wires the dashboard (`ceph dashboard set-loki-api-host`). `retentionTime` applies here. |
+| `monitoring.loki` | No | — | Centralized-logging aggregator (`service_type: loki`); role-less, placement authored explicitly. cephadm provisions Grafana's Loki datasource itself; no dashboard mgr command is emitted. `retentionTime`/`retentionSize` do not apply (cephadm's `MonitoringSpec` rejects them). |
 | `monitoring.promtail` | No | — | Log shipper (`service_type: promtail`); role-less. Ships to loki, so it has no dashboard wiring. |
 
 !!! note "Absent versus present"
@@ -167,8 +167,8 @@ Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
 | --- | --- | --- | --- |
 | `placement` | No | every host carrying the service's role | See [Shared placement](#shared-placement). |
 | `port` | No | cephadm default | Service port. |
-| `retentionTime` | No | cephadm default | Retention time (applies to Prometheus and Loki). |
-| `retentionSize` | No | cephadm default | Retention size (applies to Prometheus). |
+| `retentionTime` | No | cephadm default | Retention time (Prometheus only; `retention_time`/`retention_size` exist only on cephadm's `PrometheusSpec`, and every other monitoring service rejects the keys). |
+| `retentionSize` | No | cephadm default | Retention size (Prometheus only). |
 | `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
 
 ### Passthrough services

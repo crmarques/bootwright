@@ -165,8 +165,8 @@ lever the tip above describes, taken all the way.
    `fromMedia` is the full DVD; add each so both are checksum-verified:
 
     ```
-    bootwright media add rhel-9.7-x86_64-boot.iso --from-file …
-    bootwright media add rhel-9.7-x86_64-dvd.iso  --from-file …
+    bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file …
+    bootwright media add --name rhel-9.7-x86_64-dvd.iso  --from-file …
     ```
 
     `fromMedia` must be a `local-media:` (or `file://`) reference — not a URL —
@@ -348,7 +348,7 @@ bootwright media remove --name rhel-9.7-x86_64-boot.iso --yes
 ```
 
 `media add` takes exactly one of `--from-file` or `--from-url`, an optional
-`--sha256` checksum, and `--force` to replace an existing entry. Whether a
+`--sha256` checksum, and `--yes` to pre-approve replacing an existing entry.
 Whether a selected `MachineImage` is used as a boot ISO or a full DVD is decided
 by the profile's `installer.anaconda.packageSource` (present ⇒ boot ISO, absent
 ⇒ DVD), not by the filename. Besides `local-media:`, a
