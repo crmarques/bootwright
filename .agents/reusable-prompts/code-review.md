@@ -1,20 +1,26 @@
 # Code and Scripts Audit and Improvement Plan
 
 You are a senior engineer auditing **Bootwright**, a desired-state orchestrator
-that provisions fleets of OpenShift and OKD clusters — primarily Go with embedded
-Ansible and supporting scripts. Review the current implementation and produce a
-practical, prioritized fix plan grounded in the evidence you find. The deliverable
-**is** the audit report and plan, not a plan for how to review.
+that converges machines, managed machine OS installs, shared infrastructure
+services, OpenShift/OKD clusters, Ceph storage clusters, and cluster-bound
+bootstrap add-ons — primarily Go with an embedded Ansible collection, an
+embedded add-on catalog, and Python tooling scripts. Review the current
+implementation and produce a practical, prioritized fix plan grounded in the
+evidence you find. The deliverable **is** the audit report and plan, not a plan
+for how to review.
 
 Non-mutating by default: inspect files, run safe read-only checks, gather
 evidence. Do not edit implementation files unless the user explicitly asks for a
 follow-up fix slice (see *Edit Mode*).
 
 This prompt owns **implementation quality and safety**: correctness, dead code,
-duplication, error handling, shell/Ansible/CI safety, security, supply chain,
-naming-as-code-quality, and test gaps. For architecture/package-boundary redesign
-use `architecture.md`; for schema or user-facing UX use `specs-ux.md` or
-`cli-schema-ux-rethink.md`. Out of scope here: broad architecture redesign, schema
+duplication, error handling, shell/Python/Ansible/CI safety, security, supply
+chain, naming-as-code-quality, and test gaps. Sibling prompts own the deeper
+single-topic passes: `architecture.md` (package boundaries and redesign),
+`security-audit.md` (dedicated security audit), `idempotency-safety-audit.md`
+(idempotency and destructive-safety depth), `state-lifecycle-scenario-review.md`
+(lifecycle scenarios), and `specs-ux.md` / `cli-schema-ux-rethink.md` (schema
+and user-facing UX). Out of scope here: broad architecture redesign, schema
 changes, large rewrites, and dependency churn.
 
 Weight findings across implementation quality, surface hygiene (dead/duplicated
@@ -52,16 +58,20 @@ expanding scope:
    `domain.md`, `architecture.md`, `state-model.md`, `security.md`.
 3. Project-local skills when they apply: `.agents/skills/code-quality/`,
    `.agents/skills/security-analysis/`, `.agents/skills/repo-stewardship/`.
-4. The repo tree and package structure, then representative Go packages, Ansible
-   roles/playbooks, scripts, Makefiles, CI workflows, examples, and tests in scope.
+4. The repo tree and package structure, then representative Go packages
+   (`cmd/`, `api/v1alpha1/`, `internal/`), the embedded Ansible collection
+   (`ansible/collections/`), the embedded add-on catalog (`add-ons/`), Python
+   scripts (`scripts/`), the Makefile, CI workflows (`.github/workflows/`),
+   examples, and tests in scope.
 
 ```bash
 git status --short
 rg --files
-rg -n '<suspect-symbol>|<domain-rule>|<duplicated-branch>' internal api ansible scripts specs test
-go list ./... ; go test ./... ; go vet ./... ; gofmt -l .
-shellcheck scripts/* test/**/*.sh        # when available
-ansible-lint ; ansible-playbook --syntax-check <playbook>   # when available
+rg -n '<suspect-symbol>|<domain-rule>|<duplicated-branch>' add-ons api cmd internal ansible scripts specs docs examples test
+make check-fast   # repo gate: bundle sync, file sizes, gofmt, stale terms, pins, shellcheck, go test
+go vet ./... ; make staticcheck ; make python-test
+make ansible-syntax-check ; make ansible-lint-check   # when the tools are available
+make build ; bin/bootwright <cmd>   # behavioral probes — PATH binaries lag this tree
 ```
 
 When a check needs mutation, missing tools, network, or unavailable infrastructure,
@@ -73,10 +83,13 @@ Apply the Core Invariants in `/AGENTS.md` (scope, provider neutrality, product A
 drive official tools, secrets, output routing, clean-break `v1alpha1`, definitions);
 verify their current form in `specs/`. Prompt-specific addition:
 
-- **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
+- **Executor split.** Go owns CLI, input loading/validation, normalization,
   rendering, storage intent, task planning, locking, ledgers, status, and
-  orchestration. Ansible executes configuration and installation on the bastion and
-  target hosts/clusters. Confirm the spec's exact wording before relying on it.
+  orchestration. Host and bastion mutations execute in Ansible;
+  installed-cluster API operations execute in Go through the `oc` boundary
+  (`internal/addons/oc`); the `openshift-install` agent run stays in Ansible.
+  New cluster-scoped executors follow this split instead of re-deciding it.
+  Confirm the exact wording in `specs/architecture.md` before relying on it.
 
 ## Priority Order
 
@@ -104,13 +117,15 @@ normal paths; global mutable state that blocks tests or concurrency; unsafe path
 joins, temp-file handling, cleanup, or permissions; shell invocation where direct
 `exec.Command` args are safer; missing context/cancellation/timeout; resource
 leaks and misplaced `defer`; CLI commands embedding domain logic that belongs in
-loaders, renderers, orchestrators, or roles; missing or poorly named non-mutating
-desired-vs-real state-check command; `--override` changing more than the narrow
+loaders, renderers, orchestrators, or roles; non-mutating surfaces (`validate`,
+`preflight`, `plan`, `diff`, `status`) drifting from the selected graph that
+apply/destroy actually load; `--override` changing more than the narrow
 documented safety barrier; tests needing real infrastructure where a fake would
 prove the behavior.
 
-**Go↔Ansible drift.** Go directly configuring or installing on hosts/clusters
-instead of rendering intent and orchestrating; Ansible making CLI, validation,
+**Go↔Ansible drift.** Go mutating hosts or the bastion directly instead of
+rendering intent and orchestrating; installed-cluster API calls bypassing the
+`internal/addons/oc` boundary; Ansible making CLI, validation,
 desired-state-ownership, rendering, storage-intent, planning, locking, or status
 decisions. A fact computed in a role that the renderer could have written into vars
 is a leak. Per drift: current owner, correct owner, the boundary contract, and the
@@ -127,7 +142,12 @@ environment-specific paths/users/hosts; targets not `.PHONY` or doing more than
 their name implies; destructive targets without scoping; unpinned actions, images,
 tools, or versions; CI that skips relevant checks or has no offline path. Do not
 recommend `set -euo pipefail` mechanically — name the failure mode it prevents and
-the conditionals that need care.
+the conditionals that need care. The `scripts/` tree is Python (bundle sync and
+collection verification, unit-tested via `make python-test`); apply the same
+lenses there — swallowed exceptions, unsafe temp/path handling, platform
+assumptions, drift between script behavior and its tests. Authored shell lives
+in Ansible role files and Make recipes; `make shellcheck-check` discovers it by
+shebang under `ansible/` and `scripts/`.
 
 **Ansible.** Non-idempotent tasks; shell/command where a module fits, or without
 intentional `changed_when`/`failed_when`; missing `no_log` for sensitive values;
@@ -137,6 +157,15 @@ handlers that fire unpredictably; roles blurring provider, shared-service,
 cluster-infra, or OpenShift responsibilities; unused or duplicated roles/tasks/
 vars/templates that should be deleted or centralized.
 
+**Add-on catalog and hooks.** The embedded catalog (`add-ons/catalog.yaml`,
+per-add-on `add-on.yaml`, hook playbooks and manifests) ships content that
+`add-ons add` snapshots into the root-owned store under `/var/lib/bootwright`
+and that hook execution applies to installed clusters. Audit loader strictness
+against store snapshots, required/optional input handling, digest coverage of
+everything that changes hook behavior (inputs, extra vars, manifests, outputs),
+manifest templating boundaries, workspace lifecycle and cleanup on failure, and
+parity between catalog entries and the examples that consume them.
+
 **Security and supply chain.** Committed secrets or examples teaching unsafe secret
 placement; command injection and unsafe templating; path traversal and unsafe
 archive extraction; world-readable sensitive runtime material; TLS verification
@@ -145,16 +174,23 @@ checksum/version/digest pinning; mutable image tags (`latest`); excessive
 privilege, sudo, service-account scope, or BMC access; logs/errors/telemetry
 leaking private host data or secret material; stale security-sensitive paths
 (privilege, redaction, command exec, TLS, secret handling) that can diverge from
-the maintained path. Report only what code evidence supports.
+the maintained path. Treat the embedded add-on catalog and its store snapshots as
+supply-chain surface: what guarantees integrity between the catalog, the
+registered store copy, and the manifests and playbooks applied to clusters.
+Report only what code evidence supports.
 
-**State-check implementation.** Audit whether implementation code gives users a
-safe way to ask "does selected desired state match the recorded last apply?" without
-mutation. The command must have a clear name, load the same selected graph as
-apply/destroy, read the recorded last-apply evidence safely, report root absence succinctly, and report
-granular drift when roots exist, including missing declared resources and
-undeclared live resources such as Ceph pools, filesystems, gateways, add-ons, VMs,
-services, endpoints, or storage exports. Check text and JSON output, exit codes,
-permission/root behavior, and behavior with and without `--override`.
+**State-check implementation.** Audit the non-mutating desired-vs-real surfaces:
+`plan` (preview without contacting anything), `preflight` (live, read-only
+readiness), `status` (recorded run/ledger view plus next step), and `diff` —
+live comparison by default, `--recorded` for the offline last-apply view,
+`--adopt` folding live reality back into desired YAML. Each must load the same
+selected graph as apply/destroy, read recorded evidence safely, report root
+absence succinctly, and report granular drift when roots exist, including
+missing declared resources and undeclared live resources such as Ceph pools,
+filesystems, gateways, add-ons, VMs, services, endpoints, or storage exports.
+Check text and JSON output, drift exit codes, permission/root behavior, behavior
+with and without `--override`, and that no probe or `--adopt` path mutates a
+live system.
 
 **Duplication and dead code.** One domain rule in multiple packages or roles; one
 concept as several types/structs/helpers, or several names; one name reused for
@@ -223,12 +259,14 @@ reason.
 
 ## Edit Mode (only if the user explicitly requests fixes)
 
-Confirm the selected plan slice and affected files first (unless given). Keep
-changes small and behavior-preserving unless fixing a proven bug. Delete confirmed
-dead code rather than parking it behind comments; route confirmed duplication
-through one domain-owned component and update callers; add or adjust focused tests
-for changed behavior. Run the repo's validation skills (including implementation
-validation) before finishing and report any that could not run. Summarize only:
-changes made, files changed, checks run, remaining follow-ups. Do not invent facts,
-redesign architecture, change behavior beyond the fix, add dependencies, remove
-functionality, hide errors, weaken security, or print secrets.
+Confirm the selected plan slice and affected files first (unless given). Follow
+the `implementation-worktree` skill: edit only in a temporary branch and worktree
+created from local `main`. Keep changes small and behavior-preserving unless
+fixing a proven bug. Delete confirmed dead code rather than parking it behind
+comments; route confirmed duplication through one domain-owned component and
+update callers; add or adjust focused tests for changed behavior. Run the repo's
+validation skills (including implementation validation) before finishing and
+report any that could not run. Summarize only: changes made, files changed,
+checks run, remaining follow-ups. Do not invent facts, redesign architecture,
+change behavior beyond the fix, add dependencies, remove functionality, hide
+errors, weaken security, or print secrets.
