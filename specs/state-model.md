@@ -567,8 +567,11 @@ Rules:
 - `spec.install.servingCertificates`, when set, supplies cluster serving
   certificates: `apiServer.namedCertificates[]` (each with `names[]` and a
   `secretRef`) and `ingress.defaultCertificateRef`.
-- `spec.hosts[].role` accepts `master` or `worker`; a cluster requires at least
-  one `master` node.
+- `spec.hosts[].role` accepts `master`, `worker`, or `infra`; a cluster
+  requires at least one `master` node. `infra` is an authoring-only role:
+  OpenShift has no install-time infra role, so an infra host installs as a
+  worker and is promoted day-2 with the `node-role.kubernetes.io/infra`
+  label, a `NoSchedule` taint, and the infra MachineConfigPool.
 - `spec.controlPlane.replicas`, when set, must equal the number of `master`
   nodes. `spec.compute[]` declare worker machine pools; their summed `replicas`
   must equal the number of `worker` nodes. A single all-`master` topology omits
@@ -711,11 +714,14 @@ Rules:
   validation rejects a host claimed by both a fleet and a per-host
   `osd`/`devices`, or by two fleets.
   `hostname` is the rendered cephadm host-spec
-  hostname; it defaults to the `machineRef` name and is authored only when the
-  Ceph hostname genuinely differs from the Machine name. It is rendered
+  hostname; it defaults to the FQDN
+  `<machineRef>.<cluster>.<baseDomain>` (falling back to the bare
+  `machineRef` name when the `Environment` has no `baseDomain` or the node
+  opts out of FQDN naming) and is authored only when the
+  Ceph hostname genuinely differs from the default. It is rendered
   verbatim as the cephadm host identity and must equal the host's real OS
   hostname — self-fulfilling for Bootwright-installed machines (the installer
-  sets the OS hostname to the `Machine` name), operator-guaranteed for
+  sets the OS hostname to the same default), operator-guaranteed for
   `os.provided` machines; a mismatch passes `validate` but fails the storage
   node preflight, which asserts each node's real hostname against the declared
   topology hostname. Hostnames must be

@@ -31,6 +31,14 @@ Work must happen in a temporary branch and worktree, never directly in the prima
 - Implement only inside the worktree. Use the primary `main` worktree for
   read-only inspection until the user explicitly approves merge.
 - Never stash, reset, force-update, or commit unrelated user changes.
+- A shell's working directory does not reliably persist into the temporary
+  worktree between commands; drive tools with explicit `-C` flags
+  (`go -C`, `git -C`, `make -C`) or per-command absolute paths, or tests can
+  pass vacuously against the wrong tree.
+- `/tmp/bootwright-worktrees` does not survive a reboot or session loss:
+  commit every coherent edit set on the temporary branch as you go (the
+  branch lives in the main repository), and re-verify the worktree path
+  exists before resuming work in a later session.
 
 ## Parallel Workers
 

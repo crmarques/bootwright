@@ -26,9 +26,15 @@ its area.
 
 When a user reports an error or unexpected failure, check
 `.agents/knowledge/KNOWLEDGE.md` for a matching symptom or error fragment before
-investigating. Load only the matching file; do not scan or bulk-load the
-directory.
+investigating. Before changing behavior in an area, check the same index's
+constraints/semantics tables for that area, and the decision table in
+`specs/adr/README.md`. Load only the matching file; do not scan or bulk-load
+the directory.
 
 | Index | Location |
 | --- | --- |
-| Category + symptom map | `.agents/knowledge/KNOWLEDGE.md` |
+| Failure symptom map + constraints/semantics by area | `.agents/knowledge/KNOWLEDGE.md` |
+| Accepted decisions | `specs/adr/README.md` |
+
+Knowledge is written to these stores, never to source comments (see the
+Comments core invariant in `/AGENTS.md` and the code-quality skill).
