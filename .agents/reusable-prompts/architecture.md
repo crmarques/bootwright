@@ -1,9 +1,10 @@
 # Architecture Audit and Revision Plan
 
 You are an experienced software architect rethinking **Bootwright**, a
-desired-state orchestrator that provisions fleets of OpenShift and OKD clusters
-from bare or virtualized substrates to installed clusters. It is Go with embedded
-Ansible.
+desired-state orchestrator that converges fleets from bare or virtualized
+substrates through machines, managed machine OS installs, shared infrastructure
+services, OpenShift/OKD container clusters, Ceph storage clusters, and
+cluster-bound add-ons. It is Go with embedded Ansible.
 
 Your job is to **rethink the architecture** — make it more coherent, testable,
 operationally predictable, easier to evolve, and easier for a newcomer to learn.
@@ -52,13 +53,17 @@ substrates evolve. Read until you have enough, then stop:
    with `domain.md`, `architecture.md`, `state-model.md`.
 3. `specs/adr/` and its README index — accepted decisions. Note which are
    load-bearing for the current layout and which are historical.
-4. Repo tree and Go package inventory: directory layout under `cmd/`, `internal/`,
-   `api/`, and the embedded Ansible collection; package names, import direction,
-   and the files defining each public responsibility. Map packages to the
-   desired-state pipeline before judging whether the layout is learnable.
+4. Repo tree and Go package inventory: directory layout under `cmd/`,
+   `internal/`, `api/`, the embedded Ansible collection under
+   `ansible/collections/`, and the versioned add-on catalog under `add-ons/`;
+   package names, import direction, and the files defining each public
+   responsibility. Map packages to the desired-state pipeline before judging
+   whether the layout is learnable.
 5. Script, test, fixture, example, generated-output, and tooling directories —
    separate product code, operational automation, dev tooling, test assets,
-   generated fixtures, and user-facing examples.
+   generated fixtures, and user-facing examples. Generated outputs (`site/`,
+   `bin/`, `.state/`, the embedded `ansible_bundle.zip`) are gitignored; judge
+   only authored content.
 6. `docs/` and root `README.md` — what the project teaches.
 7. Sample one or two roles/playbooks per layer to confirm description matches
    reality. Do not bulk-read.
@@ -80,10 +85,12 @@ verify their current form in `specs/`. Architecture-specific addition:
 
 - **Go↔Ansible split.** Go owns the control plane — CLI, input loading,
   validation, normalization, rendering, storage intent, task planning,
-  orchestration, status, ledgers. Ansible executes configuration and installation
-  on the bastion and target hosts or clusters. Go renders the contract and
-  orchestrates; Ansible performs the mutations. Confirm the current spec's exact
-  wording of this split rather than assuming it.
+  orchestration, status, ledgers. Host and bastion mutations execute in Ansible;
+  installed-cluster API operations execute in Go through the `oc` command
+  boundary (`internal/addons/oc`); the `openshift-install` agent run stays in
+  Ansible because it is entangled with bastion machine state. Confirm the
+  current spec's exact wording of this split in `specs/architecture.md` rather
+  than assuming it.
 
 ## Provocations
 
@@ -104,31 +111,44 @@ Provider-specific logic belongs behind explicit interfaces — find substrate
 knowledge in cross-cutting code that has no business knowing the substrate.
 
 **Schema as architecture.** For each kind, ask "what breaks if we collapse this
-into the layer above or below?" — if nothing important, propose the collapse. If
-the API exposes a single-source-of-truth registry of owned installer fields, trace
-whether validator, renderer, docs, and scaffolder all read from it; duplication is
-a finding. Pick a new managed service (e.g. NTP, image cache) and count the files
-an honest engineer must edit to add it — if more than a handful and the steps are
-not orthogonal, the abstraction is wrong; name the missing seam.
+into the layer above or below?" — if nothing important, propose the collapse.
+Trace whether validator, renderer, docs, and scaffolder all read the
+owned-installer-fields registry (`api/v1alpha1/owned_installer_fields.go`);
+duplication is a finding. Pick a new managed service (e.g. a syslog relay or an
+object cache) and count the files an honest engineer must edit to add it — if
+more than a handful and the steps are not orthogonal, the abstraction is wrong;
+name the missing seam.
 
 **Go layout.** Is each `internal/<pkg>/` a noun with one job or a grab bag? Can a
 developer predict where to add a kind, validator rule, renderer field, provider
 adapter, CLI command, or runtime workflow from package names alone? Check
 dependency direction for upward-leaning imports; the API/types package must be a
-leaf. Are `os/exec`, filesystem writes, and network reaches behind contracts tests
-can substitute, and is that boundary actually used as one? If the repo enforces a
-per-file size guardrail, check whether it still bites or has been quietly relaxed.
+leaf — the fitness tests in `internal/repo/checks/` (`import_matrix_test.go`,
+`exec_boundary_test.go`, `workflow_engine_boundary_test.go`) encode the accepted
+matrix; check they still match the spec, not just each other. Are `os/exec`,
+filesystem writes, and network reaches behind the `internal/host/*` contracts
+tests can substitute, and is that boundary actually used as one? The add-on
+subsystem (`internal/addons/*` plus the versioned catalog under `add-ons/` and
+the `/var/lib/bootwright/add-ons` store) and the Ceph family
+(`internal/storage/ceph*`, `internal/render/ceph`) have grown into multi-package
+subsystems — ask whether each subpackage still owns one thing or whether a
+second orchestrator is emerging. If the repo enforces a per-file size guardrail,
+check whether it still bites or has been quietly relaxed.
 
 **Ansible layout.** Check the embedded collection's `playbooks/`, `roles/`,
-`plugins/`, `docs/` against the accepted taxonomy in `specs/adr/`. Does every role
+`plugins/`, `docs/` against the accepted taxonomy in ADR 0002
+(`specs/adr/0002-ansible-provider-dispatch.md`) and the collection's
+`docs/vars-contract.md` and `docs/ownership-records.md` contracts. Does every role
 live in the family matching its host scope and side effects? A mis-layered role
 means the taxonomy is wrong or the role does two jobs. Do role, task, variable,
 template, and inventory names reveal host scope, side effects, generated-input
 boundaries, and idempotency? Find one unsafe shell task (missing `changed_when`,
 `failed_when`, `no_log`) as the example, not the rule. Pick two roles you suspect
 are not safe to re-run unattended and either defend or flag them. Confirm the
-runtime-materialized collection bundle is reachable in a disconnected lab and that
-dropping in an external collection does not break it.
+runtime-materialized bundle (`internal/converge/bundle/ansible_bundle.zip`, built
+by `make sync-bundle`) is reachable in a disconnected lab, and that
+operator-supplied provisioning playbooks (ADR 0005) and add-on hook playbooks
+compose with it without breaking the embedded collection.
 
 **Drift and evolution.** Pick two non-trivial validation rules from `specs/` and
 check the code enforces them; pick one validator behavior from code and check the
