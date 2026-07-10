@@ -957,6 +957,58 @@ Rules:
   listed in `required`. Before the add-on's resources apply, the referenced
   secret's value is merged into the bound cluster's global pull secret as the
   `auths[<registry>]` credential.
+- `spec.hooks[]` ship add-on-owned imperative integration run at a lifecycle
+  point of the add-on apply — an Ansible playbook, templated Kubernetes
+  manifests, or both — so the logic travels with the add-on instead of being
+  compiled into Bootwright. `playbook`, `rolesPath`, `collectionsPath`, and each
+  `manifests[].path` are relative paths resolved against the `ClusterAddon` file
+  (the `manifestSet.path` rules); the loader skips the `playbooks/`, `roles/`,
+  and `collections/` subtrees as Ansible content.
+  - `hooks[].name` is required and unique within the add-on. `hooks[].lifecycle`
+    is required: `preApply` (before the operator install), `postOperatorReady`
+    (after the operator CSV reaches `Succeeded`, before `olm.customResources`;
+    olm add-ons only), or `postReady` (after the readiness checks pass). Hooks
+    run in that lifecycle order.
+  - A hook ships a `playbook`, `manifests[]`, or both. A manifest-only hook (no
+    `playbook`) applies templated manifests from values already available to the
+    add-on and ignores `target`/`outputs`; a playbook hook additionally runs
+    imperative work against resolved machines and captures outputs.
+  - `hooks[].target` selects the machines a playbook runs against and is required
+    for a playbook hook. It is a presence union — exactly one of `boundCluster`
+    (the bound `ContainerCluster`'s nodes), `fromInput` (an accepted input's
+    `refKind` property dereferenced to its object, then mapped to nodes:
+    `StorageExport` → its `storageClusterRef` Ceph nodes, `StorageCluster` → its
+    Ceph nodes, `ContainerCluster` → its agent nodes, `Machine` → the machine),
+    or static `clusters`/`machines` lists. A hook carries no `hostGroups` and can
+    never resolve to the controller/localhost. `target.limit` is `firstReachable`
+    (default: run against the first machine that answers) or `all` (run against
+    every resolved machine).
+  - `hooks[].secretRefs[]` name `Secret`s materialized into the hook's scoped
+    per-run secrets directory (`bootwright_hook_secrets_dir`) — only the declared
+    secrets, never the whole store. `hooks[].extraVars` is a free-form map handed
+    to the playbook as one JSON `-e` value.
+  - `hooks[].timeout` bounds the playbook run (a Go duration; default `10m`).
+    `hooks[].run` is `onChange` (default: skip a hook whose content and resolved
+    inputs are unchanged since the last reconcile) or `always`.
+    `hooks[].failureMode` is `fail` (default: a failing hook blocks the add-on
+    apply) or `continue` (record the failure and proceed); a hook whose manifests
+    consume its outputs must be `fail`.
+  - `hooks[].outputs[]` declare files the playbook writes under
+    `{{ bootwright_hook_outputs_dir }}`, captured after the run: `name` (the
+    manifest token), `file` (relative to the outputs directory), optional
+    `secret` (persisted `0600` under `clusters/<cluster>/secrets/addons/...` and
+    reclaimed from run history; non-secret outputs persist under
+    `runtime/addons/...`), and `format` `text` (default) or `json` (validates the
+    captured bytes parse as JSON). A declared output the playbook did not write
+    fails the hook; `outputs` require a `playbook`.
+  - `hooks[].manifests[]` are templated manifests applied to the bound cluster
+    (`oc apply --server-side`, in declared order) after the hook succeeds. Each
+    entry requires `path`; `reclaimRendered` removes the rendered plaintext once
+    applied (for manifests embedding secret outputs). Manifest tokens —
+    `{{ cluster }}`, `{{ output <name> }}`, `{{ input <in>.<prop> }}`,
+    `{{ secret <name> }}`, and `{{ exportDetails <in>.<prop> }}` (the
+    operator-supplied external-cluster-details payload of a referenced
+    `StorageExport`) — must each be a whole YAML scalar value.
 
 ## ClusterAddonProfile
 
@@ -990,6 +1042,31 @@ Rules:
   be supplied.
 - Input values for `refKind` schema properties must name a loaded object of
   that kind; values for `secret` properties must resolve to a declared `Secret`.
+
+## Native add-on catalog store
+
+Bootwright compiles a built-in catalog of ready-made `ClusterAddon` directories
+into the binary. `bootwright add-ons add` registers a catalog release into a
+machine-local store at `/var/lib/bootwright/add-ons/<name>/` — one registered
+version per add-on name, sibling to `contexts/` and `media/` under the
+Bootwright root — and `add-ons delete` removes it.
+
+Rules:
+
+- The store is a fallback resolution source, not a load path of its own. When a
+  `ClusterAddonBinding` `spec.addons[].addonRef` or `ClusterAddonProfile`
+  `spec.addonRefs[]` names no authored `ClusterAddon` in the loaded input, the
+  loader resolves it from the store directory of that name (which loads like any
+  authored add-on directory, its `SourcePath` anchoring the shipped
+  playbooks/manifests). An authored add-on with the same name always wins.
+- `context init`/`update` snapshot each referenced registered add-on into the
+  context input tree, after which the in-tree copy resolves the reference and
+  the store is not consulted; the context is self-contained, so deleting or
+  re-registering a store add-on never changes an existing context.
+- A store that is absent or unreadable (a rootless run cannot traverse the
+  root-owned Bootwright directory) falls through to the normal
+  unresolved-reference validation error, whose remedy names `add-ons add` when
+  the built-in catalog ships the referenced name.
 
 ## ProvisioningPlaybook
 
@@ -1382,6 +1459,22 @@ Rules:
   runs never record trust on first use, so pipelines record it with `machine
   trust` before `preflight`/`apply`, and only `machine trust --replace <machines>`
   may accept a changed key.
+- `bootwright add-ons list|add|delete` manage the machine-local store of native
+  add-ons vended from the binary's built-in catalog (see Native add-on catalog
+  store). Registering an add-on only makes it available; binding it to a cluster
+  with a `ClusterAddonBinding` is the separate, explicit step.
+  - `add-ons list` prints each catalog entry with its available versions and
+    default version, and — for a registered entry — the registered version and
+    whether the on-disk content is locally modified. `--output json` emits the
+    machine-readable report.
+  - `add-ons add --name <name>[:<version>]` registers a catalog release into the
+    store, replacing any prior version of the same add-on after a `--yes` or
+    interactive confirm. `--version` is an alternative to the `<name>:<version>`
+    shorthand (the two conflict) and defaults to the entry's default version.
+  - `add-ons delete --name <name>[:<version>]` removes a registered add-on after
+    a `--yes` or interactive confirm; an inline `<version>` is asserted against
+    the registered one, not a selector. It refuses a directory the store did not
+    register. Existing contexts keep their snapshotted copy.
 - `bootwright diff` compares the selected desired state against the live clusters
   and prints the differences as a git-style diff (`-` desired, `+` real). For each
   managed Ceph `StorageCluster` it discovers live state read-only on the seed —

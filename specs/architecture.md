@@ -72,6 +72,17 @@ checkouts without the generated archive must still compile and report an empty
 embedded bundle for commands that need Ansible until the operator runs
 `make build`.
 
+A top-level `add-ons/` directory embeds a built-in catalog of ready-made
+`ClusterAddon` directories into the binary (`internal/addons/nativecatalog`
+parses its `catalog.yaml` index). `bootwright add-ons add` vends a catalog
+release into a machine-local store under the Bootwright root
+(`/var/lib/bootwright/add-ons/<name>/`). The desired-state loader resolves a
+binding or profile `addonRef` from the input tree first and, when no authored
+`ClusterAddon` matches, from that store; the embedded catalog is the source
+`add-ons add` copies into the store, not a load-time fallback of its own.
+`context init` snapshots each referenced store add-on into the context input
+tree, so a converged context is self-contained.
+
 The desired-state API is defined in `api/v1alpha1` and specified in
 `specs/state-model.md`.
 
