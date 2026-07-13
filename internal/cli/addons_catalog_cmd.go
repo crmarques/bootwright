@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -92,11 +93,12 @@ func newAddonsListCmd(stdout io.Writer) *cobra.Command {
 		p.Command("add-ons list")
 		checks := make([]output.Check, 0, len(report.AddOns))
 		for _, row := range report.AddOns {
+			versions := strings.Join(row.Versions, ", ")
 			status := output.StatusSkip
-			evidence := fmt.Sprintf("versions %v (default %s), not registered", row.Versions, row.DefaultVersion)
+			evidence := fmt.Sprintf("available %s (default %s), not registered", versions, row.DefaultVersion)
 			if row.Registered != "" {
 				status = output.StatusOK
-				evidence = fmt.Sprintf("registered %s of %v", row.Registered, row.Versions)
+				evidence = fmt.Sprintf("registered %s of %s", row.Registered, versions)
 				if row.Modified {
 					evidence += " (locally modified)"
 				}
@@ -182,6 +184,9 @@ func newAddonsDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 			return failf(2, "--name is required")
 		}
 		bare, inlineVersion := nativecatalog.ParseNameVersion(name)
+		if err := nativecatalog.ValidateStoreName(bare); err != nil {
+			return failErr(2, err)
+		}
 		output.New(stdout).Command("add-ons delete")
 		dir := nativecatalog.InstalledDir(bare)
 		marker, found, err := nativecatalog.ReadMarker(dir)
