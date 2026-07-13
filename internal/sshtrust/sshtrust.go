@@ -154,10 +154,52 @@ func Save(dir string, store Store) error {
 	if err := safefs.AtomicWriteFile(filepath.Join(dir, StoreFileName), data, localFileMode); err != nil {
 		return err
 	}
-	if err := safefs.AtomicWriteFile(filepath.Join(dir, KnownHostsName), []byte(KnownHosts(store)), localFileMode); err != nil {
+	knownHostsPath := filepath.Join(dir, KnownHostsName)
+	merged := mergeUnmanagedKnownHosts(knownHostsPath, store, KnownHosts(store))
+	if err := safefs.AtomicWriteFile(knownHostsPath, []byte(merged), localFileMode); err != nil {
 		return err
 	}
 	return nil
+}
+
+func mergeUnmanagedKnownHosts(path string, store Store, generated string) string {
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		return generated
+	}
+	managed := map[string]bool{}
+	for _, record := range store.Hosts {
+		if addr := strings.TrimSpace(record.Address); addr != "" {
+			managed[addr] = true
+		}
+	}
+	present := map[string]bool{}
+	var lines []string
+	for _, raw := range strings.Split(generated, "\n") {
+		if line := strings.TrimSpace(raw); line != "" {
+			lines = append(lines, line)
+			present[line] = true
+		}
+	}
+	var preserved []string
+	for _, raw := range strings.Split(string(existing), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") || present[line] {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 || managed[fields[0]] {
+			continue
+		}
+		preserved = append(preserved, line)
+		present[line] = true
+	}
+	sort.Strings(preserved)
+	lines = append(lines, preserved...)
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func KnownHosts(store Store) string {
