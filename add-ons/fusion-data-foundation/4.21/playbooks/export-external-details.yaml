@@ -13,9 +13,9 @@
       - --format
       - json
       - --rbd-data-pool-name
-      - "{{ bootwright_df.rbdPoolRef.name }}"
+      - "{{ bootwright_df.rbdPoolRef }}"
       - --cephfs-filesystem-name
-      - "{{ bootwright_df.filesystemRef.name }}"
+      - "{{ bootwright_df.filesystemRef }}"
       - --k8s-cluster-name
       - "{{ bootwright_bound_cluster }}"
   tasks:
