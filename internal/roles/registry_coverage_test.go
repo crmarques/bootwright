@@ -6,12 +6,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestEveryProvisionerDispatchesToSupportedRoles enforces that each substrate
-// provisioner the schema accepts (v1alpha1.Provisioners) resolves to a supported
-// role contract through one of the two dispatch entry points. A new substrate
-// added to the schema without a registry entry would silently fall through to
-// the "unknown" apply-support fallback; this guard makes that a build failure so
-// the registry cannot drift behind the provisioner set.
 func TestEveryProvisionerDispatchesToSupportedRoles(t *testing.T) {
 	for _, provisioner := range v1alpha1.Provisioners() {
 		profile := LookupProfileProvisioner(provisioner)
@@ -22,11 +16,6 @@ func TestEveryProvisionerDispatchesToSupportedRoles(t *testing.T) {
 	}
 }
 
-// TestEveryComponentSlotHasSupportedService enforces that each authored
-// InfraComponent slot (v1alpha1.InfraComponentSlots) has at least one supported
-// service realisation in the registry. A new managed service arm added to the
-// schema without a serviceSupport entry would render no apply role; this guard
-// forces the registry entry to land with the arm.
 func TestEveryComponentSlotHasSupportedService(t *testing.T) {
 	covered := map[string]bool{}
 	for _, service := range ServiceEntries() {

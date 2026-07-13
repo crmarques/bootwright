@@ -91,10 +91,6 @@ CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
 VALIDATOR_FILE_LINE_LIMIT ?= 900
 API_FILE_LINE_LIMIT ?= 600
-# internal/addons/* and internal/storage/* are multi-package subsystems that
-# grew alongside the workflow engine. The largest today (addons/oc/execute.go
-# ~695, storage/cephdiff/cephdiff.go ~681) is the floor; keep them under this so
-# a second orchestrator does not accrete unwatched in a subpackage.
 SUBSYSTEM_FILE_LINE_LIMIT ?= 700
 
 all: build

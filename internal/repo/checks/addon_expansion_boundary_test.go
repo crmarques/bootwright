@@ -8,28 +8,14 @@ import (
 	"testing"
 )
 
-// addonExpansionOwners are the packages allowed to walk the ClusterAddonProfile
-// DAG (the .Spec.ProfileRefs / .Spec.AddonRefs recursion that expands a binding's
-// add-on set). internal/addons/inputs is the single expansion+merge owner that
-// plan, the validators, and the hook executor all consume; state/desired is the
-// cycle authority and store loader; state/graph resolves scope. Any OTHER package
-// referencing those profile-set fields is re-implementing the traversal the
-// audit collapsed — a second copy that drifts from the desired-hash input.
 var addonExpansionOwners = []string{
 	"internal/addons/inputs/",
 	"internal/state/desired/",
 	"internal/state/graph/",
 }
 
-// addonExpansionTokens name the ClusterAddonProfile set fields whose recursive
-// walk is the expansion. A package touching them is expanding the add-on DAG.
 var addonExpansionTokens = []string{".ProfileRefs", ".AddonRefs"}
 
-// TestAddonExpansionConfinedToOwners keeps binding-set expansion in one place.
-// After the plan package was collapsed onto internal/addons/inputs, no add-on
-// executor, planner, or renderer may re-walk the profile DAG; regrowth (a second
-// expansion that silently drifts from the inputs the desired hash folds in) trips
-// this guard.
 func TestAddonExpansionConfinedToOwners(t *testing.T) {
 	root := repoRoot(t)
 	offenders := map[string][]string{}

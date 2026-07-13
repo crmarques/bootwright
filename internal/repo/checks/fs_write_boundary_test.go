@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// mutatingFSCalls are the standard-library entrypoints that create, write,
-// rename, or delete on the filesystem. Read-only calls (os.Open, os.ReadFile,
-// os.Stat, os.ReadDir, ...) are deliberately absent: every package reads, so
-// only mutation is fenced. The tokens include the trailing "(" so os.Remove(
-// does not match os.RemoveAll( and each is listed on its own.
 var mutatingFSCalls = []string{
 	"os.WriteFile(", "os.Create(", "os.CreateTemp(",
 	"os.Mkdir(", "os.MkdirAll(", "os.MkdirTemp(",
@@ -22,16 +17,6 @@ var mutatingFSCalls = []string{
 	"ioutil.WriteFile(", "ioutil.TempFile(", "ioutil.TempDir(",
 }
 
-// fsWriteAllowedPrefixes and fsWriteAllowedPackages are the packages permitted
-// to mutate the filesystem directly today. internal/host/* are the sanctioned
-// primitives (safefs, managedroot, become, ptyexec own raw fs mechanics); the
-// explicit list grandfathers the domain packages that still write directly
-// instead of routing through internal/host/safefs or managedroot.
-//
-// This guard freezes that set: a NEW package that writes to disk fails the test
-// and must either route through the host primitives or be added here on
-// purpose. The list is meant to shrink as domain writers migrate behind the
-// host contracts, never to grow silently.
 var fsWriteAllowedPrefixes = []string{
 	"internal/host/",
 }
@@ -51,11 +36,6 @@ var fsWriteAllowedPackages = map[string]bool{
 	"internal/workspace":            true,
 }
 
-// TestFilesystemWritesConfinedToHostAndAllowlist pins the filesystem-write seam
-// the same way TestOSExecConfinedToHostAndAnsibleRunner pins process launches:
-// mutation flows through internal/host/safefs and managedroot, and every
-// remaining direct writer is named explicitly so a new one is a deliberate,
-// reviewed addition rather than an accident against root-owned runtime state.
 func TestFilesystemWritesConfinedToHostAndAllowlist(t *testing.T) {
 	root := repoRoot(t)
 	offenders := map[string][]string{}
