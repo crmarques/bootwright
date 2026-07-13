@@ -20,30 +20,26 @@
     bootwright_vsphere_vm_exists: "{{ (bootwright_vsphere_probe.instance is defined) and not (bootwright_vsphere_managed_os_reset | bool) }}"
   changed_when: false
 
-- name: Resolve vSphere VM ownership for override reset
+- name: Resolve vSphere VM ownership for apply
   ansible.builtin.set_fact:
-    bootwright_vsphere_reset_owned: >-
+    bootwright_vsphere_apply_owned: >-
       {{ ('bootwright:context=' ~ (bootwright_clusters_dir | dirname | basename)) in (bootwright_vsphere_probe.instance.annotation | default(''))
          and ('bootwright:cluster=' ~ bootwright_current_cluster.name) in (bootwright_vsphere_probe.instance.annotation | default(''))
          and ('bootwright:machine=' ~ bootwright_component.name) in (bootwright_vsphere_probe.instance.annotation | default('')) }}
   changed_when: false
-  when:
-    - bootwright_vsphere_managed_os_reset | bool
-    - bootwright_vsphere_probe.instance is defined
+  when: bootwright_vsphere_probe.instance is defined
 
-- name: Refuse to reset a non-Bootwright vSphere VM
+- name: Refuse to mutate a non-Bootwright vSphere VM
   ansible.builtin.assert:
     that:
-      - bootwright_vsphere_reset_owned | default(false) | bool
+      - bootwright_vsphere_apply_owned | default(false) | bool
     fail_msg: >-
-      Refusing to reinstall over vSphere VM {{ bootwright_vsphere_vm_name }} on
-      {{ bootwright_vsphere.server }}: it carries no Bootwright ownership marker
-      for this context/cluster/machine, so it may belong to another Bootwright
-      context or a foreign owner. Rename this cluster/machine or remove the
-      existing VM manually, then retry.
-  when:
-    - bootwright_vsphere_managed_os_reset | bool
-    - bootwright_vsphere_probe.instance is defined
+      Refusing to apply over vSphere VM {{ bootwright_vsphere_vm_name }} on
+      {{ bootwright_vsphere.server }}: it already exists but carries no Bootwright
+      ownership marker for this context/cluster/machine, so it may belong to another
+      Bootwright context or a foreign owner. Rename this cluster/machine or remove
+      the existing VM manually, then retry.
+  when: bootwright_vsphere_probe.instance is defined
 
 - name: Stop managed OS vSphere VM for override reinstall
   community.vmware.vmware_guest_powerstate:

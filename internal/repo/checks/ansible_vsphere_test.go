@@ -38,6 +38,28 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 	}
 }
 
+func TestVSphereSubstrateApplyRefusesForeignVM(t *testing.T) {
+	tasks := readAnsibleTasks(t, vsphereSubstrateTaskRoot+"/probe.yml")
+	assertIdx := findAnsibleTask(t, tasks, "Refuse to mutate a non-Bootwright vSphere VM")
+	stopIdx := findAnsibleTask(t, tasks, "Stop managed OS vSphere VM for override reinstall")
+	if assertIdx >= stopIdx {
+		t.Fatalf("apply ownership assertion (task %d) must run before the override reset power-off (task %d)", assertIdx, stopIdx)
+	}
+	assertWhen := fmt.Sprint(tasks[assertIdx]["when"])
+	if !strings.Contains(assertWhen, "bootwright_vsphere_probe.instance is defined") {
+		t.Fatalf("apply ownership guard must run whenever the VM exists, got when=%v", tasks[assertIdx]["when"])
+	}
+	if strings.Contains(assertWhen, "bootwright_vsphere_managed_os_reset") {
+		t.Fatalf("apply ownership guard must not be limited to the override-reset path so a plain apply cannot adopt a foreign VM, got when=%v", tasks[assertIdx]["when"])
+	}
+	body := readRepoFile(t, vsphereSubstrateTaskRoot+"/probe.yml")
+	for _, marker := range []string{"bootwright:context=", "bootwright:cluster=", "bootwright:machine="} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("vsphere apply ownership assertion missing marker %q", marker)
+		}
+	}
+}
+
 func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 	for _, rel := range []string{
 		vsphereSubstrateTaskRoot + "/destroy.yml",
