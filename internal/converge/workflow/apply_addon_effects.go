@@ -62,7 +62,7 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 		return fmt.Errorf("read secret %q for pull-secret merge: %w", secretName, err)
 	}
 	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
-	readRunner := extensionoc.CommandRunner{LogPath: e.logPath}
+	readRunner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true}
 	live, err := readRunner.Run(ctx, kubeconfig, []string{"get", "secret", "pull-secret", "-n", "openshift-config", "-o", "json"}, nil)
 	if err != nil {
 		return fmt.Errorf("read cluster pull secret: %w", err)
@@ -75,7 +75,7 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 		fmt.Fprintf(e.stdout, "global pull secret already carries %s credentials; merge skipped\n", effect.Registry)
 		return nil
 	}
-	runner := extensionoc.CommandRunner{LogPath: e.logPath, Stdout: e.stdout, Stderr: e.stderr}
+	runner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true, Stdout: e.stdout, Stderr: e.stderr}
 	if _, err := runner.Run(ctx, kubeconfig, []string{"replace", "-f", "-"}, replacement); err != nil {
 		return fmt.Errorf("update cluster pull secret with %s credentials: %w", effect.Registry, err)
 	}

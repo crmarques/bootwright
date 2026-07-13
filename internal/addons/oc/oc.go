@@ -19,11 +19,12 @@ type OCRunner interface {
 }
 
 type CommandRunner struct {
-	Command string
-	LogPath string
-	Stdout  io.Writer
-	Stderr  io.Writer
-	Runner  execution.Runner
+	Command   string
+	LogPath   string
+	RedactLog bool
+	Stdout    io.Writer
+	Stderr    io.Writer
+	Runner    execution.Runner
 }
 
 func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string, input []byte) ([]byte, error) {
@@ -46,13 +47,22 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	out := append(stdout.Bytes(), stderr.Bytes()...)
 	var logErr error
 	if r.LogPath != "" {
-		logErr = appendLog(r.LogPath, name, command, input, out)
+		loggedInput, loggedOutput := input, out
+		if r.RedactLog {
+			loggedInput = redactedLogBytes(input)
+			loggedOutput = redactedLogBytes(out)
+		}
+		logErr = appendLog(r.LogPath, name, command, loggedInput, loggedOutput)
 	}
 	if err != nil {
-		if logErr != nil {
-			return out, fmt.Errorf("run %s %s: %w: %s (also failed to append oc log %s: %v)", name, shellquote.Quote(command), err, strings.TrimSpace(string(out)), r.LogPath, logErr)
+		detail := strings.TrimSpace(string(out))
+		if r.RedactLog {
+			detail = strings.TrimSpace(stderr.String())
 		}
-		return out, fmt.Errorf("run %s %s: %w: %s", name, shellquote.Quote(command), err, strings.TrimSpace(string(out)))
+		if logErr != nil {
+			return out, fmt.Errorf("run %s %s: %w: %s (also failed to append oc log %s: %v)", name, shellquote.Quote(command), err, detail, r.LogPath, logErr)
+		}
+		return out, fmt.Errorf("run %s %s: %w: %s", name, shellquote.Quote(command), err, detail)
 	}
 	if logErr != nil {
 		return stdout.Bytes(), fmt.Errorf("append oc log %s: %w", r.LogPath, logErr)
@@ -72,6 +82,13 @@ func tee(buf *bytes.Buffer, w io.Writer) io.Writer {
 		return buf
 	}
 	return io.MultiWriter(buf, w)
+}
+
+func redactedLogBytes(data []byte) []byte {
+	if len(data) == 0 {
+		return nil
+	}
+	return []byte(fmt.Sprintf("[redacted %d bytes]", len(data)))
 }
 
 func appendLog(path, name string, args []string, input []byte, output []byte) error {
