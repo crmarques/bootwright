@@ -1,7 +1,11 @@
 ---
 - name: Resolve vSphere VM layout
   ansible.builtin.set_fact:
-    bootwright_vsphere_managed_os_reset: "{{ (bootwright_component.osManaged | default(false) | bool) and ((bootwright_apply_mode | default('continue')) == 'override') }}"
+    bootwright_vsphere_managed_os_reset: >-
+      {{ (bootwright_component.osManaged | default(false) | bool)
+         and ((bootwright_apply_mode | default('continue')) == 'override')
+         and (bootwright_current_cluster.name
+              in (bootwright_substrate_reset_clusters | default('') | split(','))) }}
     bootwright_vsphere_disks: >-
       {{
         [{'size_gb': bootwright_component.profile.diskGiB,

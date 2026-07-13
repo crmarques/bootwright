@@ -396,8 +396,8 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 			t.Fatalf("%s missing %s", tasks[resolveIdx]["name"], key)
 		}
 	}
-	if got := fmt.Sprint(resolve["bootwright_libvirt_managed_os_reset"]); !strings.Contains(got, "bootwright_component.osManaged") || !strings.Contains(got, "bootwright_apply_mode") {
-		t.Fatalf("%s must gate managed OS disk reset on osManaged and the override apply mode, got %v", tasks[resolveIdx]["name"], got)
+	if got := fmt.Sprint(resolve["bootwright_libvirt_managed_os_reset"]); !strings.Contains(got, "bootwright_component.osManaged") || !strings.Contains(got, "bootwright_apply_mode") || !strings.Contains(got, "bootwright_substrate_reset_clusters") {
+		t.Fatalf("%s must gate managed OS disk reset on osManaged, the override apply mode, and the drift-authorized substrate_reset_clusters list, got %v", tasks[resolveIdx]["name"], got)
 	}
 	if !strings.Contains(fmt.Sprint(resolve["bootwright_libvirt_disk_paths"]), "bootwright_component.profile.dataDisks") {
 		t.Fatalf("%s must include data disk paths, got %v", tasks[resolveIdx]["name"], resolve["bootwright_libvirt_disk_paths"])
@@ -456,6 +456,21 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	} {
 		if !strings.Contains(domainXML, want) {
 			t.Fatalf("domain XML missing context ownership metadata %q", want)
+		}
+	}
+}
+
+func TestVsphereManagedOSResetGatedOnDriftAuthorization(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/layout.yml")
+	idx := findAnsibleTaskByPrefix(t, tasks, "Resolve")
+	resolve, ok := tasks[idx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[idx]["name"])
+	}
+	got := fmt.Sprint(resolve["bootwright_vsphere_managed_os_reset"])
+	for _, want := range []string{"bootwright_component.osManaged", "bootwright_apply_mode", "bootwright_substrate_reset_clusters"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("vSphere managed-OS reset must gate on %q so a matching VM is never wiped, got %v", want, got)
 		}
 	}
 }

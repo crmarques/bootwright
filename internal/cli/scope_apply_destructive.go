@@ -20,6 +20,10 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		}
 		converge.ApplyReconcilableOnlyStorageExtraVar(plan, converge.ReconcilableOnlyStorageClusters(objects))
 		converge.ApplyRebuildAuthorizedStorageExtraVar(plan, converge.RebuildAuthorizedStorageClusters(objects))
+		if _, reset := workflow.OverrideDestructiveMachineSubstrate(objects); len(reset) > 0 {
+			cliout.NewContinuation(stdout).Warning("override", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
+			converge.ApplySubstrateResetExtraVar(plan, reset)
+		}
 	}
 	if reclaimDevices != "" {
 		owned := converge.OwnedStorageClusters(objects)
