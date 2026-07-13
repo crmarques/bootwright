@@ -26,6 +26,7 @@ func driftedObjects(t *testing.T, kind, id, cluster string) []workflow.ObjectCla
 		TaskID:       id,
 		TaskKind:     kind,
 		DesiredHash:  "sha256:stale",
+		HashSchema:   workflow.ConvergeHashSchema,
 		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: workflow.ConvergeSafetyOwner},
 	}); err != nil {
 		t.Fatalf("seed drift record: %v", err)

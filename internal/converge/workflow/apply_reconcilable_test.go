@@ -12,6 +12,7 @@ func saveRecordWithHashes(t *testing.T, runsDir string, task ApplyTask, desiredH
 		ResourceID:     applyTaskSafetyResourceID(task),
 		DesiredHash:    desiredHash,
 		StructuralHash: structuralHash,
+		HashSchema:     ConvergeHashSchema,
 		Owner:          ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
 		Status:         ConvergeSafetyStatusReconciled,
 		UpdatedAt:      time.Unix(0, 0).UTC(),

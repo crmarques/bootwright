@@ -213,7 +213,7 @@ func storageSubObjectStructuralHash(state v1alpha1.State, sub storageSubObject) 
 
 func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObject, runsDir string) (bool, error) {
 	structuralHash, err := storageSubObjectStructuralHash(state, sub)
-	if err != nil || structuralHash == "" {
+	if err != nil {
 		return false, err
 	}
 	desiredHash, err := storageSubObjectDesiredHash(state, sub)
@@ -223,6 +223,12 @@ func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObjec
 	record, found, err := LoadConvergeSafetyRecord(runsDir, sub.resourceID())
 	if err != nil || !found {
 		return false, err
+	}
+	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
+		return true, nil
+	}
+	if structuralHash == "" {
+		return false, nil
 	}
 	return IsReconcilableDrift(record, desiredHash, structuralHash), nil
 }
@@ -263,6 +269,7 @@ func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, sta
 			TaskKind:       ApplyTaskKindStorageCluster,
 			DesiredHash:    desiredHash,
 			StructuralHash: structuralHash,
+			HashSchema:     ConvergeHashSchema,
 			Owner: ConvergeSafetyOwnerIdentity{
 				Manager: ConvergeSafetyOwner,
 				Context: effectiveContextName(contextName),

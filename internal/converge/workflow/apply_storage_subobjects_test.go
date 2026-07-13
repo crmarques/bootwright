@@ -112,7 +112,25 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desired hash: %v", err)
 	}
-	legacy := ConvergeSafetyRecord{
+	structuralLess := ConvergeSafetyRecord{
+		APIVersion:  ConvergeSafetyAPIVersion,
+		ResourceID:  "StoragePool/demo.p1",
+		DesiredHash: desired,
+		HashSchema:  ConvergeHashSchema,
+		Owner:       ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
+		Status:      ConvergeSafetyStatusReconciled,
+		UpdatedAt:   now.UTC(),
+	}
+	if err := SaveConvergeSafetyRecord(legacyDir, structuralLess); err != nil {
+		t.Fatalf("save structural-less record: %v", err)
+	}
+	structuralLessSized := classifyPool(t, legacyDir, stateWith(storageSubObjectTestPool("p1", 2)))
+	if !structuralLessSized.HasStructuralDrift() || structuralLessSized.HasReconcilableDrift() {
+		t.Fatalf("a current-schema record with no structural hash must fall back to structural drift: structural=%v reconcilable=%v", structuralLessSized.HasStructuralDrift(), structuralLessSized.HasReconcilableDrift())
+	}
+
+	preSchemaDir := t.TempDir()
+	preSchema := ConvergeSafetyRecord{
 		APIVersion:  ConvergeSafetyAPIVersion,
 		ResourceID:  "StoragePool/demo.p1",
 		DesiredHash: desired,
@@ -120,12 +138,12 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 		Status:      ConvergeSafetyStatusReconciled,
 		UpdatedAt:   now.UTC(),
 	}
-	if err := SaveConvergeSafetyRecord(legacyDir, legacy); err != nil {
-		t.Fatalf("save legacy record: %v", err)
+	if err := SaveConvergeSafetyRecord(preSchemaDir, preSchema); err != nil {
+		t.Fatalf("save pre-schema record: %v", err)
 	}
-	legacySized := classifyPool(t, legacyDir, stateWith(storageSubObjectTestPool("p1", 2)))
-	if !legacySized.HasStructuralDrift() || legacySized.HasReconcilableDrift() {
-		t.Fatalf("legacy record must fall back to structural drift: structural=%v reconcilable=%v", legacySized.HasStructuralDrift(), legacySized.HasReconcilableDrift())
+	migrated := classifyPool(t, preSchemaDir, stateWith(storageSubObjectTestPool("p1", 2)))
+	if migrated.HasStructuralDrift() || !migrated.HasReconcilableDrift() {
+		t.Fatalf("a pre-schema record must migrate as reconcilable, never structural: structural=%v reconcilable=%v", migrated.HasStructuralDrift(), migrated.HasReconcilableDrift())
 	}
 }
 

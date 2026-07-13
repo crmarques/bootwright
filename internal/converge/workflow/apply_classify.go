@@ -119,9 +119,6 @@ func applyTaskReconcilableDrift(task ApplyTask, runsDir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if structuralHash == "" {
-		return false, nil
-	}
 	desiredHash, err := ApplyTaskDesiredHash(task)
 	if err != nil {
 		return false, err
@@ -129,6 +126,12 @@ func applyTaskReconcilableDrift(task ApplyTask, runsDir string) (bool, error) {
 	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
 	if err != nil || !found {
 		return false, err
+	}
+	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
+		return true, nil
+	}
+	if structuralHash == "" {
+		return false, nil
 	}
 	return IsReconcilableDrift(record, desiredHash, structuralHash), nil
 }

@@ -684,6 +684,7 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 		Cluster:     "sno-libvirt",
 		DesiredHash: "sha256:old",
+		HashSchema:  ConvergeHashSchema,
 		Status:      ClusterInstallStatusInstalled,
 		Phase:       ClusterInstallPhaseComplete,
 		UpdatedAt:   time.Now().UTC(),

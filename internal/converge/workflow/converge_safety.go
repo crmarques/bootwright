@@ -57,6 +57,7 @@ type ConvergeSafetyRecord struct {
 	TaskKind       string                      `json:"taskKind"`
 	DesiredHash    string                      `json:"desiredHash"`
 	StructuralHash string                      `json:"structuralHash,omitempty"`
+	HashSchema     int                         `json:"hashSchema,omitempty"`
 	Owner          ConvergeSafetyOwnerIdentity `json:"owner"`
 	Observation    ConvergeSafetyObservation   `json:"observation"`
 	Status         ConvergeSafetyStatus        `json:"status"`
@@ -169,6 +170,7 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 		TaskKind:       task.Entry.Kind,
 		DesiredHash:    desiredHash,
 		StructuralHash: structuralHash,
+		HashSchema:     ConvergeHashSchema,
 		Owner: ConvergeSafetyOwnerIdentity{
 			Manager: ConvergeSafetyOwner,
 			Context: effectiveContextName(contextName),
@@ -214,7 +216,7 @@ func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	if task.DesiredHashVars != nil {
 		payload.FabricVars = task.DesiredHashVars
 	} else {
-		state := task.State
+		state := hashScopedState(task.State)
 		payload.State = &state
 	}
 	data, err := json.Marshal(payload)
@@ -252,10 +254,17 @@ func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHas
 	if record.DesiredHash == desiredHash {
 		return false
 	}
+	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
+		return true
+	}
 	if strings.TrimSpace(structuralHash) == "" || strings.TrimSpace(record.StructuralHash) == "" {
 		return false
 	}
 	return record.StructuralHash == structuralHash
+}
+
+func recordPredatesHashSchema(schema int, recordedHash string) bool {
+	return schema < ConvergeHashSchema && strings.TrimSpace(recordedHash) != ""
 }
 
 func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManager string) ConvergeSafetyClassification {

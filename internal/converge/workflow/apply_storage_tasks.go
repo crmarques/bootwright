@@ -16,7 +16,7 @@ func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 }
 
 func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.State {
-	s := storageTaskState(state, name)
+	s := hashScopedState(storageTaskState(state, name))
 	s.StoragePlacementPolicies = nil
 	s.StoragePools = nil
 	s.StorageFilesystems = nil

@@ -8,7 +8,7 @@ import (
 
 func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1alpha1.State {
 	var clone v1alpha1.State
-	data, err := json.Marshal(clusterState)
+	data, err := json.Marshal(hashScopedState(clusterState))
 	if err != nil {
 		return clusterState
 	}

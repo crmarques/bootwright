@@ -52,6 +52,7 @@ type ClusterInstallRecord struct {
 	Cluster        string               `json:"cluster"`
 	DesiredHash    string               `json:"desiredHash"`
 	StructuralHash string               `json:"structuralHash,omitempty"`
+	HashSchema     int                  `json:"hashSchema,omitempty"`
 	Status         ClusterInstallStatus `json:"status"`
 	Phase          ClusterInstallPhase  `json:"phase"`
 	RunID          string               `json:"runId,omitempty"`
@@ -239,6 +240,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			if found && installInputsMatch(record, hash, structuralHash) && record.Status == ClusterInstallStatusInstalled {
 				available, err := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
 				if err == nil && available {
+					if err := restampLegacyInstallRecord(clustersDir, record, hash, structuralHash, now); err != nil {
+						return out, err
+					}
 					out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --override rebuilds only drifted objects, not a healthy in-sync cluster", now)
 				}
 			}
@@ -263,6 +267,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			}
 			if !available {
 				return out, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; refusing to regenerate installer inputs without --override", name)
+			}
+			if err := restampLegacyInstallRecord(clustersDir, record, hash, structuralHash, now); err != nil {
+				return out, err
 			}
 			out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs", now)
 		case ClusterInstallStatusInstalling, ClusterInstallStatusFailed:
@@ -334,6 +341,7 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	}
 	record.DesiredHash = hash
 	record.StructuralHash = structuralHash
+	record.HashSchema = ConvergeHashSchema
 	record.Status = ClusterInstallStatusInstalling
 	record.Phase = phase
 	record.RunID = runID
@@ -369,6 +377,7 @@ func MarkClusterInstallTaskSucceeded(clustersDir, contextName, secretsDir, runID
 	}
 	record.DesiredHash = hash
 	record.StructuralHash = structuralHash
+	record.HashSchema = ConvergeHashSchema
 	record.RunID = runID
 	record.Phase = phase
 	record.UpdatedAt = now.UTC()
@@ -409,6 +418,7 @@ func MarkClusterInstallTaskFailed(clustersDir, contextName, secretsDir, runID st
 	}
 	record.DesiredHash = hash
 	record.StructuralHash = structuralHash
+	record.HashSchema = ConvergeHashSchema
 	record.Status = ClusterInstallStatusFailed
 	record.Phase = phase
 	record.RunID = runID
@@ -478,7 +488,7 @@ func clusterInstallHashForContext(contextName string, state v1alpha1.State, clus
 	if err != nil {
 		return "", err
 	}
-	embedState := clusterState
+	embedState := hashScopedState(clusterState)
 	if projectDay2 {
 		embedState = containerClusterInstallStructuralHashVars(clusterState)
 	}
@@ -507,7 +517,21 @@ func clusterInstallHashForContext(contextName string, state v1alpha1.State, clus
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+func restampLegacyInstallRecord(clustersDir string, record ClusterInstallRecord, desiredHash, structuralHash string, now time.Time) error {
+	if record.HashSchema >= ConvergeHashSchema {
+		return nil
+	}
+	record.DesiredHash = desiredHash
+	record.StructuralHash = structuralHash
+	record.HashSchema = ConvergeHashSchema
+	record.UpdatedAt = now.UTC()
+	return SaveClusterInstallRecord(clustersDir, record)
+}
+
 func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
+	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
+		return true
+	}
 	if record.StructuralHash != "" && structuralHash != "" {
 		return record.StructuralHash == structuralHash
 	}

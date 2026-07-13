@@ -4078,6 +4078,7 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
 		Cluster:     clusterName,
 		DesiredHash: "sha256:old",
+		HashSchema:  workflow.ConvergeHashSchema,
 		Status:      workflow.ClusterInstallStatusInstalling,
 		Phase:       workflow.ClusterInstallPhaseNodesBooted,
 		UpdatedAt:   time.Now().UTC(),

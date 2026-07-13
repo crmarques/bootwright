@@ -1,6 +1,8 @@
 package installer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 
@@ -10,12 +12,10 @@ import (
 )
 
 type InstallerSecretInputStat struct {
-	Label           string `json:"label"`
-	Name            string `json:"name"`
-	Path            string `json:"path"`
-	Size            int64  `json:"size"`
-	Mode            uint32 `json:"mode"`
-	ModTimeUnixNano int64  `json:"modTimeUnixNano"`
+	Label         string `json:"label"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
+	ContentDigest string `json:"contentDigest"`
 }
 
 func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
@@ -41,17 +41,16 @@ func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.Stat
 			continue
 		}
 		seen[key] = true
-		info, err := resolver.StatMaterial(ref.name, ref.role())
+		data, err := resolver.ReadMaterial(ref.name, ref.role())
 		if err != nil {
 			return nil, fmt.Errorf("%s %s at %s: %w", ocp.Metadata.Name, ref.label, path, err)
 		}
+		sum := sha256.Sum256(data)
 		out = append(out, InstallerSecretInputStat{
-			Label:           ref.label,
-			Name:            ref.name,
-			Path:            path,
-			Size:            info.Size(),
-			Mode:            uint32(info.Mode().Perm()),
-			ModTimeUnixNano: info.ModTime().UnixNano(),
+			Label:         ref.label,
+			Name:          ref.name,
+			Path:          path,
+			ContentDigest: "sha256:" + hex.EncodeToString(sum[:]),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
