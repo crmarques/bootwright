@@ -111,15 +111,21 @@ func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAd
 
 func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) string {
 	projection := struct {
-		Content   string                              `json:"content"`
-		Inputs    []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
-		Target    v1alpha1.ClusterAddonHookTarget     `json:"target"`
-		Manifests []v1alpha1.ClusterAddonHookManifest `json:"manifests,omitempty"`
+		Content    string                              `json:"content"`
+		Inputs     []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
+		Target     v1alpha1.ClusterAddonHookTarget     `json:"target"`
+		Manifests  []v1alpha1.ClusterAddonHookManifest `json:"manifests,omitempty"`
+		ExtraVars  map[string]any                      `json:"extraVars,omitempty"`
+		SecretRefs []v1alpha1.SecretRef                `json:"secretRefs,omitempty"`
+		Outputs    []v1alpha1.ClusterAddonHookOutput   `json:"outputs,omitempty"`
 	}{
-		Content:   hooks.ContentDigest(e.plan.Addon.SourcePath, hook),
-		Inputs:    e.inputs,
-		Target:    hook.Target,
-		Manifests: hook.Manifests,
+		Content:    hooks.ContentDigest(e.plan.Addon.SourcePath, hook),
+		Inputs:     e.inputs,
+		Target:     hook.Target,
+		Manifests:  hook.Manifests,
+		ExtraVars:  hook.ExtraVars,
+		SecretRefs: hook.SecretRefs,
+		Outputs:    hook.Outputs,
 	}
 	data, _ := json.Marshal(projection)
 	sum := sha256.Sum256(data)
