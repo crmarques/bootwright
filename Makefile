@@ -91,6 +91,11 @@ CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
 VALIDATOR_FILE_LINE_LIMIT ?= 900
 API_FILE_LINE_LIMIT ?= 600
+# internal/addons/* and internal/storage/* are multi-package subsystems that
+# grew alongside the workflow engine. The largest today (addons/oc/execute.go
+# ~695, storage/cephdiff/cephdiff.go ~681) is the floor; keep them under this so
+# a second orchestrator does not accrete unwatched in a subpackage.
+SUBSYSTEM_FILE_LINE_LIMIT ?= 700
 
 all: build
 
@@ -310,6 +315,15 @@ cli-file-size-check:
 		done); \
 	if [ -n "$$over" ]; then \
 		printf '%s\n' "API type files over $(API_FILE_LINE_LIMIT) lines (split per kind, e.g. storage_cluster.go / storage_pool.go / storage_filesystem.go):" "$$over"; \
+		exit 1; \
+	fi
+	@over=$$(find internal/addons internal/storage -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+		| while read -r f; do \
+			n=$$(wc -l <"$$f"); \
+			if [ "$$n" -gt $(SUBSYSTEM_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
+		done); \
+	if [ -n "$$over" ]; then \
+		printf '%s\n' "addons/storage subsystem files over $(SUBSYSTEM_FILE_LINE_LIMIT) lines (split by concern; keep each subpackage single-purpose):" "$$over"; \
 		exit 1; \
 	fi
 
