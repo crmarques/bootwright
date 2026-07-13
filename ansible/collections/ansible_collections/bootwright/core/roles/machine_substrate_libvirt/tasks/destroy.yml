@@ -60,12 +60,14 @@
   community.libvirt.virt:
     name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     state: destroyed
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
   failed_when: false
 
 - name: Undefine libvirt domain
   community.libvirt.virt:
     command: undefine
     name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
     flags:
       - keep_nvram
   failed_when: false
@@ -123,6 +125,7 @@
   community.libvirt.virt_net:
     name: "{{ bootwright_libvirt_network_name }}"
     state: absent
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
   failed_when: false
 
 - name: Remove libvirt network ownership record

@@ -1442,8 +1442,9 @@ Rules:
 - `--override`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
-  provisioning, cluster add-ons, and storage-attachment apply — it is an
-  idempotent, non-destructive re-apply that touches no data, OS, or VM. For every
+  provisioning, cluster add-ons, provisioning-playbook re-runs, and
+  storage-attachment apply — it is an idempotent, non-destructive re-apply that
+  touches no data, OS, or VM. For every
   other kind — a managed-OS or substrate machine (reinstall; disks wiped) and a
   container or storage cluster (reinstall / `cephadm rm-cluster --zap-osds`) — it
   is a destructive rebuild. A kind is destructive unless it is on the

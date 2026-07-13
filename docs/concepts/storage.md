@@ -195,7 +195,7 @@ apply` document.
 | --- | --- | --- | --- |
 | `topology.hosts` | Yes | — | At least one host. |
 | `topology.hosts[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability and declared SSH access. |
-| `topology.hosts[].hostname` | No | the `machineRef` name | cephadm host-spec hostname, rendered verbatim; must equal the host's actual hostname. |
+| `topology.hosts[].hostname` | No | `<machineRef>.<cluster>.<baseDomain>` (the bare `machineRef` name when `baseDomain` is unset, or when the node is provided-OS or its `hostname.source` is `machineName`) | cephadm host-spec hostname, rendered verbatim; must equal the host's actual hostname. |
 | `topology.hosts[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
 | `topology.hosts[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
 | `topology.hosts[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |

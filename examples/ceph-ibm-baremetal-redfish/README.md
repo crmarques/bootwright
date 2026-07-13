@@ -43,6 +43,7 @@ Edit these to match your site (search-and-replace `example.com` and the
 | BMCs | `ceph-{1,2,3}-bmc.example.com` (Redfish) |
 | RGW S3 endpoint (ingress VIP) | `rgw.ceph-ibm.example.com` → `10.20.30.80` |
 | Dashboard (mgmt-gateway VIP) | `dashboard.ceph-ibm.example.com:8443` → `10.20.30.81` |
+| NFS export (ingress VIP) | `10.20.30.82` |
 | External DNS resolvers | `10.20.30.2`, `10.20.30.3` |
 | External NTP servers | `ntp1.example.com`, `ntp2.example.com` |
 | Outbound proxy | `http://proxy.example.com:3128` |
@@ -203,8 +204,9 @@ What apply does, in order:
    the RHEL + IBM Storage Ceph repos, accepts the IBM license, logs in to
    `cp.icr.io`, installs cephadm, then bootstraps from `ceph-1`, adds `ceph-2`
    and the `ceph-3` tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW
-   pools, the CephFS filesystem, the RGW service with its ingress VIP, and the
-   `mgmt-gateway` dashboard with its VIP.
+   pools, the CephFS filesystem, the RGW service with its ingress VIP, the NFS
+   export service with its ingress VIP, and the `mgmt-gateway` dashboard with its
+   VIP.
 
 Re-running `apply --yes` is idempotent. For a focused storage rerun:
 `bootwright apply --stage clusters --clusters ceph-ibm --yes`.
@@ -217,8 +219,8 @@ Re-running `apply --yes` is idempotent. For a focused storage rerun:
 # SSH into the seed node with the generated key:
 sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-baremetal/secrets/ceph-node-ssh \
   root@10.20.30.21 'cephadm shell -- ceph -s'
-# Expect HEALTH_OK, 3 mons, 2 mgr, 6 OSDs, 1 cephfs, an rgw service, a
-# mgmt-gateway, and two ingress services.
+# Expect HEALTH_OK, 3 mons, 2 mgr, 6 OSDs, 1 cephfs, an rgw service, an nfs
+# service, a mgmt-gateway, and three ingress services.
 
 bootwright cluster access --name ceph-ibm
 # Dashboard: https://dashboard.ceph-ibm.example.com:8443  (user admin; password file printed)
@@ -260,4 +262,5 @@ clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml Machines: BMC + Redfish virtua
 clusters/storage/ceph-ibm/pools/*.yaml        StoragePools: rbd, cephfs-data/metadata, rgw
 clusters/storage/ceph-ibm/filesystems/cephfs.yaml  StorageFilesystem (CephFS)
 clusters/storage/ceph-ibm/object-gateways/rgw.yaml StorageObjectGateway (RGW + ingress VIP)
+clusters/storage/ceph-ibm/nfs-exports/nfs.yaml    StorageNFSExport (NFS-Ganesha + ingress VIP)
 ```

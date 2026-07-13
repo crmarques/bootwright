@@ -35,25 +35,27 @@ generate them.
 
 ## Edit First
 
-- `environment.yaml`: base domain, secret names, and managed DNS selection.
-  `openshift-pull-secret` and `bmc-credentials` are context secrets you set out
-  of band (see below); `sno-libvirt-cluster-admin-ssh-key` and the three TLS
-  secrets are generated, and `bastion-host-ssh` points at a local key file.
+- `environment.yaml`: base domain and managed DNS selection.
+- `secrets.yaml`: the `Secret` objects. `openshift-pull-secret` is the one
+  context secret you set out of band (see below); `bmc-credentials` (username
+  `admin`, random password unless you override it),
+  `sno-libvirt-cluster-admin-ssh-key`, and the three TLS secrets are generated,
+  and `bastion-host-ssh` points at a local key file.
 - `cluster.yaml`: OpenShift release, install endpoints, the corporate
   `additionalTrustBundleRefs` and `servingCertificates`, and node binding.
 - `service-machine.yaml`: controller/libvirt host addresses and SSH key reference.
 - `provider.yaml`: libvirt URI, VM sizing, BMC emulation credentials, and
   bridge name.
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
-- `infra-component.yaml`: managed dnsmasq — bind address, upstream forwarders,
-  and the ingress hostnames it publishes.
-- `cluster-machines.yaml`: per-machine IP, root device hints, and platform render mode.
+- `infra-component.yaml`: managed dnsmasq — bind address and upstream forwarders.
+- `cluster-machines.yaml`: the node `Machine` — `networkConfigRef`, per-machine
+  `interfaceAddresses` (IP), and root device hints.
 
 ## Validate And Apply
 
-`secret generate` materializes the generated entries (the SSH key, BMC password,
-and the three self-signed TLS certificates); you must set the context secrets
-(`openshift-pull-secret`, `bmc-credentials`) yourself. To use **real** corporate
+`secret generate` materializes the generated entries (the SSH key, the emulated
+BMC password, and the three self-signed TLS certificates); you set the one
+context secret (`openshift-pull-secret`) yourself. To use **real** corporate
 material instead of the generated certificates, drop the `generated:` blocks for
 `corporate-ca`, `api-serving-tls`, and `ingress-serving-tls` and supply the
 bytes with `secret set` (shown commented below). After each step, run
@@ -63,7 +65,6 @@ bytes with `secret set` (shown commented below). After each step, run
 bootwright validate -f <input-dir>
 bootwright context init --name lab -f <input-dir>
 bootwright secret set --name openshift-pull-secret --pull-secret <path>
-printf '%s\n' "${BMC_PASS}" | bootwright secret set --name bmc-credentials --username "${BMC_USER}" --password-stdin
 # Real corporate material (replaces the generated: declarations):
 # bootwright secret set --name corporate-ca       --raw-file ./corp-ca.pem
 # bootwright secret set --name api-serving-tls     --tls-cert ./api.crt     --tls-key ./api.key

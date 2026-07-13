@@ -163,7 +163,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
 		converge.ApplyInfraComponentReleaseExtraVar(&plan, releaseDecision.Names())
 		converge.ApplyVerboseExtraVar(&plan, verbose)
-		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
+		destroySafety := workflow.EvaluateDestroySafety(plan.State, override, plan.StorageWorkNames)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))

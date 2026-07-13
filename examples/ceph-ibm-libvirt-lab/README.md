@@ -216,6 +216,18 @@ step 0c — declared `file:`, so you do not "set" it.
 
 ## 5. Check and apply
 
+> **Sidecar images must be pullable.** This lab turns on the monitoring stack and
+> two HA VIP ingresses (the RGW S3 endpoint and the `mgmt-gateway` dashboard), so
+> cephadm deploys Prometheus/Grafana/Alertmanager/node-exporter plus
+> haproxy/keepalived. On the **IBM** distribution these sidecar images are not
+> guaranteed to resolve from the entitled registry. Before `apply`, make sure the
+> nodes can pull them — `podman login cp.icr.io` and/or pin each to an entitled
+> `cp.icr.io` reference via `spec.ceph.config` under the `mgr` section
+> (`mgr/cephadm/container_image_prometheus`, `…_grafana`, `…_alertmanager`,
+> `…_node_exporter`, `…_haproxy`, `…_keepalived`) in
+> `clusters/storage/ceph-ibm/cluster.yaml` — otherwise the monitoring stack and
+> HA ingresses will not deploy.
+
 ```bash
 bootwright bastion setup --yes      # installs host prerequisites
 bootwright preflight all

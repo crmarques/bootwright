@@ -39,6 +39,11 @@
           - bootwright_infra_component_service_destroy_scope in ['', 'artifact-server']
         fail_msg: "unsupported infra component service destroy scope {{ bootwright_infra_component_service_destroy_scope }}"
 
+    - name: Probe host firewalld availability
+      ansible.builtin.include_role:
+        name: bootwright.core.machine_base
+        tasks_from: firewalld_probe.yml
+
     - name: Destroy infra component service roles
       ansible.builtin.include_role:
         name: "{{ bootwright_component.destroyRole }}"

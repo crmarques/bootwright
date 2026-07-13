@@ -16,7 +16,7 @@ const (
 
 	ossImageRepository = "quay.io/ceph/ceph"
 
-	ibmStorageCephRepoTemplate = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-%s-rhel-9.repo"
+	ibmStorageCephRepoTemplate = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-%s-rhel-{{ ansible_distribution_major_version }}.repo"
 
 	ibmImageBaseTemplate    = "cp.icr.io/cp/ibm-ceph/ceph-%s-rhel9"
 	rhcephImageBaseTemplate = "registry.redhat.io/rhceph/rhceph-%s-rhel9"

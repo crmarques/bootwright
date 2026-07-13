@@ -257,7 +257,7 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 		}
 		var entry map[string]any
 		if providerMachine, ok := stateview.Machine(state, providerHost); ok {
-			if providerMachine.Spec.Access.SSH == nil {
+			if providerMachine.Spec.Access.SSH == nil && !locality.IsControllerLocalMachine(providerMachine, localPolicy) {
 				return
 			}
 			entry = machineInventoryEntry(providerMachine, env, paths, localPolicy)

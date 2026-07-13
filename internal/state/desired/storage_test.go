@@ -104,6 +104,11 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
 	}}
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name == "ceph-arbiter" {
+			state.Machines[i].Spec.OS.Provided = v1alpha1.BoolPtr(false)
+		}
+	}
 	arbiter := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6]
 	arbiter.Hostname = ""
 	arbiter.Roles = []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR}

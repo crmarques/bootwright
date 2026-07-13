@@ -38,11 +38,11 @@ func TestSNOLibvirtExampleMaterializesDefaults(t *testing.T) {
 	}
 
 	platform := cluster.Spec.Install.Platform
-	if platform.Type != v1alpha1.PlatformTypeBareMetal {
-		t.Fatalf("platform.type = %q, want %q", platform.Type, v1alpha1.PlatformTypeBareMetal)
+	if platform.Type != v1alpha1.PlatformTypeNone {
+		t.Fatalf("platform.type = %q, want %q", platform.Type, v1alpha1.PlatformTypeNone)
 	}
-	if platform.BareMetal == nil || platform.BareMetal.ProvisioningNetwork != v1alpha1.ProvisioningNetworkDisabled {
-		t.Fatalf("platform.baremetal = %+v, want provisioningNetwork disabled", platform.BareMetal)
+	if platform.BareMetal != nil {
+		t.Fatalf("platform.baremetal = %+v, want nil for SNO", platform.BareMetal)
 	}
 
 	networking := cluster.Spec.Networking

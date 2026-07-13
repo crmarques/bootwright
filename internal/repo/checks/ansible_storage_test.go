@@ -173,13 +173,13 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 		t.Fatalf("storage hostname verification must be an assert, got %v", task)
 	}
 	that := fmt.Sprint(body["that"])
-	for _, want := range []string{"ansible_facts['hostname'] == item.hostname", "ansible_facts['nodename'] == item.hostname"} {
+	for _, want := range []string{"ansible_facts['nodename'] == item.cephHostname", "ansible_facts['hostname'] == item.cephHostname"} {
 		if !strings.Contains(that, want) {
 			t.Fatalf("hostname assert must compare gathered hostname facts with the declared topology hostname, got %v", body["that"])
 		}
 	}
 	failMsg := fmt.Sprint(body["fail_msg"])
-	for _, want := range []string{"{{ ansible_facts['nodename'] }}", "{{ item.hostname }}"} {
+	for _, want := range []string{"{{ ansible_facts['nodename'] }}", "{{ item.cephHostname }}"} {
 		if !strings.Contains(failMsg, want) {
 			t.Fatalf("hostname assert fail_msg must name both the real and the declared hostname, got %s", failMsg)
 		}

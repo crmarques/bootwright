@@ -11,7 +11,7 @@ managed NTP, trust material, and installer artifact publication.
 - `provider.yaml`: libvirt URI, VM sizing, BMC emulation credentials, and
   bridge name.
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
-- `cluster-machines.yaml`: API/app VIPs, per-machine IP, and platform render mode.
+- `cluster-machines.yaml`: per-machine IP and root device hints.
 - `cluster.yaml`: OpenShift release, disconnected mode, install endpoints,
   networking, and node binding.
 - `components/*.yaml`: managed artifact, mirror registry, and NTP service

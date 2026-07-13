@@ -16,13 +16,19 @@ func TestEvaluateDestroySafetyProtectedKinds(t *testing.T) {
 	containerOnly := protectStorage
 	containerOnly.ContainerClusters = []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "ocp"}}}
 
-	if d := EvaluateDestroySafety(withStorage, false); !d.RequiredOverride {
+	if d := EvaluateDestroySafety(withStorage, false, nil); !d.RequiredOverride {
 		t.Fatalf("protected StorageCluster in scope must require override, got %+v", d)
 	}
-	if d := EvaluateDestroySafety(withStorage, true); d.RequiredOverride {
+	if d := EvaluateDestroySafety(withStorage, true, nil); d.RequiredOverride {
 		t.Fatal("--override must clear the granular gate")
 	}
-	if d := EvaluateDestroySafety(containerOnly, false); d.RequiredOverride {
+	if d := EvaluateDestroySafety(containerOnly, false, nil); d.RequiredOverride {
 		t.Fatal("a protected kind absent from the scope must not gate the teardown")
+	}
+	if d := EvaluateDestroySafety(withStorage, false, []string{}); d.RequiredOverride {
+		t.Fatal("a render-reference StorageCluster outside the teardown work set must not gate")
+	}
+	if d := EvaluateDestroySafety(withStorage, false, []string{"ceph"}); !d.RequiredOverride {
+		t.Fatal("a StorageCluster in the teardown work set must gate")
 	}
 }

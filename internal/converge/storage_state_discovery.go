@@ -30,7 +30,8 @@ func RunCephStateDiscovery(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 	opts.Label = "storage state discovery"
 	opts.ExtraVarPairs = []string{"bootwright_storage_discovery_dir=" + discoveryDir}
 	if _, err := workflow.Run(cmdCtx, opts, runner, reporter); err != nil {
-		return nil, err
+		discovered, _ := cephstate.Load(discoveryDir)
+		return discovered, err
 	}
 	return cephstate.Load(discoveryDir)
 }

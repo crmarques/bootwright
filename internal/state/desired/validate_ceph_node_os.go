@@ -27,7 +27,7 @@ func validateOSDDevicesExcludeRootDisk(state v1alpha1.State) []string {
 			if root == "" {
 				continue
 			}
-			for _, dev := range osdDeclaredDevicePaths(host) {
+			for _, dev := range topology.OSDHostAllStaticDevices(sc, host) {
 				if strings.TrimSpace(dev) == root {
 					errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) lists its OS root disk %q as an OSD device; creating the OSD would wipe the installed operating system. Remove %q from the OSD device selection, or point rootDeviceHints at a different disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, root, root))
 					break
@@ -36,18 +36,6 @@ func validateOSDDevicesExcludeRootDisk(state v1alpha1.State) []string {
 		}
 	}
 	return errs
-}
-
-func osdDeclaredDevicePaths(host v1alpha1.StorageCephHost) []string {
-	paths := append([]string{}, host.Devices...)
-	if host.OSD != nil {
-		for _, sel := range []*v1alpha1.StorageCephDeviceSelection{host.OSD.DataDevices, host.OSD.DBDevices, host.OSD.WALDevices} {
-			if sel != nil {
-				paths = append(paths, sel.Paths...)
-			}
-		}
-	}
-	return paths
 }
 
 func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {

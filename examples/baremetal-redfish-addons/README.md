@@ -9,10 +9,12 @@ checks, and a manifestSet add-on.
   server catalog.
 - `infra/`: service host, bare-metal provider, artifact server, and network
   definitions.
-- `clusters/container/metal-ocp/cluster-machines.yaml`: VIPs, artifact endpoint,
-  machine selection, and platform render mode.
-- `clusters/container/metal-ocp/cluster.yaml`: release, cluster networking, and
-  node bindings.
+- `clusters/container/metal-ocp/cluster-machines.yaml`: the node `Machine` —
+  hardware/NICs, BMC Redfish address and credential reference, network config,
+  and root device hints.
+- `clusters/container/metal-ocp/cluster.yaml`: OpenShift release,
+  `install.endpoints` (API/ingress VIP addresses), the agent artifact endpoint,
+  and host→machine bindings.
 - `add-ons/*.yaml`: OLM packages, channels, optional `startingCSV`, readiness
   checks, manifest paths, and profile order.
 - `clusters/container/metal-ocp/add-on-binding.yaml`: selected add-on profile

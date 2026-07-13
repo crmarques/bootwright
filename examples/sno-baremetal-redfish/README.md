@@ -17,9 +17,18 @@ Single-node OpenShift on real bare metal through Redfish virtual media.
 
 ## Validate And Apply
 
+`secret generate` only materializes the `generated:` entries; set the operator
+secrets this example declares (`openshift-pull-secret`, `bmc-credentials`)
+yourself first. `bastion-host-ssh` points at a local key file. After each step,
+run `bootwright status` for the suggested next command. See
+[getting started](../../docs/getting-started/index.md) for the full secret and
+host-trust workflow.
+
 ```text
 bootwright validate -f <input-dir>
 bootwright context init --name lab -f <input-dir>
+bootwright secret set --name openshift-pull-secret --pull-secret <path>
+printf '%s\n' "${BMC_PASS}" | bootwright secret set --name bmc-credentials --username "${BMC_USER}" --password-stdin
 bootwright secret generate
 bootwright bastion setup --yes
 bootwright preflight all

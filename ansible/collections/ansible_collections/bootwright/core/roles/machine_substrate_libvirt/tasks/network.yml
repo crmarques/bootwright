@@ -56,6 +56,7 @@
   community.libvirt.virt_net:
     name: "{{ bootwright_libvirt_network_name }}"
     state: present
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
     xml: "{{ bootwright_libvirt_net_xml_slurp.content | b64decode }}"
 
 - name: Activate libvirt network
@@ -63,6 +64,7 @@
     name: "{{ bootwright_libvirt_network_name }}"
     state: active
     autostart: true
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
 
 - name: Record libvirt network ownership
   ansible.builtin.include_role:

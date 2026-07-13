@@ -2,6 +2,7 @@ package cephadopt
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -115,6 +116,10 @@ func ComputeEdits(ctx workspace.Context, state v1alpha1.State, probed []ProbedSt
 		rel, err := inputRelPath(ctx.InputDir, path)
 		if err != nil {
 			return nil, Summary{}, err
+		}
+		if _, statErr := os.Stat(path); statErr == nil {
+			summary.Detected = append(summary.Detected, fmt.Sprintf("%s already exists — a live-only object would overwrite it; author it manually", rel))
+			continue
 		}
 		edits = append(edits, workspace.InputEdit{RelPath: rel, Content: content})
 	}

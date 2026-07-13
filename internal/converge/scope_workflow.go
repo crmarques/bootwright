@@ -35,13 +35,15 @@ func PrepareScopedWorkflowPlan(scopedState v1alpha1.State, scope Scope, phaseLis
 }
 
 func selectedHasExtensionWork(selected []Phase, state v1alpha1.State) bool {
-	if len(state.ClusterAddonBindings) == 0 {
-		return false
-	}
+	addonsSelected := false
 	for _, phase := range selected {
 		if phase.Name == "add-ons" {
-			return true
+			addonsSelected = true
+			break
 		}
 	}
-	return false
+	if !addonsSelected {
+		return false
+	}
+	return len(state.ClusterAddonBindings) > 0 || len(state.ProvisioningPlaybooks) > 0
 }

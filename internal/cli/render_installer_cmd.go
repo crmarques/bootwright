@@ -253,7 +253,7 @@ func printToolInputArtifacts(stdout io.Writer, result render.Result, installerLa
 	}
 	var storagePaths []string
 	for _, asset := range result.StorageAssets {
-		storagePaths = appendNonEmpty(storagePaths, asset.ApplyScriptPath, asset.ApplyLibPath, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
+		storagePaths = appendNonEmpty(storagePaths, asset.ApplyScriptPath, asset.ApplyLibPath, asset.BootstrapConfPath, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
 	}
 	groups := []cliout.ArtifactGroup{
 		{Name: "Bootwright", Paths: []string{result.EffectiveStatePath, result.LockPath}},

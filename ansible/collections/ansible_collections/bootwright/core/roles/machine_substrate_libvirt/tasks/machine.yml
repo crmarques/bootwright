@@ -103,6 +103,7 @@
   community.libvirt.virt:
     command: undefine
     name: "{{ bootwright_libvirt_domain_name }}"
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
     flags:
       - keep_nvram
   failed_when: false
@@ -336,6 +337,7 @@
 - name: Define libvirt domain
   community.libvirt.virt:
     command: define
+    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
     xml: "{{ bootwright_libvirt_domain_xml_slurp.content | b64decode }}"
 
 - name: Record libvirt domain ownership

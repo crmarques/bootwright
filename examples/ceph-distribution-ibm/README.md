@@ -34,3 +34,11 @@ printf '%s' "$IBM_ENTITLEMENT_KEY" | bootwright secret set --name ibm-registry-c
 `license.accept: true` in the `ibm-storage-ceph` entitlement records that you
 accept the IBM Storage Ceph license; Bootwright refuses to install the licensed
 packages without it.
+
+## Node hostnames
+
+These are **provided-OS** nodes (`spec.os.provided: true`), so Bootwright cannot
+set an FQDN on them: `spec.ceph.topology.hosts[].hostname` defaults to the
+**bare machine name** (here `ceph-0`), which cephadm renders verbatim and must
+equal the node's real hostname. Name your host to match, or author
+`spec.ceph.topology.hosts[].hostname` explicitly.

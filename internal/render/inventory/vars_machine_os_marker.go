@@ -38,6 +38,9 @@ func stableMarkerInput(osInstall map[string]any) map[string]any {
 				markerBasename(satellite, "caPath")
 			}
 		}
+		if proxy, ok := installer["proxy"].(map[string]any); ok {
+			markerBasename(proxy, "credentialsPath")
+		}
 	}
 	return out
 }

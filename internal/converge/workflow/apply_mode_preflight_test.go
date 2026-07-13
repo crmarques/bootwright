@@ -12,6 +12,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindNodeConfigApply:        true,
 		ApplyTaskKindHostVirtctl:            true,
 		ApplyTaskKindClusterAddon:           true,
+		ApplyTaskKindProvisioningPlaybook:   true,
 		"storageAttachmentApply":            true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {

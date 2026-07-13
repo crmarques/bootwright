@@ -14,13 +14,16 @@
 - name: Assert storage node hostname matches the declared topology
   ansible.builtin.assert:
     that:
-      - ansible_facts['hostname'] == item.hostname or ansible_facts['nodename'] == item.hostname
+      - >-
+        ansible_facts['nodename'] == item.cephHostname
+        or ansible_facts['hostname'] == item.cephHostname
+        or ansible_facts['hostname'] == item.cephHostname.split('.')[0]
     fail_msg: >-
       Storage node {{ bootwright_host_name }} reports hostname
-      {{ ansible_facts['nodename'] }} but the declared topology hostname
-      is {{ item.hostname }}; cephadm registers hosts under their real OS
-      hostname, so set the machine's hostname or author
-      spec.ceph.topology.hosts[].hostname to match.
+      {{ ansible_facts['nodename'] }} but the name cephadm will register is
+      {{ item.cephHostname }}; cephadm registers hosts under their real OS
+      hostname, so set the machine's hostname (or, for a provided OS, author
+      spec.ceph.topology.hosts[].hostname) to match {{ item.cephHostname }}.
   loop: "{{ bootwright_host_storage_nodes }}"
   loop_control:
     label: "{{ item.hostname }}"

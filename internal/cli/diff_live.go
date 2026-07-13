@@ -154,7 +154,7 @@ func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, s
 	}
 	discos, err := converge.RunCephStateDiscovery(ctx, stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, streamAnsible, reporter)
 	if err != nil {
-		return nil, "live Ceph discovery incomplete: " + firstErrorLine(err)
+		return discos, "live Ceph discovery incomplete: " + firstErrorLine(err)
 	}
 	return discos, ""
 }

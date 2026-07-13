@@ -68,7 +68,7 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		t.Fatalf("%s is not a command task", task["name"])
 	}
 	argv, ok := command["argv"].(string)
-	if !ok || !strings.Contains(argv, "/var/tmp/bootwright-libvirt-media-eject.sh") {
+	if !ok || !strings.Contains(argv, "bootwright_libvirt_media_eject_helper_path") {
 		t.Fatalf("libvirt media cleanup command must invoke installed helper script, got %v", command["argv"])
 	}
 

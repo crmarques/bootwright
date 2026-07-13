@@ -68,6 +68,7 @@ type renderStorageCluster struct {
 	Name                 string   `json:"name"`
 	ApplyScriptPath      string   `json:"applyScriptPath,omitempty"`
 	ApplyLibPath         string   `json:"applyLibPath,omitempty"`
+	BootstrapConfPath    string   `json:"bootstrapConfPath,omitempty"`
 	BootstrapSpecPath    string   `json:"bootstrapSpecPath,omitempty"`
 	CoreServicesSpecPath string   `json:"coreServicesSpecPath,omitempty"`
 	OperationsPath       string   `json:"operationsPath,omitempty"`
@@ -82,6 +83,7 @@ func renderStorageClusters(assets []render.StorageAsset) []renderStorageCluster 
 			Name:                 asset.StorageClusterName,
 			ApplyScriptPath:      asset.ApplyScriptPath,
 			ApplyLibPath:         asset.ApplyLibPath,
+			BootstrapConfPath:    asset.BootstrapConfPath,
 			BootstrapSpecPath:    asset.BootstrapSpecPath,
 			CoreServicesSpecPath: asset.CoreServicesSpecPath,
 			OperationsPath:       asset.OperationsPath,
@@ -95,7 +97,7 @@ func renderStorageClusters(assets []render.StorageAsset) []renderStorageCluster 
 func printStorageFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.StorageAssets {
-		paths = appendNonEmpty(paths, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
+		paths = appendNonEmpty(paths, asset.BootstrapConfPath, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
 	}
 	p := cliout.NewContinuation(stdout)
 	p.Section("Rendered artifacts")

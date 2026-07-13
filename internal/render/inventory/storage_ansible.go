@@ -228,6 +228,7 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		out = append(out, map[string]any{
 			"hostname":      node.MachineRef.Name,
+			"cephHostname":  node.Hostname,
 			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
 			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
 			"devices":       cephrender.OSDGateDevicePaths(cluster, node),

@@ -226,3 +226,55 @@ func dataDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
 	}
 	return paths
 }
+
+func OSDHostAllStaticDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) []string {
+	if cluster.Spec.Ceph == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(paths []string) {
+		for _, p := range paths {
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	add(host.Devices)
+	add(allDeviceStaticPaths(host.OSD))
+	name := host.Hostname
+	if name == "" {
+		name = CanonicalHostname(cluster, host.MachineRef.Name)
+	}
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
+			if placed == name {
+				add(allDeviceStaticPaths(&cluster.Spec.Ceph.Topology.OSDDrivegroups[i].OSD))
+				break
+			}
+		}
+	}
+	return out
+}
+
+func allDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
+	if osd == nil {
+		return nil
+	}
+	var paths []string
+	for _, sel := range []*v1alpha1.StorageCephDeviceSelection{osd.DataDevices, osd.DBDevices, osd.WALDevices} {
+		if sel == nil {
+			continue
+		}
+		paths = append(paths, sel.Paths...)
+		for _, p := range sel.PathSpecs {
+			if p.Path != "" {
+				paths = append(paths, p.Path)
+			}
+		}
+	}
+	return paths
+}

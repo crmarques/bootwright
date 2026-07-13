@@ -350,6 +350,9 @@ func nodeOptsOutOfFQDN(state *v1alpha1.State, machineName string) bool {
 	if !ok {
 		return false
 	}
+	if v1alpha1.MachineOSProvided(machine) {
+		return true
+	}
 	profile, ok := stateview.MachineInstallProfile(*state, machine.Spec.OS.InstallProfileRef.Name)
 	if !ok {
 		return false
@@ -505,6 +508,10 @@ func applyClusterPlatformDefaults(state *v1alpha1.State) {
 		cluster := &state.ContainerClusters[i]
 		platform := &cluster.Spec.Install.Platform
 		if !installPlatformOmitted(*platform) {
+			continue
+		}
+		if stateview.IsSingleNodeCluster(*cluster) {
+			platform.Type = v1alpha1.PlatformTypeNone
 			continue
 		}
 		binding := clusterNodeProviderBinding(*state, *cluster)

@@ -569,6 +569,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		if entitlement.Spec.RHSM != nil {
 			require(owner+".rhsm.organizationRef", entitlement.Spec.RHSM.OrganizationRef)
 			require(owner+".rhsm.activationKeyRef", entitlement.Spec.RHSM.ActivationKeyRef)
+			if sat := entitlement.Spec.RHSM.Satellite; sat != nil {
+				require(owner+".rhsm.satellite.trustBundleRef", sat.TrustBundleRef)
+			}
 		}
 		if entitlement.Spec.Registry != nil {
 			require(owner+".registry.credentialsRef", entitlement.Spec.Registry.CredentialsRef)
@@ -667,6 +670,13 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	for _, playbook := range state.ProvisioningPlaybooks {
 		for i, ref := range playbook.Spec.SecretRefs {
 			require(fmt.Sprintf("ProvisioningPlaybook/%s spec.secretRefs[%d]", playbook.Metadata.Name, i), ref)
+		}
+	}
+	for _, addon := range state.ClusterAddons {
+		for i, hook := range addon.Spec.Hooks {
+			for j, ref := range hook.SecretRefs {
+				require(fmt.Sprintf("ClusterAddon/%s spec.hooks[%d].secretRefs[%d]", addon.Metadata.Name, i, j), ref)
+			}
 		}
 	}
 	return errs

@@ -43,6 +43,8 @@
       - --namespace
       - "{{ bootwright_kubevirt_namespace }}"
       - --force
+      - --grace-period
+      - "0"
   register: bootwright_kubevirt_vm_stop
   changed_when: bootwright_kubevirt_vm_stop.rc == 0
   failed_when:

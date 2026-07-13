@@ -245,10 +245,14 @@ func sweepStaleRuntimeSecrets(runsDir, liveRunID string) {
 func removeRuntimeSecretDirs(root string) {
 	var targets []string
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
+		if err != nil || !d.IsDir() {
 			return nil
 		}
-		if d.IsDir() && d.Name() == "secrets" && filepath.Base(filepath.Dir(path)) == "runtime" {
+		parent := filepath.Base(filepath.Dir(path))
+		grandparent := filepath.Base(filepath.Dir(filepath.Dir(path)))
+		runtimeSecrets := d.Name() == "secrets" && parent == "runtime"
+		hookSecrets := (d.Name() == "secrets" || d.Name() == "connection-secrets") && grandparent == "hooks"
+		if runtimeSecrets || hookSecrets {
 			targets = append(targets, path)
 			return filepath.SkipDir
 		}

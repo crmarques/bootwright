@@ -9,6 +9,8 @@ spec:
     namespace:
       name: openshift-gitops-operator
       create: true
+    operatorGroup:
+      name: openshift-gitops-operator
     subscription:
       name: openshift-gitops-operator
       package: openshift-gitops-operator

@@ -131,10 +131,10 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 			Release:      release,
 		}}}
 	}
-	if url := Select(ibm(""), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo" {
+	if url := Select(ibm(""), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
 		t.Fatalf("default ibm repo url = %q", url)
 	}
-	if url := Select(ibm("10"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-9.repo" {
+	if url := Select(ibm("10"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-{{ ansible_distribution_major_version }}.repo" {
 		t.Fatalf("stream ibm repo url = %q, want stream 10", url)
 	}
 }

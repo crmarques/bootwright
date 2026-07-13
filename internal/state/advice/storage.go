@@ -134,13 +134,17 @@ func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []St
 	if cluster.Spec.Ceph.Image != "" {
 		return nil
 	}
+	example := "registry.redhat.io/rhceph/rhceph-9-rhel9@sha256:..."
+	if distribution == v1alpha1.StorageCephDistributionIBM {
+		example = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:..."
+	}
 	return []StorageAdvisory{{
 		Severity:    SeverityWarn,
 		Group:       cephBestPracticeGroup,
 		Object:      object,
 		Finding:     fmt.Sprintf("distribution %q pins no spec.ceph.image", distribution),
 		Impact:      "the install uses the distribution-packaged cephadm's default image tag, which floats; the running Ceph version is not reproducible across re-installs",
-		Remediation: "set spec.ceph.image to a digest-pinned reference (for example cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:...)",
+		Remediation: "set spec.ceph.image to a digest-pinned reference (for example " + example + ")",
 	}}
 }
 

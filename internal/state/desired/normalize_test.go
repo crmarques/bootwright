@@ -354,25 +354,27 @@ func platformDerivationState(providerTypes ...string) v1alpha1.State {
 	cluster := v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: "cluster-a"}}
 	for i, providerType := range providerTypes {
 		providerName := fmt.Sprintf("provider-%d", i)
-		machineName := fmt.Sprintf("machine-%d", i)
 		state.InfraProviders = append(state.InfraProviders, v1alpha1.InfraProvider{
 			Metadata: v1alpha1.Metadata{Name: providerName},
 			Spec:     v1alpha1.InfraProviderSpec{Type: providerType},
 		})
-		state.Machines = append(state.Machines, v1alpha1.Machine{
-			Metadata: v1alpha1.Metadata{Name: machineName},
-			Spec: v1alpha1.MachineSpec{
-				Substrate: v1alpha1.MachineSubstrate{
-					ProviderRef: v1alpha1.LocalObjectReference{Name: providerName},
+		for n := 0; n < 2; n++ {
+			machineName := fmt.Sprintf("machine-%d-%d", i, n)
+			state.Machines = append(state.Machines, v1alpha1.Machine{
+				Metadata: v1alpha1.Metadata{Name: machineName},
+				Spec: v1alpha1.MachineSpec{
+					Substrate: v1alpha1.MachineSubstrate{
+						ProviderRef: v1alpha1.LocalObjectReference{Name: providerName},
+					},
+					OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 				},
-				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
-			},
-		})
-		cluster.Spec.Hosts = append(cluster.Spec.Hosts, v1alpha1.OCPHostSpec{
-			Hostname:   fmt.Sprintf("master-%d", i),
-			Role:       "master",
-			MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
-		})
+			})
+			cluster.Spec.Hosts = append(cluster.Spec.Hosts, v1alpha1.OCPHostSpec{
+				Hostname:   fmt.Sprintf("master-%d-%d", i, n),
+				Role:       "master",
+				MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
+			})
+		}
 	}
 	state.ContainerClusters = []v1alpha1.ContainerCluster{cluster}
 	return state

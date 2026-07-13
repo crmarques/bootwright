@@ -26,6 +26,8 @@
     - "{{ bootwright_cluster_generated_addon_secrets_dir }}"
     - "{{ bootwright_cluster_install_record_path }}"
     - "{{ bootwright_cluster_connection_record_path }}"
+    - "{{ bootwright_cluster_secrets_dir }}/kubeconfig"
+    - "{{ bootwright_cluster_secrets_dir }}/kubeadmin-password"
   loop_control:
     label: "{{ item }}"
 

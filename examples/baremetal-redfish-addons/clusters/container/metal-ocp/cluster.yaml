@@ -10,11 +10,11 @@ spec:
   install:
     endpoints:
       api:
-        address: 192.168.150.10
+        address: 192.168.150.20
         source:
           type: external
       ingress:
-        address: 192.168.150.11
+        address: 192.168.150.20
         source:
           type: external
     agent:

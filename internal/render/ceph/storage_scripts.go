@@ -40,12 +40,24 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	writeOrchApply(&b, opts.CoreServicesSpecFile)
 
 	b.WriteString("\necho \"== stage 20: ceph objects ==\"\n")
+	var lateOps []map[string]any
 	for _, op := range cephOperationList(state, cluster) {
+		if op["phase"] == "object-gateway" {
+			lateOps = append(lateOps, op)
+			continue
+		}
 		writeOperation(&b, op)
 	}
 
 	b.WriteString("\necho \"== stage 30: late service specs (ceph orch apply) ==\"\n")
 	writeOrchApply(&b, opts.LateServicesSpecFile)
+
+	if len(lateOps) > 0 {
+		b.WriteString("\necho \"== stage 40: object-gateway objects (after the rgw/nfs services above) ==\"\n")
+		for _, op := range lateOps {
+			writeOperation(&b, op)
+		}
+	}
 
 	if ManagementHasSecrets(cluster) {
 		b.WriteString("\necho \"  [todo] spec.ceph.management carries TLS/oauth2-proxy secrets: the mgmt-gateway is NOT in this bundle.\"\n")

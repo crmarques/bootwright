@@ -30,7 +30,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		}
 		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, owned)
 	}
-	if firstBoot := workflow.BareMetalFirstInstallClusters(objects, tasks); len(firstBoot) > 0 {
+	if firstBoot := workflow.BareMetalFirstInstallClusters(objects, tasks, plan.State); len(firstBoot) > 0 {
 		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
 		converge.ApplyOCPFirstInstallClustersExtraVar(plan, firstBoot)
 	}

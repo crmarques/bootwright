@@ -12,11 +12,11 @@ spec:
       keyPairRef: metal-ocp-cluster-admin-ssh-key
     endpoints:
       api:
-        address: 192.168.160.10
+        address: 192.168.160.20
         source:
           type: external
       ingress:
-        address: 192.168.160.11
+        address: 192.168.160.20
         source:
           type: external
     agent:

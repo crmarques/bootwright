@@ -17,7 +17,7 @@ spec:
 
   kubevirt:
     namespace: bootwright-dc2-child-ocp
-    storageClassRef: ocs-storagecluster-ceph-rbd
+    storageClassRef: ocs-external-storagecluster-ceph-rbd
     hostClusterRef: dc2-metal-ocp
     machineProfiles:
     - name: dc2-child-master

@@ -310,7 +310,7 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 }
 
 func TestHostBaseFirewalldAvailabilityRequiresRunningDaemon(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_base/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_base/tasks/firewalld_probe.yml")
 	binaryIdx := findAnsibleTask(t, tasks, "Detect firewall-cmd binary")
 	stateIdx := findAnsibleTask(t, tasks, "Detect running firewalld daemon")
 	factIdx := findAnsibleTask(t, tasks, "Set firewalld availability fact")
