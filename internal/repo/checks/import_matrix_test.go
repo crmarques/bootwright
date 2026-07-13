@@ -15,7 +15,20 @@ var allowedImports = map[string][]string{
 	"api/v1alpha1":   {},
 	"cmd/bootwright": {"internal/cli"},
 
-	"internal/cli":        {"*"},
+	"internal/cli": {
+		"api/v1alpha1", "internal/addons/nativecatalog", "internal/addons/oc",
+		"internal/addons/plan", "internal/addons/records", "internal/cli/output",
+		"internal/clusteraccess", "internal/converge", "internal/converge/ansible",
+		"internal/converge/bastion", "internal/converge/bundle", "internal/converge/workflow",
+		"internal/host/become", "internal/host/callerio", "internal/host/execution",
+		"internal/host/ptyexec", "internal/host/safefs", "internal/infra/artifacts",
+		"internal/infra/locality", "internal/infra/media", "internal/infra/proxy",
+		"internal/ownership", "internal/preflight", "internal/render", "internal/secrets",
+		"internal/sshtrust", "internal/state/advice", "internal/state/desired",
+		"internal/state/graph", "internal/state/scaffold", "internal/state/view",
+		"internal/status", "internal/storage/cephadopt", "internal/storage/cephdiff",
+		"internal/storage/cephstate", "internal/workspace",
+	},
 	"internal/cli/output": {},
 
 	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
