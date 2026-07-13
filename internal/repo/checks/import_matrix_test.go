@@ -70,7 +70,7 @@ var allowedImports = map[string][]string{
 	"internal/addons/inputs":        {"api/v1alpha1"},
 	"internal/addons/nativecatalog": {"add-ons", "api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/workspace"},
 	"internal/addons/oc":            {"api/v1alpha1", "internal/addons", "internal/addons/hooks", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/host/execution", "internal/host/shellquote"},
-	"internal/addons/plan":          {"api/v1alpha1", "internal/addons", "internal/addons/render"},
+	"internal/addons/plan":          {"api/v1alpha1", "internal/addons", "internal/addons/inputs", "internal/addons/render"},
 	"internal/addons/records":       {"internal/host/safefs"},
 	"internal/addons/render":        {"api/v1alpha1", "internal/addons", "internal/addons/hooks"},
 

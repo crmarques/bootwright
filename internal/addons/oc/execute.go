@@ -97,11 +97,23 @@ func hasGlobalPullSecretMergeEffect(extension v1alpha1.ClusterAddon) bool {
 	return false
 }
 
+// planDesiredHash returns the add-on's desired-state hash. plan.BindingPlans
+// computes it once and carries it on the ExtensionPlan, so the executor consumes
+// that value rather than deriving its own. An ExtensionPlan built directly
+// without the hash (a test fixture) falls back to computing it from the same
+// pure inputs, so the value is identical either way.
+func planDesiredHash(plan extensionplan.ExtensionPlan) (string, error) {
+	if plan.DesiredHash != "" {
+		return plan.DesiredHash, nil
+	}
+	return extensionrender.DesiredHash(plan.Extension, plan.Policy, plan.Inputs)
+}
+
 func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (TaskResult, error) {
 	if err := requireKubeconfig(cfg.Kubeconfig); err != nil {
 		return TaskResult{}, err
 	}
-	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy, plan.Inputs)
+	hash, err := planDesiredHash(plan)
 	if err != nil {
 		return TaskResult{}, err
 	}
@@ -172,7 +184,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err := requireKubeconfig(cfg.Kubeconfig); err != nil {
 		return TaskResult{}, err
 	}
-	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy, plan.Inputs)
+	hash, err := planDesiredHash(plan)
 	if err != nil {
 		return TaskResult{}, err
 	}

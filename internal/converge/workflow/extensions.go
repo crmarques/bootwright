@@ -35,13 +35,18 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	var err error
 	switch task.Entry.Kind {
 	case ApplyTaskKindClusterAddon:
-		var applied, waited extensionoc.TaskResult
-		applied, err = extensionoc.Apply(ctx, runner, cfg, *task.Extension)
-		if err == nil {
-			waited, err = extensionoc.Wait(ctx, runner, cfg, *task.Extension)
-		}
-		if err == nil && applied.Skipped && waited.Skipped {
-			result = extensionoc.TaskResult{Skipped: true, Reason: applied.Reason}
+		plan := *task.Extension
+		var hash string
+		if hash, err = plan.ComputeDesiredHash(); err == nil {
+			plan.DesiredHash = hash
+			var applied, waited extensionoc.TaskResult
+			applied, err = extensionoc.Apply(ctx, runner, cfg, plan)
+			if err == nil {
+				waited, err = extensionoc.Wait(ctx, runner, cfg, plan)
+			}
+			if err == nil && applied.Skipped && waited.Skipped {
+				result = extensionoc.TaskResult{Skipped: true, Reason: applied.Reason}
+			}
 		}
 	default:
 		err = fmt.Errorf("unsupported add-on task kind %s", task.Entry.Kind)
