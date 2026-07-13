@@ -158,14 +158,14 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - \"bad cap\"\n", 1),
 			},
-			wantSubstring: `spec.provides[0] "bad cap" is not a valid capability token`,
+			wantSubstring: `spec.provides[0] "bad cap" is not a supported capability (supported: kubevirt, dataFoundation, nmstate)`,
 		},
 		{
 			name: "malformed-required-capability",
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  requires:\n    - \"bad cap\"\n", 1),
 			},
-			wantSubstring: `spec.requires[0] "bad cap" is not a valid capability token`,
+			wantSubstring: `spec.requires[0] "bad cap" is not a supported capability (supported: kubevirt, dataFoundation, nmstate)`,
 		},
 		{
 			name: "duplicated-provided-capability",

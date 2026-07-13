@@ -49,7 +49,7 @@ func TestValidateProvisioningPlaybook(t *testing.T) {
 		{"localhost-ban", func(p *v1alpha1.ProvisioningPlaybook) {
 			p.Spec.Target = v1alpha1.ProvisioningPlaybookTarget{HostGroups: []string{"bootwright_ocp_hosts"}}
 		}, "targets the bootwright controller/localhost"},
-		{"absolute-playbook", func(p *v1alpha1.ProvisioningPlaybook) { p.Spec.Playbook = "/etc/passwd" }, "must be relative"},
+		{"absolute-playbook", func(p *v1alpha1.ProvisioningPlaybook) { p.Spec.Playbook = "/etc/passwd" }, "must be a relative path"},
 		{"escaping-playbook", func(p *v1alpha1.ProvisioningPlaybook) { p.Spec.Playbook = "../evil.yml" }, "must stay within"},
 		{"vendor-dir", func(p *v1alpha1.ProvisioningPlaybook) { p.Spec.RolesPath = "vendor" }, "must not be named vendor"},
 	}

@@ -226,11 +226,11 @@ func validateContainedPath(owner, value string) (string, []string) {
 		return "", []string{fmt.Sprintf("%s %q must not contain leading or trailing whitespace", owner, value)}
 	}
 	if filepath.IsAbs(value) {
-		return "", []string{fmt.Sprintf("%s %q must be relative to the ProvisioningPlaybook file", owner, value)}
+		return "", []string{fmt.Sprintf("%s %q must be a relative path", owner, value)}
 	}
 	clean := filepath.Clean(value)
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", []string{fmt.Sprintf("%s %q must stay within the ProvisioningPlaybook file directory", owner, value)}
+		return "", []string{fmt.Sprintf("%s %q must stay within the directory of the file that declares it", owner, value)}
 	}
 	return clean, nil
 }

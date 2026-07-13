@@ -165,7 +165,7 @@ func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterA
 		case "":
 			errs = append(errs, owner+".type is required")
 		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q is not supported", owner, effect.Type))
+			errs = append(errs, fmt.Sprintf("%s.type %q is not supported (supported: %s, %s)", owner, effect.Type, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge))
 		}
 	}
 	return errs
@@ -207,7 +207,15 @@ func validateGlobalPullSecretMergeInputSchema(addon string, index int, input v1a
 }
 
 func clusterAddonCapabilityValid(capability string) bool {
-	return provisioningTokenRe.MatchString(capability)
+	switch capability {
+	case v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState:
+		return true
+	}
+	return false
+}
+
+func clusterAddonCapabilityTokens() string {
+	return strings.Join([]string{v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState}, ", ")
 }
 
 func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
@@ -221,7 +229,7 @@ func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
 			continue
 		}
 		if !clusterAddonCapabilityValid(capability) {
-			errs = append(errs, fmt.Sprintf("%s %q is not a valid capability token", owner, capability))
+			errs = append(errs, fmt.Sprintf("%s %q is not a supported capability (supported: %s)", owner, capability, clusterAddonCapabilityTokens()))
 			continue
 		}
 		if seen[capability] {
@@ -247,7 +255,7 @@ func validateClusterAddonRequires(extension v1alpha1.ClusterAddon) []string {
 			continue
 		}
 		if !clusterAddonCapabilityValid(capability) {
-			errs = append(errs, fmt.Sprintf("%s %q is not a valid capability token", owner, capability))
+			errs = append(errs, fmt.Sprintf("%s %q is not a supported capability (supported: %s)", owner, capability, clusterAddonCapabilityTokens()))
 			continue
 		}
 		if seen[capability] {
@@ -293,6 +301,9 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 		}
 		if catalog.Name != "" && olm.Subscription.Source != "" && olm.Subscription.Source != catalog.Name {
 			errs = append(errs, fmt.Sprintf("%s.subscription.source %q must match catalogSource.name %q", prefix, olm.Subscription.Source, catalog.Name))
+		}
+		if olm.Namespace.Create && olm.Subscription.SourceNamespace != "" && olm.Subscription.SourceNamespace == olm.Namespace.Name {
+			errs = append(errs, fmt.Sprintf("%s.subscription.sourceNamespace %q must be a pre-existing namespace when catalogSource is set; the CatalogSource is applied and readiness-gated before the add-on creates %q", prefix, olm.Subscription.SourceNamespace, olm.Namespace.Name))
 		}
 	}
 	sub := olm.Subscription
