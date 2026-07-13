@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/cephdiff"
+	"github.com/crmarques/bootwright/internal/storage/cephstate"
 )
 
 func TestPrintLiveDiffRendersGitStyle(t *testing.T) {
@@ -62,6 +64,30 @@ func TestPrintLiveDiffRendersGitStyle(t *testing.T) {
 	}
 	if strings.Contains(got, "+type: replicated") {
 		t.Fatalf("desired-only field rendered as an addition:\n%s", got)
+	}
+}
+
+func TestDiffStorageClusterUnreachableIsNotInSync(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph-prod"},
+		Spec:     v1alpha1.StorageClusterSpec{Type: "ceph", Ceph: &v1alpha1.StorageClusterCephSpec{}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	live := liveDiffReport{InSync: true}
+	result := diffStorageCluster(state, cluster, "ceph-prod", map[string]cephstate.Discovery{}, &live)
+	if result.InSync || live.InSync {
+		t.Fatalf("unreachable managed cluster must not report in sync: result=%+v live=%+v", result, live)
+	}
+	if !strings.Contains(result.Note, "unreachable") {
+		t.Fatalf("unreachable note missing: %+v", result)
+	}
+
+	external := cluster
+	external.Spec.Management = v1alpha1.StorageClusterManagementExternal
+	live = liveDiffReport{InSync: true}
+	result = diffStorageCluster(state, external, "ceph-prod", map[string]cephstate.Discovery{}, &live)
+	if !result.InSync || !live.InSync {
+		t.Fatalf("external cluster comparison must stay neutral: result=%+v live=%+v", result, live)
 	}
 }
 

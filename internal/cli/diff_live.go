@@ -98,7 +98,7 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 				continue
 			}
 			container := probeContainerCluster(ctx, state, clustersDir, cf.ctx.RunsDir, root.Name)
-			if container.Reachable && !container.Available {
+			if !container.Installed || !container.Reachable || !container.Available {
 				live.InSync = false
 			}
 			live.Container = append(live.Container, container)
@@ -133,6 +133,8 @@ func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 	disc, ok := discos[name]
 	if !ok || !disc.Probed {
 		result.Note = "cluster unreachable; could not compare live state"
+		result.InSync = false
+		live.InSync = false
 		return result
 	}
 	report := cephdiff.Compare(state, cluster, disc)
