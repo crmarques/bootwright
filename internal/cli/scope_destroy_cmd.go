@@ -122,6 +122,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
+		if runScope.Name != "infra" && sel.Active && len(sel.StorageRoots) > 0 {
+			if conflicts := stategraph.StorageConsumerDestroyConflicts(state, sel.StorageRoots, sel.ContainerRoots); len(conflicts) > 0 {
+				return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
+			}
+		}
 		printPlanStep(stdout, flags.output, runCommandLabel)
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"

@@ -215,6 +215,17 @@ func FormatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict, fl
 		"re-run without "+flagName+" to destroy everything, or extend "+flagName+" to include the unscoped clusters")
 }
 
+func FormatStorageConsumerConflicts(conflicts []stategraph.StorageConsumerConflict) error {
+	var b strings.Builder
+	b.WriteString("refusing to destroy storage still consumed by a container cluster left running:\n")
+	for _, c := range conflicts {
+		b.WriteString(fmt.Sprintf("  - StorageCluster %s is consumed by %s\n",
+			c.StorageCluster, strings.Join(c.ConsumingClusters, ", ")))
+	}
+	b.WriteString("include the consuming cluster(s) in --clusters, destroy them first, or remove the storage attachment binding if the consumer is already gone")
+	return fmt.Errorf("%s", b.String())
+}
+
 func formatScopeConflicts(conflicts []stategraph.DestroyScopeConflict, lead, closing string) error {
 	var b strings.Builder
 	b.WriteString(lead + "\n")
