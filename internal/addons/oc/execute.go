@@ -274,15 +274,14 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		if err != nil {
 			return observed, "", err
 		}
-		hasPostOperatorReady := hooks.HasLifecycle(plan.Extension, v1alpha1.ClusterAddonHookPostOperatorReady)
-		if len(custom) > 0 || hasPostOperatorReady {
-			olm := plan.Extension.Spec.OLM
-			if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, olm.Namespace.Name, olm.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
-				return observed, "", err
-			}
-			if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady); err != nil {
-				return observed, "", err
-			}
+		subscriptionOLM := plan.Extension.Spec.OLM
+		if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, subscriptionOLM.Namespace.Name, subscriptionOLM.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
+			return observed, "", err
+		}
+		if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady); err != nil {
+			return observed, "", err
+		}
+		if len(custom) > 0 {
 			observed, failedID, err = applyResources(ctx, runner, kubeconfig, plan.Policy, custom, observed)
 			if err != nil {
 				return observed, failedID, err
@@ -320,6 +319,7 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 	if err != nil {
 		return err
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if pollInterval <= 0 {
@@ -340,6 +340,9 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 		}
 		select {
 		case <-ctx.Done():
+			if parent.Err() != nil {
+				return parent.Err()
+			}
 			return &csvGateError{namespace: namespace, subscription: subscription, timeout: timeout, lastObserved: last}
 		case <-ticker.C:
 		}
@@ -351,6 +354,7 @@ func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, na
 	if err != nil {
 		return err
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if pollInterval <= 0 {
@@ -369,6 +373,9 @@ func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, na
 		}
 		select {
 		case <-ctx.Done():
+			if parent.Err() != nil {
+				return parent.Err()
+			}
 			return &catalogGateError{namespace: namespace, name: name, timeout: timeout, lastObserved: last}
 		case <-ticker.C:
 		}
@@ -456,6 +463,7 @@ func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extensio
 	if len(extension.Spec.Readiness.Checks) == 0 {
 		return "no readiness checks declared", nil
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if pollInterval <= 0 {
@@ -476,6 +484,9 @@ func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extensio
 		}
 		select {
 		case <-ctx.Done():
+			if parent.Err() != nil {
+				return last, parent.Err()
+			}
 			return last, fmt.Errorf("ClusterAddon/%s readiness timed out after %s; last observed: %s", extension.Metadata.Name, timeout, last)
 		case <-ticker.C:
 		}
