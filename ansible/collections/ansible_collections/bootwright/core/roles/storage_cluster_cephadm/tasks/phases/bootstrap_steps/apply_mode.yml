@@ -46,6 +46,61 @@
              == bootwright_ceph_override_fsid | default(''))
       }}
 
+- name: Probe whether the existing Ceph cluster is reachable
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "20"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - health
+  register: bootwright_ceph_override_health
+  changed_when: false
+  failed_when: false
+  when:
+    - (bootwright_ceph_override_conf | default({})).content is defined
+    - bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname
+
+- name: Resolve whether the existing Ceph cluster is reachable
+  ansible.builtin.set_fact:
+    bootwright_ceph_override_reachable: >-
+      {{ (bootwright_ceph_override_health.rc | default(1)) == 0 }}
+
+- name: Detect an incomplete Bootwright bootstrap eligible for override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_incomplete_bootstrap: >-
+      {{
+        ((bootwright_ceph_override_conf | default({})).content is defined)
+        and (bootwright_ceph_override_fsid | default('') | length > 0)
+        and (bootwright_ceph_override_record.stat.exists | default(false) | bool)
+        and (bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname)
+        and (bootwright_ceph_override_owned_fsid | default('') | length == 0)
+        and not (bootwright_ceph_override_reachable | default(false) | bool)
+      }}
+
+- name: Refuse to touch a Bootwright Ceph cluster whose ownership marker is missing
+  ansible.builtin.fail:
+    msg: >-
+      Bootwright has an ownership record for storage cluster
+      {{ bootwright_selected_storage_cluster.name }} on {{ inventory_hostname }}, but its
+      on-host ownership marker at {{ bootwright_ceph_ownership_marker_path }} is missing or
+      does not match the live cluster fsid {{ bootwright_ceph_override_fsid }}. Refusing any
+      destructive action.
+      {{
+        'The cluster is reachable: if you trust it, re-stamp the marker with that fsid to adopt it.'
+        if (bootwright_ceph_override_reachable | default(false) | bool)
+        else 'The cluster is unreachable and its bootstrap never completed: re-run with --override to rebuild it.'
+      }}
+  when:
+    - (bootwright_ceph_override_conf | default({})).content is defined
+    - bootwright_ceph_override_record.stat.exists | default(false) | bool
+    - (bootwright_ceph_override_owned_fsid | default('') | length == 0)
+    - >-
+      (bootwright_ceph_override_reachable | default(false) | bool)
+      or ((bootwright_apply_mode | default('continue')) != 'override')
+
 - name: Enforce apply mode for the Ceph cluster
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -53,7 +108,9 @@
   vars:
     bootwright_gate_object: "storage cluster {{ bootwright_selected_storage_cluster.name }} cephadm cluster"
     bootwright_gate_exists: "{{ (bootwright_ceph_override_conf | default({})).content is defined }}"
-    bootwright_gate_owned: "{{ bootwright_ceph_override_owned | default(false) | bool }}"
+    bootwright_gate_owned: >-
+      {{ (bootwright_ceph_override_owned | default(false) | bool)
+         or (bootwright_ceph_incomplete_bootstrap | default(false) | bool) }}
 
 - name: Decide whether this cluster's override drift is reconcilable in place
   ansible.builtin.set_fact:
@@ -81,10 +138,14 @@
   failed_when: bootwright_ceph_override_rm.rc != 0
   when:
     - (bootwright_apply_mode | default('continue')) == 'override'
-    - bootwright_ceph_override_owned | default(false) | bool
     - bootwright_ceph_override_fsid | default('') | length > 0
-    - bootwright_ceph_rebuild_authorized | default(false) | bool
-    - not (bootwright_ceph_reconcilable_only | default(false) | bool)
+    - >-
+      (
+        (bootwright_ceph_override_owned | default(false) | bool)
+        and (bootwright_ceph_rebuild_authorized | default(false) | bool)
+        and not (bootwright_ceph_reconcilable_only | default(false) | bool)
+      )
+      or (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
 
 - name: Clear residual Ceph configuration for override rebuild
   ansible.builtin.file:
@@ -97,10 +158,14 @@
     - "{{ bootwright_ceph_ownership_marker_path }}"
   when:
     - (bootwright_apply_mode | default('continue')) == 'override'
-    - bootwright_ceph_override_owned | default(false) | bool
     - (bootwright_ceph_override_conf | default({})).content is defined
-    - bootwright_ceph_rebuild_authorized | default(false) | bool
-    - not (bootwright_ceph_reconcilable_only | default(false) | bool)
+    - >-
+      (
+        (bootwright_ceph_override_owned | default(false) | bool)
+        and (bootwright_ceph_rebuild_authorized | default(false) | bool)
+        and not (bootwright_ceph_reconcilable_only | default(false) | bool)
+      )
+      or (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
 
 - name: Check existing Ceph configuration
   ansible.builtin.command:

@@ -303,6 +303,51 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
+	tasks := storageCephBootstrapTasks(t)
+
+	detectIdx := findAnsibleTask(t, tasks, "Detect an incomplete Bootwright bootstrap eligible for override rebuild")
+	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
+	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")
+	if !(detectIdx < gateIdx && gateIdx < zapIdx) {
+		t.Fatalf("incomplete-bootstrap detection must run before the gate and the zap (detect=%d gate=%d zap=%d)", detectIdx, gateIdx, zapIdx)
+	}
+
+	detect, ok := tasks[detectIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("incomplete-bootstrap detection must be a set_fact, got %v", tasks[detectIdx])
+	}
+	expr := fmt.Sprint(detect["bootwright_ceph_incomplete_bootstrap"])
+	for _, want := range []string{
+		"bootwright_ceph_override_record.stat.exists",
+		"bootwright_ceph_override_owned_fsid | default('') | length == 0",
+		"bootwright_ceph_override_reachable",
+		"bootwright_selected_storage_cluster.seedHost",
+	} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("incomplete-bootstrap detection must require %q, got %v", want, detect["bootwright_ceph_incomplete_bootstrap"])
+		}
+	}
+	if !strings.Contains(expr, "not (bootwright_ceph_override_reachable") {
+		t.Fatalf("incomplete-bootstrap detection must require the cluster to be unreachable, got %v", detect["bootwright_ceph_incomplete_bootstrap"])
+	}
+
+	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_incomplete_bootstrap") {
+		t.Fatalf("override rebuild zap must also honor the incomplete-bootstrap decision, got %v", tasks[zapIdx]["when"])
+	}
+
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to touch a Bootwright Ceph cluster whose ownership marker is missing")
+	if !(detectIdx < refuseIdx && refuseIdx < gateIdx) {
+		t.Fatalf("missing-marker refusal must run after detection and before the gate (detect=%d refuse=%d gate=%d)", detectIdx, refuseIdx, gateIdx)
+	}
+	if _, ok := tasks[refuseIdx]["ansible.builtin.fail"].(map[string]any); !ok {
+		t.Fatalf("missing-marker refusal must be a fail, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_override_owned_fsid | default('') | length == 0") {
+		t.Fatalf("missing-marker refusal must be gated on the absent ownership marker, got %v", tasks[refuseIdx]["when"])
+	}
+}
+
 func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 	rm := tasks[findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")]
