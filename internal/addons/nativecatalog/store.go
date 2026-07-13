@@ -33,6 +33,13 @@ func InstalledDir(name string) string {
 	return filepath.Join(StoreDir(), name)
 }
 
+func ValidateStoreName(name string) error {
+	if name == "" || name != filepath.Base(name) || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\:`) {
+		return fmt.Errorf("invalid add-on name %q", name)
+	}
+	return nil
+}
+
 func ensureStoreDir() error {
 	if _, err := managedroot.Ensure(workspace.RootDir(), dirMode); err != nil {
 		return err
@@ -179,6 +186,9 @@ func installedDigest(dir string) string {
 }
 
 func Remove(name string) error {
+	if err := ValidateStoreName(name); err != nil {
+		return err
+	}
 	dir := InstalledDir(name)
 	_, found, err := ReadMarker(dir)
 	if err != nil {

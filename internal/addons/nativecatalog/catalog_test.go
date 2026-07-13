@@ -155,3 +155,23 @@ func TestRemoveRefusesUnmarkedDirectory(t *testing.T) {
 		t.Fatalf("Remove unmarked err = %v", err)
 	}
 }
+
+func TestRemoveRejectsTraversalNames(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	victim := filepath.Join(root, "contexts", "prod", "input", "add-ons", "_store", "odf")
+	if err := os.MkdirAll(victim, 0o700); err != nil {
+		t.Fatalf("mkdir victim: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(victim, MarkerName), []byte("name=odf\nversion=1\n"), 0o600); err != nil {
+		t.Fatalf("seed marker: %v", err)
+	}
+	for _, name := range []string{"", ".", "..", "../contexts/prod/input/add-ons/_store/odf", "a/b", `a\b`, ".hidden"} {
+		if err := Remove(name); err == nil || !strings.Contains(err.Error(), "invalid add-on name") {
+			t.Fatalf("Remove(%q) err = %v, want invalid add-on name", name, err)
+		}
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatalf("victim dir must survive traversal attempts: %v", err)
+	}
+}

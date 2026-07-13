@@ -35,6 +35,9 @@ func resolveRegisteredAddons(state *v1alpha1.State) error {
 	}
 	sort.Strings(missing)
 	for _, name := range missing {
+		if nativecatalog.ValidateStoreName(name) != nil {
+			continue
+		}
 		dir := nativecatalog.InstalledDir(name)
 		if _, err := os.Stat(dir); err != nil {
 			continue
