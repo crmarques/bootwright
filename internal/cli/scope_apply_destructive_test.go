@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestReclaimDestructiveDescriptors(t *testing.T) {
+	if got := reclaimDestructiveDescriptors("/dev/sdb", []string{"ceph"}); len(got) != 1 || !strings.Contains(got[0], "/dev/sdb") || !strings.Contains(got[0], "ceph") {
+		t.Fatalf("reclaim of an owned cluster must yield a data-loss descriptor, got %v", got)
+	}
+	if got := reclaimDestructiveDescriptors("/dev/sdb", nil); got != nil {
+		t.Fatalf("reclaim with no owned cluster must not add a data-loss descriptor, got %v", got)
+	}
+	if got := reclaimDestructiveDescriptors("", []string{"ceph"}); got != nil {
+		t.Fatalf("no reclaim devices must not add a data-loss descriptor, got %v", got)
+	}
+}
+
 func TestDestructiveOverrideYesGuard(t *testing.T) {
 	objs := []string{"Machine/db1", "StorageCluster/ceph"}
 	cases := []struct {

@@ -36,17 +36,24 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 	}
 }
 
+func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []string {
+	if reclaimDevices == "" || len(owned) == 0 {
+		return nil
+	}
+	return []string{"reclaim-devices " + reclaimDevices + " on Ceph cluster(s) " + strings.Join(owned, ", ")}
+}
+
 func destructiveApplyConfirmPrompt(stdout io.Writer, destructive []string, allowDestroy bool) string {
 	if len(destructive) == 0 || allowDestroy {
 		return "Continue with apply? [y/N] (default: no): "
 	}
-	cliout.NewContinuation(stdout).Warning("override", "will DESTROY and rebuild "+strings.Join(destructive, ", ")+" — disks wiped / Ceph OSD data zapped. This is irreversible.")
-	return "Confirm this DESTRUCTIVE rebuild (accept data loss)? [y/N] (default: no): "
+	cliout.NewContinuation(stdout).Warning("data loss", "will DESTROY data — "+strings.Join(destructive, ", ")+" — disks wiped / Ceph OSD data zapped. This is irreversible.")
+	return "Confirm this DESTRUCTIVE action (accept data loss)? [y/N] (default: no): "
 }
 
 func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool) error {
 	if len(destructive) == 0 || allowDestroy || !yes {
 		return nil
 	}
-	return fmt.Errorf("apply --override would destructively rebuild %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: add --allow-destroy to proceed non-interactively, or drop --yes to confirm interactively", strings.Join(destructive, ", "))
+	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: add --allow-destroy to proceed non-interactively, or drop --yes to confirm interactively", strings.Join(destructive, ", "))
 }

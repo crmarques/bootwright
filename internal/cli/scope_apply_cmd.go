@@ -237,9 +237,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, err)
 				}
 				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
-				if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
-					return failErr(1, err)
-				}
+			}
+			if reclaimDevices != "" {
+				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, converge.OwnedStorageClusters(objects))...)
+			}
+			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
+				return failErr(1, err)
 			}
 			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices)
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
