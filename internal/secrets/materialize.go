@@ -1,6 +1,8 @@
 package secret
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -65,6 +67,24 @@ func generatedCredentialsRequestsFor(state v1alpha1.State) []generatedCredential
 	return out
 }
 
+type generatedTokenRequest struct {
+	name  string
+	bytes int
+}
+
+func generatedTokenRequestsFor(state v1alpha1.State) []generatedTokenRequest {
+	secrets := generatedSecretsOfType(state, v1alpha1.SecretTypeToken)
+	out := make([]generatedTokenRequest, 0, len(secrets))
+	for _, s := range secrets {
+		size := s.Spec.Source.Generated.Bytes
+		if size <= 0 {
+			size = v1alpha1.DefaultTokenBytes
+		}
+		out = append(out, generatedTokenRequest{name: s.Metadata.Name, bytes: size})
+	}
+	return out
+}
+
 type generatedSSHKeyPairRequest struct {
 	name    string
 	keyPair v1alpha1.GeneratedSSHKeyPairSpec
@@ -103,6 +123,13 @@ func MaterializeForContext(contextName, secretsDir string, state v1alpha1.State,
 		}
 		for _, request := range generatedSSHKeyPairRequestsFor(state) {
 			action, err := materializeGeneratedSSHKeyPair(store, secretsDir, request, opts.Renew)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, MaterializeResult{Name: request.name, Action: action})
+		}
+		for _, request := range generatedTokenRequestsFor(state) {
+			action, err := materializeGeneratedToken(store, secretsDir, request, opts.Renew)
 			if err != nil {
 				return nil, err
 			}
@@ -203,6 +230,29 @@ func materializeGeneratedCredentials(store *ContextStore, secretsDir string, req
 		return fmt.Sprintf("regenerated %s (user %q)", target, wantUser), nil
 	}
 	return fmt.Sprintf("generated %s (user %q)", target, wantUser), nil
+}
+
+func materializeGeneratedToken(store *ContextStore, secretsDir string, request generatedTokenRequest, renew bool) (string, error) {
+	target := filepath.Join(secretsDir, request.name)
+	key := MaterialKey{Name: request.name, Role: MaterialPrimary}
+	exists, err := store.Exists(key)
+	if err != nil {
+		return "", err
+	}
+	if exists && !renew {
+		return "reused existing token", nil
+	}
+	buf := make([]byte, request.bytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate token %s: %w", request.name, err)
+	}
+	if err := store.Write(key, []byte(base64.RawURLEncoding.EncodeToString(buf)+"\n")); err != nil {
+		return "", err
+	}
+	if renew && exists {
+		return "regenerated " + target, nil
+	}
+	return "generated " + target, nil
 }
 
 func materializeGeneratedSSHKeyPair(store *ContextStore, secretsDir string, request generatedSSHKeyPairRequest, renew bool) (string, error) {

@@ -57,6 +57,54 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 	}
 }
 
+func TestMaterializeGeneratedToken(t *testing.T) {
+	secretsDir := t.TempDir()
+	state := v1alpha1.State{
+		Secrets: []v1alpha1.Secret{{
+			Metadata: v1alpha1.Metadata{Name: "df-exporter-token"},
+			Spec: v1alpha1.SecretSpec{
+				Type:   v1alpha1.SecretTypeToken,
+				Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{}},
+			},
+		}},
+	}
+
+	results, err := MaterializeForContext("test", secretsDir, state, MaterializeOptions{Generated: true})
+	if err != nil {
+		t.Fatalf("MaterializeForContext: %v", err)
+	}
+	if len(results) != 1 || !strings.Contains(results[0].Action, "generated") {
+		t.Fatalf("results = %+v", results)
+	}
+	body := readTestSecret(t, secretsDir, "df-exporter-token", MaterialPrimary)
+	token := strings.TrimSuffix(body, "\n")
+	if len(token) < 40 || strings.ContainsAny(token, " \t\n") {
+		t.Fatalf("token body = %q", body)
+	}
+
+	results, err = MaterializeForContext("test", secretsDir, state, MaterializeOptions{Generated: true})
+	if err != nil {
+		t.Fatalf("MaterializeForContext second run: %v", err)
+	}
+	if len(results) != 1 || !strings.Contains(results[0].Action, "reused existing token") {
+		t.Fatalf("second results = %+v", results)
+	}
+	if got := readTestSecret(t, secretsDir, "df-exporter-token", MaterialPrimary); got != body {
+		t.Fatal("second materialize rewrote the token")
+	}
+
+	results, err = MaterializeForContext("test", secretsDir, state, MaterializeOptions{Generated: true, Renew: true})
+	if err != nil {
+		t.Fatalf("MaterializeForContext renew: %v", err)
+	}
+	if len(results) != 1 || !strings.Contains(results[0].Action, "regenerated") {
+		t.Fatalf("renew results = %+v", results)
+	}
+	if got := readTestSecret(t, secretsDir, "df-exporter-token", MaterialPrimary); got == body {
+		t.Fatal("renew must mint a new token")
+	}
+}
+
 func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 	sourceDir := t.TempDir()
 	privateSource := filepath.Join(sourceDir, "id_ed25519")
