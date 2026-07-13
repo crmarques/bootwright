@@ -123,7 +123,6 @@
   register: bootwright_ceph_osd_marker_probe
   changed_when: false
   failed_when: false
-  when: bootwright_current_storage_host.devices | default([]) | length > 0
 
 - name: Resolve devices recorded as Bootwright OSDs for this cluster
   ansible.builtin.set_fact:
@@ -177,6 +176,37 @@
       non-system disk.
     quiet: true
   loop: "{{ bootwright_ceph_reclaim_mounts.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
+- name: Probe reclaim devices for active LVM or crypt holders
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - TYPE
+      - "{{ item }}"
+  register: bootwright_ceph_reclaim_holders
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_reclaim_here | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to reclaim a device that still backs a live OSD
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - (item.stdout_lines | default([]) | map('trim') | select('in', ['lvm', 'crypt']) | list | length) == 0
+    fail_msg: >-
+      Refusing to reclaim {{ item.item }} on {{ bootwright_current_storage_host.hostname }}:
+      it carries LVM or dm-crypt holders, so it is almost certainly a live bluestore OSD
+      data disk (an in-use OSD has no mountpoint, so the mount probe cannot catch it).
+      Drain and remove the OSD first — find its id with `cephadm shell -- ceph osd tree`,
+      then `cephadm shell -- ceph orch osd rm <id>` — before reclaiming the device.
+    quiet: true
+  loop: "{{ bootwright_ceph_reclaim_holders.results | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
@@ -235,7 +265,7 @@
     bootwright_ceph_removed_osd_devices: >-
       {{ (bootwright_ceph_owned_osd_devices | default([]))
          | difference(bootwright_current_storage_host.devices | default([])) }}
-  when: bootwright_current_storage_host.devices | default([]) | length > 0
+  when: bootwright_ceph_owned_osd_devices | default([]) | length > 0
 
 - name: Probe declared-removed OSD devices for a still-present OSD
   ansible.builtin.command:

@@ -41,11 +41,9 @@
         (bootwright_ceph_override_fsid | default('') | length > 0)
         and (bootwright_ceph_override_record.stat.exists | default(false) | bool)
         and (bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname)
-        and (
-          (bootwright_ceph_override_owned_fsid | default('') | length == 0)
-          or (bootwright_ceph_override_owned_fsid | default('')
-              == bootwright_ceph_override_fsid | default(''))
-        )
+        and (bootwright_ceph_override_owned_fsid | default('') | length > 0)
+        and (bootwright_ceph_override_owned_fsid | default('')
+             == bootwright_ceph_override_fsid | default(''))
       }}
 
 - name: Enforce apply mode for the Ceph cluster
