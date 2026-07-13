@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
 )
 
 var (
@@ -71,6 +72,20 @@ func shortCommit(commit string) string {
 	return commit
 }
 
+func embeddedBundleDigestDisplay() string {
+	digest, err := bundle.EmbeddedBundleDigest()
+	if err != nil {
+		if bundle.IsEmptyAnsibleBundle(err) {
+			return "not built (run make build)"
+		}
+		return "unknown"
+	}
+	if len(digest) > 12 {
+		return digest[:12]
+	}
+	return digest
+}
+
 func newVersionCmd(stdout io.Writer) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
@@ -85,6 +100,7 @@ func newVersionCmd(stdout io.Writer) *cobra.Command {
 				{Key: "version", Value: metadata.version},
 				{Key: "git commit", Value: metadata.gitCommit},
 				{Key: "go", Value: runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH},
+				{Key: "ansible bundle", Value: embeddedBundleDigestDisplay()},
 			})
 			p.Summary(output.StatusOK, "bootwright", metadata.version)
 		},

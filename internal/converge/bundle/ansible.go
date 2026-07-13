@@ -62,6 +62,15 @@ func IsEmptyAnsibleBundle(err error) bool {
 	return errors.Is(err, errEmptyAnsibleBundle)
 }
 
+func EmbeddedBundleDigest() (string, error) {
+	archive, err := openAnsibleBundleArchive()
+	if err != nil {
+		return "", err
+	}
+	digest, _, err := ansibleBundleDigest(archive)
+	return digest, err
+}
+
 func ExtractAnsibleBundle(dest string, bundleVersion string) error {
 	result, err := EnsureAnsibleBundle(dest, bundleVersion)
 	if err != nil {
