@@ -18,6 +18,17 @@ type InfraComponentSpec struct {
 	Registry       *RegistryComponent       `yaml:"registry,omitempty" json:"registry,omitempty"`
 }
 
+func InfraComponentSlots() []string {
+	return []string{
+		ComponentSlotArtifactServer,
+		ComponentSlotLoadBalancer,
+		ComponentSlotProxy,
+		ComponentSlotNameResolution,
+		ComponentSlotNTP,
+		ComponentSlotRegistry,
+	}
+}
+
 func (s InfraComponentSpec) SetSlots() []string {
 	var slots []string
 	if s.ArtifactServer != nil {

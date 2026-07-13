@@ -330,6 +330,59 @@ the tools Bootwright drives before adding custom orchestration around the same
 operation — for example, install completion stays delegated to
 `openshift-install agent wait-for install-complete`.
 
+### Adding a managed infrastructure service
+
+A managed service (an artifact server, load balancer, proxy, name resolution,
+NTP, or a new peer such as a syslog relay) is an `InfraComponent` arm. The
+runtime layer is orthogonal — Ansible role dispatch, task scheduling, and host
+grouping are data-driven, so they do not change — but the desired-state layer is
+a hand-enumerated arm union. Touch, in order:
+
+1. `api/v1alpha1/infracomponent.go` — add the arm struct and its field to
+   `InfraComponentSpec`, the `ComponentSlot*` constant reference in `SetSlots`,
+   and the constant to `InfraComponentSlots`.
+2. `api/v1alpha1/types.go` — add the `ComponentSlot*` and service-type
+   constants and any `Default*Port`.
+3. `internal/roles` — add the `serviceSupport` registry entry (apply/destroy
+   role, host capabilities, image pin, default port).
+4. The desired-state validator (`state/desired`) — add the arm validation.
+5. The render vars (`render/inventory`) — add the arm to the infra-component
+   vars projection.
+6. The service graph (`state/graph`) — classify the slot in the self-contained
+   shared-service set so scoped apply reasons about it correctly.
+7. The `infra_component_*` Ansible role and its `docs/` var contract.
+8. Docs and an example under `examples/`.
+
+Two guards catch the easiest omissions: `TestInfraComponentSlotsCoverArmUnion`
+(the arm, `SetSlots`, and `InfraComponentSlots` must agree) and
+`TestEveryComponentSlotHasSupportedService` (every slot needs a registry entry).
+They do not cover the validator, render, or service-graph steps — follow the
+list.
+
+### Adding a substrate provider
+
+A substrate (`libvirt`, `vsphere`, `kubevirt`, `baremetal`, or a new one) is a
+provider capability arm. Role dispatch is table-driven through `internal/roles`,
+but the rest of the desired-state layer switches on the `Provisioner*` constant.
+Touch:
+
+1. `api/v1alpha1/infraprovider.go` — add the provider arm; `helpers.go` — add
+   the constant to `Provisioners`; `types.go` — add the `Provisioner*` constant.
+2. `internal/roles` — add the `dispatchSupport` entry and wire it into
+   `LookupProfileProvisioner` or `LookupMachineProvisioner`.
+3. The provider and machine validators (`state/desired`).
+4. The substrate resolver (`state/view`), the network-attachment render vars
+   (`render/inventory`), and the per-provider resource-lock keys in the
+   `converge/workflow` planner.
+5. Scaffolding (`state/scaffold`) and the CLI substrate display.
+6. The `machine_substrate_*`, `container_cluster_boot_*`, and
+   `provider_service_bmc_*` Ansible roles, plus the `internal/repo/checks`
+   provider tests.
+
+`TestEveryProvisionerDispatchesToSupportedRoles` fails if a provisioner in
+`Provisioners` has no supported role contract, so the registry cannot silently
+lag the schema.
+
 For the contributor extension walkthrough, see [API](api.md). The full per-field
 schema is in [The desired-state model](../concepts/index.md), and the normative
 contract lives in

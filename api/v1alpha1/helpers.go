@@ -130,3 +130,16 @@ func DNSServiceIP(bind string, network NetworkConfig) string {
 	}
 	return ""
 }
+
+// Provisioners lists every substrate provisioner kind, the single source of
+// truth for the provider dispatch fan-out. The roles registry must dispatch
+// each of these to a supported role contract; a guard test enforces that, so a
+// new substrate cannot be added to the schema without wiring its apply support.
+func Provisioners() []string {
+	return []string{
+		ProvisionerLibvirt,
+		ProvisionerVSphere,
+		ProvisionerKubeVirt,
+		ProvisionerBareMetal,
+	}
+}
