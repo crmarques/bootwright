@@ -135,7 +135,7 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty-one kinds:
 
 | Kind | Owns |
 | --- | --- |
@@ -159,6 +159,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty kinds:
 | `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
 | `ClusterAddonBinding` | One installed cluster's post-install bootstrap set: add-ons, profiles, and binding-scoped add-on inputs |
 | `ProvisioningPlaybook` | An operator-supplied Ansible playbook injected into the provisioning DAG at a chosen sub-phase, with optional vendored roles and collections |
+| `Secret` | Named secret material a `SecretRef` resolves to: its type (opaque, token, username/password, docker config, CA bundle, TLS certificate, or SSH key pair) and its source (literal, file, or Bootwright-generated) |
 
 `ContainerCluster` owns install intent while machines own substrate and OS
 facts. Swapping from libvirt with Redfish emulation to real bare metal edits

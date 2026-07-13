@@ -17,7 +17,7 @@ import (
 func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	required := []string{
-		"twenty kinds",
+		"twenty-one kinds",
 		"`Entitlement`",
 		"`Machine`",
 		"`MachineImage`",
@@ -37,6 +37,7 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"`ClusterAddonProfile`",
 		"`ClusterAddonBinding`",
 		"`ProvisioningPlaybook`",
+		"`Secret`",
 		"`Environment`",
 	}
 	for _, phrase := range required {
@@ -53,6 +54,7 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"seventeen kinds",
 		"eighteen kinds",
 		"nineteen kinds",
+		"twenty kinds",
 		"`Host`",
 		"`ClusterInfra`",
 		"`StorageClusterBinding`",
