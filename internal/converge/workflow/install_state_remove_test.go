@@ -30,6 +30,10 @@ func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("seed kubeconfig: %v", err)
 	}
+	kubeadminPassword := filepath.Join(ClusterSecretsDir(clustersDir, cluster), "kubeadmin-password")
+	if err := os.WriteFile(kubeadminPassword, []byte("hunter2\n"), 0o600); err != nil {
+		t.Fatalf("seed kubeadmin-password: %v", err)
+	}
 
 	if _, found, err := LoadClusterInstallRecord(clustersDir, cluster); err != nil || !found {
 		t.Fatalf("precondition: install record should exist, found=%v err=%v", found, err)
@@ -42,7 +46,7 @@ func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 	if _, found, err := LoadClusterInstallRecord(clustersDir, cluster); err != nil || found {
 		t.Fatalf("install record must be gone after removal, found=%v err=%v", found, err)
 	}
-	for _, path := range []string{kubeconfig, ClusterConnectionPath(clustersDir, cluster)} {
+	for _, path := range []string{kubeconfig, kubeadminPassword, ClusterConnectionPath(clustersDir, cluster)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("%s must be removed, stat err=%v", path, err)
 		}

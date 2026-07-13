@@ -136,6 +136,7 @@ func RemoveClusterInstallState(clustersDir, cluster string) error {
 		ClusterInstallRecordPath(clustersDir, cluster),
 		ClusterConnectionPath(clustersDir, cluster),
 		clusterKubeconfigPath(clustersDir, cluster),
+		filepath.Join(ClusterSecretsDir(clustersDir, cluster), "kubeadmin-password"),
 	} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove cluster install state %s: %w", path, err)
