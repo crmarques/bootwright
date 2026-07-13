@@ -346,6 +346,12 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 			t.Fatalf("ceph destroy ownership decision must require %s, got %v", want, decide["bootwright_ceph_destroy_owned"])
 		}
 	}
+	if !strings.Contains(owned, "bootwright_ceph_destroy_owned_fsid | default('') | length > 0") {
+		t.Fatalf("ceph destroy ownership decision must require a present on-host marker fsid (no empty-marker fail-open), got %v", decide["bootwright_ceph_destroy_owned"])
+	}
+	if strings.Contains(owned, "bootwright_ceph_destroy_owned_fsid | default('') | length == 0") {
+		t.Fatalf("ceph destroy ownership decision must not treat an empty marker fsid as owned, got %v", decide["bootwright_ceph_destroy_owned"])
+	}
 
 	rm := tasks[rmIdx]
 	if got := fmt.Sprint(rm["when"]); !strings.Contains(got, "bootwright_ceph_destroy_owned") {
@@ -444,20 +450,28 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")
-	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe declared devices not recorded as Bootwright OSDs")
+	probeIdx := findAnsibleTask(t, tasks, "Probe present Ceph destroy devices for data signatures")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe present Ceph devices without a valid Bootwright OSD record")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
-	if !(readIdx < refuseIdx && refuseIdx < wipeIdx) {
-		t.Fatalf("ceph destroy must read the OSD marker and refuse unrecorded devices before wiping (read=%d refuse=%d wipe=%d)", readIdx, refuseIdx, wipeIdx)
+	if !(readIdx < probeIdx && probeIdx < refuseIdx && refuseIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must read the OSD marker, probe signatures, and refuse unproven devices before wiping (read=%d probe=%d refuse=%d wipe=%d)", readIdx, probeIdx, refuseIdx, wipeIdx)
 	}
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("OSD device guard must be an assert, got %v", tasks[refuseIdx])
 	}
-	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_recorded_osd_devices") {
+	that := fmt.Sprint(refuse["that"])
+	if !strings.Contains(that, "bootwright_ceph_recorded_osd_devices") {
 		t.Fatalf("OSD device guard must require declared devices to be in the recorded set, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_osd_marker_valid") {
-		t.Fatalf("OSD device guard must be gated on marker validity so it falls back when no marker exists, got %v", tasks[refuseIdx]["when"])
+	if !strings.Contains(that, "bootwright_ceph_osd_marker_valid") {
+		t.Fatalf("OSD device guard must require a valid marker before exempting a recorded device, got %v", refuse["that"])
+	}
+	if !strings.Contains(that, "stdout") {
+		t.Fatalf("OSD device guard must allow a signature-free (empty) device via the wipefs probe stdout, got %v", refuse["that"])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); strings.Contains(got, "bootwright_ceph_osd_marker_valid") {
+		t.Fatalf("OSD device guard must run unconditionally (fail closed on a missing marker), not be skipped when the marker is absent, got when=%v", tasks[refuseIdx]["when"])
 	}
 	resolve := tasks[findAnsibleTask(t, tasks, "Resolve recorded Bootwright OSD devices")]
 	facts, ok := resolve["ansible.builtin.set_fact"].(map[string]any)

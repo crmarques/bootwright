@@ -90,19 +90,48 @@
     bootwright_ceph_osd_marker_doc: "{{ bootwright_ceph_osd_device_marker.content | b64decode | from_json }}"
   when: (bootwright_ceph_osd_device_marker | default({})).content is defined
 
-- name: Refuse to wipe declared devices not recorded as Bootwright OSDs
-  ansible.builtin.assert:
-    that:
-      - item in (bootwright_ceph_recorded_osd_devices | default([]))
-    fail_msg: >-
-      Refusing to wipe storage device {{ item }} for
-      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
-      it is not in this node's recorded Bootwright OSD device set
-      ({{ bootwright_ceph_recorded_osd_devices | default([]) | join(', ') }}), so it was not
-      provisioned by Bootwright as an OSD. It may have been added to the devices list after
-      apply. Re-apply to re-record OSD devices, or verify and wipe it manually.
-      (--force-unowned does not relax this device data-safety gate.)
+- name: Probe present Ceph destroy devices for data signatures
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --no-act
+      - --noheadings
+      - "{{ item }}"
+  register: bootwright_ceph_destroy_signatures
+  changed_when: false
+  failed_when: false
   loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
-  when: bootwright_ceph_osd_marker_valid | default(false) | bool
+
+- name: Refuse to wipe present Ceph devices without a valid Bootwright OSD record
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - (item.stdout | trim | length == 0)
+        or ((bootwright_ceph_osd_marker_valid | default(false) | bool)
+            and (item.item in (bootwright_ceph_recorded_osd_devices | default([]))))
+    fail_msg: >-
+      {{
+        ('Refusing to wipe storage device ' ~ item.item ~ ' for '
+         ~ bootwright_selected_storage_cluster.name ~ '/' ~ bootwright_current_storage_host.hostname
+         ~ ': it could not be probed with wipefs (rc=' ~ item.rc ~ '): '
+         ~ (item.stderr | default('') | trim)
+         ~ '. Failing closed rather than risk wiping the wrong device.')
+        if item.rc != 0
+        else
+        ('Refusing to wipe storage device ' ~ item.item ~ ' for '
+         ~ bootwright_selected_storage_cluster.name ~ '/' ~ bootwright_current_storage_host.hostname
+         ~ ': it carries data signatures (' ~ (item.stdout | trim) ~ ') and is not recorded as a'
+         ~ ' Bootwright OSD device on this node'
+         ~ ((' (no valid Bootwright OSD ownership marker is present on this node, so it may be a'
+             ~ ' foreign or co-resident Ceph cluster)')
+            if not (bootwright_ceph_osd_marker_valid | default(false) | bool)
+            else (' (recorded devices: '
+                  ~ (bootwright_ceph_recorded_osd_devices | default([]) | join(', ')) ~ ')'))
+         ~ '. Re-apply to re-record OSD devices, or verify and wipe it manually.'
+         ~ ' (--force-unowned does not relax this device data-safety gate.)')
+      }}
+  loop: "{{ bootwright_ceph_destroy_signatures.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
