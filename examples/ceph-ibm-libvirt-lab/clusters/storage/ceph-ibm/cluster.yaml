@@ -10,7 +10,7 @@ spec:
   ceph:
     distribution: ibm
 
-    release: "9"
+    release: "9.9.1"
 
     entitlementRef: ibm-storage-ceph
 

@@ -146,11 +146,14 @@ need an **IBM entitlement key**:
 > holds only the IBM registry + license and names the separate `rhel` entitlement
 > (the org ID + activation key from step 1a) via `rhelEntitlementRef`.
 
-**Version:** the StorageCluster pins `spec.ceph.release: "9"` — IBM Storage Ceph
-**9**, the latest published stream (`public.dhe.ibm.com/.../ceph` ships
-`ibm-storage-ceph-9-rhel-9.repo` as the newest). `spec.ceph.image` is left unset
-so cephadm pulls the latest 9.x image at bootstrap; pin a digest there if you
-want a frozen, reproducible version (a `:latest` tag is rejected by validation).
+**Version:** the StorageCluster pins `spec.ceph.release: "9.9.1"` — the IBM
+Storage Ceph product version. Only its major digit (`9`) is machine-consumed: it
+selects the `9` stream (`public.dhe.ibm.com/.../ceph` ships
+`ibm-storage-ceph-9-rhel-9.repo` as the newest) and the `ceph-9-rhel9` image
+base; the `.9.1` records which product build you intend to run. `spec.ceph.image`
+is left unset so cephadm pulls the latest 9.x image at bootstrap; pin a digest
+there if you want a frozen, reproducible version (a `:latest` tag is rejected by
+validation).
 
 ---
 
@@ -357,7 +360,7 @@ infra/networkconfigs/ceph-net.yaml            NetworkConfig: 192.168.140.0/24, s
 infra/components/lab-dns.yaml                  InfraComponent: dnsmasq resolver + forwarders
 infra/os/rhel-9-x86-64-dvd.yaml               MachineImage: RHEL 9.7 DVD (local-media)
 infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
-clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9, mgmt-gateway HA dashboard
+clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1, mgmt-gateway HA dashboard
 clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml  Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
 clusters/storage/ceph-ibm/placement-policy.yaml  size 2 / minSize 2, failureDomain host
 clusters/storage/ceph-ibm/pools/*.yaml        StoragePools: rbd, cephfs-data/metadata, rgw

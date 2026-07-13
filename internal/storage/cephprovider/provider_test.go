@@ -137,6 +137,9 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 	if url := Select(ibm("10"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-{{ ansible_distribution_major_version }}.repo" {
 		t.Fatalf("stream ibm repo url = %q, want stream 10", url)
 	}
+	if url := Select(ibm("9.9.1"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
+		t.Fatalf("full-version ibm repo url = %q, want stream 9 from 9.9.1", url)
+	}
 }
 
 func TestSelectResolvesContainerImageBase(t *testing.T) {
@@ -156,6 +159,7 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 	}{
 		{"ibm default stream", v1alpha1.StorageCephDistributionIBM, "", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
 		{"ibm explicit stream", v1alpha1.StorageCephDistributionIBM, "10", "", "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9"},
+		{"ibm full product version", v1alpha1.StorageCephDistributionIBM, "9.9.1", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
 		{"redhat default stream", v1alpha1.StorageCephDistributionRedHat, "", "", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
 		{"oss release name", v1alpha1.StorageCephDistributionOSS, "squid", "", "quay.io/ceph/ceph"},
 		{"oss version", v1alpha1.StorageCephDistributionOSS, "19.2.1", "", "quay.io/ceph/ceph"},

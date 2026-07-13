@@ -174,6 +174,30 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 				state.StorageClusters[0].Spec.Ceph.Image = "registry.redhat.io/rhceph/rhceph-9-rhel9:9"
 			},
 		},
+		{
+			name: "redhat-major-minor",
+			edit: func(state *v1alpha1.State) {
+				state.Entitlements = []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-entitlement"},
+					Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeRedHatCeph},
+				}}
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
+				state.StorageClusters[0].Spec.Ceph.Release = "9.0"
+			},
+		},
+		{
+			name: "ibm-full-product-version",
+			edit: func(state *v1alpha1.State) {
+				state.Entitlements = []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-entitlement"},
+					Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeIBMStorageCeph},
+				}}
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionIBM
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
+				state.StorageClusters[0].Spec.Ceph.Release = "9.9.1"
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -626,7 +650,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 				state.StorageClusters[0].Spec.Ceph.Release = "squid"
 			},
-			want: `spec.ceph.release "squid" must be a product stream version such as 9 or 9.1`,
+			want: `spec.ceph.release "squid" must be a product version such as 9, 9.1, or 9.9.1; its leading major digit selects the product stream`,
 		},
 		{
 			name: "image-mutable-latest",

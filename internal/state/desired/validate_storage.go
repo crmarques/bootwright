@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	cephOSSReleaseNamePattern     = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
-	cephOSSReleaseVersionPattern  = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	cephSubscriptionStreamPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
+	cephOSSReleaseNamePattern      = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
+	cephOSSReleaseVersionPattern   = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+	cephSubscriptionVersionPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}$`)
 )
 
 func validateStorage(state v1alpha1.State) []string {

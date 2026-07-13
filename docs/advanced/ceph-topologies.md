@@ -46,10 +46,18 @@ distribution. For `oss` it is an upstream release name (`squid`, `reef`,
 `quincy`) or a full `x.y.z` version, which pins the package repository
 reproducibly and — when `image` is unset — derives the matching
 `quay.io/ceph/ceph:vX.Y.Z` daemon image. For `redhat` and `ibm` it is the
-product stream (for example `9`). It defaults to the community default release
-for `oss` and to stream `9` for `redhat`/`ibm`. To mirror upstream packages for
-a disconnected `oss` install, set `spec.ceph.community.mirror` (it must stay
-empty for `redhat`/`ibm`).
+product version: the bare stream (`9`), a `major.minor` (`9.0`), or the full
+product version exactly as the vendor publishes it — for example IBM Storage
+Ceph `9.9.1`. Only the leading **major** digit is machine-consumed: it selects
+the subscription tools repo, the yum repo file, and the container image base
+(`rhceph-9-rhel9` / `ceph-9-rhel9`), so `9.9.1` and `9` resolve to the same
+stream `9`. The minor/patch are documentation of intent and never appear in a
+repo or image name; the immutable build tag is not derivable from the product
+version, so pin `spec.ceph.image` to lock the exact build (see the note below).
+`release` defaults to the community default release for `oss` and to stream `9`
+for `redhat`/`ibm`. To mirror upstream packages for a disconnected `oss`
+install, set `spec.ceph.community.mirror` (it must stay empty for
+`redhat`/`ibm`).
 
 ```yaml
 ceph:

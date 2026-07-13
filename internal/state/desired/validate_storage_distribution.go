@@ -56,8 +56,8 @@ func validateStorageCephRelease(prefix, distribution, release string) []string {
 			return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
 		}
 	case v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM:
-		if !cephSubscriptionStreamPattern.MatchString(release) {
-			return []string{fmt.Sprintf("%s.release %q must be a product stream version such as 9 or 9.1", prefix, release)}
+		if !cephSubscriptionVersionPattern.MatchString(release) {
+			return []string{fmt.Sprintf("%s.release %q must be a product version such as 9, 9.1, or 9.9.1; its leading major digit selects the product stream", prefix, release)}
 		}
 	}
 	return nil
