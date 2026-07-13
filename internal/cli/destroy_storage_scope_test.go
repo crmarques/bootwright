@@ -30,9 +30,22 @@ func TestDestroyClustersScopeGatesStorageWorkSet(t *testing.T) {
 	})
 
 	t.Run("mixed selection tears down only the named storage root", func(t *testing.T) {
-		report := destroyDryRunJSON(t, "dc1-metal-ocp,ceph-storage")
+		report := destroyDryRunJSON(t, "dc1-metal-ocp,dc2-metal-ocp,dc1-child-ocp,dc2-child-ocp,ceph-storage")
 		if !slices.Contains(report.ExtraVars, "bootwright_destroy_storage_scope=ceph-storage") {
 			t.Fatalf("mixed destroy must restrict storage teardown to ceph-storage; extraVars=%v", report.ExtraVars)
+		}
+	})
+
+	t.Run("storage destroy refuses a live out-of-scope consumer", func(t *testing.T) {
+		_, stderr, code := runCLI(t,
+			"destroy", "--stage", "clusters", "--clusters", "dc1-metal-ocp,ceph-storage",
+			"--dry-run", "--ask-become-pass=false",
+		)
+		if code == 0 {
+			t.Fatal("destroying ceph-storage while dc2 clusters still consume it must refuse")
+		}
+		if !strings.Contains(stderr, "ceph-storage") || !strings.Contains(stderr, "dc2-metal-ocp") {
+			t.Fatalf("refusal must name the storage cluster and the out-of-scope consumer, got stderr=%q", stderr)
 		}
 	})
 }

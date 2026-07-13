@@ -4335,7 +4335,7 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	stdout, stderr, code = runCLI(t, "destroy", "--stage", "clusters", "--clusters", "dc1-metal-ocp,ceph-storage", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	stdout, stderr, code = runCLI(t, "destroy", "--stage", "clusters", "--clusters", "dc1-metal-ocp,dc2-metal-ocp,dc1-child-ocp,dc2-child-ocp,ceph-storage", "--dry-run", "--output", "json", "--ask-become-pass=false")
 	if code != 0 {
 		t.Fatalf("destroy mixed clusters dry-run json exited %d, stderr=%q", code, stderr)
 	}

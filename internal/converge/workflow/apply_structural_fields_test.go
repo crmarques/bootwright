@@ -7,21 +7,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// structuralFieldClass records, for every v1alpha1.State field, how a change to
-// that kind may affect a cluster's structural (destructive-rebuild) identity:
-//
-//	identity       - the cluster's own install/Ceph identity; a change may rebuild.
-//	subobject      - a storage sub-object classified against its own structural hash.
-//	day2           - reconfigure-only intent excluded from the install structural hash.
-//	excluded       - fleet-scoped/reference input already cleared from the storage
-//	                 structural projection, so editing it never forces a wipe.
-//	excludePending - fleet-scoped input that STILL leaks into the storage/install
-//	                 structural hash (2026-07-12 lifecycle review H4); clearing it is
-//	                 gated on the convergence-record re-stamp migration.
-//
-// A new State field trips TestStateFieldsAllStructurallyClassified until it is
-// classified here, so a new kind cannot silently leak into the "would wipe" hash
-// the way the excludePending kinds did.
 var structuralFieldClass = map[string]string{
 	"Environments":             "excluded",
 	"Entitlements":             "excludePending",

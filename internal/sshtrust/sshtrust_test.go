@@ -67,8 +67,6 @@ func TestSavePreservesUnmanagedKnownHostsPins(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	// A managed-OS node pin appended out of band by the install playbook, plus a
-	// stale line for an address the store is about to (re)write.
 	seed := "cephnode.example.test ssh-ed25519 TUFOQUdFRA==\nprovider.example.test ssh-ed25519 U1RBTEU=\n"
 	if err := os.WriteFile(filepath.Join(dir, KnownHostsName), []byte(seed), 0o600); err != nil {
 		t.Fatalf("seed known_hosts: %v", err)
