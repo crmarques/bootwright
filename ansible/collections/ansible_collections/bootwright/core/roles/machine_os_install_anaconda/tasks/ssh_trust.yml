@@ -16,12 +16,8 @@
       set -uo pipefail
       kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
       addr={{ bootwright_component.osInstall.ssh.address | quote }}
-      # A reinstalled node regenerates its host keys; drop any stale pin first so the
-      # fresh key is (re)learned instead of tripping a StrictHostKeyChecking mismatch.
       ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
       rm -f "$kh.old"
-      # accept-new records the host key the FIPS-approved handshake used, before auth;
-      # auth is the verify step's job, so its outcome is ignored here.
       ssh \
         -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
         -o StrictHostKeyChecking=accept-new \
@@ -31,7 +27,6 @@
         -o GSSAPIAuthentication=no \
         {{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
         true >/dev/null 2>&1 || true
-      # Succeed once the host key is actually pinned in the trust store.
       ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1
   delegate_to: localhost
   register: bootwright_os_ssh_keyscan
