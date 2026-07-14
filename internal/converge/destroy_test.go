@@ -115,6 +115,39 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 	}
 }
 
+func TestFullDestroySweepsRecordsForUndeclaredObjects(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	now := time.Unix(1700000000, 0)
+	st := twoCephClustersState()
+
+	tasks, err := workflow.PlanApplyTasksChecked(AllScope.ApplyTarget(), st)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	for _, task := range tasks {
+		switch task.Entry.Kind {
+		case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
+			if err := workflow.MarkApplyTaskConvergeSafety(runsDir, "ctx", "apply", task, workflow.ConvergeSafetyStatusReconciled, now); err != nil {
+				t.Fatalf("mark task %s: %v", task.Entry.ID, err)
+			}
+		}
+	}
+	orphan := workflow.ApplyTask{Entry: workflow.TaskLedgerEntry{ID: "storage.ceph-gone", Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph-gone"}}
+	if err := workflow.MarkApplyTaskConvergeSafety(runsDir, "ctx", "apply", orphan, workflow.ConvergeSafetyStatusReconciled, now); err != nil {
+		t.Fatalf("mark orphan: %v", err)
+	}
+	if !workflow.HasConvergeSafetyRecords(runsDir) {
+		t.Fatal("precondition: records must exist")
+	}
+
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, AllScope, st, nil, nil)
+
+	if workflow.HasConvergeSafetyRecords(runsDir) {
+		t.Fatal("a full-estate destroy must leave no converge safety records, including for objects deleted from the desired state before the destroy")
+	}
+}
+
 func objectRecorded(objects []workflow.ObjectClassification, key string) bool {
 	for _, o := range objects {
 		if o.ObjectKey == key {

@@ -142,6 +142,29 @@ func RemoveConvergeSafetyRecord(runsDir, resourceID string) error {
 	return nil
 }
 
+func RemoveAllConvergeSafetyRecords(runsDir string) error {
+	if strings.TrimSpace(runsDir) == "" {
+		return nil
+	}
+	dir := filepath.Join(runsDir, "safety")
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("list converge safety records: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove converge safety record %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
 func RemoveApplyTaskConvergeSafety(runsDir string, task ApplyTask) error {
 	if strings.TrimSpace(task.Entry.ID) == "" {
 		return nil

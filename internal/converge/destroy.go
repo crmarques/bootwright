@@ -131,6 +131,9 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 		}
 		_ = workflow.RemoveStorageSubObjectsConvergeSafety(runsDir, state, name)
 	}
+	if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 {
+		_ = workflow.RemoveAllConvergeSafetyRecords(runsDir)
+	}
 }
 
 func isPartialStorageTask(task workflow.ApplyTask, partial map[string]bool) bool {
