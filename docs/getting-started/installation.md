@@ -39,6 +39,10 @@ Every command below runs as your normal user. Bootwright re-executes through
   input tree. The Ceph lab needs different credentials, listed in its guide.
 - A free machine network on the libvirt host with room for the node IP(s) and the
   virtual IPs the lab declares.
+- Outbound reachability from the bastion and nodes to the upstreams your install
+  uses (release images, RHSM/CDN, Ceph repos, add-on registries). Behind a
+  corporate proxy or firewall, allowlist the hosts in the
+  [egress allowlist](../advanced/disconnected-proxy.md#egress-allowlist) first.
 
 Bootwright desired state is safe to commit: it names secrets, but never stores
 their bytes. Keep pull secrets, private keys, kubeconfigs, tokens, and passwords

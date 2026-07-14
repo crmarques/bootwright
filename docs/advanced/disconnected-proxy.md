@@ -16,6 +16,110 @@ The committed references are
 managed mirror registry and artifact server behind an external proxy) and
 `examples/ceph-ibm-baremetal-redfish` (real bare metal on an external proxy).
 
+## Egress allowlist
+
+Before you configure a proxy, the perimeter it fronts must let the estate reach
+the upstreams below. These are the **default** public hosts Bootwright's bastion,
+OpenShift nodes, and Ceph nodes contact during provisioning when the source is
+*not* redirected. Which hosts are actually reached depends on what you provision
+and which package/registry/mirror sources you select — a fully mirrored or
+Satellite-backed estate reaches **none** of the public hosts here, and every
+default is overridable (columns note the field). Allowlist only the rows for the
+paths you use.
+
+All hosts are reached over HTTPS (TCP 443) unless noted. On-prem targets — BMC /
+Redfish addresses, managed mirror/artifact/DNS components, an internal
+Satellite — are deliberately proxy-bypassed via `noProxy` and are not listed.
+
+### Bastion / controller
+
+The host running Bootwright, Ansible, and the agent installer, and hosting the
+managed infra components. Routed through `proxyFor.bootwright`.
+
+| Host | Purpose | Override |
+| --- | --- | --- |
+| `pypi.org`, `files.pythonhosted.org` | `bastion setup` builds the managed Ansible venv: pinned `pip`, `ansible-core`, and — when the estate uses them — `sushy-tools` (libvirt BMC emulation) and `pyvmomi` (vSphere). Package **metadata** is read from `pypi.org`; the wheels/sdists **download** from `files.pythonhosted.org`. | — |
+| `mirror.openshift.com` | `oc` / `openshift-install` client binaries and checksums for the release version (OpenShift/OKD). | `spec.defaults.clientsMirror` |
+| `docker.io` | Container images for the managed infra components you declare: `library/haproxy` (load balancer), `library/nginx` (artifact server), `openeuler/squid` (forward proxy), `dockurr/dnsmasq` (DNS), `library/registry` (mirror registry). Only declared components pull. | mirror the images |
+
+!!! note "`bastion setup` is the first thing to egress"
+    `bastion setup` builds the Ansible venv with `pip`, so it is usually the
+    first command to leave the bastion — and the first to hit a misconfigured
+    proxy. pip fails unless the proxy allowlists **both** `pypi.org` (the index
+    metadata) *and* `files.pythonhosted.org` (the actual package downloads);
+    allowlisting only `pypi.org` still breaks the download. The venv build routes
+    through `proxyFor.bootwright`, so that target must resolve to a working proxy.
+    If `python3.12` is absent, `bastion setup` first runs `dnf install
+    python3.12`, which uses the bastion's own OS package repos (RHEL CDN,
+    Satellite, or your mirror) rather than any host above.
+
+### OpenShift clusters
+
+Reached by the agent installer on the bastion and by the cluster nodes during
+bootstrap; governed by the cluster pull secret. Redirect with a disconnected
+install (`registries.mirror` + `imageDigestSources`, see below).
+
+| Host | Purpose |
+| --- | --- |
+| `quay.io` | OpenShift release image (`openshift-release-dev/ocp-release` and `openshift-release-dev/ocp-v4.0-art-dev`); the release payload then pulls its component images. |
+| `registry.redhat.io` | Operator/operand images for OperatorHub content and the `redhat-operators` catalog used by add-ons. |
+
+### Managed-OS (RHEL) nodes
+
+Only when the install profile uses `packageSource.redhatCDN` (registering against
+the public Red Hat CDN). Routed through `proxyFor.machineOSInstall`. A
+`packageSource.mirror`, a `rhsm.satellite` redirect, or a `hostedTree` local tree
+replaces all of these.
+
+| Host | Purpose |
+| --- | --- |
+| `subscription.rhsm.redhat.com` | RHSM registration and entitlement refresh. |
+| `cdn.redhat.com` | RHEL BaseOS/AppStream package content. |
+| `cert-api.access.redhat.com`, `console.redhat.com` | Red Hat Insights — only when the entitlement sets `rhsm.connectToInsights: true`. |
+
+### Ceph nodes
+
+Depends on the storage distribution. Managed nodes route package work through the
+egress proxy (see [Package managers and `noProxy`](#package-managers-and-noproxy)).
+
+**Red Hat / IBM Storage Ceph (subscription):**
+
+| Host | Purpose | Distribution |
+| --- | --- | --- |
+| `subscription.rhsm.redhat.com`, `cdn.redhat.com` | RHSM registration and the RHEL BaseOS/AppStream + `rhceph-*-tools` repos. | Red Hat |
+| `registry.redhat.io` | `podman login` + RHCS daemon image (`rhceph/rhceph-*-rhel9`) and cephadm monitoring/ingress sidecars. | Red Hat |
+| `cp.icr.io` | IBM registry login + IBM Storage Ceph daemon image (`cp/ibm-ceph/ceph-*-rhel9`). | IBM |
+| `public.dhe.ibm.com` | IBM Storage Ceph `.repo` file download (unauthenticated). | IBM |
+| `cert-api.access.redhat.com`, `console.redhat.com` | Red Hat Insights — only when `rhsm.connectToInsights: true`. | Red Hat |
+
+**Community Ceph (OSS):** overridable via `spec.ceph.community.mirror` and
+`spec.ceph.image`.
+
+| Host | Purpose |
+| --- | --- |
+| `download.ceph.com` | `cephadm` bootstrap binary and the community Ceph repo. |
+| `quay.io` | Community Ceph daemon image (`ceph/ceph`). |
+| `dl.fedoraproject.org` | EPEL bootstrap package. |
+| `mirror.stream.centos.org` | CentOS Stream BaseOS/AppStream/CRB dependency repos. |
+| `www.centos.org` | GPG key for the CentOS Stream dependency repos. |
+
+### Add-ons
+
+Pulled by the OpenShift cluster when the corresponding add-on is enabled; merged
+into the cluster global pull secret.
+
+| Host | Purpose |
+| --- | --- |
+| `registry.redhat.io` | `redhat-operators` catalog operands — OpenShift Data Foundation, OpenShift Virtualization, GitOps. |
+| `icr.io`, `cp.icr.io` | IBM Fusion Data Foundation catalog index (`cpopen/isf-data-foundation-catalog`) and its entitled operand images. |
+
+!!! note "Building the Bootwright container image"
+    Building the image itself (not provisioning) additionally reaches
+    `docker.io` (`library/golang`, `redhat/ubi9` base images),
+    `galaxy.ansible.com` (bundled Ansible collections), `pypi.org` (Python /
+    `ansible-core`), and `proxy.golang.org` (Go modules). Allowlist these only on
+    the build host, not on the provisioned estate.
+
 ## Environment proxy
 
 A proxy entry lives under `Environment.spec.infraComponents.proxies[]`.
