@@ -2,8 +2,13 @@ package converge
 
 const VerboseNoLogExtraVar = "bootwright_no_log"
 
-func ApplyVerboseExtraVar(plan *WorkflowPlan, verbose bool) {
-	if verbose {
-		plan.ExtraVarPairs = append(plan.ExtraVarPairs, VerboseNoLogExtraVar+"=false")
+func VerboseNoLogExtraVarPairs(verbose bool) []string {
+	if !verbose {
+		return nil
 	}
+	return []string{VerboseNoLogExtraVar + "=false"}
+}
+
+func ApplyVerboseExtraVar(plan *WorkflowPlan, verbose bool) {
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, VerboseNoLogExtraVarPairs(verbose)...)
 }

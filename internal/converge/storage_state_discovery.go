@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func RunCephStateDiscovery(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir string, state v1alpha1.State, streamAnsible bool, reporter workflow.Reporter) (map[string]cephstate.Discovery, error) {
+func RunCephStateDiscovery(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir string, state v1alpha1.State, verbose bool, streamAnsible bool, reporter workflow.Reporter) (map[string]cephstate.Discovery, error) {
 	discoveryDir, err := os.MkdirTemp(ctx.RunsDir, "storage-discovery-")
 	if err != nil {
 		return nil, fmt.Errorf("create storage discovery result dir: %w", err)
@@ -28,7 +28,7 @@ func RunCephStateDiscovery(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 	opts.ArtifactsBaseName = "storage-discovery"
 	opts.OutputLogPath = workflow.PreflightLogPath(ctx.RunsDir, "storage-discovery")
 	opts.Label = "storage state discovery"
-	opts.ExtraVarPairs = []string{"bootwright_storage_discovery_dir=" + discoveryDir}
+	opts.ExtraVarPairs = append([]string{"bootwright_storage_discovery_dir=" + discoveryDir}, VerboseNoLogExtraVarPairs(verbose)...)
 	if _, err := workflow.Run(cmdCtx, opts, runner, reporter); err != nil {
 		discovered, _ := cephstate.Load(discoveryDir)
 		return discovered, err

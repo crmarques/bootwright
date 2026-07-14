@@ -24,6 +24,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		output       string
 		recorded     bool
 		adopt        bool
+		verbose      bool
 	)
 	executable := workspace.ResolveAnsiblePlaybook()
 	cmd := &cobra.Command{
@@ -62,6 +63,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
 	cmd.Flags().BoolVar(&recorded, "recorded", false, "skip cluster contact; report drift against the last recorded apply instead of live state")
 	cmd.Flags().BoolVar(&adopt, "adopt", false, "fold the discovered live state back into desired-state YAML (snapshots the prior input to history first); implies live mode")
+	addVerboseFlag(cmd, &verbose)
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -101,7 +103,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 			}
 			return nil
 		}
-		live := buildLiveDiff(c.Context(), cf, executable, state, report, false, stderr)
+		live := buildLiveDiff(c.Context(), cf, executable, state, report, verbose, false, stderr)
 		if adopt {
 			var probed []cephadopt.ProbedStorage
 			for _, storage := range live.Storage {

@@ -54,7 +54,7 @@ type liveInfraResource struct {
 	Classification workflow.ConvergeSafetyClassification `json:"classification"`
 }
 
-func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, offline workflow.StateCheckReport, streamAnsible bool, stderr io.Writer) liveDiffReport {
+func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, offline workflow.StateCheckReport, verbose bool, streamAnsible bool, stderr io.Writer) liveDiffReport {
 	live := liveDiffReport{InSync: true}
 
 	storageByName := map[string]v1alpha1.StorageCluster{}
@@ -74,7 +74,7 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 
 	discos := map[string]cephstate.Discovery{}
 	if needDiscovery {
-		got, warning := runCephDiscovery(ctx, cf, executable, state, streamAnsible, stderr)
+		got, warning := runCephDiscovery(ctx, cf, executable, state, verbose, streamAnsible, stderr)
 		if warning != "" {
 			live.Warnings = append(live.Warnings, warning)
 		}
@@ -147,14 +147,14 @@ func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 	return result
 }
 
-func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, streamAnsible bool, stderr io.Writer) (map[string]cephstate.Discovery, string) {
+func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, verbose bool, streamAnsible bool, stderr io.Writer) (map[string]cephstate.Discovery, string) {
 	clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
 	reporter := newWorkflowReporter(stderr)
 	bundle, err := prepareWorkflowBundle(false)
 	if err != nil {
 		return nil, "live Ceph discovery skipped: could not prepare the Ansible bundle: " + firstErrorLine(err)
 	}
-	discos, err := converge.RunCephStateDiscovery(ctx, stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, streamAnsible, reporter)
+	discos, err := converge.RunCephStateDiscovery(ctx, stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, verbose, streamAnsible, reporter)
 	if err != nil {
 		return discos, "live Ceph discovery incomplete: " + firstErrorLine(err)
 	}

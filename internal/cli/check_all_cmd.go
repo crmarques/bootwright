@@ -15,6 +15,7 @@ import (
 func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
 		dryRun          bool
+		verbose         bool
 		output          string
 		trustOnFirstUse bool
 	)
@@ -31,6 +32,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
+	addVerboseFlag(cmd, &verbose)
 	addOutputFlagDryRun(cmd, &output)
 	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
@@ -47,7 +49,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 			}
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
 			selected := converge.PhasesForState(converge.AllScope.Phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AllScope.AnsibleLimit, nil, "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AllScope.AnsibleLimit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		outputpkg(stdout).Command("all preflight")
 		if err := runBastionChecks(stdout); err != nil {
@@ -74,7 +76,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, executable, bundle.Dir, converge.AllScope, state, "", dryRun, false, reporter)
+		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, executable, bundle.Dir, converge.AllScope, state, "", dryRun, verbose, false, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}

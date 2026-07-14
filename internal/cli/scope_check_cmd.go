@@ -19,6 +19,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 	var (
 		flags           scopeCommonFlags
 		dryRun          bool
+		verbose         bool
 		trustOnFirstUse bool
 	)
 	cmd := &cobra.Command{
@@ -30,6 +31,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 	cf := addCommonFlags()
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "preflight", true, scopeTargetKind(scope))
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
+	addVerboseFlag(cmd, &verbose)
 	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
@@ -67,7 +69,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped preflight commands"))
 			}
 			selected := converge.PhasesForState(scope.Phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, nil, "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		if trustOnFirstUse && !dryRun {
 			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, hostTrustScope); err != nil {
@@ -88,7 +90,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, scope, state, limit, dryRun, false, reporter)
+		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, scope, state, limit, dryRun, verbose, false, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}

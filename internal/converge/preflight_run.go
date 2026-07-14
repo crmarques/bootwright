@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func RunScopePreflight(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scope Scope, state v1alpha1.State, limit string, dryRun bool, streamAnsible bool, reporter workflow.Reporter) (string, error) {
+func RunScopePreflight(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scope Scope, state v1alpha1.State, limit string, dryRun bool, verbose bool, streamAnsible bool, reporter workflow.Reporter) (string, error) {
 	logPath := workflow.PreflightLogPath(ctx.RunsDir, scope.Name)
 	runner := preflightRunner(stdout, stderr, streamAnsible)
 	opts := runOptionsForContext(ctx, clustersDir, executable, state)
@@ -20,6 +20,7 @@ func RunScopePreflight(cmdCtx context.Context, stdout, stderr io.Writer, ctx wor
 	opts.ArtifactsBaseName = "preflight-" + scope.Name
 	opts.OutputLogPath = logPath
 	opts.DryRun = dryRun
+	opts.ExtraVarPairs = VerboseNoLogExtraVarPairs(verbose)
 	opts.Label = scope.Name + " preflight"
 	_, err := workflow.Run(cmdCtx, opts, runner, reporter)
 	return logPath, err
