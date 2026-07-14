@@ -6,6 +6,8 @@
 *.bak
 
 # Credentials and cluster access
+# Filled-in container-build proxy secret (template is proxy.env.example).
+proxy.env
 *kubeconfig*
 !internal/clusteraccess/kubeconfig.go
 *pull-secret*

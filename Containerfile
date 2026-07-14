@@ -3,20 +3,12 @@ FROM docker.io/library/golang:1.25.11@sha256:995e25c0e1868fa30a57236d5d8c2252b94
 
 FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92 AS builder
 
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
 ARG NO_PROXY
-ARG http_proxy
-ARG https_proxy
 ARG no_proxy
 ARG PIP_VERSION=26.1.2
 ARG ANSIBLE_CORE_VERSION=2.21.0
 
-ENV HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY} \
-    http_proxy=${http_proxy} \
-    https_proxy=${https_proxy} \
+ENV NO_PROXY=${NO_PROXY} \
     no_proxy=${no_proxy} \
     PATH=/opt/bootwright-ansible/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     GOMODCACHE=/go/pkg/mod \
@@ -24,8 +16,10 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
 
 WORKDIR /src
 
-RUN --mount=type=cache,id=bootwright-dnf-cache,target=/var/cache/dnf,sharing=locked \
+RUN --mount=type=secret,id=proxy \
+    --mount=type=cache,id=bootwright-dnf-cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,id=bootwright-dnf-lib,target=/var/lib/dnf,sharing=locked \
+    if [ -f /run/secrets/proxy ]; then . /run/secrets/proxy; fi; \
     dnf install -y --setopt=keepcache=1 \
         python3.12 \
         make \
@@ -35,14 +29,18 @@ COPY --from=gotoolchain /usr/local/go /usr/local/go
 
 RUN go version
 
-RUN --mount=type=cache,id=bootwright-pip,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=secret,id=proxy \
+    --mount=type=cache,id=bootwright-pip,target=/root/.cache/pip,sharing=locked \
+    if [ -f /run/secrets/proxy ]; then . /run/secrets/proxy; fi; \
     python3.12 -m venv /opt/bootwright-ansible \
     && /opt/bootwright-ansible/bin/pip install "pip==${PIP_VERSION}" \
     && /opt/bootwright-ansible/bin/pip install "ansible-core==${ANSIBLE_CORE_VERSION}"
 
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
+RUN --mount=type=secret,id=proxy \
+    --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
+    if [ -f /run/secrets/proxy ]; then . /run/secrets/proxy; fi; \
     go mod download
 
 COPY Makefile Makefile
@@ -51,9 +49,11 @@ COPY ansible/collections/requirements.lock.yml ansible/collections/requirements.
 COPY scripts/sync-ansible-bundle.py scripts/sync-ansible-bundle.py
 COPY scripts/verify-ansible-collections.py scripts/verify-ansible-collections.py
 COPY internal/repo/bundlecheck internal/repo/bundlecheck
-RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharing=locked \
+RUN --mount=type=secret,id=proxy \
+    --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharing=locked \
     --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
+    if [ -f /run/secrets/proxy ]; then . /run/secrets/proxy; fi; \
     make sync-bundle
 
 COPY api api
@@ -63,9 +63,11 @@ COPY add-ons add-ons
 COPY ansible ansible
 COPY scripts scripts
 
-RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharing=locked \
+RUN --mount=type=secret,id=proxy \
+    --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharing=locked \
     --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
+    if [ -f /run/secrets/proxy ]; then . /run/secrets/proxy; fi; \
     make sync-bundle
 
 COPY .git .git

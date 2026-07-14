@@ -107,21 +107,21 @@ If a release binary is not available yet, build the CLI from the repository
 root with the [`Containerfile`](Containerfile) and copy the binary out of the
 image:
 
+If your build host reaches the internet through an authenticated proxy, the
+credential never becomes a build-arg, `ENV`, or image layer: copy
+[`proxy.env.example`](proxy.env.example) to `proxy.env`, fill in the real
+`user:password@host`, and pass it as a BuildKit secret. The file is git-ignored,
+mounted on a tmpfs only during each network step, and absent from the finished
+image and `docker history`. Omit `--secret` entirely to build without a proxy.
+`NO_PROXY` is not sensitive, so it stays an ordinary build-arg.
+
 ```bash
-export HTTP_PROXY
-export HTTPS_PROXY="${HTTP_PROXY}"
 export NO_PROXY="localhost,127.0.0.1,.local,10."
-export http_proxy="${HTTP_PROXY}"
-export https_proxy="${HTTPS_PROXY}"
-export no_proxy="${NO_PROXY}"
 
 DOCKER_BUILDKIT=1 docker build \
-  --build-arg "HTTP_PROXY=${HTTP_PROXY}" \
-  --build-arg "HTTPS_PROXY=${HTTPS_PROXY}" \
+  --secret id=proxy,src=proxy.env \
   --build-arg "NO_PROXY=${NO_PROXY}" \
-  --build-arg "http_proxy=${http_proxy}" \
-  --build-arg "https_proxy=${https_proxy}" \
-  --build-arg "no_proxy=${no_proxy}" \
+  --build-arg "no_proxy=${NO_PROXY}" \
   -t bootwright \
   -f Containerfile \
   .
