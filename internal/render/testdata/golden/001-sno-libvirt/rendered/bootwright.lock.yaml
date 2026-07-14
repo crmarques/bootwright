@@ -5,9 +5,9 @@ components:
       source: https://pypi.org/project/ansible-core/
       lookupDate: "2026-05-31"
     - name: pip
-      version: 26.1.1
+      version: 26.1.2
       source: https://pypi.org/project/pip/
-      lookupDate: "2026-05-21"
+      lookupDate: "2026-07-14"
     - name: go.yaml.in/yaml/v3
       version: v3.0.4
       source: https://go.yaml.in/yaml/v3

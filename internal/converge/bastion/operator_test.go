@@ -239,7 +239,7 @@ func TestComponentPinnedVersion(t *testing.T) {
 		want string
 	}{
 		{name: "ansible-core", want: "2.21.0"},
-		{name: "pip", want: "26.1.1"},
+		{name: "pip", want: "26.1.2"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -410,7 +410,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenv(t *testing.T) {
 		outputs: map[string][]byte{
 			"python3.12":      []byte("Python 3.12.4"),
 			venvBin("python"): []byte("Python 3.12.4"),
-			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.2 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false, "")
@@ -427,7 +427,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenvWithoutSystemPython(t *testing.T) {
 	got, err := BootstrapPlanWith(fakeProcessDeps{
 		outputs: map[string][]byte{
 			venvBin("python"): []byte("Python 3.12.4"),
-			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.2 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false, "")
@@ -446,7 +446,7 @@ func TestBootstrapPlanWithDepsRecreatesOutdatedPinnedVenv(t *testing.T) {
 		outputs: map[string][]byte{
 			"python3.12":      []byte("Python 3.12.4"),
 			venvBin("python"): []byte("Python 3.12.4"),
-			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.2 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.19.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false, "")
@@ -455,7 +455,7 @@ func TestBootstrapPlanWithDepsRecreatesOutdatedPinnedVenv(t *testing.T) {
 	}
 	want := [][]string{
 		{"python3.12", "-m", "venv", "--clear", "/venv"},
-		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.1"},
+		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.2"},
 		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.21.0"},
 	}
 	if len(got) != len(want) {
@@ -481,7 +481,7 @@ func TestBootstrapPlanWithDepsRepairsUsableVenvWithoutSystemPython(t *testing.T)
 		t.Fatal(err)
 	}
 	want := [][]string{
-		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.1"},
+		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.2"},
 		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.21.0"},
 	}
 	if len(got) != len(want) {
@@ -522,7 +522,7 @@ func TestBootstrapPlanWithDepsInstallsPyvmomiForVSphereStates(t *testing.T) {
 	venvBin := func(name string) string { return "/venv/bin/" + name }
 	pinnedOutputs := map[string][]byte{
 		venvBin("python"): []byte("Python 3.12.4"),
-		commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+		commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.2 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 		commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 	}
 

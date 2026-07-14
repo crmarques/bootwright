@@ -274,10 +274,10 @@ bootwright_component_pins:
       name: ansible-core
       source: https://pypi.org/project/ansible-core/
       version: 2.21.0
-    - lookupDate: "2026-05-21"
+    - lookupDate: "2026-07-14"
       name: pip
       source: https://pypi.org/project/pip/
-      version: 26.1.1
+      version: 26.1.2
     - lookupDate: "2026-05-21"
       name: go.yaml.in/yaml/v3
       source: https://go.yaml.in/yaml/v3
