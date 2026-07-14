@@ -180,20 +180,14 @@ func (e *addonHookExecutor) reclaimSecretHookOutputs(hook v1alpha1.ClusterAddonH
 }
 
 func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error) {
-	input, property, ok := hooks.SplitInputProperty(arg)
-	if !ok {
-		return "", fmt.Errorf("exportDetails token %q must be input.property", arg)
-	}
 	var exportName string
 	for _, in := range e.inputs {
-		if in.Name == input {
-			if value, ok := in.Values[property].(string); ok {
-				exportName = value
-			}
+		if in.Name == arg {
+			exportName = in.Value
 		}
 	}
 	if exportName == "" {
-		return "", fmt.Errorf("exportDetails input %q property %q has no value", input, property)
+		return "", fmt.Errorf("exportDetails input %q has no value", arg)
 	}
 	export, ok := stateview.ExportByName(e.state, exportName)
 	if !ok {
@@ -218,28 +212,24 @@ func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error
 func (e *addonHookExecutor) resolveHookRefs() map[string]any {
 	refs := map[string]any{}
 	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
-		for property, schema := range accepted.Schema.Properties {
-			if schema.RefKind == "" {
-				continue
-			}
-			name := e.inputValue(accepted.Name, property)
-			if name == "" {
-				continue
-			}
-			if object := e.resolveRefObject(schema.RefKind, name); object != nil {
-				refs[property] = object
-			}
+		if accepted.ResourceRef == nil {
+			continue
+		}
+		name := e.inputValue(accepted.Name)
+		if name == "" {
+			continue
+		}
+		if object := e.resolveRefObject(accepted.ResourceRef.Kind, name); object != nil {
+			refs[accepted.Name] = object
 		}
 	}
 	return refs
 }
 
-func (e *addonHookExecutor) inputValue(input, property string) string {
+func (e *addonHookExecutor) inputValue(input string) string {
 	for _, in := range e.inputs {
 		if in.Name == input {
-			if value, ok := in.Values[property].(string); ok {
-				return value
-			}
+			return in.Value
 		}
 	}
 	return ""

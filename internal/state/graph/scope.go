@@ -148,7 +148,7 @@ func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]b
 		if !selectedClusters[effect.Binding.Spec.ClusterRef.Name] {
 			continue
 		}
-		selectedExports[addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name] = true
+		selectedExports[addoninputs.LocalObjectReferenceValue(effect.Input).Name] = true
 	}
 	selectedStorageClusters := map[string]bool{}
 	selectedPools := map[string]bool{}
@@ -247,7 +247,7 @@ func storageAttachmentContainerClusters(state v1alpha1.State) map[string]bool {
 	selected := map[string]bool{}
 	var bindings []v1alpha1.ClusterAddonBinding
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input)
 		if !selectedExports[exportRef.Name] {
 			continue
 		}
@@ -371,10 +371,10 @@ func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bo
 			continue
 		}
 		filteredBindings = append(filteredBindings, binding)
-		for _, ref := range binding.Spec.AddonProfileRefs {
+		for _, ref := range binding.Spec.ProfileRefs {
 			selectedSets[ref.Name] = true
 		}
-		for _, addon := range binding.Spec.Addons {
+		for _, addon := range addoninputs.EffectiveBindingAddons(state, binding) {
 			selectedAddons[addon.AddonRef.Name] = true
 		}
 	}
@@ -414,7 +414,8 @@ func storageEffectBinding(effect addoninputs.EffectBinding) v1alpha1.ClusterAddo
 		Metadata:   effect.Binding.Metadata,
 		Spec: v1alpha1.ClusterAddonBindingSpec{
 			ClusterRef: effect.Binding.Spec.ClusterRef,
-			Addons: []v1alpha1.ClusterAddonBindingAddon{{
+			AddonRefs:  []v1alpha1.LocalObjectReference{effect.Addon.AddonRef},
+			AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
 				AddonRef: effect.Addon.AddonRef,
 				Inputs:   []v1alpha1.ClusterAddonBindingInput{effect.Input},
 			}},

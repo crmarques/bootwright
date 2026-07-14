@@ -19,26 +19,28 @@ func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddon
 	var out []hookTargetMachine
 	add := func(more []hookTargetMachine) { out = append(out, more...) }
 
-	if target.BoundCluster {
+	if target.BoundCluster != nil {
 		machines, err := e.containerClusterMachines(e.plan.Cluster)
 		if err != nil {
 			return nil, err
 		}
 		add(machines)
 	}
-	for _, name := range target.Clusters {
-		machines, err := e.clusterMachines(name)
-		if err != nil {
-			return nil, err
+	if target.Static != nil {
+		for _, name := range target.Static.Clusters {
+			machines, err := e.clusterMachines(name)
+			if err != nil {
+				return nil, err
+			}
+			add(machines)
 		}
-		add(machines)
-	}
-	for _, name := range target.Machines {
-		machine, ok := stateview.Machine(e.state, name)
-		if !ok {
-			return nil, fmt.Errorf("hook %s target machine %q not found", hook.Name, name)
+		for _, name := range target.Static.Machines {
+			machine, ok := stateview.Machine(e.state, name)
+			if !ok {
+				return nil, fmt.Errorf("hook %s target machine %q not found", hook.Name, name)
+			}
+			add([]hookTargetMachine{{label: "Machine/" + name, machine: machine}})
 		}
-		add([]hookTargetMachine{{label: "Machine/" + name, machine: machine}})
 	}
 	if target.FromInput != nil {
 		machines, err := e.fromInputMachines(hook, *target.FromInput)
@@ -51,13 +53,13 @@ func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddon
 }
 
 func (e *addonHookExecutor) fromInputMachines(hook v1alpha1.ClusterAddonHook, from v1alpha1.ClusterAddonHookInputTarget) ([]hookTargetMachine, error) {
-	refKind, ok := e.inputRefKind(from.Input, from.Property)
+	refKind, ok := e.inputRefKind(from.Input)
 	if !ok {
-		return nil, fmt.Errorf("hook %s fromInput %s.%s is not a refKind property", hook.Name, from.Input, from.Property)
+		return nil, fmt.Errorf("hook %s fromInput %s is not a resourceRef input", hook.Name, from.Input)
 	}
-	name := e.inputValue(from.Input, from.Property)
+	name := e.inputValue(from.Input)
 	if name == "" {
-		return nil, fmt.Errorf("hook %s fromInput %s.%s has no value", hook.Name, from.Input, from.Property)
+		return nil, fmt.Errorf("hook %s fromInput %s has no value", hook.Name, from.Input)
 	}
 	switch refKind {
 	case hooks.RefKindStorageExport:
@@ -139,13 +141,13 @@ func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMac
 	return out, nil
 }
 
-func (e *addonHookExecutor) inputRefKind(input, property string) (string, bool) {
+func (e *addonHookExecutor) inputRefKind(input string) (string, bool) {
 	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
 		if accepted.Name != input {
 			continue
 		}
-		if schema, ok := accepted.Schema.Properties[property]; ok && schema.RefKind != "" {
-			return schema.RefKind, true
+		if accepted.ResourceRef != nil && accepted.ResourceRef.Kind != "" {
+			return accepted.ResourceRef.Kind, true
 		}
 	}
 	return "", false

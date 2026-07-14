@@ -4493,7 +4493,7 @@ metadata:
   name: sno-libvirt-addons
 spec:
   clusterRef: sno-libvirt
-  addonProfileRefs:
+  profileRefs:
     - virtualization-platform
 `), 0o600); err != nil {
 		t.Fatalf("write addon binding: %v", err)
@@ -4530,9 +4530,9 @@ spec:
         spec: {}
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-cnv
-        subscription: hco-operatorhub
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
 `
 }
 

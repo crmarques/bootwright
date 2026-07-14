@@ -37,7 +37,7 @@ func cataloguedOLMPlan(timeout string) extensionplan.ExtensionPlan {
 				Readiness: v1alpha1.ClusterAddonReadiness{
 					Timeout: timeout,
 					Checks: []v1alpha1.ClusterAddonReadinessCheck{{
-						Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "cat-ns", Subscription: "cat-op",
+						CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "cat-ns", Subscription: "cat-op"},
 					}},
 				},
 			},

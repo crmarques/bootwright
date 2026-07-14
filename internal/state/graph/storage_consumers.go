@@ -24,7 +24,7 @@ func StorageConsumerDestroyConflicts(state v1alpha1.State, selectedStorage, sele
 	}
 	consumers := map[string]map[string]bool{}
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input).Name
 		storageCluster := exportCluster[exportRef]
 		if storageCluster == "" || !destroying[storageCluster] {
 			continue

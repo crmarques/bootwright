@@ -1,8 +1,10 @@
 package workflow
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -141,5 +143,81 @@ func TestMergedPullSecretReplacementRejectsMissingPayload(t *testing.T) {
 	_, _, merr := mergedPullSecretReplacement(live, "cp.icr.io", "cp", "KEY")
 	if merr == nil || !strings.Contains(merr.Error(), "no .dockerconfigjson data") {
 		t.Fatalf("err = %v, want missing-payload error", merr)
+	}
+}
+
+func TestMergeGlobalPullSecretCredentialRetriesConflictWithLatestResourceVersion(t *testing.T) {
+	runner := &conflictPullSecretRunner{
+		gets: [][]byte{
+			livePullSecretJSON(t, "1", dockerConfig(t, map[string]map[string]string{"quay.io": {"auth": "cXVheQ=="}})),
+			livePullSecretJSON(t, "2", dockerConfig(t, map[string]map[string]string{"quay.io": {"auth": "cXVheQ=="}})),
+		},
+		replaceErrs: []error{errors.New(`Error from server (Conflict): Operation cannot be fulfilled on secrets "pull-secret": the object has been modified`)},
+	}
+	changed, err := mergeGlobalPullSecretCredential(context.Background(), runner, "/tmp/kubeconfig", "cp.icr.io", "cp", "KEY")
+	if err != nil {
+		t.Fatalf("mergeGlobalPullSecretCredential: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	if runner.getCalls != 2 || runner.replaceCalls != 2 {
+		t.Fatalf("calls get=%d replace=%d, want 2/2", runner.getCalls, runner.replaceCalls)
+	}
+	var replacement struct {
+		Metadata struct {
+			ResourceVersion string `json:"resourceVersion"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(runner.replacements[1], &replacement); err != nil {
+		t.Fatalf("decode second replacement: %v", err)
+	}
+	if replacement.Metadata.ResourceVersion != "2" {
+		t.Fatalf("second replacement resourceVersion = %q, want 2", replacement.Metadata.ResourceVersion)
+	}
+}
+
+func livePullSecretJSON(t *testing.T, resourceVersion string, config []byte) []byte {
+	t.Helper()
+	live, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{"name": "pull-secret", "namespace": "openshift-config", "resourceVersion": resourceVersion},
+		"data":     map[string]string{".dockerconfigjson": base64.StdEncoding.EncodeToString(config)},
+	})
+	if err != nil {
+		t.Fatalf("marshal live secret: %v", err)
+	}
+	return live
+}
+
+type conflictPullSecretRunner struct {
+	gets         [][]byte
+	replaceErrs  []error
+	replacements [][]byte
+	getCalls     int
+	replaceCalls int
+}
+
+func (r *conflictPullSecretRunner) Run(_ context.Context, _ string, args []string, input []byte) ([]byte, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	switch args[0] {
+	case "get":
+		if r.getCalls >= len(r.gets) {
+			return nil, errors.New("unexpected get")
+		}
+		out := r.gets[r.getCalls]
+		r.getCalls++
+		return out, nil
+	case "replace":
+		r.replacements = append(r.replacements, append([]byte(nil), input...))
+		var err error
+		if r.replaceCalls < len(r.replaceErrs) {
+			err = r.replaceErrs[r.replaceCalls]
+		}
+		r.replaceCalls++
+		return nil, err
+	default:
+		return nil, errors.New("unexpected oc command")
 	}
 }

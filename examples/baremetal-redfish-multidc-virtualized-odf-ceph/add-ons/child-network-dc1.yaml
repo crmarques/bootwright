@@ -14,12 +14,12 @@ spec:
   readiness:
     timeout: 5m
     checks:
-      - type: resourceExists
-        apiVersion: k8s.ovn.org/v1
-        kind: ClusterUserDefinedNetwork
-        name: dc1-child-net
-      - type: resourceExists
-        apiVersion: k8s.cni.cncf.io/v1
-        kind: NetworkAttachmentDefinition
-        name: dc1-child-net
-        namespace: bootwright-dc1-child-ocp
+      - resourceExists:
+          apiVersion: k8s.ovn.org/v1
+          kind: ClusterUserDefinedNetwork
+          name: dc1-child-net
+      - resourceExists:
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          name: dc1-child-net
+          namespace: bootwright-dc1-child-ocp

@@ -17,12 +17,8 @@ func hookAddon(dir string, hook v1alpha1.ClusterAddonHook) v1alpha1.ClusterAddon
 			Type: v1alpha1.ClusterAddonTypeOLM,
 			Accepts: v1alpha1.ClusterAddonAccepts{
 				Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-					Name: "external-storage",
-					Schema: v1alpha1.ClusterAddonInputSchema{
-						Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-							"exportRef": {RefKind: v1alpha1.KindStorageExport},
-						},
-					},
+					Name:        "external-storage",
+					ResourceRef: &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport},
 				}},
 			},
 			Hooks: []v1alpha1.ClusterAddonHook{hook},
@@ -67,8 +63,8 @@ func TestValidateHookTargetModes(t *testing.T) {
 		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
 		Playbook:  "playbooks/p.yml",
 		Target: v1alpha1.ClusterAddonHookTarget{
-			BoundCluster: true,
-			FromInput:    &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"},
+			BoundCluster: &v1alpha1.ClusterAddonHookBoundTarget{},
+			FromInput:    &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
 		},
 	})
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "exactly one of")
@@ -81,7 +77,7 @@ func TestValidateHookStorageExportTargetRequiresAttachmentEffect(t *testing.T) {
 		Name:      "h",
 		Lifecycle: v1alpha1.ClusterAddonHookPostReady,
 		Playbook:  "playbooks/p.yml",
-		Target:    v1alpha1.ClusterAddonHookTarget{FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"}},
+		Target:    v1alpha1.ClusterAddonHookTarget{FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"}},
 	}
 
 	withoutEffect := hookAddon(dir, hook)
@@ -89,8 +85,7 @@ func TestValidateHookStorageExportTargetRequiresAttachmentEffect(t *testing.T) {
 
 	withEffect := hookAddon(dir, hook)
 	withEffect.Spec.Accepts.Inputs[0].Effects = []v1alpha1.ClusterAddonInputEffect{{
-		Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-		Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+		StorageExportAttachment: &v1alpha1.ClusterAddonStorageExportAttachmentEffect{},
 	}}
 	for _, e := range validateClusterAddonHooks(v1alpha1.State{}, withEffect) {
 		if strings.Contains(e, "storageExportAttachment effect") {
@@ -106,7 +101,7 @@ func TestValidateHookPlaybookMustLiveUnderPlaybooksDir(t *testing.T) {
 		Name:      "h",
 		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
 		Playbook:  "run.yml",
-		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: true},
+		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: &v1alpha1.ClusterAddonHookBoundTarget{}},
 	})
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "must live under a playbooks/ directory")
 }
@@ -130,7 +125,7 @@ func TestValidateHookFromInputUnknownInput(t *testing.T) {
 		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
 		Playbook:  "playbooks/p.yml",
 		Target: v1alpha1.ClusterAddonHookTarget{
-			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "nope", Property: "exportRef"},
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "nope"},
 		},
 	})
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), `input "nope" does not name`)
@@ -149,7 +144,7 @@ func TestValidateHookManifestUndeclaredOutput(t *testing.T) {
 
 func TestValidateHookManifestOnlyValid(t *testing.T) {
 	dir := t.TempDir()
-	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  x: \"{{ exportDetails external-storage.exportRef }}\"\n  c: \"{{ cluster }}\"\n")
+	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  x: \"{{ exportDetails external-storage }}\"\n  c: \"{{ cluster }}\"\n")
 	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
 		Name:      "attach",
 		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
@@ -168,7 +163,7 @@ func TestValidateManifestOnlyHookRejectsOutputsAndTarget(t *testing.T) {
 		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
 		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
 		Outputs:   []v1alpha1.ClusterAddonHookOutput{{Name: "details", File: "d.json"}},
-		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: true},
+		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: &v1alpha1.ClusterAddonHookBoundTarget{}},
 	})
 	errs := validateClusterAddonHooks(v1alpha1.State{}, addon)
 	hookErrsContain(t, errs, "outputs requires a playbook")
@@ -184,7 +179,7 @@ func TestValidateHookOutputConsumerMustFail(t *testing.T) {
 		Lifecycle:   v1alpha1.ClusterAddonHookPostOperatorReady,
 		Playbook:    "playbooks/p.yml",
 		FailureMode: v1alpha1.ProvisioningPlaybookFailureContinue,
-		Target:      v1alpha1.ClusterAddonHookTarget{BoundCluster: true},
+		Target:      v1alpha1.ClusterAddonHookTarget{BoundCluster: &v1alpha1.ClusterAddonHookBoundTarget{}},
 		Outputs:     []v1alpha1.ClusterAddonHookOutput{{Name: "d", File: "d.json"}},
 		Manifests:   []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
 	})

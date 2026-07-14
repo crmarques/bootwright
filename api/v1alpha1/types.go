@@ -196,7 +196,6 @@ const (
 	ClusterAddonProvidesKubeVirt                    = "kubevirt"
 	ClusterAddonProvidesDataFoundation              = "dataFoundation"
 	ClusterAddonProvidesNMState                     = "nmstate"
-	ClusterAddonInputSchemaTypeObject               = "object"
 	ClusterAddonInputEffectStorageExportAttachment  = "storageExportAttachment"
 	ClusterAddonInputEffectGlobalPullSecretMerge    = "globalPullSecretMerge"
 

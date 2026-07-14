@@ -89,19 +89,19 @@ func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[st
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		prefix := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s]", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name)
 		if !addonProvides(effect.Extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
-			errs = append(errs, fmt.Sprintf("%s effect %q with provider %q requires ClusterAddon/%s to provide %q", prefix, effect.Effect.Type, effect.Effect.Provider, effect.Addon.AddonRef.Name, v1alpha1.ClusterAddonProvidesDataFoundation))
+			errs = append(errs, fmt.Sprintf("%s storageExportAttachment requires ClusterAddon/%s to provide %q", prefix, effect.Addon.AddonRef.Name, v1alpha1.ClusterAddonProvidesDataFoundation))
 		}
-		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input)
 		if exportRef.Name == "" {
 			continue
 		}
 		export, exportOK := exports[exportRef.Name]
 		if !exportOK {
-			errs = append(errs, fmt.Sprintf("%s.values.exportRef %q does not match any StorageExport", prefix, exportRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.value %q does not match any StorageExport", prefix, exportRef.Name))
 			continue
 		}
 		if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
-			errs = append(errs, fmt.Sprintf("%s.values.exportRef %q must reference a %s StorageExport", prefix, exportRef.Name, v1alpha1.StorageExportTypeDataFoundation))
+			errs = append(errs, fmt.Sprintf("%s.value %q must reference a %s StorageExport", prefix, exportRef.Name, v1alpha1.StorageExportTypeDataFoundation))
 			continue
 		}
 	}

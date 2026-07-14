@@ -12,28 +12,16 @@ spec:
     inputs:
       - name: external-storage
         required: true
-        schema:
-          type: object
-          required:
-            - exportRef
-          properties:
-            exportRef:
-              refKind: StorageExport
+        resourceRef:
+          kind: StorageExport
         effects:
-          - type: storageExportAttachment
-            provider: dataFoundation
+          - storageExportAttachment: {}
       - name: ibm-entitlement
-        schema:
-          type: object
-          required:
-            - entitlementKeyRef
-          properties:
-            entitlementKeyRef:
-              secret: true
+        secretRef: {}
         effects:
-          - type: globalPullSecretMerge
-            registry: cp.icr.io
-            username: cp
+          - globalPullSecretMerge:
+              registry: cp.icr.io
+              username: cp
 
   olm:
     namespace:
@@ -63,7 +51,6 @@ spec:
       target:
         fromInput:
           input: external-storage
-          property: exportRef
       run: always
       outputs:
         - name: externalDetails
@@ -78,14 +65,14 @@ spec:
   readiness:
     timeout: 45m
     checks:
-      - type: csvSucceeded
-        namespace: openshift-storage
-        subscription: odf-operator
-      - type: condition
-        apiVersion: ocs.openshift.io/v1
-        kind: StorageCluster
-        namespace: openshift-storage
-        name: ocs-external-storagecluster
-        condition:
-          type: Available
-          status: "True"
+      - csvSucceeded:
+          namespace: openshift-storage
+          subscription: odf-operator
+      - condition:
+          apiVersion: ocs.openshift.io/v1
+          kind: StorageCluster
+          namespace: openshift-storage
+          name: ocs-external-storagecluster
+          condition:
+            type: Available
+            status: "True"

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
@@ -36,12 +37,12 @@ func newAddonEffectExecutor(stdout, stderr io.Writer, runsDir, runID string, opt
 func (e *addonEffectExecutor) Run(ctx context.Context) error {
 	for _, input := range e.plan.Addon.Spec.Accepts.Inputs {
 		for _, effect := range input.Effects {
-			if effect.Type != v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge {
+			if effect.GlobalPullSecretMerge == nil {
 				continue
 			}
-			if err := e.mergeGlobalPullSecret(ctx, input, effect); err != nil {
+			if err := e.mergeGlobalPullSecret(ctx, input, *effect.GlobalPullSecretMerge); err != nil {
 				return &extensionoc.EffectError{
-					Effect: effect.Type,
+					Effect: v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge,
 					Input:  input.Name,
 					Detail: conciseApplyTaskFailure(err.Error()),
 				}
@@ -51,7 +52,7 @@ func (e *addonEffectExecutor) Run(ctx context.Context) error {
 	return nil
 }
 
-func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v1alpha1.ClusterAddonAcceptedInput, effect v1alpha1.ClusterAddonInputEffect) error {
+func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v1alpha1.ClusterAddonAcceptedInput, effect v1alpha1.ClusterAddonGlobalPullSecretMergeEffect) error {
 	secretName := e.bindingSecretName(input)
 	if secretName == "" {
 		return nil
@@ -62,12 +63,8 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 		return fmt.Errorf("read secret %q for pull-secret merge: %w", secretName, err)
 	}
 	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
-	readRunner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true}
-	live, err := readRunner.Run(ctx, kubeconfig, []string{"get", "secret", "pull-secret", "-n", "openshift-config", "-o", "json"}, nil)
-	if err != nil {
-		return fmt.Errorf("read cluster pull secret: %w", err)
-	}
-	replacement, changed, err := mergedPullSecretReplacement(live, effect.Registry, effect.Username, string(password))
+	runner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true, Stdout: e.stdout, Stderr: e.stderr}
+	changed, err := mergeGlobalPullSecretCredential(ctx, runner, kubeconfig, effect.Registry, effect.Username, string(password))
 	if err != nil {
 		return err
 	}
@@ -75,31 +72,52 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 		fmt.Fprintf(e.stdout, "global pull secret already carries %s credentials; merge skipped\n", effect.Registry)
 		return nil
 	}
-	runner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true, Stdout: e.stdout, Stderr: e.stderr}
-	if _, err := runner.Run(ctx, kubeconfig, []string{"replace", "-f", "-"}, replacement); err != nil {
-		return fmt.Errorf("update cluster pull secret with %s credentials: %w", effect.Registry, err)
-	}
 	return nil
 }
 
-func (e *addonEffectExecutor) bindingSecretName(input v1alpha1.ClusterAddonAcceptedInput) string {
-	property := ""
-	for name, prop := range input.Schema.Properties {
-		if prop.Secret {
-			property = name
-			break
+const pullSecretMergeAttempts = 3
+
+func mergeGlobalPullSecretCredential(ctx context.Context, runner extensionoc.OCRunner, kubeconfig, registry, username, password string) (bool, error) {
+	var conflict error
+	for attempt := 0; attempt < pullSecretMergeAttempts; attempt++ {
+		live, err := runner.Run(ctx, kubeconfig, []string{"get", "secret", "pull-secret", "-n", "openshift-config", "-o", "json"}, nil)
+		if err != nil {
+			return false, fmt.Errorf("read cluster pull secret: %w", err)
 		}
+		replacement, changed, err := mergedPullSecretReplacement(live, registry, username, password)
+		if err != nil {
+			return false, err
+		}
+		if !changed {
+			return false, nil
+		}
+		if _, err := runner.Run(ctx, kubeconfig, []string{"replace", "-f", "-"}, replacement); err != nil {
+			if pullSecretUpdateConflict(err) {
+				conflict = err
+				continue
+			}
+			return false, fmt.Errorf("update cluster pull secret with %s credentials: %w", registry, err)
+		}
+		return true, nil
 	}
-	if property == "" {
+	return false, fmt.Errorf("update cluster pull secret with %s credentials after %d attempts: %w", registry, pullSecretMergeAttempts, conflict)
+}
+
+func pullSecretUpdateConflict(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "Error from server (Conflict)") ||
+		strings.Contains(message, "the object has been modified")
+}
+
+func (e *addonEffectExecutor) bindingSecretName(input v1alpha1.ClusterAddonAcceptedInput) string {
+	if input.SecretRef == nil {
 		return ""
 	}
 	for _, in := range e.inputs {
 		if in.Name != input.Name {
 			continue
 		}
-		if value, ok := in.Values[property].(string); ok {
-			return value
-		}
+		return in.Value
 	}
 	return ""
 }

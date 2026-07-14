@@ -12,16 +12,10 @@ spec:
     inputs:
       - name: external-storage
         required: true
-        schema:
-          type: object
-          required:
-            - exportRef
-          properties:
-            exportRef:
-              refKind: StorageExport
+        resourceRef:
+          kind: StorageExport
         effects:
-          - type: storageExportAttachment
-            provider: dataFoundation
+          - storageExportAttachment: {}
 
   olm:
     namespace:
@@ -50,14 +44,14 @@ spec:
   readiness:
     timeout: 45m
     checks:
-      - type: csvSucceeded
-        namespace: openshift-storage
-        subscription: odf-operator
-      - type: condition
-        apiVersion: ocs.openshift.io/v1
-        kind: StorageCluster
-        namespace: openshift-storage
-        name: ocs-external-storagecluster
-        condition:
-          type: Available
-          status: "True"
+      - csvSucceeded:
+          namespace: openshift-storage
+          subscription: odf-operator
+      - condition:
+          apiVersion: ocs.openshift.io/v1
+          kind: StorageCluster
+          namespace: openshift-storage
+          name: ocs-external-storagecluster
+          condition:
+            type: Available
+            status: "True"

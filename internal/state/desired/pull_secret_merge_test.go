@@ -9,15 +9,13 @@ import (
 
 func pullSecretMergeInput() v1alpha1.ClusterAddonAcceptedInput {
 	return v1alpha1.ClusterAddonAcceptedInput{
-		Name: "ibm-entitlement",
-		Schema: v1alpha1.ClusterAddonInputSchema{
-			Required:   []string{"entitlementKeyRef"},
-			Properties: map[string]v1alpha1.ClusterAddonInputProperty{"entitlementKeyRef": {Secret: true}},
-		},
+		Name:      "ibm-entitlement",
+		SecretRef: &v1alpha1.ClusterAddonInputSecret{},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
-			Type:     v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge,
-			Registry: "cp.icr.io",
-			Username: "cp",
+			GlobalPullSecretMerge: &v1alpha1.ClusterAddonGlobalPullSecretMergeEffect{
+				Registry: "cp.icr.io",
+				Username: "cp",
+			},
 		}},
 	}
 }
@@ -31,25 +29,29 @@ func TestValidateGlobalPullSecretMergeEffect(t *testing.T) {
 		{name: "valid", mutate: func(*v1alpha1.ClusterAddonAcceptedInput) {}},
 		{
 			name:    "missing registry",
-			mutate:  func(in *v1alpha1.ClusterAddonAcceptedInput) { in.Effects[0].Registry = "" },
+			mutate:  func(in *v1alpha1.ClusterAddonAcceptedInput) { in.Effects[0].GlobalPullSecretMerge.Registry = "" },
 			wantErr: "registry is required",
 		},
 		{
 			name:    "missing username",
-			mutate:  func(in *v1alpha1.ClusterAddonAcceptedInput) { in.Effects[0].Username = "" },
+			mutate:  func(in *v1alpha1.ClusterAddonAcceptedInput) { in.Effects[0].GlobalPullSecretMerge.Username = "" },
 			wantErr: "username is required",
 		},
 		{
-			name:    "provider rejected",
-			mutate:  func(in *v1alpha1.ClusterAddonAcceptedInput) { in.Effects[0].Provider = "ibm" },
-			wantErr: "provider is only valid",
+			name: "requires secret input",
+			mutate: func(in *v1alpha1.ClusterAddonAcceptedInput) {
+				in.SecretRef = nil
+				in.ResourceRef = &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport}
+			},
+			wantErr: "requires a secretRef input",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			input := pullSecretMergeInput()
 			tc.mutate(&input)
-			got := strings.Join(validateClusterAddonInputEffects("spec.accepts.inputs[0].effects", input.Effects), "; ")
+			extension := v1alpha1.ClusterAddon{Metadata: v1alpha1.Metadata{Name: "entitled"}}
+			got := strings.Join(validateClusterAddonInputEffects("spec.accepts.inputs[0].effects", extension, input), "; ")
 			if tc.wantErr == "" {
 				if got != "" {
 					t.Fatalf("unexpected errors: %s", got)
@@ -63,19 +65,17 @@ func TestValidateGlobalPullSecretMergeEffect(t *testing.T) {
 	}
 }
 
-func TestValidateStorageExportAttachmentRejectsMergeFields(t *testing.T) {
-	effects := []v1alpha1.ClusterAddonInputEffect{{
-		Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-		Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
-		Registry: "cp.icr.io",
-	}}
-	got := strings.Join(validateClusterAddonInputEffects("spec.accepts.inputs[0].effects", effects), "; ")
-	if !strings.Contains(got, "registry and username are only valid") {
-		t.Fatalf("errors = %q, want registry/username rejection", got)
+func TestValidateEffectPresenceUnion(t *testing.T) {
+	input := pullSecretMergeInput()
+	input.Effects[0].StorageExportAttachment = &v1alpha1.ClusterAddonStorageExportAttachmentEffect{}
+	extension := v1alpha1.ClusterAddon{Metadata: v1alpha1.Metadata{Name: "entitled"}}
+	got := strings.Join(validateClusterAddonInputEffects("spec.accepts.inputs[0].effects", extension, input), "; ")
+	if !strings.Contains(got, "must not set more than one effect arm") {
+		t.Fatalf("errors = %q, want multiple arm rejection", got)
 	}
 }
 
-func TestValidateGlobalPullSecretMergeInputSchemaPinned(t *testing.T) {
+func TestValidateAcceptedInputPresence(t *testing.T) {
 	cases := []struct {
 		name    string
 		mutate  func(*v1alpha1.ClusterAddonAcceptedInput)
@@ -83,30 +83,33 @@ func TestValidateGlobalPullSecretMergeInputSchemaPinned(t *testing.T) {
 	}{
 		{name: "valid", mutate: func(*v1alpha1.ClusterAddonAcceptedInput) {}},
 		{
-			name: "extra property",
+			name: "missing arm",
 			mutate: func(in *v1alpha1.ClusterAddonAcceptedInput) {
-				in.Schema.Properties["other"] = v1alpha1.ClusterAddonInputProperty{Secret: true}
+				in.SecretRef = nil
 			},
-			wantErr: "exactly one secret property",
+			wantErr: "must set exactly one of resourceRef or secretRef",
 		},
 		{
-			name: "non-secret property",
+			name: "two arms",
 			mutate: func(in *v1alpha1.ClusterAddonAcceptedInput) {
-				in.Schema.Properties["entitlementKeyRef"] = v1alpha1.ClusterAddonInputProperty{RefKind: "Secret"}
+				in.ResourceRef = &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport}
 			},
-			wantErr: "must set secret: true",
+			wantErr: "must not set both resourceRef and secretRef",
 		},
 		{
-			name:    "not required",
-			mutate:  func(in *v1alpha1.ClusterAddonAcceptedInput) { in.Schema.Required = nil },
-			wantErr: "required must include",
+			name: "unknown resource kind",
+			mutate: func(in *v1alpha1.ClusterAddonAcceptedInput) {
+				in.SecretRef = nil
+				in.ResourceRef = &v1alpha1.ClusterAddonInputRef{Kind: "Unknown"}
+			},
+			wantErr: "is not a known Bootwright kind",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			input := pullSecretMergeInput()
 			tc.mutate(&input)
-			got := strings.Join(validateGlobalPullSecretMergeInputSchema("entitled", 0, input), "; ")
+			got := strings.Join(validateClusterAddonInputPresence("spec.accepts.inputs[0]", input), "; ")
 			if tc.wantErr == "" {
 				if got != "" {
 					t.Fatalf("unexpected errors: %s", got)

@@ -54,7 +54,7 @@ func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterA
 			if len(hook.Outputs) > 0 {
 				errs = append(errs, prefix+".outputs requires a playbook (only a playbook run can produce outputs)")
 			}
-			if hook.Target.BoundCluster || hook.Target.FromInput != nil || len(hook.Target.Clusters) > 0 || len(hook.Target.Machines) > 0 || hook.Target.Limit != "" {
+			if hook.Target.BoundCluster != nil || hook.Target.FromInput != nil || hook.Target.Static != nil || hook.Target.Limit != "" {
 				errs = append(errs, prefix+".target requires a playbook (manifests always apply to the bound cluster)")
 			}
 		}
@@ -87,8 +87,10 @@ func validateHookVocab(prefix string, hook v1alpha1.ClusterAddonHook) []string {
 		errs = append(errs, fmt.Sprintf("%s.failureMode %q must be %q or %q", prefix, hook.FailureMode, v1alpha1.ProvisioningPlaybookFailureFail, v1alpha1.ProvisioningPlaybookFailureContinue))
 	}
 	if hook.Timeout != "" {
-		if _, err := time.ParseDuration(hook.Timeout); err != nil {
+		if d, err := time.ParseDuration(hook.Timeout); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.timeout %q is not a valid duration", prefix, hook.Timeout))
+		} else if d <= 0 {
+			errs = append(errs, fmt.Sprintf("%s.timeout %q must be greater than 0", prefix, hook.Timeout))
 		}
 	}
 	return errs
@@ -98,35 +100,40 @@ func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1a
 	var errs []string
 	target := hook.Target
 	modes := 0
-	if target.BoundCluster {
+	if target.BoundCluster != nil {
 		modes++
 	}
 	if target.FromInput != nil {
 		modes++
 	}
-	if len(target.Clusters) > 0 || len(target.Machines) > 0 {
+	if target.Static != nil {
 		modes++
 	}
 	if modes == 0 {
-		errs = append(errs, prefix+".target must select boundCluster, fromInput, or a clusters/machines list")
+		errs = append(errs, prefix+".target must select boundCluster, fromInput, or static")
 	} else if modes > 1 {
-		errs = append(errs, prefix+".target must set exactly one of boundCluster, fromInput, or the static lists")
+		errs = append(errs, prefix+".target must set exactly one of boundCluster, fromInput, or static")
 	}
 	if target.Limit != "" && target.Limit != v1alpha1.ClusterAddonHookTargetLimitFirstReachable && target.Limit != v1alpha1.ClusterAddonHookTargetLimitAll {
 		errs = append(errs, fmt.Sprintf("%s.target.limit %q must be %q or %q", prefix, target.Limit, v1alpha1.ClusterAddonHookTargetLimitFirstReachable, v1alpha1.ClusterAddonHookTargetLimitAll))
 	}
-	for i, name := range target.Clusters {
-		if _, ok := containers[name]; ok {
-			continue
+	if target.Static != nil {
+		for i, name := range target.Static.Clusters {
+			if _, ok := containers[name]; ok {
+				continue
+			}
+			if _, ok := storage[name]; ok {
+				continue
+			}
+			errs = append(errs, fmt.Sprintf("%s.target.static.clusters[%d] %q does not match any ContainerCluster or StorageCluster", prefix, i, name))
 		}
-		if _, ok := storage[name]; ok {
-			continue
+		for i, name := range target.Static.Machines {
+			if _, ok := machines[name]; !ok {
+				errs = append(errs, fmt.Sprintf("%s.target.static.machines[%d] %q does not match any Machine", prefix, i, name))
+			}
 		}
-		errs = append(errs, fmt.Sprintf("%s.target.clusters[%d] %q does not match any ContainerCluster or StorageCluster", prefix, i, name))
-	}
-	for i, name := range target.Machines {
-		if _, ok := machines[name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.target.machines[%d] %q does not match any Machine", prefix, i, name))
+		if len(target.Static.Clusters) == 0 && len(target.Static.Machines) == 0 {
+			errs = append(errs, prefix+".target.static must include clusters or machines")
 		}
 	}
 	if target.FromInput != nil {
@@ -140,14 +147,13 @@ func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v
 	if !ok {
 		return []string{fmt.Sprintf("%s.input %q does not name a declared spec.accepts.inputs entry", prefix, from.Input)}
 	}
-	property, ok := accepted.Schema.Properties[from.Property]
-	if !ok || property.RefKind == "" {
-		return []string{fmt.Sprintf("%s.property %q must name a refKind-typed schema property of input %q", prefix, from.Property, from.Input)}
+	if accepted.ResourceRef == nil {
+		return []string{fmt.Sprintf("%s.input %q must name a resourceRef input", prefix, from.Input)}
 	}
-	if !slices.Contains(hooks.SupportedTargetRefKinds(), property.RefKind) {
-		return []string{fmt.Sprintf("%s.property %q refKind %q is not a supported target kind %v", prefix, from.Property, property.RefKind, hooks.SupportedTargetRefKinds())}
+	if !slices.Contains(hooks.SupportedTargetRefKinds(), accepted.ResourceRef.Kind) {
+		return []string{fmt.Sprintf("%s.input %q resourceRef kind %q is not a supported target kind %v", prefix, from.Input, accepted.ResourceRef.Kind, hooks.SupportedTargetRefKinds())}
 	}
-	if property.RefKind == v1alpha1.KindStorageExport && !inputHasStorageExportAttachment(accepted) {
+	if accepted.ResourceRef.Kind == v1alpha1.KindStorageExport && !inputHasStorageExportAttachment(accepted) {
 		return []string{fmt.Sprintf("%s targets a StorageExport through input %q, so that input must declare a storageExportAttachment effect; without it the export's Ceph cluster and nodes are not pulled into the add-on's apply scope and the hook fails at apply time with an unresolved-reference error", prefix, from.Input)}
 	}
 	return nil
@@ -155,7 +161,7 @@ func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v
 
 func inputHasStorageExportAttachment(input v1alpha1.ClusterAddonAcceptedInput) bool {
 	for _, effect := range input.Effects {
-		if effect.Type == v1alpha1.ClusterAddonInputEffectStorageExportAttachment {
+		if effect.StorageExportAttachment != nil {
 			return true
 		}
 	}
@@ -247,24 +253,20 @@ func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alp
 			return []string{fmt.Sprintf("%s references secret %q not listed in the hook secretRefs", owner, token.Arg)}
 		}
 	case hooks.TokenInput, hooks.TokenExportDetails:
-		return validateHookInputPropertyToken(owner, extension, token)
+		return validateHookInputToken(owner, extension, token)
 	default:
 		return []string{fmt.Sprintf("%s has unknown token kind %q", owner, token.Kind)}
 	}
 	return nil
 }
 
-func validateHookInputPropertyToken(owner string, extension v1alpha1.ClusterAddon, token hooks.Token) []string {
-	input, property, ok := hooks.SplitInputProperty(token.Arg)
+func validateHookInputToken(owner string, extension v1alpha1.ClusterAddon, token hooks.Token) []string {
+	accepted, ok := acceptedInputByName(extension, token.Arg)
 	if !ok {
-		return []string{fmt.Sprintf("%s token %q must reference input.property", owner, token.Arg)}
+		return []string{fmt.Sprintf("%s references undeclared input %q", owner, token.Arg)}
 	}
-	accepted, ok := acceptedInputByName(extension, input)
-	if !ok {
-		return []string{fmt.Sprintf("%s references undeclared input %q", owner, input)}
-	}
-	if _, ok := accepted.Schema.Properties[property]; !ok {
-		return []string{fmt.Sprintf("%s references undeclared property %q of input %q", owner, property, input)}
+	if token.Kind == hooks.TokenExportDetails && (accepted.ResourceRef == nil || accepted.ResourceRef.Kind != v1alpha1.KindStorageExport) {
+		return []string{fmt.Sprintf("%s exportDetails token must reference a StorageExport resourceRef input", owner)}
 	}
 	return nil
 }

@@ -175,3 +175,49 @@ func TestRemoveRejectsTraversalNames(t *testing.T) {
 		t.Fatalf("victim dir must survive traversal attempts: %v", err)
 	}
 }
+
+func TestInstallRejectsUnsafeReleaseName(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	_, err := Install(Release{Entry: Entry{Name: "../evil"}, Version: "4.21"})
+	if err == nil || !strings.Contains(err.Error(), "invalid add-on name") {
+		t.Fatalf("Install unsafe release err = %v, want invalid add-on name", err)
+	}
+}
+
+func TestValidateCatalogFilePathRejectsEscapesAndMarker(t *testing.T) {
+	for _, path := range []string{"", ".", "..", "../x", MarkerName, "nested/" + MarkerName} {
+		if err := validateCatalogFilePath(path); err == nil {
+			t.Fatalf("validateCatalogFilePath(%q) = nil, want error", path)
+		}
+	}
+	if err := validateCatalogFilePath("manifests/storage-cluster.yaml"); err != nil {
+		t.Fatalf("validateCatalogFilePath valid path: %v", err)
+	}
+}
+
+func TestInstalledAddonsMarksSymlinkContentModified(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	dir := InstalledDir("linked")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, MarkerName), []byte("name=linked\nversion=1\ncontentDigest=sha256:clean\n"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	target := filepath.Join(t.TempDir(), "target")
+	if err := os.WriteFile(target, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "payload.yaml")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	installed, err := InstalledAddons()
+	if err != nil {
+		t.Fatalf("InstalledAddons: %v", err)
+	}
+	if len(installed) != 1 || !installed[0].Modified {
+		t.Fatalf("InstalledAddons = %+v, want modified symlink add-on", installed)
+	}
+}

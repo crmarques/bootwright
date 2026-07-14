@@ -46,12 +46,9 @@ func TestBindingPlansExpandSetsBeforeDirectAddonsAndDeduplicate(t *testing.T) {
 		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ClusterRef:       v1alpha1.LocalObjectReference{Name: "demo"},
-				AddonProfileRefs: []v1alpha1.LocalObjectReference{{Name: "base"}, {Name: "observability"}},
-				Addons: []v1alpha1.ClusterAddonBindingAddon{
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "b"}},
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "d"}},
-				},
+				ClusterRef:  v1alpha1.LocalObjectReference{Name: "demo"},
+				ProfileRefs: []v1alpha1.LocalObjectReference{{Name: "base"}, {Name: "observability"}},
+				AddonRefs:   []v1alpha1.LocalObjectReference{{Name: "b"}, {Name: "d"}},
 			},
 		}},
 	}
@@ -193,8 +190,8 @@ func TestDesiredHashTracksManifestContent(t *testing.T) {
 func TestDesiredHashTracksBindingInputChanges(t *testing.T) {
 	extension := testExtension("virt")
 	policy := addons.ClusterAddonPolicy{FieldManager: addons.DefaultClusterAddonFieldManager}
-	inputsA := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph-a"}}}
-	inputsB := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph-b"}}}
+	inputsA := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "ceph-a"}}
+	inputsB := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "ceph-b"}}
 
 	without, err := extensionrender.DesiredHash(extension, policy, nil)
 	if err != nil {
@@ -221,9 +218,10 @@ func TestBindingPlansCarryBindingInputs(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons: []v1alpha1.ClusterAddonBindingAddon{{
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "virt"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
 					AddonRef: v1alpha1.LocalObjectReference{Name: "virt"},
-					Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph"}}},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "ceph"}},
 				}},
 			},
 		}},
@@ -236,13 +234,13 @@ func TestBindingPlansCarryBindingInputs(t *testing.T) {
 		t.Fatalf("plans = %v, want one binding with one addon", plans)
 	}
 	inputs := plans[0].Addons[0].Inputs
-	if len(inputs) != 1 || inputs[0].Name != "external-storage" || inputs[0].Values["exportRef"] != "ceph" {
+	if len(inputs) != 1 || inputs[0].Name != "external-storage" || inputs[0].Value != "ceph" {
 		t.Fatalf("plan inputs = %v, want the binding-supplied external-storage input", inputs)
 	}
 
-	state.ClusterAddonBindings[0].Spec.Addons = append(state.ClusterAddonBindings[0].Spec.Addons, v1alpha1.ClusterAddonBindingAddon{
+	state.ClusterAddonBindings[0].Spec.AddonConfigs = append(state.ClusterAddonBindings[0].Spec.AddonConfigs, v1alpha1.ClusterAddonBindingAddonConfig{
 		AddonRef: v1alpha1.LocalObjectReference{Name: "virt"},
-		Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "tuning", Values: map[string]any{"profileRef": "fast"}}},
+		Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "tuning", Value: "fast"}},
 	})
 	plans, err = extensionplan.BindingPlans(state)
 	if err != nil {
@@ -283,9 +281,10 @@ func TestReadinessChecks(t *testing.T) {
 		{
 			name: "csv-succeeded",
 			extension: readinessExtension("virt", v1alpha1.ClusterAddonReadinessCheck{
-				Type:         v1alpha1.ClusterAddonReadinessCSVSucceeded,
-				Namespace:    "openshift-cnv",
-				Subscription: "hco",
+				CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{
+					Namespace:    "openshift-cnv",
+					Subscription: "hco",
+				},
 			}),
 			responses: map[string][]fakeOCResponse{
 				"get subscription.operators.coreos.com hco -o json -n openshift-cnv": {
@@ -300,12 +299,13 @@ func TestReadinessChecks(t *testing.T) {
 		{
 			name: "condition",
 			extension: readinessExtension("virt", v1alpha1.ClusterAddonReadinessCheck{
-				Type:       v1alpha1.ClusterAddonReadinessCondition,
-				APIVersion: "hco.kubevirt.io/v1beta1",
-				Kind:       "HyperConverged",
-				Namespace:  "openshift-cnv",
-				Name:       "kubevirt-hyperconverged",
-				Condition:  &v1alpha1.ClusterAddonConditionReadiness{Type: "Available", Status: "True"},
+				Condition: &v1alpha1.ClusterAddonConditionReadiness{
+					APIVersion: "hco.kubevirt.io/v1beta1",
+					Kind:       "HyperConverged",
+					Namespace:  "openshift-cnv",
+					Name:       "kubevirt-hyperconverged",
+					Condition:  v1alpha1.ClusterAddonConditionRequirement{Type: "Available", Status: "True"},
+				},
 			}),
 			responses: map[string][]fakeOCResponse{
 				"get hyperconverged.hco.kubevirt.io kubevirt-hyperconverged -o json -n openshift-cnv": {
@@ -317,10 +317,11 @@ func TestReadinessChecks(t *testing.T) {
 		{
 			name: "resource-exists",
 			extension: readinessExtension("console", v1alpha1.ClusterAddonReadinessCheck{
-				Type:       v1alpha1.ClusterAddonReadinessResourceExists,
-				APIVersion: "operator.openshift.io/v1",
-				Kind:       "Console",
-				Name:       "cluster",
+				ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+					APIVersion: "operator.openshift.io/v1",
+					Kind:       "Console",
+					Name:       "cluster",
+				},
 			}),
 			responses: map[string][]fakeOCResponse{
 				"get console.operator.openshift.io cluster -o json": {
@@ -349,10 +350,11 @@ func TestReadinessChecks(t *testing.T) {
 
 func TestReadinessTimeoutReportsLastObservedState(t *testing.T) {
 	extension := readinessExtension("console", v1alpha1.ClusterAddonReadinessCheck{
-		Type:       v1alpha1.ClusterAddonReadinessResourceExists,
-		APIVersion: "v1",
-		Kind:       "ConfigMap",
-		Name:       "missing",
+		ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+			Name:       "missing",
+		},
 	})
 	extension.Spec.Readiness.Timeout = "3ms"
 	runner := &fakeOCRunner{responses: map[string][]fakeOCResponse{
@@ -408,11 +410,7 @@ func TestBindingPlansOrdersByRequiresProvides(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons: []v1alpha1.ClusterAddonBindingAddon{
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "vcn"}},
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "storage"}},
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "nmstate"}},
-				},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "vcn"}, {Name: "storage"}, {Name: "nmstate"}},
 			},
 		}},
 	}
@@ -444,10 +442,7 @@ func TestBindingPlansRejectsRequiresProvidesCycle(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons: []v1alpha1.ClusterAddonBindingAddon{
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "a"}},
-					{AddonRef: v1alpha1.LocalObjectReference{Name: "b"}},
-				},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "a"}, {Name: "b"}},
 			},
 		}},
 	}

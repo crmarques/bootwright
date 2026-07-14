@@ -22,17 +22,16 @@ func EffectiveBindingAddons(state v1alpha1.State, binding v1alpha1.ClusterAddonB
 	sets := profileIndex(state.ClusterAddonProfiles)
 	var expanded []v1alpha1.ClusterAddonBindingAddon
 	positions := map[string]int{}
-	add := func(item v1alpha1.ClusterAddonBindingAddon) {
-		if item.AddonRef.Name == "" {
-			expanded = append(expanded, item)
+	add := func(ref v1alpha1.LocalObjectReference) {
+		if ref.Name == "" {
+			expanded = append(expanded, v1alpha1.ClusterAddonBindingAddon{AddonRef: ref})
 			return
 		}
-		if index, ok := positions[item.AddonRef.Name]; ok {
-			expanded[index].Inputs = append(expanded[index].Inputs, item.Inputs...)
+		if _, ok := positions[ref.Name]; ok {
 			return
 		}
-		positions[item.AddonRef.Name] = len(expanded)
-		expanded = append(expanded, item)
+		positions[ref.Name] = len(expanded)
+		expanded = append(expanded, v1alpha1.ClusterAddonBindingAddon{AddonRef: ref})
 	}
 	var visitProfile func(string, []string)
 	visitProfile = func(name string, stack []string) {
@@ -50,14 +49,19 @@ func EffectiveBindingAddons(state v1alpha1.State, binding v1alpha1.ClusterAddonB
 			visitProfile(ref.Name, stack)
 		}
 		for _, ref := range profile.Spec.AddonRefs {
-			add(v1alpha1.ClusterAddonBindingAddon{AddonRef: ref})
+			add(ref)
 		}
 	}
-	for _, ref := range binding.Spec.AddonProfileRefs {
+	for _, ref := range binding.Spec.ProfileRefs {
 		visitProfile(ref.Name, nil)
 	}
-	for _, item := range binding.Spec.Addons {
-		add(item)
+	for _, ref := range binding.Spec.AddonRefs {
+		add(ref)
+	}
+	for _, item := range binding.Spec.AddonConfigs {
+		if index, ok := positions[item.AddonRef.Name]; ok {
+			expanded[index].Inputs = append(expanded[index].Inputs, item.Inputs...)
+		}
 	}
 	return expanded
 }
@@ -91,10 +95,7 @@ func EffectBindings(state v1alpha1.State, effectType, provider string) []EffectB
 				continue
 			}
 			for _, effect := range accept.Effects {
-				if effect.Type != effectType {
-					continue
-				}
-				if provider != "" && effect.Provider != provider {
+				if !EffectMatches(effect, effectType, provider) {
 					continue
 				}
 				out = append(out, EffectBinding{
@@ -108,6 +109,17 @@ func EffectBindings(state v1alpha1.State, effectType, provider string) []EffectB
 		}
 	}
 	return out
+}
+
+func EffectMatches(effect v1alpha1.ClusterAddonInputEffect, effectType, provider string) bool {
+	switch effectType {
+	case v1alpha1.ClusterAddonInputEffectStorageExportAttachment:
+		return effect.StorageExportAttachment != nil && (provider == "" || provider == v1alpha1.ClusterAddonProvidesDataFoundation)
+	case v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge:
+		return effect.GlobalPullSecretMerge != nil && provider == ""
+	default:
+		return false
+	}
 }
 
 type StorageExportAttachment struct {
@@ -124,7 +136,7 @@ func StorageExportAttachments(state v1alpha1.State) []StorageExportAttachment {
 	}
 	var out []StorageExportAttachment
 	for _, effect := range EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		exportRef := LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		exportRef := LocalObjectReferenceValue(effect.Input)
 		export, ok := exports[exportRef.Name]
 		if !ok {
 			continue
@@ -134,17 +146,12 @@ func StorageExportAttachments(state v1alpha1.State) []StorageExportAttachment {
 	return out
 }
 
-func LocalObjectReferenceValue(values map[string]any, field string) v1alpha1.LocalObjectReference {
-	return v1alpha1.LocalObjectReference{Name: namedValue(values, field)}
+func LocalObjectReferenceValue(input v1alpha1.ClusterAddonBindingInput) v1alpha1.LocalObjectReference {
+	return v1alpha1.LocalObjectReference{Name: input.Value}
 }
 
-func SecretRefValue(values map[string]any, field string) v1alpha1.SecretRef {
-	return v1alpha1.SecretRef{Name: namedValue(values, field)}
-}
-
-func namedValue(values map[string]any, field string) string {
-	name, _ := values[field].(string)
-	return name
+func SecretRefValue(input v1alpha1.ClusterAddonBindingInput) v1alpha1.SecretRef {
+	return v1alpha1.SecretRef{Name: input.Value}
 }
 
 func profileIndex(items []v1alpha1.ClusterAddonProfile) map[string]v1alpha1.ClusterAddonProfile {

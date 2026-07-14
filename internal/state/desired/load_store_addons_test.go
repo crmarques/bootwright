@@ -29,6 +29,7 @@ func storeAddonFixture(t *testing.T, addonName string) string {
 				t.Fatalf("read binding: %v", err)
 			}
 			rewritten := strings.ReplaceAll(string(data), "addonRef: openshift-data-foundation", "addonRef: "+addonName)
+			rewritten = strings.ReplaceAll(rewritten, "- openshift-data-foundation", "- "+addonName)
 			if err := os.WriteFile(path, []byte(rewritten), 0o600); err != nil {
 				t.Fatalf("rewrite binding: %v", err)
 			}

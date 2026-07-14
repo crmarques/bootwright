@@ -74,9 +74,17 @@ func Digest(files []File) string {
 }
 
 func Install(release Release) (dir string, err error) {
+	if err := ValidateStoreName(release.Entry.Name); err != nil {
+		return "", err
+	}
 	files, err := Files(release)
 	if err != nil {
 		return "", err
+	}
+	for _, file := range files {
+		if err := validateCatalogFilePath(file.Path); err != nil {
+			return "", err
+		}
 	}
 	if err := ensureStoreDir(); err != nil {
 		return "", err
@@ -87,9 +95,6 @@ func Install(release Release) (dir string, err error) {
 	}
 	for _, file := range files {
 		rel := filepath.Clean(file.Path)
-		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("embedded add-on file path %q escapes the add-on directory", file.Path)
-		}
 		dest := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(dest), dirMode); err != nil {
 			return "", err
@@ -103,6 +108,17 @@ func Install(release Release) (dir string, err error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+func validateCatalogFilePath(path string) error {
+	rel := filepath.Clean(path)
+	if path == "" || rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("embedded add-on file path %q escapes the add-on directory", path)
+	}
+	if filepath.Base(rel) == MarkerName {
+		return fmt.Errorf("embedded add-on file path %q uses reserved marker name %s", path, MarkerName)
+	}
+	return nil
 }
 
 func ReadMarker(dir string) (marker Marker, found bool, err error) {
@@ -166,6 +182,9 @@ func installedDigest(dir string) string {
 		}
 		if d.IsDir() || d.Name() == MarkerName {
 			return nil
+		}
+		if d.Type() != 0 {
+			return fmt.Errorf("%s is not a regular file", path)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {

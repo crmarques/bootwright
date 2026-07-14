@@ -49,6 +49,9 @@ func Entries() ([]Entry, error) {
 		if entry.Name == "" || seen[entry.Name] {
 			return nil, fmt.Errorf("catalog entry name %q is empty or duplicated", entry.Name)
 		}
+		if err := ValidateStoreName(entry.Name); err != nil {
+			return nil, fmt.Errorf("catalog entry name %q is not a safe path segment: %w", entry.Name, err)
+		}
 		seen[entry.Name] = true
 		if len(entry.Versions) == 0 {
 			return nil, fmt.Errorf("catalog entry %s declares no versions", entry.Name)

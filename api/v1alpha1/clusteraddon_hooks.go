@@ -22,16 +22,21 @@ type ClusterAddonHook struct {
 }
 
 type ClusterAddonHookTarget struct {
-	BoundCluster bool                         `yaml:"boundCluster,omitempty" json:"boundCluster,omitempty"`
-	FromInput    *ClusterAddonHookInputTarget `yaml:"fromInput,omitempty" json:"fromInput,omitempty"`
-	Clusters     []string                     `yaml:"clusters,omitempty" json:"clusters,omitempty"`
-	Machines     []string                     `yaml:"machines,omitempty" json:"machines,omitempty"`
-	Limit        string                       `yaml:"limit,omitempty" json:"limit,omitempty"`
+	BoundCluster *ClusterAddonHookBoundTarget  `yaml:"boundCluster,omitempty" json:"boundCluster,omitempty"`
+	FromInput    *ClusterAddonHookInputTarget  `yaml:"fromInput,omitempty" json:"fromInput,omitempty"`
+	Static       *ClusterAddonHookStaticTarget `yaml:"static,omitempty" json:"static,omitempty"`
+	Limit        string                        `yaml:"limit,omitempty" json:"limit,omitempty"`
 }
 
+type ClusterAddonHookBoundTarget struct{}
+
 type ClusterAddonHookInputTarget struct {
-	Input    string `yaml:"input" json:"input"`
-	Property string `yaml:"property" json:"property"`
+	Input string `yaml:"input" json:"input"`
+}
+
+type ClusterAddonHookStaticTarget struct {
+	Clusters []string `yaml:"clusters,omitempty" json:"clusters,omitempty"`
+	Machines []string `yaml:"machines,omitempty" json:"machines,omitempty"`
 }
 
 type ClusterAddonHookOutput struct {

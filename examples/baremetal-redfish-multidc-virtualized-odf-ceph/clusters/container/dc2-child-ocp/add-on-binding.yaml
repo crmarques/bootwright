@@ -5,9 +5,11 @@ metadata:
 spec:
   clusterRef: dc2-child-ocp
 
-  addons:
+  addonRefs:
+    - openshift-data-foundation
+
+  addonConfigs:
     - addonRef: openshift-data-foundation
       inputs:
         - name: external-storage
-          values:
-            exportRef: odf-external-ceph
+          value: odf-external-ceph

@@ -269,7 +269,7 @@ func TestApplyOLMWaitsForCSVBeforeCustomResources(t *testing.T) {
 			Readiness: v1alpha1.ClusterAddonReadiness{
 				Timeout: "30m",
 				Checks: []v1alpha1.ClusterAddonReadinessCheck{{
-					Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "csv-ns", Subscription: "csv-op",
+					CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "csv-ns", Subscription: "csv-op"},
 				}},
 			},
 		},
@@ -389,7 +389,7 @@ func gatedOLMPlan(timeout string) extensionplan.ExtensionPlan {
 				Readiness: v1alpha1.ClusterAddonReadiness{
 					Timeout: timeout,
 					Checks: []v1alpha1.ClusterAddonReadinessCheck{{
-						Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "csv-ns", Subscription: "csv-op",
+						CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "csv-ns", Subscription: "csv-op"},
 					}},
 				},
 			},
@@ -546,10 +546,11 @@ func readyExtensionPlan() extensionplan.ExtensionPlan {
 			Readiness: v1alpha1.ClusterAddonReadiness{
 				Timeout: "30m",
 				Checks: []v1alpha1.ClusterAddonReadinessCheck{{
-					Type:       v1alpha1.ClusterAddonReadinessResourceExists,
-					APIVersion: "v1",
-					Kind:       "Namespace",
-					Name:       "installed",
+					ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+						APIVersion: "v1",
+						Kind:       "Namespace",
+						Name:       "installed",
+					},
 				}},
 			},
 		},

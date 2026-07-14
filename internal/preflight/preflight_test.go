@@ -703,7 +703,7 @@ func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
 		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
 		Playbook:  "playbooks/x.yaml",
 		Target: v1alpha1.ClusterAddonHookTarget{
-			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"},
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
 		},
 	}}
 	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
@@ -789,7 +789,11 @@ func importedCephSecretState(source v1alpha1.SecretSource) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "odf"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
+					AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{dataFoundationBindingInput("shared-ceph-data-foundation")},
+				}},
 			},
 		}},
 	}
@@ -797,31 +801,18 @@ func importedCephSecretState(source v1alpha1.SecretSource) v1alpha1.State {
 
 func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-		Name: "external-storage",
-		Schema: v1alpha1.ClusterAddonInputSchema{
-			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
-			Required: []string{"exportRef"},
-			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef": {RefKind: v1alpha1.KindStorageExport},
-			},
-		},
+		Name:        "external-storage",
+		ResourceRef: &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
-			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+			StorageExportAttachment: &v1alpha1.ClusterAddonStorageExportAttachmentEffect{},
 		}},
 	}}}
 }
 
-func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
-	values := map[string]any{
-		"exportRef": export,
-	}
-	return v1alpha1.ClusterAddonBindingAddon{
-		AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
-		Inputs: []v1alpha1.ClusterAddonBindingInput{{
-			Name:   "external-storage",
-			Values: values,
-		}},
+func dataFoundationBindingInput(export string) v1alpha1.ClusterAddonBindingInput {
+	return v1alpha1.ClusterAddonBindingInput{
+		Name:  "external-storage",
+		Value: export,
 	}
 }
 

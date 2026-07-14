@@ -102,7 +102,7 @@ ClusterAddonBinding
   -> ClusterAddonProfile
   -> ClusterAddon
 
-ClusterAddonBinding.addons[].inputs[]
+ClusterAddonBinding.addonConfigs[].inputs[]
   -> StorageExport
   -> StorageCluster
 ```

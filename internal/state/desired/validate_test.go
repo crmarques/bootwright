@@ -3682,27 +3682,27 @@ spec:
       - path: manifests/placeholder.yaml
   readiness:
     checks:
-      - type: resourceExists
-        apiVersion: kubevirt.io/v1
-        kind: KubeVirt
-        name: kubevirt
-        namespace: openshift-cnv
+      - resourceExists:
+          apiVersion: kubevirt.io/v1
+          kind: KubeVirt
+          name: kubevirt
+          namespace: openshift-cnv
 `,
 		"binding-a.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata: { name: virt-a }
 spec:
   clusterRef: cluster-a
-  addons:
-    - addonRef: openshift-virtualization
+  addonRefs:
+    - openshift-virtualization
 `,
 		"binding-b.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata: { name: virt-b }
 spec:
   clusterRef: cluster-b
-  addons:
-    - addonRef: openshift-virtualization
+  addonRefs:
+    - openshift-virtualization
 `,
 		"manifests/placeholder.yaml": `apiVersion: v1
 kind: ConfigMap

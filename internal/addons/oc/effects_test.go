@@ -36,13 +36,10 @@ func pullSecretMergePlan() extensionplan.ExtensionPlan {
 				Type: v1alpha1.ClusterAddonTypeOLM,
 				Accepts: v1alpha1.ClusterAddonAccepts{
 					Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-						Name: "ibm-entitlement",
-						Schema: v1alpha1.ClusterAddonInputSchema{
-							Required:   []string{"entitlementKeyRef"},
-							Properties: map[string]v1alpha1.ClusterAddonInputProperty{"entitlementKeyRef": {Secret: true}},
-						},
+						Name:      "ibm-entitlement",
+						SecretRef: &v1alpha1.ClusterAddonInputSecret{},
 						Effects: []v1alpha1.ClusterAddonInputEffect{{
-							Type: v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge, Registry: "cp.icr.io", Username: "cp",
+							GlobalPullSecretMerge: &v1alpha1.ClusterAddonGlobalPullSecretMergeEffect{Registry: "cp.icr.io", Username: "cp"},
 						}},
 					}},
 				},
@@ -57,7 +54,7 @@ func pullSecretMergePlan() extensionplan.ExtensionPlan {
 				Readiness: v1alpha1.ClusterAddonReadiness{
 					Timeout: "30m",
 					Checks: []v1alpha1.ClusterAddonReadinessCheck{{
-						Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "ent-ns", Subscription: "ent-op",
+						CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "ent-ns", Subscription: "ent-op"},
 					}},
 				},
 			},

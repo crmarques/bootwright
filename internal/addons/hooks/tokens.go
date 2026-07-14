@@ -115,11 +115,3 @@ func sortedKeys(m map[string]any) []string {
 	sort.Strings(keys)
 	return keys
 }
-
-func SplitInputProperty(arg string) (input, property string, ok bool) {
-	parts := strings.SplitN(arg, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[1], ".") {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
-}

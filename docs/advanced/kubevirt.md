@@ -174,9 +174,9 @@ spec:
       source: redhat-operators
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-cnv
-        subscription: hco-operatorhub
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
 ```
 
 In the full apply graph, the child's infra work gets dependency edges to both the

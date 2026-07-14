@@ -62,9 +62,9 @@ apply `nmstate.io` resources order after it.
     one [`readiness.checks[]`](#readiness) entry, so dependents wait on a real
     readiness signal rather than mere apply completion.
 
-**Required capabilities.** `ClusterAddon.spec.requires[]` lists capabilities
-(same vocabulary as `provides[]`) that another add-on **in the same binding** must
-advertise. Requirements drive apply order: within a binding an add-on is applied
+**Required capabilities.** `ClusterAddon.spec.requires[]` lists capability
+tokens that another add-on **in the same binding** must advertise. Requirements
+drive apply order: within a binding an add-on is applied
 after every add-on that provides a capability it requires, so a binding lists
 add-ons in any order and they still apply correctly. Ordering is resolved per
 binding, so the provider must be in the same binding as the consumer. Validation
@@ -74,16 +74,13 @@ add-on that applies a `NodeNetworkConfigurationPolicy` declares
 `requires: [nmstate]` so it always applies after the NMState operator that
 registers the `nmstate.io` CRDs.
 
-**Binding-scoped inputs.** `ClusterAddon.spec.accepts.inputs[]` declares input
-APIs that bindings supply by name, validated against a per-input schema. A
-schema property names exactly one resolution — `refKind` (binding values name a
-loaded object of that kind) or `secret` (binding values name a declared
-[`Environment` secret](secrets.md)). The only built-in effect is
-`storageExportAttachment`, the canonical pairing for Data Foundation external
-storage: an input whose single required property is `exportRef` with
-`refKind: StorageExport`, plus an effect with `provider: dataFoundation`. The
-binding then supplies the [`StorageExport`](storage.md#storageexport) name for
-one cluster.
+**Binding-scoped inputs.** `ClusterAddon.spec.accepts.inputs[]` declares scalar
+input APIs that bindings supply by name. Each accepted input is either
+`resourceRef` (the binding value names a loaded object of the declared kind) or
+`secretRef` (the binding value names a Secret). The `storageExportAttachment`
+effect is the canonical pairing for Data Foundation external storage: a
+`resourceRef.kind: StorageExport` input whose binding value supplies the
+[`StorageExport`](storage.md#storageexport) name for one cluster.
 
 ## ClusterAddon
 
@@ -93,9 +90,9 @@ discriminated union arm whose key is byte-identical to the `type` value.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.type` | Yes | — | `olm` or `manifestSet`. |
-| `spec.provides[]` | No | — | Capability advertisements; each value is `kubevirt`, `dataFoundation`, or `nmstate` and must be unique. |
-| `spec.requires[]` | No | — | Capabilities (same vocabulary) another add-on on the cluster must provide; drives apply order. |
-| `spec.accepts.inputs[]` | No | — | Binding-scoped input schemas and effects. |
+| `spec.provides[]` | No | — | Capability advertisements; each value must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and be unique. |
+| `spec.requires[]` | No | — | Capability names another add-on on the cluster must provide; drives apply order. |
+| `spec.accepts.inputs[]` | No | — | Binding-scoped scalar inputs and effects. |
 | `spec.olm` | For `type: olm` | — | OLM resources and optional custom resources. |
 | `spec.manifestSet` | For `type: manifestSet` | — | Ordered manifest file list. |
 | `spec.readiness` | No | — | Readiness timeout and checks. |
@@ -145,17 +142,17 @@ spec:
           namespace: openshift-cnv
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-cnv
-        subscription: hco-operatorhub
-      - type: condition
-        apiVersion: hco.kubevirt.io/v1beta1
-        kind: HyperConverged
-        name: kubevirt-hyperconverged
-        namespace: openshift-cnv
-        condition:
-          type: Available
-          status: "True"
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
+      - condition:
+          apiVersion: hco.kubevirt.io/v1beta1
+          kind: HyperConverged
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+          condition:
+            type: Available
+            status: "True"
 ```
 
 ### OLM
@@ -240,38 +237,32 @@ files applied in declared order.
 ### Accepted inputs
 
 `spec.accepts.inputs[]` declares the binding-scoped values an add-on accepts.
-Each input has a name, an object schema, and optional built-in effects. The
-`ClusterAddonBinding` supplies the values; the schema validates them.
+Each input has a name, exactly one value kind (`resourceRef` or `secretRef`),
+and optional built-in effects. The `ClusterAddonBinding` supplies the scalar
+value.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `accepts.inputs[].name` | Yes | — | Input name. Must be unique within the add-on; bindings reference it by name. |
 | `accepts.inputs[].required` | No | `false` | When `true`, every binding of this add-on must supply the input; validation rejects a binding that omits it. Optional inputs may be omitted, and any effects they carry are skipped. |
-| `accepts.inputs[].schema.type` | No | `object` | Must be `object` (or omitted, which means `object`). No other value is accepted. |
-| `accepts.inputs[].schema.required[]` | No | — | Required property names. Each must be non-empty, unique, and declared in `properties`. |
-| `accepts.inputs[].schema.properties.<name>.refKind` | One of `refKind`/`secret` per property | — | Property value must name a loaded object of this Bootwright kind. |
-| `accepts.inputs[].schema.properties.<name>.secret` | One of `refKind`/`secret` per property | — | Property value must name an `Environment` secret. |
-| `accepts.inputs[].effects[].type` | Yes within an effect | — | Built-in effect type: `storageExportAttachment` or `globalPullSecretMerge`. |
-| `accepts.inputs[].effects[].provider` | For `storageExportAttachment` | — | Effect provider; must be `dataFoundation` for `storageExportAttachment`. |
-| `accepts.inputs[].effects[].registry` | For `globalPullSecretMerge` | — | Registry host whose credential is merged into the cluster's global pull secret. |
-| `accepts.inputs[].effects[].username` | For `globalPullSecretMerge` | — | Registry username the merged credential authenticates as. |
+| `accepts.inputs[].resourceRef.kind` | One of `resourceRef`/`secretRef` | — | Binding value must name a loaded object of this Bootwright kind. |
+| `accepts.inputs[].secretRef` | One of `resourceRef`/`secretRef` | — | Empty presence arm (`{}`); binding value names a Secret. |
+| `accepts.inputs[].effects[].storageExportAttachment` | One effect arm | — | Empty presence arm (`{}`); attaches a Data Foundation `StorageExport`. |
+| `accepts.inputs[].effects[].globalPullSecretMerge.registry` | For `globalPullSecretMerge` | — | Registry host whose credential is merged into the cluster's global pull secret. |
+| `accepts.inputs[].effects[].globalPullSecretMerge.username` | For `globalPullSecretMerge` | — | Registry username the merged credential authenticates as. |
 
-!!! note "Each property names exactly one resolution"
-    A property under `schema.properties` must set exactly one of `refKind` or
-    `secret`. Setting both, or neither, is rejected. A `refKind` must name a
-    known Bootwright kind.
+!!! note "Each input names exactly one resolution"
+    An input must set exactly one of `resourceRef` or `secretRef`. Setting both,
+    or neither, is rejected. A `resourceRef.kind` must name a known Bootwright
+    kind.
 
 !!! note "Data Foundation storage attachment contract"
-    A `storageExportAttachment` effect's `provider` must be `dataFoundation`.
-    The attachment machinery reads the binding value under a property literally
-    named `exportRef`, so an input carrying this effect must declare a
-    `schema.properties.exportRef` with `refKind: StorageExport`, list
-    `exportRef` in `schema.required[]`, and declare *no other properties*. Any
-    extra property on such an input is rejected.
+    A `storageExportAttachment` effect requires the add-on to provide
+    `dataFoundation` and the input to declare `resourceRef.kind: StorageExport`.
 
 !!! note "Global pull-secret merge contract"
-    An input carrying a `globalPullSecretMerge` effect must declare exactly one
-    property, marked `secret: true` and listed in `schema.required[]`. Before
+    An input carrying a `globalPullSecretMerge` effect must declare
+    `secretRef: {}`. Before
     any of the add-on's resources apply, Bootwright merges an
     `auths[<registry>]` entry — user `<username>`, password = the referenced
     secret's value — into the bound cluster's `openshift-config/pull-secret`,
@@ -298,16 +289,10 @@ spec:
   accepts:
     inputs:
       - name: external-storage
-        schema:
-          type: object
-          required:
-            - exportRef
-          properties:
-            exportRef:
-              refKind: StorageExport
+        resourceRef:
+          kind: StorageExport
         effects:
-          - type: storageExportAttachment
-            provider: dataFoundation
+          - storageExportAttachment: {}
   olm:
     namespace:
       name: openshift-storage
@@ -323,9 +308,9 @@ spec:
       source: redhat-operators
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-storage
-        subscription: odf-operator
+      - csvSucceeded:
+          namespace: openshift-storage
+          subscription: odf-operator
 ```
 
 ### Readiness
@@ -337,22 +322,29 @@ add-on to become ready after apply.
 | --- | --- | --- | --- |
 | `readiness.timeout` | No | `30m` | Overall readiness timeout. A Go duration such as `10m`, `30m`, or `1h`. |
 | `readiness.checks[]` | No | — | Readiness checks; required (≥ 1) when `spec.provides[]` is set. |
-| `readiness.checks[].type` | Yes within a check | — | `csvSucceeded`, `condition`, or `resourceExists`. |
-| `readiness.checks[].namespace` | For `csvSucceeded`; for `condition`/`resourceExists` on namespaced kinds | — | Target namespace. Omit for cluster-scoped kinds. |
-| `readiness.checks[].subscription` | For `csvSucceeded` | — | Subscription name; valid only with `csvSucceeded`. |
-| `readiness.checks[].apiVersion` | For `condition`/`resourceExists` | — | Resource API version. |
-| `readiness.checks[].kind` | For `condition`/`resourceExists` | — | Resource kind. |
-| `readiness.checks[].name` | For `condition`/`resourceExists` | — | Resource name. |
-| `readiness.checks[].condition.type` | For `condition` | — | Condition type. |
-| `readiness.checks[].condition.status` | For `condition` | — | Expected condition status. |
+| `readiness.checks[].csvSucceeded` | One check arm | — | Waits for a Subscription's installed CSV to reach `Succeeded`. |
+| `readiness.checks[].csvSucceeded.namespace` | Yes | — | Subscription namespace. |
+| `readiness.checks[].csvSucceeded.subscription` | Yes | — | Subscription name. |
+| `readiness.checks[].condition` | One check arm | — | Waits for a Kubernetes resource condition. |
+| `readiness.checks[].condition.apiVersion` | Yes | — | Resource API version. |
+| `readiness.checks[].condition.kind` | Yes | — | Resource kind. |
+| `readiness.checks[].condition.name` | Yes | — | Resource name. |
+| `readiness.checks[].condition.namespace` | No | — | Resource namespace. Omit for cluster-scoped kinds. |
+| `readiness.checks[].condition.condition.type` | Yes | — | Condition type. |
+| `readiness.checks[].condition.condition.status` | Yes | — | Expected condition status. |
+| `readiness.checks[].resourceExists` | One check arm | — | Waits until a Kubernetes resource can be read. |
+| `readiness.checks[].resourceExists.apiVersion` | Yes | — | Resource API version. |
+| `readiness.checks[].resourceExists.kind` | Yes | — | Resource kind. |
+| `readiness.checks[].resourceExists.name` | Yes | — | Resource name. |
+| `readiness.checks[].resourceExists.namespace` | No | — | Resource namespace. Omit for cluster-scoped kinds. |
 
-The required fields depend on the check `type`:
+Each readiness check must set exactly one arm:
 
-| Check `type` | Required fields | Must not set |
-| --- | --- | --- |
-| `csvSucceeded` | `namespace`, `subscription` | `apiVersion`, `kind`, `name`, `condition` |
-| `condition` | `apiVersion`, `kind`, `name`, `condition.type`, `condition.status` | `subscription` |
-| `resourceExists` | `apiVersion`, `kind`, `name` | `subscription`, `condition` |
+| Check arm | Required fields |
+| --- | --- |
+| `csvSucceeded` | `namespace`, `subscription` |
+| `condition` | `apiVersion`, `kind`, `name`, `condition.type`, `condition.status` |
+| `resourceExists` | `apiVersion`, `kind`, `name` |
 
 ### Hooks
 
@@ -389,7 +381,7 @@ everywhere else in the input tree.
 
 The `target` selects machines a playbook runs against — exactly one of
 `boundCluster` (the bound container cluster's nodes), `fromInput` (dereference a
-binding input's `refKind` property to its object, then to that object's nodes —
+binding input's `resourceRef` value to its object, then to that object's nodes —
 a `StorageExport` resolves through its `storageClusterRef` to the Ceph nodes), or
 a static `clusters`/`machines` list. `target.limit` is `firstReachable`
 (default) or `all`. A hook can never target the controller/localhost.
@@ -398,9 +390,8 @@ A hook run receives scoped variables: `bootwright_hook_name`,
 `bootwright_hook_lifecycle`, `bootwright_addon_name`,
 `bootwright_bound_cluster`, `bootwright_hook_outputs_dir`,
 `bootwright_hook_secrets_dir` (only the declared `secretRefs`),
-`bootwright_hook_inputs` (input name → values map), `bootwright_hook_refs`
-(the resolved ref objects, so a playbook can read e.g.
-`exportRef.spec.dataFoundation`), and `bootwright_kubeconfig` (the bound
+`bootwright_hook_inputs` (input name → scalar value), `bootwright_hook_refs`
+(input name → resolved ref object), and `bootwright_kubeconfig` (the bound
 cluster's kubeconfig). The play runs against the resolved target machines
 (each inventory host carries its Machine name in `bootwright_host_name`), but
 the outputs directory, secrets directory, and kubeconfig are controller-local
@@ -411,8 +402,8 @@ controller to fetch the exporter script the operator publishes before staging
 and running it on a Ceph node.
 
 Manifest templates use whole-scalar tokens: `{{ cluster }}`,
-`{{ output <name> }}`, `{{ input <in>.<prop> }}`, `{{ secret <name> }}`, and
-`{{ exportDetails <in>.<prop> }}` (the operator-supplied
+`{{ output <name> }}`, `{{ input <in> }}`, `{{ secret <name> }}`, and
+`{{ exportDetails <in> }}` (the operator-supplied
 external-cluster-details payload of a referenced `StorageExport` — its
 `externalDetails.fromSecretRef` secret). Each token must be an entire YAML
 scalar value.
@@ -429,12 +420,8 @@ spec:
     inputs:
       - name: external-storage
         required: true
-        schema:
-          type: object
-          required: [exportRef]
-          properties:
-            exportRef:
-              refKind: StorageExport
+        resourceRef:
+          kind: StorageExport
   olm:
     namespace:
       name: openshift-storage
@@ -455,7 +442,6 @@ spec:
       target:
         fromInput:
           input: external-storage
-          property: exportRef
       playbook: playbooks/export-external-details.yml
       outputs:
         - name: externalDetails
@@ -468,9 +454,9 @@ spec:
         - path: manifests/storage-cluster.yaml
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-storage
-        subscription: odf-operator
+      - csvSucceeded:
+          namespace: openshift-storage
+          subscription: odf-operator
 ```
 
 A shipped manifest template embeds the captured output as a whole scalar:
@@ -495,7 +481,7 @@ anything on a machine. The two Data Foundation shapes follow from this: a
 managed-Ceph export uses the exporter-playbook hook above (the add-on produces
 the payload), while an imported-Ceph export with `externalDetails.fromSecretRef`
 uses a manifest-only hook whose Secret template consumes
-`{{ exportDetails external-storage.exportRef }}`.
+`{{ exportDetails external-storage }}`.
 
 For imperative work that is not tied to an add-on's lifecycle, use a
 [provisioning playbook](provisioning-playbooks.md) instead.
@@ -526,27 +512,26 @@ authored YAML cannot override.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.clusterRef` | Yes | — | Target `ContainerCluster`; must resolve to a loaded cluster. |
-| `spec.addonProfileRefs[]` | No | — | `ClusterAddonProfile` references expanded for this cluster. |
-| `spec.addons[]` | No | — | Direct add-ons and their input values. |
-| `spec.addons[].addonRef` | Yes within an entry | — | Referenced `ClusterAddon`; must resolve to a loaded add-on. |
-| `spec.addons[].inputs[].name` | Yes within an input | — | Input name. Must be declared by the referenced add-on's `spec.accepts.inputs[]` and unique within the entry. |
-| `spec.addons[].inputs[].values` | No | — | Binding-scoped values validated against the add-on's input schema. |
+| `spec.profileRefs[]` | No | — | `ClusterAddonProfile` references expanded for this cluster. |
+| `spec.addonRefs[]` | No | — | Direct `ClusterAddon` references appended after expanded profiles. |
+| `spec.addonConfigs[]` | No | — | Per-add-on input values. Config entries do not select add-ons. |
+| `spec.addonConfigs[].addonRef` | Yes within an entry | — | Referenced `ClusterAddon`; must already be selected by `profileRefs[]` or `addonRefs[]`. |
+| `spec.addonConfigs[].inputs[].name` | Yes within an input | — | Input name. Must be declared by the referenced add-on's `spec.accepts.inputs[]` and unique within the config entry. |
+| `spec.addonConfigs[].inputs[].value` | Yes within an input | — | Scalar binding-scoped value. A `resourceRef` input must resolve to a loaded object of that kind; a `secretRef` input must resolve to a loaded Secret when secret checks run. |
 
-A binding must include at least one `addonProfileRefs` or `addons` entry. Use
+A binding must include at least one `profileRefs` or `addonRefs` entry. Use
 separate bindings for separate clusters.
 
-!!! note "Input values are validated against the schema"
-    Each `addons[].inputs[].name` must match an `accepts.inputs[].name` on the
-    referenced add-on, or the binding is rejected. The supplied `values` are
-    checked against that input's schema: every `schema.required[]` property must
-    be present, no undeclared property may appear, a `refKind` property value
-    must be a plain name string that resolves to a loaded object of that kind,
-    and a `secret` property value must be a plain name string.
+!!! note "Input values are scalar"
+    Each `addonConfigs[].inputs[].name` must match an `accepts.inputs[].name`
+    on the referenced add-on, or the binding is rejected. The supplied `value`
+    is a plain name string. Bootwright validates `resourceRef` inputs against
+    the declared Bootwright kind and treats `secretRef` inputs as Secret names.
 
 !!! note "Each add-on reaches a cluster only once"
     After profile expansion, a given `ClusterAddon` may be applied to a given
     `ContainerCluster` by only one binding. The same add-on reaching one cluster
-    through two bindings — or through both a direct `addons[]` entry and an
+    through two bindings — or through both a direct `addonRefs[]` entry and an
     expanded profile — is rejected.
 
 A binding that expands a profile (no inputs):
@@ -558,7 +543,7 @@ metadata:
   name: metal-ocp-platform
 spec:
   clusterRef: metal-ocp
-  addonProfileRefs:
+  profileRefs:
     - platform-bootstrap
 ```
 
@@ -571,12 +556,13 @@ metadata:
   name: metal-ocp-odf
 spec:
   clusterRef: metal-ocp
-  addons:
+  addonRefs:
+    - openshift-data-foundation
+  addonConfigs:
     - addonRef: openshift-data-foundation
       inputs:
         - name: external-storage
-          values:
-            exportRef: imported-ceph-odf
+          value: imported-ceph-odf
 ```
 
 ## Native add-on catalog

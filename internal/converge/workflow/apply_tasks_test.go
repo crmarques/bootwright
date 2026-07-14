@@ -1383,9 +1383,9 @@ func extensionPlanningState() v1alpha1.State {
 		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ClusterRef:       v1alpha1.LocalObjectReference{Name: "demo"},
-				AddonProfileRefs: []v1alpha1.LocalObjectReference{{Name: "platform"}},
-				Addons:           []v1alpha1.ClusterAddonBindingAddon{{AddonRef: v1alpha1.LocalObjectReference{Name: "b"}}},
+				ClusterRef:  v1alpha1.LocalObjectReference{Name: "demo"},
+				ProfileRefs: []v1alpha1.LocalObjectReference{{Name: "platform"}},
+				AddonRefs:   []v1alpha1.LocalObjectReference{{Name: "b"}},
 			},
 		}},
 	}
@@ -1453,7 +1453,11 @@ func storageAttachmentPlanningState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "odf"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
+					AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{dataFoundationBindingInput("export")},
+				}},
 			},
 		}},
 	}
@@ -1479,40 +1483,24 @@ func externalStorageAttachmentPlanningState() v1alpha1.State {
 		},
 	}}
 	state.ClusterAddonBindings[0].Metadata.Name = "shared-ceph-binding"
-	state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0].Values = dataFoundationValues("shared-ceph-export")
+	state.ClusterAddonBindings[0].Spec.AddonConfigs[0].Inputs[0].Value = "shared-ceph-export"
 	return state
 }
 
 func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-		Name: "external-storage",
-		Schema: v1alpha1.ClusterAddonInputSchema{
-			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
-			Required: []string{"exportRef"},
-			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef": {RefKind: v1alpha1.KindStorageExport},
-			},
-		},
+		Name:        "external-storage",
+		ResourceRef: &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
-			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+			StorageExportAttachment: &v1alpha1.ClusterAddonStorageExportAttachmentEffect{},
 		}},
 	}}}
 }
 
-func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
-	return v1alpha1.ClusterAddonBindingAddon{
-		AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
-		Inputs: []v1alpha1.ClusterAddonBindingInput{{
-			Name:   "external-storage",
-			Values: dataFoundationValues(export),
-		}},
-	}
-}
-
-func dataFoundationValues(export string) map[string]any {
-	return map[string]any{
-		"exportRef": export,
+func dataFoundationBindingInput(export string) v1alpha1.ClusterAddonBindingInput {
+	return v1alpha1.ClusterAddonBindingInput{
+		Name:  "external-storage",
+		Value: export,
 	}
 }
 
@@ -1563,7 +1551,7 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "virt"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "metal-ocp"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{{AddonRef: v1alpha1.LocalObjectReference{Name: "openshift-virtualization"}}},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "openshift-virtualization"}},
 			},
 		}},
 	}

@@ -24,26 +24,27 @@ type ClusterAddonAccepts struct {
 }
 
 type ClusterAddonAcceptedInput struct {
-	Name     string                    `yaml:"name" json:"name"`
-	Required bool                      `yaml:"required,omitempty" json:"required,omitempty"`
-	Schema   ClusterAddonInputSchema   `yaml:"schema,omitempty" json:"schema,omitempty"`
-	Effects  []ClusterAddonInputEffect `yaml:"effects,omitempty" json:"effects,omitempty"`
+	Name        string                    `yaml:"name" json:"name"`
+	Required    bool                      `yaml:"required,omitempty" json:"required,omitempty"`
+	ResourceRef *ClusterAddonInputRef     `yaml:"resourceRef,omitempty" json:"resourceRef,omitempty"`
+	SecretRef   *ClusterAddonInputSecret  `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`
+	Effects     []ClusterAddonInputEffect `yaml:"effects,omitempty" json:"effects,omitempty"`
 }
 
-type ClusterAddonInputSchema struct {
-	Type       string                               `yaml:"type,omitempty" json:"type,omitempty"`
-	Required   []string                             `yaml:"required,omitempty" json:"required,omitempty"`
-	Properties map[string]ClusterAddonInputProperty `yaml:"properties,omitempty" json:"properties,omitempty"`
+type ClusterAddonInputRef struct {
+	Kind string `yaml:"kind" json:"kind"`
 }
 
-type ClusterAddonInputProperty struct {
-	RefKind string `yaml:"refKind,omitempty" json:"refKind,omitempty"`
-	Secret  bool   `yaml:"secret,omitempty" json:"secret,omitempty"`
-}
+type ClusterAddonInputSecret struct{}
 
 type ClusterAddonInputEffect struct {
-	Type     string `yaml:"type" json:"type"`
-	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
+	StorageExportAttachment *ClusterAddonStorageExportAttachmentEffect `yaml:"storageExportAttachment,omitempty" json:"storageExportAttachment,omitempty"`
+	GlobalPullSecretMerge   *ClusterAddonGlobalPullSecretMergeEffect   `yaml:"globalPullSecretMerge,omitempty" json:"globalPullSecretMerge,omitempty"`
+}
+
+type ClusterAddonStorageExportAttachmentEffect struct{}
+
+type ClusterAddonGlobalPullSecretMergeEffect struct {
 	Registry string `yaml:"registry,omitempty" json:"registry,omitempty"`
 	Username string `yaml:"username,omitempty" json:"username,omitempty"`
 }
@@ -99,16 +100,32 @@ type ClusterAddonReadiness struct {
 }
 
 type ClusterAddonReadinessCheck struct {
-	Type         string                          `yaml:"type" json:"type"`
-	Namespace    string                          `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	Subscription string                          `yaml:"subscription,omitempty" json:"subscription,omitempty"`
-	APIVersion   string                          `yaml:"apiVersion,omitempty" json:"apiVersion,omitempty"`
-	Kind         string                          `yaml:"kind,omitempty" json:"kind,omitempty"`
-	Name         string                          `yaml:"name,omitempty" json:"name,omitempty"`
-	Condition    *ClusterAddonConditionReadiness `yaml:"condition,omitempty" json:"condition,omitempty"`
+	CSVSucceeded   *ClusterAddonCSVReadiness            `yaml:"csvSucceeded,omitempty" json:"csvSucceeded,omitempty"`
+	Condition      *ClusterAddonConditionReadiness      `yaml:"condition,omitempty" json:"condition,omitempty"`
+	ResourceExists *ClusterAddonResourceExistsReadiness `yaml:"resourceExists,omitempty" json:"resourceExists,omitempty"`
+}
+
+type ClusterAddonCSVReadiness struct {
+	Namespace    string `yaml:"namespace" json:"namespace"`
+	Subscription string `yaml:"subscription" json:"subscription"`
 }
 
 type ClusterAddonConditionReadiness struct {
+	APIVersion string                           `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string                           `yaml:"kind" json:"kind"`
+	Namespace  string                           `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Name       string                           `yaml:"name" json:"name"`
+	Condition  ClusterAddonConditionRequirement `yaml:"condition" json:"condition"`
+}
+
+type ClusterAddonResourceExistsReadiness struct {
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string `yaml:"kind" json:"kind"`
+	Namespace  string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Name       string `yaml:"name" json:"name"`
+}
+
+type ClusterAddonConditionRequirement struct {
 	Type   string `yaml:"type" json:"type"`
 	Status string `yaml:"status" json:"status"`
 }
@@ -135,17 +152,23 @@ type ClusterAddonBinding struct {
 }
 
 type ClusterAddonBindingSpec struct {
-	ClusterRef       LocalObjectReference       `yaml:"clusterRef" json:"clusterRef"`
-	AddonProfileRefs []LocalObjectReference     `yaml:"addonProfileRefs,omitempty" json:"addonProfileRefs,omitempty"`
-	Addons           []ClusterAddonBindingAddon `yaml:"addons,omitempty" json:"addons,omitempty"`
+	ClusterRef   LocalObjectReference             `yaml:"clusterRef" json:"clusterRef"`
+	ProfileRefs  []LocalObjectReference           `yaml:"profileRefs,omitempty" json:"profileRefs,omitempty"`
+	AddonRefs    []LocalObjectReference           `yaml:"addonRefs,omitempty" json:"addonRefs,omitempty"`
+	AddonConfigs []ClusterAddonBindingAddonConfig `yaml:"addonConfigs,omitempty" json:"addonConfigs,omitempty"`
 }
 
-type ClusterAddonBindingAddon struct {
+type ClusterAddonBindingAddonConfig struct {
 	AddonRef LocalObjectReference       `yaml:"addonRef" json:"addonRef"`
 	Inputs   []ClusterAddonBindingInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 }
 
+type ClusterAddonBindingAddon struct {
+	AddonRef LocalObjectReference
+	Inputs   []ClusterAddonBindingInput
+}
+
 type ClusterAddonBindingInput struct {
-	Name   string         `yaml:"name" json:"name"`
-	Values map[string]any `yaml:"values,omitempty" json:"values,omitempty"`
+	Name  string `yaml:"name" json:"name"`
+	Value string `yaml:"value" json:"value"`
 }

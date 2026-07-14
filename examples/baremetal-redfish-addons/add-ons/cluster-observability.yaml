@@ -11,8 +11,7 @@ spec:
 
   readiness:
     checks:
-      - type: resourceExists
-        apiVersion: v1
-        kind: Namespace
-        name: observability
-
+      - resourceExists:
+          apiVersion: v1
+          kind: Namespace
+          name: observability

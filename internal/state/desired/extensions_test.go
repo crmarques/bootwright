@@ -81,16 +81,16 @@ func TestClusterAddonLoaderRejectsOldSchemaNames(t *testing.T) {
 		},
 		{
 			name: "old-binding-phase",
-			body: strings.Replace(extensionBindingYAML("binding", "set"), "  addonProfileRefs:", "  applyAfter:\n    phase: containerClusterInstalled\n  addonProfileRefs:", 1),
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "  profileRefs:", "  applyAfter:\n    phase: containerClusterInstalled\n  profileRefs:", 1),
 			want: "field applyAfter not found",
 		},
 		{
 			name: "old-binding-profiles-key",
-			body: strings.Replace(extensionBindingYAML("binding", "set"), "addonProfileRefs:", "addonProfiles:", 1),
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "profileRefs:", "addonProfiles:", 1),
 			want: "field addonProfiles not found",
 		},
 		{
-			name: "old-binding-addon-name-key",
+			name: "old-binding-addons-key",
 			body: `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata: { name: bad-binding }
@@ -99,7 +99,7 @@ spec:
   addons:
     - name: virt
 `,
-			want: "field name not found",
+			want: "field addons not found",
 		},
 	}
 	for _, tc := range cases {
@@ -158,14 +158,14 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - \"bad cap\"\n", 1),
 			},
-			wantSubstring: `spec.provides[0] "bad cap" is not a supported capability (supported: kubevirt, dataFoundation, nmstate)`,
+			wantSubstring: `spec.provides[0] "bad cap" must match ^[A-Za-z0-9][A-Za-z0-9._-]*$`,
 		},
 		{
 			name: "malformed-required-capability",
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  requires:\n    - \"bad cap\"\n", 1),
 			},
-			wantSubstring: `spec.requires[0] "bad cap" is not a supported capability (supported: kubevirt, dataFoundation, nmstate)`,
+			wantSubstring: `spec.requires[0] "bad cap" must match ^[A-Za-z0-9][A-Za-z0-9._-]*$`,
 		},
 		{
 			name: "duplicated-provided-capability",
@@ -179,7 +179,7 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			files: map[string]string{
 				"extension.yaml": strings.Replace(
 					strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - kubevirt\n", 1),
-					"  readiness:\n    checks:\n      - type: csvSucceeded\n        namespace: openshift-cnv\n        subscription: hco-operatorhub\n", "", 1),
+					"  readiness:\n    checks:\n      - csvSucceeded:\n          namespace: openshift-cnv\n          subscription: hco-operatorhub\n", "", 1),
 			},
 			wantSubstring: `spec.provides requires at least one readiness check`,
 		},
@@ -203,7 +203,7 @@ spec:
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "missing"), "demo-ocp", "sno", 1),
 				"cluster.yaml":   newClusterYAML,
 			},
-			wantSubstring: `ClusterAddonBinding/binding spec.addonProfileRefs[0] "missing" does not match any ClusterAddonProfile`,
+			wantSubstring: `ClusterAddonBinding/binding spec.profileRefs[0] "missing" does not match any ClusterAddonProfile`,
 		},
 		{
 			name: "set-cycle",
@@ -241,11 +241,11 @@ spec:
 			wantSubstring: `installPlanApproval "Sometimes" must be one of {Automatic, Manual}`,
 		},
 		{
-			name: "csv-readiness-condition-arm",
+			name: "multiple-readiness-arms",
 			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "        subscription: hco-operatorhub\n", "        subscription: hco-operatorhub\n        condition:\n          type: Available\n          status: \"True\"\n", 1),
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "          subscription: hco-operatorhub\n", "          subscription: hco-operatorhub\n        resourceExists:\n          apiVersion: v1\n          kind: Namespace\n          name: openshift-cnv\n", 1),
 			},
-			wantSubstring: "type=csvSucceeded must not set apiVersion, kind, name, or condition",
+			wantSubstring: "must not set more than one readiness arm",
 		},
 		{
 			name: "unknown-cluster",
@@ -330,24 +330,29 @@ func TestClusterAddonInputValidation(t *testing.T) {
 	addonWithInputs := func(inputYAML string) string {
 		return strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  accepts:\n    inputs:\n"+inputYAML, 1)
 	}
+	dataFoundationAddonWithInputs := func(inputYAML string) string {
+		return strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - dataFoundation\n  accepts:\n    inputs:\n"+inputYAML, 1)
+	}
 	bindingWithInputs := func(inputYAML string) string {
-		return `apiVersion: bootwright.io/v1alpha1
+		body := `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata: { name: binding }
 spec:
   clusterRef: sno
-  addons:
+  addonRefs:
+    - virt
+`
+		if inputYAML != "" {
+			body += `  addonConfigs:
     - addonRef: virt
+      inputs:
 ` + inputYAML
+		}
+		return body
 	}
 	validInput := `      - name: config
-        schema:
-          type: object
-          required:
-            - targetRef
-          properties:
-            targetRef:
-              refKind: ContainerCluster
+        resourceRef:
+          kind: ContainerCluster
 `
 
 	cases := []struct {
@@ -360,67 +365,86 @@ spec:
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(`      - name: config
-        schema:
-          type: object
+        resourceRef:
+          kind: ContainerCluster
       - name: config
-        schema:
-          type: object
+        resourceRef:
+          kind: ContainerCluster
 `)
 				return files
 			},
 			wantSubstring: `spec.accepts.inputs[1].name "config" is duplicated`,
 		},
 		{
-			name: "required-property-not-declared",
+			name: "missing-input-arm",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(`      - name: config
-        schema:
-          type: object
-          required:
-            - targetRef
 `)
 				return files
 			},
-			wantSubstring: `spec.accepts.inputs[0].schema.required[0] "targetRef" is not declared in properties`,
+			wantSubstring: `spec.accepts.inputs[0] must set exactly one of resourceRef or secretRef`,
 		},
 		{
-			name: "unsupported-effect-type",
+			name: "multiple-input-arms",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(`      - name: config
-        schema:
-          type: object
-        effects:
-          - type: volume-attachment
+        resourceRef:
+          kind: ContainerCluster
+        secretRef: {}
 `)
 				return files
 			},
-			wantSubstring: `spec.accepts.inputs[0].effects[0].type "volume-attachment" is not supported`,
+			wantSubstring: `spec.accepts.inputs[0] must not set both resourceRef and secretRef`,
 		},
 		{
-			name: "unsupported-effect-provider",
+			name: "unknown-resource-kind",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
-        schema:
-          type: object
-        effects:
-          - type: storageExportAttachment
-            provider: kubevirt
+        resourceRef:
+          kind: Unknown
 `)
 				return files
 			},
-			wantSubstring: `provider "kubevirt" must be "dataFoundation" when type is "storageExportAttachment"`,
+			wantSubstring: `spec.accepts.inputs[0].resourceRef.kind "Unknown" is not a known Bootwright kind`,
+		},
+		{
+			name: "storage-attachment-requires-datafoundation-provider",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
+        resourceRef:
+          kind: StorageExport
+        effects:
+          - storageExportAttachment: {}
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].effects[0].storageExportAttachment requires the add-on to provide dataFoundation`,
+		},
+		{
+			name: "storage-attachment-requires-storage-export-input",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = dataFoundationAddonWithInputs(`      - name: external-storage
+        resourceRef:
+          kind: Machine
+        effects:
+          - storageExportAttachment: {}
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].effects[0].storageExportAttachment requires a resourceRef input with kind StorageExport`,
 		},
 		{
 			name: "unknown-supplied-input",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = extensionYAML("virt")
-				files["binding.yaml"] = bindingWithInputs(`      inputs:
-        - name: unknown
-          values: {}
+				files["binding.yaml"] = bindingWithInputs(`        - name: unknown
+          value: sno
 `)
 				return files
 			},
@@ -431,30 +455,34 @@ spec:
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(validInput)
-				files["binding.yaml"] = bindingWithInputs(`      inputs:
+				files["binding.yaml"] = bindingWithInputs(`        - name: config
+          value: sno
         - name: config
-          values:
-            targetRef: sno
-        - name: config
-          values:
-            targetRef: sno
+          value: sno
 `)
 				return files
 			},
-			wantSubstring: `spec.addons[0].inputs[1].name "config" is duplicated`,
+			wantSubstring: `spec.addonConfigs[0].inputs[1].name "config" is duplicated`,
 		},
 		{
-			name: "missing-required-value",
+			name: "configured-addon-must-be-selected",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(validInput)
-				files["binding.yaml"] = bindingWithInputs(`      inputs:
+				files["binding.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata: { name: binding }
+spec:
+  clusterRef: sno
+  addonConfigs:
+    - addonRef: virt
+      inputs:
         - name: config
-          values: {}
-`)
+          value: sno
+`
 				return files
 			},
-			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.targetRef is required`,
+			wantSubstring: `spec.addonConfigs[0].addonRef "virt" must already be selected by profileRefs or addonRefs`,
 		},
 		{
 			name: "missing-required-input",
@@ -462,11 +490,8 @@ spec:
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(`      - name: config
         required: true
-        schema:
-          type: object
-          properties:
-            targetRef:
-              refKind: ContainerCluster
+        resourceRef:
+          kind: ContainerCluster
 `)
 				files["binding.yaml"] = bindingWithInputs("")
 				return files
@@ -474,111 +499,28 @@ spec:
 			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt does not supply required input "config"`,
 		},
 		{
-			name: "undeclared-value-property",
+			name: "missing-scalar-value",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(validInput)
-				files["binding.yaml"] = bindingWithInputs(`      inputs:
-        - name: config
-          values:
-            targetRef: sno
-            otherRef: sno
+				files["binding.yaml"] = bindingWithInputs(`        - name: config
+          value: ""
 `)
 				return files
 			},
-			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.otherRef is not declared by the input schema`,
-		},
-		{
-			name: "secret-value-must-exist",
-			files: func() map[string]string {
-				files := newBaselineFiles()
-				files["extension.yaml"] = addonWithInputs(`      - name: config
-        schema:
-          type: object
-          properties:
-            credentialsRef:
-              secret: true
-`)
-				files["binding.yaml"] = bindingWithInputs(`      inputs:
-        - name: config
-          values:
-            credentialsRef: missing-secret
-`)
-				return files
-			},
-			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialsRef "missing-secret" is not a declared Secret`,
+			wantSubstring: `spec.addonConfigs[0].inputs[0].value is required`,
 		},
 		{
 			name: "ref-kind-value-must-exist",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(validInput)
-				files["binding.yaml"] = bindingWithInputs(`      inputs:
-        - name: config
-          values:
-            targetRef: missing-cluster
+				files["binding.yaml"] = bindingWithInputs(`        - name: config
+          value: missing-cluster
 `)
 				return files
 			},
-			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.targetRef "missing-cluster" does not match any ContainerCluster`,
-		},
-		{
-			name: "storage-attachment-property-must-be-exportRef",
-			files: func() map[string]string {
-				files := newBaselineFiles()
-				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
-        schema:
-          type: object
-          required:
-            - export
-          properties:
-            export:
-              refKind: StorageExport
-        effects:
-          - type: storageExportAttachment
-            provider: dataFoundation
-`)
-				return files
-			},
-			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef is required for dataFoundation storage attachment inputs`,
-		},
-		{
-			name: "storage-attachment-exportRef-must-be-required",
-			files: func() map[string]string {
-				files := newBaselineFiles()
-				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
-        schema:
-          type: object
-          properties:
-            exportRef:
-              refKind: StorageExport
-        effects:
-          - type: storageExportAttachment
-            provider: dataFoundation
-`)
-				return files
-			},
-			wantSubstring: `spec.accepts.inputs[0].schema.required must include "exportRef" for dataFoundation storage attachment inputs`,
-		},
-		{
-			name: "storage-attachment-exportRef-wrong-ref-kind",
-			files: func() map[string]string {
-				files := newBaselineFiles()
-				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
-        schema:
-          type: object
-          required:
-            - exportRef
-          properties:
-            exportRef:
-              refKind: Machine
-        effects:
-          - type: storageExportAttachment
-            provider: dataFoundation
-`)
-				return files
-			},
-			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef.refKind "Machine" must be "StorageExport" for dataFoundation storage attachment inputs`,
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].value "missing-cluster" does not match any ContainerCluster`,
 		},
 		{
 			name: "duplicate-effective-application",
@@ -613,27 +555,21 @@ func TestClusterAddonBindingInputsCanConfigureProfileAddon(t *testing.T) {
   accepts:
     inputs:
       - name: config
-        schema:
-          type: object
-          required:
-            - targetRef
-          properties:
-            targetRef:
-              refKind: ContainerCluster
+        resourceRef:
+          kind: ContainerCluster
 `, 1)
 	binding := `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata: { name: binding }
 spec:
   clusterRef: sno
-  addonProfileRefs:
+  profileRefs:
     - set
-  addons:
+  addonConfigs:
     - addonRef: virt
       inputs:
         - name: config
-          values:
-            targetRef: sno
+          value: sno
 `
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -658,14 +594,14 @@ func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T)
 			resources: []string{
 				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonBinding/demo-ocp-addons spec.addons[0].addonRef; add "extension.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonBinding/demo-ocp-addons spec.addonRefs[0]; add "extension.yaml"`,
 		},
 		{
 			name: "binding-requires-set",
 			resources: []string{
 				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding-set.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.addonProfileRefs[0]; add "set.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.profileRefs[0]; add "set.yaml"`,
 		},
 		{
 			name: "set-requires-extension",
@@ -687,8 +623,8 @@ kind: ClusterAddonBinding
 metadata: { name: demo-ocp-addons }
 spec:
   clusterRef: sno
-  addons:
-    - addonRef: openshift-virtualization
+  addonRefs:
+    - openshift-virtualization
 `
 			files["binding-set.yaml"] = extensionBindingYAML("demo-ocp-set", "virtualization-platform")
 			writeFiles(t, dir, files)
@@ -747,9 +683,9 @@ spec:
       source: redhat-operators
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: ` + name + `-ns
-        subscription: ` + name + `-op
+      - csvSucceeded:
+          namespace: ` + name + `-ns
+          subscription: ` + name + `-op
 `
 }
 
@@ -760,10 +696,10 @@ metadata:
   name: ` + name + `
 spec:
   clusterRef: sno
-  addons:
+  addonRefs:
 `
 	for _, ref := range addonRefs {
-		body += "    - addonRef: " + ref + "\n"
+		body += "    - " + ref + "\n"
 	}
 	return body
 }
@@ -856,9 +792,9 @@ spec:
         spec: {}
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-cnv
-        subscription: hco-operatorhub
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
 `
 }
 
@@ -880,7 +816,7 @@ metadata:
   name: ` + name + `
 spec:
   clusterRef: sno
-  addonProfileRefs:
+  profileRefs:
     - ` + set + `
 `
 }
@@ -897,9 +833,9 @@ spec:
       - path: ` + manifestPath + `
   readiness:
     checks:
-      - type: resourceExists
-        apiVersion: operator.openshift.io/v1
-        kind: Console
-        name: cluster
+      - resourceExists:
+          apiVersion: operator.openshift.io/v1
+          kind: Console
+          name: cluster
 `
 }

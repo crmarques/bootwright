@@ -32,14 +32,14 @@ spec:
 
   readiness:
     checks:
-      - type: csvSucceeded
-        namespace: openshift-cnv
-        subscription: hco-operatorhub
-      - type: condition
-        apiVersion: hco.kubevirt.io/v1beta1
-        kind: HyperConverged
-        name: kubevirt-hyperconverged
-        namespace: openshift-cnv
-        condition:
-          type: Available
-          status: "True"
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
+      - condition:
+          apiVersion: hco.kubevirt.io/v1beta1
+          kind: HyperConverged
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+          condition:
+            type: Available
+            status: "True"

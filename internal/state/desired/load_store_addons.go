@@ -18,8 +18,11 @@ func resolveRegisteredAddons(state *v1alpha1.State) error {
 	}
 	referenced := map[string]bool{}
 	for _, binding := range state.ClusterAddonBindings {
-		for _, addon := range binding.Spec.Addons {
-			referenced[addon.AddonRef.Name] = true
+		for _, ref := range binding.Spec.AddonRefs {
+			referenced[ref.Name] = true
+		}
+		for _, config := range binding.Spec.AddonConfigs {
+			referenced[config.AddonRef.Name] = true
 		}
 	}
 	for _, profile := range state.ClusterAddonProfiles {

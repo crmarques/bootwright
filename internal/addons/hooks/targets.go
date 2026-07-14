@@ -20,14 +20,16 @@ func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundClus
 	c := newClusterSet()
 	s := newClusterSet()
 	target := hook.Target
-	if target.BoundCluster {
+	if target.BoundCluster != nil {
 		c.add(boundCluster)
 	}
-	for _, name := range target.Clusters {
-		classifyCluster(state, name, c, s)
-	}
-	for _, name := range target.Machines {
-		classifyMachineOwners(state, name, c, s)
+	if target.Static != nil {
+		for _, name := range target.Static.Clusters {
+			classifyCluster(state, name, c, s)
+		}
+		for _, name := range target.Static.Machines {
+			classifyMachineOwners(state, name, c, s)
+		}
 	}
 	if target.FromInput != nil {
 		refKind, refName, ok := resolveInputRef(addon, hook, inputs, *target.FromInput)
@@ -43,19 +45,18 @@ func resolveInputRef(addon v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook
 	if !found {
 		return "", "", false
 	}
-	property, found := accepted.Schema.Properties[from.Property]
-	if !found || property.RefKind == "" {
+	if accepted.ResourceRef == nil {
 		return "", "", false
 	}
 	for _, input := range inputs {
 		if input.Name != from.Input {
 			continue
 		}
-		ref := addoninputs.LocalObjectReferenceValue(input.Values, from.Property)
+		ref := addoninputs.LocalObjectReferenceValue(input)
 		if ref.Name == "" {
 			return "", "", false
 		}
-		return property.RefKind, ref.Name, true
+		return accepted.ResourceRef.Kind, ref.Name, true
 	}
 	return "", "", false
 }

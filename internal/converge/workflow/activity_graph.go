@@ -26,14 +26,14 @@ type Activity struct {
 type ActivityGraph struct {
 	activities map[string]Activity
 	order      []string
-	providedBy map[string]string
+	providedBy map[string][]string
 	available  map[string]bool
 }
 
 func NewActivityGraph() *ActivityGraph {
 	return &ActivityGraph{
 		activities: map[string]Activity{},
-		providedBy: map[string]string{},
+		providedBy: map[string][]string{},
 		available:  map[string]bool{},
 	}
 }
@@ -59,10 +59,7 @@ func (g *ActivityGraph) Add(activity Activity) error {
 	g.order = append(g.order, activity.ID)
 	for _, capability := range activity.Provides {
 		key := capability.key()
-		if existing := g.providedBy[key]; existing != "" {
-			return fmt.Errorf("capability %s is provided by both %s and %s", key, existing, activity.ID)
-		}
-		g.providedBy[key] = activity.ID
+		g.providedBy[key] = appendUniqueString(g.providedBy[key], activity.ID)
 	}
 	return nil
 }
@@ -105,11 +102,11 @@ func (g *ActivityGraph) Lower() ([]ApplyTask, error) {
 			if g.available[key] {
 				continue
 			}
-			provider := g.providedBy[key]
-			if provider == "" {
+			providers := g.providedBy[key]
+			if len(providers) == 0 {
 				return nil, fmt.Errorf("%s requires unavailable capability %s", activity.ID, key)
 			}
-			deps = appendUniqueString(deps, provider)
+			deps = appendUniqueStrings(deps, providers...)
 		}
 		deps = appendUniqueStrings(deps, activity.Task.Entry.Dependencies...)
 		deps = appendUniqueStrings(deps, activity.ExplicitDependencies...)

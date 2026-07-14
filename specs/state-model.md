@@ -939,35 +939,35 @@ Rules:
   not set `olm`. Each `manifests[].path` is relative to the `ClusterAddon` file,
   ends in `.yaml`/`.yml`, must stay within the file directory, must not be a
   symlink, and must exist.
-- `spec.provides[]` accepts `kubevirt`, `dataFoundation`, or `nmstate`; declaring
-  any `provides` value requires at least one `spec.readiness.checks[]` entry.
-- `spec.requires[]` accepts the same vocabulary as `provides[]`. Each requirement
-  must be provided by another add-on in the same binding (ordering is resolved per
-  binding), and add-ons are applied after the add-ons providing their required
-  capabilities (a per-binding stable topological order). Unsatisfied requirements
-  and `requires`/`provides` cycles are rejected.
-- `spec.readiness.timeout` is a Go duration. `spec.readiness.checks[].type`
-  accepts `csvSucceeded` (requires `namespace`, `subscription`), `condition`
-  (requires `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
+- `spec.provides[]` accepts open capability tokens matching
+  `^[A-Za-z0-9][A-Za-z0-9._-]*$`; declaring any `provides` value requires at
+  least one `spec.readiness.checks[]` entry.
+- `spec.requires[]` accepts the same token grammar as `provides[]`. Each
+  requirement must be provided by another add-on in the same binding (ordering is
+  resolved per binding), and add-ons are applied after the add-ons providing their
+  required capabilities (a per-binding stable topological order). Unsatisfied
+  requirements and `requires`/`provides` cycles are rejected.
+- `spec.readiness.timeout` is a Go duration. Each
+  `spec.readiness.checks[]` entry is a presence union with exactly one of
+  `csvSucceeded` (requires `namespace`, `subscription`), `condition` (requires
+  `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
-- `spec.accepts.inputs[]` declare binding-scoped inputs. Each input has a `name`,
-  an optional `required` marker (when `true`, every binding of the add-on must
-  supply the input), an optional `schema` (`type`, `required[]`, and
-  `properties` keyed by property name, each property setting exactly one of
-  `refKind` — a known Bootwright kind — or `secret: true`), and optional
-  `effects[]`. Each effect sets a `type`: `storageExportAttachment` or
+- `spec.accepts.inputs[]` declare binding-scoped scalar inputs. Each input has a
+  `name`, an optional `required` marker (when `true`, every binding of the add-on
+  must supply the input), exactly one of `resourceRef.kind` (a known Bootwright
+  kind) or `secretRef: {}`, and optional `effects[]`. Each effect is a presence
+  union with exactly one of `storageExportAttachment: {}` or
   `globalPullSecretMerge`.
-- A `storageExportAttachment` effect requires `provider: dataFoundation` and a
-  schema declaring exactly one property, literally named `exportRef`, with
-  `refKind: StorageExport` and listed in `required` — the scope machinery reads
-  that exact value name to pull the referenced Ceph cluster into the add-on's
-  task state. The attachment itself (the external-details payload and consumer
-  manifests) is applied by the add-on's own hooks.
-- A `globalPullSecretMerge` effect requires `registry` and `username` (and no
-  `provider`), and a schema declaring exactly one property, `secret: true` and
-  listed in `required`. Before the add-on's resources apply, the referenced
-  secret's value is merged into the bound cluster's global pull secret as the
-  `auths[<registry>]` credential.
+- A `storageExportAttachment` effect requires the add-on to provide
+  `dataFoundation` and the input to declare `resourceRef.kind: StorageExport` —
+  the scope machinery reads the scalar input value to pull the referenced Ceph
+  cluster into the add-on's task state. The attachment itself (the
+  external-details payload and consumer manifests) is applied by the add-on's own
+  hooks.
+- A `globalPullSecretMerge` effect requires `registry` and `username` under the
+  `globalPullSecretMerge` arm, and the input must declare `secretRef: {}`. Before
+  the add-on's resources apply, the referenced secret's value is merged into the
+  bound cluster's global pull secret as the `auths[<registry>]` credential.
 - `spec.hooks[]` ship add-on-owned imperative integration run at a lifecycle
   point of the add-on apply — an Ansible playbook, templated Kubernetes
   manifests, or both — so the logic travels with the add-on instead of being
@@ -986,8 +986,8 @@ Rules:
     imperative work against resolved machines and captures outputs.
   - `hooks[].target` selects the machines a playbook runs against and is required
     for a playbook hook. It is a presence union — exactly one of `boundCluster`
-    (the bound `ContainerCluster`'s nodes), `fromInput` (an accepted input's
-    `refKind` property dereferenced to its object, then mapped to nodes:
+    (the bound `ContainerCluster`'s nodes), `fromInput` (an accepted
+    `resourceRef` input dereferenced to its object, then mapped to nodes:
     `StorageExport` → its `storageClusterRef` Ceph nodes, `StorageCluster` → its
     Ceph nodes, `ContainerCluster` → its agent nodes, `Machine` → the machine),
     or static `clusters`/`machines` lists. A hook carries no `hostGroups` and can
@@ -1041,18 +1041,20 @@ input values.
 Rules:
 
 - `spec.clusterRef` is required and references a `ContainerCluster`.
-- A binding must include at least one of `spec.addonProfileRefs[]` or
-  `spec.addons[]`.
-- `spec.addonProfileRefs[]` must reference `ClusterAddonProfile`s;
-  `spec.addons[].addonRef` must reference a `ClusterAddon`.
+- A binding must include at least one of `spec.profileRefs[]` or
+  `spec.addonRefs[]`.
+- `spec.profileRefs[]` must reference `ClusterAddonProfile`s;
+  `spec.addonRefs[]` must reference `ClusterAddon`s.
+- `spec.addonConfigs[].addonRef` must reference a `ClusterAddon` already
+  selected by `spec.profileRefs[]` or `spec.addonRefs[]`.
 - A given `ClusterAddon` may be applied to one `ContainerCluster` only once
   across all bindings.
-- `spec.addons[].inputs[]` must be declared by the add-on's
-  `spec.accepts.inputs`, have unique names, and satisfy the input schema's
-  required values. Every accepted input the add-on marks `required: true` must
-  be supplied.
-- Input values for `refKind` schema properties must name a loaded object of
-  that kind; values for `secret` properties must resolve to a declared `Secret`.
+- `spec.addonConfigs[].inputs[]` must be declared by the add-on's
+  `spec.accepts.inputs`, have unique names, and carry a non-empty scalar
+  `value`. Every accepted input the add-on marks `required: true` must be
+  supplied.
+- Input values for `resourceRef` inputs must name a loaded object of that kind;
+  values for `secretRef` inputs must resolve to a declared `Secret`.
 
 ## Native add-on catalog store
 
@@ -1065,7 +1067,7 @@ Bootwright root — and `add-ons delete` removes it.
 Rules:
 
 - The store is a fallback resolution source, not a load path of its own. When a
-  `ClusterAddonBinding` `spec.addons[].addonRef` or `ClusterAddonProfile`
+  `ClusterAddonBinding` `spec.addonRefs[]` or `ClusterAddonProfile`
   `spec.addonRefs[]` names no authored `ClusterAddon` in the loaded input, the
   loader resolves it from the store directory of that name (which loads like any
   authored add-on directory, its `SourcePath` anchoring the shipped

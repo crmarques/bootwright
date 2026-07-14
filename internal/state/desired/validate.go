@@ -657,13 +657,11 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			if !ok {
 				continue
 			}
-			for name, property := range acceptedInput.Schema.Properties {
-				if !property.Secret {
-					continue
-				}
-				if ref := addoninputs.SecretRefValue(input.Values, name); ref.Name != "" {
-					require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.%s", effective.Binding.Metadata.Name, effective.Addon.AddonRef.Name, input.Name, name), ref)
-				}
+			if acceptedInput.SecretRef == nil {
+				continue
+			}
+			if ref := addoninputs.SecretRefValue(input); ref.Name != "" {
+				require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].value", effective.Binding.Metadata.Name, effective.Addon.AddonRef.Name, input.Name), ref)
 			}
 		}
 	}

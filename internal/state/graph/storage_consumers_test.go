@@ -17,10 +17,10 @@ func storageConsumerState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "odf-consumer"},
 			Spec: v1alpha1.ClusterAddonSpec{
 				Accepts: v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-					Name: "storage",
+					Name:        "storage",
+					ResourceRef: &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport},
 					Effects: []v1alpha1.ClusterAddonInputEffect{{
-						Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-						Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+						StorageExportAttachment: &v1alpha1.ClusterAddonStorageExportAttachmentEffect{},
 					}},
 				}}},
 			},
@@ -28,11 +28,12 @@ func storageConsumerState() v1alpha1.State {
 		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "ocp"},
-				Addons: []v1alpha1.ClusterAddonBindingAddon{{
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "odf-consumer"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
 					AddonRef: v1alpha1.LocalObjectReference{Name: "odf-consumer"},
 					Inputs: []v1alpha1.ClusterAddonBindingInput{{
-						Name:   "storage",
-						Values: map[string]any{"exportRef": "ceph-export"},
+						Name:  "storage",
+						Value: "ceph-export",
 					}},
 				}},
 			},

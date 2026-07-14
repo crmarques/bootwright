@@ -207,19 +207,13 @@ func (e *addonHookExecutor) resolveManifestToken(hook v1alpha1.ClusterAddonHook,
 }
 
 func (e *addonHookExecutor) resolveInputToken(arg string) (string, error) {
-	input, property, ok := hooks.SplitInputProperty(arg)
-	if !ok {
-		return "", fmt.Errorf("input token %q must be input.property", arg)
-	}
 	for _, in := range e.inputs {
-		if in.Name != input {
+		if in.Name != arg {
 			continue
 		}
-		if value, ok := in.Values[property].(string); ok {
-			return value, nil
-		}
+		return in.Value, nil
 	}
-	return "", fmt.Errorf("input %q property %q has no value", input, property)
+	return "", fmt.Errorf("input %q has no value", arg)
 }
 
 func (e *addonHookExecutor) resolveSecretToken(name string) (string, error) {
@@ -269,7 +263,7 @@ func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outpu
 func bindingInputValues(inputs []v1alpha1.ClusterAddonBindingInput) map[string]any {
 	out := map[string]any{}
 	for _, input := range inputs {
-		out[input.Name] = input.Values
+		out[input.Name] = input.Value
 	}
 	return out
 }

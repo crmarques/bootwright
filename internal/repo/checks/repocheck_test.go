@@ -442,9 +442,21 @@ func isExtensionPayloadManifest(path string) bool {
 func assertNoFlowStyleCollections(t *testing.T, name, body string) {
 	t.Helper()
 	for i, line := range strings.Split(body, "\n") {
+		if allowedEmptyPresenceUnion(line) {
+			continue
+		}
 		if strings.ContainsAny(line, "{}[]") {
 			t.Fatalf("%s:%d uses flow-style collection syntax %q", name, i+1, strings.TrimSpace(line))
 		}
+	}
+}
+
+func allowedEmptyPresenceUnion(line string) bool {
+	switch strings.TrimSpace(line) {
+	case "secretRef: {}", "storageExportAttachment: {}", "- storageExportAttachment: {}", "boundCluster: {}":
+		return true
+	default:
+		return false
 	}
 }
 

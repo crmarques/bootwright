@@ -6,7 +6,7 @@ metadata:
   annotations:
     bootwright.io/addon: openshift-data-foundation
     bootwright.io/addon-input: external-storage
-    bootwright.io/storage-export: "{{ input external-storage.exportRef }}"
+    bootwright.io/storage-export: "{{ input external-storage }}"
     bootwright.io/container-cluster-ref: "{{ cluster }}"
 type: Opaque
 stringData:

@@ -79,7 +79,11 @@ func hostTrustScopePlanningState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "odf"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
+					AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{dataFoundationBindingInput("export")},
+				}},
 			},
 		}},
 	}
@@ -126,7 +130,7 @@ func TestHookReferencedClustersPullsCrossClusterStorageIntoScope(t *testing.T) {
 		Name:      "seed-export",
 		Lifecycle: v1alpha1.ClusterAddonHookLifecycles()[0],
 		Target: v1alpha1.ClusterAddonHookTarget{
-			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"},
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
 		},
 	}}
 	binding := extensionplan.BindingPlan{Binding: "ceph-binding", Cluster: "demo"}

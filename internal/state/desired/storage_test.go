@@ -1388,7 +1388,7 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			edit: func(state *v1alpha1.State) {
 				state.StorageExports[0].Spec.Type = "nfs"
 			},
-			want: `values.exportRef "export" must reference a dataFoundation StorageExport`,
+			want: `input[external-storage].value "export" must reference a dataFoundation StorageExport`,
 		},
 		{
 			name: "external-ceph-spec",
@@ -1598,7 +1598,13 @@ func storageValidationState() v1alpha1.State {
 				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
 				Accepts:  dataFoundationAccepts(),
 				Readiness: v1alpha1.ClusterAddonReadiness{
-					Checks: []v1alpha1.ClusterAddonReadinessCheck{{Type: v1alpha1.ClusterAddonReadinessResourceExists}},
+					Checks: []v1alpha1.ClusterAddonReadinessCheck{{
+						ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+							APIVersion: "v1",
+							Kind:       "Namespace",
+							Name:       "openshift-storage",
+						},
+					}},
 				},
 			},
 		}},
@@ -1606,7 +1612,11 @@ func storageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "odf"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
+					AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{dataFoundationBindingInput("export")},
+				}},
 			},
 		}},
 	}
@@ -1685,7 +1695,13 @@ func externalStorageValidationState() v1alpha1.State {
 				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
 				Accepts:  dataFoundationAccepts(),
 				Readiness: v1alpha1.ClusterAddonReadiness{
-					Checks: []v1alpha1.ClusterAddonReadinessCheck{{Type: v1alpha1.ClusterAddonReadinessResourceExists}},
+					Checks: []v1alpha1.ClusterAddonReadinessCheck{{
+						ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+							APIVersion: "v1",
+							Kind:       "Namespace",
+							Name:       "openshift-storage",
+						},
+					}},
 				},
 			},
 		}},
@@ -1693,7 +1709,11 @@ func externalStorageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
+				AddonRefs:  []v1alpha1.LocalObjectReference{{Name: "odf"}},
+				AddonConfigs: []v1alpha1.ClusterAddonBindingAddonConfig{{
+					AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
+					Inputs:   []v1alpha1.ClusterAddonBindingInput{dataFoundationBindingInput("export")},
+				}},
 			},
 		}},
 	}
@@ -1701,31 +1721,18 @@ func externalStorageValidationState() v1alpha1.State {
 
 func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
-		Name: "external-storage",
-		Schema: v1alpha1.ClusterAddonInputSchema{
-			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
-			Required: []string{"exportRef"},
-			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef": {RefKind: v1alpha1.KindStorageExport},
-			},
-		},
+		Name:        "external-storage",
+		ResourceRef: &v1alpha1.ClusterAddonInputRef{Kind: v1alpha1.KindStorageExport},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
-			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
-			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+			StorageExportAttachment: &v1alpha1.ClusterAddonStorageExportAttachmentEffect{},
 		}},
 	}}}
 }
 
-func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
-	values := map[string]any{
-		"exportRef": export,
-	}
-	return v1alpha1.ClusterAddonBindingAddon{
-		AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
-		Inputs: []v1alpha1.ClusterAddonBindingInput{{
-			Name:   "external-storage",
-			Values: values,
-		}},
+func dataFoundationBindingInput(export string) v1alpha1.ClusterAddonBindingInput {
+	return v1alpha1.ClusterAddonBindingInput{
+		Name:  "external-storage",
+		Value: export,
 	}
 }
 

@@ -86,10 +86,19 @@ func (c RunConfig) runEffects(ctx context.Context) error {
 	return c.Effects.Run(ctx)
 }
 
-func hasGlobalPullSecretMergeEffect(extension v1alpha1.ClusterAddon) bool {
-	for _, input := range extension.Spec.Accepts.Inputs {
+func hasActiveGlobalPullSecretMergeEffect(plan extensionplan.ExtensionPlan) bool {
+	supplied := map[string]bool{}
+	for _, input := range plan.Inputs {
+		if input.Value != "" {
+			supplied[input.Name] = true
+		}
+	}
+	for _, input := range plan.Extension.Spec.Accepts.Inputs {
+		if !supplied[input.Name] {
+			continue
+		}
 		for _, effect := range input.Effects {
-			if effect.Type == v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge {
+			if effect.GlobalPullSecretMerge != nil {
 				return true
 			}
 		}
@@ -114,13 +123,13 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	}
 	if len(plan.Extension.Spec.Readiness.Checks) > 0 &&
 		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) &&
-		!hasGlobalPullSecretMergeEffect(plan.Extension) {
+		!hasActiveGlobalPullSecretMergeEffect(plan) {
 		if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
 			record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 			if err != nil {
 				return TaskResult{}, err
 			}
-			if found && record.DesiredHash == hash && !record.HasFailedHook() {
+			if found && completeReadyRecord(record, hash) && hooksReady(record, plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) {
 				return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 			}
 		}
@@ -187,8 +196,8 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err != nil {
 		return TaskResult{}, err
 	}
-	if found && record.DesiredHash == hash && record.Status == extensionrecords.RecordStatusReady &&
-		!record.HasFailedHook() &&
+	if found && completeReadyRecord(record, hash) &&
+		hooksReady(record, plan.Extension, v1alpha1.ClusterAddonHookPostReady) &&
 		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPostReady) {
 		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {
@@ -237,6 +246,27 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		return TaskResult{}, err
 	}
 	return TaskResult{}, nil
+}
+
+func completeReadyRecord(record extensionrecords.Record, hash string) bool {
+	return record.DesiredHash == hash &&
+		record.Status == extensionrecords.RecordStatusReady &&
+		record.Phase == extensionrecords.RecordPhaseComplete
+}
+
+func hooksReady(record extensionrecords.Record, extension v1alpha1.ClusterAddon, lifecycles ...string) bool {
+	for _, lifecycle := range lifecycles {
+		for _, hook := range hooks.At(extension, lifecycle) {
+			if v1alpha1.ClusterAddonHookRun(hook) == v1alpha1.ProvisioningPlaybookRunAlways {
+				continue
+			}
+			item, ok := record.Hooks[hook.Name]
+			if !ok || item.Status != extensionrecords.RecordStatusReady {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
@@ -316,7 +346,7 @@ func applyResources(ctx context.Context, runner OCRunner, kubeconfig string, pol
 }
 
 func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription, timeoutStr string, pollInterval time.Duration) error {
-	timeout, err := time.ParseDuration(timeoutStr)
+	timeout, err := parsePositiveDuration(timeoutStr)
 	if err != nil {
 		return err
 	}
@@ -351,7 +381,7 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 }
 
 func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, namespace, name, timeoutStr string, pollInterval time.Duration) error {
-	timeout, err := time.ParseDuration(timeoutStr)
+	timeout, err := parsePositiveDuration(timeoutStr)
 	if err != nil {
 		return err
 	}
@@ -457,7 +487,7 @@ func requireKubeconfig(path string) error {
 }
 
 func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, pollInterval time.Duration) (string, error) {
-	timeout, err := time.ParseDuration(extension.Spec.Readiness.Timeout)
+	timeout, err := parsePositiveDuration(extension.Spec.Readiness.Timeout)
 	if err != nil {
 		return "", err
 	}
@@ -510,19 +540,20 @@ func Ready(ctx context.Context, runner OCRunner, kubeconfig string, extension v1
 }
 
 func checkReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonReadinessCheck) (bool, string, error) {
-	switch check.Type {
-	case v1alpha1.ClusterAddonReadinessCSVSucceeded:
-		return csvSucceeded(ctx, runner, kubeconfig, check.Namespace, check.Subscription)
-	case v1alpha1.ClusterAddonReadinessCondition:
-		return conditionReady(ctx, runner, kubeconfig, check)
-	case v1alpha1.ClusterAddonReadinessResourceExists:
-		_, err := getResource(ctx, runner, kubeconfig, check.APIVersion, check.Kind, check.Namespace, check.Name)
+	switch {
+	case check.CSVSucceeded != nil:
+		return csvSucceeded(ctx, runner, kubeconfig, check.CSVSucceeded.Namespace, check.CSVSucceeded.Subscription)
+	case check.Condition != nil:
+		return conditionReady(ctx, runner, kubeconfig, *check.Condition)
+	case check.ResourceExists != nil:
+		exists := check.ResourceExists
+		_, err := getResource(ctx, runner, kubeconfig, exists.APIVersion, exists.Kind, exists.Namespace, exists.Name)
 		if err != nil {
-			return false, fmt.Sprintf("%s/%s not found", check.Kind, check.Name), nil
+			return false, fmt.Sprintf("%s/%s not found", exists.Kind, exists.Name), nil
 		}
-		return true, fmt.Sprintf("%s/%s exists", check.Kind, check.Name), nil
+		return true, fmt.Sprintf("%s/%s exists", exists.Kind, exists.Name), nil
 	default:
-		return false, "", fmt.Errorf("unsupported readiness check %q", check.Type)
+		return false, "", fmt.Errorf("readiness check must set exactly one arm")
 	}
 }
 
@@ -546,10 +577,7 @@ func csvSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, s
 	return true, fmt.Sprintf("CSV/%s/%s Succeeded", namespace, csv), nil
 }
 
-func conditionReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonReadinessCheck) (bool, string, error) {
-	if check.Condition == nil {
-		return false, "", fmt.Errorf("condition readiness check is missing condition")
-	}
+func conditionReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonConditionReadiness) (bool, string, error) {
 	obj, err := getResource(ctx, runner, kubeconfig, check.APIVersion, check.Kind, check.Namespace, check.Name)
 	if err != nil {
 		return false, fmt.Sprintf("%s/%s unavailable", check.Kind, check.Name), nil
@@ -565,6 +593,17 @@ func conditionReady(ctx context.Context, runner OCRunner, kubeconfig string, che
 		}
 	}
 	return false, fmt.Sprintf("%s/%s condition %s not %s", check.Kind, check.Name, check.Condition.Type, check.Condition.Status), nil
+}
+
+func parsePositiveDuration(value string) (time.Duration, error) {
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, err
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("duration %s must be greater than 0", value)
+	}
+	return duration, nil
 }
 
 func getResource(ctx context.Context, runner OCRunner, kubeconfig, apiVersion, kind, namespace, name string) (map[string]any, error) {

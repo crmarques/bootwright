@@ -282,20 +282,24 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		}
 	}
 	for _, binding := range state.ClusterAddonBindings {
-		for i, ref := range binding.Spec.AddonProfileRefs {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfileRefs[%d]", binding.Metadata.Name, i),
+		for i, ref := range binding.Spec.ProfileRefs {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.profileRefs[%d]", binding.Metadata.Name, i),
 				v1alpha1.KindClusterAddonProfile, ref.Name)
 		}
-		for i, addon := range binding.Spec.Addons {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].addonRef", binding.Metadata.Name, i),
-				v1alpha1.KindClusterAddon, addon.AddonRef.Name)
+		for i, ref := range binding.Spec.AddonRefs {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addonRefs[%d]", binding.Metadata.Name, i),
+				v1alpha1.KindClusterAddon, ref.Name)
+		}
+		for i, config := range binding.Spec.AddonConfigs {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addonConfigs[%d].addonRef", binding.Metadata.Name, i),
+				v1alpha1.KindClusterAddon, config.AddonRef.Name)
 		}
 		require(fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef", binding.Metadata.Name),
 			v1alpha1.KindContainerCluster, binding.Spec.ClusterRef.Name)
 	}
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name),
-			v1alpha1.KindStorageExport, addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name)
+		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].value", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name),
+			v1alpha1.KindStorageExport, addoninputs.LocalObjectReferenceValue(effect.Input).Name)
 	}
 	for _, cluster := range state.StorageClusters {
 		if cluster.Spec.Ceph == nil {

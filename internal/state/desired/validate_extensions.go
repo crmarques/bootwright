@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 )
+
+var clusterAddonCapabilityRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 func validateClusterAddons(state v1alpha1.State) []string {
 	var errs []string
@@ -56,166 +59,80 @@ func validateClusterAddonAccepts(extension v1alpha1.ClusterAddon) []string {
 			errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", prefix, input.Name))
 		}
 		seen[input.Name] = true
-		errs = append(errs, validateClusterAddonInputSchema(prefix+".schema", input.Schema)...)
-		errs = append(errs, validateClusterAddonInputEffects(prefix+".effects", input.Effects)...)
-		errs = append(errs, validateDataFoundationStorageInputSchema(extension.Metadata.Name, i, input)...)
-		errs = append(errs, validateGlobalPullSecretMergeInputSchema(extension.Metadata.Name, i, input)...)
+		errs = append(errs, validateClusterAddonInputPresence(prefix, input)...)
+		errs = append(errs, validateClusterAddonInputEffects(prefix+".effects", extension, input)...)
 	}
 	return errs
 }
 
-func validateDataFoundationStorageInputSchema(addon string, index int, input v1alpha1.ClusterAddonAcceptedInput) []string {
-	hasDataFoundationStorageEffect := false
-	for _, effect := range input.Effects {
-		if effect.Type == v1alpha1.ClusterAddonInputEffectStorageExportAttachment && effect.Provider == v1alpha1.ClusterAddonProvidesDataFoundation {
-			hasDataFoundationStorageEffect = true
-			break
-		}
-	}
-	if !hasDataFoundationStorageEffect {
-		return nil
-	}
+func validateClusterAddonInputPresence(prefix string, input v1alpha1.ClusterAddonAcceptedInput) []string {
 	var errs []string
-	prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d].schema", addon, index)
-	if property, ok := input.Schema.Properties["exportRef"]; !ok {
-		errs = append(errs, prefix+".properties.exportRef is required for dataFoundation storage attachment inputs")
-	} else if property.RefKind != v1alpha1.KindStorageExport {
-		errs = append(errs, fmt.Sprintf("%s.properties.exportRef.refKind %q must be %q for dataFoundation storage attachment inputs", prefix, property.RefKind, v1alpha1.KindStorageExport))
-	}
-	requiresExportRef := false
-	for _, name := range input.Schema.Required {
-		if name == "exportRef" {
-			requiresExportRef = true
-			break
+	arms := 0
+	if input.ResourceRef != nil {
+		arms++
+		if input.ResourceRef.Kind == "" {
+			errs = append(errs, prefix+".resourceRef.kind is required")
+		} else if !knownResourceKind(input.ResourceRef.Kind) {
+			errs = append(errs, fmt.Sprintf("%s.resourceRef.kind %q is not a known Bootwright kind", prefix, input.ResourceRef.Kind))
 		}
 	}
-	if !requiresExportRef {
-		errs = append(errs, fmt.Sprintf("%s.required must include %q for dataFoundation storage attachment inputs", prefix, "exportRef"))
+	if input.SecretRef != nil {
+		arms++
 	}
-	for name := range input.Schema.Properties {
-		if name != "exportRef" {
-			errs = append(errs, fmt.Sprintf("%s.properties.%s is not supported for dataFoundation storage attachment inputs", prefix, name))
-		}
+	if arms == 0 {
+		errs = append(errs, prefix+" must set exactly one of resourceRef or secretRef")
+	} else if arms > 1 {
+		errs = append(errs, prefix+" must not set both resourceRef and secretRef")
 	}
 	return errs
 }
 
-func validateClusterAddonInputSchema(prefix string, schema v1alpha1.ClusterAddonInputSchema) []string {
+func validateClusterAddonInputEffects(prefix string, extension v1alpha1.ClusterAddon, input v1alpha1.ClusterAddonAcceptedInput) []string {
 	var errs []string
-	switch schema.Type {
-	case "", v1alpha1.ClusterAddonInputSchemaTypeObject:
-	default:
-		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, schema.Type, v1alpha1.ClusterAddonInputSchemaTypeObject))
-	}
-	required := map[string]bool{}
-	for i, name := range schema.Required {
-		owner := fmt.Sprintf("%s.required[%d]", prefix, i)
-		if name == "" {
-			errs = append(errs, owner+" must not be empty")
-		} else if required[name] {
-			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, name))
-		} else if _, ok := schema.Properties[name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s %q is not declared in properties", owner, name))
-		}
-		required[name] = true
-	}
-	for name, property := range schema.Properties {
-		owner := prefix + ".properties." + name
-		if name == "" {
-			errs = append(errs, prefix+".properties contains an empty property name")
-		}
-		if property.RefKind != "" {
-			if !knownResourceKind(property.RefKind) {
-				errs = append(errs, fmt.Sprintf("%s.refKind %q is not a known Bootwright kind", owner, property.RefKind))
-			}
-			if property.Secret {
-				errs = append(errs, owner+" must not set both refKind and secret")
-			}
-			continue
-		}
-		if !property.Secret {
-			errs = append(errs, owner+" must set refKind or secret")
-		}
-	}
-	return errs
-}
-
-func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterAddonInputEffect) []string {
-	var errs []string
-	for i, effect := range effects {
+	for i, effect := range input.Effects {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
-		switch effect.Type {
-		case v1alpha1.ClusterAddonInputEffectStorageExportAttachment:
-			if effect.Provider != v1alpha1.ClusterAddonProvidesDataFoundation {
-				errs = append(errs, fmt.Sprintf("%s.provider %q must be %q when type is %q", owner, effect.Provider, v1alpha1.ClusterAddonProvidesDataFoundation, effect.Type))
+		arms := 0
+		if effect.StorageExportAttachment != nil {
+			arms++
+			if !clusterAddonProvides(extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
+				errs = append(errs, owner+".storageExportAttachment requires the add-on to provide dataFoundation")
 			}
-			if effect.Registry != "" || effect.Username != "" {
-				errs = append(errs, fmt.Sprintf("%s.registry and username are only valid when type is %q", owner, v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge))
+			if input.ResourceRef == nil || input.ResourceRef.Kind != v1alpha1.KindStorageExport {
+				errs = append(errs, owner+".storageExportAttachment requires a resourceRef input with kind StorageExport")
 			}
-		case v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge:
-			if effect.Provider != "" {
-				errs = append(errs, fmt.Sprintf("%s.provider is only valid when type is %q", owner, v1alpha1.ClusterAddonInputEffectStorageExportAttachment))
+		}
+		if merge := effect.GlobalPullSecretMerge; merge != nil {
+			arms++
+			if input.SecretRef == nil {
+				errs = append(errs, owner+".globalPullSecretMerge requires a secretRef input")
 			}
-			if effect.Registry == "" {
-				errs = append(errs, fmt.Sprintf("%s.registry is required when type is %q", owner, effect.Type))
+			if merge.Registry == "" {
+				errs = append(errs, owner+".globalPullSecretMerge.registry is required")
 			}
-			if effect.Username == "" {
-				errs = append(errs, fmt.Sprintf("%s.username is required when type is %q", owner, effect.Type))
+			if merge.Username == "" {
+				errs = append(errs, owner+".globalPullSecretMerge.username is required")
 			}
-		case "":
-			errs = append(errs, owner+".type is required")
-		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q is not supported (supported: %s, %s)", owner, effect.Type, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge))
+		}
+		if arms == 0 {
+			errs = append(errs, owner+" must set exactly one of storageExportAttachment or globalPullSecretMerge")
+		} else if arms > 1 {
+			errs = append(errs, owner+" must not set more than one effect arm")
 		}
 	}
 	return errs
 }
 
-func validateGlobalPullSecretMergeInputSchema(addon string, index int, input v1alpha1.ClusterAddonAcceptedInput) []string {
-	hasMergeEffect := false
-	for _, effect := range input.Effects {
-		if effect.Type == v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge {
-			hasMergeEffect = true
-			break
+func clusterAddonProvides(extension v1alpha1.ClusterAddon, capability string) bool {
+	for _, item := range extension.Spec.Provides {
+		if item == capability {
+			return true
 		}
-	}
-	if !hasMergeEffect {
-		return nil
-	}
-	var errs []string
-	prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d].schema", addon, index)
-	if len(input.Schema.Properties) != 1 {
-		errs = append(errs, prefix+".properties must declare exactly one secret property for globalPullSecretMerge inputs")
-		return errs
-	}
-	for name, property := range input.Schema.Properties {
-		if !property.Secret {
-			errs = append(errs, fmt.Sprintf("%s.properties.%s must set secret: true for globalPullSecretMerge inputs", prefix, name))
-		}
-		requiresProperty := false
-		for _, required := range input.Schema.Required {
-			if required == name {
-				requiresProperty = true
-				break
-			}
-		}
-		if !requiresProperty {
-			errs = append(errs, fmt.Sprintf("%s.required must include %q for globalPullSecretMerge inputs", prefix, name))
-		}
-	}
-	return errs
-}
-
-func clusterAddonCapabilityValid(capability string) bool {
-	switch capability {
-	case v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState:
-		return true
 	}
 	return false
 }
 
-func clusterAddonCapabilityTokens() string {
-	return strings.Join([]string{v1alpha1.ClusterAddonProvidesKubeVirt, v1alpha1.ClusterAddonProvidesDataFoundation, v1alpha1.ClusterAddonProvidesNMState}, ", ")
+func clusterAddonCapabilityValid(capability string) bool {
+	return clusterAddonCapabilityRe.MatchString(capability)
 }
 
 func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
@@ -229,7 +146,7 @@ func validateClusterAddonProvides(extension v1alpha1.ClusterAddon) []string {
 			continue
 		}
 		if !clusterAddonCapabilityValid(capability) {
-			errs = append(errs, fmt.Sprintf("%s %q is not a supported capability (supported: %s)", owner, capability, clusterAddonCapabilityTokens()))
+			errs = append(errs, fmt.Sprintf("%s %q must match ^[A-Za-z0-9][A-Za-z0-9._-]*$", owner, capability))
 			continue
 		}
 		if seen[capability] {
@@ -255,7 +172,7 @@ func validateClusterAddonRequires(extension v1alpha1.ClusterAddon) []string {
 			continue
 		}
 		if !clusterAddonCapabilityValid(capability) {
-			errs = append(errs, fmt.Sprintf("%s %q is not a supported capability (supported: %s)", owner, capability, clusterAddonCapabilityTokens()))
+			errs = append(errs, fmt.Sprintf("%s %q must match ^[A-Za-z0-9][A-Za-z0-9._-]*$", owner, capability))
 			continue
 		}
 		if seen[capability] {
@@ -412,69 +329,57 @@ func validateClusterAddonManifestSet(extension v1alpha1.ClusterAddon) []string {
 func validateClusterAddonReadiness(extension v1alpha1.ClusterAddon) []string {
 	var errs []string
 	prefix := fmt.Sprintf("ClusterAddon/%s spec.readiness", extension.Metadata.Name)
-	if _, err := time.ParseDuration(extension.Spec.Readiness.Timeout); err != nil {
+	if d, err := time.ParseDuration(extension.Spec.Readiness.Timeout); err != nil {
 		errs = append(errs, fmt.Sprintf("%s.timeout %q must be a Go duration such as 10m, 30m, or 1h", prefix, extension.Spec.Readiness.Timeout))
+	} else if d <= 0 {
+		errs = append(errs, fmt.Sprintf("%s.timeout %q must be greater than 0", prefix, extension.Spec.Readiness.Timeout))
 	}
 	for i, check := range extension.Spec.Readiness.Checks {
 		owner := fmt.Sprintf("%s.checks[%d]", prefix, i)
-		switch check.Type {
-		case v1alpha1.ClusterAddonReadinessCSVSucceeded:
-			if check.APIVersion != "" || check.Kind != "" || check.Name != "" || check.Condition != nil {
-				errs = append(errs, owner+".type=csvSucceeded must not set apiVersion, kind, name, or condition")
+		arms := 0
+		if csv := check.CSVSucceeded; csv != nil {
+			arms++
+			if csv.Namespace == "" {
+				errs = append(errs, owner+".csvSucceeded.namespace is required")
 			}
-			if check.Namespace == "" {
-				errs = append(errs, owner+".namespace is required")
+			if csv.Subscription == "" {
+				errs = append(errs, owner+".csvSucceeded.subscription is required")
 			}
-			if check.Subscription == "" {
-				errs = append(errs, owner+".subscription is required")
+		}
+		if condition := check.Condition; condition != nil {
+			arms++
+			if condition.APIVersion == "" {
+				errs = append(errs, owner+".condition.apiVersion is required")
 			}
-		case v1alpha1.ClusterAddonReadinessCondition:
-			if check.Subscription != "" {
-				errs = append(errs, owner+".subscription is only valid when type=csvSucceeded")
+			if condition.Kind == "" {
+				errs = append(errs, owner+".condition.kind is required")
 			}
-			if check.APIVersion == "" {
-				errs = append(errs, owner+".apiVersion is required")
+			if condition.Name == "" {
+				errs = append(errs, owner+".condition.name is required")
 			}
-			if check.Kind == "" {
-				errs = append(errs, owner+".kind is required")
+			if condition.Condition.Type == "" {
+				errs = append(errs, owner+".condition.condition.type is required")
 			}
-			if check.Name == "" {
-				errs = append(errs, owner+".name is required")
+			if condition.Condition.Status == "" {
+				errs = append(errs, owner+".condition.condition.status is required")
 			}
-			if check.Condition == nil {
-				errs = append(errs, owner+".condition is required")
-				continue
+		}
+		if exists := check.ResourceExists; exists != nil {
+			arms++
+			if exists.APIVersion == "" {
+				errs = append(errs, owner+".resourceExists.apiVersion is required")
 			}
-			if check.Condition.Type == "" {
-				errs = append(errs, owner+".condition.type is required")
+			if exists.Kind == "" {
+				errs = append(errs, owner+".resourceExists.kind is required")
 			}
-			if check.Condition.Status == "" {
-				errs = append(errs, owner+".condition.status is required")
+			if exists.Name == "" {
+				errs = append(errs, owner+".resourceExists.name is required")
 			}
-		case v1alpha1.ClusterAddonReadinessResourceExists:
-			if check.Subscription != "" {
-				errs = append(errs, owner+".subscription is only valid when type=csvSucceeded")
-			}
-			if check.Condition != nil {
-				errs = append(errs, owner+".condition is only valid when type=condition")
-			}
-			if check.APIVersion == "" {
-				errs = append(errs, owner+".apiVersion is required")
-			}
-			if check.Kind == "" {
-				errs = append(errs, owner+".kind is required")
-			}
-			if check.Name == "" {
-				errs = append(errs, owner+".name is required")
-			}
-		case "":
-			errs = append(errs, owner+".type is required")
-		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s, %s}",
-				owner, check.Type,
-				v1alpha1.ClusterAddonReadinessCSVSucceeded,
-				v1alpha1.ClusterAddonReadinessCondition,
-				v1alpha1.ClusterAddonReadinessResourceExists))
+		}
+		if arms == 0 {
+			errs = append(errs, owner+" must set exactly one of csvSucceeded, condition, or resourceExists")
+		} else if arms > 1 {
+			errs = append(errs, owner+" must not set more than one readiness arm")
 		}
 	}
 	return errs
@@ -566,34 +471,47 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 		} else if _, ok := clusters[binding.Spec.ClusterRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef %q does not match any ContainerCluster", binding.Metadata.Name, binding.Spec.ClusterRef.Name))
 		}
-		if len(binding.Spec.AddonProfileRefs) == 0 && len(binding.Spec.Addons) == 0 {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfileRefs or addons", binding.Metadata.Name))
+		if len(binding.Spec.ProfileRefs) == 0 && len(binding.Spec.AddonRefs) == 0 {
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of profileRefs or addonRefs", binding.Metadata.Name))
 		}
-		for i, ref := range binding.Spec.AddonProfileRefs {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfileRefs[%d]", binding.Metadata.Name, i)
+		for i, ref := range binding.Spec.ProfileRefs {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.profileRefs[%d]", binding.Metadata.Name, i)
 			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := sets[ref.Name]; !ok {
 				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddonProfile", owner, ref.Name))
 			}
 		}
-		for i, addon := range binding.Spec.Addons {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].addonRef", binding.Metadata.Name, i)
-			if addon.AddonRef.Name == "" {
+		selected := map[string]bool{}
+		direct := map[string]bool{}
+		for i, ref := range binding.Spec.AddonRefs {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonRefs[%d]", binding.Metadata.Name, i)
+			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
-			} else if _, ok := addons[addon.AddonRef.Name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon%s", owner, addon.AddonRef.Name, unresolvedAddonRemedy(addon.AddonRef.Name)))
+			} else if direct[ref.Name] {
+				errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, ref.Name))
+			} else if _, ok := addons[ref.Name]; !ok {
+				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon%s", owner, ref.Name, unresolvedAddonRemedy(ref.Name)))
 			}
-			inputNames := map[string]bool{}
-			for j, input := range addon.Inputs {
-				inputOwner := fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].inputs[%d]", binding.Metadata.Name, i, j)
-				if input.Name == "" {
-					errs = append(errs, inputOwner+".name is required")
-				} else if inputNames[input.Name] {
-					errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", inputOwner, input.Name))
-				}
-				inputNames[input.Name] = true
+			direct[ref.Name] = true
+		}
+		for _, addon := range addoninputs.EffectiveBindingAddons(state, binding) {
+			selected[addon.AddonRef.Name] = true
+		}
+		configs := map[string]bool{}
+		for i, config := range binding.Spec.AddonConfigs {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonConfigs[%d].addonRef", binding.Metadata.Name, i)
+			if config.AddonRef.Name == "" {
+				errs = append(errs, owner+" is required")
+			} else if configs[config.AddonRef.Name] {
+				errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, config.AddonRef.Name))
+			} else if _, ok := addons[config.AddonRef.Name]; !ok {
+				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon%s", owner, config.AddonRef.Name, unresolvedAddonRemedy(config.AddonRef.Name)))
+			} else if !selected[config.AddonRef.Name] {
+				errs = append(errs, fmt.Sprintf("%s %q must already be selected by profileRefs or addonRefs", owner, config.AddonRef.Name))
 			}
+			configs[config.AddonRef.Name] = true
+			errs = append(errs, validateClusterAddonConfigInputs(binding.Metadata.Name, i, config)...)
 		}
 		for _, addon := range addoninputs.EffectiveBindingAddons(state, binding) {
 			if addon.AddonRef.Name == "" {
@@ -629,7 +547,7 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 					errs = append(errs, fmt.Sprintf("%s.name %q is not declared by ClusterAddon/%s spec.accepts.inputs", owner, input.Name, addon.AddonRef.Name))
 					continue
 				}
-				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema, loaded)...)
+				errs = append(errs, validateClusterAddonInputValue(owner+".value", input.Value, acceptedInput, loaded)...)
 			}
 			for _, acceptedInput := range extension.Spec.Accepts.Inputs {
 				if acceptedInput.Required && !effectiveInputNames[acceptedInput.Name] {
@@ -710,43 +628,32 @@ func validateBindingCapabilityOrdering(binding v1alpha1.ClusterAddonBinding, add
 	return errs
 }
 
-func validateClusterAddonInputValues(prefix string, values map[string]any, schema v1alpha1.ClusterAddonInputSchema, loaded map[resourceKey]bool) []string {
+func validateClusterAddonConfigInputs(binding string, configIndex int, config v1alpha1.ClusterAddonBindingAddonConfig) []string {
 	var errs []string
-	if schema.Type != "" && schema.Type != v1alpha1.ClusterAddonInputSchemaTypeObject {
-		return errs
-	}
-	for _, name := range schema.Required {
-		if _, ok := values[name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.%s is required", prefix, name))
+	inputNames := map[string]bool{}
+	for j, input := range config.Inputs {
+		owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonConfigs[%d].inputs[%d]", binding, configIndex, j)
+		if input.Name == "" {
+			errs = append(errs, owner+".name is required")
+		} else if inputNames[input.Name] {
+			errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, input.Name))
 		}
-	}
-	for name := range values {
-		if _, ok := schema.Properties[name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.%s is not declared by the input schema", prefix, name))
-		}
-	}
-	for name, property := range schema.Properties {
-		raw, ok := values[name]
-		if !ok {
-			continue
-		}
-		owner := prefix + "." + name
-		if property.RefKind != "" || property.Secret {
-			nameValue, ok := raw.(string)
-			if !ok {
-				errs = append(errs, owner+" must be a plain name string")
-				continue
-			}
-			if nameValue == "" {
-				errs = append(errs, owner+" is required")
-				continue
-			}
-			if property.RefKind != "" && !loaded[resourceKey{kind: property.RefKind, name: nameValue}] {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any %s", owner, nameValue, property.RefKind))
-			}
+		inputNames[input.Name] = true
+		if input.Value == "" {
+			errs = append(errs, owner+".value is required")
 		}
 	}
 	return errs
+}
+
+func validateClusterAddonInputValue(owner, value string, accepted v1alpha1.ClusterAddonAcceptedInput, loaded map[resourceKey]bool) []string {
+	if value == "" {
+		return []string{owner + " is required"}
+	}
+	if accepted.ResourceRef != nil && !loaded[resourceKey{kind: accepted.ResourceRef.Kind, name: value}] {
+		return []string{fmt.Sprintf("%s %q does not match any %s", owner, value, accepted.ResourceRef.Kind)}
+	}
+	return nil
 }
 
 func providedClusterCapabilities(state v1alpha1.State) map[string]map[string]bool {

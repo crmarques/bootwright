@@ -10,8 +10,8 @@ import (
 
 func TestHookExtraVarPairsCarryScopedRuntimeVars(t *testing.T) {
 	hook := v1alpha1.ClusterAddonHook{Name: "attach", Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady}
-	inputs := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Values: map[string]any{"exportRef": "ceph-export"}}}
-	pairs := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", map[string]any{"exportRef": map[string]any{"kind": "StorageExport"}}, inputs)
+	inputs := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "ceph-export"}}
+	pairs := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", map[string]any{"external-storage": map[string]any{"kind": "StorageExport"}}, inputs)
 	for _, want := range []string{
 		"bootwright_hook_name=attach",
 		"bootwright_hook_lifecycle=postOperatorReady",

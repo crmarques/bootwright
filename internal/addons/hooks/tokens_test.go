@@ -14,8 +14,8 @@ func TestParseToken(t *testing.T) {
 	}{
 		{"{{ cluster }}", "cluster", "", true},
 		{"{{ output externalDetails }}", "output", "externalDetails", true},
-		{"{{ input external-storage.exportRef }}", "input", "external-storage.exportRef", true},
-		{"{{ exportDetails external-storage.exportRef }}", "exportDetails", "external-storage.exportRef", true},
+		{"{{ input external-storage }}", "input", "external-storage", true},
+		{"{{ exportDetails external-storage }}", "exportDetails", "external-storage", true},
 		{"{{secret foo}}", "secret", "foo", true},
 		{"literal", "", "", false},
 		{"prefix {{ output x }}", "", "", false},
@@ -92,25 +92,5 @@ data:
 	}
 	if len(tokens) != 3 {
 		t.Fatalf("got %d tokens want 3: %+v", len(tokens), tokens)
-	}
-}
-
-func TestSplitInputProperty(t *testing.T) {
-	cases := []struct {
-		in          string
-		input, prop string
-		ok          bool
-	}{
-		{"external-storage.exportRef", "external-storage", "exportRef", true},
-		{"noproperty", "", "", false},
-		{"a.b.c", "", "", false},
-		{".prop", "", "", false},
-		{"input.", "", "", false},
-	}
-	for _, tc := range cases {
-		input, prop, ok := SplitInputProperty(tc.in)
-		if ok != tc.ok || input != tc.input || prop != tc.prop {
-			t.Errorf("SplitInputProperty(%q) = (%q,%q,%v) want (%q,%q,%v)", tc.in, input, prop, ok, tc.input, tc.prop, tc.ok)
-		}
 	}
 }

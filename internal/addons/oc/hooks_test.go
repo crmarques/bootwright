@@ -51,7 +51,7 @@ func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
 			Readiness: v1alpha1.ClusterAddonReadiness{
 				Timeout: "30m",
 				Checks: []v1alpha1.ClusterAddonReadinessCheck{{
-					Type: v1alpha1.ClusterAddonReadinessCSVSucceeded, Namespace: "openshift-storage", Subscription: "odf-operator",
+					CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "openshift-storage", Subscription: "odf-operator"},
 				}},
 			},
 		},
