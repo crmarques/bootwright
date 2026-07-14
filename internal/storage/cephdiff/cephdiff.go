@@ -524,7 +524,7 @@ func realConfig(disc cephstate.Discovery) []entry {
 	}
 	var out []entry
 	for _, opt := range options {
-		out = append(out, entry{key: opt.Section + "/" + opt.Name, fields: []kv{{"value", opt.Value}}})
+		out = append(out, entry{key: opt.Key(), fields: []kv{{"value", opt.Value}}})
 	}
 	return out
 }

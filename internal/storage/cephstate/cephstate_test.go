@@ -67,7 +67,8 @@ func TestLoadDecodesCoreFacets(t *testing.T) {
 		]`,
 		ReadConfigDump: `[
 			{"section":"global","name":"public_network","value":"10.0.0.0/24"},
-			{"section":"mon","name":"auth_allow_insecure_global_id_reclaim","value":"false"}
+			{"section":"mon","name":"auth_allow_insecure_global_id_reclaim","value":"false"},
+			{"section":"osd","mask":"class:ssd","name":"osd_max_backfills","value":"3"}
 		]`,
 		ReadMgrModuleLS: `{"enabled_modules":["dashboard","prometheus"],"always_on_modules":["balancer","crash"]}`,
 		ReadOSDTree: `{"nodes":[
@@ -155,8 +156,17 @@ func TestLoadDecodesCoreFacets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg) != 2 || cfg[0].Section != "global" || cfg[0].Name != "public_network" {
+	if len(cfg) != 3 || cfg[0].Section != "global" || cfg[0].Name != "public_network" {
 		t.Fatalf("config decode wrong: %+v", cfg)
+	}
+	var masked *ConfigOption
+	for i := range cfg {
+		if cfg[i].Mask != "" {
+			masked = &cfg[i]
+		}
+	}
+	if masked == nil || masked.Key() != "osd/class:ssd/osd_max_backfills" {
+		t.Fatalf("masked config option must decode its mask into the key, got %+v", cfg)
 	}
 
 	mods, err := disc.MgrModules()

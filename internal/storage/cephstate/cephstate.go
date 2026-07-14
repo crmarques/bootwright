@@ -393,8 +393,16 @@ func (d Discovery) CrushRuleByID(id int) string {
 
 type ConfigOption struct {
 	Section string `json:"section"`
+	Mask    string `json:"mask"`
 	Name    string `json:"name"`
 	Value   string `json:"value"`
+}
+
+func (o ConfigOption) Key() string {
+	if o.Mask != "" {
+		return o.Section + "/" + o.Mask + "/" + o.Name
+	}
+	return o.Section + "/" + o.Name
 }
 
 func (d Discovery) Config() ([]ConfigOption, error) {
@@ -403,10 +411,7 @@ func (d Discovery) Config() ([]ConfigOption, error) {
 		return nil, err
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Section == out[j].Section {
-			return out[i].Name < out[j].Name
-		}
-		return out[i].Section < out[j].Section
+		return out[i].Key() < out[j].Key()
 	})
 	return out, nil
 }
