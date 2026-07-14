@@ -147,7 +147,19 @@ func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v
 	if !slices.Contains(hooks.SupportedTargetRefKinds(), property.RefKind) {
 		return []string{fmt.Sprintf("%s.property %q refKind %q is not a supported target kind %v", prefix, from.Property, property.RefKind, hooks.SupportedTargetRefKinds())}
 	}
+	if property.RefKind == v1alpha1.KindStorageExport && !inputHasStorageExportAttachment(accepted) {
+		return []string{fmt.Sprintf("%s targets a StorageExport through input %q, so that input must declare a storageExportAttachment effect; without it the export's Ceph cluster and nodes are not pulled into the add-on's apply scope and the hook fails at apply time with an unresolved-reference error", prefix, from.Input)}
+	}
 	return nil
+}
+
+func inputHasStorageExportAttachment(input v1alpha1.ClusterAddonAcceptedInput) bool {
+	for _, effect := range input.Effects {
+		if effect.Type == v1alpha1.ClusterAddonInputEffectStorageExportAttachment {
+			return true
+		}
+	}
+	return false
 }
 
 func validateHookOutputs(prefix string, hook v1alpha1.ClusterAddonHook) []string {

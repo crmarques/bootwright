@@ -74,6 +74,31 @@ func TestValidateHookTargetModes(t *testing.T) {
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "exactly one of")
 }
 
+func TestValidateHookStorageExportTargetRequiresAttachmentEffect(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	hook := v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPostReady,
+		Playbook:  "playbooks/p.yml",
+		Target:    v1alpha1.ClusterAddonHookTarget{FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"}},
+	}
+
+	withoutEffect := hookAddon(dir, hook)
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, withoutEffect), "must declare a storageExportAttachment effect")
+
+	withEffect := hookAddon(dir, hook)
+	withEffect.Spec.Accepts.Inputs[0].Effects = []v1alpha1.ClusterAddonInputEffect{{
+		Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
+		Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+	}}
+	for _, e := range validateClusterAddonHooks(v1alpha1.State{}, withEffect) {
+		if strings.Contains(e, "storageExportAttachment effect") {
+			t.Fatalf("an input that declares the effect must not be flagged: %v", e)
+		}
+	}
+}
+
 func TestValidateHookPlaybookMustLiveUnderPlaybooksDir(t *testing.T) {
 	dir := t.TempDir()
 	writeHookFile(t, dir, "run.yml", "- hosts: all\n")
