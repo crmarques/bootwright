@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -802,20 +803,47 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 		t.Fatalf("nfs ingress backend = %v", ingressSpec)
 	}
 
-	byName := map[string][]string{}
+	byName := map[string]map[string]any{}
 	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
 		name, _ := op["name"].(string)
-		cmd, _ := op["command"].([]string)
-		byName[name] = cmd
+		byName[name] = op
 	}
-	cephfs := byName["create-nfs-export-nfs-share"]
-	want := []string{"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", "nfs1", "--pseudo-path", "/share", "--fsname", "fs1", "--path", "/data", "--readonly", "--squash", "root_squash", "--client-addr", "10.0.0.0/8"}
-	if !reflect.DeepEqual(cephfs, want) {
-		t.Fatalf("cephfs export =\n  %v\nwant\n  %v", cephfs, want)
+	cephfs := byName["apply-nfs-export-nfs-share"]
+	wantCmd := []string{"ceph", "nfs", "export", "apply", "nfs1", "-i", "-"}
+	if !reflect.DeepEqual(cephfs["command"], wantCmd) {
+		t.Fatalf("cephfs export command =\n  %v\nwant\n  %v", cephfs["command"], wantCmd)
 	}
-	rgw := byName["create-nfs-export-nfs-bucket"]
-	if !reflect.DeepEqual(rgw, []string{"ceph", "nfs", "export", "create", "rgw", "--cluster-id", "nfs1", "--pseudo-path", "/bucket", "--bucket", "tenant-a"}) {
-		t.Fatalf("rgw export = %v", rgw)
+	if _, ok := cephfs["idempotency"]; ok {
+		t.Fatalf("declarative export apply must not carry a create-skip idempotency guard, got %v", cephfs)
+	}
+	var cephfsSpec map[string]any
+	if err := json.Unmarshal([]byte(cephfs["stdin"].(string)), &cephfsSpec); err != nil {
+		t.Fatalf("cephfs export stdin is not valid JSON: %v (%q)", err, cephfs["stdin"])
+	}
+	for k, want := range map[string]any{"cluster_id": "nfs1", "pseudo": "/share", "access_type": "RO", "squash": "root_squash", "path": "/data"} {
+		if cephfsSpec[k] != want {
+			t.Fatalf("cephfs export spec %q = %v, want %v", k, cephfsSpec[k], want)
+		}
+	}
+	if fsal := cephfsSpec["fsal"].(map[string]any); fsal["name"] != "CEPH" || fsal["fs_name"] != "fs1" {
+		t.Fatalf("cephfs export fsal = %v", fsal)
+	}
+
+	rgw := byName["apply-nfs-export-nfs-bucket"]
+	var rgwSpec map[string]any
+	if err := json.Unmarshal([]byte(rgw["stdin"].(string)), &rgwSpec); err != nil {
+		t.Fatalf("rgw export stdin is not valid JSON: %v", err)
+	}
+	if rgwSpec["access_type"] != v1alpha1.StorageNFSAccessReadWrite {
+		t.Fatalf("rgw export must default to RW access, got %v", rgwSpec["access_type"])
+	}
+	if fsal := rgwSpec["fsal"].(map[string]any); fsal["name"] != "RGW" || fsal["bucket"] != "tenant-a" {
+		t.Fatalf("rgw export fsal = %v", fsal)
+	}
+
+	script := CephApplyScript(state, cluster, CephScriptOptions{LibFile: "lib.sh"})
+	if !strings.Contains(script, "ceph nfs export apply nfs1 -i -") || !strings.Contains(script, "<<'BW_STDIN'") {
+		t.Fatalf("reproduction script must feed the export spec to a declarative apply via heredoc")
 	}
 }
 

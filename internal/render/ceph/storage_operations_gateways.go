@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -71,27 +72,39 @@ func nfsExportOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) 
 		}
 		id := nfs.Spec.Ceph.ServiceID
 		for _, export := range nfs.Spec.Exports {
-			var cmd []string
+			access := export.AccessType
+			if access == "" {
+				access = v1alpha1.StorageNFSAccessReadWrite
+			}
+			spec := map[string]any{
+				"cluster_id":  id,
+				"pseudo":      export.Pseudo,
+				"access_type": access,
+				"protocols":   []int{4},
+			}
+			if export.Squash != "" {
+				spec["squash"] = export.Squash
+			}
+			if len(export.Clients) > 0 {
+				spec["clients"] = []map[string]any{{"addresses": export.Clients}}
+			}
 			if export.Bucket != "" {
-				cmd = []string{"ceph", "nfs", "export", "create", "rgw", "--cluster-id", id, "--pseudo-path", export.Pseudo, "--bucket", export.Bucket}
+				spec["fsal"] = map[string]any{"name": "RGW", "bucket": export.Bucket}
 			} else {
 				path := export.Path
 				if path == "" {
 					path = "/"
 				}
-				cmd = []string{"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", id, "--pseudo-path", export.Pseudo, "--fsname", export.FilesystemRef.Name, "--path", path}
+				spec["path"] = path
+				spec["fsal"] = map[string]any{"name": "CEPH", "fs_name": export.FilesystemRef.Name}
 			}
-			if export.AccessType == v1alpha1.StorageNFSAccessReadOnly {
-				cmd = append(cmd, "--readonly")
+			doc, err := json.Marshal(spec)
+			if err != nil {
+				continue
 			}
-			if export.Squash != "" {
-				cmd = append(cmd, "--squash", export.Squash)
-			}
-			for _, client := range export.Clients {
-				cmd = append(cmd, "--client-addr", client)
-			}
-			name := "create-nfs-export-" + nfs.Metadata.Name + "-" + sanitizeOpName(export.Pseudo)
-			ops = append(ops, operationWithIdempotency("object-gateway", name, "nfs-export", id+"|"+export.Pseudo, cmd...))
+			name := "apply-nfs-export-" + nfs.Metadata.Name + "-" + sanitizeOpName(export.Pseudo)
+			ops = append(ops, operationWithStdin("object-gateway", name, string(doc),
+				"ceph", "nfs", "export", "apply", id, "-i", "-"))
 		}
 	}
 	return ops

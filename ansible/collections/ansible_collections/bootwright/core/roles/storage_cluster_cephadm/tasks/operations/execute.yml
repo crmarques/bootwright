@@ -2,6 +2,7 @@
 - name: Run Ceph operation
   ansible.builtin.command:
     argv: "{{ bootwright_ceph_op_command }}"
+    stdin: "{{ (bootwright_ceph_op_stdin | default('') | length > 0) | ternary(bootwright_ceph_op_stdin, omit) }}"
   register: bootwright_ceph_op_run
   changed_when: true
   no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"

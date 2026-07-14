@@ -60,6 +60,11 @@ func TestCephApplyScriptReproducesEveryOperation(t *testing.T) {
 		if quoted := shellquote.Quote(cmd); !strings.Contains(script, quoted) {
 			t.Fatalf("apply.sh missing native command for op %q:\n  want substring: %s", name, quoted)
 		}
+		if stdin, _ := op["stdin"].(string); stdin != "" {
+			if !strings.Contains(script, "<<'BW_STDIN'") || !strings.Contains(script, stdin) {
+				t.Fatalf("apply.sh must feed stdin via heredoc for declarative op %q", name)
+			}
+		}
 	}
 }
 
@@ -98,7 +103,6 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 		"command -v jq",
 		"_bw_exists()",
 		"ceph-pool)",
-		"nfs-export)",
 		"BW_CEPH_PREFIX",
 		"bw_stretch_crush_rule()",
 	} {

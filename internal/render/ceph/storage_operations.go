@@ -53,3 +53,9 @@ func operationWithIdempotency(phase, name, kind, resourceName string, command ..
 	}
 	return op
 }
+
+func operationWithStdin(phase, name, stdin string, command ...string) map[string]any {
+	op := operationInPhase(phase, name, command...)
+	op["stdin"] = stdin
+	return op
+}

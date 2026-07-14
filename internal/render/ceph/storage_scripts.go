@@ -130,6 +130,10 @@ func writeOperation(b *strings.Builder, op map[string]any) {
 		fmt.Fprintf(b, "echo \"  [todo] %s cannot be expressed as a native command; apply it with 'bootwright apply --clusters <cluster>'\"\n", name)
 		return
 	}
+	if stdin := opString(op, "stdin"); stdin != "" {
+		fmt.Fprintf(b, "bw_run %s <<'BW_STDIN'\n%s\nBW_STDIN\n", shellquote.QuoteWords(cmd), stdin)
+		return
+	}
 	sensitive := opSensitive(op)
 	switch {
 	case guarded && sensitive:
@@ -320,9 +324,6 @@ _bw_exists() {
       _bw_exec radosgw-admin zone get --rgw-zone "$name" >/dev/null 2>&1 ;;
     rgw-user)
       _bw_exec radosgw-admin user info --uid "$name" >/dev/null 2>&1 ;;
-    nfs-export)
-      local svc="${name%%|*}" pseudo="${name#*|}"
-      _bw_exec ceph nfs export ls "$svc" --format json 2>/dev/null | jq -e --arg p "$pseudo" 'any(.[]; . == $p)' >/dev/null 2>&1 ;;
     *)
       return 1 ;;
   esac
