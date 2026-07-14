@@ -92,6 +92,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
 			hookDeps := hookCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
 			addonDeps := appendUniqueStrings(append([]string(nil), deps...), hookDeps...)
+			hookStateContainers, hookStateStorage := hookReferencedClusters(state, binding, extension.Name, extension.Extension)
 			if err := graph.Add(Activity{
 				ID:                   id,
 				Provides:             provides,
@@ -105,7 +106,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 						ClusterKind: ApplyClusterKindContainer,
 						Status:      TaskStatusPending,
 					},
-					State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
+					State:     stategraph.FilterStateToApplyClusterRoots(state, hookStateContainers, hookStateStorage),
 					Extension: &extension,
 				},
 			}); err != nil {

@@ -287,6 +287,20 @@ func hookSecretNames(hook v1alpha1.ClusterAddonHook) []string {
 	return names
 }
 
+func hookReferencedClusters(state v1alpha1.State, binding extensionplan.BindingPlan, addonName string, addon v1alpha1.ClusterAddon) (containers, storage []string) {
+	containers = []string{binding.Cluster}
+	if len(addon.Spec.Hooks) == 0 {
+		return containers, nil
+	}
+	_, inputs := addonBindingInputs(state, binding.Binding, addonName)
+	for _, hook := range addon.Spec.Hooks {
+		c, s := hooks.TargetClusters(state, addon, binding.Cluster, hook, inputs)
+		containers = appendUniqueStrings(containers, c...)
+		storage = appendUniqueStrings(storage, s...)
+	}
+	return containers, storage
+}
+
 func hookCrossClusterDependencies(state v1alpha1.State, binding extensionplan.BindingPlan, addonName string, addon v1alpha1.ClusterAddon, installPhasePlanned bool, storageDepsByCluster map[string][]string) []string {
 	if len(addon.Spec.Hooks) == 0 {
 		return nil

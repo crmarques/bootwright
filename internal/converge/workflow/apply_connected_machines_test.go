@@ -1,9 +1,11 @@
 package workflow
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 )
 
 func hostTrustScopePlanningState() v1alpha1.State {
@@ -115,6 +117,26 @@ func TestApplyTaskConnectedMachinesDepsIncludesArbiter(t *testing.T) {
 	}
 	if !connected["ceph-seed"] {
 		t.Errorf("deps plan should connect the seed; connected=%v", connected)
+	}
+}
+
+func TestHookReferencedClustersPullsCrossClusterStorageIntoScope(t *testing.T) {
+	state := hostTrustScopePlanningState()
+	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
+		Name:      "seed-export",
+		Lifecycle: v1alpha1.ClusterAddonHookLifecycles()[0],
+		Target: v1alpha1.ClusterAddonHookTarget{
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage", Property: "exportRef"},
+		},
+	}}
+	binding := extensionplan.BindingPlan{Binding: "ceph-binding", Cluster: "demo"}
+
+	containers, storage := hookReferencedClusters(state, binding, "odf", state.ClusterAddons[0])
+	if !slices.Contains(containers, "demo") {
+		t.Fatalf("the bound container cluster must stay in the addon task scope, got %v", containers)
+	}
+	if !slices.Contains(storage, "ceph") {
+		t.Fatalf("a hook fromInput -> StorageExport must pull its storage cluster into the addon task scope so target resolution does not silently drop it, got %v", storage)
 	}
 }
 
