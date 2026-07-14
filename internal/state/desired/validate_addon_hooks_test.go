@@ -74,6 +74,29 @@ func TestValidateHookTargetModes(t *testing.T) {
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "exactly one of")
 }
 
+func TestValidateHookPlaybookMustLiveUnderPlaybooksDir(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "run.yml", "- hosts: all\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
+		Playbook:  "run.yml",
+		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: true},
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "must live under a playbooks/ directory")
+}
+
+func TestValidateHookManifestMustLiveUnderManifestsDir(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "templates/secret.yaml", "apiVersion: v1\nkind: Secret\nmetadata:\n  name: x\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPostReady,
+		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "templates/secret.yaml"}},
+	})
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "must live under a manifests/ directory")
+}
+
 func TestValidateHookFromInputUnknownInput(t *testing.T) {
 	dir := t.TempDir()
 	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")

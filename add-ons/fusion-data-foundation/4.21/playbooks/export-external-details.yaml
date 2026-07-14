@@ -37,6 +37,12 @@
           - jsonpath={.data.script}
       register: bootwright_exporter_configmap_read
       changed_when: false
+      failed_when: false
+      retries: 30
+      delay: 10
+      until:
+        - bootwright_exporter_configmap_read.rc == 0
+        - bootwright_exporter_configmap_read.stdout | length > 0
 
     - name: Assert the operator published the exporter script
       when: bootwright_exporter_script | length == 0

@@ -166,6 +166,19 @@ func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, o
 	return values, nil
 }
 
+func (e *addonHookExecutor) reclaimSecretHookOutputs(hook v1alpha1.ClusterAddonHook) error {
+	for _, output := range hook.Outputs {
+		if !output.Secret {
+			continue
+		}
+		path := hooks.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, output)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("reclaim secret hook output %q: %w", output.Name, err)
+		}
+	}
+	return nil
+}
+
 func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error) {
 	input, property, ok := hooks.SplitInputProperty(arg)
 	if !ok {

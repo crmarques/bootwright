@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -39,6 +40,9 @@ func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterA
 		}
 		if hook.Playbook != "" {
 			errs = append(errs, validateContainedFile(prefix+".playbook", baseDir, hook.Playbook, true)...)
+			if !hookPathHasSegment(hook.Playbook, "playbooks") {
+				errs = append(errs, fmt.Sprintf("%s.playbook %q must live under a playbooks/ directory so the loader does not parse it as desired state", prefix, hook.Playbook))
+			}
 			if hook.RolesPath != "" {
 				errs = append(errs, validateContainedDir(prefix+".rolesPath", baseDir, hook.RolesPath)...)
 			}
@@ -58,6 +62,10 @@ func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterA
 		errs = append(errs, validateHookManifests(prefix, baseDir, extension, hook)...)
 	}
 	return errs
+}
+
+func hookPathHasSegment(path, segment string) bool {
+	return slices.Contains(strings.Split(filepath.ToSlash(filepath.Clean(path)), "/"), segment)
 }
 
 func validateHookLifecycle(prefix string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook) []string {
@@ -181,6 +189,10 @@ func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAdd
 		fileErrs := validateContainedFile(owner+".path", baseDir, manifest.Path, true)
 		errs = append(errs, fileErrs...)
 		if len(fileErrs) > 0 {
+			continue
+		}
+		if !hookPathHasSegment(manifest.Path, "manifests") {
+			errs = append(errs, fmt.Sprintf("%s.path %q must live under a manifests/ directory so the loader does not parse it as desired state", owner, manifest.Path))
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(baseDir, manifest.Path))

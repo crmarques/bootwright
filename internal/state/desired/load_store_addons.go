@@ -42,6 +42,13 @@ func resolveRegisteredAddons(state *v1alpha1.State) error {
 		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
+		marker, found, err := nativecatalog.ReadMarker(dir)
+		if err != nil {
+			return fmt.Errorf("read registered add-on marker %s: %w", name, err)
+		}
+		if !found || marker.Name != name {
+			return fmt.Errorf("add-on %q has a store directory at %s but no valid registration marker; it may be a partial or interrupted `bootwright add-ons add`. Remove it and re-register with: bootwright add-ons add --name %s", name, dir, name)
+		}
 		loaded, err := Load([]string{dir})
 		if err != nil {
 			return fmt.Errorf("load registered add-on %s: %w", name, err)

@@ -54,6 +54,15 @@ type HookRecord struct {
 	LastError string       `json:"lastError,omitempty"`
 }
 
+func (r Record) HasFailedHook() bool {
+	for _, hook := range r.Hooks {
+		if hook.Status == RecordStatusFailed {
+			return true
+		}
+	}
+	return false
+}
+
 func RecordPath(clustersDir, cluster, extension string) string {
 	return filepath.Join(clustersDir, cluster, "runtime", RecordRelativeDir, extension+".json")
 }

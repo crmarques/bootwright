@@ -120,7 +120,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 			if err != nil {
 				return TaskResult{}, err
 			}
-			if found && record.DesiredHash == hash {
+			if found && record.DesiredHash == hash && !record.HasFailedHook() {
 				return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 			}
 		}
@@ -188,6 +188,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		return TaskResult{}, err
 	}
 	if found && record.DesiredHash == hash && record.Status == extensionrecords.RecordStatusReady &&
+		!record.HasFailedHook() &&
 		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPostReady) {
 		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {

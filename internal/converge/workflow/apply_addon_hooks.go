@@ -101,6 +101,9 @@ func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAd
 	if err := e.applyHookManifests(ctx, hook, outputs); err != nil {
 		return err
 	}
+	if err := e.reclaimSecretHookOutputs(hook); err != nil {
+		return err
+	}
 	return extensionrecords.SetHook(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, extensionrecords.HookRecord{
 		Lifecycle: hook.Lifecycle,
 		Status:    extensionrecords.RecordStatusReady,

@@ -121,6 +121,23 @@ func TestLoadWithoutStoreKeepsUnresolvedReferenceError(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsMarkerlessStoreDirectory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	dir := nativecatalog.InstalledDir("openshift-data-foundation")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("seed partial store dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "add-on.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\n"), 0o600); err != nil {
+		t.Fatalf("seed add-on file: %v", err)
+	}
+	input := storeAddonFixture(t, "openshift-data-foundation")
+	_, err := LoadNormalizeValidate([]string{input})
+	if err == nil || !strings.Contains(err.Error(), "no valid registration marker") {
+		t.Fatalf("err = %v, want a rejection of the marker-less store directory", err)
+	}
+}
+
 func TestAddonRemedyForState(t *testing.T) {
 	cases := []struct {
 		name      string
