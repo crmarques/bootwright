@@ -52,6 +52,10 @@
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"
+      when: >-
+        bootwright_infra_component_reclaim_records is not defined
+        or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+           in bootwright_infra_component_reclaim_records.split(',')
 
     - name: Destroy recorded infra component resources
       ansible.builtin.include_role:
@@ -65,3 +69,4 @@
       when:
         - item.kind == 'infra-component'
         - bootwright_infra_component_service_destroy_scope == '' or (item.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+        - bootwright_infra_component_reclaim_records is not defined or item.name in bootwright_infra_component_reclaim_records.split(',')

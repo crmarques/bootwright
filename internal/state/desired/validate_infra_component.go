@@ -65,10 +65,21 @@ func validateArtifactServerComponent(component v1alpha1.InfraComponent, machines
 	errs = append(errs, validateServiceParams(prefix, server.BindAddress, 0)...)
 	errs = append(errs, validateArtifactServerListeners(prefix, server.Listeners)...)
 	errs = append(errs, validateArtifactServerTLS(prefix, server.TLS, server.Listeners)...)
+	errs = append(errs, validateArtifactServerRetention(prefix, server.Retention)...)
 	if machine, ok := machines[server.MachineRef.Name]; ok {
 		errs = append(errs, validateArtifactServerEndpoints(prefix, server.Listeners, server.Endpoints, machine)...)
 	}
 	return errs
+}
+
+func validateArtifactServerRetention(prefix, retention string) []string {
+	switch retention {
+	case "", v1alpha1.ArtifactServerRetentionPersistent, v1alpha1.ArtifactServerRetentionInstallOnly:
+		return nil
+	default:
+		return []string{fmt.Sprintf("%s.retention %q must be one of {%s, %s}",
+			prefix, retention, v1alpha1.ArtifactServerRetentionPersistent, v1alpha1.ArtifactServerRetentionInstallOnly)}
+	}
 }
 
 func validateArtifactServerTLS(prefix string, tls *v1alpha1.ArtifactServerTLS, listeners []v1alpha1.ArtifactServerListener) []string {

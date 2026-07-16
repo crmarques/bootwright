@@ -55,9 +55,22 @@ func (s InfraComponentSpec) SetSlots() []string {
 type ArtifactServerComponent struct {
 	MachineRef  LocalObjectReference     `yaml:"machineRef" json:"machineRef"`
 	BindAddress string                   `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+	Retention   string                   `yaml:"retention,omitempty" json:"retention,omitempty"`
 	TLS         *ArtifactServerTLS       `yaml:"tls,omitempty" json:"tls,omitempty"`
 	Listeners   []ArtifactServerListener `yaml:"listeners,omitempty" json:"listeners,omitempty"`
 	Endpoints   []ArtifactServerEndpoint `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+}
+
+const (
+	ArtifactServerRetentionPersistent  = "persistent"
+	ArtifactServerRetentionInstallOnly = "install-only"
+)
+
+func (c *ArtifactServerComponent) RetentionMode() string {
+	if c == nil || c.Retention == "" {
+		return ArtifactServerRetentionPersistent
+	}
+	return c.Retention
 }
 
 type ArtifactServerTLS struct {

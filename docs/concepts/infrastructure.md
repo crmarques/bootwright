@@ -479,6 +479,7 @@ default HTTPS listener on port `8443`.
 | --- | --- | --- | --- |
 | `artifactServer.machineRef` | Yes | — | Machine that runs the service. |
 | `artifactServer.bindAddress` | No | — | Bind address; must be a valid IP when set. |
+| `artifactServer.retention` | No | `persistent` | `persistent` keeps the service until an explicit destroy; `install-only` reclaims it automatically at the end of the apply that finishes installing every cluster it serves, and re-provisions it on demand when a later apply must install or rebuild a node it serves. |
 | `artifactServer.tls.minVersion` | No | server default | Lowest TLS version the HTTPS listeners accept (`TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`); renders `ssl_protocols` from it up to `TLSv1.3`. Lower it for a legacy BMC HTTPS client. |
 | `artifactServer.tls.ciphers` | No | server default | OpenSSL cipher string rendered verbatim as `ssl_ciphers` (e.g. `DEFAULT:@SECLEVEL=0`). Requires an `https` listener. |
 | `artifactServer.listeners[]` | Yes | — | At least one listener. |
@@ -489,6 +490,19 @@ default HTTPS listener on port `8443`.
 | `artifactServer.endpoints[].name` | Yes | — | Endpoint selector name; unique within the service. |
 | `artifactServer.endpoints[].listenerRef` | Yes | — | Must name a declared `listeners[].name`. |
 | `artifactServer.endpoints[].addressRef` | Yes | — | Must resolve to a `Machine.spec.addresses[].name` on the placement machine. |
+
+!!! note "`install-only` retention"
+    An `install-only` artifact server exists only while a cluster it serves is
+    being installed. Bootwright reclaims it — container, published tree, and
+    ownership record — at the end of the apply that finishes the last referencing
+    install, and skips re-provisioning it on subsequent no-op applies, so the
+    host stays in sync without churn. A later apply that must install or rebuild a
+    node it serves brings the service back automatically, then reclaims it again.
+    Use it to shrink the post-install footprint on the bastion; leave it
+    `persistent` (the default) to keep the service available for day-2
+    re-provisioning. Reclaim is reference-aware: a server another context still
+    references is left in place. The manual equivalent remains
+    `bootwright destroy --stage infra --clusters artifact-server`.
 
 !!! warning "BMC reachability for virtual media"
     The artifact server endpoint selected by an

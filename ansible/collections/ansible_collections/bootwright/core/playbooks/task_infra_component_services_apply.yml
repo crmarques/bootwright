@@ -44,3 +44,7 @@
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.applyRole }}"
+      when: >-
+        (bootwright_infra_component_apply_skip_records | default('')) == ''
+        or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+           not in bootwright_infra_component_apply_skip_records.split(',')

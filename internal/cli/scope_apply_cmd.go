@@ -220,6 +220,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return failErr(1, err)
 		}
 		converge.ApplyVerboseExtraVar(&plan, verbose)
+		artifactServerTargets := installOnlyArtifactServerTargets(state)
+		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
+			cliout.NewContinuation(stdout).Warning("artifact-server retention", serr.Error())
+		} else {
+			converge.ApplyArtifactServerSkipExtraVar(&plan, skip)
+		}
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
@@ -328,6 +334,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		printRenderResult(stdout, renderResult)
 		if usesAnsible {
 			printBundlePath(stdout, bundleResult.Dir)
+		}
+		if usesAnsible {
+			if rerr := converge.ReclaimInstallOnlyArtifactServers(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, artifactServerTargets, reporter); rerr != nil {
+				cliout.NewContinuation(stdout).Warning("artifact-server reclaim", rerr.Error())
+			}
 		}
 		if plan.TargetsClusters {
 			printClusterAccess(stdout, plan.State, renderResult, ledger, clustersDir)

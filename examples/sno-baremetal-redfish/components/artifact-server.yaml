@@ -6,6 +6,7 @@ spec:
   type: artifactServer
 
   artifactServer:
+    retention: install-only
     endpoints:
     - name: bmc
       listenerRef: https
