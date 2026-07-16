@@ -51,6 +51,7 @@ func TestBastionSetupDryRunShowsHighLevelActions(t *testing.T) {
 		"Actions",
 		"Ansible runtime",
 		"OpenShift CLIs",
+		"bastion/setup/ansible-output.log",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout)

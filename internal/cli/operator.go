@@ -156,20 +156,20 @@ func planControllerCLIInstall(state v1alpha1.State, installDir string) *bastion.
 	return bastion.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), workspace.AnsibleVenvBin)
 }
 
-func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, becomePasswordFile string) error {
+func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, logPath string, extraEnv map[string]string, askBecomePass bool, becomePasswordFile string) error {
 	bundleDir, cleanup, err := extractControllerCLIBundle()
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir, becomePasswordFile)
+	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, logPath, extraEnv, askBecomePass, bundleDir, becomePasswordFile)
 }
 
-func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string) error {
-	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir, "")
+func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, logPath string, extraEnv map[string]string, askBecomePass bool, bundleDir string) error {
+	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, logPath, extraEnv, askBecomePass, bundleDir, "")
 }
 
-func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string, becomePasswordFile string) error {
+func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, logPath string, extraEnv map[string]string, askBecomePass bool, bundleDir string, becomePasswordFile string) error {
 	spec.BundleDir = bundleDir
 	inventoryPath := filepath.Join(bundleDir, controllerCLIInventory)
 	inventoryBody, err := controllerCLIInventoryBody(state, secretsDir)
@@ -198,8 +198,12 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 	}
 	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIInventory), askBecomePass, becomePasswordFile)
 	env := bastion.MergeBootstrapEnv(os.Environ(), ansibleEnv)
-	run := runCommandWithControllingTTY
-	if err := run(ctx, stdin, stdout, stderr, args, env); err != nil {
+	// Route Ansible output to the log file and keep the terminal to a status
+	// view, mirroring apply/destroy. A controlling TTY is still granted (unless
+	// Ansible itself must prompt for the become password) so requiretty sudo
+	// works; with nil writers that TTY output lands only in the log.
+	useControllingTTY := becomePasswordFile != "" || !askBecomePass
+	if err := ansible.RunLoggedCommand(ctx, args, env, logPath, nil, nil, useControllingTTY); err != nil {
 		return fmt.Errorf("run controller-clis playbook: %w", err)
 	}
 	p.Status(output.StatusOK, "OpenShift CLIs", "ready")

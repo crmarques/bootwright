@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
 	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -99,6 +100,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 			return failErr(1, err)
 		}
 		cliSpec := planControllerCLIInstall(state, workspace.DefaultControllerCLIInstallDir())
+		cliInstallLogPath := workflow.BastionSetupLogPath(ctx.RunsDir)
 
 		p := output.New(stdout)
 		p.Command("bastion setup")
@@ -106,6 +108,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		fields := []output.Field{{Key: "runtime", Value: "managed Ansible environment"}}
 		if cliSpec != nil {
 			fields = append(fields, output.Field{Key: "OpenShift CLIs", Value: cliSpec.OCPReleaseVersion + " into " + cliSpec.InstallDir})
+			fields = append(fields, output.Field{Key: "log", Value: cliInstallLogPath})
 		} else {
 			fields = append(fields, output.Field{Key: "OpenShift CLIs", Value: "not required"})
 		}
@@ -159,7 +162,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 			return err
 		}
 		if cliSpec != nil {
-			if err := runControllerCLIInstallWithBecomePasswordFile(c.Context(), stdin, stdout, stderr, state, ctx.SecretsDir, *cliSpec, proxyEnv, askBecomePass, becomePasswordFile); err != nil {
+			if err := runControllerCLIInstallWithBecomePasswordFile(c.Context(), stdin, stdout, stderr, state, ctx.SecretsDir, *cliSpec, cliInstallLogPath, proxyEnv, askBecomePass, becomePasswordFile); err != nil {
 				return failErr(1, err)
 			}
 		}

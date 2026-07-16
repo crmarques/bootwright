@@ -3743,6 +3743,7 @@ test "$found" -eq 1
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	bundleDir := t.TempDir()
+	logPath := filepath.Join(dir, "runs", "bastion", "setup", "ansible-output.log")
 	spec := bastion.CLIInstallSpec{
 		OCPReleaseVersion: "4.21.12",
 		InstallDir:        "/usr/local/bin",
@@ -3756,6 +3757,7 @@ test "$found" -eq 1
 		loadFixtureState(t, "001-sno-libvirt"),
 		t.TempDir(),
 		spec,
+		logPath,
 		map[string]string{
 			"BOOTWRIGHT_TEST_ARGS":          argsPath,
 			"BOOTWRIGHT_TEST_PASSWORD_PATH": passwordPath,
@@ -3769,6 +3771,9 @@ test "$found" -eq 1
 	}
 	if got := stderr.String(); got != "\nBECOME password: " {
 		t.Fatalf("stderr prompt = %q, want BECOME password prompt only", got)
+	}
+	if _, statErr := os.Stat(logPath); statErr != nil {
+		t.Fatalf("controller CLI install log not written to %q: %v", logPath, statErr)
 	}
 	args, err := os.ReadFile(argsPath)
 	if err != nil {

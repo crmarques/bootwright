@@ -184,3 +184,7 @@ func PreflightLogPath(runsDir, scopeName string) string {
 func DestroyLogPath(runsDir, baseName string) string {
 	return filepath.Join(runsDir, "destroy", baseName, ansible.OutputLogName)
 }
+
+func BastionSetupLogPath(runsDir string) string {
+	return filepath.Join(runsDir, "bastion", "setup", ansible.OutputLogName)
+}

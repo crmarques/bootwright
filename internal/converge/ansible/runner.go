@@ -128,22 +128,6 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	if outputLogPath == "" {
 		outputLogPath = filepath.Join(spec.ArtifactsDir, OutputLogName)
 	}
-	if err := os.MkdirAll(filepath.Dir(outputLogPath), 0o700); err != nil {
-		return fmt.Errorf("create Ansible output log directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(outputLogPath), 0o700); err != nil {
-		return fmt.Errorf("chmod Ansible output log directory: %w", err)
-	}
-	outputLog, err := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("create Ansible output log: %w", err)
-	}
-	defer outputLog.Close()
-	if err := os.Chmod(outputLogPath, 0o600); err != nil {
-		return fmt.Errorf("chmod Ansible output log: %w", err)
-	}
-	lockedOutputLog := &lockedWriter{w: outputLog}
-
 	command := r.Command(spec)
 	env := os.Environ()
 	env = appendSystemTempEnv(env)
@@ -165,13 +149,44 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	if extra := sudoUserSitePackages(); extra != "" {
 		env = appendPythonPath(env, extra)
 	}
+	return RunLoggedCommand(ctx, command, env, outputLogPath, r.Stdout, r.Stderr, spec.UseControllingTTY)
+}
+
+// RunLoggedCommand executes command with env, writing its combined output to
+// outputLogPath (created 0600, truncating any prior run). When stdout or stderr
+// are non-nil the output is also teed to them; pass nil for both to keep the
+// terminal quiet and log-only, the way apply and destroy route Ansible output
+// so callers can render a status view instead. When useControllingTTY is true
+// the command runs under a controlling pseudo-terminal so sudo/become steps see
+// a real TTY. On failure the returned error carries the log path and a tail
+// summary of the recorded output.
+func RunLoggedCommand(ctx context.Context, command []string, env []string, outputLogPath string, stdout, stderr io.Writer, useControllingTTY bool) error {
+	if len(command) == 0 {
+		return errors.New("run logged command: empty command")
+	}
+	if err := os.MkdirAll(filepath.Dir(outputLogPath), 0o700); err != nil {
+		return fmt.Errorf("create Ansible output log directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(outputLogPath), 0o700); err != nil {
+		return fmt.Errorf("chmod Ansible output log directory: %w", err)
+	}
+	outputLog, err := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create Ansible output log: %w", err)
+	}
+	defer outputLog.Close()
+	if err := os.Chmod(outputLogPath, 0o600); err != nil {
+		return fmt.Errorf("chmod Ansible output log: %w", err)
+	}
+	lockedOutputLog := &lockedWriter{w: outputLog}
+
 	var runErr error
-	if spec.UseControllingTTY {
-		runErr = ptyexec.RunCommand(ctx, ttyOutputWriter(r.Stdout, r.Stderr, lockedOutputLog), nil, command, env)
+	if useControllingTTY {
+		runErr = ptyexec.RunCommand(ctx, ttyOutputWriter(stdout, stderr, lockedOutputLog), nil, command, env)
 	} else {
 		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		cmd.Stdout = teeWriter(r.Stdout, lockedOutputLog)
-		cmd.Stderr = teeWriter(r.Stderr, lockedOutputLog)
+		cmd.Stdout = teeWriter(stdout, lockedOutputLog)
+		cmd.Stderr = teeWriter(stderr, lockedOutputLog)
 		cmd.Stdin = os.Stdin
 		cmd.Env = env
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
