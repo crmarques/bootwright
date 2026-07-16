@@ -12,7 +12,11 @@ import (
 
 func printApplyTransitionLedger(stdout io.Writer, tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode) {
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
-	if err != nil || len(objects) == 0 {
+	if err != nil {
+		cliout.NewContinuation(stdout).Warning("change plan", "could not classify objects against run records: "+err.Error()+"; the real run recomputes this and fails closed on the same error")
+		return
+	}
+	if len(objects) == 0 {
 		return
 	}
 	byAction := map[workflow.ApplyTransitionAction][]string{}

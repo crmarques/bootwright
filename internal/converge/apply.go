@@ -32,10 +32,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	return fmt.Errorf("apply --override would destructively rebuild %s, protected by spec.safety.protectedKinds; run `bootwright destroy --override` for that scope first, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "))
 }
 
-func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string, clusterSelectionActive bool) error {
-	if clusterSelectionActive {
-		return nil
-	}
+func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string) error {
 	provisioned, err := workflow.RecordedProvisionedClusters(clustersDir)
 	if err != nil {
 		return err
@@ -82,6 +79,28 @@ func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters []string
 	default:
 		return "run `bootwright destroy --override` for that scope first"
 	}
+}
+
+func CheckReclaimDestroyProtection(state v1alpha1.State, ownedClusters []string, override bool) error {
+	if len(ownedClusters) == 0 || override {
+		return nil
+	}
+	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
+		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s in Environment %s with spec.safety.destroyProtection=%s; add --override to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "), strings.Join(protected, ", "), v1alpha1.EnvironmentDestroyProtectionRequiredOverride)
+	}
+	if workflow.ProtectedKindSet(state)[v1alpha1.KindStorageCluster] {
+		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s, protected by spec.safety.protectedKinds; add --override to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "))
+	}
+	return nil
+}
+
+func StateHasManagedStorageCluster(state v1alpha1.State) bool {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph != nil && v1alpha1.StorageClusterManaged(cluster) {
+			return true
+		}
+	}
+	return false
 }
 
 func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, limits workflow.ConcurrencyLimits, runsDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {

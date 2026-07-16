@@ -60,10 +60,33 @@ type DryRunInstallerArtifact struct {
 }
 
 type DryRunApply struct {
-	RunStatus string                     `json:"runStatus"`
-	Limits    workflow.ConcurrencyLimits `json:"limits"`
-	Tasks     []workflow.TaskLedgerEntry `json:"tasks"`
-	Addons    []DryRunAddonPlan          `json:"addons,omitempty"`
+	RunStatus   string                     `json:"runStatus"`
+	Limits      workflow.ConcurrencyLimits `json:"limits"`
+	Tasks       []workflow.TaskLedgerEntry `json:"tasks"`
+	Addons      []DryRunAddonPlan          `json:"addons,omitempty"`
+	Transitions *DryRunTransitions         `json:"transitions,omitempty"`
+}
+
+type DryRunTransitions struct {
+	Objects []DryRunTransition `json:"objects"`
+	Error   string             `json:"error,omitempty"`
+}
+
+type DryRunTransition struct {
+	Label  string `json:"label"`
+	Action string `json:"action"`
+}
+
+func BuildDryRunTransitions(tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode) *DryRunTransitions {
+	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+	if err != nil {
+		return &DryRunTransitions{Error: err.Error()}
+	}
+	out := &DryRunTransitions{Objects: []DryRunTransition{}}
+	for _, tr := range workflow.ClassifyApplyTransitions(objects, mode) {
+		out.Objects = append(out.Objects, DryRunTransition{Label: tr.Label, Action: string(tr.Action)})
+	}
+	return out
 }
 
 type DryRunAddonPlan struct {
@@ -80,7 +103,7 @@ type DryRunDestroySafety struct {
 	Reasons          []string `json:"reasons"`
 }
 
-func BuildScopeDryRunReport(cmdCtx context.Context, ctx workspace.Context, executable string, bundleDir string, scope Scope, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, destroySafety *DryRunDestroySafety, forks int) (DryRunReport, error) {
+func BuildScopeDryRunReport(cmdCtx context.Context, ctx workspace.Context, executable string, bundleDir string, scope Scope, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, destroySafety *DryRunDestroySafety, transitions *DryRunTransitions, forks int) (DryRunReport, error) {
 	clustersDir := workspace.ControllerClustersDir(ctx.Name)
 	runner := ansible.CommandRunner{Stdout: io.Discard, Stderr: io.Discard}
 	opts := runOptionsForContext(ctx, clustersDir, executable, state)
@@ -133,10 +156,11 @@ func BuildScopeDryRunReport(cmdCtx context.Context, ctx workspace.Context, execu
 	}
 	if action == "apply" || action == "plan" {
 		report.ApplyPlan = &DryRunApply{
-			RunStatus: string(workflow.RunStatusRunning),
-			Limits:    limits,
-			Tasks:     workflow.TaskLedgerEntries(tasks),
-			Addons:    dryRunExtensionPlans(tasks),
+			RunStatus:   string(workflow.RunStatusRunning),
+			Limits:      limits,
+			Tasks:       workflow.TaskLedgerEntries(tasks),
+			Addons:      dryRunExtensionPlans(tasks),
+			Transitions: transitions,
 		}
 	}
 	return report, nil

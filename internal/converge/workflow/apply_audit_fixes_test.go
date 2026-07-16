@@ -68,7 +68,7 @@ func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 	}
 	writeAuditKubeconfig(t, clustersDir, cluster)
 	checker := &fakeClusterAvailabilityChecker{err: errors.New("connection refused")}
-	out, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, checker, now)
+	out, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, checker, now)
 	if err != nil {
 		t.Fatalf("override with a probe error must not fail the apply: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 	}
 	writeAuditKubeconfig(t, clustersDir, cluster)
 	checker := &fakeClusterAvailabilityChecker{err: errors.New("connection refused")}
-	_, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
+	_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
 	if err == nil {
 		t.Fatal("continue mode must refuse an unverifiable probe")
 	}
@@ -119,7 +119,7 @@ func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
 		secretsDir := writeWorkflowInstallerSecrets(t, dir)
 		writeAuditKubeconfig(t, clustersDir, cluster)
 		checker := &fakeClusterAvailabilityChecker{available: true}
-		_, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
+		_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
 		if err == nil || !strings.Contains(err.Error(), "no install record") {
 			t.Fatalf("record-less reachable cluster must be refused, got: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
 		clustersDir := filepath.Join(dir, "clusters")
 		secretsDir := writeWorkflowInstallerSecrets(t, dir)
 		checker := &fakeClusterAvailabilityChecker{available: true}
-		out, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
+		out, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
 		if err != nil {
 			t.Fatalf("a fresh cluster (no kubeconfig) must install: %v", err)
 		}

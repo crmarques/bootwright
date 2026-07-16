@@ -13,7 +13,6 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindHostVirtctl:            true,
 		ApplyTaskKindClusterAddon:           true,
 		ApplyTaskKindProvisioningPlaybook:   true,
-		"storageAttachmentApply":            true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
 		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --override taxonomy", len(overrideReconfigureOnlyKinds), len(want))

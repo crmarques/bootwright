@@ -162,6 +162,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(2, err)
 			}
 		}
+		if reclaimDevices != "" && !converge.ScopeIncludesApplyPhase(runScope, converge.PhaseDeps) {
+			return failErr(2, errors.New("--reclaim-devices wipes devices during the deps phase, which is not in this run's scope; re-run with a scope that includes it (--stage deps, --through base, or the full graph)"))
+		}
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
@@ -196,7 +199,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		if mode == workflow.ApplyModeOverride && stage == converge.PhaseBase && len(sel.StorageWorkNames()) > 0 {
+		if mode == workflow.ApplyModeOverride && converge.ScopeSkipsStorageDeviceGate(runScope) && converge.StateHasManagedStorageCluster(sel.RenderState) {
 			return failErr(2, errors.New("--override --stage base skips the deps-phase device-empty gate that must precede a Ceph wipe-and-rebuild; use --override --through base (runs the gate then the rebuild) or the full graph"))
 		}
 		plan, err := prepareScopedApplyWorkflow(sel.RenderState, runScope, askBecomePass, dryRun)
@@ -221,7 +224,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.State, plan.Limit))
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
 		var destructiveOverride []string
 		if !dryRun {
@@ -229,7 +232,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err != nil {
 				return failErr(1, err)
 			}
-			if err := converge.CheckApplyRenameOrphan(plan.State, objects, clustersDir, sel.Active); err != nil {
+			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir); err != nil {
 				return failErr(1, err)
 			}
 			if override {
@@ -237,9 +240,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, err)
 				}
 				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
+				destructiveOverride = append(destructiveOverride, workflow.OverrideRebuildUnverifiedClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)...)
 			}
 			if reclaimDevices != "" {
-				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, converge.OwnedStorageClusters(objects))...)
+				ownedReclaim := converge.OwnedStorageClusters(objects)
+				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, override); err != nil {
+					return failErr(1, err)
+				}
+				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, ownedReclaim)...)
 			}
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
@@ -257,6 +265,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, hostTrustScope, secretScope); err != nil {
 				return err
 			}
+		}
+		if options.stageSelector {
+			printStageScopeNotices(stdout, runScope)
 		}
 		printApplySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		if !dryRun && !yes && !plan.NoRemoteWork {
@@ -280,8 +291,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
-			if options.stageSelector {
-				printStageScopeNotices(stdout, runScope)
+			if reclaimDevices != "" {
+				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply — irreversible data loss, gated by the data-loss acknowledgement (--allow-destroy or interactive confirm)")
 			}
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode)

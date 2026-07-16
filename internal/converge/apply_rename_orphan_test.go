@@ -29,22 +29,22 @@ func TestCheckApplyRenameOrphan(t *testing.T) {
 	created := []workflow.ObjectClassification{newContainerClusterObject("prod-east")}
 
 	t.Run("rename co-occurrence refuses", func(t *testing.T) {
-		if err := CheckApplyRenameOrphan(stateWithClusters("prod-east"), created, dir, false); err == nil {
+		if err := CheckApplyRenameOrphan(stateWithClusters("prod-east"), created, dir); err == nil {
 			t.Fatal("a new cluster + an undeclared provisioned cluster must refuse as a possible rename")
 		}
 	})
-	t.Run("scoped apply is suppressed", func(t *testing.T) {
-		if err := CheckApplyRenameOrphan(stateWithClusters("prod-east"), created, dir, true); err != nil {
-			t.Fatalf("a --clusters-scoped apply legitimately omits clusters: %v", err)
+	t.Run("scoped apply refuses against the full declared state", func(t *testing.T) {
+		if err := CheckApplyRenameOrphan(stateWithClusters("prod-east"), created, dir); err == nil {
+			t.Fatal("a --clusters-scoped apply must still refuse when the full state no longer declares a provisioned cluster")
 		}
 	})
 	t.Run("fully declared fleet is safe", func(t *testing.T) {
-		if err := CheckApplyRenameOrphan(stateWithClusters("prod-a", "prod-east"), created, dir, false); err != nil {
+		if err := CheckApplyRenameOrphan(stateWithClusters("prod-a", "prod-east"), created, dir); err != nil {
 			t.Fatalf("a declared cluster is not an orphan: %v", err)
 		}
 	})
 	t.Run("pure orphan with no new cluster is left alone", func(t *testing.T) {
-		if err := CheckApplyRenameOrphan(stateWithClusters(), nil, dir, false); err != nil {
+		if err := CheckApplyRenameOrphan(stateWithClusters(), nil, dir); err != nil {
 			t.Fatalf("an undeclared cluster with no new cluster must not refuse (apply never touches it): %v", err)
 		}
 	})

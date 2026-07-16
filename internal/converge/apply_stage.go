@@ -147,3 +147,15 @@ func ScopeProvisionsClusterWorkload(scope Scope) bool {
 	}
 	return false
 }
+
+func ScopeSkipsStorageDeviceGate(scope Scope) bool {
+	return slices.Contains(scope.PhaseNames, PhaseBase) && !slices.Contains(scope.PhaseNames, PhaseDeps)
+}
+
+func ScopeIncludesApplyPhase(scope Scope, phase string) bool {
+	names := scope.PhaseNames
+	if len(scope.ApplyPhaseNames) > 0 {
+		names = scope.ApplyPhaseNames
+	}
+	return slices.Contains(names, phase)
+}

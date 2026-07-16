@@ -69,7 +69,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped preflight commands"))
 			}
 			selected := converge.PhasesForState(scope.Phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
 		}
 		if trustOnFirstUse && !dryRun {
 			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, hostTrustScope); err != nil {

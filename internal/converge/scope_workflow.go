@@ -45,5 +45,5 @@ func selectedHasExtensionWork(selected []Phase, state v1alpha1.State) bool {
 	if !addonsSelected {
 		return false
 	}
-	return len(state.ClusterAddonBindings) > 0 || len(state.ProvisioningPlaybooks) > 0
+	return len(state.ClusterAddonBindings) > 0 || len(state.ProvisioningPlaybooks) > 0 || workflow.StateHasNodeConfigWork(state)
 }

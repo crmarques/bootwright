@@ -10,6 +10,12 @@ import (
 func ApplyTaskConnectedMachines(tasks []ApplyTask) map[string]bool {
 	connected := map[string]bool{}
 	for _, task := range tasks {
+		if task.Entry.Kind == ApplyTaskKindClusterAddon {
+			for _, machine := range inventoryHostMachineNames(task.State) {
+				connected[machine] = true
+			}
+			continue
+		}
 		if strings.TrimSpace(task.Limit) == "" {
 			continue
 		}

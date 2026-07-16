@@ -55,7 +55,7 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		writeKubeconfig(t, clustersDir)
-		out, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, &fakeClusterAvailabilityChecker{available: available}, now)
+		out, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, &fakeClusterAvailabilityChecker{available: available}, now)
 		if err != nil {
 			t.Fatalf("reconcile: %v", err)
 		}

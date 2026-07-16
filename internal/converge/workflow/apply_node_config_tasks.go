@@ -40,6 +40,15 @@ func planNodeConfigActivities(graph *ActivityGraph, state v1alpha1.State, instal
 	return nil
 }
 
+func StateHasNodeConfigWork(state v1alpha1.State) bool {
+	for _, ocp := range state.ContainerClusters {
+		if clusterNeedsNodeConfig(ocp) {
+			return true
+		}
+	}
+	return false
+}
+
 func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 	for _, host := range ocp.Spec.Hosts {
 		if host.Role == v1alpha1.NodeRoleInfra || len(host.Labels) > 0 || len(host.Taints) > 0 {

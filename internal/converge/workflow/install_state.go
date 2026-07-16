@@ -34,7 +34,6 @@ const (
 	ClusterInstallStatusInstalled  ClusterInstallStatus = "installed"
 	ClusterInstallStatusFailed     ClusterInstallStatus = "failed"
 	ClusterInstallStatusDestroyed  ClusterInstallStatus = "destroyed"
-	ClusterInstallStatusSuperseded ClusterInstallStatus = "superseded"
 )
 
 type ClusterInstallPhase string
@@ -214,10 +213,11 @@ func SaveClusterConnectionRecord(clustersDir string, record ClusterConnectionRec
 	return nil
 }
 
-func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, mode ApplyMode, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
+func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, mode ApplyMode, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, []string, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
+	var installedMatching []string
 	out := make([]ApplyTask, len(tasks))
 	copy(out, tasks)
 	for _, name := range installTaskClusterNames(out) {
@@ -226,36 +226,40 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		}
 		hash, err := clusterInstallDesiredHashForContext(contextName, state, name, secretsDir)
 		if err != nil {
-			return out, err
+			return out, installedMatching, err
 		}
 		structuralHash, err := clusterInstallStructuralHashForContext(contextName, state, name, secretsDir)
 		if err != nil {
-			return out, err
+			return out, installedMatching, err
 		}
 		record, found, err := LoadClusterInstallRecord(clustersDir, name)
 		if err != nil {
-			return out, err
+			return out, installedMatching, err
+		}
+		hashMatches := !found || installInputsMatch(record, hash, structuralHash)
+		if err := guardStaleAgentISOBoot(out, name, record, found, hashMatches); err != nil {
+			return out, installedMatching, err
 		}
 		if mode == ApplyModeOverride {
 			if found && installInputsMatch(record, hash, structuralHash) && record.Status == ClusterInstallStatusInstalled {
-				available, err := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
-				if err == nil && available {
+				available, availErr := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
+				if availErr == nil && available {
 					if err := restampLegacyInstallRecord(clustersDir, record, hash, structuralHash, now); err != nil {
-						return out, err
+						return out, installedMatching, err
 					}
 					out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --override rebuilds only drifted objects, not a healthy in-sync cluster", now)
+					installedMatching = append(installedMatching, name)
 				}
 			}
 			continue
 		}
-		hashMatches := !found || installInputsMatch(record, hash, structuralHash)
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
-			return out, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --override --yes after resetting target machines", name, name, name)
+			return out, installedMatching, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --override --yes after resetting target machines", name, name, name)
 		}
 		kubeconfigPath := clusterKubeconfigPath(clustersDir, name)
 		if !found {
 			if err := guardUnrecordedCluster(ctx, name, kubeconfigPath, checker); err != nil {
-				return out, err
+				return out, installedMatching, err
 			}
 			continue
 		}
@@ -263,27 +267,99 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		case ClusterInstallStatusInstalled:
 			available, err := checker.Available(ctx, kubeconfigPath)
 			if err != nil {
-				return out, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w; if the cluster is unreachable, rebuild it with bootwright apply --stage clusters --clusters %s --override --yes (or bootwright destroy --stage clusters --clusters %s --yes first)", name, err, name, name)
+				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w; if the cluster is unreachable, rebuild it with bootwright apply --stage clusters --clusters %s --override --yes (or bootwright destroy --stage clusters --clusters %s --yes first)", name, err, name, name)
 			}
 			if !available {
-				return out, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; refusing to regenerate installer inputs without --override", name)
+				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; refusing to regenerate installer inputs without --override", name)
 			}
 			if err := restampLegacyInstallRecord(clustersDir, record, hash, structuralHash, now); err != nil {
-				return out, err
+				return out, installedMatching, err
 			}
 			out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs", now)
+			installedMatching = append(installedMatching, name)
 		case ClusterInstallStatusInstalling, ClusterInstallStatusFailed:
 			if !hashMatches {
 				continue
 			}
 			planned, err := resumeClusterInstallTasks(out, record, name, now)
 			if err != nil {
-				return out, err
+				return out, installedMatching, err
 			}
 			out = planned
 		}
 	}
-	return out, nil
+	return out, installedMatching, nil
+}
+
+func stampInstalledClusterConvergeRecords(runsDir, contextName, runID string, tasks []ApplyTask, clusters []string, now time.Time) error {
+	if len(clusters) == 0 || strings.TrimSpace(runsDir) == "" {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, name := range clusters {
+		set[name] = true
+	}
+	for _, task := range tasks {
+		if !set[task.Entry.Cluster] || !isClusterInstallTaskKind(task.Entry.Kind) {
+			continue
+		}
+		if err := MarkApplyTaskConvergeSafety(runsDir, contextName, runID, task, ConvergeSafetyStatusSkipped, now); err != nil {
+			return fmt.Errorf("record verified-installed cluster %s: %w", task.Entry.Cluster, err)
+		}
+	}
+	return nil
+}
+
+func OverrideRebuildUnverifiedClusters(ctx context.Context, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask, checker ClusterAvailabilityChecker) []string {
+	if checker == nil {
+		checker = OCClusterAvailabilityChecker{}
+	}
+	var out []string
+	for _, name := range installTaskClusterNames(tasks) {
+		if !stateHasContainerCluster(state, name) {
+			continue
+		}
+		hash, structuralHash, err := clusterInstallHashes(contextName, state, name, secretsDir)
+		if err != nil {
+			continue
+		}
+		record, found, err := LoadClusterInstallRecord(clustersDir, name)
+		if err != nil || !found || !installInputsMatch(record, hash, structuralHash) || record.Status != ClusterInstallStatusInstalled {
+			continue
+		}
+		available, availErr := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
+		switch {
+		case availErr != nil:
+			out = append(out, fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but availability could not be verified: %v)", name, availErr))
+		case !available:
+			out = append(out, fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but the cluster does not report Available=True)", name))
+		}
+	}
+	return out
+}
+
+func guardStaleAgentISOBoot(tasks []ApplyTask, name string, record ClusterInstallRecord, found, hashMatches bool) error {
+	if !clusterTaskKindPlanned(tasks, name, ApplyTaskKindNodeBoot) || clusterTaskKindPlanned(tasks, name, ApplyTaskKindClusterISO) {
+		return nil
+	}
+	switch {
+	case !found:
+		return fmt.Errorf("ContainerCluster/%s: this scope boots nodes from the previously published agent ISO, but no install record proves an ISO was created from the current desired inputs; run bootwright apply --through base --clusters %s (or the full graph) to regenerate the ISO and boot", name, name)
+	case !hashMatches:
+		return fmt.Errorf("ContainerCluster/%s: install inputs changed after the published agent ISO was created; booting it would install the cluster from stale inputs while recording the current ones; run bootwright apply --through base --clusters %s (or the full graph) to regenerate the ISO first", name, name)
+	case record.Status != ClusterInstallStatusInstalled && record.Phase != ClusterInstallPhaseISOCreated && !clusterInstallPhaseMayHaveBooted(record.Phase):
+		return fmt.Errorf("ContainerCluster/%s has install phase %q: the agent ISO for the desired inputs was never fully created; run bootwright apply --through base --clusters %s (or the full graph) to create it", name, record.Phase, name)
+	}
+	return nil
+}
+
+func clusterTaskKindPlanned(tasks []ApplyTask, cluster, kind string) bool {
+	for _, task := range tasks {
+		if task.Entry.Cluster == cluster && task.Entry.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func guardUnrecordedCluster(ctx context.Context, name, kubeconfigPath string, checker ClusterAvailabilityChecker) error {
@@ -336,7 +412,7 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	if err != nil {
 		return err
 	}
-	if !found || record.Status == ClusterInstallStatusInstalled || record.Status == ClusterInstallStatusSuperseded {
+	if !found || record.Status == ClusterInstallStatusInstalled {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
 	record.DesiredHash = hash

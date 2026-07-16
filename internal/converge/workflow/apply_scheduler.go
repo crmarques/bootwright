@@ -29,9 +29,11 @@ func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions,
 	}
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
 	tasks = AnnotateApplyTaskClusterLogPaths(runsDir, runID, tasks)
-	var err error
-	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, opts.State, tasks, opts.ApplyMode, opts.ClusterAvailabilityChecker, startedAt)
+	tasks, installedMatching, err := ReconcileApplyClusterInstallState(ctx, opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, opts.State, tasks, opts.ApplyMode, opts.ClusterAvailabilityChecker, startedAt)
 	if err != nil {
+		return PreparedApplyTaskGraph{}, err
+	}
+	if err := stampInstalledClusterConvergeRecords(runsDir, opts.ContextName, runID, tasks, installedMatching, startedAt); err != nil {
 		return PreparedApplyTaskGraph{}, err
 	}
 	return PreparedApplyTaskGraph{

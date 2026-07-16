@@ -180,7 +180,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				}
 				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, override))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), nil, 0)
 		}
 		if !dryRun && destroySafety.RequiredOverride {
 			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))

@@ -95,7 +95,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			secretsDir := writeWorkflowInstallerSecrets(t, dir)
 			tc.seed(t, clustersDir, secretsDir)
 			checker := &fakeClusterAvailabilityChecker{available: false}
-			_, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
+			_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, checker, now)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("expected fail-closed error containing %q, got %v", tc.wantErr, err)
 			}
