@@ -177,9 +177,9 @@ func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.Artifa
 	}
 	if vm := bmc.VirtualMedia; vm != nil && vm.TLS != nil {
 		certificate := map[string]any{
-			"ignoreVerification": !vm.TLS.VerifyEnabled(),
-			"import":             vm.TLS.ImportServerCertificate,
-			"removeAfterBoot":    vm.TLS.RemoveServerCertificateAfterBoot,
+			"trust":            vm.TLS.TrustMode(),
+			"restoreAfterBoot": vm.TLS.RestoreVerificationEnabled(),
+			"removeAfterBoot":  vm.TLS.RemoveCertificateAfterBoot,
 		}
 		if origin != nil && origin.Hostname() != "" {
 			certificate["host"] = origin.Hostname()

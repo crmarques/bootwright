@@ -115,9 +115,9 @@ func deepCopyBMCVirtualMedia(src *v1alpha1.BMCVirtualMedia) *v1alpha1.BMCVirtual
 	out := &v1alpha1.BMCVirtualMedia{}
 	if src.TLS != nil {
 		tls := *src.TLS
-		if src.TLS.Verify != nil {
-			v := *src.TLS.Verify
-			tls.Verify = &v
+		if src.TLS.RestoreVerificationAfterBoot != nil {
+			v := *src.TLS.RestoreVerificationAfterBoot
+			tls.RestoreVerificationAfterBoot = &v
 		}
 		out.TLS = &tls
 	}

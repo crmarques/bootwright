@@ -41,14 +41,30 @@ func TestValidateMachineVirtualMediaCertificate(t *testing.T) {
 	}
 	prefix := "Machine/node spec.hardware"
 
-	ok := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{ImportServerCertificate: true, RemoveServerCertificateAfterBoot: true}))
+	ok := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{Trust: v1alpha1.BMCVirtualMediaTrustImportCertificate, RemoveCertificateAfterBoot: true}))
 	if errs := validateMachineHardware(prefix, ok, v1alpha1.InfraProvider{}, false); containsSubstring(errs, "virtualMedia.tls") {
 		t.Fatalf("valid import+remove rejected: %v", errs)
 	}
 
-	badRemove := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{RemoveServerCertificateAfterBoot: true}))
-	if !containsSubstring(validateMachineHardware(prefix, badRemove, v1alpha1.InfraProvider{}, false), "removeServerCertificateAfterBoot requires importServerCertificate") {
-		t.Fatalf("expected removeServerCertificateAfterBoot dependency error")
+	established := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{Trust: v1alpha1.BMCVirtualMediaTrustEstablished}))
+	if errs := validateMachineHardware(prefix, established, v1alpha1.InfraProvider{}, false); containsSubstring(errs, "virtualMedia.tls") {
+		t.Fatalf("valid trust established rejected: %v", errs)
+	}
+
+	badTrust := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{Trust: "bogus"}))
+	if !containsSubstring(validateMachineHardware(prefix, badTrust, v1alpha1.InfraProvider{}, false), `trust "bogus" is not supported`) {
+		t.Fatalf("expected unsupported trust error")
+	}
+
+	badRemove := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{RemoveCertificateAfterBoot: true}))
+	if !containsSubstring(validateMachineHardware(prefix, badRemove, v1alpha1.InfraProvider{}, false), `removeCertificateAfterBoot is only valid with trust "import-certificate"`) {
+		t.Fatalf("expected removeCertificateAfterBoot dependency error")
+	}
+
+	restore := false
+	badRestore := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{Trust: v1alpha1.BMCVirtualMediaTrustEstablished, RestoreVerificationAfterBoot: &restore}))
+	if !containsSubstring(validateMachineHardware(prefix, badRestore, v1alpha1.InfraProvider{}, false), `restoreVerificationAfterBoot is only valid with trust "disable-verification"`) {
+		t.Fatalf("expected restoreVerificationAfterBoot dependency error")
 	}
 
 	empty := machine(vmTLS(&v1alpha1.BMCVirtualMediaTLS{}))

@@ -2,6 +2,7 @@
 - name: Resolve virtual media transfer protocol
   ansible.builtin.set_fact:
     bootwright_redfish_vmedia_transfer_protocol: "{{ bootwright_component.boot.agentIso.transferProtocol }}"
+    bootwright_redfish_artifact_cert_trust: "{{ bootwright_component.boot.redfish.artifactCertificate.trust | default('disable-verification') }}"
   changed_when: false
 
 - name: Resolve redacted agent ISO fetch URL
@@ -123,6 +124,7 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_redfish_artifact_cert_trust == 'disable-verification'
     - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool
     - bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool
 
@@ -137,10 +139,14 @@
       right (for example the iBMC "Security Configuration" privilege), so
       certificate verification would silently stay enabled and the
       virtual-media fetch would fail afterwards. Grant that right to the BMC
-      account, or set bmc.virtualMedia.tls.importServerCertificate so the BMC
-      trusts the artifact server certificate instead.
+      account, set bmc.virtualMedia.tls.trust: import-certificate (needs the
+      same right) so the BMC trusts the artifact server certificate, or -- if
+      the BMC already trusts that certificate out of band -- set
+      bmc.virtualMedia.tls.trust: established so bootwright leaves the BMC
+      certificate settings untouched.
   when:
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_redfish_artifact_cert_trust == 'disable-verification'
     - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool
     - bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool
 
@@ -158,7 +164,12 @@
       httpsTransferCertVerification: "{{ (bootwright_redfish_security_service_probe.json | default({})).HttpsTransferCertVerification | default('', true) }}"
       httpsTransferCertVerificationPatchStatus: >-
         {{
-          bootwright_redfish_security_service_https_transfer_patch.status | default('unknown')
+          'skipped-by-trust-mode'
+          if (
+            (bootwright_redfish_vmedia_transfer_protocol == 'HTTPS')
+            and (bootwright_redfish_artifact_cert_trust != 'disable-verification')
+          )
+          else bootwright_redfish_security_service_https_transfer_patch.status | default('unknown')
           if (
             (bootwright_redfish_vmedia_transfer_protocol == 'HTTPS')
             and (bootwright_redfish_security_service_https_transfer_supported | default(false) | bool)
@@ -187,7 +198,7 @@
   ansible.builtin.include_tasks: ../media/import_certificate.yml
   when:
     - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
-    - bootwright_component.boot.redfish.artifactCertificate.import | default(false) | bool
+    - bootwright_redfish_artifact_cert_trust == 'import-certificate'
 
 - name: Initialize Redfish virtual media insert attempt
   ansible.builtin.set_fact:
@@ -236,7 +247,15 @@
       Direct backend attachment={{ bootwright_redfish_vmedia_backend_attached | default(false) }},
       Resource attachment match={{ bootwright_redfish_vmedia_resource_attached | default(false) }},
       InsertMedia task attachment accepted={{ bootwright_redfish_vmedia_task_attached | default(false) }},
-      HTTP status={{ bootwright_redfish_vmedia_status.status }}.
+      HTTP status={{ bootwright_redfish_vmedia_status.status }},
+      artifact certificate trust mode={{ bootwright_redfish_artifact_cert_trust }}.
+      {%- if bootwright_redfish_artifact_cert_trust == 'established' %}
+      Trust mode "established" means bootwright deliberately did not modify any
+      BMC certificate settings: if the fetch failed because the BMC does not
+      trust the artifact server certificate, either establish that trust out of
+      band (CA-signed certificate or pre-loaded root CA) or set
+      bmc.virtualMedia.tls.trust to import-certificate or disable-verification.
+      {%- endif %}
     success_msg: >-
       Redfish virtual media attachment accepted on {{ bootwright_redfish_vmedia_status.member }}
       via {{ 'direct media backend' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'VirtualMedia resource' if (bootwright_redfish_vmedia_resource_attached | default(false) | bool) else 'InsertMedia task' if (bootwright_redfish_vmedia_task_attached | default(false) | bool) else 'unknown source' }},

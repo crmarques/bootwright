@@ -41,8 +41,9 @@
       Could not retrieve a TLS certificate from artifact server
       {{ bootwright_redfish_artifact_cert_host }}:{{ bootwright_redfish_artifact_cert_port }}
       with openssl s_client. Confirm the artifact server is reachable from this host
-      and serving HTTPS, or use ignoreVerification or a BMC-trusted artifact server
-      certificate instead.
+      and serving HTTPS, or set bmc.virtualMedia.tls.trust to disable-verification,
+      or serve a BMC-trusted artifact server certificate with trust: established
+      instead.
 
 - name: Refresh VirtualMedia member to locate a DMTF certificate store
   ansible.builtin.uri:
@@ -107,12 +108,12 @@
     that:
       - (bootwright_redfish_artifact_cert_method | length) > 0
     fail_msg: >-
-      hardware.management.bmc.virtualMediaCertificate.importCertificate is set,
+      hardware.management.bmc.virtualMedia.tls.trust is import-certificate,
       but BMC VirtualMedia member {{ bootwright_redfish_vmedia_member }} exposes
       neither a Redfish Certificates collection nor a manager SecurityService
       ImportRemoteHttpsServerRootCA action to import the artifact server
-      certificate into. Use ignoreVerification, or serve a BMC-trusted artifact
-      server certificate, instead.
+      certificate into. Set trust: disable-verification, or serve a BMC-trusted
+      artifact server certificate with trust: established, instead.
 
 - name: Import the artifact certificate via the discovered trust-store method
   ansible.builtin.include_tasks: "import_certificate/{{ bootwright_redfish_artifact_cert_method }}.yml"

@@ -307,11 +307,24 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 
 func validateBMCVirtualMediaTLS(prefix string, tls *v1alpha1.BMCVirtualMediaTLS) []string {
 	var errs []string
-	if tls.RemoveServerCertificateAfterBoot && !tls.ImportServerCertificate {
-		errs = append(errs, prefix+".removeServerCertificateAfterBoot requires importServerCertificate")
+	switch tls.Trust {
+	case "", v1alpha1.BMCVirtualMediaTrustDisableVerification, v1alpha1.BMCVirtualMediaTrustImportCertificate, v1alpha1.BMCVirtualMediaTrustEstablished:
+	default:
+		errs = append(errs, fmt.Sprintf("%s.trust %q is not supported; use %q, %q or %q",
+			prefix, tls.Trust,
+			v1alpha1.BMCVirtualMediaTrustDisableVerification,
+			v1alpha1.BMCVirtualMediaTrustImportCertificate,
+			v1alpha1.BMCVirtualMediaTrustEstablished))
+		return errs
 	}
-	if tls.Verify == nil && !tls.ImportServerCertificate && !tls.RemoveServerCertificateAfterBoot {
-		errs = append(errs, prefix+" sets no option; set verify and/or importServerCertificate")
+	if tls.RestoreVerificationAfterBoot != nil && tls.TrustMode() != v1alpha1.BMCVirtualMediaTrustDisableVerification {
+		errs = append(errs, fmt.Sprintf("%s.restoreVerificationAfterBoot is only valid with trust %q", prefix, v1alpha1.BMCVirtualMediaTrustDisableVerification))
+	}
+	if tls.RemoveCertificateAfterBoot && tls.TrustMode() != v1alpha1.BMCVirtualMediaTrustImportCertificate {
+		errs = append(errs, fmt.Sprintf("%s.removeCertificateAfterBoot is only valid with trust %q", prefix, v1alpha1.BMCVirtualMediaTrustImportCertificate))
+	}
+	if tls.Trust == "" && tls.RestoreVerificationAfterBoot == nil && !tls.RemoveCertificateAfterBoot {
+		errs = append(errs, prefix+" sets no option; set trust (disable-verification, import-certificate or established)")
 	}
 	return errs
 }

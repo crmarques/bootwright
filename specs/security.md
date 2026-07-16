@@ -94,19 +94,27 @@ The artifact server presents a self-signed certificate the BMC cannot trust
 without distributing a CA to every BMC, so the fetch leg needs deliberate
 handling:
 
-- By default (no authored `virtualMedia.tls`), for an HTTPS fetch the
+- `virtualMedia.tls.trust: disable-verification` (the default when no
+  `virtualMedia.tls` is authored): for an HTTPS fetch the
   `container_cluster_boot_redfish` role temporarily sets the BMC
   `SecurityService.HttpsTransferCertVerification` and the VirtualMedia
   `VerifyCertificate` to `false` for the fetch, then restores the probed
   original values in an `always` cleanup
-  (`media/restore_certificate_verification.yml`). TLS encryption is retained —
-  only server authentication is dropped — and the fetch is further bounded by
-  the unguessable per-run publish token in the ISO URL.
-- `virtualMedia.tls.verify: false` asks the BMC to skip verification and does
-  not restore it afterward (best-effort; some firmware ignores it).
-- `virtualMedia.tls.importServerCertificate: true` is the trust path: it uploads
-  the artifact server certificate into the BMC trust store before the fetch, and
-  `removeServerCertificateAfterBoot: true` removes it once the ISO is mounted.
+  (`media/restore_certificate_verification.yml`) unless
+  `restoreVerificationAfterBoot: false` leaves them off. TLS encryption is
+  retained — only server authentication is dropped — and the fetch is further
+  bounded by the unguessable per-run publish token in the ISO URL.
+- `virtualMedia.tls.trust: import-certificate` is the trust path: it uploads
+  the artifact server certificate into the BMC trust store before the fetch so
+  verification can stay on, and `removeCertificateAfterBoot: true` removes it
+  once the ISO is mounted.
+- `virtualMedia.tls.trust: established` declares the trust exists out of band
+  (CA-signed artifact certificate, root CA pre-loaded into the BMC trust store,
+  or verification already disabled): the role performs **no** BMC security
+  writes — no verification toggles, no import, no restore — and only issues the
+  canonical `InsertMedia`. This is the only mode usable by a BMC account that
+  lacks the vendor's security-configuration right on a verification-enforcing
+  BMC.
 
 This virtual-media fetch is the only place Bootwright relaxes artifact-server
 TLS trust. `InfraProvider.spec.baremetal.defaults.bmc` supplies fleet-wide

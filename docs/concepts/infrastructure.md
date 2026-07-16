@@ -79,7 +79,7 @@ attachment.
 | `baremetal.boot.method` | No | — | Boot method. Free-form string today; `external` is the supported value for Redfish virtual media. |
 | `baremetal.defaults.bmc.credentialsRef` | No | — | Default BMC credentials secret. Not inherited by machines — credentials stay per-machine. |
 | `baremetal.defaults.bmc.tls.verify` | No | `true` | Default for the bootwright→BMC TLS leg; `false` is a lab opt-out. Inherited by machines that omit `bmc.tls`. |
-| `baremetal.defaults.bmc.virtualMedia.tls.{verify,importServerCertificate,removeServerCertificateAfterBoot}` | No | — | Default for the BMC→artifact-server virtual-media TLS. Inherited by machines that omit `bmc.virtualMedia`. |
+| `baremetal.defaults.bmc.virtualMedia.tls.{trust,restoreVerificationAfterBoot,removeCertificateAfterBoot}` | No | — | Default for the BMC→artifact-server virtual-media TLS trust strategy. Inherited whole by machines that omit `bmc.virtualMedia`. |
 
 `defaults.bmc` supplies provider-wide BMC defaults: `tls` and `virtualMedia` are
 inherited by every Machine that omits them (credentialsRef stays per-machine). An
@@ -106,8 +106,8 @@ spec:
           verify: false
         virtualMedia:
           tls:
-            importServerCertificate: true
-            removeServerCertificateAfterBoot: true
+            trust: import-certificate
+            removeCertificateAfterBoot: true
   networkAttachments:
     - name: rack1-vlan140-machine
       baremetal:

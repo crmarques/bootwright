@@ -200,7 +200,7 @@ func TestBareMetalProviderBMCDefaults(t *testing.T) {
 	verifyFalse := false
 	certOnly := validateProviderSpec(mk(&v1alpha1.BMCDefaults{
 		TLS:          &v1alpha1.BMCTLS{Verify: &verifyFalse},
-		VirtualMedia: &v1alpha1.BMCVirtualMedia{TLS: &v1alpha1.BMCVirtualMediaTLS{ImportServerCertificate: true}},
+		VirtualMedia: &v1alpha1.BMCVirtualMedia{TLS: &v1alpha1.BMCVirtualMediaTLS{Trust: v1alpha1.BMCVirtualMediaTrustImportCertificate}},
 	}), noMachines, noClusters)
 	for _, bad := range []string{"defaults.bmc.credentialsRef", "virtualMedia.tls"} {
 		if strings.Contains(strings.Join(certOnly, "\n"), bad) {
@@ -209,9 +209,9 @@ func TestBareMetalProviderBMCDefaults(t *testing.T) {
 	}
 
 	badRemove := validateProviderSpec(mk(&v1alpha1.BMCDefaults{
-		VirtualMedia: &v1alpha1.BMCVirtualMedia{TLS: &v1alpha1.BMCVirtualMediaTLS{RemoveServerCertificateAfterBoot: true}},
+		VirtualMedia: &v1alpha1.BMCVirtualMedia{TLS: &v1alpha1.BMCVirtualMediaTLS{RemoveCertificateAfterBoot: true}},
 	}), noMachines, noClusters)
-	want := "spec.bareMetal.defaults.bmc.virtualMedia.tls.removeServerCertificateAfterBoot requires importServerCertificate"
+	want := `spec.bareMetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot is only valid with trust "import-certificate"`
 	if !strings.Contains(strings.Join(badRemove, "\n"), want) {
 		t.Fatalf("missing %q in %v", want, badRemove)
 	}

@@ -254,7 +254,7 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 				t.Errorf("redfish.validateCerts got %v, want %v", got, tc.wantValidate)
 			}
 			if _, ok := redfish["artifactCertificate"]; ok {
-				t.Errorf("redfish.artifactCertificate present by default; should be omitted unless bmc.virtualMediaCertificate is set")
+				t.Errorf("redfish.artifactCertificate present by default; should be omitted unless bmc.virtualMedia.tls is set")
 			}
 			if got := machine["bootApplyRole"]; got != "bootwright.core.container_cluster_boot_redfish" {
 				t.Errorf("bootApplyRole got %v, want bootwright.core.container_cluster_boot_redfish", got)
@@ -573,12 +573,10 @@ func TestBareMetalBootRendersVirtualMediaCertificateTrust(t *testing.T) {
 		if state.Machines[i].Spec.Hardware.Management.BMC.Address == "" {
 			continue
 		}
-		verifyFalse := false
 		state.Machines[i].Spec.Hardware.Management.BMC.VirtualMedia = &v1alpha1.BMCVirtualMedia{
 			TLS: &v1alpha1.BMCVirtualMediaTLS{
-				Verify:                           &verifyFalse,
-				ImportServerCertificate:          true,
-				RemoveServerCertificateAfterBoot: true,
+				Trust:                      v1alpha1.BMCVirtualMediaTrustImportCertificate,
+				RemoveCertificateAfterBoot: true,
 			},
 		}
 		set++
@@ -593,8 +591,38 @@ func TestBareMetalBootRendersVirtualMediaCertificateTrust(t *testing.T) {
 	if !ok {
 		t.Fatalf("redfish.artifactCertificate missing: %v", redfish)
 	}
-	if ac["ignoreVerification"] != true || ac["import"] != true || ac["removeAfterBoot"] != true {
-		t.Errorf("artifactCertificate got %v, want all flags true", ac)
+	if ac["trust"] != v1alpha1.BMCVirtualMediaTrustImportCertificate || ac["removeAfterBoot"] != true || ac["restoreAfterBoot"] != true {
+		t.Errorf("artifactCertificate got %v, want trust import-certificate with removeAfterBoot", ac)
+	}
+}
+
+func TestBareMetalBootRendersEstablishedTrust(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	set := 0
+	for i := range state.Machines {
+		if state.Machines[i].Spec.Hardware.Management.BMC.Address == "" {
+			continue
+		}
+		state.Machines[i].Spec.Hardware.Management.BMC.VirtualMedia = &v1alpha1.BMCVirtualMedia{
+			TLS: &v1alpha1.BMCVirtualMediaTLS{Trust: v1alpha1.BMCVirtualMediaTrustEstablished},
+		}
+		set++
+	}
+	if set == 0 {
+		t.Fatal("fixture has no baremetal BMC machine to configure")
+	}
+
+	cluster := Vars(state)["bootwright_clusters"].([]any)[0].(map[string]any)
+	redfish := firstMachineComponent(t, cluster)["boot"].(map[string]any)["redfish"].(map[string]any)
+	ac, ok := redfish["artifactCertificate"].(map[string]any)
+	if !ok {
+		t.Fatalf("redfish.artifactCertificate missing: %v", redfish)
+	}
+	if ac["trust"] != v1alpha1.BMCVirtualMediaTrustEstablished || ac["removeAfterBoot"] != false {
+		t.Errorf("artifactCertificate got %v, want trust established without cleanup flags", ac)
 	}
 }
 

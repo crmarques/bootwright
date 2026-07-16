@@ -65,13 +65,28 @@ type BMCVirtualMedia struct {
 	TLS *BMCVirtualMediaTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
 }
 
+const (
+	BMCVirtualMediaTrustDisableVerification = "disable-verification"
+	BMCVirtualMediaTrustImportCertificate   = "import-certificate"
+	BMCVirtualMediaTrustEstablished         = "established"
+)
+
 type BMCVirtualMediaTLS struct {
-	Verify                           *bool `yaml:"verify,omitempty" json:"verify,omitempty"`
-	ImportServerCertificate          bool  `yaml:"importServerCertificate,omitempty" json:"importServerCertificate,omitempty"`
-	RemoveServerCertificateAfterBoot bool  `yaml:"removeServerCertificateAfterBoot,omitempty" json:"removeServerCertificateAfterBoot,omitempty"`
+	Trust                        string `yaml:"trust,omitempty" json:"trust,omitempty"`
+	RestoreVerificationAfterBoot *bool  `yaml:"restoreVerificationAfterBoot,omitempty" json:"restoreVerificationAfterBoot,omitempty"`
+	RemoveCertificateAfterBoot   bool   `yaml:"removeCertificateAfterBoot,omitempty" json:"removeCertificateAfterBoot,omitempty"`
 }
 
-func (t *BMCVirtualMediaTLS) VerifyEnabled() bool { return t == nil || t.Verify == nil || *t.Verify }
+func (t *BMCVirtualMediaTLS) TrustMode() string {
+	if t == nil || t.Trust == "" {
+		return BMCVirtualMediaTrustDisableVerification
+	}
+	return t.Trust
+}
+
+func (t *BMCVirtualMediaTLS) RestoreVerificationEnabled() bool {
+	return t == nil || t.RestoreVerificationAfterBoot == nil || *t.RestoreVerificationAfterBoot
+}
 
 type RootDeviceHints struct {
 	DeviceName       string `yaml:"deviceName,omitempty" json:"deviceName,omitempty"`

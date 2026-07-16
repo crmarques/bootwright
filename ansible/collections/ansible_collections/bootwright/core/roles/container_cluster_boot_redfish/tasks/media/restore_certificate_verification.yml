@@ -10,7 +10,7 @@
   changed_when: false
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
-    - not (bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool)
+    - bootwright_component.boot.redfish.artifactCertificate.restoreAfterBoot | default(true) | bool
     - (bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'
     - bootwright_redfish_vmedia_verify_certificate_supported | default(false) | bool
     - bootwright_redfish_vmedia_verify_certificate_original | default(false) | bool
@@ -72,7 +72,7 @@
   changed_when: false
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
   when:
-    - not (bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool)
+    - bootwright_component.boot.redfish.artifactCertificate.restoreAfterBoot | default(true) | bool
     - (bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'
     - (bootwright_redfish_security_service_member | default('') | length) > 0
     - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool

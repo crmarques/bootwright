@@ -64,7 +64,9 @@
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204]
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
-  when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+  when:
+    - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_redfish_artifact_cert_trust == 'disable-verification'
 
 - name: Confirm the virtual-media certificate verification disable was not refused for lack of privilege
   ansible.builtin.assert:
@@ -85,9 +87,12 @@
       Huawei/xFusion iBMC the fixed Operator and Common User roles do not hold this
       right -- use an Administrator-role account, or grant a Custom Role the
       "Security Configuration" right, then re-run with the same credentials. The
-      privilege-free path is to serve a BMC-trusted artifact server certificate so
-      no verification-disable is needed.
-  when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+      privilege-free path is to serve a BMC-trusted artifact server certificate
+      and set bmc.virtualMedia.tls.trust: established so no verification-disable
+      is needed.
+  when:
+    - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_redfish_artifact_cert_trust == 'disable-verification'
 
 - name: Build standard Redfish InsertMedia request body
   ansible.builtin.set_fact:
@@ -432,7 +437,7 @@
       attempts: "{{ bootwright_redfish_vmedia_probe.attempts | default(1) }}"
       requestedTransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
       observedTransferProtocolType: "{{ bootwright_redfish_vmedia_probe.json.TransferProtocolType | default('', true) }}"
-      verifyCertificateStatus: "{{ bootwright_redfish_vmedia_verify_certificate_patch.status | default('unknown') if bootwright_redfish_vmedia_transfer_protocol == 'HTTPS' else 'not attempted' }}"
+      verifyCertificateStatus: "{{ 'skipped-by-trust-mode' if (bootwright_redfish_vmedia_transfer_protocol == 'HTTPS' and bootwright_redfish_artifact_cert_trust != 'disable-verification') else bootwright_redfish_vmedia_verify_certificate_patch.status | default('unknown') if bootwright_redfish_vmedia_transfer_protocol == 'HTTPS' else 'not attempted' }}"
       verifyCertificate: "{{ bootwright_redfish_vmedia_probe.json.VerifyCertificate | default('') }}"
       securityServiceMember: "{{ bootwright_redfish_security_service_status.member | default('', true) }}"
       securityServiceStatus: "{{ bootwright_redfish_security_service_status.status | default('not attempted') }}"

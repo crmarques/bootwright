@@ -203,20 +203,29 @@ If the BMC accepts the `InsertMedia` task but the task then ends in
 on BMCs such as Huawei iBMC — the BMC reached the listener but rejected the
 HTTPS connection. The usual cause is the artifact server's **self-signed
 certificate**: the BMC will not trust it, and the standard Redfish "skip
-verification" toggles are unimplemented or ineffective on much firmware. Make
-the BMC trust the certificate with
-`Machine.spec.hardware.management.bmc.virtualMedia.tls` (or set it once on the
-provider's `baremetal.defaults.bmc.virtualMedia.tls` to cover the whole fleet):
+verification" toggles are unimplemented or ineffective on much firmware. Declare
+the trust strategy with
+`Machine.spec.hardware.management.bmc.virtualMedia.tls.trust` (or set it once on
+the provider's `baremetal.defaults.bmc.virtualMedia.tls` to cover the whole
+fleet):
 
-- `importServerCertificate: true` uploads the artifact server certificate into the
-  BMC trust store before the fetch (and `removeServerCertificateAfterBoot: true`
+- `trust: import-certificate` uploads the artifact server certificate into the
+  BMC trust store before the fetch (and `removeCertificateAfterBoot: true`
   removes it once the ISO is mounted). Uses the Redfish VirtualMedia Certificates
   collection or the xFusion/Huawei iBMC `SecurityService.ImportRemoteHttpsServerRootCA`
-  action.
-- `verify: false` asks the BMC to skip verifying the certificate (best-effort;
-  some firmware ignores it).
+  action. On xFusion/Huawei iBMC this needs the BMC account's **Security
+  Configuration** right, otherwise HTTP 403 `InsufficientPrivilege`.
+- `trust: disable-verification` (the default) asks the BMC to skip verifying the
+  certificate for the fetch and restores verification afterwards unless
+  `restoreVerificationAfterBoot: false` (best-effort; some firmware ignores it,
+  and disabling an *enforcing* iBMC needs the same Security Configuration right).
+- `trust: established` declares the BMC already trusts the artifact server
+  (CA-signed certificate, pre-loaded root CA, or verification already off):
+  bootwright performs **no** BMC security writes. This is the path for BMC
+  accounts that lack the Security Configuration right.
 
-Alternatively serve a BMC-trusted certificate, or — if the failure is a TLS
+Alternatively serve a BMC-trusted certificate (then declare
+`trust: established`), or — if the failure is a TLS
 *handshake* mismatch rather than trust — relax the listener with
 `InfraComponent.spec.artifactServer.tls.minVersion`/`tls.ciphers` (see
 [Artifact Server](concepts/infrastructure.md#artifact-server)).

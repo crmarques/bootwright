@@ -1,9 +1,11 @@
 # Redfish BMC certificate-import mechanics
 
-The operator-facing two-leg TLS model (`bmc.tls` vs `bmc.virtualMedia.tls.{verify,
-importServerCertificate,removeServerCertificateAfterBoot}`) is documented in
-docs/concepts/machines.md and docs/troubleshooting.md. This file records the
-non-obvious mechanics inside `container_cluster_boot_redfish/tasks/media/`.
+The operator-facing two-leg TLS model (`bmc.tls` vs `bmc.virtualMedia.tls.{trust,
+restoreVerificationAfterBoot,removeCertificateAfterBoot}`) is documented in
+docs/concepts/machines.md and docs/troubleshooting.md. The import path below runs
+only with `trust: import-certificate`; `trust: established` performs no BMC
+security writes at all. This file records the non-obvious mechanics inside
+`container_cluster_boot_redfish/tasks/media/`.
 
 **Discovery-then-dispatch:** `import_certificate.yml` discovers which trust-store
 mechanism the BMC exposes, then dispatches to `import_certificate/<method>.yml`:
@@ -17,8 +19,8 @@ Adding another OEM mechanism is a new method name plus sibling
 `import_certificate/<method>.yml` and `remove_certificate/<method>.yml` files —
 no vendor branch in the shared flow. `cert_method` is a discovered capability,
 not a configured vendor. When the BMC exposes neither mechanism an assert fails
-with a clear message; fall back to ignoring verification or a BMC-trusted
-artifact server certificate.
+with a clear message; fall back to `trust: disable-verification` or a BMC-trusted
+artifact server certificate with `trust: established`.
 
 **iBMC RootCertId slots are 5..8:** the remote-HTTPS-server root-CA store
 accepts `RootCertId` 5 through 8 only (not 1..8); values outside that range are

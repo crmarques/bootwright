@@ -18,8 +18,8 @@ func TestApplyBareMetalBMCDefaults(t *testing.T) {
 						TLS: &v1alpha1.BMCTLS{Verify: &verifyFalse},
 						VirtualMedia: &v1alpha1.BMCVirtualMedia{
 							TLS: &v1alpha1.BMCVirtualMediaTLS{
-								ImportServerCertificate:          true,
-								RemoveServerCertificateAfterBoot: true,
+								Trust:                        v1alpha1.BMCVirtualMediaTrustDisableVerification,
+								RestoreVerificationAfterBoot: &verifyFalse,
 							},
 						},
 					},
@@ -68,11 +68,14 @@ func TestApplyBareMetalBMCDefaults(t *testing.T) {
 		t.Errorf("inherits tls.verify = %v, want false", in.TLS)
 	}
 	if in.VirtualMedia == nil || in.VirtualMedia.TLS == nil ||
-		!in.VirtualMedia.TLS.ImportServerCertificate || !in.VirtualMedia.TLS.RemoveServerCertificateAfterBoot {
-		t.Errorf("inherits virtualMedia = %+v, want import+remove", in.VirtualMedia)
+		in.VirtualMedia.TLS.TrustMode() != v1alpha1.BMCVirtualMediaTrustDisableVerification ||
+		in.VirtualMedia.TLS.RestoreVerificationEnabled() {
+		t.Errorf("inherits virtualMedia = %+v, want disable-verification without restore", in.VirtualMedia)
 	}
-	in.VirtualMedia.TLS.ImportServerCertificate = false
-	if !state.InfraProviders[0].Spec.BareMetal.Defaults.BMC.VirtualMedia.TLS.ImportServerCertificate {
+	in.VirtualMedia.TLS.Trust = v1alpha1.BMCVirtualMediaTrustEstablished
+	*in.VirtualMedia.TLS.RestoreVerificationAfterBoot = true
+	d := state.InfraProviders[0].Spec.BareMetal.Defaults.BMC.VirtualMedia.TLS
+	if d.TrustMode() != v1alpha1.BMCVirtualMediaTrustDisableVerification || d.RestoreVerificationEnabled() {
 		t.Errorf("provider default was aliased by machine inheritance")
 	}
 

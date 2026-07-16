@@ -45,12 +45,13 @@
       transport, so basic-auth-vs-session makes no difference. On Huawei/xFusion
       iBMC the fixed Operator and Common User roles do not hold this right -- use an
       Administrator-role account, or grant a Custom Role the "Security
-      Configuration" right, then re-run with the same credentials. ignoreVerification
-      will not help such an account either: disabling the iBMC
-      HttpsTransferCertVerification flag is the same SecurityService write and needs
-      the same right. The privilege-free path is to serve a BMC-trusted artifact
-      server certificate (CA-signed, or pre-loaded into the BMC trust store) so no
-      import is needed.
+      Configuration" right, then re-run with the same credentials. Switching to
+      trust: disable-verification will not help such an account either: disabling
+      the iBMC HttpsTransferCertVerification flag is the same SecurityService write
+      and needs the same right. The privilege-free path is to serve a BMC-trusted
+      artifact server certificate (CA-signed, or pre-loaded into the BMC trust
+      store) and declare bmc.virtualMedia.tls.trust: established so bootwright
+      performs no BMC security writes at all.
 
 - name: Record SecurityService imported root-CA slot for cleanup
   ansible.builtin.set_fact:

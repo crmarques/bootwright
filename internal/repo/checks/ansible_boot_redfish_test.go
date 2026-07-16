@@ -772,8 +772,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri body", insertAttemptTasks[verifyCertIdx]["name"])
 	}
-	if got := insertAttemptTasks[verifyCertIdx]["when"]; got != "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'" {
-		t.Fatalf("VerifyCertificate patch must only run for HTTPS media, got when=%v", got)
+	if got := insertAttemptTasks[verifyCertIdx]["when"]; !stringListContains(got, "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'") || !stringListContains(got, "bootwright_redfish_artifact_cert_trust == 'disable-verification'") {
+		t.Fatalf("VerifyCertificate patch must only run for HTTPS media under trust disable-verification, got when=%v", got)
 	}
 	verifyBody, ok := verifyCert["body"].(map[string]any)
 	if !ok || verifyBody["VerifyCertificate"] != false {
@@ -1310,12 +1310,21 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 	mediaInsert := readRepoFile(t, root+"/boot/media_insert.yml")
 	for _, want := range []string{
 		"../media/import_certificate.yml",
-		"bootwright_component.boot.redfish.artifactCertificate.import | default(false) | bool",
+		"bootwright_redfish_artifact_cert_trust: \"{{ bootwright_component.boot.redfish.artifactCertificate.trust | default('disable-verification') }}\"",
+		"bootwright_redfish_artifact_cert_trust == 'import-certificate'",
 		"bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'",
 	} {
 		if !strings.Contains(mediaInsert, want) {
-			t.Fatalf("media_insert.yml must gate certificate import on the operator flag; missing %q", want)
+			t.Fatalf("media_insert.yml must gate certificate import on the trust mode; missing %q", want)
 		}
+	}
+	if strings.Count(mediaInsert, "bootwright_redfish_artifact_cert_trust == 'disable-verification'") < 2 {
+		t.Fatalf("media_insert.yml must gate the HttpsTransferCertVerification disable PATCH and its privilege assert on trust disable-verification")
+	}
+
+	insertAttempt := readRepoFile(t, root+"/media/insert_attempt.yml")
+	if strings.Count(insertAttempt, "bootwright_redfish_artifact_cert_trust == 'disable-verification'") < 2 {
+		t.Fatalf("insert_attempt.yml must gate the VerifyCertificate disable PATCH and its privilege assert on trust disable-verification")
 	}
 
 	imp := readRepoFile(t, root+"/media/import_certificate.yml")
@@ -1381,8 +1390,8 @@ func TestRedfishVirtualMediaCertificateTrust(t *testing.T) {
 	}
 
 	restore := readRepoFile(t, root+"/media/restore_certificate_verification.yml")
-	if strings.Count(restore, "not (bootwright_component.boot.redfish.artifactCertificate.ignoreVerification | default(false) | bool)") < 2 {
-		t.Fatalf("both restore PATCHes must skip when ignoreVerification leaves BMC verification disabled")
+	if strings.Count(restore, "bootwright_component.boot.redfish.artifactCertificate.restoreAfterBoot | default(true) | bool") < 2 {
+		t.Fatalf("both restore PATCHes must skip when restoreAfterBoot leaves BMC verification disabled")
 	}
 	for _, want := range []string{
 		"remove_certificate.yml",

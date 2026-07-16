@@ -187,17 +187,19 @@ Rules:
   - `bmc.tls.verify` controls the connection Bootwright opens **to** the BMC
     (the Redfish API leg, controller → BMC). It is tri-state; omitted means
     verify. Set `false` only for a lab/self-signed BMC certificate.
-  - `bmc.virtualMedia.tls` controls how the BMC handles the **artifact server's**
-    certificate when it fetches the boot ISO (BMC → artifact server).
-    `verify` (tri-state, default verify) asks the BMC to skip verification
-    (best-effort; some firmware ignores it). `importServerCertificate: true`
-    uploads the artifact server certificate into the BMC trust store before the
-    fetch so a self-signed certificate is accepted, and
-    `removeServerCertificateAfterBoot: true` (requires `importServerCertificate`)
-    removes it once the ISO is mounted. This virtual-media leg is where
-    Bootwright reconciles the artifact server's typically self-signed
-    certificate; `security.md` describes the default fetch-window handling these
-    fields override.
+  - `bmc.virtualMedia.tls.trust` declares how the BMC comes to trust the
+    **artifact server's** certificate when it fetches the boot ISO (BMC →
+    artifact server). `disable-verification` (the default) asks the BMC to skip
+    verification for the fetch and restores it afterwards unless
+    `restoreVerificationAfterBoot: false` (best-effort; some firmware ignores
+    it). `import-certificate` uploads the artifact server certificate into the
+    BMC trust store before the fetch so a self-signed certificate is accepted,
+    and `removeCertificateAfterBoot: true` (only valid with `import-certificate`)
+    removes it once the ISO is mounted. `established` means the trust already
+    exists out of band and Bootwright performs no BMC security writes at all.
+    This virtual-media leg is where Bootwright reconciles the artifact server's
+    typically self-signed certificate; `security.md` describes the per-mode
+    fetch-window handling.
 - Libvirt, vSphere, and KubeVirt install machines select VM shape through
   `spec.substrate.profileRef`.
 - `spec.os.installProfileRef` selects a `MachineInstallProfile` when Bootwright
