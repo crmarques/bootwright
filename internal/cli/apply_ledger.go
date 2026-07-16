@@ -8,6 +8,10 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 )
 
+func checkCurrentApplyBeforeMutation(runsDir string) error {
+	return converge.CheckCurrentApplyActive(runsDir)
+}
+
 func reconcileCurrentApplyBeforeMutation(stdout io.Writer, runsDir string) error {
 	cancelled, err := converge.ReconcileCurrentApplyBeforeMutation(runsDir)
 	if err != nil {

@@ -110,7 +110,14 @@ func ClusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []
 		for name := range storageKnown {
 			available = append(available, name)
 		}
-		return nil, nil, fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
+		hint := availableClusterNamesHint(available)
+		for _, name := range missing {
+			if name == "artifact-server" {
+				hint += "; the reserved literal artifact-server is valid only as the sole --clusters selector of --stage infra"
+				break
+			}
+		}
+		return nil, nil, fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), hint)
 	}
 	return containerNames, storageNames, nil
 }
@@ -246,10 +253,11 @@ func ValidateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 	if !scopeProvisionsSharedMachineLayer(target) {
 		return nil
 	}
-	selectedNames, _, err := ClusterRootNamesForTarget(state, scope)
+	containerNames, storageNames, err := ClusterRootNamesForTarget(state, scope)
 	if err != nil {
 		return err
 	}
+	selectedNames := append(append([]string{}, containerNames...), storageNames...)
 	if len(selectedNames) == 0 {
 		return nil
 	}

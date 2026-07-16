@@ -1,17 +1,8 @@
 ---
-- name: Resolve shared-service release decision for boot artifact server
-  ansible.builtin.set_fact:
-    bootwright_component_release: >-
-      {{ bootwright_infra_component_release_records is defined
-         and (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
-             in bootwright_infra_component_release_records.split(',') }}
-  changed_when: false
-
 - name: Remove boot artifact server container
   containers.podman.podman_container:
     name: "{{ bootwright_artifacts_container_name }}"
     state: absent
-  when: not bootwright_component_release
 
 - name: Reap orphan boot artifact server from a leaked container instance
   ansible.builtin.include_role:
@@ -22,7 +13,6 @@
       - "label=bootwright.provider={{ bootwright_component.providerName }}"
       - "label=bootwright.name={{ bootwright_component.name }}"
     bootwright_process_cleanup_mark_changed: false
-  when: not bootwright_component_release
 
 - name: Close boot artifact ports on host firewall
   ansible.posix.firewalld:
@@ -35,14 +25,12 @@
   loop_control:
     label: "{{ item.protocol }}:{{ item.port }}"
   when:
-    - not bootwright_component_release
     - bootwright_firewalld_available | default(false)
 
 - name: Remove boot artifact state directory
   ansible.builtin.file:
     path: "{{ bootwright_artifacts_root }}"
     state: absent
-  when: not bootwright_component_release
 
 - name: Remove boot artifact ownership record
   ansible.builtin.include_role:

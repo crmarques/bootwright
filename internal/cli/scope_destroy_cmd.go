@@ -97,6 +97,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			runCommandLabel = converge.DestroyStageCommandLabel(stage, commandLabel)
 		}
 		fullDestroy := converge.DestroyIsFullScope(runScope)
+		if forceUnowned && !converge.ScopeTearsMachineLayer(runScope) {
+			return failErr(2, errors.New("--force-unowned relaxes machine-substrate ownership refusals, which run only in the infra stage; re-run with --stage infra (optionally with --clusters) or as a full destroy"))
+		}
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
@@ -118,13 +121,20 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		if runScope.Name == "infra" && sel.Active {
-			if conflicts := stategraph.SharedDestroyConflicts(state, sel.ContainerRoots); len(conflicts) > 0 {
+			if conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots); len(conflicts) > 0 {
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
-		if runScope.Name != "infra" && sel.Active && len(sel.StorageRoots) > 0 {
+		var storageConsumerOverrideNotice string
+		if sel.Active && len(sel.StorageRoots) > 0 {
 			if conflicts := stategraph.StorageConsumerDestroyConflicts(state, sel.StorageRoots, sel.ContainerRoots); len(conflicts) > 0 {
-				return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
+				if runScope.Name != "infra" {
+					return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
+				}
+				if !override {
+					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --override to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts)))
+				}
+				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --override was supplied"
 			}
 		}
 		printPlanStep(stdout, flags.output, runCommandLabel)
@@ -135,17 +145,28 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
-		tearsDownInfraComponents := artifactServerOnly || runScope.Name == "infra" || fullDestroy
-		var releaseDecision converge.ReleaseDecision
-		if tearsDownInfraComponents {
-			decision, releaseErr := converge.PlanInfraComponentReleases(ctx.Name, ownershipRecords)
-			if releaseErr != nil && !override {
-				return failErr(1, fmt.Errorf("cannot verify whether shared services are still referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", releaseErr))
+		if len(ownershipSkipped) > 0 && !override && !dryRun {
+			details := make([]string, 0, len(ownershipSkipped))
+			for _, warning := range ownershipSkipped {
+				details = append(details, warning.Error())
 			}
-			if err := converge.ReferencedOwnerError(decision.Blocks); err != nil && !override {
+			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --override to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
+		}
+		tearsDownInfraComponents := artifactServerOnly || runScope.Name == "infra" || fullDestroy
+		var componentDecision converge.InfraComponentDestroyDecision
+		if tearsDownInfraComponents {
+			blocksState := sel.RenderState
+			if artifactServerOnly {
+				blocksState = state
+			}
+			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, blocksState, ownershipRecords, artifactServerOnly)
+			if blocksErr != nil && !override {
+				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", blocksErr))
+			}
+			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil && !override {
 				return failErr(1, err)
 			}
-			releaseDecision = decision
+			componentDecision = decision
 		}
 		var plan converge.WorkflowPlan
 		if artifactServerOnly {
@@ -166,14 +187,18 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			resolvedClusterRoots = sel.AllRoots
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
-		converge.ApplyInfraComponentReleaseExtraVar(&plan, releaseDecision.Names())
 		converge.ApplyVerboseExtraVar(&plan, verbose)
-		destroySafety := workflow.EvaluateDestroySafety(plan.State, override, plan.StorageWorkNames)
+		safetyScope := workflow.DestroySafetyScope{}
+		if !artifactServerOnly {
+			safetyScope.TearsMachines = converge.ScopeTearsMachineLayer(runScope)
+			safetyScope.TearsClusters = converge.ScopeTearsClusterLayer(runScope)
+		}
+		destroySafety := workflow.EvaluateDestroySafety(plan.State, override, plan.StorageWorkNames, safetyScope)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			if fullDestroy {
+			if !artifactServerOnly {
 				tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 				if terr != nil {
 					return failErr(1, terr)
@@ -186,11 +211,14 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))
 		}
 		if !dryRun {
-			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
+			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
 		}
 		printDestroySafety(stdout, destroySafety, override, dryRun)
+		if storageConsumerOverrideNotice != "" {
+			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
+		}
 		printSkippedOwnershipRecords(stdout, ownershipSkipped)
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.State)
@@ -198,11 +226,16 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			printDestroyPreview(stdout, runScope, clustersDir, plan.State, plan.StorageWorkNames)
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
-		printInfraComponentReleases(stdout, releaseDecision)
+		printInfraComponentDestroyBlocks(stdout, componentDecision, override)
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		if !dryRun && !yes && !plan.NoRemoteWork {
 			if !confirm(stdin, stdout, "Continue with destroy? [y/N] (default: no): ") {
 				return failErr(1, errors.New("destroy aborted"))
+			}
+		}
+		if !dryRun {
+			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
+				return failErr(1, err)
 			}
 		}
 		if !dryRun && !plan.NoRemoteWork {
@@ -228,7 +261,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
 		var renderResult render.Result
 		switch {
-		case fullDestroy && dryRun:
+		case dryRun && !artifactServerOnly:
 			tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 			if terr != nil {
 				return failErr(1, terr)
@@ -244,14 +277,24 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
+			storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
+			storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
+			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
+				partialErr = fmt.Errorf("the storage teardown ran with --skip-unreachable but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
+			}
+			resetPartial := partial.Recorded
+			if partialErr != nil {
+				resetPartial = storageScopeNames
+			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
+				printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, resetPartial, workflow.SucceededDestroyTaskKinds(ledger)))
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, partial)
+			printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, resetPartial, nil))
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
@@ -259,8 +302,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if derr != nil {
 				return failErr(1, derr)
 			}
-			if !dryRun && !artifactServerOnly {
-				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, nil)
+			if !dryRun && !artifactServerOnly && !plan.NoRemoteWork {
+				printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, nil, nil))
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)
@@ -275,14 +318,25 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	return cmd
 }
 
-func printPartialStorageDestroyWarning(stdout io.Writer, partial []string, err error) {
-	if len(partial) > 0 {
+func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.PartialStorageDestroy, err error) {
+	if len(partial.Recorded) > 0 {
 		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
 			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped and local Ceph state remains. Re-run destroy once the nodes are back up, or wipe them manually, before reusing the hardware; bootwright status flags them.",
-			strings.Join(partial, ", ")))
+			strings.Join(partial.Recorded, ", ")))
+	}
+	if len(partial.Unrecorded) > 0 {
+		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
+			"storage cluster(s) %s had unreachable node(s) but no Bootwright ownership record — treated as never provisioned, so nothing was wiped and no durable partial-destroy marker exists. If these clusters ever held data, verify the nodes manually before reusing the hardware.",
+			strings.Join(partial.Unrecorded, ", ")))
 	}
 	if err != nil {
-		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error())
+		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error()+"; their converge records are kept so the next apply/destroy fails closed")
+	}
+}
+
+func printConvergeRecordResetProblems(stdout io.Writer, problems []error) {
+	for _, problem := range problems {
+		cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; run records may still claim this resource is converged — remove the reported record or re-run destroy before the next apply")
 	}
 }
 

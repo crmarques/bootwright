@@ -12,6 +12,24 @@ type StaleApplyCancellation struct {
 	Detail string
 }
 
+func CheckCurrentApplyActive(runsDir string) error {
+	ledger, found, err := workflow.LoadRunLedger(runsDir)
+	if err != nil {
+		return err
+	}
+	if !found || !ledger.Active() {
+		return nil
+	}
+	activity, err := workflow.AssessRunActivity(runsDir, ledger, time.Now())
+	if err != nil {
+		return err
+	}
+	if activity.State == workflow.RunActivityActive {
+		return fmt.Errorf("apply run %s is still running; inspect it with bootwright status --watch", ledger.RunID)
+	}
+	return nil
+}
+
 func ReconcileCurrentApplyBeforeMutation(runsDir string) (*StaleApplyCancellation, error) {
 	ledger, found, err := workflow.LoadRunLedger(runsDir)
 	if err != nil {

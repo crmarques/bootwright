@@ -5,60 +5,45 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ownership"
+	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 const ownershipInfraComponentKind = "infra-component"
 
-const InfraComponentReleaseExtraVar = "bootwright_infra_component_release_records"
+const artifactServerRecordKindLabel = "artifacts"
 
-type InfraComponentRelease struct {
+type InfraComponentDestroyBlock struct {
 	Name          string
 	Host          string
 	ComponentKind string
+	Contexts      []string
+	Unrecorded    bool
 }
 
-type InfraComponentReferencedOwner struct {
-	Name          string
-	Host          string
-	ComponentKind string
-	Referrers     []string
-}
-
-type ReleaseDecision struct {
-	Releases []InfraComponentRelease
-	Blocks   []InfraComponentReferencedOwner
+type InfraComponentDestroyDecision struct {
+	Blocks   []InfraComponentDestroyBlock
 	Warnings []error
 }
 
-func (d ReleaseDecision) Names() []string {
-	names := make([]string, 0, len(d.Releases))
-	for _, release := range d.Releases {
-		names = append(names, release.Name)
-	}
-	return names
-}
-
-func PlanInfraComponentReleases(selfContext string, records []ownership.ResourceRecord) (ReleaseDecision, error) {
+func PlanInfraComponentDestroyBlocks(selfContext string, state v1alpha1.State, records []ownership.ResourceRecord, artifactServerOnly bool) (InfraComponentDestroyDecision, error) {
 	stores, err := siblingContextStores(selfContext)
 	if err != nil {
-		return ReleaseDecision{}, err
+		return InfraComponentDestroyDecision{}, err
 	}
-	var decision ReleaseDecision
+	var decision InfraComponentDestroyDecision
+	ownNames := map[string]bool{}
 	for _, record := range records {
 		if strings.TrimSpace(record.Kind) != ownershipInfraComponentKind {
 			continue
 		}
 		componentKind := strings.TrimSpace(record.Labels["bootwright.kind"])
-		if record.IsReference() {
-			decision.Releases = append(decision.Releases, InfraComponentRelease{
-				Name:          record.Name,
-				Host:          record.Host,
-				ComponentKind: componentKind,
-			})
+		if artifactServerOnly && componentKind != artifactServerRecordKindLabel {
 			continue
 		}
+		ownNames[strings.TrimSpace(record.Name)] = true
 		if len(stores) == 0 {
 			continue
 		}
@@ -73,33 +58,56 @@ func PlanInfraComponentReleases(selfContext string, records []ownership.Resource
 		decision.Warnings = append(decision.Warnings, coSkipped...)
 		blockers := mergeUniqueSorted(referrers, coOwners)
 		if len(blockers) > 0 {
-			decision.Blocks = append(decision.Blocks, InfraComponentReferencedOwner{
+			decision.Blocks = append(decision.Blocks, InfraComponentDestroyBlock{
 				Name:          record.Name,
 				Host:          record.Host,
 				ComponentKind: componentKind,
-				Referrers:     blockers,
+				Contexts:      blockers,
 			})
 		}
 	}
+	if len(stores) > 0 {
+		for _, service := range stategraph.ResolveMachineServices(state).Services {
+			if !service.IsInfraComponentService() {
+				continue
+			}
+			if artifactServerOnly && service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {
+				continue
+			}
+			name := strings.TrimSpace(service.Identity.Name)
+			if name == "" || ownNames[name] {
+				continue
+			}
+			owners, skipped := ownership.OwnerContextsForComponent(stores, selfContext, ownershipInfraComponentKind, name)
+			decision.Warnings = append(decision.Warnings, skipped...)
+			if len(owners) > 0 {
+				decision.Blocks = append(decision.Blocks, InfraComponentDestroyBlock{
+					Name:          name,
+					ComponentKind: service.Identity.Kind,
+					Contexts:      owners,
+					Unrecorded:    true,
+				})
+			}
+		}
+	}
+	decision.Warnings = dedupeErrors(decision.Warnings)
+	sort.SliceStable(decision.Blocks, func(i, j int) bool { return decision.Blocks[i].Name < decision.Blocks[j].Name })
 	return decision, nil
 }
 
-func ReferencedOwnerError(blocks []InfraComponentReferencedOwner) error {
+func InfraComponentDestroyBlockError(blocks []InfraComponentDestroyBlock) error {
 	if len(blocks) == 0 {
 		return nil
 	}
 	parts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
-		parts = append(parts, fmt.Sprintf("%s (referrers: %s)", block.Name, strings.Join(block.Referrers, ", ")))
+		detail := "co-owned or referenced by"
+		if block.Unrecorded {
+			detail = "owned (with no ownership record in this context) by"
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s context(s): %s)", block.Name, detail, strings.Join(block.Contexts, ", ")))
 	}
-	return fmt.Errorf("refusing to tear down shared infra-component(s) still referenced or co-owned by other contexts: %s; detach the other contexts first, or re-run with --override to tear them down regardless", strings.Join(parts, "; "))
-}
-
-func ApplyInfraComponentReleaseExtraVar(plan *WorkflowPlan, names []string) {
-	if len(names) == 0 {
-		return
-	}
-	plan.ExtraVarPairs = append(plan.ExtraVarPairs, InfraComponentReleaseExtraVar+"="+strings.Join(names, ","))
+	return fmt.Errorf("refusing to tear down shared infra-component(s) that other contexts own or reference: %s; destroy or detach them from the owning context first, or re-run with --override to tear them down regardless", strings.Join(parts, "; "))
 }
 
 func mergeUniqueSorted(a, b []string) []string {
@@ -116,6 +124,19 @@ func mergeUniqueSorted(a, b []string) []string {
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+func dedupeErrors(in []error) []error {
+	seen := map[string]bool{}
+	out := make([]error, 0, len(in))
+	for _, err := range in {
+		if err == nil || seen[err.Error()] {
+			continue
+		}
+		seen[err.Error()] = true
+		out = append(out, err)
+	}
 	return out
 }
 

@@ -56,33 +56,33 @@ func printSkippedOwnershipRecords(w io.Writer, warnings []error) {
 	}
 }
 
-func printInfraComponentReleases(w io.Writer, decision converge.ReleaseDecision) {
-	if len(decision.Releases) == 0 && len(decision.Blocks) == 0 && len(decision.Warnings) == 0 {
+func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraComponentDestroyDecision, override bool) {
+	if len(decision.Blocks) == 0 && len(decision.Warnings) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
-	if len(decision.Releases) > 0 {
-		p.Section("Will release (this context only references; owner's base kept)")
-		for _, release := range decision.Releases {
-			label := release.ComponentKind + " " + release.Name
-			if release.Host != "" {
-				label += " on " + release.Host
-			}
-			p.Status(output.StatusInfo, label, "removing only this context's contribution and reference record")
-		}
-	}
 	if len(decision.Blocks) > 0 {
-		p.Section("Blocked (owned base still referenced by other contexts)")
+		p.Section("Shared components owned or referenced by other contexts")
 		for _, block := range decision.Blocks {
 			label := block.ComponentKind + " " + block.Name
 			if block.Host != "" {
 				label += " on " + block.Host
 			}
-			p.Status(output.StatusWarn, label, "referenced by "+strings.Join(block.Referrers, ", ")+"; refused unless --override")
+			relation := "co-owned or referenced by "
+			if block.Unrecorded {
+				relation = "owned (no ownership record in this context) by "
+			}
+			detail := relation + strings.Join(block.Contexts, ", ")
+			if override {
+				detail += "; WILL BE TORN DOWN because --override was supplied"
+			} else {
+				detail += "; refused unless --override"
+			}
+			p.Status(output.StatusWarn, label, detail)
 		}
 	}
 	for _, warning := range decision.Warnings {
-		p.Status(output.StatusWarn, "reference scan", warning.Error()+"; treated as still-referenced")
+		p.Status(output.StatusWarn, "ownership scan", warning.Error()+"; treated as still in use")
 	}
 }
 

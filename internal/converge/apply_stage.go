@@ -159,3 +159,17 @@ func ScopeIncludesApplyPhase(scope Scope, phase string) bool {
 	}
 	return slices.Contains(names, phase)
 }
+
+func ScopeTearsMachineLayer(scope Scope) bool {
+	return slices.Contains(scope.PhaseNames, PhaseFabric) || slices.Contains(scope.PhaseNames, PhaseMachines)
+}
+
+func ScopeTearsClusterLayer(scope Scope) bool {
+	for _, name := range scope.PhaseNames {
+		switch name {
+		case PhaseDeps, PhaseBase, PhaseAddons:
+			return true
+		}
+	}
+	return false
+}

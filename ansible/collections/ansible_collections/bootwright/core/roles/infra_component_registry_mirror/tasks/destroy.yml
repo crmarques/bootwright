@@ -1,17 +1,8 @@
 ---
-- name: Resolve shared-service release decision for mirror registry
-  ansible.builtin.set_fact:
-    bootwright_component_release: >-
-      {{ bootwright_infra_component_release_records is defined
-         and (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
-             in bootwright_infra_component_release_records.split(',') }}
-  changed_when: false
-
 - name: Remove mirror registry container
   containers.podman.podman_container:
     name: "{{ bootwright_mr_container_name }}"
     state: absent
-  when: not bootwright_component_release
 
 - name: Reap orphan mirror registry from a leaked container instance
   ansible.builtin.include_role:
@@ -22,14 +13,12 @@
       - "label=bootwright.provider={{ bootwright_component.providerName }}"
       - "label=bootwright.name={{ bootwright_component.name }}"
     bootwright_process_cleanup_mark_changed: false
-  when: not bootwright_component_release
 
 - name: Remove mirror registry trust anchor
   ansible.builtin.file:
     path: "{{ bootwright_mr_trust_anchor }}"
     state: absent
   register: bootwright_mr_trust_removed
-  when: not bootwright_component_release
 
 - name: Update CA trust store
   ansible.builtin.command:
@@ -45,7 +34,6 @@
     permanent: true
     immediate: true
   when:
-    - not bootwright_component_release
     - bootwright_firewalld_available | default(false)
   failed_when: false
 
@@ -53,7 +41,6 @@
   ansible.builtin.file:
     path: "{{ bootwright_mr_root }}"
     state: absent
-  when: not bootwright_component_release
 
 - name: Remove mirror registry ownership record
   ansible.builtin.include_role:

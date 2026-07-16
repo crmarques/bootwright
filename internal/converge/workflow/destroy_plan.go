@@ -131,3 +131,22 @@ func PrepareDestroyTaskGraph(runsDir string, opts RunOptions, tasks []ApplyTask,
 func destroyRunID(now time.Time) string {
 	return "destroy-" + now.UTC().Format("20060102T150405.000000000Z")
 }
+
+func SucceededDestroyTaskKinds(ledger RunLedger) map[string]bool {
+	out := map[string]bool{}
+	for _, task := range ledger.Tasks {
+		if task.Status == TaskStatusOK {
+			out[task.Kind] = true
+		}
+	}
+	return out
+}
+
+func DestroyScopeCoversStorage(scopeName string) bool {
+	switch strings.TrimSpace(scopeName) {
+	case "clusters", "all":
+		return true
+	default:
+		return false
+	}
+}

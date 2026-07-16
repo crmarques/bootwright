@@ -4,11 +4,12 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileReferenced(t *testing.T) {
+func TestPlanInfraComponentDestroyBlocksOwnerTeardownWhileReferenced(t *testing.T) {
 	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
 	ctxHub := mustContext(t, "hub")
 	ctxSpoke := mustContext(t, "spoke")
@@ -20,26 +21,23 @@ func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileReferenced(t *testing
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 	saveRecord(t, ctxSpoke.OwnershipDir, reference)
 
-	decision, err := PlanInfraComponentReleases("hub", []ownership.ResourceRecord{owner})
+	decision, err := PlanInfraComponentDestroyBlocks("hub", v1alpha1.State{}, []ownership.ResourceRecord{owner}, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
-	}
-	if len(decision.Releases) != 0 {
-		t.Fatalf("owner teardown is not a release, got %+v", decision.Releases)
 	}
 	if len(decision.Blocks) != 1 {
 		t.Fatalf("want 1 block, got %d (%+v)", len(decision.Blocks), decision.Blocks)
 	}
 	block := decision.Blocks[0]
-	if block.Name != "prov1-edge" || block.ComponentKind != "artifacts" || !slices.Equal(block.Referrers, []string{"spoke"}) {
+	if block.Name != "prov1-edge" || block.ComponentKind != "artifacts" || !slices.Equal(block.Contexts, []string{"spoke"}) {
 		t.Fatalf("unexpected block %+v", block)
 	}
-	if refErr := ReferencedOwnerError(decision.Blocks); refErr == nil {
+	if refErr := InfraComponentDestroyBlockError(decision.Blocks); refErr == nil {
 		t.Fatalf("blocks must render a refusal error")
 	}
 }
 
-func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileCoOwned(t *testing.T) {
+func TestPlanInfraComponentDestroyBlocksOwnerTeardownWhileCoOwned(t *testing.T) {
 	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
 	ctxHub := mustContext(t, "hub")
 	ctxSpoke := mustContext(t, "spoke")
@@ -50,49 +48,22 @@ func TestPlanInfraComponentReleasesBlocksOwnerTeardownWhileCoOwned(t *testing.T)
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 	saveRecord(t, ctxSpoke.OwnershipDir, coOwner)
 
-	decision, err := PlanInfraComponentReleases("hub", []ownership.ResourceRecord{owner})
+	decision, err := PlanInfraComponentDestroyBlocks("hub", v1alpha1.State{}, []ownership.ResourceRecord{owner}, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	if len(decision.Blocks) != 1 {
 		t.Fatalf("want 1 block from co-owner, got %d (%+v)", len(decision.Blocks), decision.Blocks)
 	}
-	if block := decision.Blocks[0]; block.Name != "prov1-edge" || !slices.Equal(block.Referrers, []string{"spoke"}) {
+	if block := decision.Blocks[0]; block.Name != "prov1-edge" || !slices.Equal(block.Contexts, []string{"spoke"}) {
 		t.Fatalf("unexpected co-owner block %+v", block)
 	}
-	if ReferencedOwnerError(decision.Blocks) == nil {
+	if InfraComponentDestroyBlockError(decision.Blocks) == nil {
 		t.Fatalf("co-owner block must render a refusal error")
 	}
 }
 
-func TestPlanInfraComponentReleasesReleasesReferenceForAllKinds(t *testing.T) {
-	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
-	ctxHub := mustContext(t, "hub")
-	ctxSpoke := mustContext(t, "spoke")
-
-	base := ownership.ResourceRecord{
-		Kind: "infra-component", Name: "prov1-lb", Host: "bastion.lab",
-		Owner: ownership.Owner, Labels: map[string]string{"bootwright.kind": "load-balancer"},
-	}
-	reference := base
-	reference.Role = ownership.RoleReference
-	reference.Context = "spoke"
-	saveRecord(t, ctxHub.OwnershipDir, base)
-	saveRecord(t, ctxSpoke.OwnershipDir, reference)
-
-	decision, err := PlanInfraComponentReleases("spoke", []ownership.ResourceRecord{reference})
-	if err != nil {
-		t.Fatalf("plan: %v", err)
-	}
-	if len(decision.Blocks) != 0 {
-		t.Fatalf("a referrer teardown is never blocked, got %+v", decision.Blocks)
-	}
-	if names := decision.Names(); !slices.Equal(names, []string{"prov1-lb"}) {
-		t.Fatalf("want reference released [prov1-lb], got %v", names)
-	}
-}
-
-func TestPlanInfraComponentReleasesTearsDownWhenSoleOwner(t *testing.T) {
+func TestPlanInfraComponentDestroyBlocksTearsDownWhenSoleOwner(t *testing.T) {
 	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
 	ctxA := mustContext(t, "ctx-a")
 	mustContext(t, "ctx-b")
@@ -100,25 +71,12 @@ func TestPlanInfraComponentReleasesTearsDownWhenSoleOwner(t *testing.T) {
 	shared := sharedArtifactRecord()
 	saveRecord(t, ctxA.OwnershipDir, shared)
 
-	decision, err := PlanInfraComponentReleases("ctx-a", []ownership.ResourceRecord{shared})
+	decision, err := PlanInfraComponentDestroyBlocks("ctx-a", v1alpha1.State{}, []ownership.ResourceRecord{shared}, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	if len(decision.Releases) != 0 || len(decision.Blocks) != 0 {
-		t.Fatalf("sole owner must tear down unblocked, got releases %+v blocks %+v", decision.Releases, decision.Blocks)
-	}
-}
-
-func TestApplyInfraComponentReleaseExtraVar(t *testing.T) {
-	plan := &WorkflowPlan{}
-	ApplyInfraComponentReleaseExtraVar(plan, nil)
-	if len(plan.ExtraVarPairs) != 0 {
-		t.Fatalf("empty release set must add no extra var, got %v", plan.ExtraVarPairs)
-	}
-	ApplyInfraComponentReleaseExtraVar(plan, []string{"prov1-edge", "prov1-proxy"})
-	want := InfraComponentReleaseExtraVar + "=prov1-edge,prov1-proxy"
-	if len(plan.ExtraVarPairs) != 1 || plan.ExtraVarPairs[0] != want {
-		t.Fatalf("want %q, got %v", want, plan.ExtraVarPairs)
+	if len(decision.Blocks) != 0 {
+		t.Fatalf("sole owner must tear down unblocked, got blocks %+v", decision.Blocks)
 	}
 }
 

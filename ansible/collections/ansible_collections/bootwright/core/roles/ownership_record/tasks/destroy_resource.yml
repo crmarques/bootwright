@@ -12,10 +12,6 @@
     bootwright_ownership_destroy_name: "{{ bootwright_ownership_record.name }}"
     bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_record.attributes | default({}) }}"
     bootwright_ownership_destroy_paths: "{{ bootwright_ownership_record.paths | default([]) }}"
-    bootwright_ownership_destroy_release: >-
-      {{ bootwright_ownership_record.kind == 'infra-component'
-         and bootwright_infra_component_release_records is defined
-         and bootwright_ownership_record.name in bootwright_infra_component_release_records.split(',') }}
   changed_when: false
 
 - name: Stop recorded libvirt domain
@@ -98,7 +94,6 @@
     state: absent
   failed_when: false
   when:
-    - not bootwright_ownership_destroy_release
     - bootwright_ownership_destroy_attrs.container | default('') | length > 0
 
 - name: Close recorded firewalld ports
@@ -115,7 +110,6 @@
   loop_control:
     label: "{{ item }}"
   when:
-    - not bootwright_ownership_destroy_release
     - item | length > 0
 
 - name: Resolve mount-safe recorded owned paths
@@ -136,7 +130,6 @@
       }}
     bootwright_ownership_owned_path_re: "^({{ bootwright_ownership_owned_path_prefixes | map('regex_escape') | join('|') }})"
   changed_when: false
-  when: not bootwright_ownership_destroy_release
 
 - name: List active mounts before removing owned paths
   ansible.builtin.command:
@@ -149,7 +142,6 @@
   changed_when: false
   failed_when: false
   when:
-    - not bootwright_ownership_destroy_release
     - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
 
 - name: Unmount active mounts under recorded owned paths
@@ -169,7 +161,6 @@
     label: "{{ item }}"
   failed_when: false
   when:
-    - not bootwright_ownership_destroy_release
     - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
 
 - name: Remove recorded owned paths
@@ -180,7 +171,6 @@
   loop_control:
     label: "{{ item }}"
   when:
-    - not bootwright_ownership_destroy_release
     - item | length > 0
     - "'..' not in item"
     - >-

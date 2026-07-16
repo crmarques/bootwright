@@ -42,8 +42,14 @@ func TestRecordPartialStorageDestroyStampsOwnershipRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecordPartialStorageDestroy: %v", err)
 	}
-	if len(partial) != 1 || partial[0] != "ceph-a" {
-		t.Fatalf("partial clusters = %v, want [ceph-a]", partial)
+	if !partial.Found {
+		t.Fatal("result file must be reported as found")
+	}
+	if len(partial.Recorded) != 1 || partial.Recorded[0] != "ceph-a" {
+		t.Fatalf("recorded partial clusters = %v, want [ceph-a]", partial.Recorded)
+	}
+	if len(partial.Unrecorded) != 0 {
+		t.Fatalf("unrecorded partial clusters = %v, want none", partial.Unrecorded)
 	}
 
 	records, err := ownership.LoadContext(ownershipDir, "")
@@ -76,7 +82,30 @@ func TestRecordPartialStorageDestroyNoResultIsClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing result must be clean, got err %v", err)
 	}
-	if partial != nil {
-		t.Fatalf("missing result must report no partial clusters, got %v", partial)
+	if partial.Found {
+		t.Fatal("missing result must report Found=false")
+	}
+	if len(partial.Recorded) != 0 || len(partial.Unrecorded) != 0 {
+		t.Fatalf("missing result must report no partial clusters, got %+v", partial)
+	}
+}
+
+func TestRecordPartialStorageDestroyUnrecordedClusterIsReportedSeparately(t *testing.T) {
+	dir := t.TempDir()
+	ownershipDir := filepath.Join(dir, "ownership")
+	runsDir := filepath.Join(dir, "runs")
+
+	runLog := writeStorageDestroyResult(t, runsDir, "destroy-20260101T000000Z",
+		`{"partialClusters":["ceph-a"],"skippedNodes":["ceph-02"],"skippedHosts":["storage__ceph-a__ceph-02"]}`)
+
+	partial, err := RecordPartialStorageDestroy(ownershipDir, "", runLog)
+	if err != nil {
+		t.Fatalf("RecordPartialStorageDestroy: %v", err)
+	}
+	if len(partial.Recorded) != 0 {
+		t.Fatalf("no ownership record exists, recorded = %v, want none", partial.Recorded)
+	}
+	if len(partial.Unrecorded) != 1 || partial.Unrecorded[0] != "ceph-a" {
+		t.Fatalf("unrecorded = %v, want [ceph-a]", partial.Unrecorded)
 	}
 }

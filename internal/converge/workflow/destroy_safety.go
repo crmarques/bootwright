@@ -33,16 +33,21 @@ func ProtectedKindSet(state v1alpha1.State) map[string]bool {
 	return out
 }
 
-func protectedKindsPresent(state v1alpha1.State, storageWorkNames []string) []string {
+type DestroySafetyScope struct {
+	TearsMachines bool
+	TearsClusters bool
+}
+
+func protectedKindsPresent(state v1alpha1.State, storageWorkNames []string, scope DestroySafetyScope) []string {
 	protected := ProtectedKindSet(state)
 	var present []string
-	if protected[v1alpha1.KindContainerCluster] && len(state.ContainerClusters) > 0 {
+	if scope.TearsClusters && protected[v1alpha1.KindContainerCluster] && len(state.ContainerClusters) > 0 {
 		present = append(present, v1alpha1.KindContainerCluster)
 	}
-	if protected[v1alpha1.KindStorageCluster] && storageInTeardown(state, storageWorkNames) {
+	if (scope.TearsClusters || scope.TearsMachines) && protected[v1alpha1.KindStorageCluster] && storageInTeardown(state, storageWorkNames) {
 		present = append(present, v1alpha1.KindStorageCluster)
 	}
-	if protected[v1alpha1.KindMachine] && len(state.Machines) > 0 {
+	if scope.TearsMachines && protected[v1alpha1.KindMachine] && len(state.Machines) > 0 {
 		present = append(present, v1alpha1.KindMachine)
 	}
 	return present
@@ -55,12 +60,12 @@ func storageInTeardown(state v1alpha1.State, storageWorkNames []string) bool {
 	return len(storageWorkNames) > 0
 }
 
-func EvaluateDestroySafety(state v1alpha1.State, override bool, storageWorkNames []string) DestroySafetyDecision {
+func EvaluateDestroySafety(state v1alpha1.State, override bool, storageWorkNames []string, scope DestroySafetyScope) DestroySafetyDecision {
 	var reasons []string
 	for _, name := range ProtectedEnvironments(state) {
 		reasons = append(reasons, fmt.Sprintf("Environment/%s spec.safety.destroyProtection=%s", name, v1alpha1.EnvironmentDestroyProtectionRequiredOverride))
 	}
-	for _, kind := range protectedKindsPresent(state, storageWorkNames) {
+	for _, kind := range protectedKindsPresent(state, storageWorkNames, scope) {
 		reasons = append(reasons, fmt.Sprintf("spec.safety.protectedKinds includes %s and this teardown covers one", kind))
 	}
 	return DestroySafetyDecision{

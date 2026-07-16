@@ -1032,8 +1032,8 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "add-ons"}) {
 		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
 	}
-	if report.Playbook != clustersScope.destroyPlaybook {
-		t.Fatalf("playbook = %q, want %q", report.Playbook, clustersScope.destroyPlaybook)
+	if report.DestroyPlan == nil || len(report.DestroyPlan.Tasks) == 0 {
+		t.Fatalf("staged destroy dry-run must carry the executed task plan, got %+v", report.DestroyPlan)
 	}
 }
 
@@ -1056,8 +1056,8 @@ func TestDestroyClustersInfersStageFromClusterScope(t *testing.T) {
 	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
-	if report.Playbook != clustersScope.destroyPlaybook {
-		t.Fatalf("playbook = %q, want %q", report.Playbook, clustersScope.destroyPlaybook)
+	if report.DestroyPlan == nil || len(report.DestroyPlan.Tasks) == 0 {
+		t.Fatalf("staged destroy dry-run must carry the executed task plan, got %+v", report.DestroyPlan)
 	}
 }
 
@@ -4349,8 +4349,8 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode destroy dry-run json: %v\n%s", err, stdout)
 	}
-	if report.Target != "clusters" || report.Playbook != clustersScope.destroyPlaybook {
-		t.Fatalf("destroy target/playbook = %q/%q, want clusters/%q", report.Target, report.Playbook, clustersScope.destroyPlaybook)
+	if report.Target != "clusters" || report.DestroyPlan == nil {
+		t.Fatalf("destroy target = %q with plan %+v, want clusters with a task plan", report.Target, report.DestroyPlan)
 	}
 	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "add-ons"}) {
 		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)

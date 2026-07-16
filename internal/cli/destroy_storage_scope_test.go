@@ -21,8 +21,13 @@ func TestDestroyClustersScopeGatesStorageWorkSet(t *testing.T) {
 		if !slices.Contains(report.ExtraVars, "bootwright_destroy_storage_scope=") {
 			t.Fatalf("container-only destroy must carry an empty storage allowlist; extraVars=%v", report.ExtraVars)
 		}
-		if !slices.Contains(report.Command, "bootwright_destroy_storage_scope=") {
-			t.Fatalf("container-only destroy command must carry the storage gate; command=%v", report.Command)
+		if report.DestroyPlan == nil {
+			t.Fatalf("staged destroy dry-run must carry the executed task plan")
+		}
+		for _, task := range report.DestroyPlan.Tasks {
+			if task.ID == "destroy.storage-clusters" {
+				t.Fatalf("container-only destroy must not plan a storage teardown task; tasks=%+v", report.DestroyPlan.Tasks)
+			}
 		}
 		if !renderedVarsContain(t, report, "name: ceph-storage") {
 			t.Fatalf("render-inclusive state must still render ceph-storage for the attachment")

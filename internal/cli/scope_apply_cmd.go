@@ -253,7 +253,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices)
-			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
+			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
 			hostTrustScope := workflow.ApplyTaskConnectedMachines(tasks)
@@ -273,6 +273,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if !dryRun && !yes && !plan.NoRemoteWork {
 			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(stdout, destructiveOverride, allowDestroy)) {
 				return failErr(1, errors.New("apply aborted"))
+			}
+		}
+		if !dryRun {
+			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
+				return failErr(1, err)
 			}
 		}
 		become, reporter, becomeCleanup, err := prepareMutatingRunCredential(stdin, stdout, stderr, plan, dryRun)

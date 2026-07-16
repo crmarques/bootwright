@@ -50,6 +50,56 @@
           (--skip-unreachable requires --override). Otherwise power the node(s) on and retry.
       when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
+    - name: Summarize storage hosts skipped as unreachable
+      vars:
+        bootwright_storage_skipped_entries: >-
+          {{
+            ansible_play_hosts_all
+            | map('extract', hostvars)
+            | selectattr('bootwright_storage_reachable_probe', 'defined')
+            | selectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
+            | selectattr('bootwright_storage_reachable_probe.unreachable')
+            | list
+          }}
+      block:
+        - name: Warn about storage hosts skipped as unreachable
+          ansible.builtin.debug:
+            msg: >-
+              Skipped unreachable storage node(s):
+              {{ bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list | join(', ') }}.
+              Their OSD devices were NOT wiped and local Ceph state remains; storage
+              cluster(s)
+              {{ bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list | join(', ') }}
+              are only partially destroyed. Re-run destroy once the nodes are back
+              up, or wipe them manually, before reusing the hardware.
+          when: bootwright_storage_skipped_entries | length > 0
+
+        - name: Create storage destroy artifact directory
+          ansible.builtin.file:
+            path: "{{ bootwright_ansible_artifacts_dir }}"
+            state: directory
+            mode: "0700"
+          delegate_to: localhost
+          become: false
+
+        - name: Record skipped-node Ceph teardown state for the controller
+          ansible.builtin.copy:
+            dest: "{{ bootwright_ansible_artifacts_dir }}/storage-destroy-result.json"
+            content: >-
+              {{
+                {
+                  'partialClusters': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list),
+                  'skippedNodes': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list),
+                  'skippedHosts': (bootwright_storage_skipped_entries | map(attribute='inventory_hostname') | list)
+                } | to_nice_json
+              }}
+            mode: "0600"
+          delegate_to: localhost
+          become: false
+      run_once: true
+      when:
+        - bootwright_destroy_skip_unreachable | default(false) | bool
+
     - name: Stop tearing down unreachable storage hosts
       ansible.builtin.meta: end_host
       when:
@@ -103,53 +153,3 @@
       ansible.builtin.include_role:
         name: bootwright.core.storage_cluster_cephadm
         tasks_from: destroy.yml
-
-    - name: Summarize storage hosts skipped as unreachable
-      vars:
-        bootwright_storage_skipped_entries: >-
-          {{
-            ansible_play_hosts_all
-            | map('extract', hostvars)
-            | selectattr('bootwright_storage_reachable_probe', 'defined')
-            | selectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
-            | selectattr('bootwright_storage_reachable_probe.unreachable')
-            | list
-          }}
-      block:
-        - name: Warn about storage hosts skipped as unreachable
-          ansible.builtin.debug:
-            msg: >-
-              Skipped unreachable storage node(s):
-              {{ bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list | join(', ') }}.
-              Their OSD devices were NOT wiped and local Ceph state remains; storage
-              cluster(s)
-              {{ bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list | join(', ') }}
-              are only partially destroyed. Re-run destroy once the nodes are back
-              up, or wipe them manually, before reusing the hardware.
-
-        - name: Create storage destroy artifact directory
-          ansible.builtin.file:
-            path: "{{ bootwright_ansible_artifacts_dir }}"
-            state: directory
-            mode: "0700"
-          delegate_to: localhost
-          become: false
-
-        - name: Record partial Ceph teardown for the controller
-          ansible.builtin.copy:
-            dest: "{{ bootwright_ansible_artifacts_dir }}/storage-destroy-result.json"
-            content: >-
-              {{
-                {
-                  'partialClusters': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list),
-                  'skippedNodes': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list),
-                  'skippedHosts': (bootwright_storage_skipped_entries | map(attribute='inventory_hostname') | list)
-                } | to_nice_json
-              }}
-            mode: "0600"
-          delegate_to: localhost
-          become: false
-      run_once: true
-      when:
-        - bootwright_destroy_skip_unreachable | default(false) | bool
-        - bootwright_storage_skipped_entries | length > 0

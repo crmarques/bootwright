@@ -101,11 +101,13 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	return renderResult, ledger, workflow.ApplyRunLogPath(ctx.RunsDir, prepared.RunID), err
 }
 
-func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string) {
+func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string, succeededDestroyKinds map[string]bool) []error {
+	var problems []error
 	partial := make(map[string]bool, len(partialStorageClusters))
 	for _, name := range partialStorageClusters {
 		partial[name] = true
 	}
+	include := destroyKindIncluded(succeededDestroyKinds)
 	resetScope := runScope
 	if runScope.Name == InfraScope.Name {
 		resetScope = AllScope
@@ -114,25 +116,78 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 	if storageWorkNames != nil {
 		target.StorageClusterNames = append([]string{}, storageWorkNames...)
 	}
-	if tasks, perr := workflow.PlanApplyTasksChecked(target, state); perr == nil {
+	if tasks, perr := workflow.PlanApplyTasksChecked(target, state); perr != nil {
+		problems = append(problems, fmt.Errorf("plan converge-record reset: %w", perr))
+	} else {
 		for _, task := range tasks {
 			if isPartialStorageTask(task, partial) {
 				continue
 			}
-			_ = workflow.RemoveApplyTaskConvergeSafety(runsDir, task)
+			if !include(destroyKindForApplyTaskKind(task.Entry.Kind)) {
+				continue
+			}
+			if err := workflow.RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {
+				problems = append(problems, fmt.Errorf("remove converge record for %s: %w", task.Entry.ID, err))
+			}
 		}
-		for _, name := range workflow.ContainerInstallClusterNames(tasks) {
-			_ = workflow.RemoveClusterInstallState(clustersDir, name)
+		if include(workflow.DestroyTaskKindContainerCluster) {
+			for _, name := range workflow.ContainerInstallClusterNames(tasks) {
+				if err := workflow.RemoveClusterInstallState(clustersDir, name); err != nil {
+					problems = append(problems, fmt.Errorf("remove install record for ContainerCluster/%s: %w", name, err))
+				}
+			}
 		}
 	}
-	for _, name := range destroyStorageResetNames(state, storageWorkNames) {
-		if partial[name] {
-			continue
+	if include(workflow.DestroyTaskKindStorageCluster) {
+		for _, name := range destroyStorageResetNames(state, storageWorkNames) {
+			if partial[name] {
+				continue
+			}
+			if err := workflow.RemoveStorageSubObjectsConvergeSafety(runsDir, state, name); err != nil {
+				problems = append(problems, fmt.Errorf("remove storage sub-object records for StorageCluster/%s: %w", name, err))
+			}
 		}
-		_ = workflow.RemoveStorageSubObjectsConvergeSafety(runsDir, state, name)
 	}
-	if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 {
-		_ = workflow.RemoveAllConvergeSafetyRecords(runsDir)
+	if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
+		if err := workflow.RemoveAllConvergeSafetyRecords(runsDir); err != nil {
+			problems = append(problems, fmt.Errorf("remove remaining converge records: %w", err))
+		}
+	}
+	return problems
+}
+
+func destroyKindIncluded(succeeded map[string]bool) func(string) bool {
+	if succeeded == nil {
+		return func(string) bool { return true }
+	}
+	expanded := make(map[string]bool, len(succeeded)+2)
+	for kind, ok := range succeeded {
+		expanded[kind] = ok
+	}
+	if expanded[workflow.DestroyTaskKindMachineInfra] {
+		expanded[workflow.DestroyTaskKindContainerCluster] = true
+		expanded[workflow.DestroyTaskKindStorageCluster] = true
+	}
+	return func(kind string) bool { return kind != "" && expanded[kind] }
+}
+
+func destroyKindForApplyTaskKind(kind string) string {
+	switch kind {
+	case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
+		return workflow.DestroyTaskKindStorageCluster
+	case workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindInstallWait,
+		workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindNodeConfigApply, workflow.ApplyTaskKindClusterAddon,
+		workflow.ApplyTaskKindHostVirtctl:
+		return workflow.DestroyTaskKindContainerCluster
+	case workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindMachineInfraFinalize,
+		workflow.ApplyTaskKindProvisioningPlaybook:
+		return workflow.DestroyTaskKindMachineInfra
+	case workflow.ApplyTaskKindInfraComponentServices:
+		return workflow.DestroyTaskKindInfraComponents
+	case workflow.ApplyTaskKindProvider:
+		return workflow.DestroyTaskKindProviderServices
+	default:
+		return ""
 	}
 }
 
@@ -145,6 +200,10 @@ func isPartialStorageTask(task workflow.ApplyTask, partial map[string]bool) bool
 		return partial[task.Entry.Cluster]
 	}
 	return false
+}
+
+func DestroyStorageScopeNames(state v1alpha1.State, storageWorkNames []string) []string {
+	return destroyStorageResetNames(state, storageWorkNames)
 }
 
 func destroyStorageResetNames(state v1alpha1.State, storageWorkNames []string) []string {

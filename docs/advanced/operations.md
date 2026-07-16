@@ -329,10 +329,13 @@ marker, so the teardown no longer recognizes it as its own and stops with
 "it carries no Bootwright ownership marker for this context/cluster/machine".
 
 `--force-unowned` is the recovery path: it tells the machine-substrate teardown
-to remove a matching VM despite a missing or mismatched marker.
+to remove a matching VM despite a missing or mismatched marker. Machine
+substrate is torn down by the infra stage, so combine it with `--stage infra`
+(a clusters-only destroy never runs the machine-substrate teardown and refuses
+the flag).
 
 ```text
-bootwright destroy --clusters ceph-storage --force-unowned --yes
+bootwright destroy --stage infra --clusters ceph-storage --force-unowned --yes
 ```
 
 !!! warning "`--force-unowned` is scoped to machine VMs"

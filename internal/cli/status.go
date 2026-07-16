@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -191,7 +192,10 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 	}
 	p.Section("Clusters")
 	displays := buildClusterDisplays(state)
-	partialStorage, _ := converge.PartiallyDestroyedStorageClusters(ownershipDir, contextName)
+	partialStorage, partialErr := converge.PartiallyDestroyedStorageClusters(ownershipDir, contextName)
+	if partialErr != nil {
+		p.Status(cliout.StatusWarn, "teardown", "could not read partial-destroy markers under "+ownershipDir+": "+partialErr.Error()+"; partially destroyed storage clusters may not be flagged")
+	}
 	freshness := status.LoadEffectiveStateFreshness(state, renderedDir)
 	addons := status.BuildAddons(state, clustersDir)
 	containers := map[string]v1alpha1.ContainerCluster{}
@@ -249,6 +253,24 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 			}
 			p.Status(status, "add-on "+extension.Name, detail)
 		}
+	}
+	orphanPartial := make([]string, 0, len(partialStorage))
+	for name := range partialStorage {
+		if _, ok := storages[name]; ok {
+			continue
+		}
+		if _, ok := containers[name]; ok {
+			continue
+		}
+		orphanPartial = append(orphanPartial, name)
+	}
+	sort.Strings(orphanPartial)
+	for _, name := range orphanPartial {
+		detail := "partially destroyed and no longer declared: unreachable nodes were skipped, devices not wiped; restore the StorageCluster declaration and re-run destroy, or wipe the nodes manually"
+		if skipped := strings.TrimSpace(partialStorage[name]); skipped != "" {
+			detail = "partially destroyed and no longer declared: nodes " + skipped + " skipped (unreachable), devices not wiped; restore the StorageCluster declaration and re-run destroy, or wipe the nodes manually"
+		}
+		p.Status(cliout.StatusWarn, name, detail)
 	}
 }
 
