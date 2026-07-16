@@ -66,6 +66,17 @@ func TestMountpointsUnderMatchesDirItself(t *testing.T) {
 	}
 }
 
+func TestMountpointsUnderKeepsUnescapedWhitespaceInTarget(t *testing.T) {
+	mountinfo := "90 25 7:0 / /data/ctx/weird\rname ro,relatime - iso9660 /dev/loop0 ro"
+	mounts, err := mountpointsUnder(strings.NewReader(mountinfo), "/data/ctx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mounts) != 1 || mounts[0] != "/data/ctx/weird\rname" {
+		t.Fatalf("got %v, want [/data/ctx/weird\\rname]", mounts)
+	}
+}
+
 func TestUnescapeMountPath(t *testing.T) {
 	cases := map[string]string{
 		`/data/with\040space`:      "/data/with space",

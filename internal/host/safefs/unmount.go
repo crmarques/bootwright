@@ -15,7 +15,7 @@ func mountpointsUnder(r io.Reader, dir string) ([]string, error) {
 	var mounts []string
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
+		fields := strings.Split(scanner.Text(), " ")
 		if len(fields) < 5 {
 			continue
 		}
