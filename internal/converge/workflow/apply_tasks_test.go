@@ -624,6 +624,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	record := ClusterInstallRecord{
 		Cluster:     "sno-libvirt",
 		DesiredHash: hash,
+		HashSchema:  ConvergeHashSchema,
 		Status:      ClusterInstallStatusInstalled,
 		Phase:       ClusterInstallPhaseComplete,
 		RunID:       "previous-run",
@@ -786,6 +787,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 		Cluster:     "sno-libvirt",
 		DesiredHash: hash,
+		HashSchema:  ConvergeHashSchema,
 		Status:      ClusterInstallStatusInstalling,
 		Phase:       ClusterInstallPhaseNodesBooted,
 		RunID:       "previous-run",

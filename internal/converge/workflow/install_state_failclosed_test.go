@@ -43,7 +43,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			name: "installed record not available",
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
 				if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir),
+					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir), HashSchema: ConvergeHashSchema,
 					Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
 					UpdatedAt: now.UTC(),
 				}); err != nil {
@@ -64,7 +64,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			name: "booting phase is uncertain",
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
 				if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir),
+					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir), HashSchema: ConvergeHashSchema,
 					Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseBooting,
 					UpdatedAt: now.UTC(),
 				}); err != nil {
@@ -77,7 +77,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			name: "unrecognized phase",
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
 				if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir),
+					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir), HashSchema: ConvergeHashSchema,
 					Status: ClusterInstallStatusInstalling, Phase: "bogus-phase",
 					UpdatedAt: now.UTC(),
 				}); err != nil {

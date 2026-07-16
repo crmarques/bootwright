@@ -224,9 +224,6 @@ func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObjec
 	if err != nil || !found {
 		return false, err
 	}
-	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
-		return true, nil
-	}
 	if structuralHash == "" {
 		return false, nil
 	}

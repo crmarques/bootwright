@@ -9,11 +9,11 @@ import (
 
 var structuralFieldClass = map[string]string{
 	"Environments":             "excluded",
-	"Entitlements":             "excludePending",
+	"Entitlements":             "excluded",
 	"Machines":                 "excluded",
-	"MachineImages":            "excludePending",
-	"MachineInstallProfiles":   "excludePending",
-	"NetworkConfigs":           "excludePending",
+	"MachineImages":            "excluded",
+	"MachineInstallProfiles":   "excluded",
+	"NetworkConfigs":           "excluded",
 	"InfraProviders":           "excluded",
 	"InfraComponents":          "excluded",
 	"ContainerClusters":        "identity",
@@ -27,7 +27,7 @@ var structuralFieldClass = map[string]string{
 	"ClusterAddons":            "day2",
 	"ClusterAddonProfiles":     "day2",
 	"ClusterAddonBindings":     "day2",
-	"ProvisioningPlaybooks":    "excludePending",
+	"ProvisioningPlaybooks":    "excluded",
 	"Secrets":                  "excluded",
 }
 
@@ -63,6 +63,44 @@ func TestStorageStructuralProjectionClearsExcludedKinds(t *testing.T) {
 		}
 		if value != 0 {
 			t.Fatalf("storage structural projection must clear excluded kind %q, but it survived (%d entries)", field, value)
+		}
+	}
+}
+
+func TestStorageStructuralProjectionClearsReferencedInstallKinds(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters:        []v1alpha1.StorageCluster{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+		Entitlements:           []v1alpha1.Entitlement{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+		MachineImages:          []v1alpha1.MachineImage{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+		NetworkConfigs:         []v1alpha1.NetworkConfig{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+		ProvisioningPlaybooks:  []v1alpha1.ProvisioningPlaybook{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+	}
+	desired := storageClusterDesiredHashVars(state, "ceph")
+	for field, value := range map[string]int{
+		"Entitlements":           len(desired.Entitlements),
+		"MachineImages":          len(desired.MachineImages),
+		"MachineInstallProfiles": len(desired.MachineInstallProfiles),
+		"NetworkConfigs":         len(desired.NetworkConfigs),
+		"ProvisioningPlaybooks":  len(desired.ProvisioningPlaybooks),
+	} {
+		if value == 0 {
+			t.Fatalf("desired-hash projection must keep referenced kind %q so its edits stay reconcilable drift", field)
+		}
+	}
+	projected := storageClusterStructuralHashVars(state, "ceph")
+	for field, value := range map[string]int{
+		"Entitlements":           len(projected.Entitlements),
+		"MachineImages":          len(projected.MachineImages),
+		"MachineInstallProfiles": len(projected.MachineInstallProfiles),
+		"NetworkConfigs":         len(projected.NetworkConfigs),
+		"ProvisioningPlaybooks":  len(projected.ProvisioningPlaybooks),
+	} {
+		if structuralFieldClass[field] != "excluded" {
+			t.Fatalf("field %q is asserted cleared but not classified excluded", field)
+		}
+		if value != 0 {
+			t.Fatalf("storage structural projection must clear %q so its edits never classify as wipe-and-rebuild, but it survived (%d entries)", field, value)
 		}
 	}
 }

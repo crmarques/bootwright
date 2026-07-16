@@ -41,6 +41,11 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 	clone.Environments = nil
 	clone.Machines = nil
 	clone.Secrets = nil
+	clone.Entitlements = nil
+	clone.MachineImages = nil
+	clone.MachineInstallProfiles = nil
+	clone.NetworkConfigs = nil
+	clone.ProvisioningPlaybooks = nil
 	for i := range clone.StorageClusters {
 		ceph := clone.StorageClusters[i].Spec.Ceph
 		if ceph == nil {
@@ -80,6 +85,7 @@ func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alp
 	}
 	for i := range clone.Machines {
 		clone.Machines[i].Spec.Substrate = v1alpha1.MachineSubstrate{}
+		clone.Machines[i].Spec.Hardware.Management = v1alpha1.MachineHardwareManagement{}
 	}
 	return clone
 }

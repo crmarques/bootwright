@@ -25,7 +25,7 @@ func TestInstallInputsMatch(t *testing.T) {
 	}
 
 	preSchema := ClusterInstallRecord{DesiredHash: "old-full", StructuralHash: "old-struct"}
-	if !installInputsMatch(preSchema, "new-full", "new-struct") {
-		t.Fatal("a pre-schema record must migrate as matching so an upgrade does not re-image an installed cluster")
+	if installInputsMatch(preSchema, "new-full", "new-struct") {
+		t.Fatal("a pre-schema record must NOT read as a match: bootwright cannot prove what it was installed from, so it fails closed instead of silently adopting the record")
 	}
 }

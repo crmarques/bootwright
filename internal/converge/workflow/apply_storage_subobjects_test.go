@@ -141,9 +141,9 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	if err := SaveConvergeSafetyRecord(preSchemaDir, preSchema); err != nil {
 		t.Fatalf("save pre-schema record: %v", err)
 	}
-	migrated := classifyPool(t, preSchemaDir, stateWith(storageSubObjectTestPool("p1", 2)))
-	if migrated.HasStructuralDrift() || !migrated.HasReconcilableDrift() {
-		t.Fatalf("a pre-schema record must migrate as reconcilable, never structural: structural=%v reconcilable=%v", migrated.HasStructuralDrift(), migrated.HasReconcilableDrift())
+	preSchemaClassified := classifyPool(t, preSchemaDir, stateWith(storageSubObjectTestPool("p1", 2)))
+	if !preSchemaClassified.HasStructuralDrift() || preSchemaClassified.HasReconcilableDrift() {
+		t.Fatalf("a pre-schema record must fail closed as structural drift, never silently reconcile: structural=%v reconcilable=%v", preSchemaClassified.HasStructuralDrift(), preSchemaClassified.HasReconcilableDrift())
 	}
 }
 

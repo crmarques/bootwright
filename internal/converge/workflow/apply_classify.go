@@ -127,9 +127,6 @@ func applyTaskReconcilableDrift(task ApplyTask, runsDir string) (bool, error) {
 	if err != nil || !found {
 		return false, err
 	}
-	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
-		return true, nil
-	}
 	if structuralHash == "" {
 		return false, nil
 	}

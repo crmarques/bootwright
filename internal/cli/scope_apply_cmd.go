@@ -247,7 +247,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, err)
 				}
 				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
-				destructiveOverride = append(destructiveOverride, workflow.OverrideRebuildUnverifiedClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)...)
+				destructiveOverride = append(destructiveOverride, workflow.OverrideRebuildInstalledClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)...)
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
 			if reclaimDevices != "" {

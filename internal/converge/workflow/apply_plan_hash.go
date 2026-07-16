@@ -21,12 +21,19 @@ func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1al
 	clone.InfraProviders = nil
 	clone.InfraComponents = nil
 	clone.NetworkConfigs = nil
+	clone.Entitlements = nil
+	clone.MachineImages = nil
+	clone.MachineInstallProfiles = nil
+	clone.ProvisioningPlaybooks = nil
 	for i := range clone.ContainerClusters {
 		for j := range clone.ContainerClusters[i].Spec.Hosts {
 			clone.ContainerClusters[i].Spec.Hosts[j].Labels = nil
 			clone.ContainerClusters[i].Spec.Hosts[j].Taints = nil
 			clone.ContainerClusters[i].Spec.Hosts[j].Role = installTimeNodeRole(clone.ContainerClusters[i].Spec.Hosts[j].Role)
 		}
+	}
+	for i := range clone.Machines {
+		clone.Machines[i].Spec.Hardware.Management = v1alpha1.MachineHardwareManagement{}
 	}
 	return clone
 }

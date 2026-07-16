@@ -277,17 +277,13 @@ func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHas
 	if record.DesiredHash == desiredHash {
 		return false
 	}
-	if recordPredatesHashSchema(record.HashSchema, record.DesiredHash) {
-		return true
+	if record.HashSchema < ConvergeHashSchema {
+		return false
 	}
 	if strings.TrimSpace(structuralHash) == "" || strings.TrimSpace(record.StructuralHash) == "" {
 		return false
 	}
 	return record.StructuralHash == structuralHash
-}
-
-func recordPredatesHashSchema(schema int, recordedHash string) bool {
-	return schema < ConvergeHashSchema && strings.TrimSpace(recordedHash) != ""
 }
 
 func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManager string) ConvergeSafetyClassification {

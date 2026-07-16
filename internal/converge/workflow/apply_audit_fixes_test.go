@@ -60,7 +60,7 @@ func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
 	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster: cluster, DesiredHash: hash,
+		Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
 		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
 		UpdatedAt: now.UTC(),
 	}); err != nil {
@@ -90,7 +90,7 @@ func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
 	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster: cluster, DesiredHash: hash,
+		Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
 		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
 		UpdatedAt: now.UTC(),
 	}); err != nil {
