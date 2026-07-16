@@ -227,6 +227,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
 		var destructiveOverride []string
+		var substrateResetClusters []string
 		if !dryRun {
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
@@ -241,6 +242,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				}
 				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
 				destructiveOverride = append(destructiveOverride, workflow.OverrideRebuildUnverifiedClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)...)
+				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
 			if reclaimDevices != "" {
 				ownedReclaim := converge.OwnedStorageClusters(objects)
@@ -278,6 +280,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if !dryRun {
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
+			}
+			for _, problem := range workflow.RemoveProvisioningPlaybookRecordsForClusters(ctx.RunsDir, plan.State, tasks, substrateResetClusters) {
+				cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; the playbook may be skipped as unchanged although its machines are rebuilt")
 			}
 		}
 		become, reporter, becomeCleanup, err := prepareMutatingRunCredential(stdin, stdout, stderr, plan, dryRun)

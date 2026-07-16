@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/host/safefs"
@@ -304,6 +305,22 @@ func SaveRunLedger(runsDir string, ledger RunLedger) error {
 	data = append(data, '\n')
 	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write apply ledger: %w", err)
+	}
+	return nil
+}
+
+func ArchiveRunLedger(runsDir string, ledger RunLedger) error {
+	if strings.TrimSpace(ledger.RunID) == "" {
+		return fmt.Errorf("archive run ledger: run id is empty")
+	}
+	path := filepath.Join(runsDir, "history", ledger.RunID, "ledger.json")
+	data, err := json.MarshalIndent(ledger, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode run ledger archive: %w", err)
+	}
+	data = append(data, '\n')
+	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
+		return fmt.Errorf("write run ledger archive: %w", err)
 	}
 	return nil
 }

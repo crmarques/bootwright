@@ -109,6 +109,9 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		if err := SaveRunLedger(runsDir, ledger); err != nil {
 			return err
 		}
+		if err := ArchiveRunLedger(runsDir, ledger); err != nil {
+			return err
+		}
 		if err := RemoveRunLeaseIfOwner(runsDir, runID); err != nil && !isLeaseNotOwned(err) {
 			return err
 		}
@@ -268,15 +271,19 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		blockUnfinishedApplyTasks(&ledger, time.Now())
 	}
 	flushFinishedClusterMarkers(logs, ledger, clusterInitiated, clusterFinished, time.Now())
+	failedStatus := RunStatusFailed
+	if ctx.Err() != nil {
+		failedStatus = RunStatusCancelled
+	}
 	if fatalErr != nil {
-		_ = finishRun(RunStatusFailed)
+		finishRunReportingError(streamErr, finishRun, failedStatus)
 		if reporter != nil {
 			reporter.RunSummary(ledger)
 		}
 		return ledger, fatalErr
 	}
 	if firstTaskErr != nil {
-		_ = finishRun(RunStatusFailed)
+		finishRunReportingError(streamErr, finishRun, failedStatus)
 		if reporter != nil {
 			reporter.RunSummary(ledger)
 		}
@@ -289,6 +296,12 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		reporter.RunSummary(ledger)
 	}
 	return ledger, nil
+}
+
+func finishRunReportingError(streamErr io.Writer, finishRun func(RunStatus) error, status RunStatus) {
+	if err := finishRun(status); err != nil && streamErr != nil {
+		fmt.Fprintf(streamErr, "warning: could not record the run's final %s status: %v; the run ledger may still show it as running\n", status, err)
+	}
 }
 
 var (

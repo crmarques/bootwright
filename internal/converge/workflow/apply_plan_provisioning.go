@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,7 +14,70 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
+
+func RemoveProvisioningPlaybookRecordsForClusters(runsDir string, state v1alpha1.State, tasks []ApplyTask, clusters []string) []error {
+	if len(clusters) == 0 || strings.TrimSpace(runsDir) == "" {
+		return nil
+	}
+	rebuiltMachines := map[string]bool{}
+	for _, name := range clusters {
+		for _, machine := range clusterMachineNames(state, name) {
+			rebuiltMachines[machine] = true
+		}
+	}
+	if len(rebuiltMachines) == 0 {
+		return nil
+	}
+	var problems []error
+	for _, task := range tasks {
+		if task.Entry.Kind != ApplyTaskKindProvisioningPlaybook {
+			continue
+		}
+		targets := limitTargetHosts(task.Limit, render.HostGroupMembers(task.State))
+		hostMachines := inventoryHostMachineNames(task.State)
+		intersects := strings.TrimSpace(task.Limit) == ""
+		for _, host := range targets {
+			if machine := hostMachines[host]; machine != "" && rebuiltMachines[machine] {
+				intersects = true
+				break
+			}
+		}
+		if !intersects {
+			continue
+		}
+		if err := RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {
+			problems = append(problems, fmt.Errorf("reset provisioning playbook record %s after machine rebuild: %w", task.Entry.ID, err))
+		}
+	}
+	return problems
+}
+
+func clusterMachineNames(state v1alpha1.State, cluster string) []string {
+	var out []string
+	for _, ocp := range state.ContainerClusters {
+		if ocp.Metadata.Name != cluster {
+			continue
+		}
+		if ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp); ok {
+			for _, machine := range ci.Machines {
+				out = append(out, machine.Name)
+			}
+		}
+	}
+	for _, sc := range state.StorageClusters {
+		if sc.Metadata.Name != cluster || sc.Spec.Ceph == nil {
+			continue
+		}
+		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+			if host.MachineRef.Name != "" {
+				out = append(out, host.MachineRef.Name)
+			}
+		}
+	}
+	return out
+}
 
 func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, target ApplyTarget) error {
 	playbooks := selectedProvisioningPlaybooks(state)
@@ -33,6 +98,10 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 		}
 		timing := v1alpha1.ProvisioningPlaybookTiming(p)
 		id := "playbook." + p.Metadata.Name
+		hashVars, err := provisioningDesiredHashVars(p)
+		if err != nil {
+			return fmt.Errorf("ProvisioningPlaybook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
+		}
 
 		activity := Activity{
 			ID:       id,
@@ -52,7 +121,7 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 				CollectionsPath:   provisioningVendoredPath(p, p.Spec.CollectionsPath),
 				ExtraVarPairs:     provisioningExtraVarPairs(p, stage, timing),
 				State:             state,
-				DesiredHashVars:   provisioningDesiredHashVars(p),
+				DesiredHashVars:   hashVars,
 				SkipWhenConverged: v1alpha1.ProvisioningPlaybookRun(p) == v1alpha1.ProvisioningPlaybookRunOnChange,
 			},
 		}
@@ -344,10 +413,14 @@ type provisioningPlaybookHashVars struct {
 	ContentDigest   string                              `json:"contentDigest,omitempty"`
 }
 
-func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) provisioningPlaybookHashVars {
+func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) (provisioningPlaybookHashVars, error) {
 	secretNames := make([]string, 0, len(p.Spec.SecretRefs))
 	for _, ref := range p.Spec.SecretRefs {
 		secretNames = append(secretNames, ref.Name)
+	}
+	digest, err := provisioningContentDigest(p)
+	if err != nil {
+		return provisioningPlaybookHashVars{}, err
 	}
 	return provisioningPlaybookHashVars{
 		Stage:           p.Spec.Stage,
@@ -363,25 +436,31 @@ func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) provisioningPl
 		Target:          p.Spec.Target,
 		ExtraVars:       p.Spec.ExtraVars,
 		SecretRefs:      secretNames,
-		ContentDigest:   provisioningContentDigest(p),
-	}
+		ContentDigest:   digest,
+	}, nil
 }
 
-func provisioningContentDigest(p v1alpha1.ProvisioningPlaybook) string {
+func provisioningContentDigest(p v1alpha1.ProvisioningPlaybook) (string, error) {
 	base := filepath.Dir(p.SourcePath)
 	h := sha256.New()
-	digestPath := func(rel string) {
+	digestPath := func(rel string) error {
 		if strings.TrimSpace(rel) == "" {
-			return
+			return nil
 		}
 		root := filepath.Join(base, rel)
-		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+		if _, statErr := os.Lstat(root); errors.Is(statErr, fs.ErrNotExist) {
+			return nil
+		}
+		return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return fmt.Errorf("scan playbook content %s: %w", path, err)
+			}
+			if d.IsDir() {
 				return nil
 			}
 			data, readErr := os.ReadFile(path)
 			if readErr != nil {
-				return nil
+				return fmt.Errorf("read playbook content %s: %w", path, readErr)
 			}
 			relPath, _ := filepath.Rel(root, path)
 			h.Write([]byte(relPath))
@@ -391,10 +470,12 @@ func provisioningContentDigest(p v1alpha1.ProvisioningPlaybook) string {
 			return nil
 		})
 	}
-	digestPath(p.Spec.Playbook)
-	digestPath(p.Spec.RolesPath)
-	digestPath(p.Spec.CollectionsPath)
-	return "sha256:" + hex.EncodeToString(h.Sum(nil))
+	for _, rel := range []string{p.Spec.Playbook, p.Spec.RolesPath, p.Spec.CollectionsPath} {
+		if err := digestPath(rel); err != nil {
+			return "", err
+		}
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func dedupeStrings(items []string) []string {

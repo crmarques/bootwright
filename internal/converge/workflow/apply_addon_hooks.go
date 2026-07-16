@@ -68,12 +68,14 @@ func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) error {
 			continue
 		}
 		detail := conciseApplyTaskFailure(err.Error())
-		_ = extensionrecords.SetHook(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, extensionrecords.HookRecord{
+		if recordErr := extensionrecords.SetHook(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, extensionrecords.HookRecord{
 			Lifecycle: lifecycle,
 			Status:    extensionrecords.RecordStatusFailed,
 			RanAt:     time.Now().UTC(),
 			LastError: detail,
-		})
+		}); recordErr != nil {
+			fmt.Fprintf(e.stderr, "warning: could not record failed hook %s (%s): %v; a prior ready record may skip it on the next run\n", hook.Name, lifecycle, recordErr)
+		}
 		if v1alpha1.ClusterAddonHookFailureMode(hook) == v1alpha1.ProvisioningPlaybookFailureContinue {
 			fmt.Fprintf(e.stderr, "hook %s (%s) failed, continuing: %s\n", hook.Name, lifecycle, detail)
 			continue

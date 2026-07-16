@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -181,6 +182,21 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 			return RunResult{Render: result, Command: command}, err
 		}
 		sweepStaleRuntimeSecrets(opts.RunsDir, lease.RunID)
+		label := opts.Label
+		if label == "" {
+			label = opts.Playbook
+		}
+		ledger := NewRunLedger(lease.RunID, label, "", ConcurrencyLimits{}, []TaskLedgerEntry{{
+			ID:     lease.RunID,
+			Kind:   "playbook",
+			Label:  label,
+			Status: TaskStatusPending,
+		}}, now)
+		ledger.MarkRunning(lease.RunID, opts.OutputLogPath, now)
+		if err := SaveRunLedger(opts.RunsDir, ledger); err != nil {
+			_ = RemoveRunLeaseIfOwner(opts.RunsDir, lease.RunID)
+			return RunResult{Render: result, Command: command}, err
+		}
 		leaseCtx, leaseCancel := context.WithCancel(ctx)
 		defer leaseCancel()
 		stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(leaseCtx, opts.RunsDir, lease)
@@ -188,6 +204,32 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 			stopLeaseHeartbeat()
 			_ = RemoveRunLeaseIfOwner(opts.RunsDir, lease.RunID)
 		}()
+		finishLedger := func(runErr error) error {
+			finished := time.Now()
+			if runErr == nil {
+				ledger.MarkOK(lease.RunID, finished)
+				ledger.Finish(RunStatusOK, finished)
+			} else {
+				ledger.MarkFailed(lease.RunID, conciseApplyTaskFailure(runErr.Error()), finished)
+				status := RunStatusFailed
+				if ctx.Err() != nil {
+					status = RunStatusCancelled
+				}
+				ledger.Finish(status, finished)
+			}
+			saveErr := SaveRunLedger(opts.RunsDir, ledger)
+			if archiveErr := ArchiveRunLedger(opts.RunsDir, ledger); saveErr == nil {
+				saveErr = archiveErr
+			}
+			switch {
+			case runErr != nil && saveErr != nil:
+				return fmt.Errorf("%w; additionally failed to record the run's final status: %v", runErr, saveErr)
+			case runErr != nil:
+				return runErr
+			default:
+				return saveErr
+			}
+		}
 		if reporter != nil {
 			reporter.AnsibleStart(command[0])
 		}
@@ -195,14 +237,14 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		go func() { runErr <- runner.Run(leaseCtx, spec) }()
 		select {
 		case err := <-runErr:
-			return RunResult{Render: result, Command: command}, err
+			return RunResult{Render: result, Command: command}, finishLedger(err)
 		case err := <-leaseErrors:
 			leaseCancel()
 			<-runErr
 			if err == nil {
 				err = errors.New("apply lease heartbeat stopped")
 			}
-			return RunResult{Render: result, Command: command}, err
+			return RunResult{Render: result, Command: command}, finishLedger(err)
 		}
 	}
 	if reporter != nil {
