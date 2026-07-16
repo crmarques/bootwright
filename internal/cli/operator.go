@@ -198,10 +198,6 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 	}
 	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIInventory), askBecomePass, becomePasswordFile)
 	env := bastion.MergeBootstrapEnv(os.Environ(), ansibleEnv)
-	// Route Ansible output to the log file and keep the terminal to a status
-	// view, mirroring apply/destroy. A controlling TTY is still granted (unless
-	// Ansible itself must prompt for the become password) so requiretty sudo
-	// works; with nil writers that TTY output lands only in the log.
 	useControllingTTY := becomePasswordFile != "" || !askBecomePass
 	if err := ansible.RunLoggedCommand(ctx, args, env, logPath, nil, nil, useControllingTTY); err != nil {
 		return fmt.Errorf("run controller-clis playbook: %w", err)

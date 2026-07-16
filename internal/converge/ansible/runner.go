@@ -152,14 +152,6 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	return RunLoggedCommand(ctx, command, env, outputLogPath, r.Stdout, r.Stderr, spec.UseControllingTTY)
 }
 
-// RunLoggedCommand executes command with env, writing its combined output to
-// outputLogPath (created 0600, truncating any prior run). When stdout or stderr
-// are non-nil the output is also teed to them; pass nil for both to keep the
-// terminal quiet and log-only, the way apply and destroy route Ansible output
-// so callers can render a status view instead. When useControllingTTY is true
-// the command runs under a controlling pseudo-terminal so sudo/become steps see
-// a real TTY. On failure the returned error carries the log path and a tail
-// summary of the recorded output.
 func RunLoggedCommand(ctx context.Context, command []string, env []string, outputLogPath string, stdout, stderr io.Writer, useControllingTTY bool) error {
 	if len(command) == 0 {
 		return errors.New("run logged command: empty command")
