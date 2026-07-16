@@ -87,7 +87,7 @@ var allowedImports = map[string][]string{
 	"internal/addons/records":       {"internal/host/safefs"},
 	"internal/addons/render":        {"api/v1alpha1", "internal/addons", "internal/addons/hooks"},
 
-	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/topology", "internal/workspace"},
+	"internal/preflight":     {"api/v1alpha1", "internal/addons/inputs", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/execution", "internal/host/safefs", "internal/infra/locality", "internal/infra/media", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/topology", "internal/workspace"},
 	"internal/status":        {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/clusteraccess", "internal/converge/workflow", "internal/ownership", "internal/render", "internal/state/graph", "internal/state/view"},
 	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/host/shellquote", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 }

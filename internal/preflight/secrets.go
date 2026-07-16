@@ -59,27 +59,27 @@ func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, 
 		checks = append(checks, secretsDirCheck(secretsDir, deps))
 	}
 	for _, req := range inScope {
-		if req.tlsPair {
-			checks = append(checks, tlsSecretFileChecks(req, idx, secretsDir, deps)...)
-			continue
-		}
-		if req.sshPair {
-			checks = append(checks, sshKeyPairFileChecks(req, idx, secretsDir, deps)...)
-			continue
-		}
-		if req.source == secretRefSourceGenerated && req.generatedKind == "sshKeyPair" {
-			checks = append(checks, generatedSSHKeyPairChecks(req, idx, secretsDir, deps)...)
-			continue
-		}
-		if req.source == secretRefSourceGenerated {
-			path := filepath.Join(secretsDir, req.refName)
-			checks = append(checks, generatedSecretCheck(req.refName, path, req.label, req.generatedKind, deps))
-			continue
-		}
-		path := secret.ResolveMaterialPath(req.refName, idx, secretsDir, req.role)
-		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, secret.MaterialPathUsesExternalSource(req.refName, idx, req.role), deps))
+		checks = append(checks, secretRequirementCheck(req, idx, secretsDir, deps)...)
 	}
 	return checks
+}
+
+func secretRequirementCheck(req secretRefRequirement, idx secret.Index, secretsDir string, deps Deps) []Check {
+	if req.tlsPair {
+		return tlsSecretFileChecks(req, idx, secretsDir, deps)
+	}
+	if req.sshPair {
+		return sshKeyPairFileChecks(req, idx, secretsDir, deps)
+	}
+	if req.source == secretRefSourceGenerated && req.generatedKind == "sshKeyPair" {
+		return generatedSSHKeyPairChecks(req, idx, secretsDir, deps)
+	}
+	if req.source == secretRefSourceGenerated {
+		path := filepath.Join(secretsDir, req.refName)
+		return []Check{generatedSecretCheck(req.refName, path, req.label, req.generatedKind, deps)}
+	}
+	path := secret.ResolveMaterialPath(req.refName, idx, secretsDir, req.role)
+	return []Check{secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, secret.MaterialPathUsesExternalSource(req.refName, idx, req.role), deps)}
 }
 
 func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localPolicy locality.Policy) []secretRefRequirement {
@@ -252,6 +252,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		}
 	}
 	out = append(out, collectStorageSecretRefRequirements(state)...)
+	out = append(out, addonSecretRefRequirements(state)...)
 	return resolveSecretRequirementSources(state, out)
 }
 

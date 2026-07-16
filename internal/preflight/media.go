@@ -30,18 +30,30 @@ func installerMediaChecks(state v1alpha1.State, selected []Phase, deps Deps, sec
 		}
 		for _, ref := range machineInstallMediaRefs(image, profile) {
 			resolved, err := media.Resolve(ref)
-			if err != nil || resolved.Path == "" {
+			if err != nil {
 				continue
 			}
-			if seen[resolved.Path] {
+			key := installerMediaKey(resolved)
+			if key == "" || seen[key] {
 				continue
 			}
-			seen[resolved.Path] = true
+			seen[key] = true
+			if resolved.Path == "" {
+				checks = append(checks, installerMediaURLCheck(resolved))
+				continue
+			}
 			checks = append(checks, installerMediaCheck(resolved, deps))
 		}
 	}
 	sort.SliceStable(checks, func(i, j int) bool { return checks[i].Name < checks[j].Name })
 	return checks
+}
+
+func installerMediaKey(resolved media.Resolved) string {
+	if resolved.Path != "" {
+		return resolved.Path
+	}
+	return resolved.URL
 }
 
 func machineInstallMediaRefs(image v1alpha1.MachineImage, profile v1alpha1.MachineInstallProfile) []string {
@@ -66,6 +78,11 @@ func installerMediaCheck(resolved media.Resolved, deps Deps) Check {
 			installerMediaRemediation(resolved))
 	}
 	return okCheck(checkGroupInstallerMedia, name, resolved.Path)
+}
+
+func installerMediaURLCheck(resolved media.Resolved) Check {
+	return infoCheck(checkGroupInstallerMedia, resolved.Original,
+		"remote install ISO; the controller cannot verify a URL the way it stats staged media. Stage it with bootwright media add --from-url "+resolved.URL+" so it is checksum-verified in the media store before install")
 }
 
 func installerMediaRemediation(resolved media.Resolved) string {

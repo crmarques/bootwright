@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func TestInstallerMediaCheckFailsWhenSourceMissing(t *testing.T) {
@@ -61,6 +63,53 @@ func TestInstallerMediaCheckHonorsSecretScope(t *testing.T) {
 
 	if checks := installerMediaChecks(state, []Phase{{Name: "machines"}}, deps, scope); len(checks) != 0 {
 		t.Fatalf("media checks = %+v, want none for out-of-scope machines", checks)
+	}
+}
+
+func TestInstallerMediaCheckReportsRemoteURL(t *testing.T) {
+	state := v1alpha1.State{
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "node-0"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{
+					Provided:          v1alpha1.BoolPtr(false),
+					InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				},
+			},
+		}},
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.MachineInstallProfileSpec{
+				Installer: v1alpha1.MachineInstallProfileInstaller{
+					Anaconda: &v1alpha1.MachineInstallAnaconda{
+						ImageRef: v1alpha1.LocalObjectReference{Name: "rhel-img"},
+					},
+				},
+			},
+		}},
+		MachineImages: []v1alpha1.MachineImage{{
+			Metadata: v1alpha1.Metadata{Name: "rhel-img"},
+			Spec:     v1alpha1.MachineImageSpec{BootMedia: "https://mirror.example.test/rhel-9.7.iso"},
+		}},
+	}
+	deps := Deps{StatPath: func(string) (os.FileInfo, error) {
+		t.Fatal("StatPath must not be called for a remote-URL ISO")
+		return nil, nil
+	}}
+
+	checks := installerMediaChecks(state, []Phase{{Name: "machines"}}, deps, nil)
+	if len(checks) != 1 {
+		t.Fatalf("media checks = %d, want 1: %+v", len(checks), checks)
+	}
+	c := checks[0]
+	if c.Status != StatusInfo || c.Group != checkGroupInstallerMedia {
+		t.Fatalf("check = %+v, want INFO in %q", c, checkGroupInstallerMedia)
+	}
+	if c.Name != "https://mirror.example.test/rhel-9.7.iso" {
+		t.Fatalf("name = %q, want the URL reference", c.Name)
+	}
+	if !strings.Contains(c.Evidence, "bootwright media add --from-url") {
+		t.Fatalf("evidence = %q, want a media-store staging hint", c.Evidence)
 	}
 }
 

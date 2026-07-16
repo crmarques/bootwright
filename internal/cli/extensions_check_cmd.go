@@ -51,7 +51,7 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), sel.RenderState)
+		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), cf.ctx.SecretsDir, sel.RenderState)
 		failed := 0
 		for _, check := range results {
 			if check.Status != cliout.StatusOK {
@@ -106,10 +106,11 @@ func writeAddonsCheckJSON(stdout io.Writer, checks []cliout.Check, ok bool) erro
 	return cliout.JSON(stdout, report)
 }
 
-func extensionPreflightChecks(clustersDir string, state v1alpha1.State) []cliout.Check {
+func extensionPreflightChecks(clustersDir, secretsDir string, state v1alpha1.State) []cliout.Check {
 	raw := preflight.ExtensionPreflight(clustersDir, state, preflight.ExtensionDeps{
 		LookPath: preflight.DefaultDeps.LookPath,
 		StatPath: preflight.DefaultDeps.StatPath,
 	})
+	raw = append(raw, preflight.AddonSecretChecks(state, secretsDir, preflight.DefaultDeps)...)
 	return preflightChecksToOutput(raw)
 }
