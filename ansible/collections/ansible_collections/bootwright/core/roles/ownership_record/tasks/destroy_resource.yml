@@ -118,6 +118,26 @@
     - not bootwright_ownership_destroy_release
     - item | length > 0
 
+- name: Resolve mount-safe recorded owned paths
+  ansible.builtin.set_fact:
+    bootwright_ownership_destroy_mount_paths: >-
+      {{
+        bootwright_ownership_destroy_paths | select() | reject('search', '[.][.]')
+        | select('match', bootwright_ownership_owned_path_re) | list
+      }}
+  vars:
+    bootwright_ownership_owned_path_prefixes: >-
+      {{
+        ['/var/lib/', '/var/log/', '/etc/systemd/system/', '/etc/sysctl.d/',
+         '/etc/pki/ca-trust/source/anchors/', '/tmp/bootwright-']
+        + ([bootwright_provider_state_dir | default(''), bootwright_managed_services_dir | default(''),
+            bootwright_clusters_dir | default(''), bootwright_ownership_dir | default('')]
+           | select() | map('regex_replace', '/$', '') | map('regex_replace', '$', '/'))
+      }}
+    bootwright_ownership_owned_path_re: "^({{ bootwright_ownership_owned_path_prefixes | map('regex_escape') | join('|') }})"
+  changed_when: false
+  when: not bootwright_ownership_destroy_release
+
 - name: List active mounts before removing owned paths
   ansible.builtin.command:
     argv:
@@ -130,7 +150,7 @@
   failed_when: false
   when:
     - not bootwright_ownership_destroy_release
-    - bootwright_ownership_destroy_paths | select() | list | length > 0
+    - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
 
 - name: Unmount active mounts under recorded owned paths
   ansible.posix.mount:
@@ -138,7 +158,7 @@
     state: unmounted
   vars:
     bootwright_ownership_destroy_mount_pattern: >-
-      ^({{ bootwright_ownership_destroy_paths | select() | map('regex_escape') | join('|') }})(/|$)
+      ^({{ bootwright_ownership_destroy_mount_paths | map('regex_escape') | join('|') }})(/|$)
   loop: >-
     {{
       (bootwright_ownership_destroy_mounts.stdout_lines | default([]))
@@ -147,9 +167,10 @@
     }}
   loop_control:
     label: "{{ item }}"
+  failed_when: false
   when:
     - not bootwright_ownership_destroy_release
-    - bootwright_ownership_destroy_paths | select() | list | length > 0
+    - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
 
 - name: Remove recorded owned paths
   ansible.builtin.file:
