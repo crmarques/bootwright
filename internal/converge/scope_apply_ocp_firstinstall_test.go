@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestApplyOCPFirstInstallClustersExtraVar(t *testing.T) {
+func TestApplyOCPReinstallClustersExtraVar(t *testing.T) {
 	var plan WorkflowPlan
-	ApplyOCPFirstInstallClustersExtraVar(&plan, nil)
+	ApplyOCPReinstallClustersExtraVar(&plan, nil)
 	if len(plan.ExtraVarPairs) != 0 {
-		t.Fatalf("empty list must append nothing, got %v", plan.ExtraVarPairs)
+		t.Fatalf("empty list must append nothing so the occupancy guard stays armed, got %v", plan.ExtraVarPairs)
 	}
-	ApplyOCPFirstInstallClustersExtraVar(&plan, []string{"prod-east", "prod-west"})
-	if got, want := strings.Join(plan.ExtraVarPairs, ";"), "bootwright_ocp_first_install_clusters=prod-east,prod-west"; got != want {
+	ApplyOCPReinstallClustersExtraVar(&plan, []string{"prod-east", "prod-west"})
+	if got, want := strings.Join(plan.ExtraVarPairs, ";"), "bootwright_ocp_reinstall_clusters=prod-east,prod-west"; got != want {
 		t.Fatalf("extra-var = %q, want %q", got, want)
 	}
 }

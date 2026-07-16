@@ -101,6 +101,20 @@
       changed_when: false
       failed_when: false
 
+    - name: Require a conclusive KubeVirt VirtualMachine probe
+      ansible.builtin.assert:
+        that:
+          - >-
+            (bootwright_kubevirt_vm_owner.rc | default(1)) == 0
+            or 'NotFound' in (bootwright_kubevirt_vm_owner.stderr | default(''))
+        fail_msg: >-
+          Could not determine whether VirtualMachine {{ bootwright_kubevirt_vm_name }}
+          in namespace {{ bootwright_kubevirt_namespace }} exists:
+          {{ bootwright_kubevirt_vm_owner.stderr | default('kubectl get failed with no detail') }}.
+          Refusing to treat it as absent — that would skip its teardown and drop
+          its ownership record while the VM may still run. Fix host-cluster
+          kubeconfig access and re-run destroy.
+
     - name: Resolve KubeVirt VirtualMachine ownership for destroy
       ansible.builtin.set_fact:
         bootwright_kubevirt_vm_present: "{{ (bootwright_kubevirt_vm_owner.rc | default(1)) == 0 }}"
@@ -188,6 +202,22 @@
       register: bootwright_kubevirt_dv_owner
       changed_when: false
       failed_when: false
+
+    - name: Require conclusive KubeVirt DataVolume probes
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item.rc | default(1)) == 0
+            or 'NotFound' in (item.stderr | default(''))
+        fail_msg: >-
+          Could not determine whether DataVolume {{ item.item }} in namespace
+          {{ bootwright_kubevirt_namespace }} exists:
+          {{ item.stderr | default('kubectl get failed with no detail') }}.
+          Refusing to treat it as absent — its teardown would be silently
+          skipped. Fix host-cluster kubeconfig access and re-run destroy.
+      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Refuse to delete a non-Bootwright KubeVirt DataVolume
       ansible.builtin.assert:

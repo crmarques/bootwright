@@ -15,6 +15,19 @@
   failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
+- name: Require a conclusive vSphere VM probe
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_vsphere_probe.instance is defined
+        or 'non-existing VM' in (bootwright_vsphere_probe.msg | default(''))
+    fail_msg: >-
+      Could not determine whether vSphere VM {{ bootwright_vsphere_vm_name }}
+      exists on {{ bootwright_vsphere.server }}:
+      {{ bootwright_vsphere_probe.msg | default('probe failed with no detail') }}.
+      Refusing to continue — an existing foreign VM could not be detected.
+      Fix vCenter access/credentials and re-run apply.
+
 - name: Resolve vSphere virtual machine presence
   ansible.builtin.set_fact:
     bootwright_vsphere_vm_exists: "{{ (bootwright_vsphere_probe.instance is defined) and not (bootwright_vsphere_managed_os_reset | bool) }}"

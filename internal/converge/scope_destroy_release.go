@@ -5,9 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ownership"
-	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -28,7 +26,12 @@ type InfraComponentDestroyDecision struct {
 	Warnings []error
 }
 
-func PlanInfraComponentDestroyBlocks(selfContext string, state v1alpha1.State, records []ownership.ResourceRecord, artifactServerOnly bool) (InfraComponentDestroyDecision, error) {
+type InfraComponentServiceRef struct {
+	Name string
+	Kind string
+}
+
+func PlanInfraComponentDestroyBlocks(selfContext string, services []InfraComponentServiceRef, records []ownership.ResourceRecord, artifactServerOnly bool) (InfraComponentDestroyDecision, error) {
 	stores, err := siblingContextStores(selfContext)
 	if err != nil {
 		return InfraComponentDestroyDecision{}, err
@@ -67,14 +70,8 @@ func PlanInfraComponentDestroyBlocks(selfContext string, state v1alpha1.State, r
 		}
 	}
 	if len(stores) > 0 {
-		for _, service := range stategraph.ResolveMachineServices(state).Services {
-			if !service.IsInfraComponentService() {
-				continue
-			}
-			if artifactServerOnly && service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {
-				continue
-			}
-			name := strings.TrimSpace(service.Identity.Name)
+		for _, service := range services {
+			name := strings.TrimSpace(service.Name)
 			if name == "" || ownNames[name] {
 				continue
 			}
@@ -83,7 +80,7 @@ func PlanInfraComponentDestroyBlocks(selfContext string, state v1alpha1.State, r
 			if len(owners) > 0 {
 				decision.Blocks = append(decision.Blocks, InfraComponentDestroyBlock{
 					Name:          name,
-					ComponentKind: service.Identity.Kind,
+					ComponentKind: service.Kind,
 					Contexts:      owners,
 					Unrecorded:    true,
 				})

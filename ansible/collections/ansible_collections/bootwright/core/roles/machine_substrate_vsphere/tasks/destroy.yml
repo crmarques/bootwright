@@ -42,6 +42,20 @@
   failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
+- name: Require a conclusive vSphere VM probe before destroy
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_vsphere_destroy_info.instance is defined
+        or 'non-existing VM' in (bootwright_vsphere_destroy_info.msg | default(''))
+    fail_msg: >-
+      Could not determine whether vSphere VM {{ bootwright_vsphere_vm_name }}
+      exists on {{ bootwright_vsphere.server }}:
+      {{ bootwright_vsphere_destroy_info.msg | default('probe failed with no detail') }}.
+      Refusing to treat it as absent — that would drop its ownership record
+      while the VM may still be running. Fix vCenter access/credentials and
+      re-run destroy.
+
 - name: Resolve vSphere VM presence
   ansible.builtin.set_fact:
     bootwright_vsphere_vm_present: "{{ bootwright_vsphere_destroy_info.instance is defined }}"

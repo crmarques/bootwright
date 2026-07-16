@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -66,11 +67,22 @@ func ApplySubstrateResetExtraVar(plan *WorkflowPlan, names []string) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_substrate_reset_clusters="+strings.Join(names, ","))
 }
 
-func ApplyOCPFirstInstallClustersExtraVar(plan *WorkflowPlan, names []string) {
+func RecordedContainerClusters(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if o.Kind == workflow.ObjectKindContainerCluster && o.Recorded() {
+			out = append(out, strings.TrimPrefix(o.Label, "ContainerCluster/"))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func ApplyOCPReinstallClustersExtraVar(plan *WorkflowPlan, names []string) {
 	if len(names) == 0 {
 		return
 	}
-	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ocp_first_install_clusters="+strings.Join(names, ","))
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ocp_reinstall_clusters="+strings.Join(names, ","))
 }
 
 func OwnedStorageClusters(objects []workflow.ObjectClassification) []string {

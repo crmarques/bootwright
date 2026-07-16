@@ -474,8 +474,15 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	if !strings.Contains(resolved, "bootwright_selected_storage_cluster.name") || !strings.Contains(resolved, "bootwright_current_storage_host.hostname") {
 		t.Fatalf("OSD owned-device resolution must require cluster and node to match the marker, got %v", resolved)
 	}
-	if got := fmt.Sprint(tasks[checkIdx]["failed_when"]); !strings.Contains(got, "bootwright_ceph_owned_osd_devices") {
-		t.Fatalf("OSD device check must exempt only recorded Bootwright devices, got failed_when=%v", got)
+	check, ok := tasks[checkIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("OSD device gate must be an assert with a remedial fail_msg, got %v", tasks[checkIdx])
+	}
+	if got := fmt.Sprint(check["that"]); !strings.Contains(got, "bootwright_ceph_owned_osd_devices") {
+		t.Fatalf("OSD device check must exempt only recorded Bootwright devices, got that=%v", got)
+	}
+	if got := fmt.Sprint(check["fail_msg"]); !strings.Contains(got, "--reclaim-devices") {
+		t.Fatalf("OSD device refusal must name the reclaim remedy, got fail_msg=%v", got)
 	}
 	stamp, ok := tasks[stampIdx]["ansible.builtin.copy"].(map[string]any)
 	if !ok {

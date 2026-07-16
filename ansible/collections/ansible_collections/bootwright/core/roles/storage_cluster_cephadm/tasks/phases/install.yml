@@ -243,7 +243,7 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
-- name: Check declared OSD devices are empty or Bootwright-owned
+- name: Probe declared OSD devices for existing signatures
   ansible.builtin.command:
     argv:
       - wipefs
@@ -252,13 +252,32 @@
       - "{{ item }}"
   register: bootwright_ceph_device_check
   changed_when: false
-  failed_when: >-
-    bootwright_ceph_device_check.rc != 0
-    or (bootwright_ceph_device_check.stdout | trim | length > 0
-        and item not in bootwright_ceph_owned_osd_devices | default([]))
+  failed_when: false
   loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Check declared OSD devices are empty or Bootwright-owned
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - >-
+        (item.stdout | trim | length == 0)
+        or item.item in bootwright_ceph_owned_osd_devices | default([])
+    fail_msg: >-
+      Declared OSD device {{ item.item }} on
+      {{ bootwright_current_storage_host.hostname }}
+      {% if item.rc != 0 %}could not be probed (wipefs exited {{ item.rc }}:
+      {{ item.stderr | default('') | trim }}); verify the device path exists and
+      is readable, then re-run apply.{% else %}already carries data
+      ({{ item.stdout | trim }}) and is not recorded as a Bootwright-owned OSD
+      device. Refusing to use it: wipe it explicitly with
+      `bootwright apply --reclaim-devices {{ item.item }} ...` (irreversible) after
+      verifying the data is disposable, or remove the device from the
+      StorageCluster declaration.{% endif %}
+  loop: "{{ bootwright_ceph_device_check.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
 - name: Resolve declared-removed Bootwright OSD devices
   ansible.builtin.set_fact:

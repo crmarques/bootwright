@@ -4,7 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -21,7 +20,7 @@ func TestPlanInfraComponentDestroyBlocksOwnerTeardownWhileReferenced(t *testing.
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 	saveRecord(t, ctxSpoke.OwnershipDir, reference)
 
-	decision, err := PlanInfraComponentDestroyBlocks("hub", v1alpha1.State{}, []ownership.ResourceRecord{owner}, false)
+	decision, err := PlanInfraComponentDestroyBlocks("hub", nil, []ownership.ResourceRecord{owner}, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
@@ -48,7 +47,7 @@ func TestPlanInfraComponentDestroyBlocksOwnerTeardownWhileCoOwned(t *testing.T) 
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 	saveRecord(t, ctxSpoke.OwnershipDir, coOwner)
 
-	decision, err := PlanInfraComponentDestroyBlocks("hub", v1alpha1.State{}, []ownership.ResourceRecord{owner}, false)
+	decision, err := PlanInfraComponentDestroyBlocks("hub", nil, []ownership.ResourceRecord{owner}, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
@@ -71,12 +70,37 @@ func TestPlanInfraComponentDestroyBlocksTearsDownWhenSoleOwner(t *testing.T) {
 	shared := sharedArtifactRecord()
 	saveRecord(t, ctxA.OwnershipDir, shared)
 
-	decision, err := PlanInfraComponentDestroyBlocks("ctx-a", v1alpha1.State{}, []ownership.ResourceRecord{shared}, false)
+	decision, err := PlanInfraComponentDestroyBlocks("ctx-a", nil, []ownership.ResourceRecord{shared}, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	if len(decision.Blocks) != 0 {
 		t.Fatalf("sole owner must tear down unblocked, got blocks %+v", decision.Blocks)
+	}
+}
+
+func TestPlanInfraComponentDestroyBlocksSiblingOwnedUnrecordedService(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
+	mustContext(t, "spoke")
+	ctxHub := mustContext(t, "hub")
+
+	owner := sharedArtifactRecord()
+	saveRecord(t, ctxHub.OwnershipDir, owner)
+
+	services := []InfraComponentServiceRef{{Name: "prov1-edge", Kind: "artifactServer"}}
+	decision, err := PlanInfraComponentDestroyBlocks("spoke", services, nil, false)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(decision.Blocks) != 1 {
+		t.Fatalf("a rendered service owned by a sibling with no local record must block, got %+v", decision.Blocks)
+	}
+	block := decision.Blocks[0]
+	if block.Name != "prov1-edge" || !block.Unrecorded || !slices.Equal(block.Contexts, []string{"hub"}) {
+		t.Fatalf("unexpected sibling-owner block %+v", block)
+	}
+	if InfraComponentDestroyBlockError(decision.Blocks) == nil {
+		t.Fatalf("sibling-owner block must render a refusal error")
 	}
 }
 

@@ -198,6 +198,9 @@ func RunLoggedCommand(ctx context.Context, command []string, env []string, outpu
 		}
 		cmd.WaitDelay = processGroupTerminationGrace
 		runErr = cmd.Run()
+		if ctx.Err() != nil && cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
 		if errors.Is(runErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
 			runErr = nil
 		}

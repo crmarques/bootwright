@@ -152,6 +152,23 @@
       }}
   changed_when: false
 
+- name: Refuse an on-host drift the controller did not authorize for rebuild
+  ansible.builtin.fail:
+    msg: >-
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} is
+      Bootwright-owned but {{ bootwright_os_marker_path }} does not match the
+      desired hash, while the controller's records show no drift for cluster
+      {{ bootwright_current_cluster.name }} — the host may have been reinstalled
+      out-of-band. Investigate before rebuilding; to force it, run
+      `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --override`
+      and re-apply.
+  when:
+    - bootwright_managed_os_already_ready | bool
+    - bootwright_os_pre_marker_owned | default(false) | bool
+    - not (bootwright_os_pre_marker_matches | default(false) | bool)
+    - (bootwright_apply_mode | default('continue')) == 'override'
+    - bootwright_current_cluster.name not in (bootwright_substrate_reset_clusters | default('') | split(','))
+
 - name: Resolve whether an owned drifted managed OS must be override-rebuilt
   ansible.builtin.set_fact:
     bootwright_managed_os_force_rebuild: >-
@@ -160,6 +177,7 @@
         and (bootwright_os_pre_marker_owned | default(false) | bool)
         and (not (bootwright_os_pre_marker_matches | default(false) | bool))
         and ((bootwright_apply_mode | default('continue')) == 'override')
+        and (bootwright_current_cluster.name in (bootwright_substrate_reset_clusters | default('') | split(',')))
       }}
   changed_when: false
 

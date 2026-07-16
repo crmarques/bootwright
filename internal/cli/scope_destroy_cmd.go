@@ -159,7 +159,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if artifactServerOnly {
 				blocksState = state
 			}
-			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, blocksState, ownershipRecords, artifactServerOnly)
+			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
 			if blocksErr != nil && !override {
 				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", blocksErr))
 			}
@@ -316,6 +316,20 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		return nil
 	}
 	return cmd
+}
+
+func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []converge.InfraComponentServiceRef {
+	var out []converge.InfraComponentServiceRef
+	for _, service := range stategraph.ResolveMachineServices(state).Services {
+		if !service.IsInfraComponentService() {
+			continue
+		}
+		if artifactServerOnly && service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {
+			continue
+		}
+		out = append(out, converge.InfraComponentServiceRef{Name: service.Identity.Name, Kind: service.Identity.Kind})
+	}
+	return out
 }
 
 func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.PartialStorageDestroy, err error) {

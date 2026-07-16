@@ -64,6 +64,9 @@ func RunCommand(ctx context.Context, stdout io.Writer, stderr io.Writer, args []
 	}
 	_ = slave.Close()
 	err = cmd.Wait()
+	if ctx.Err() != nil && cmd.Process != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 	_ = master.Close()
 	<-drained
 	return err

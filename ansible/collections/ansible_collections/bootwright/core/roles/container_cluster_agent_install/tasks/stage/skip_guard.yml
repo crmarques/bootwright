@@ -37,5 +37,6 @@
   ansible.builtin.debug:
     msg: >-
       Skipping install_agent for {{ bootwright_current_cluster.name }} because
-      cluster reports Available=True. Run `bootwright destroy cluster` first to force a reinstall.
+      cluster reports Available=True. Run `bootwright destroy --stage clusters
+      --clusters {{ bootwright_current_cluster.name }}` first to force a reinstall.
   when: bootwright_install_already_complete

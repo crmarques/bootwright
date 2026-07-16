@@ -63,5 +63,6 @@
       {% endfor %}
 
       Configure controller-visible DNS for these endpoint names, then
-      re-run `bootwright apply cluster`.
+      re-run `bootwright apply --stage clusters --clusters
+      {{ bootwright_current_cluster.name }}`.
   when: bootwright_controller_dns_failures | length > 0

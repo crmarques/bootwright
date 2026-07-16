@@ -2,6 +2,12 @@
 <network{% if _ntp_ips %} xmlns:dnsmasq='http://libvirt.org/schemas/network/dnsmasq/1.0'{% endif %}>
   <name>{{ bootwright_libvirt_network_name }}</name>
   <uuid>{{ bootwright_libvirt_network_uuid }}</uuid>
+  <metadata>
+    <bootwright:resource xmlns:bootwright='https://bootwright.io/libvirt/metadata/1.0'>
+      <bootwright:context>{{ bootwright_clusters_dir | dirname | basename }}</bootwright:context>
+      <bootwright:cluster>{{ bootwright_current_cluster.name }}</bootwright:cluster>
+    </bootwright:resource>
+  </metadata>
   <forward mode='nat'>
     <nat>
       <port start='1024' end='65535'/>
