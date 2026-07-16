@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,9 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
+	"github.com/crmarques/bootwright/internal/render"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func newClusterRshCmd() *cobra.Command {
@@ -17,7 +21,8 @@ func newClusterRshCmd() *cobra.Command {
 		Use:   "rsh --name <cluster> --node <node>",
 		Short: "Open an interactive SSH shell on a cluster node",
 		Long: `Open an interactive remote shell on a node of a container or storage cluster over
-SSH, using the identity Bootwright already knows for the node's backing Machine.
+SSH. Container cluster nodes use the cluster's install.nodeSSH private key and
+the core user; storage cluster nodes use the backing Machine's SSH identity.
 Select the node by its Machine name, its hostname, or its <role>-<ordinal>
 (e.g. master-0); on a single-node cluster --node may be omitted. Run a single
 command instead with 'cluster exec'.
@@ -36,7 +41,7 @@ command instead with 'cluster exec'.
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
 	cf := addCommonFlags()
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return failErr(2, fmt.Errorf("cluster rsh opens an interactive shell and takes no command; run one with 'cluster exec --name %s --node %s -- %s'", clusterName, node, strings.Join(args, " ")))
 		}
@@ -44,7 +49,7 @@ command instead with 'cluster exec'.
 		if err != nil {
 			return err
 		}
-		return execSSHToMachine(cf.ctx, state, machine, nil)
+		return execSSHToClusterNode(cmd.Context(), cf.ctx, state, clusterName, machine, nil)
 	}
 	return cmd
 }
@@ -70,7 +75,7 @@ Drop into an interactive shell instead with 'cluster rsh'.
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
 	cf := addCommonFlags()
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return failErr(2, errors.New("cluster exec requires a command after --, e.g. 'cluster exec --name <cluster> --node <node> -- systemctl status kubelet'"))
 		}
@@ -78,9 +83,48 @@ Drop into an interactive shell instead with 'cluster rsh'.
 		if err != nil {
 			return err
 		}
-		return execSSHToMachine(cf.ctx, state, machine, args)
+		return execSSHToClusterNode(cmd.Context(), cf.ctx, state, clusterName, machine, args)
 	}
 	return cmd
+}
+
+func execSSHToClusterNode(commandCtx context.Context, ctx workspace.Context, state v1alpha1.State, clusterName, machineName string, cmdArgs []string) error {
+	target, err := clusterNodeSSHTarget(state, clusterName, machineName)
+	if err != nil {
+		return failErr(1, err)
+	}
+	return execSSHTarget(commandCtx, ctx, state, target, cmdArgs)
+}
+
+func clusterNodeSSHTarget(state v1alpha1.State, clusterName, machineName string) (sshTarget, error) {
+	cluster, ok := stateview.ContainerCluster(state, clusterName)
+	if !ok {
+		return machineSSHTarget(state, machineName)
+	}
+	privateRef := cluster.Spec.Install.NodeSSH.PrivateMaterialRef()
+	if privateRef.Name == "" {
+		return sshTarget{}, fmt.Errorf("ContainerCluster %q install.nodeSSH has no private key; set keyPairRef or privateKeyRef for cluster SSH access", clusterName)
+	}
+	if _, ok := stateview.Machine(state, machineName); !ok {
+		return sshTarget{}, fmt.Errorf("ContainerCluster %q references unknown Machine %q", clusterName, machineName)
+	}
+	address := render.ContainerNodePrimaryAddress(state, cluster, machineName)
+	if address == "" {
+		for _, host := range cluster.Spec.Hosts {
+			if host.MachineRef.Name == machineName {
+				address = host.Hostname
+				break
+			}
+		}
+	}
+	if address == "" {
+		return sshTarget{}, fmt.Errorf("ContainerCluster %q node Machine %q has no primary install IP or hostname for SSH access", clusterName, machineName)
+	}
+	return sshTarget{
+		Address: address,
+		User:    "core",
+		KeyRef:  privateRef,
+	}, nil
 }
 
 func resolveClusterNodeMachine(cf *commonFlags, clusterName, node string) (string, v1alpha1.State, error) {

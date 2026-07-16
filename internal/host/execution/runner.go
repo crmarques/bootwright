@@ -6,16 +6,19 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"time"
 )
 
 type Command struct {
-	Name   string
-	Args   []string
-	Dir    string
-	Env    []string
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Name           string
+	Args           []string
+	Dir            string
+	Env            []string
+	Stdin          io.Reader
+	Stdout         io.Writer
+	Stderr         io.Writer
+	GracefulCancel bool
+	WaitDelay      time.Duration
 }
 
 type Runner interface {
@@ -40,6 +43,12 @@ func build(ctx context.Context, cmd Command) *exec.Cmd {
 	c.Stdin = cmd.Stdin
 	c.Stdout = cmd.Stdout
 	c.Stderr = cmd.Stderr
+	if cmd.GracefulCancel {
+		c.Cancel = func() error {
+			return terminateProcess(c.Process)
+		}
+		c.WaitDelay = cmd.WaitDelay
+	}
 	return c
 }
 
@@ -50,7 +59,13 @@ func AppendEnv(extra ...string) []string {
 func ExitCode(err error) (int, bool) {
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return exitErr.ExitCode(), true
+		if code := exitErr.ExitCode(); code >= 0 {
+			return code, true
+		}
+		if code, ok := signaledExitCode(exitErr); ok {
+			return code, true
+		}
+		return 1, true
 	}
 	return 0, false
 }

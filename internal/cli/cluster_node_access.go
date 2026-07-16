@@ -110,11 +110,19 @@ func printClusterNodeAccess(p *cliout.Printer, state v1alpha1.State, clusterName
 		return
 	}
 	fields := make([]cliout.Field, 0, len(nodes))
+	privateNodeSSH := true
+	if cluster, ok := stateview.ContainerCluster(state, clusterName); ok {
+		privateNodeSSH = cluster.Spec.Install.NodeSSH.PrivateMaterialRef().Name != ""
+	}
 	for _, n := range nodes {
 		hint := nodeSelectorHint(n)
+		value := "bootwright cluster rsh --name " + clusterName + " --node " + hint
+		if !privateNodeSSH {
+			value = "(unavailable: set spec.install.nodeSSH.keyPairRef or privateKeyRef)"
+		}
 		fields = append(fields, cliout.Field{
 			Key:   "Node " + hint,
-			Value: "bootwright cluster rsh --name " + clusterName + " --node " + hint,
+			Value: value,
 		})
 	}
 	p.Fields(fields)

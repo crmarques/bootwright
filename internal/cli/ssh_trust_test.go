@@ -123,7 +123,14 @@ func TestHostTrustCommandSkipsMachinesWithManagedOS(t *testing.T) {
 
 func initHostTrustTestContext(t *testing.T) workspace.Context {
 	t.Helper()
-	setTestHomeAndRoot(t)
+	home := setTestHomeAndRoot(t)
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatalf("create test SSH directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "bootwright-ssh-key"), []byte("FAKE PRIVATE KEY FOR TESTS\n"), 0o600); err != nil {
+		t.Fatalf("write test SSH private key: %v", err)
+	}
 	inputDir := t.TempDir()
 	writeHostTrustTestInput(t, inputDir)
 	stdout, stderr, code := runCLI(t, "context", "init", "--name", "lab", "-f", inputDir)

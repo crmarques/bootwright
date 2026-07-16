@@ -1,37 +1,17 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/host/execution"
-	secret "github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
-
-type machineSSHDeps struct {
-	lookPath func(string) (string, error)
-	exec     func(argv0 string, argv []string, env []string) error
-}
-
-var defaultMachineSSHDeps = machineSSHDeps{
-	lookPath: execution.LookPath,
-	exec:     syscall.Exec,
-}
-
-type sshInvocation struct {
-	Path string
-	Args []string
-	Env  []string
-}
 
 func newMachineRshCmd() *cobra.Command {
 	name := ""
@@ -52,11 +32,11 @@ private key, and the context host-key trust store recorded by
 	_ = cmd.MarkFlagRequired("name")
 	registerMachineNameCompletion(cmd)
 	cf := addCommonFlags()
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return failErr(2, fmt.Errorf("machine rsh opens an interactive shell and takes no command; run one with 'machine exec --name %s -- %s'", name, strings.Join(args, " ")))
 		}
-		return runSSHToMachine(cf, name, nil)
+		return runSSHToMachine(cmd.Context(), cf, name, nil)
 	}
 	return cmd
 }
@@ -79,65 +59,49 @@ interactive shell instead with 'machine rsh'.
 	_ = cmd.MarkFlagRequired("name")
 	registerMachineNameCompletion(cmd)
 	cf := addCommonFlags()
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return failErr(2, errors.New("machine exec requires a command after --, e.g. 'machine exec --name <machine> -- systemctl status ceph.target'"))
 		}
-		return runSSHToMachine(cf, name, args)
+		return runSSHToMachine(cmd.Context(), cf, name, args)
 	}
 	return cmd
 }
 
-func runSSHToMachine(cf *commonFlags, machineName string, cmdArgs []string) error {
+func runSSHToMachine(commandCtx context.Context, cf *commonFlags, machineName string, cmdArgs []string) error {
 	state, err := loadDesiredState(cf)
 	if err != nil {
 		return failErr(1, err)
 	}
-	return execSSHToMachine(cf.ctx, state, machineName, cmdArgs)
+	return execSSHToMachine(commandCtx, cf.ctx, state, machineName, cmdArgs)
 }
 
-func execSSHToMachine(ctx workspace.Context, state v1alpha1.State, machineName string, cmdArgs []string) error {
-	sshPath, err := defaultMachineSSHDeps.lookPath("ssh")
-	if err != nil {
-		return failErr(1, fmt.Errorf("an ssh client is required to reach a Machine over SSH: %w", err))
-	}
-	invocation, err := buildMachineSSHInvocation(state, ctx, machineName, cmdArgs, sshPath)
+func execSSHToMachine(commandCtx context.Context, ctx workspace.Context, state v1alpha1.State, machineName string, cmdArgs []string) error {
+	target, err := machineSSHTarget(state, machineName)
 	if err != nil {
 		return failErr(1, err)
 	}
-	if err := defaultMachineSSHDeps.exec(invocation.Path, invocation.Args, invocation.Env); err != nil {
-		return failErr(1, fmt.Errorf("exec ssh: %w", err))
-	}
-	return nil
+	return execSSHTarget(commandCtx, ctx, state, target, cmdArgs)
 }
 
-func buildMachineSSHInvocation(state v1alpha1.State, ctx workspace.Context, name string, extraArgs []string, sshPath string) (sshInvocation, error) {
+func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 	machine, ok := stateview.Machine(state, name)
 	if !ok {
-		return sshInvocation{}, fmt.Errorf("unknown Machine %q", name)
+		return sshTarget{}, fmt.Errorf("unknown Machine %q", name)
 	}
 	if machine.Spec.Access.SSH == nil {
-		return sshInvocation{}, fmt.Errorf("machine %q declares no SSH access (spec.access.ssh)", name)
+		return sshTarget{}, fmt.Errorf("machine %q declares no SSH access (spec.access.ssh)", name)
 	}
 	address := v1alpha1.MachineSSHAddress(machine)
 	if address == "" {
-		return sshInvocation{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
+		return sshTarget{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
 	}
-	idx := secret.NewIndex(state)
-	args := []string{"ssh"}
-	if keyPath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, idx, ctx.SecretsDir); keyPath != "" {
-		args = append(args, "-i", keyPath, "-o", "IdentitiesOnly=yes")
-	}
-	if knownHosts := machineSSHKnownHostsPath(machine, idx, ctx); knownHosts != "" {
-		args = append(args, "-o", "UserKnownHostsFile="+knownHosts, "-o", "StrictHostKeyChecking=accept-new")
-	}
-	target := address
-	if user := machineSSHUser(machine); user != "" {
-		target = user + "@" + address
-	}
-	args = append(args, target)
-	args = append(args, extraArgs...)
-	return sshInvocation{Path: sshPath, Args: args, Env: os.Environ()}, nil
+	return sshTarget{
+		Address:       address,
+		User:          machineSSHUser(machine),
+		KeyRef:        machine.Spec.Access.SSH.KeyRef,
+		KnownHostsRef: machine.Spec.Access.SSH.KnownHostsRef,
+	}, nil
 }
 
 func machineSSHUser(machine v1alpha1.Machine) string {
@@ -145,8 +109,4 @@ func machineSSHUser(machine v1alpha1.Machine) string {
 		return machine.Spec.Access.SSH.User
 	}
 	return "root"
-}
-
-func machineSSHKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, ctx workspace.Context) string {
-	return sshtrust.MachineKnownHostsPath(machine, idx, ctx.SecretsDir, sshtrust.KnownHostsPathForContext(ctx.BaseDir))
 }

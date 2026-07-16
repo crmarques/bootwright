@@ -201,6 +201,11 @@ that name explicitly.
     pinned to the existing secret name (or migrate the key material
     deliberately).
 
+`bootwright cluster rsh` and `cluster exec` use that private material for
+container-cluster nodes. A split declaration that omits `privateKeyRef` can
+install the cluster but cannot open a node shell; add `privateKeyRef` or use a
+combined `keyPairRef`.
+
 For durable machines Bootwright or managed tools SSH into, put SSH connection
 material on `Machine.spec.access.ssh`. `keyRef` supplies private SSH key
 material; managed Ceph node hosts also require the public half at `<name>.pub`

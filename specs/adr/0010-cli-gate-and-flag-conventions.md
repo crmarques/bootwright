@@ -54,9 +54,12 @@ touch root-owned state:
   the per-user registry (`argsMayMutateRegistry`); only `apply`, rootful
   destroy targets, and `bastion setup` may use a become password
   (`argsMayUseBecome`).
-- `machine rsh`/`exec` and `cluster rsh`/`exec` exec the ssh client as
-  root specifically to read the root-owned SSH private key, and escalate
-  only when a non-empty `--name` is present.
+- `machine rsh`/`exec` and `cluster rsh`/`exec` run and wait for the SSH
+  client as root specifically to decrypt root-owned SSH private material.
+  The client reads that material through a parent-held anonymous descriptor;
+  Bootwright forwards cancellation, preserves the child exit status, closes
+  the descriptor after SSH exits, and escalates only when a non-empty `--name`
+  is present.
 - A leading global `--context` is stripped for classification only; the
   original args are forwarded verbatim to the sudo child.
 

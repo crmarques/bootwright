@@ -553,6 +553,15 @@ Rules:
   fills it when omitted) sets `keyPairRef`, or `publicKeyRef` with an optional
   `privateKeyRef`. `keyPairRef` is mutually exclusive with the other two, and
   an authored `nodeSSH` without `keyPairRef` requires `publicKeyRef`.
+- `cluster rsh` and `cluster exec` reach a `ContainerCluster` node with the
+  private material selected by `install.nodeSSH` (`keyPairRef`, otherwise
+  `privateKeyRef`), the `core` user, and the node's effective primary install
+  IP (falling back to its declared hostname). A public-only `nodeSSH` is valid
+  for installation but cannot power these commands. Storage-cluster access
+  continues to use each node `Machine`'s `spec.access.ssh`. Container-node
+  first use requires an interactive OpenSSH confirmation. A verified changed
+  key is rotated by removing only its effective address from the context
+  known-hosts file with `ssh-keygen -R`, then reconnecting interactively.
 - `spec.networking.clusterNetwork` defaults to one entry
   `{cidr: 10.128.0.0/14, hostPrefix: 23}` and `spec.networking.serviceNetwork`
   defaults to `[172.30.0.0/16]` (the stock openshift-install networks) when
@@ -1240,7 +1249,9 @@ Rules:
 - Machines that are used over SSH must declare
   `spec.access.ssh.addressRef`, `keyRef`, and a matching address.
   `access.ssh.addressRef` defaults to the address named `ssh` when one exists
-  (documented convention; there is no only-address fallback).
+  (documented convention; there is no only-address fallback). Container-cluster
+  node access is the exception because `ContainerCluster.spec.install.nodeSSH`
+  owns the installed RHCOS identity.
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
 - A `Machine` is node-bound by at most one cluster across `ContainerCluster`

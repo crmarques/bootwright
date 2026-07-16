@@ -37,14 +37,15 @@ Machine SSH follows the same boundary. Durable SSH connection details live on
 objects by name; when `knownHostsRef` is omitted, Bootwright records
 server keys under context-managed SSH trust state. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.
-Trust is recorded either by `bootwright machine trust` or on first use during an
-interactive `preflight`/`apply`, and first-use recording is allowed only for a
-host with no existing trust record and only after an explicit interactive
-per-host confirmation of the displayed key fingerprint. It never happens under
-`--dry-run`, JSON output, or non-interactive execution, and a changed server
-key is never accepted interactively: it fails closed until the operator
-verifies the new fingerprint and records it deliberately with
-`bootwright machine trust --replace`.
+Trust is recorded by `bootwright machine trust`, on first use during an
+interactive `preflight`/`apply`, or through OpenSSH's prompt during interactive
+direct SSH. First-use recording is allowed only for a host with no existing
+trust record and only after an explicit interactive per-host confirmation of
+the displayed key fingerprint. It never happens under `--dry-run`, JSON output,
+or non-interactive execution, and a changed server key is never accepted
+interactively: it fails closed pending out-of-band verification. Machine-owned
+endpoints are then recorded deliberately with `bootwright machine trust
+--replace`; container-node replacement follows the Installer Trust rules below.
 
 KubeVirt child-cluster profiles also follow the same boundary. `hostClusterRef`
 resolves to a generated kubeconfig already stored under Bootwright cluster
@@ -74,6 +75,29 @@ Cluster install trust is rendered only from explicit references:
   `ContainerCluster.spec.install.additionalTrustBundleRefs`.
 - API and ingress serving certificate material comes from
   `ContainerCluster.spec.install.servingCertificates`.
+
+`cluster rsh` and `cluster exec` use the private half of the selected
+`ContainerCluster.spec.install.nodeSSH` secret for container nodes. Bootwright
+unlinks an owner-only temporary file before writing the decrypted key, keeps
+its descriptor open while SSH runs, and gives OpenSSH the corresponding
+`/proc/<bootwright-pid>/fd/<fd>` path. The parent closes the descriptor after
+SSH exits. The encrypted context envelope is never passed to OpenSSH and no
+named plaintext key remains after the command.
+Direct SSH copies only allowlisted cryptographic directives from the Red Hat
+OpenSSH crypto-policy backend, when present, into an anonymous configuration;
+other platforms retain OpenSSH's compiled cryptographic defaults. It does not
+read generic system host rules or the invoking root account's personal
+configuration, and permits only the selected public-key identity. Its host-key
+alias is the effective target address, with global and DNS host-key trust
+disabled, so context or explicit known-hosts material remains the only
+server-authentication source. Context-managed direct SSH uses OpenSSH's explicit
+first-use prompt; unknown keys fail without an interactive terminal and changed
+keys always fail closed. After out-of-band verification, container-node
+replacement removes only the effective address's stale entry from the context
+known-hosts file with `ssh-keygen -R`, then records the replacement through an
+interactive direct connection. The child receives only terminal, locale, time
+zone, and color environment values; caller-selected askpass, agent, loader, and
+crypto-provider overrides do not cross the root process boundary.
 
 Disconnected installs are cluster-scoped through
 `ContainerCluster.spec.install.mode`. They require mirror trust material and

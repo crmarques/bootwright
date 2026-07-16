@@ -222,7 +222,11 @@ $ bootwright machine list --output json
 `Machine` using the identity Bootwright already knows for it — the resolved
 `access.ssh` address, user (default `root`), private key, and the context
 host-key trust store recorded by `bootwright machine trust`. `machine exec` runs
-a single command on the `Machine` instead of opening a shell:
+a single command on the `Machine` instead of opening a shell. An unknown server
+key prompts for explicit acceptance on an interactive first connection; verify
+it out of band first. Use `machine trust --machines <machine>` to pre-record it,
+or `machine trust --replace <machine>` after deliberately verifying a changed
+key:
 
 ```console
 $ bootwright machine rsh --name ceph-dc1-0
@@ -232,7 +236,11 @@ $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`
 for a one-off command); the node selector accepts the Machine name, the node
-hostname, or a `<role>-<ordinal>` such as `master-0`.
+hostname, or a `<role>-<ordinal>` such as `master-0`. Container-cluster access
+uses `install.nodeSSH`, the `core` user, and the node's primary install IP, so
+its backing Machine does not need `access.ssh`. Storage-cluster access keeps
+using the Machine SSH identity. An unknown node key prompts for explicit
+acceptance on an interactive first connection; a changed key fails closed.
 
 ## MachineImage
 

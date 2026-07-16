@@ -130,7 +130,7 @@ Author either a combined key pair or split public/private references — not bot
 | --- | --- | --- | --- |
 | `install.nodeSSH.keyPairRef` | One of `keyPairRef`/`publicKeyRef` | Generated convention key | Secret holding both private and public material. |
 | `install.nodeSSH.publicKeyRef` | Required when `keyPairRef` is empty | — | Secret holding public key material. |
-| `install.nodeSSH.privateKeyRef` | No | — | Secret holding private key material for local probes. |
+| `install.nodeSSH.privateKeyRef` | No | — | Secret holding private key material for local probes and `cluster rsh`/`exec`. |
 
 !!! note "Key pair or split refs, not both"
     Setting `keyPairRef` together with `publicKeyRef` or `privateKeyRef` is
@@ -138,6 +138,19 @@ Author either a combined key pair or split public/private references — not bot
     whole block is omitted, normalize injects the generated
     `<cluster-name>-cluster-admin-ssh-key` convention name. See
     [Secrets](secrets.md#node-ssh-keys) for how the secret name is keyed.
+
+Container-node `cluster rsh` and `cluster exec` use this private key, the
+`core` user, and the node's effective primary install IP. They do not require
+the backing Machine to duplicate the cluster key under `spec.access.ssh`.
+The first interactive connection asks before recording an unknown server key
+in the context trust file. After verifying a changed node key out of band,
+remove only that address's stale pin and reconnect interactively to confirm it:
+
+```console
+$ sudo ssh-keygen -R <effective-node-address> \
+    -f /var/lib/bootwright/contexts/<context>/trust/ssh/known_hosts
+$ bootwright cluster rsh --name <cluster> --node <node>
+```
 
 ### Serving certificates
 

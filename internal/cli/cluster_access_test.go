@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
@@ -97,6 +99,22 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 	}
 	if strings.Contains(stdout, "do-not-print-this-password") {
 		t.Fatalf("cluster info leaked password bytes without --secrets:\n%s", stdout)
+	}
+}
+
+func TestClusterNodeAccessReportsPublicOnlyNodeSSH(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.ContainerClusters[0].Spec.Install.NodeSSH = v1alpha1.NodeSSHSpec{
+		PublicKeyRef: v1alpha1.SecretRef{Name: "cluster-public"},
+	}
+	var out bytes.Buffer
+	printClusterNodeAccess(cliout.New(&out), state, "sno-libvirt")
+	got := out.String()
+	if !strings.Contains(got, "unavailable: set spec.install.nodeSSH.keyPairRef or privateKeyRef") {
+		t.Fatalf("public-only access output = %q", got)
+	}
+	if strings.Contains(got, "bootwright cluster rsh") {
+		t.Fatalf("public-only access advertised a failing command: %q", got)
 	}
 }
 
