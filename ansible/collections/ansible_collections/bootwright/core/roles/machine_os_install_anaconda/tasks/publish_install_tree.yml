@@ -13,6 +13,11 @@
     bootwright_tree_dvd_path: "{{ bootwright_tree.fromMedia.path }}"
   changed_when: false
 
+- name: Unmount hosted install tree DVD leaked by an interrupted run
+  ansible.posix.mount:
+    path: "{{ bootwright_tree_mount }}"
+    state: unmounted
+
 - name: Create hosted install tree publish root
   ansible.builtin.file:
     path: "{{ bootwright_tree_publish | dirname }}"

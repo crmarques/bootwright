@@ -346,6 +346,9 @@ func SafePurgeBaseDir(ctx Context) error {
 	if err != nil {
 		return err
 	}
+	if err := safefs.UnmountAllUnder(baseDir); err != nil {
+		return fmt.Errorf("release mounts under %s: %w", baseDir, err)
+	}
 	return os.RemoveAll(baseDir)
 }
 

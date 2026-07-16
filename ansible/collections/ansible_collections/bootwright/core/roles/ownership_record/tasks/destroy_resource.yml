@@ -118,6 +118,39 @@
     - not bootwright_ownership_destroy_release
     - item | length > 0
 
+- name: List active mounts before removing owned paths
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - -rn
+      - -o
+      - TARGET
+  register: bootwright_ownership_destroy_mounts
+  changed_when: false
+  failed_when: false
+  when:
+    - not bootwright_ownership_destroy_release
+    - bootwright_ownership_destroy_paths | select() | list | length > 0
+
+- name: Unmount active mounts under recorded owned paths
+  ansible.posix.mount:
+    path: "{{ item }}"
+    state: unmounted
+  vars:
+    bootwright_ownership_destroy_mount_pattern: >-
+      ^({{ bootwright_ownership_destroy_paths | select() | map('regex_escape') | join('|') }})(/|$)
+  loop: >-
+    {{
+      (bootwright_ownership_destroy_mounts.stdout_lines | default([]))
+      | select('match', bootwright_ownership_destroy_mount_pattern)
+      | list | sort(reverse=true)
+    }}
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - not bootwright_ownership_destroy_release
+    - bootwright_ownership_destroy_paths | select() | list | length > 0
+
 - name: Remove recorded owned paths
   ansible.builtin.file:
     path: "{{ item }}"
