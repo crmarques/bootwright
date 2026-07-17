@@ -1,5 +1,15 @@
 ---
 
+- name: Ensure managed OS staging directory on the controller
+  ansible.builtin.file:
+    path: "{{ bootwright_os_install_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  delegate_to: localhost
+  changed_when: false
+
 - name: Stage managed OS desired network state on the controller
   ansible.builtin.copy:
     dest: "{{ bootwright_os_install_root }}/nmstate.yml"
