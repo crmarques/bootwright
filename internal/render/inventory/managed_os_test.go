@@ -109,6 +109,9 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if got := localization["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8", "pt_BR.UTF-8"}) {
 		t.Fatalf("kickstart localization.instLangs = %v, want [en_US.UTF-8 pt_BR.UTF-8]", got)
 	}
+	if got := localization["localePackages"].([]string); !reflect.DeepEqual(got, []string{"glibc-langpack-pt"}) {
+		t.Fatalf("kickstart localization.localePackages = %v, want [glibc-langpack-pt]", got)
+	}
 	services := ks["services"].(map[string]any)
 	if got := services["enabled"].([]string); !reflect.DeepEqual(got, []string{"sshd", "chronyd", "firewalld"}) {
 		t.Fatalf("kickstart services.enabled = %v", got)
@@ -583,6 +586,9 @@ func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
 	if _, ok := base["formats"]; ok {
 		t.Fatalf("default localization must omit formats, got %v", base["formats"])
 	}
+	if _, ok := base["localePackages"]; ok {
+		t.Fatalf("default localization must omit localePackages, got %v", base["localePackages"])
+	}
 	if got := base["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
 		t.Fatalf("default localization instLangs = %v, want [en_US.UTF-8]", got)
 	}
@@ -601,5 +607,8 @@ func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
 	}
 	if got := split["instLangs"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8", "pt_BR.UTF-8", "es_ES.UTF-8"}) {
 		t.Fatalf("split localization instLangs = %v, want [en_US.UTF-8 pt_BR.UTF-8 es_ES.UTF-8] (deduped, language first)", got)
+	}
+	if got := split["localePackages"].([]string); !reflect.DeepEqual(got, []string{"glibc-langpack-pt", "glibc-langpack-es"}) {
+		t.Fatalf("split localization localePackages = %v, want [glibc-langpack-pt glibc-langpack-es] (regional only, system language excluded)", got)
 	}
 }

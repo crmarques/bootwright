@@ -130,6 +130,9 @@ update-ca-trust extract
 {% if localization.instLangs | default([]) | length > 0 %}{% set pkg_opts = pkg_opts ~ ' --inst-langs=' ~ (localization.instLangs | join(',')) %}{% endif %}
 %packages{{ pkg_opts }}
 @^{{ packages.environment | default('minimal') }}-environment
+{% for package in localization.localePackages | default([]) %}
+{{ package }}
+{% endfor %}
 {% for package in packages.install | default([]) %}
 {{ package }}
 {% endfor %}
@@ -139,8 +142,8 @@ update-ca-trust extract
 {% if localization.formats | default('') | length > 0 %}
 # Keep system messages in {{ localization.language | default('en_US.UTF-8', true) }} while regional
 # formatting (dates, numbers, currency, paper) follows {{ localization.formats }}. LANG drives
-# messages/sorting; the explicit LC_* override only the formatting categories. The %packages
-# --inst-langs above installed the {{ localization.formats }} locale data this needs.
+# messages/sorting; the explicit LC_* override only the formatting categories. The
+# glibc-langpack packages in %packages install the {{ localization.formats }} locale data this needs.
 cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_CONF'
 LANG={{ localization.language | default('en_US.UTF-8', true) }}
 LC_TIME={{ localization.formats }}
