@@ -276,10 +276,7 @@ func filteredSSHEnvironment(environ []string) []string {
 		switch {
 		case key == "TERM",
 			key == "COLORTERM",
-			key == "LANG",
-			key == "TZ",
-			key == "NO_COLOR",
-			strings.HasPrefix(key, "LC_"):
+			key == "NO_COLOR":
 			out = append(out, entry)
 		}
 	}

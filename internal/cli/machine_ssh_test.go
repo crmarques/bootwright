@@ -550,8 +550,11 @@ func TestLoadSanitizedSSHPolicyDropsBenignDirectives(t *testing.T) {
 func TestFilteredSSHEnvironmentDropsHelperAndLoaderOverrides(t *testing.T) {
 	got := filteredSSHEnvironment([]string{
 		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
 		"LANG=en_US.UTF-8",
 		"LC_ALL=C",
+		"LC_TIME=pt_BR.UTF-8",
+		"TZ=America/Sao_Paulo",
 		"SSH_ASKPASS=/tmp/askpass",
 		"SSH_ASKPASS_REQUIRE=force",
 		"DISPLAY=:0",
@@ -561,7 +564,7 @@ func TestFilteredSSHEnvironmentDropsHelperAndLoaderOverrides(t *testing.T) {
 		"LD_PRELOAD=/tmp/inject.so",
 		"PATH=/tmp/bin",
 	})
-	if strings.Join(got, "\n") != "TERM=xterm-256color\nLANG=en_US.UTF-8\nLC_ALL=C" {
+	if strings.Join(got, "\n") != "TERM=xterm-256color\nCOLORTERM=truecolor" {
 		t.Fatalf("filtered SSH environment = %q", got)
 	}
 }
