@@ -34,7 +34,11 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	if err != nil {
 		return nil, err
 	}
-	storageInfraDepsByCluster, err := planStorageInfraActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster)
+	registrationDepsByCluster, err := planStorageRegistrationActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster)
+	if err != nil {
+		return nil, err
+	}
+	storageInfraDepsByCluster, err := planStorageInfraActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster, registrationDepsByCluster)
 	if err != nil {
 		return nil, err
 	}

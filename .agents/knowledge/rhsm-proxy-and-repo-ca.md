@@ -13,16 +13,19 @@ proxy from rhsm.conf's `[server]` section, ignoring the `http(s)_proxy` task
 environment; without it the plugin stamps `proxy = _none_` into every
 redhat.repo entry.
 
-**Fix:** the `storage_cluster_cephadm` subscription task ALWAYS runs and
-converges `[server]` `proxy_scheme`/`proxy_hostname`/`proxy_port`/
+**Fix:** the `machine_registration_rhsm` proxy tasks (machines-phase
+`registration.<cluster>` task) ALWAYS run under managed rhsm management and
+converge `[server]` `proxy_scheme`/`proxy_hostname`/`proxy_port`/
 `no_proxy`/`proxy_user`/`proxy_password`: written when a proxy is declared
 and the RHSM server is not CIDR-bypassed, BLANKED otherwise — blanking
 matters because a stale proxy left in rhsm.conf would force a now-direct
 node through a dead proxy. Any change (either direction), a fresh
 registration, or a repo-CA change triggers `subscription-manager refresh`,
 regenerating redhat.repo so the proxy and `sslcacert` land in the RHEL repos
-before the vendor license package pulls RHEL dependencies. rhsm.conf is
-tightened to `0600` when proxy credentials are written into it.
+before the deps-phase Ceph work pulls RHEL dependencies. rhsm.conf is
+tightened to `0600` when proxy credentials are written into it. With
+`rhsm.management: external` these tasks never run — the operator playbook
+owns rhsm.conf entirely.
 
 ## RHSM CDN fails TLS behind an SSL-bump proxy despite system trust
 

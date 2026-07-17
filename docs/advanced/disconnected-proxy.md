@@ -81,12 +81,15 @@ replaces all of these.
 
 Depends on the storage distribution. Managed nodes route package work through the
 egress proxy (see [Package managers and `noProxy`](#package-managers-and-noproxy)).
+For the subscription distributions, the RHSM registration egress happens in the
+machines-phase registration task — after the OS is in place, before the Ceph
+deps-phase repo and registry work reaches the remaining rows.
 
 **Red Hat / IBM Storage Ceph (subscription):**
 
 | Host | Purpose | Distribution |
 | --- | --- | --- |
-| `subscription.rhsm.redhat.com`, `cdn.redhat.com` | RHSM registration and the RHEL BaseOS/AppStream + `rhceph-*-tools` repos. | Red Hat |
+| `subscription.rhsm.redhat.com`, `cdn.redhat.com` | RHSM registration (machines phase) and the RHEL BaseOS/AppStream + `rhceph-*-tools` repos (Ceph deps phase). | Red Hat |
 | `registry.redhat.io` | `podman login` + RHCS daemon image (`rhceph/rhceph-*-rhel9`) and cephadm monitoring/ingress sidecars. | Red Hat |
 | `cp.icr.io` | IBM registry login + IBM Storage Ceph daemon image (`cp/ibm-ceph/ceph-*-rhel9`). | IBM |
 | `public.dhe.ibm.com` | IBM Storage Ceph `.repo` file download (unauthenticated). | IBM |
@@ -247,15 +250,20 @@ the package manager honour the `noProxy` exceptions.
 
 Red Hat subscription content is the exception. The certificate-based RHEL repos
 in `/etc/yum.repos.d/redhat.repo` take their proxy from `/etc/rhsm/rhsm.conf`,
-not the `http_proxy` environment — so on a managed Ceph node Bootwright writes
-the effective proxy (host, port, credentials, and `noProxy`) into rhsm.conf's
-`[server]` section before registering, and `subscription-manager` stamps it into
-each RHEL repo. Without this the RHSM plugin marks those repos `proxy = _none_`
-and dnf reaches the Red Hat CDN directly, which fails on a proxied estate.
+not the `http_proxy` environment — so on a managed Ceph node the machines-phase
+registration task (run after the OS is in place, before the Ceph deps-phase
+package work) converges the effective proxy (host, port, credentials, and
+`noProxy`) into rhsm.conf's `[server]` section before registering, and
+`subscription-manager` stamps it into each RHEL repo. Without this the RHSM
+plugin marks those repos `proxy = _none_` and dnf reaches the Red Hat CDN
+directly, which fails on a proxied estate. When the entitlement sets
+`rhsm.management: external`, no registration task is planned and Bootwright
+writes no proxy into rhsm.conf at all — the delegated registration playbook
+owns that file.
 
 `python-rhsm`'s `no_proxy` matcher understands hostnames and domain suffixes but
 **not** CIDR entries, so a plain `10.0.0.0/8` in `noProxy` would leave an internal
-host in that range proxied. Bootwright handles this two ways. It feeds rhsm.conf a
+host in that range proxied. The registration task handles this two ways. It feeds rhsm.conf a
 CIDR-stripped `no_proxy` (domains plus concrete IP literals — the internal hosts a
 CIDR covers are already pinned as literals from the estate's known addresses). And
 because that pinning cannot resolve a Satellite named only by FQDN, when the
@@ -419,8 +427,14 @@ spec:
 A managed-OS `redhatCDN` install registers against the public Red Hat CDN unless
 the referenced entitlement's `rhsm` arm carries a `satellite` block, in which
 case the install registers and pulls content from that Red Hat Satellite instead
-— no `MachineImage` change is needed. This is how a disconnected or proxied
-estate keeps RHEL package fetches inside the perimeter. See
+— no `MachineImage` change is needed; on a managed Ceph cluster the same block
+redirects the machines-phase registration task, which trusts the Satellite CA
+and binds katello-ca-consumer before registering. This is how a disconnected or
+proxied estate keeps RHEL package fetches inside the perimeter. The
+entitlement's `rhsm.management` field (`managed`, the default, or `external`)
+picks who registers: `external` delegates registration to an operator
+`ProvisioningPlaybook` and is rejected for `redhatCDN` installs, whose
+install-time registration *is* the package source. See
 [Managed OS installs](managed-os.md) and the entitlement model on
 [Environment](../concepts/environment.md).
 

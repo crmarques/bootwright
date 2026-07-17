@@ -20,3 +20,4 @@ constraint knowledge lives in [`.agents/knowledge/`](../../.agents/knowledge/KNO
 | [0012](0012-proxy-fanout-per-directive.md) | Proxy Fan-Out, Per-Directive Bypass, and TLS-Inspection Trust | Accepted |
 | [0013](0013-addon-catalog-and-hooks.md) | Add-on Catalog, Hook Lifecycle, and OLM Readiness Gating | Accepted |
 | [0014](0014-api-grammar.md) | Public API Grammar: References, Unions, Collections, Enablement | Accepted |
+| [0015](0015-machine-scope-rhsm-registration.md) | Machine-Scope RHSM Registration and External Management | Accepted |

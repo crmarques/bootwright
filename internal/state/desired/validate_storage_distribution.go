@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/media"
 )
 
@@ -36,7 +35,7 @@ func validateStorageCephDistributionEntitlement(prefix string, state v1alpha1.St
 	if ref == "" {
 		return []string{prefix + ".entitlementRef is required when distribution requires subscription or license handling"}
 	}
-	entitlement, ok := entitlements.Find(state.Entitlements, ref)
+	entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, ref)
 	if !ok {
 		return []string{fmt.Sprintf("%s.entitlementRef %q does not match any Entitlement", prefix, ref)}
 	}

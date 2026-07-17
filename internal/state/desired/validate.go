@@ -8,7 +8,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
-	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -321,13 +320,17 @@ func validateMachineInstallProfileEntitlements(state v1alpha1.State) []string {
 			continue
 		}
 		field := fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.redhatCDN.entitlementRef %q", profile.Metadata.Name, ref)
-		entitlement, ok := entitlements.Find(state.Entitlements, ref)
+		entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, ref)
 		if !ok {
 			errs = append(errs, field+" does not match any Entitlement")
 			continue
 		}
 		if entitlement.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
 			errs = append(errs, fmt.Sprintf("%s resolves to type %q, want %q", field, entitlement.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL))
+			continue
+		}
+		if entitlement.Spec.RHSM != nil && v1alpha1.EntitlementRHSMManagement(entitlement.Spec.RHSM) == v1alpha1.EntitlementRHSMManagementExternal {
+			errs = append(errs, field+" has rhsm.management external; the redhatCDN package source registers during Anaconda and cannot be delegated to a provisioning playbook — use a managed entitlement or a mirror/hostedTree package source")
 		}
 	}
 	return errs

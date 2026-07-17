@@ -1,0 +1,71 @@
+---
+- name: Resolve corporate Satellite address for the no_proxy CIDR bypass check
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ bootwright_registration_satellite_hostname }}"
+  register: bootwright_registration_satellite_resolve
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_proxy_enabled | default(false) | bool
+    - bootwright_registration_satellite_hostname | length > 0
+    - (((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list | length) > 0
+
+- name: Determine whether the Satellite egress is bypassed by a no_proxy CIDR
+  ansible.builtin.set_fact:
+    bootwright_registration_server_bypassed: "{{ (bootwright_registration_server_bypassed | default(false)) or ((bootwright_registration_satellite_ips | ansible.utils.ipaddr(item)) | length > 0) }}"
+  loop: "{{ ((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  vars:
+    bootwright_registration_satellite_ips: "{{ (bootwright_registration_satellite_resolve.stdout_lines | default([])) | map('split') | map('first') | unique | list }}"
+  when:
+    - bootwright_proxy_enabled | default(false) | bool
+    - bootwright_registration_satellite_hostname | length > 0
+    - (bootwright_registration_satellite_resolve.stdout_lines | default([]) | length) > 0
+
+- name: Configure subscription-manager egress proxy
+  community.general.ini_file:
+    path: /etc/rhsm/rhsm.conf
+    section: server
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: root
+    group: root
+    mode: "{{ '0600' if (bootwright_registration_proxy_on and bootwright_proxy_credentialed_url) else '0644' }}"
+  loop: "{{ bootwright_registration_proxy_options }}"
+  loop_control:
+    label: "{{ item.option }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and bootwright_registration_proxy_on and bootwright_proxy_credentialed_url }}"
+  register: bootwright_registration_proxy
+  vars:
+    bootwright_registration_proxy_on: "{{ (bootwright_proxy_enabled | default(false) | bool) and not (bootwright_registration_server_bypassed | default(false) | bool) }}"
+    bootwright_registration_proxy_creds: "{{ bootwright_registration_proxy_on and bootwright_proxy_credentialed_url }}"
+    bootwright_registration_proxy_url: >-
+      {{ bootwright_proxy_https if (bootwright_proxy_https | length) > 0 else bootwright_proxy_http }}
+    bootwright_registration_proxy_options:
+      - option: proxy_scheme
+        value: "{{ (bootwright_registration_proxy_url | urlsplit('scheme')) if bootwright_registration_proxy_on else '' }}"
+      - option: proxy_hostname
+        value: "{{ (bootwright_registration_proxy_url | urlsplit('hostname')) if bootwright_registration_proxy_on else '' }}"
+      - option: proxy_port
+        value: "{{ (bootwright_registration_proxy_url | urlsplit('port')) if bootwright_registration_proxy_on else '' }}"
+      - option: no_proxy
+        value: "{{ bootwright_proxy_no_literal if bootwright_registration_proxy_on else '' }}"
+      - option: proxy_user
+        value: "{{ bootwright_proxy_credentials.username if bootwright_registration_proxy_creds else '' }}"
+      - option: proxy_password
+        value: "{{ bootwright_proxy_credentials.password if bootwright_registration_proxy_creds else '' }}"
+
+- name: Point RHSM content CA at the proxy-aware trust store
+  community.general.ini_file:
+    path: /etc/rhsm/rhsm.conf
+    section: rhsm
+    option: repo_ca_cert
+    value: "{{ bootwright_registration_system_ca_bundle_path if (bootwright_proxy_trust_bundle_ref | default('') | length > 0) else bootwright_registration_default_repo_ca }}"
+    owner: root
+    group: root
+    mode: "{{ '0600' if bootwright_proxy_credentialed_url | default(false) | bool else '0644' }}"
+  register: bootwright_registration_repo_ca

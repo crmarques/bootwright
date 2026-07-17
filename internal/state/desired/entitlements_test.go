@@ -222,6 +222,82 @@ func TestEntitlementValidation(t *testing.T) {
 			want: "registry.url must not embed credentials; use credentialsRef",
 		},
 		{
+			name: "rhsm-management-external-valid",
+			entitlements: []v1alpha1.Entitlement{{
+				Metadata: v1alpha1.Metadata{Name: "rhel"},
+				Spec: v1alpha1.EntitlementSpec{
+					Type: v1alpha1.EntitlementTypeRedHatRHEL,
+					RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
+				},
+			}},
+		},
+		{
+			name: "rhsm-management-external-redhat-ceph-valid",
+			entitlements: []v1alpha1.Entitlement{{
+				Metadata: v1alpha1.Metadata{Name: "rhcs"},
+				Spec: v1alpha1.EntitlementSpec{
+					Type: v1alpha1.EntitlementTypeRedHatCeph,
+					RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
+					Registry: &v1alpha1.EntitlementRegistry{
+						CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"},
+					},
+				},
+			}},
+		},
+		{
+			name: "rhsm-management-invalid",
+			entitlements: []v1alpha1.Entitlement{{
+				Metadata: v1alpha1.Metadata{Name: "rhel"},
+				Spec: v1alpha1.EntitlementSpec{
+					Type: v1alpha1.EntitlementTypeRedHatRHEL,
+					RHSM: &v1alpha1.EntitlementRHSM{Management: "operator"},
+				},
+			}},
+			want: `rhsm.management "operator" must be one of {managed, external}`,
+		},
+		{
+			name: "rhsm-management-external-rejects-refs",
+			entitlements: []v1alpha1.Entitlement{{
+				Metadata: v1alpha1.Metadata{Name: "rhel"},
+				Spec: v1alpha1.EntitlementSpec{
+					Type: v1alpha1.EntitlementTypeRedHatRHEL,
+					RHSM: &v1alpha1.EntitlementRHSM{
+						Management:      v1alpha1.EntitlementRHSMManagementExternal,
+						OrganizationRef: v1alpha1.SecretRef{Name: "rhel-org"},
+					},
+				},
+			}},
+			want: "organizationRef must be unset when management is external",
+		},
+		{
+			name: "rhsm-management-external-rejects-satellite",
+			entitlements: []v1alpha1.Entitlement{{
+				Metadata: v1alpha1.Metadata{Name: "rhel"},
+				Spec: v1alpha1.EntitlementSpec{
+					Type: v1alpha1.EntitlementTypeRedHatRHEL,
+					RHSM: &v1alpha1.EntitlementRHSM{
+						Management: v1alpha1.EntitlementRHSMManagementExternal,
+						Satellite:  &v1alpha1.EntitlementRHSMSatellite{Hostname: "satellite.corp.example.com"},
+					},
+				},
+			}},
+			want: "satellite must be unset when management is external",
+		},
+		{
+			name: "rhsm-management-external-rejects-insights",
+			entitlements: []v1alpha1.Entitlement{{
+				Metadata: v1alpha1.Metadata{Name: "rhel"},
+				Spec: v1alpha1.EntitlementSpec{
+					Type: v1alpha1.EntitlementTypeRedHatRHEL,
+					RHSM: &v1alpha1.EntitlementRHSM{
+						Management:        v1alpha1.EntitlementRHSMManagementExternal,
+						ConnectToInsights: true,
+					},
+				},
+			}},
+			want: "connectToInsights must be unset when management is external",
+		},
+		{
 			name: "satellite-valid",
 			entitlements: rhelWithSatellite(&v1alpha1.EntitlementRHSMSatellite{
 				Hostname:       "satellite.corp.example.com",
@@ -291,6 +367,36 @@ func TestMachineInstallProfileRedHatCDNRequiresRHELEntitlement(t *testing.T) {
 	}
 	errs := validateMachineInstallProfileEntitlements(state)
 	if got := strings.Join(errs, "; "); !strings.Contains(got, `resolves to type "redhat-ceph", want "redhat-rhel"`) {
+		t.Fatalf("validateMachineInstallProfileEntitlements errors = %q", got)
+	}
+}
+
+func TestMachineInstallProfileRedHatCDNRejectsExternalManagement(t *testing.T) {
+	state := v1alpha1.State{
+		Entitlements: []v1alpha1.Entitlement{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
+			},
+		}},
+		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.MachineInstallProfileSpec{
+				Installer: v1alpha1.MachineInstallProfileInstaller{
+					Anaconda: &v1alpha1.MachineInstallAnaconda{
+						PackageSource: &v1alpha1.MachineInstallPackageSource{
+							RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+								EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+							},
+						},
+					},
+				},
+			},
+		}},
+	}
+	errs := validateMachineInstallProfileEntitlements(state)
+	if got := strings.Join(errs, "; "); !strings.Contains(got, "cannot be delegated to a provisioning playbook") {
 		t.Fatalf("validateMachineInstallProfileEntitlements errors = %q", got)
 	}
 }

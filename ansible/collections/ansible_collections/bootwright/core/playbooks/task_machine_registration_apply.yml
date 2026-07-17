@@ -1,0 +1,45 @@
+---
+- name: Register cluster machines with RHSM
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  vars:
+    bootwright_selected_storage_cluster: >-
+      {{
+        bootwright_storage_clusters
+        | default([])
+        | selectattr('name', 'equalto', bootwright_task_storage_cluster_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
+  tasks:
+    - name: End hosts outside selected storage cluster
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_cluster_name | default('') != bootwright_task_storage_cluster_name | default('')
+
+    - name: Validate selected registration context
+      ansible.builtin.assert:
+        that:
+          - bootwright_task_storage_cluster_name | default('') | length > 0
+          - bootwright_selected_storage_cluster.name | default('') == bootwright_task_storage_cluster_name
+          - bootwright_selected_storage_cluster.provider.rhsmManagement | default('') == 'managed'
+        fail_msg: >-
+          Machine registration task did not receive a managed RHSM context for
+          {{ bootwright_task_storage_cluster_name | default('<unset>') }}.
+
+    - name: Register machine with RHSM
+      ansible.builtin.include_role:
+        name: bootwright.core.machine_registration_rhsm
+      vars:
+        bootwright_registration_organization_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.organizationPath | default('') }}"
+        bootwright_registration_activation_key_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.activationKeyPath | default('') }}"
+        bootwright_registration_satellite_hostname: "{{ bootwright_selected_storage_cluster.provider.rhsm.satellite.hostname | default('') }}"
+        bootwright_registration_satellite_ca_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.satellite.caPath | default('') }}"
+        bootwright_registration_connect_to_insights: "{{ bootwright_selected_storage_cluster.provider.rhsm.connectToInsights | default(false) }}"

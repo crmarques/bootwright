@@ -1,0 +1,17 @@
+---
+- name: Validate registration node OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'RedHat'
+    fail_msg: >-
+      RHSM registration is supported on RHEL-family nodes only; {{ inventory_hostname }} reported
+      {{ ansible_distribution | default('<unknown>') }} (os_family {{ ansible_os_family | default('<unknown>') }}).
+
+- name: Validate RHSM entitlement material paths
+  ansible.builtin.assert:
+    that:
+      - bootwright_registration_organization_path | length > 0
+      - bootwright_registration_activation_key_path | length > 0
+    fail_msg: >-
+      Managed RHSM registration requires the entitlement rhsm organizationRef and
+      activationKeyRef material.

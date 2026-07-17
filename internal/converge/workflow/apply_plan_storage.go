@@ -76,7 +76,54 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 	return managedOSDepsByCluster, nil
 }
 
-func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
+func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
+	registrationDepsByCluster := map[string][]string{}
+	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
+		return registrationDepsByCluster, nil
+	}
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) {
+			continue
+		}
+		if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+			continue
+		}
+		if !v1alpha1.StorageCephManagedRHSM(cluster, state.Entitlements) {
+			continue
+		}
+		taskID := "registration." + cluster.Metadata.Name
+		registrationDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+		deps := append([]string(nil), machineServiceTaskIDs...)
+		deps = append(deps, managedOSDepsByCluster[cluster.Metadata.Name]...)
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			ExplicitDependencies: deps,
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindMachineRegistration,
+					Label:        "machine registration " + cluster.Metadata.Name,
+					Cluster:      cluster.Metadata.Name,
+					ClusterKind:  ApplyClusterKindStorage,
+					Status:       TaskStatusPending,
+					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+				},
+				Playbook:           applyMachineRegistrationPlaybook,
+				Limit:              render.StorageClusterGroupName(cluster.Metadata.Name),
+				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name},
+				State:              storageTaskState(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(state, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(state, cluster.Metadata.Name),
+				Forks:              storageClusterNodeCount(cluster),
+			},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return registrationDepsByCluster, nil
+}
+
+func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster, registrationDepsByCluster map[string][]string) (map[string][]string, error) {
 	storageInfraDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseDeps] && includeStorage) {
 		return storageInfraDepsByCluster, nil
@@ -92,6 +139,7 @@ func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, targ
 		storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
 		deps := append([]string(nil), machineServiceTaskIDs...)
 		deps = append(deps, managedOSDepsByCluster[cluster.Metadata.Name]...)
+		deps = append(deps, registrationDepsByCluster[cluster.Metadata.Name]...)
 		if err := graph.Add(Activity{
 			ID:                   taskID,
 			Provides:             []CapabilityRef{{Kind: "storage.nodes-ready", Name: cluster.Metadata.Name}},

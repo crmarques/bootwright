@@ -265,7 +265,7 @@ so there is no `type` field. Set it under
 | Arm | Fields | Description |
 | --- | --- | --- |
 | `mirror` | `baseURL` (required, `http(s)`), `repositories[]` (`id` + `http(s)` `baseURL`) | Install from an HTTP(S) install tree you host. `baseURL` is the primary tree (BaseOS); `repositories` are additional (e.g. AppStream). |
-| `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. |
+| `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. The entitlement must keep `rhsm.management: managed` (the default) — install-time registration is the package source and cannot be delegated; `mirror` and `hostedTree` are the delegation-compatible sources. |
 | `hostedTree` | `fromMedia` (required, `local-media:`/`file://`), `artifactServerEndpoint` | Bootwright extracts the DVD named by `fromMedia` once and serves it from the selected managed artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from the referenced image's `spec.bootMedia`; `artifactServerEndpoint.endpointRef` must select an HTTP endpoint. |
 
 !!! note "Registering against a corporate Satellite"

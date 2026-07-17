@@ -1,0 +1,25 @@
+---
+- name: Gather registration node OS facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+
+- name: Validate RHSM registration inputs
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Load registration node OS variables
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+- name: Trust corporate proxy CA before package work
+  ansible.builtin.include_tasks: trust.yml
+
+- name: Bind node to corporate Satellite
+  ansible.builtin.include_tasks: satellite.yml
+
+- name: Configure RHSM proxy and content trust
+  ansible.builtin.include_tasks: proxy.yml
+
+- name: Register node with RHSM
+  ansible.builtin.include_tasks: register.yml

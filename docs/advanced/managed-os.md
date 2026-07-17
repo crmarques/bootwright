@@ -129,6 +129,11 @@ spec:
           entitlementRef: rhel
 ```
 
+A `redhatCDN` entitlement must keep `rhsm.management: managed` (the default):
+install-time registration *is* the package source, so it cannot be delegated to
+an operator playbook — `management: external` fails validation here, and
+`mirror` and `hostedTree` are the delegation-compatible sources.
+
 For an air-gapped estate with no mirror, **`hostedTree`** has Bootwright extract
 the DVD named by `fromMedia` once into the cluster artifact server and serve it
 locally, so the ~10 GB payload is not baked into every per-node ISO (see

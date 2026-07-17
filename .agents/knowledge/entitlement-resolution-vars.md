@@ -16,13 +16,18 @@ URL, the distribution's default registry fills in (`registry.redhat.io` or
 
 **Inline vs deferred rhsm:** an Entitlement carries its `rhsm` arm inline
 (types `redhat-rhel` and `redhat-ceph`) or, for `ibm-storage-ceph`, defers it
-to the `redhat-rhel` entitlement named by `spec.rhelEntitlementRef`. `Resolve`
-populates `Resolved.RHSM` identically in both cases, so downstream rendering
-(`cephprovider.Vars`) does not distinguish the two — the IBM entitlement
-contributes only registry and license arms while its RHSM (including any
-Satellite redirect) is inherited through the reference. Guarded by
-`TestResolveFollowsRHELEntitlementRef`, `TestResolveCarriesSatellite`, and
-`TestSelectIBMProviderProjectsLicenseAndRegistry`.
+to the `redhat-rhel` entitlement named by `spec.rhelEntitlementRef`
+(`v1alpha1.EntitlementEffectiveRHSM` is the single indirection point).
+`Resolve` populates `Resolved.RHSM` identically in both cases, so downstream
+rendering (`cephprovider.Vars`) does not distinguish the two — the IBM
+entitlement contributes only registry and license arms while its RHSM
+(including any Satellite redirect and the `management` axis) is inherited
+through the reference. `Resolved.RHSM.Management` defaults to `managed`;
+under `external` no secret paths or Satellite resolve, `Vars` emits
+`rhsmManagement` but no `rhsm` map, and the machines-phase registration task
+is not planned. Guarded by `TestResolveFollowsRHELEntitlementRef`,
+`TestResolveCarriesSatellite`, `TestResolveExternalManagementCarriesNoMaterial`,
+and `TestSelectExternalRHSMManagementProjectsNoRHSMVars`.
 
 **Resolved Satellite form:** `RHSMSatellite` is the resolved form of a
 corporate Red Hat Satellite redirect on an entitlement's `rhsm` arm. An empty

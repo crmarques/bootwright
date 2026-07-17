@@ -209,7 +209,7 @@ reruns. They are not stage families and `destroy` does not accept them.
 | Sub-phase | Family | Includes |
 | --- | --- | --- |
 | `fabric` | `infra` | Provider and shared-service preparation. |
-| `machines` | `infra` | Machine infrastructure and managed OS work. |
+| `machines` | `infra` | Machine infrastructure, managed OS work, and RHSM registration of storage nodes. |
 | `deps` | `clusters` | Cluster-stage prerequisites. |
 | `base` | `clusters` | Container and storage cluster base install. |
 | `add-ons` | `clusters` | Post-install add-ons. |

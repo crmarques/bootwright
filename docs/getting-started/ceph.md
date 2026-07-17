@@ -98,9 +98,12 @@ files (referenced by name from the `StorageCluster`), decoupled by concern — I
 Storage Ceph runs on RHEL it does not itself entitle:
 
 - `rhel` (`type: redhat-rhel`) registers each node with
-  `subscription-manager` so the RHEL BaseOS/AppStream repos cephadm needs are
-  available. Its `rhsm.organizationRef` and `rhsm.activationKeyRef` resolve to the
-  `rhel-org` and `rhel-activation-key` secrets.
+  `subscription-manager` — in the machines phase, right after RHEL lands on the
+  node — so the RHEL BaseOS/AppStream repos cephadm needs are available. Its
+  `rhsm.organizationRef` and `rhsm.activationKeyRef` resolve to the `rhel-org`
+  and `rhel-activation-key` secrets. `rhsm.management` defaults to `managed`;
+  `external` delegates registration to an operator `ProvisioningPlaybook` and
+  drops the org/key secrets (see the `ceph-external-rhsm` example).
 - `ibm-storage-ceph` (`type: ibm-storage-ceph`) logs each node
   into the IBM registry `cp.icr.io/cp` for the container images, accepts the
   product license (`license.accept: true`), and names the RHEL entitlement via
@@ -257,8 +260,8 @@ bootwright media list
 - **Red Hat subscription** (`rhel-org`, `rhel-activation-key`): a Red Hat account
   with RHEL entitlements (the no-cost Developer Subscription or a RHEL trial),
   then an **activation key** and your numeric **organization ID** from the Hybrid
-  Cloud Console. The nodes register with `subscription-manager` to enable the
-  RHEL repos.
+  Cloud Console. Each node registers with `subscription-manager` right after its
+  RHEL install; the storage stage then enables the RHEL repos.
 - **IBM Storage Ceph entitlement** (`ibm-ceph-registry`): an IBM account with
   IBM Storage Ceph (trial/eval or entitled), then an **entitlement key** from the
   IBM Container Software Library. The registry login is username `cp` with that
@@ -323,12 +326,14 @@ bootwright status --watch
 ```
 
 `apply` runs in two stages. **infra** defines the NAT'd libvirt network, brings
-up the dnsmasq resolver, creates the three VMs with emulated Redfish BMCs, and
-installs RHEL 9.7 on each via the Anaconda kickstart. **clusters** then, on every
-node, registers with RHSM, enables the RHEL and IBM Storage Ceph repos, accepts
-the IBM license, logs in to `cp.icr.io`, installs cephadm, bootstraps the cluster
-from `ceph-1`, adds `ceph-2` and the `ceph-3` tie-breaker monitor, and creates the
-OSDs, pools, CephFS filesystem, and the RGW service with its ingress VIP.
+up the dnsmasq resolver, creates the three VMs with emulated Redfish BMCs,
+installs RHEL 9.7 on each via the Anaconda kickstart, and — once the OS is in
+place — registers every node with RHSM (the `registration.ceph-ibm` machines
+task). **clusters** then, on every node, enables the RHEL and IBM Storage Ceph
+repos, accepts the IBM license, logs in to `cp.icr.io`, installs cephadm,
+bootstraps the cluster from `ceph-1`, adds `ceph-2` and the `ceph-3` tie-breaker
+monitor, and creates the OSDs, pools, CephFS filesystem, and the RGW service with
+its ingress VIP.
 Re-running `apply --yes` is idempotent; for a focused storage rerun use
 `bootwright apply --stage clusters --clusters ceph-ibm --yes`.
 

@@ -199,7 +199,7 @@ func applyTaskKindPhase(kind string) (string, bool) {
 	switch kind {
 	case ApplyTaskKindProvider, ApplyTaskKindInfraComponentServices:
 		return ApplyPhaseFabric, true
-	case ApplyTaskKindMachineInfraPrepare, ApplyTaskKindClusterInstall, ApplyTaskKindMachineInfraFinalize, ApplyTaskKindManagedMachineOS:
+	case ApplyTaskKindMachineInfraPrepare, ApplyTaskKindClusterInstall, ApplyTaskKindMachineInfraFinalize, ApplyTaskKindManagedMachineOS, ApplyTaskKindMachineRegistration:
 		return ApplyPhaseMachines, true
 	case ApplyTaskKindStorageInfra, ApplyTaskKindClusterISO, ApplyTaskKindHostVirtctl:
 		return ApplyPhaseDeps, true

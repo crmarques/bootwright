@@ -412,6 +412,7 @@ bootwright_storage_clusters:
         name: rhcs
         provider: redhat
         product: ceph
+      rhsmManagement: managed
       rhsm:
         organizationPath: /var/lib/bootwright/contexts/lab/secrets/redhat-org
         activationKeyPath: /var/lib/bootwright/contexts/lab/secrets/redhat-activation-key
@@ -472,14 +473,27 @@ capability flags, not on the distribution name. For `distribution: oss` the
 latest stable upstream Ceph release) and an optional `mirror`; the role uses it
 to configure the upstream community Ceph package repository with cephadm before
 installing `cephadm`. The `redhat` and `ibm` distributions omit `community` and
-set `requiresRHSM: true`; one shared, data-driven task file then registers RHSM,
-enables `repository.redhatRepos`, installs the optional `repository.ibmRepoURL`
-vendor `.repo`, and — when `requiresLicense: true` — installs and accepts the
-vendor license. Distributions that set `requiresRegistry: true` additionally run
-a registry stage (after host dependencies, before cephadm install) that installs
-the entitlement's `registry.trustBundlePath` and logs in to `registry.url` so
-every node can pull the Ceph container images cephadm orchestrates. Adding a
-distribution is a renderer/table change, not a new branch in the role.
+set `requiresRHSM: true` plus `rhsmManagement` (`managed` or `external` from the
+entitlement's `rhsm.management`); the `rhsm` path map is projected only when
+`rhsmManagement` is `managed`. RHSM registration itself runs earlier, in the
+machines-phase `task_machine_registration_apply` playbook: it selects the
+cluster entry from `bootwright_storage_clusters` via
+`bootwright_task_storage_cluster_name`, refuses a non-managed context, and
+feeds `provider.rhsm.*` into the `machine_registration_rhsm` role
+(`bootwright_registration_*` role vars) for Satellite CA trust and katello
+binding, proxy CA trust, the node-side Satellite-in-CIDR bypass decision,
+`rhsm.conf` `[server]` proxy and `[rhsm]` `repo_ca_cert` convergence,
+`subscription-manager` registration and refresh, and optional Insights
+enrollment. The storage role's subscription task file then enables
+`repository.redhatRepos` (skipped when `rhsmManagement` is `external`, so
+operator-enabled repo sets are never purged), installs the optional
+`repository.ibmRepoURL` vendor `.repo`, and — when `requiresLicense: true` —
+installs and accepts the vendor license. Distributions that set
+`requiresRegistry: true` additionally run a registry stage (after host
+dependencies, before cephadm install) that installs the entitlement's
+`registry.trustBundlePath` and logs in to `registry.url` so every node can pull
+the Ceph container images cephadm orchestrates. Adding a distribution is a
+renderer/table change, not a new branch in the role.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
 stable `phase`, `name`, and `command`. Create-style operations also declare
@@ -547,8 +561,9 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | `bootwright_task_machine_name` | Machine name selected for one machine infrastructure task |
 | `bootwright_task_managed_os_group_name` | StorageCluster-backed managed OS group selected for one managed OS task |
 | `bootwright_task_provider_host_name` | Provider host selected for one shared machine infrastructure prepare/finalize task |
-| `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage task |
+| `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage or machine registration task |
 | `bootwright_task_storage_prereqs_only` | Optional boolean that limits a storage task to node prerequisites before seed-only cephadm work |
+| `bootwright_task_storage_skip_prereqs` | Optional boolean that limits a storage task to the seed-only cephadm bootstrap, skipping node prerequisites |
 | `bootwright_agent_node_cluster_name` | ContainerCluster name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_agent_node_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_machine_task_cluster_name` | ContainerCluster or managed OS group name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |

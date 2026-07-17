@@ -107,8 +107,12 @@ ssh-copy-id -i ~/.ssh/bootwright-ssh-key.pub <user>@bastion.example.com
 None of this goes in YAML — it lives encrypted in the Bootwright context.
 
 1. **RHEL subscription** — an **organization ID** and an **activation key**
-   (no-cost *Red Hat Developer Subscription* or a RHEL trial). The nodes register
-   with `subscription-manager` to enable the BaseOS/AppStream repos cephadm needs.
+   (no-cost *Red Hat Developer Subscription* or a RHEL trial). The machines-phase
+   registration task registers each node with `subscription-manager` right after
+   the RHEL install; the clusters-stage Ceph work then enables the
+   BaseOS/AppStream repos cephadm needs. (Setting the RHEL entitlement's
+   `rhsm.management: external` instead delegates registration to a corporate
+   `ProvisioningPlaybook` — see `examples/ceph-external-rhsm`.)
 2. **IBM Storage Ceph entitlement key** — from the IBM Container Software Library
    (`https://myibm.ibm.com/products-services/containerlibrary`). The registry
    login is username **`cp`** with that key as the password. (The IBM license is
@@ -199,14 +203,15 @@ What apply does, in order:
 1. **infra** — starts the artifact server on the bastion, then for each node
    drives its Redfish BMC to mount the RHEL 9.7 ISO as virtual media and runs the
    **anaconda install** (static IP on `10.20.30.0/24`, external DNS, NTP via
-   chrony to the external servers, proxy for outbound).
-2. **clusters** — on every node (through the proxy): registers with RHSM, enables
-   the RHEL + IBM Storage Ceph repos, accepts the IBM license, logs in to
-   `cp.icr.io`, installs cephadm, then bootstraps from `ceph-1`, adds `ceph-2`
-   and the `ceph-3` tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW
-   pools, the CephFS filesystem, the RGW service with its ingress VIP, the NFS
-   export service with its ingress VIP, and the `mgmt-gateway` dashboard with its
-   VIP.
+   chrony to the external servers, proxy for outbound). With RHEL in place, the
+   machines-phase registration task registers each node with RHSM through the
+   proxy.
+2. **clusters** — on every node (through the proxy): enables the RHEL +
+   IBM Storage Ceph repos, accepts the IBM license, logs in to `cp.icr.io`,
+   installs cephadm, then bootstraps from `ceph-1`, adds `ceph-2` and the
+   `ceph-3` tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW pools, the
+   CephFS filesystem, the RGW service with its ingress VIP, the NFS export
+   service with its ingress VIP, and the `mgmt-gateway` dashboard with its VIP.
 
 Re-running `apply --yes` is idempotent. For a focused storage rerun:
 `bootwright apply --stage clusters --clusters ceph-ibm --yes`.

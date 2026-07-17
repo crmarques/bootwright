@@ -1,0 +1,8 @@
+---
+- name: Register nodes with the corporate RHSM automation
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Announce the corporate registration target
+      ansible.builtin.debug:
+        msg: "would run the corporate subscription-manager registration on {{ inventory_hostname }}"

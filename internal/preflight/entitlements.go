@@ -3,28 +3,19 @@ package preflight
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
 func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
-	entitlementsByName := map[string]v1alpha1.Entitlement{}
-	for _, entitlement := range state.Entitlements {
-		entitlementsByName[entitlement.Metadata.Name] = entitlement
-	}
 	var out []secretRefRequirement
-	appendEntitlement := func(refName, label string, phases []string, owner secretRefOwner) {
-		entitlement, ok := entitlementsByName[refName]
+	appendEntitlement := func(refName, label string, rhsmPhases, registryPhases []string, owner secretRefOwner) {
+		entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, refName)
 		if !ok {
 			return
 		}
-		rhsm := entitlement.Spec.RHSM
-		if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
-			if rhel, ok := entitlementsByName[entitlement.Spec.RHELEntitlementRef.Name]; ok {
-				rhsm = rhel.Spec.RHSM
-			}
-		}
-		if rhsm != nil {
+		rhsm := v1alpha1.EntitlementEffectiveRHSM(state.Entitlements, refName)
+		if rhsm != nil && v1alpha1.EntitlementRHSMManagement(rhsm) == v1alpha1.EntitlementRHSMManagementManaged {
 			if rhsm.OrganizationRef.Name != "" {
 				out = append(out, secretRefRequirement{
 					refName: rhsm.OrganizationRef.Name,
 					label:   label + " rhsm organizationRef",
-					phases:  phases,
+					phases:  rhsmPhases,
 					owner:   owner,
 				})
 			}
@@ -32,7 +23,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 				out = append(out, secretRefRequirement{
 					refName: rhsm.ActivationKeyRef.Name,
 					label:   label + " rhsm activationKeyRef",
-					phases:  phases,
+					phases:  rhsmPhases,
 					owner:   owner,
 				})
 			}
@@ -40,7 +31,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 				out = append(out, secretRefRequirement{
 					refName: rhsm.Satellite.TrustBundleRef.Name,
 					label:   label + " rhsm satellite trustBundleRef",
-					phases:  phases,
+					phases:  rhsmPhases,
 					owner:   owner,
 				})
 			}
@@ -50,7 +41,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 				out = append(out, secretRefRequirement{
 					refName: entitlement.Spec.Registry.CredentialsRef.Name,
 					label:   label + " registry credentialsRef",
-					phases:  phases,
+					phases:  registryPhases,
 					owner:   owner,
 				})
 			}
@@ -58,7 +49,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 				out = append(out, secretRefRequirement{
 					refName: entitlement.Spec.Registry.TrustBundleRef.Name,
 					label:   label + " registry trustBundleRef",
-					phases:  phases,
+					phases:  registryPhases,
 					owner:   owner,
 				})
 			}
@@ -76,6 +67,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 			cdn.EntitlementRef.Name,
 			"MachineInstallProfile/"+profile.Metadata.Name+" installer.anaconda.packageSource.redhatCDN entitlementRef",
 			[]string{"machines"},
+			[]string{"machines"},
 			secretRefOwner{},
 		)
 	}
@@ -86,6 +78,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 		appendEntitlement(
 			cluster.Spec.Ceph.EntitlementRef.Name,
 			"StorageCluster/"+cluster.Metadata.Name+" ceph entitlementRef",
+			[]string{"machines"},
 			[]string{"deps", "base"},
 			secretRefOwner{storageCluster: cluster.Metadata.Name},
 		)

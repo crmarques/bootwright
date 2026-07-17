@@ -119,6 +119,27 @@ Rules:
   takes no inline `rhsm` arm. Referenced secret material is declared as
   [`Secret`](#secret) objects.
 
+  The `rhsm` arm carries a who-runs-it axis: `rhsm.management` is `managed`
+  (the default when unset) or `external`. Managed registration runs as a
+  machines-phase `registration.<cluster>` task on the storage nodes after the
+  OS is in place and before the cluster `deps` work — Satellite binding and CA
+  trust, `rhsm.conf` proxy and content-CA convergence, `subscription-manager`
+  registration, and optional Insights enrollment. With `management: external`
+  Bootwright plans no registration task and never touches `rhsm.conf`; the arm
+  must then carry only `management` (`organizationRef`, `activationKeyRef`,
+  `satellite`, and `connectToInsights` are rejected), and the operator owns
+  registration — typically through a [`ProvisioningPlaybook`](#provisioningplaybook)
+  at `stage: deps, timing: before`, which runs after the machines phase and
+  (with the default `failureMode: fail`) gates the deps-phase Ceph work; a
+  `machines`/`after` playbook runs at the same point in time but does not gate
+  later phases. The delegated playbook must leave the nodes able to install
+  the distribution's packages. Under
+  `external`, the subscription-backed repository enablement (which purges
+  unlisted repos) is also skipped so operator-enabled repo sets survive; the
+  cephadm/ceph-common install asserts remain the fail-closed package-
+  availability gate. Registration is install-only: neither `destroy` nor an
+  entitlement change unregisters a node.
+
 Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
 inputs, fixtures, or scaffold output.
@@ -331,7 +352,9 @@ Rules:
   become additional Kickstart `repo` entries (e.g. AppStream). Every `baseURL`
   must be `http://` or `https://`.
 - `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a
-  `redhat-rhel` `Entitlement`. RHSM organization and activation key secret refs
+  `redhat-rhel` `Entitlement` whose `rhsm.management` is `managed`: the
+  Anaconda-time registration is the package source, so it cannot be delegated
+  to a provisioning playbook. RHSM organization and activation key secret refs
   are owned by that entitlement.
 - `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
   once and serves from the selected managed artifact server. It must reference
@@ -1457,9 +1480,9 @@ Rules:
 - `--override`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
-  provisioning, cluster add-ons, provisioning-playbook re-runs, and
-  storage-attachment apply — it is an idempotent, non-destructive re-apply that
-  touches no data, OS, or VM. For every
+  provisioning, cluster add-ons, machine RHSM registration, provisioning-playbook
+  re-runs, and storage-attachment apply — it is an idempotent, non-destructive
+  re-apply that touches no data, OS, or VM. For every
   other kind — a managed-OS or substrate machine (reinstall; disks wiped) and a
   container or storage cluster (reinstall / `cephadm rm-cluster --zap-osds`) — it
   is a destructive rebuild. A kind is destructive unless it is on the

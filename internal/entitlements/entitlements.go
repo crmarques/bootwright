@@ -6,6 +6,7 @@ import (
 )
 
 type RHSM struct {
+	Management        string
 	OrganizationPath  string
 	ActivationKeyPath string
 	ConnectToInsights bool
@@ -37,20 +38,8 @@ type Resolved struct {
 	License  License
 }
 
-func Find(ents []v1alpha1.Entitlement, name string) (v1alpha1.Entitlement, bool) {
-	if name == "" {
-		return v1alpha1.Entitlement{}, false
-	}
-	for _, entitlement := range ents {
-		if entitlement.Metadata.Name == name {
-			return entitlement, true
-		}
-	}
-	return v1alpha1.Entitlement{}, false
-}
-
 func Resolve(ents []v1alpha1.Entitlement, idx secret.Index, name, defaultRegistryURL, secretsDir string) (Resolved, bool) {
-	entitlement, ok := Find(ents, name)
+	entitlement, ok := v1alpha1.EntitlementByName(ents, name)
 	if !ok {
 		return Resolved{}, false
 	}
@@ -60,23 +49,18 @@ func Resolve(ents []v1alpha1.Entitlement, idx secret.Index, name, defaultRegistr
 		Provider: provider,
 		Product:  product,
 	}
-	rhsm := entitlement.Spec.RHSM
-	if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
-		if rhel, ok := Find(ents, entitlement.Spec.RHELEntitlementRef.Name); ok {
-			rhsm = rhel.Spec.RHSM
-		}
-	}
-	if rhsm != nil {
-		out.RHSM = RHSM{
-			OrganizationPath:  secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, idx, secretsDir, secret.MaterialPrimary),
-			ActivationKeyPath: secret.ResolveMaterialPath(rhsm.ActivationKeyRef.Name, idx, secretsDir, secret.MaterialPrimary),
-			ConnectToInsights: rhsm.ConnectToInsights,
-		}
-		if rhsm.Satellite != nil {
-			out.RHSM.Satellite = RHSMSatellite{
-				Hostname:        rhsm.Satellite.Hostname,
-				ContentBaseURL:  rhsm.Satellite.ContentBaseURL,
-				TrustBundlePath: secret.ResolveMaterialPath(rhsm.Satellite.TrustBundleRef.Name, idx, secretsDir, secret.MaterialPrimary),
+	if rhsm := v1alpha1.EntitlementEffectiveRHSM(ents, name); rhsm != nil {
+		out.RHSM.Management = v1alpha1.EntitlementRHSMManagement(rhsm)
+		if out.RHSM.Management != v1alpha1.EntitlementRHSMManagementExternal {
+			out.RHSM.OrganizationPath = secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, idx, secretsDir, secret.MaterialPrimary)
+			out.RHSM.ActivationKeyPath = secret.ResolveMaterialPath(rhsm.ActivationKeyRef.Name, idx, secretsDir, secret.MaterialPrimary)
+			out.RHSM.ConnectToInsights = rhsm.ConnectToInsights
+			if rhsm.Satellite != nil {
+				out.RHSM.Satellite = RHSMSatellite{
+					Hostname:        rhsm.Satellite.Hostname,
+					ContentBaseURL:  rhsm.Satellite.ContentBaseURL,
+					TrustBundlePath: secret.ResolveMaterialPath(rhsm.Satellite.TrustBundleRef.Name, idx, secretsDir, secret.MaterialPrimary),
+				}
 			}
 		}
 	}

@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ProvisioningPlaybook
+metadata:
+  name: corporate-rhsm
+spec:
+  stage: deps
+
+  timing: before
+
+  target:
+    clusters:
+      - ceph-external
+
+  playbook: playbooks/corporate-rhsm.yml
+
+  run: onChange
+
+  failureMode: fail

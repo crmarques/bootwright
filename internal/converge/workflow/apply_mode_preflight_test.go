@@ -12,6 +12,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindNodeConfigApply:        true,
 		ApplyTaskKindHostVirtctl:            true,
 		ApplyTaskKindClusterAddon:           true,
+		ApplyTaskKindMachineRegistration:    true,
 		ApplyTaskKindProvisioningPlaybook:   true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {

@@ -233,6 +233,37 @@ func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
 	if _, ok := rhsm["satellite"]; ok {
 		t.Fatalf("public-CDN rhsm must carry no satellite key: %#v", rhsm["satellite"])
 	}
+	if vars["rhsmManagement"] != v1alpha1.EntitlementRHSMManagementManaged {
+		t.Fatalf("rhsmManagement = %v, want managed", vars["rhsmManagement"])
+	}
+}
+
+func TestSelectExternalRHSMManagementProjectsNoRHSMVars(t *testing.T) {
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhcs"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatCeph,
+			RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
+			Registry: &v1alpha1.EntitlementRegistry{
+				CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"},
+			},
+		},
+	}}
+	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution:   v1alpha1.StorageCephDistributionRedHat,
+		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+	}}}
+	vars := Vars(Select(cluster, ents, secret.Index{}, "/context/secrets"))
+	if vars["rhsmManagement"] != v1alpha1.EntitlementRHSMManagementExternal {
+		t.Fatalf("rhsmManagement = %v, want external", vars["rhsmManagement"])
+	}
+	if _, ok := vars["rhsm"]; ok {
+		t.Fatalf("external rhsm management must project no rhsm vars: %#v", vars["rhsm"])
+	}
+	registry := vars["registry"].(map[string]any)
+	if registry["credentialsPath"] != "/context/secrets/redhat-registry" {
+		t.Fatalf("registry vars must survive external rhsm management: %#v", registry)
+	}
 }
 
 func TestSelectRedHatProviderProjectsSatellite(t *testing.T) {

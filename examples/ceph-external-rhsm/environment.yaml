@@ -1,0 +1,6 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-external-rhsm
+spec:
+  baseDomain: bootwright.test

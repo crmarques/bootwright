@@ -279,6 +279,13 @@ func Vars(provider Provider) map[string]any {
 			"product":  provider.Entitlement.Product,
 		}
 	}
+	if provider.RequiresRHSM {
+		management := provider.Entitlement.RHSM.Management
+		if management == "" {
+			management = v1alpha1.EntitlementRHSMManagementManaged
+		}
+		out["rhsmManagement"] = management
+	}
 	if len(provider.Repository.RedHatRepos) > 0 || provider.Repository.IBMRepoURL != "" {
 		repo := map[string]any{}
 		if len(provider.Repository.RedHatRepos) > 0 {

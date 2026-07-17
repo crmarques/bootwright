@@ -2,13 +2,11 @@
 - name: Validate subscription-backed Ceph entitlement paths
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_rhsm_organization_path | length > 0
-      - bootwright_ceph_rhsm_activation_key_path | length > 0
       - bootwright_ceph_registry_url | length > 0
       - bootwright_ceph_registry_credentials_path | length > 0
     fail_msg: >-
-      Ceph distribution {{ bootwright_ceph_provider_name }} requires RHSM organizationRef,
-      activationKeyRef, and registry credentialsRef entitlement material.
+      Ceph distribution {{ bootwright_ceph_provider_name }} requires registry
+      credentialsRef entitlement material.
 
 - name: Require accepted license for licensed Ceph distribution
   ansible.builtin.assert:
@@ -19,132 +17,34 @@
       set the Environment entitlement license.accept=true.
   when: bootwright_ceph_provider.requiresLicense | default(false) | bool
 
-- name: Trust corporate Satellite CA on storage node
-  ansible.builtin.copy:
-    src: "{{ bootwright_ceph_rhsm_satellite_ca_path }}"
-    dest: "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
-    owner: root
-    group: root
-    mode: "0644"
-  register: bootwright_ceph_satellite_ca
-  when:
-    - bootwright_ceph_rhsm_satellite_hostname | length > 0
-    - bootwright_ceph_rhsm_satellite_ca_path | length > 0
-
-- name: Update storage node trust store for corporate Satellite
-  ansible.builtin.command:
-    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
-  changed_when: bootwright_ceph_satellite_ca.changed | default(false)
-  when: bootwright_ceph_satellite_ca.changed | default(false)
-
-- name: Bind storage node subscription-manager to corporate Satellite
-  ansible.builtin.dnf:
-    name: "http://{{ bootwright_ceph_rhsm_satellite_hostname }}/pub/katello-ca-consumer-latest.noarch.rpm"
-    state: present
-    disable_gpg_check: true
-  when: bootwright_ceph_rhsm_satellite_hostname | length > 0
-
-- name: Resolve corporate Satellite address for the no_proxy CIDR bypass check
-  ansible.builtin.command:
-    argv:
-      - getent
-      - ahostsv4
-      - "{{ bootwright_ceph_rhsm_satellite_hostname }}"
-  register: bootwright_ceph_rhsm_satellite_resolve
-  changed_when: false
-  failed_when: false
-  when:
-    - bootwright_proxy_enabled | default(false) | bool
-    - bootwright_ceph_rhsm_satellite_hostname | length > 0
-    - (((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list | length) > 0
-
-- name: Determine whether the Satellite egress is bypassed by a no_proxy CIDR
-  ansible.builtin.set_fact:
-    bootwright_ceph_rhsm_server_bypassed: "{{ (bootwright_ceph_rhsm_server_bypassed | default(false)) or ((bootwright_ceph_rhsm_satellite_ips | ansible.utils.ipaddr(item)) | length > 0) }}"
-  loop: "{{ ((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list }}"
-  loop_control:
-    label: "{{ item }}"
-  vars:
-    bootwright_ceph_rhsm_satellite_ips: "{{ (bootwright_ceph_rhsm_satellite_resolve.stdout_lines | default([])) | map('split') | map('first') | unique | list }}"
-  when:
-    - bootwright_proxy_enabled | default(false) | bool
-    - bootwright_ceph_rhsm_satellite_hostname | length > 0
-    - (bootwright_ceph_rhsm_satellite_resolve.stdout_lines | default([]) | length) > 0
-
-- name: Configure subscription-manager egress proxy
-  community.general.ini_file:
-    path: /etc/rhsm/rhsm.conf
-    section: server
-    option: "{{ item.option }}"
-    value: "{{ item.value }}"
-    owner: root
-    group: root
-    mode: "{{ '0600' if (bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url) else '0644' }}"
-  loop: "{{ bootwright_ceph_rhsm_proxy_options }}"
-  loop_control:
-    label: "{{ item.option }}"
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url }}"
-  register: bootwright_ceph_rhsm_proxy
-  vars:
-    bootwright_ceph_rhsm_proxy_on: "{{ (bootwright_proxy_enabled | default(false) | bool) and not (bootwright_ceph_rhsm_server_bypassed | default(false) | bool) }}"
-    bootwright_ceph_rhsm_proxy_creds: "{{ bootwright_ceph_rhsm_proxy_on and bootwright_proxy_credentialed_url }}"
-    bootwright_ceph_rhsm_proxy_url: >-
-      {{ bootwright_proxy_https if (bootwright_proxy_https | length) > 0 else bootwright_proxy_http }}
-    bootwright_ceph_rhsm_proxy_options:
-      - option: proxy_scheme
-        value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('scheme')) if bootwright_ceph_rhsm_proxy_on else '' }}"
-      - option: proxy_hostname
-        value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('hostname')) if bootwright_ceph_rhsm_proxy_on else '' }}"
-      - option: proxy_port
-        value: "{{ (bootwright_ceph_rhsm_proxy_url | urlsplit('port')) if bootwright_ceph_rhsm_proxy_on else '' }}"
-      - option: no_proxy
-        value: "{{ bootwright_proxy_no_literal if bootwright_ceph_rhsm_proxy_on else '' }}"
-      - option: proxy_user
-        value: "{{ bootwright_proxy_credentials.username if bootwright_ceph_rhsm_proxy_creds else '' }}"
-      - option: proxy_password
-        value: "{{ bootwright_proxy_credentials.password if bootwright_ceph_rhsm_proxy_creds else '' }}"
-
-- name: Point RHSM content CA at the proxy-aware trust store
-  community.general.ini_file:
-    path: /etc/rhsm/rhsm.conf
-    section: rhsm
-    option: repo_ca_cert
-    value: "{{ bootwright_ceph_system_ca_bundle_path if (bootwright_proxy_trust_bundle_ref | default('') | length > 0) else bootwright_ceph_rhsm_default_repo_ca }}"
-    owner: root
-    group: root
-    mode: "{{ '0600' if bootwright_proxy_credentialed_url | default(false) | bool else '0644' }}"
-  register: bootwright_ceph_rhsm_repo_ca
-
-- name: Register storage node with RHSM
-  community.general.redhat_subscription:
-    state: present
-    org_id: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_organization_path) | trim }}"
-    activationkey: "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_activation_key_path) | trim }}"
-  register: bootwright_ceph_rhsm_register
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-
-- name: Refresh RHSM subscription metadata
+- name: Probe RHSM registration identity
   ansible.builtin.command:
     argv:
       - subscription-manager
-      - refresh
-  changed_when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed or bootwright_ceph_rhsm_repo_ca is changed
-  when: bootwright_ceph_rhsm_register is changed or bootwright_ceph_rhsm_proxy is changed or bootwright_ceph_rhsm_repo_ca is changed
+      - identity
+  register: bootwright_ceph_rhsm_identity
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
 
-- name: Connect storage node to Red Hat Insights
-  ansible.builtin.command:
-    argv:
-      - insights-client
-      - --register
-  register: bootwright_ceph_insights_register
-  changed_when: bootwright_ceph_insights_register.rc == 0
-  when: bootwright_ceph_provider.rhsm.connectToInsights | default(false) | bool
+- name: Require RHSM registration before enabling subscription repositories
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_rhsm_identity.rc == 0
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }} is not registered with RHSM.
+      Registration runs in the machines-phase registration task; run a full apply or
+      `bootwright apply --stage infra --clusters {{ bootwright_selected_storage_cluster.name }}`
+      before retrying the cluster stage.
+  when: bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
 
 - name: Enable subscription-backed Ceph repositories (and disable the rest)
   community.general.rhsm_repository:
     name: "{{ bootwright_ceph_provider.repository.redhatRepos | default([]) }}"
     purge: true
-  when: (bootwright_ceph_provider.repository.redhatRepos | default([]) | length) > 0
+  when:
+    - (bootwright_ceph_provider.repository.redhatRepos | default([]) | length) > 0
+    - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
 
 - name: Install vendor Ceph repository definition
   ansible.builtin.get_url:

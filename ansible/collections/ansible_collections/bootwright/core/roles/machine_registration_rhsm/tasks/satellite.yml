@@ -1,0 +1,25 @@
+---
+- name: Trust corporate Satellite CA on node
+  ansible.builtin.copy:
+    src: "{{ bootwright_registration_satellite_ca_path }}"
+    dest: "{{ bootwright_registration_satellite_ca_anchor_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_registration_satellite_ca
+  when:
+    - bootwright_registration_satellite_hostname | length > 0
+    - bootwright_registration_satellite_ca_path | length > 0
+
+- name: Update node trust store for corporate Satellite
+  ansible.builtin.command:
+    argv: "{{ bootwright_registration_ca_trust_update_argv }}"
+  changed_when: bootwright_registration_satellite_ca.changed | default(false)
+  when: bootwright_registration_satellite_ca.changed | default(false)
+
+- name: Bind node subscription-manager to corporate Satellite
+  ansible.builtin.dnf:
+    name: "http://{{ bootwright_registration_satellite_hostname }}/pub/katello-ca-consumer-latest.noarch.rpm"
+    state: present
+    disable_gpg_check: true
+  when: bootwright_registration_satellite_hostname | length > 0

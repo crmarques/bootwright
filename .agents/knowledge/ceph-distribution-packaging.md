@@ -65,13 +65,15 @@ written in the repository stage — before the install stage pulls `cephadm`/
 `ceph` from the vendor repo
 (`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-<N>-rhel-9.repo`).
 
-**Constraint:** RHSM is converged declaratively: `redhat_subscription` registers
-only when needed (re-registering with `--force` mints a fresh consumer record
-and rotates entitlement certs every run), and `rhsm_repository` with
+**Constraint:** RHSM is converged declaratively: `redhat_subscription`
+(machines-phase `machine_registration_rhsm` role) registers only when needed
+(re-registering with `--force` mints a fresh consumer record and rotates
+entitlement certs every run), and the storage role's `rhsm_repository` with
 `purge: true` enables exactly the named repos and disables the rest, with
-honest change reporting. Proxy and TLS-inspection CA handling for the RHSM
-repos (rhsm.conf `[server]` proxy, `[rhsm] repo_ca_cert`, the three distinct
-CA anchor files) is covered in
+honest change reporting — skipped under `rhsm.management: external` so
+operator-enabled repo sets are never purged. Proxy and TLS-inspection CA
+handling for the RHSM repos (rhsm.conf `[server]` proxy, `[rhsm]
+repo_ca_cert`, the three distinct CA anchor files) is covered in
 [rhsm-proxy-and-repo-ca.md](rhsm-proxy-and-repo-ca.md).
 
 **Constraint:** Subscription-backed repos embed

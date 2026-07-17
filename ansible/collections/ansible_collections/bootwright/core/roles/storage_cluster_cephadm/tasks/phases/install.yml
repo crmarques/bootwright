@@ -50,7 +50,9 @@
     fail_msg: >-
       cephadm CLI is required on storage node {{ bootwright_current_storage_host.hostname }} for Ceph
       distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
-      provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
+      provider repositories, managed OS MachineInstallProfile repositories, preinstalled host packages,
+      or — with rhsm management external — that your registration provisioning playbook enabled
+      repositories providing the Ceph packages.
       Package fallback result: {{ (bootwright_cephadm_package_install | default({})).msg | default('not attempted') }}
 
 - name: Probe ceph CLI before package fallback
@@ -104,7 +106,9 @@
     fail_msg: >-
       ceph CLI (ceph-common) is required on storage node {{ bootwright_current_storage_host.hostname }} for Ceph
       distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
-      provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
+      provider repositories, managed OS MachineInstallProfile repositories, preinstalled host packages,
+      or — with rhsm management external — that your registration provisioning playbook enabled
+      repositories providing the Ceph packages.
       Package fallback result: {{ (bootwright_ceph_common_package_install | default({})).msg | default('not attempted') }}
 
 - name: Authorize cephadm cluster SSH key on storage node

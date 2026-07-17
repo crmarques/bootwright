@@ -7,12 +7,15 @@ entitlement (`ibm-storage-ceph`) holds the IBM registry and license and names
 the `rhel` entitlement via `rhelEntitlementRef`. The `StorageCluster` references
 the IBM entitlement with `spec.ceph.entitlementRef`.
 
-Bootwright prepares each storage node by registering it with RHSM (from the
-`rhel` entry), enabling the RHEL base/appstream repositories, installing the IBM
-Storage Ceph `.repo` definition, installing and accepting the
-`ibm-storage-ceph-license`, and logging in to the IBM container registry (from
-the `ibm-storage-ceph` entry). The secret names below are declarations only; the
-bytes are supplied out of band.
+Bootwright registers each provided RHEL node with RHSM (from the `rhel` entry)
+in the machines phase, before any Ceph work; the clusters-stage Ceph work then
+enables the RHEL base/appstream repositories, installs the IBM Storage Ceph
+`.repo` definition, installs and accepts the `ibm-storage-ceph-license`, and
+logs in to the IBM container registry (from the `ibm-storage-ceph` entry).
+Setting the `rhel` entitlement's `rhsm.management: external` instead delegates
+registration to a corporate `ProvisioningPlaybook` (see
+`examples/ceph-external-rhsm`). The secret names below are declarations only;
+the bytes are supplied out of band.
 
 ## Credentials to supply
 

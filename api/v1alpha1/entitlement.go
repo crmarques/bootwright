@@ -17,10 +17,44 @@ type EntitlementSpec struct {
 }
 
 type EntitlementRHSM struct {
+	Management        string                    `yaml:"management,omitempty" json:"management,omitempty"`
 	OrganizationRef   SecretRef                 `yaml:"organizationRef,omitempty" json:"organizationRef,omitempty"`
 	ActivationKeyRef  SecretRef                 `yaml:"activationKeyRef,omitempty" json:"activationKeyRef,omitempty"`
 	ConnectToInsights bool                      `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
 	Satellite         *EntitlementRHSMSatellite `yaml:"satellite,omitempty" json:"satellite,omitempty"`
+}
+
+func EntitlementRHSMManagement(rhsm *EntitlementRHSM) string {
+	if rhsm == nil || rhsm.Management == "" {
+		return EntitlementRHSMManagementManaged
+	}
+	return rhsm.Management
+}
+
+func EntitlementByName(ents []Entitlement, name string) (Entitlement, bool) {
+	if name == "" {
+		return Entitlement{}, false
+	}
+	for _, entitlement := range ents {
+		if entitlement.Metadata.Name == name {
+			return entitlement, true
+		}
+	}
+	return Entitlement{}, false
+}
+
+func EntitlementEffectiveRHSM(ents []Entitlement, name string) *EntitlementRHSM {
+	entitlement, ok := EntitlementByName(ents, name)
+	if !ok {
+		return nil
+	}
+	rhsm := entitlement.Spec.RHSM
+	if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
+		if rhel, ok := EntitlementByName(ents, entitlement.Spec.RHELEntitlementRef.Name); ok {
+			rhsm = rhel.Spec.RHSM
+		}
+	}
+	return rhsm
 }
 
 type EntitlementRHSMSatellite struct {

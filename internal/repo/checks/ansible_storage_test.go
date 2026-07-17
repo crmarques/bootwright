@@ -614,6 +614,52 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Apply Ceph storage cluster")], "bootwright.core.storage_cluster_cephadm")
 }
 
+func TestMachineRegistrationRoleRegistersSafely(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_registration_apply.yml")
+	if len(plays) != 1 {
+		t.Fatalf("machine registration playbook has %d plays, want 1", len(plays))
+	}
+	if got := plays[0]["hosts"]; got != "bootwright_storage_hosts" {
+		t.Fatalf("machine registration play hosts = %v, want bootwright_storage_hosts", got)
+	}
+	tasks, ok := plays[0]["tasks"].([]any)
+	if !ok {
+		t.Fatalf("machine registration play has no tasks")
+	}
+	decoded := make([]map[string]any, 0, len(tasks))
+	for i, task := range tasks {
+		item, ok := task.(map[string]any)
+		if !ok {
+			t.Fatalf("machine registration task %d is not a map", i)
+		}
+		decoded = append(decoded, item)
+	}
+	contextAssert := decoded[findAnsibleTask(t, decoded, "Validate selected registration context")]
+	if got := fmt.Sprint(contextAssert["ansible.builtin.assert"]); !strings.Contains(got, "rhsmManagement") || !strings.Contains(got, "managed") {
+		t.Fatalf("registration play must refuse a non-managed RHSM context, got %v", got)
+	}
+	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Register machine with RHSM")], "bootwright.core.machine_registration_rhsm")
+
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_registration_rhsm/tasks/main.yml")
+	validateIdx := findAnsibleTask(t, mainTasks, "Validate RHSM registration inputs")
+	satelliteIdx := findAnsibleTask(t, mainTasks, "Bind node to corporate Satellite")
+	proxyIdx := findAnsibleTask(t, mainTasks, "Configure RHSM proxy and content trust")
+	registerIdx := findAnsibleTask(t, mainTasks, "Register node with RHSM")
+	if !(validateIdx < satelliteIdx && satelliteIdx < proxyIdx && proxyIdx < registerIdx) {
+		t.Fatalf("registration role must validate, bind Satellite, and converge proxy trust before registering (validate=%d satellite=%d proxy=%d register=%d)", validateIdx, satelliteIdx, proxyIdx, registerIdx)
+	}
+
+	registerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_registration_rhsm/tasks/register.yml")
+	rhsmRegister := registerTasks[findAnsibleTask(t, registerTasks, "Register node with RHSM")]
+	assertRedactsByDefault(t, "RHSM registration", rhsmRegister["no_log"])
+
+	proxyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_registration_rhsm/tasks/proxy.yml")
+	repoCA := proxyTasks[findAnsibleTask(t, proxyTasks, "Point RHSM content CA at the proxy-aware trust store")]
+	if got := fmt.Sprint(repoCA["community.general.ini_file"]); !strings.Contains(got, "repo_ca_cert") {
+		t.Fatalf("registration proxy tasks must converge rhsm.conf repo_ca_cert, got %v", got)
+	}
+}
+
 func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
 	for _, name := range []string{
@@ -676,8 +722,10 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	}
 
 	subscriptionTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml")
-	rhsmRegister := subscriptionTasks[findAnsibleTask(t, subscriptionTasks, "Register storage node with RHSM")]
-	assertRedactsByDefault(t, "RHSM registration", rhsmRegister["no_log"])
+	repoEnableIdx := findAnsibleTask(t, subscriptionTasks, "Enable subscription-backed Ceph repositories (and disable the rest)")
+	if got := fmt.Sprint(subscriptionTasks[repoEnableIdx]["when"]); !strings.Contains(got, "external") {
+		t.Fatalf("subscription repo enablement must skip external rhsm management, got when=%v", got)
+	}
 	licenseAcceptIdx := findAnsibleTask(t, subscriptionTasks, "Accept vendor Ceph license provisions")
 	if got := fmt.Sprint(subscriptionTasks[licenseAcceptIdx]["when"]); !strings.Contains(got, "requiresLicense") {
 		t.Fatalf("license acceptance must gate on requiresLicense, got when=%v", got)

@@ -9,7 +9,9 @@ A `ProvisioningPlaybook` runs an **operator-supplied Ansible playbook** against
 machines at a chosen provisioning stage. It is the imperative escape hatch for
 site-specific steps bootwright does not model — hardening a node after OS
 install, preparing storage before cluster dependencies land, registering nodes
-with an external system after the cluster is up.
+with an external system after the cluster is up, or
+[replacing Bootwright's managed RHSM registration](#delegating-rhsm-registration)
+of storage nodes.
 
 It is the sibling of an [add-on](add-ons.md): an add-on applies **declarative
 Kubernetes objects** *inside* an installed cluster; a provisioning playbook runs
@@ -100,6 +102,30 @@ operator code as root over every context's secrets. Secrets named in
 `secretRefs` are read by the playbook from `{{ bootwright_secrets_dir }}/<name>`;
 their values never reach the command line. `extraVars` arrive as a single JSON
 `-e` value.
+
+## Delegating RHSM registration
+
+A subscription-backed managed Ceph cluster is normally registered by
+Bootwright's own machines-phase `registration.<cluster>` task — after the OS is
+in place, before the deps-phase storage work. Setting `rhsm.management:
+external` on the cluster's `Entitlement` delegates that work to a provisioning
+playbook: Bootwright plans no registration task, never touches `rhsm.conf`, and
+skips the repo-enablement purge, so operator-managed repo sets survive — and no
+RHSM organization or activation-key secrets exist or are demanded.
+
+Anchor the delegated playbook at `stage: deps, timing: before`: it runs after
+the machines-phase work (the OS is in place) and, with the default
+`failureMode: fail`, the deps-phase Ceph work waits for and gates on it. A
+`stage: machines, timing: after` playbook also runs after the OS install but
+does **not** gate later phases, so do not use it for delegated registration.
+The playbook must leave every storage node able to install the distribution
+packages — activation-key repo sets, a Satellite content view, or an internal
+mirror — because the cephadm/ceph-common install asserts remain the
+fail-closed package-availability gate. See the
+[`examples/ceph-external-rhsm`](https://github.com/crmarques/bootwright/tree/main/examples/ceph-external-rhsm)
+snippet and the `Entitlement` section of
+[`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md)
+for the normative rules.
 
 ## Idempotency, failure, and ordering
 

@@ -17,8 +17,6 @@ bootwright_ceph_managed_packages:
 bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
 bootwright_ceph_rhsm_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem
 bootwright_ceph_proxy_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.pem
-bootwright_ceph_system_ca_bundle_path: /etc/pki/tls/certs/ca-bundle.crt
-bootwright_ceph_rhsm_default_repo_ca: /etc/rhsm/ca/redhat-uep.pem
 bootwright_ceph_ca_trust_update_argv:
   - update-ca-trust
 bootwright_ceph_community_default_mirror: https://download.ceph.com

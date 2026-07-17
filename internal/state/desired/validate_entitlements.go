@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/entitlements"
 )
 
 func validateEntitlements(state v1alpha1.State) []string {
@@ -58,7 +57,7 @@ func validateEntitlementRHELRef(owner string, ref v1alpha1.LocalObjectReference,
 	if ref.Name == "" {
 		return []string{owner + " is required for ibm-storage-ceph; name a redhat-rhel entitlement for the RHEL subscription"}
 	}
-	target, ok := entitlements.Find(state.Entitlements, ref.Name)
+	target, ok := v1alpha1.EntitlementByName(state.Entitlements, ref.Name)
 	if !ok {
 		return []string{fmt.Sprintf("%s %q does not match any Entitlement", owner, ref.Name)}
 	}
@@ -72,6 +71,13 @@ func validateEntitlementRHSMRequired(owner string, rhsm *v1alpha1.EntitlementRHS
 	if rhsm == nil {
 		return []string{owner + " is required"}
 	}
+	switch rhsm.Management {
+	case "", v1alpha1.EntitlementRHSMManagementManaged:
+	case v1alpha1.EntitlementRHSMManagementExternal:
+		return validateEntitlementRHSMExternal(owner, rhsm)
+	default:
+		return []string{fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, rhsm.Management, v1alpha1.EntitlementRHSMManagementManaged, v1alpha1.EntitlementRHSMManagementExternal)}
+	}
 	var errs []string
 	if rhsm.OrganizationRef.Name == "" {
 		errs = append(errs, owner+".organizationRef is required")
@@ -80,6 +86,23 @@ func validateEntitlementRHSMRequired(owner string, rhsm *v1alpha1.EntitlementRHS
 		errs = append(errs, owner+".activationKeyRef is required")
 	}
 	return append(errs, validateEntitlementSatellite(owner+".satellite", rhsm.Satellite)...)
+}
+
+func validateEntitlementRHSMExternal(owner string, rhsm *v1alpha1.EntitlementRHSM) []string {
+	var errs []string
+	if rhsm.OrganizationRef.Name != "" {
+		errs = append(errs, owner+".organizationRef must be unset when management is external; the operator provisioning playbook owns registration")
+	}
+	if rhsm.ActivationKeyRef.Name != "" {
+		errs = append(errs, owner+".activationKeyRef must be unset when management is external; the operator provisioning playbook owns registration")
+	}
+	if rhsm.Satellite != nil {
+		errs = append(errs, owner+".satellite must be unset when management is external; the operator provisioning playbook owns Satellite trust and registration")
+	}
+	if rhsm.ConnectToInsights {
+		errs = append(errs, owner+".connectToInsights must be unset when management is external; the operator provisioning playbook owns Insights registration")
+	}
+	return errs
 }
 
 func validateEntitlementSatellite(owner string, sat *v1alpha1.EntitlementRHSMSatellite) []string {

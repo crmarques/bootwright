@@ -1,0 +1,7 @@
+---
+bootwright_registration_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem
+bootwright_registration_proxy_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.pem
+bootwright_registration_system_ca_bundle_path: /etc/pki/tls/certs/ca-bundle.crt
+bootwright_registration_default_repo_ca: /etc/rhsm/ca/redhat-uep.pem
+bootwright_registration_ca_trust_update_argv:
+  - update-ca-trust

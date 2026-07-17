@@ -1,8 +1,9 @@
 # Satellite registration trust chain: kickstart and day-2
 
 **Day-2 Satellite binding order:** when a Ceph entitlement names a corporate
-Satellite, `storage_cluster_cephadm/tasks/providers/subscription.yml` binds
-the storage node to it BEFORE registering. The
+Satellite, `machine_registration_rhsm/tasks/satellite.yml` (machines-phase
+`registration.<cluster>` task) binds the storage node to it BEFORE
+registering. The
 `katello-ca-consumer-latest.noarch.rpm` is installed from the Satellite's
 plain-HTTP `/pub` bootstrap path (dnf with `disable_gpg_check: true`) — that
 RPM writes the Satellite CA into `/etc/rhsm/ca` and points `rhsm.conf` at the

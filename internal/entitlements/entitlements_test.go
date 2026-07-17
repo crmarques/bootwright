@@ -119,3 +119,66 @@ func TestResolveCarriesSatellite(t *testing.T) {
 		t.Fatalf("bare rhsm should carry no satellite, got %#v", resolved.RHSM.Satellite)
 	}
 }
+
+func TestResolveExternalManagementCarriesNoMaterial(t *testing.T) {
+	ents := []v1alpha1.Entitlement{
+		{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
+				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				Registry:           &v1alpha1.EntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"}},
+				License:            &v1alpha1.EntitlementLicense{Accept: true},
+			},
+		},
+	}
+
+	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
+	if !ok {
+		t.Fatal("Resolve(rhel) not found")
+	}
+	if rhel.RHSM.Management != v1alpha1.EntitlementRHSMManagementExternal {
+		t.Fatalf("rhel rhsm management = %q, want external", rhel.RHSM.Management)
+	}
+	if rhel.RHSM.OrganizationPath != "" || rhel.RHSM.ActivationKeyPath != "" || rhel.RHSM.Satellite.Hostname != "" {
+		t.Fatalf("external rhsm must resolve no material, got %#v", rhel.RHSM)
+	}
+
+	ibm, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
+	if !ok {
+		t.Fatal("Resolve(ibm-ceph) not found")
+	}
+	if ibm.RHSM.Management != v1alpha1.EntitlementRHSMManagementExternal {
+		t.Fatalf("ibm rhsm management via rhelEntitlementRef = %q, want external", ibm.RHSM.Management)
+	}
+	if ibm.Registry.CredentialsPath != "/secrets/ibm-registry" || !ibm.License.Accepted {
+		t.Fatalf("registry/license must resolve regardless of rhsm management, got %#v %#v", ibm.Registry, ibm.License)
+	}
+}
+
+func TestResolveManagedManagementDefault(t *testing.T) {
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatRHEL,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
+				ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+			},
+		},
+	}}
+	resolved, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
+	if !ok {
+		t.Fatal("Resolve(rhel) not found")
+	}
+	if resolved.RHSM.Management != v1alpha1.EntitlementRHSMManagementManaged {
+		t.Fatalf("unset management must resolve managed, got %q", resolved.RHSM.Management)
+	}
+}

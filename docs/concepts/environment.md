@@ -171,9 +171,10 @@ and — for `ibm-storage-ceph` — from another entitlement's
 | --- | --- | --- | --- |
 | `metadata.name` | Yes | — | Entitlement name referenced by storage or OS install inputs. |
 | `spec.type` | Yes | — | Discriminator: `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
-| `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever `rhsm` is required. |
-| `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever `rhsm` is required. |
-| `spec.rhsm.connectToInsights` | No | `false` | Whether managed RHEL installs connect to Insights. |
+| `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`ProvisioningPlaybook`](provisioning-playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). For `ibm-storage-ceph` the value arrives through `rhelEntitlementRef`. |
+| `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
+| `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
+| `spec.rhsm.connectToInsights` | No | `false` | Whether registered RHEL nodes enroll in Insights. |
 | `spec.rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. See [Corporate Satellite](#corporate-satellite). |
 | `spec.rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
 | `spec.rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
@@ -211,6 +212,18 @@ separate `redhat-rhel` entitlement named via `rhelEntitlementRef` — an inline
 stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
 tools repo, so its own `rhsm` arm covers both.)
 
+The required `rhsm` secret refs assume the default `rhsm.management: managed`,
+where Bootwright registers the storage nodes itself in a machines-phase task —
+after the OS is in place, before the Ceph deps work. Under `management:
+external` the arm carries only `management`: Bootwright plans no registration
+task and demands no RHSM secrets; the operator delegates registration to a
+[`ProvisioningPlaybook`](provisioning-playbooks.md) at `stage: deps`,
+`timing: before` (which gates the Ceph deps work), and it must leave nodes
+able to install the distribution packages. The `examples/ceph-external-rhsm`
+snippet shows the pattern;
+[`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md)
+is normative.
+
 ### Corporate Satellite
 
 By default an `rhsm` arm registers against the public Red Hat CDN
@@ -219,8 +232,10 @@ registration to a corporate Red Hat Satellite (or Capsule): the same
 `organizationRef` and `activationKeyRef` are interpreted against the Satellite,
 and the CA named by `trustBundleRef` is trusted before registration. One block
 covers both the install-time Anaconda kickstart (`rhsm --server-hostname …
---rhsm-baseurl …`) and the day-2 cephadm `subscription-manager register`, so
-nodes never fall back to the CDN. Because the redirect lives on the entitlement,
+--rhsm-baseurl …`) and the machines-phase registration task's
+`subscription-manager register` — run after the OS is in place, before the Ceph
+deps work — so nodes never fall back to the CDN. Because the redirect lives on
+the entitlement,
 a [`MachineImage`](machines.md) boot ISO or a Ceph cluster that already
 references the entitlement inherits Satellite with no other changes.
 
@@ -271,8 +286,12 @@ spec:
 
 The `rhsm` kickstart command Bootwright emits is supported on Red Hat Enterprise
 Linux only (Anaconda disables it on RHEL rebuilds such as AlmaLinux, Rocky, and
-CentOS Stream); Satellite registration therefore applies to `family: rhel`
-installs. OpenShift/RHCOS agent-install nodes do not use Satellite.
+CentOS Stream); install-time Satellite registration therefore applies to
+`family: rhel` installs. An entitlement backing `packageSource.redhatCDN` must
+keep `rhsm.management: managed` — install-time registration *is* the package
+source and cannot be delegated (`mirror` and `hostedTree` are the
+delegation-compatible sources). OpenShift/RHCOS agent-install nodes do not use
+Satellite.
 
 ## Component images
 

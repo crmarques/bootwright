@@ -17,6 +17,7 @@ const (
 	ApplyTaskKindClusterInstall         = "clusterInstall"
 	ApplyTaskKindMachineInfraFinalize   = "machineInfraFinalize"
 	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
+	ApplyTaskKindMachineRegistration    = "machineRegistration"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindHostVirtctl            = "hostVirtctl"
@@ -36,17 +37,18 @@ const (
 	ApplyPhaseBase     = "base"
 	ApplyPhaseAddons   = "add-ons"
 
-	applyProviderPlaybook         = roles.PlaybookTaskProviderServicesApply
-	applyInfraComponentsPlaybook  = roles.PlaybookTaskInfraComponentServicesApply
-	applyMachineInfraPrepare      = roles.PlaybookTaskMachineInfraPrepare
-	applyClusterInstallPlaybook   = roles.PlaybookTaskMachineInfraApply
-	applyMachineInfraFinalize     = roles.PlaybookTaskMachineInfraFinalize
-	applyManagedMachineOSPlaybook = roles.PlaybookTaskManagedMachineOSApply
-	applyCreateISOPlaybook        = roles.PlaybookTaskContainerClusterCreateAgentISO
-	applyHostVirtctlPlaybook      = roles.PlaybookTaskHostVirtctlProvision
-	applyBootMachinePlaybook      = roles.PlaybookTaskContainerClusterBootAgentMachine
-	applyWaitInstallPlaybook      = roles.PlaybookTaskContainerClusterWaitAgentInstall
-	applyStoragePlaybook          = roles.PlaybookTaskStorageClusterApply
+	applyProviderPlaybook            = roles.PlaybookTaskProviderServicesApply
+	applyInfraComponentsPlaybook     = roles.PlaybookTaskInfraComponentServicesApply
+	applyMachineInfraPrepare         = roles.PlaybookTaskMachineInfraPrepare
+	applyClusterInstallPlaybook      = roles.PlaybookTaskMachineInfraApply
+	applyMachineInfraFinalize        = roles.PlaybookTaskMachineInfraFinalize
+	applyManagedMachineOSPlaybook    = roles.PlaybookTaskManagedMachineOSApply
+	applyMachineRegistrationPlaybook = roles.PlaybookTaskMachineRegistrationApply
+	applyCreateISOPlaybook           = roles.PlaybookTaskContainerClusterCreateAgentISO
+	applyHostVirtctlPlaybook         = roles.PlaybookTaskHostVirtctlProvision
+	applyBootMachinePlaybook         = roles.PlaybookTaskContainerClusterBootAgentMachine
+	applyWaitInstallPlaybook         = roles.PlaybookTaskContainerClusterWaitAgentInstall
+	applyStoragePlaybook             = roles.PlaybookTaskStorageClusterApply
 )
 
 type ApplyMode string

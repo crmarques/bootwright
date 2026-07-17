@@ -1,0 +1,16 @@
+---
+- name: Trust corporate proxy CA on node
+  ansible.builtin.copy:
+    src: "{{ bootwright_proxy_trust_bundle_ref }}"
+    dest: "{{ bootwright_registration_proxy_ca_anchor_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_registration_proxy_ca
+  when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
+
+- name: Update node trust store for corporate proxy CA
+  ansible.builtin.command:
+    argv: "{{ bootwright_registration_ca_trust_update_argv }}"
+  changed_when: bootwright_registration_proxy_ca.changed | default(false)
+  when: bootwright_registration_proxy_ca.changed | default(false)

@@ -36,9 +36,13 @@ entitlement-backed repositories, so `spec.ceph.entitlementRef` must name an
 `Entitlement` that resolves to a `redhat-ceph` or `ibm-storage-ceph`
 entitlement; `oss` takes no entitlement. An `ibm-storage-ceph` entitlement
 carries only the IBM registry and license and names a separate `redhat-rhel`
-entitlement (via `rhelEntitlementRef`) for the RHEL subscription cephadm
-registers each node with. The entitlement model — the `spec.type` values,
-license acceptance, and the credential plumbing — lives in
+entitlement (via `rhelEntitlementRef`) for the RHEL subscription the
+machines-phase registration task registers each node with — after the OS is in
+place and before the Ceph deps work, not inside the cephadm flow. An
+entitlement with `rhsm.management: external` delegates that registration to an
+operator-supplied `ProvisioningPlaybook` instead. The entitlement model — the
+`spec.type` values, license acceptance, the `rhsm.management` axis, and the
+credential plumbing — lives in
 [Secrets and entitlements](../concepts/secrets.md#entitlements).
 
 `spec.ceph.release` selects which release to install for the chosen

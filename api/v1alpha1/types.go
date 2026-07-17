@@ -138,6 +138,9 @@ const (
 	EntitlementProductRHEL           = "rhel"
 	EntitlementProductIBMStorageCeph = "ibm-storage-ceph"
 
+	EntitlementRHSMManagementManaged  = "managed"
+	EntitlementRHSMManagementExternal = "external"
+
 	InfraComponentTypeHAProxy        = "haproxy"
 	InfraComponentTypeSquid          = "squid"
 	InfraComponentTypeDnsmasq        = "dnsmasq"

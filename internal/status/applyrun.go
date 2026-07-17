@@ -34,7 +34,7 @@ func ApplyClusterPhases(ledger workflow.RunLedger, cluster string) []ApplyPhase 
 	switch ApplyClusterKind(tasks) {
 	case v1alpha1.KindStorageCluster:
 		return []ApplyPhase{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra))},
+			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindStorageInfra))},
 			{Label: "Provision", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster))},
 		}
 	case v1alpha1.KindContainerCluster:

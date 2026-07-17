@@ -5,10 +5,13 @@ all subscription and registry material through one `Entitlement` object
 (`rhcs`, type `redhat-ceph`), referenced from the `StorageCluster` with
 `spec.ceph.entitlementRef`.
 
-Bootwright prepares each storage node by registering it with RHSM, enabling the
-RHEL base/appstream and `rhceph-*-tools` repositories, and logging in to
-`registry.redhat.io` — all from this entitlement. The secret names below are
-declarations only; the bytes are supplied out of band.
+Bootwright registers each provided RHEL node with RHSM in the machines phase,
+before any Ceph work; the clusters-stage Ceph work then enables the RHEL
+base/appstream and `rhceph-*-tools` repositories and logs in to
+`registry.redhat.io` — all from this entitlement. Setting
+`rhsm.management: external` instead delegates registration to a corporate
+`ProvisioningPlaybook` (see `examples/ceph-external-rhsm`). The secret names
+below are declarations only; the bytes are supplied out of band.
 
 ## Credentials to supply
 

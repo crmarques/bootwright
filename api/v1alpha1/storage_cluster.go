@@ -22,6 +22,21 @@ func StorageClusterExternal(cluster StorageCluster) bool {
 	return !StorageClusterManaged(cluster)
 }
 
+func StorageCephDistributionSubscriptionBacked(distribution string) bool {
+	return distribution == StorageCephDistributionRedHat || distribution == StorageCephDistributionIBM
+}
+
+func StorageCephManagedRHSM(cluster StorageCluster, ents []Entitlement) bool {
+	if cluster.Spec.Ceph == nil || !StorageCephDistributionSubscriptionBacked(cluster.Spec.Ceph.Distribution) {
+		return false
+	}
+	rhsm := EntitlementEffectiveRHSM(ents, cluster.Spec.Ceph.EntitlementRef.Name)
+	if rhsm == nil {
+		return false
+	}
+	return EntitlementRHSMManagement(rhsm) == EntitlementRHSMManagementManaged
+}
+
 type StorageClusterCephSpec struct {
 	Distribution   string                       `yaml:"distribution,omitempty" json:"distribution,omitempty"`
 	Release        string                       `yaml:"release,omitempty" json:"release,omitempty"`

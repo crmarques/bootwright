@@ -18,6 +18,7 @@ const (
 	PlaybookTaskMachineInfraApply                = "bootwright.core.task_machine_infra_apply"
 	PlaybookTaskMachineInfraFinalize             = "bootwright.core.task_machine_infra_finalize"
 	PlaybookTaskManagedMachineOSApply            = "bootwright.core.task_managed_machine_os_apply"
+	PlaybookTaskMachineRegistrationApply         = "bootwright.core.task_machine_registration_apply"
 	PlaybookTaskContainerClusterCreateAgentISO   = "bootwright.core.task_container_cluster_create_agent_iso"
 	PlaybookTaskContainerClusterBootAgentMachine = "bootwright.core.task_container_cluster_boot_agent_machine"
 	PlaybookTaskContainerClusterWaitAgentInstall = "bootwright.core.task_container_cluster_wait_agent_install"

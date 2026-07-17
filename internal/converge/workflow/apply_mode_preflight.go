@@ -93,6 +93,7 @@ var overrideReconfigureOnlyKinds = map[string]bool{
 	ApplyTaskKindNodeConfigApply:        true,
 	ApplyTaskKindHostVirtctl:            true,
 	ApplyTaskKindClusterAddon:           true,
+	ApplyTaskKindMachineRegistration:    true,
 	ApplyTaskKindProvisioningPlaybook:   true,
 }
 
