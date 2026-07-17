@@ -197,6 +197,44 @@ func buildSSHInvocation(target sshTarget, keyPath, configPath, knownHostsPath, s
 	return sshInvocation{Path: sshPath, Args: args, Env: filteredSSHEnvironment(os.Environ()), MaterialFiles: files}
 }
 
+var sshPolicyCryptoDirectives = map[string]bool{
+	"ciphers":                     true,
+	"macs":                        true,
+	"kexalgorithms":               true,
+	"gssapikexalgorithms":         true,
+	"hostkeyalgorithms":           true,
+	"pubkeyacceptedalgorithms":    true,
+	"pubkeyacceptedkeytypes":      true,
+	"hostbasedacceptedalgorithms": true,
+	"hostbasedkeytypes":           true,
+	"casignaturealgorithms":       true,
+	"requiredrsasize":             true,
+	"rsaminsize":                  true,
+	"rekeylimit":                  true,
+}
+
+var sshPolicyUnsafeDirectives = map[string]bool{
+	"identityfile":        true,
+	"certificatefile":     true,
+	"identityagent":       true,
+	"pkcs11provider":      true,
+	"securitykeyprovider": true,
+	"addkeystoagent":      true,
+	"hostname":            true,
+	"port":                true,
+	"user":                true,
+	"proxycommand":        true,
+	"proxyjump":           true,
+	"localcommand":        true,
+	"permitlocalcommand":  true,
+	"knownhostscommand":   true,
+	"localforward":        true,
+	"remoteforward":       true,
+	"dynamicforward":      true,
+	"include":             true,
+	"match":               true,
+}
+
 func loadSanitizedSSHPolicy(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -215,22 +253,10 @@ func loadSanitizedSSHPolicy(path string) ([]byte, error) {
 		if i := strings.IndexByte(key, '='); i >= 0 {
 			key = key[:i]
 		}
-		switch strings.ToLower(key) {
-		case "ciphers",
-			"macs",
-			"kexalgorithms",
-			"gssapikexalgorithms",
-			"hostkeyalgorithms",
-			"pubkeyacceptedalgorithms",
-			"pubkeyacceptedkeytypes",
-			"hostbasedacceptedalgorithms",
-			"hostbasedkeytypes",
-			"casignaturealgorithms",
-			"requiredrsasize",
-			"rsaminsize",
-			"rekeylimit":
+		switch {
+		case sshPolicyCryptoDirectives[strings.ToLower(key)]:
 			lines = append(lines, line)
-		default:
+		case sshPolicyUnsafeDirectives[strings.ToLower(key)]:
 			return nil, fmt.Errorf("OpenSSH crypto policy %s:%d contains unsupported directive %q", path, number+1, key)
 		}
 	}

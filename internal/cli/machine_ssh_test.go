@@ -532,6 +532,21 @@ func TestLoadSanitizedSSHPolicyKeepsCryptoDirectives(t *testing.T) {
 	}
 }
 
+func TestLoadSanitizedSSHPolicyDropsBenignDirectives(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy")
+	want := "Ciphers aes256-gcm@openssh.com\n"
+	if err := os.WriteFile(path, []byte(want+"GSSAPIKeyExchange yes\n"), 0o600); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+	got, err := loadSanitizedSSHPolicy(path)
+	if err != nil {
+		t.Fatalf("loadSanitizedSSHPolicy: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("sanitized policy = %q, want %q", got, want)
+	}
+}
+
 func TestFilteredSSHEnvironmentDropsHelperAndLoaderOverrides(t *testing.T) {
 	got := filteredSSHEnvironment([]string{
 		"TERM=xterm-256color",
