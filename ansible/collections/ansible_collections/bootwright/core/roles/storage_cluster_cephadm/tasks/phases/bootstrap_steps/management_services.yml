@@ -58,11 +58,16 @@
 - name: Apply management service spec
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --mount
+      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+      - --
       - ceph
       - orch
       - apply
       - -i
-      - "{{ bootwright_ceph_remote_work_dir }}/management-services.yaml"
+      - /mnt/management-services.yaml
   register: bootwright_ceph_management_apply
   changed_when: true
   when: bootwright_ceph_management.hosts is defined

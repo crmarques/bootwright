@@ -23,7 +23,7 @@ step chooseleaf firstn 2 type host
 
 `ceph osd crush rule create-replicated` cannot express that two-step rule, so
 the role compiles it into the CRUSH map directly. `crushtool` is not installed
-on the host (only cephadm + ceph-common), so the de/compile steps run inside
+on the host, so the de/compile steps run inside
 the `cephadm shell` container with the work directory mounted. The rule renders
 as a structured operation with no argv (idempotency kind `stretch-crush-rule`);
 in the generated native-CLI `apply.sh` it becomes a `bw_stretch_crush_rule`

@@ -2,11 +2,16 @@
 - name: Reconcile cephadm registry login for credential rotation
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --mount
+      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+      - --
       - ceph
       - cephadm
       - registry-login
       - -i
-      - "{{ bootwright_ceph_remote_registry_json }}"
+      - /mnt/registry-login.json
   register: bootwright_ceph_registry_login
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"

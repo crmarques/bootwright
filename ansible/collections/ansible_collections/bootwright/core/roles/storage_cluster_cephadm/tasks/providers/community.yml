@@ -8,6 +8,57 @@
       Ceph distribution {{ bootwright_ceph_provider_name }} uses the upstream community
       package source and must not require Red Hat or IBM entitlement material.
 
+- name: Inspect obsolete Bootwright community dependency repository
+  ansible.builtin.stat:
+    path: "{{ bootwright_ceph_community_obsolete_dependency_repo_file }}"
+    follow: false
+  register: bootwright_ceph_community_obsolete_dependency_repo_stat
+  changed_when: false
+
+- name: Read obsolete Bootwright community dependency repository
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ceph_community_obsolete_dependency_repo_file }}"
+  register: bootwright_ceph_community_obsolete_dependency_repo
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_community_obsolete_dependency_repo_stat.stat.isreg | default(false) | bool
+    - not (bootwright_ceph_community_obsolete_dependency_repo_stat.stat.islnk | default(false) | bool)
+
+- name: Refuse to remove an unrecognized community dependency repository
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (bootwright_ceph_community_obsolete_dependency_repo_stat.stat.exists | default(false) | bool)
+        or (
+          bootwright_ceph_community_obsolete_dependency_repo_stat.stat.isreg | default(false) | bool
+          and not (bootwright_ceph_community_obsolete_dependency_repo_stat.stat.islnk | default(false) | bool)
+          and (bootwright_ceph_community_obsolete_dependency_repo.content | default('') | length > 0)
+          and bootwright_ceph_community_obsolete_dependency_repo_sections | length > 0
+          and (bootwright_ceph_community_obsolete_dependency_repo_sections
+               | difference(bootwright_ceph_community_obsolete_dependency_repo_allowed_sections)
+               | length == 0)
+        )
+    fail_msg: >-
+      Refusing to remove {{ bootwright_ceph_community_obsolete_dependency_repo_file }}:
+      it does not contain the three repository sections previously managed by Bootwright.
+      Remove or disable that cross-distribution repository file after verifying its owner,
+      then retry.
+  vars:
+    bootwright_ceph_community_obsolete_dependency_repo_sections: >-
+      {{ (bootwright_ceph_community_obsolete_dependency_repo.content | default('') | b64decode)
+         | regex_findall('(?m)^\[([^]]+)\]$') }}
+    bootwright_ceph_community_obsolete_dependency_repo_allowed_sections:
+      - bootwright-centos-stream-baseos
+      - bootwright-centos-stream-appstream
+      - bootwright-centos-stream-crb
+
+- name: Remove obsolete Bootwright community dependency repository
+  ansible.builtin.file:
+    path: "{{ bootwright_ceph_community_obsolete_dependency_repo_file }}"
+    state: absent
+  when: bootwright_ceph_community_obsolete_dependency_repo.content | default('') | length > 0
+
 - name: Resolve community Ceph package source
   ansible.builtin.set_fact:
     bootwright_ceph_community_version: "{{ bootwright_ceph_provider.community.version | default('') }}"
@@ -58,46 +109,6 @@
     name: "{{ bootwright_ceph_community_epel_url }}"
     state: present
     disable_gpg_check: true
-
-- name: Resolve community Ceph dependency repository source
-  ansible.builtin.set_fact:
-    bootwright_ceph_community_dependency_enabled: "{{ bootwright_ceph_community_dependency_repos_enabled | default(true) | bool }}"
-    bootwright_ceph_community_dependency_mirror: "{{ bootwright_ceph_community_dependency_default_mirror | regex_replace('/$', '') }}"
-  changed_when: false
-
-- name: Require an https community Ceph dependency mirror and signing key
-  ansible.builtin.assert:
-    that:
-      - bootwright_ceph_community_dependency_mirror is match('^https://')
-      - bootwright_ceph_community_dependency_gpgkey is match('^https://')
-    fail_msg: >-
-      Refusing to fetch community Ceph dependency packages or their signing key
-      over an insecure transport: set bootwright_ceph_community_dependency_default_mirror
-      and bootwright_ceph_community_dependency_gpgkey to https:// URLs (got
-      {{ bootwright_ceph_community_dependency_mirror }} and
-      {{ bootwright_ceph_community_dependency_gpgkey }}).
-  when: bootwright_ceph_community_dependency_enabled
-
-- name: Trust the CentOS community signing key for Ceph dependency repositories
-  ansible.builtin.rpm_key:
-    key: "{{ bootwright_ceph_community_dependency_gpgkey }}"
-    fingerprint: "{{ bootwright_ceph_community_dependency_gpg_fingerprint }}"
-    state: present
-  when: bootwright_ceph_community_dependency_enabled
-
-- name: Add CentOS Stream community repositories for Ceph dependencies
-  ansible.builtin.yum_repository:
-    name: "{{ item.id }}"
-    description: "{{ item.name }}"
-    baseurl: "{{ bootwright_ceph_community_dependency_mirror }}/{{ ansible_distribution_major_version }}-stream/{{ item.path }}/$basearch/os/"
-    gpgcheck: true
-    gpgkey: "{{ bootwright_ceph_community_dependency_gpgkey }}"
-    enabled: true
-    file: bootwright-ceph-dependencies
-  loop: "{{ bootwright_ceph_community_dependency_repos }}"
-  loop_control:
-    label: "{{ item.id }}"
-  when: bootwright_ceph_community_dependency_enabled
 
 - name: Trust the Ceph community release signing key
   ansible.builtin.rpm_key:

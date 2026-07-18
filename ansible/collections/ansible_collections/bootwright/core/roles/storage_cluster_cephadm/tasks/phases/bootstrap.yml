@@ -42,6 +42,9 @@
     - name: Wait for the stretch tiebreaker mon to join the monmap
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - mon
           - dump

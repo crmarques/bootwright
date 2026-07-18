@@ -2,6 +2,9 @@
 - name: Read current cephadm container image base
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - config
       - get
@@ -15,6 +18,9 @@
 - name: Pin cephadm container image base to the distribution registry
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - config
       - set

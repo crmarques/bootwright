@@ -17,6 +17,9 @@
 - name: Wait for declared Ceph OSDs to be created and in
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - stat
@@ -66,6 +69,9 @@
 - name: Capture observed Ceph health for the storage result
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - health
       - --format

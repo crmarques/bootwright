@@ -6,6 +6,68 @@ import (
 	"testing"
 )
 
+func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
+	paths := []string{
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_storage_health.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/cluster_gate.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/container_image_base.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml",
+	}
+	for _, path := range paths {
+		lines := strings.Split(readRepoFile(t, path), "\n")
+		for i, line := range lines {
+			if strings.TrimSpace(line) != "argv:" || i+1 >= len(lines) {
+				continue
+			}
+			next := strings.TrimSpace(lines[i+1])
+			if next == "- ceph" || next == "- radosgw-admin" {
+				t.Fatalf("%s:%d invokes host-installed %s instead of cephadm shell", path, i+2, strings.TrimPrefix(next, "- "))
+			}
+		}
+	}
+	execute := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/execute.yml")
+	if !strings.Contains(execute, "['cephadm', 'shell', '--'] + bootwright_ceph_op_command") {
+		t.Fatalf("rendered Ceph operations must run inside cephadm shell")
+	}
+	for path, mountedPaths := range map[string][]string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml": {
+			"/mnt/stretch-crushmap.bin",
+			"/mnt/stretch-crushmap-new.bin",
+		},
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml": {
+			"/mnt/registry-login.json",
+		},
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml": {
+			"/mnt/ssh_config",
+			"/mnt/bootstrap-spec.yaml",
+			"/mnt/core-services.yaml",
+		},
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml": {
+			"/mnt/late-services.yaml",
+		},
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml": {
+			"/mnt/management-services.yaml",
+		},
+	} {
+		body := readRepoFile(t, path)
+		if !strings.Contains(body, "- --mount") || !strings.Contains(body, "bootwright_ceph_remote_work_dir }}:/mnt") {
+			t.Fatalf("%s must mount the staged work directory into cephadm shell", path)
+		}
+		for _, mountedPath := range mountedPaths {
+			if !strings.Contains(body, mountedPath) {
+				t.Fatalf("%s must address staged input as %s inside cephadm shell", path, mountedPath)
+			}
+		}
+	}
+}
+
 func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 	body := strings.Join([]string{
 		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/classify.yml"),
@@ -220,8 +282,8 @@ func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 	idx := findAnsibleTask(t, tasks, "Reconcile cephadm registry login for credential rotation")
 	step := tasks[idx]
-	if got := fmt.Sprint(step["ansible.builtin.command"]); !strings.Contains(got, "registry-login") || !strings.Contains(got, "bootwright_ceph_remote_registry_json") {
-		t.Fatalf("registry login must run ceph cephadm registry-login -i <json>, got %v", step["ansible.builtin.command"])
+	if got := fmt.Sprint(step["ansible.builtin.command"]); !strings.Contains(got, "registry-login") || !strings.Contains(got, "bootwright_ceph_remote_work_dir") || !strings.Contains(got, "/mnt/registry-login.json") {
+		t.Fatalf("registry login must mount its staged JSON into cephadm shell, got %v", step["ansible.builtin.command"])
 	}
 	if got := fmt.Sprint(step["when"]); !strings.Contains(got, "bootwright_ceph_registry_credentials is defined") {
 		t.Fatalf("registry login must be gated on resolved credentials, got when=%v", step["when"])
@@ -666,7 +728,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		"Prepare Ceph repository and subscription",
 		"Install Ceph host dependencies",
 		"Configure Ceph container registry access",
-		"Install cephadm and Ceph host tooling",
+		"Install cephadm host tooling",
 		"Bootstrap and converge Ceph cluster",
 	} {
 		task := mainTasks[findAnsibleTask(t, mainTasks, name)]
@@ -737,6 +799,32 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	repoKeyHeal, ok := communityTasks[findAnsibleTask(t, communityTasks, "Point existing community Ceph repository at the release signing key")]["ansible.builtin.replace"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(repoKeyHeal["regexp"]), "gpgkey") {
 		t.Fatalf("community repo gpgkey heal task must rewrite gpgkey lines in the existing repo file, got %v", repoKeyHeal)
+	}
+	communitySource := strings.Join([]string{
+		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/community.yml"),
+		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/vars/os/RedHat.yml"),
+	}, "\n")
+	for _, forbidden := range []string{"mirror.stream.centos.org", "community_dependency_default_mirror", "ansible.builtin.yum_repository"} {
+		if strings.Contains(communitySource, forbidden) {
+			t.Fatalf("community Ceph setup must not expose unrestricted cross-distribution package source %q", forbidden)
+		}
+	}
+	inspectRepoIdx := findAnsibleTask(t, communityTasks, "Inspect obsolete Bootwright community dependency repository")
+	readRepoIdx := findAnsibleTask(t, communityTasks, "Read obsolete Bootwright community dependency repository")
+	refuseRepoIdx := findAnsibleTask(t, communityTasks, "Refuse to remove an unrecognized community dependency repository")
+	removeRepoIdx := findAnsibleTask(t, communityTasks, "Remove obsolete Bootwright community dependency repository")
+	if !(inspectRepoIdx < readRepoIdx && readRepoIdx < refuseRepoIdx && refuseRepoIdx < removeRepoIdx) {
+		t.Fatalf("obsolete dependency repo cleanup must inspect, read, verify, then remove")
+	}
+	removeRepo := communityTasks[findAnsibleTask(t, communityTasks, "Remove obsolete Bootwright community dependency repository")]
+	removeRepoBody, ok := removeRepo["ansible.builtin.file"].(map[string]any)
+	if !ok || removeRepoBody["state"] != "absent" || !strings.Contains(fmt.Sprint(removeRepoBody["path"]), "obsolete_dependency_repo_file") {
+		t.Fatalf("community Ceph setup must remove the obsolete Bootwright dependency repo file, got %v", removeRepo)
+	}
+	refuseRepo := communityTasks[refuseRepoIdx]
+	refuseRepoBody, ok := refuseRepo["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(refuseRepoBody["that"]), "isreg") || !strings.Contains(fmt.Sprint(refuseRepoBody["that"]), "islnk") || !strings.Contains(fmt.Sprint(refuseRepoBody["that"]), "difference") || !strings.Contains(fmt.Sprint(refuseRepo["vars"]), "bootwright-centos-stream-baseos") || !strings.Contains(fmt.Sprint(refuseRepo["vars"]), "bootwright-centos-stream-crb") {
+		t.Fatalf("obsolete dependency repo cleanup must verify Bootwright section ownership, got %v", refuseRepo)
 	}
 
 	subscriptionTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml")
@@ -816,29 +904,13 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("cephadm unavailable assert must point to managed OS package ownership, got %v", failCephadm)
 	}
 
-	probeCephIdx := findAnsibleTask(t, installTasks, "Probe ceph CLI before package fallback")
-	cephCommonPackageIdx := findAnsibleTask(t, installTasks, "Install ceph-common package on storage node when not preinstalled")
-	recordCephCommonIdx := findAnsibleTask(t, installTasks, "Write ceph-common package ownership record")
-	verifyCephIdx := findAnsibleTask(t, installTasks, "Verify ceph CLI on storage node")
-	failCephIdx := findAnsibleTask(t, installTasks, "Fail when ceph CLI is unavailable")
-	if !(failCephadmIdx < probeCephIdx && probeCephIdx < cephCommonPackageIdx && cephCommonPackageIdx < recordCephCommonIdx && recordCephCommonIdx < verifyCephIdx && verifyCephIdx < failCephIdx) {
-		t.Fatalf("ceph-common fallback must run after cephadm tooling and before storage services/verification")
-	}
-	cephCommonPackage := installTasks[cephCommonPackageIdx]
-	if got := cephCommonPackage["failed_when"]; got != false {
-		t.Fatalf("ceph-common package fallback must not fail the package batch, got failed_when=%v", got)
-	}
-	cephCommonPackageBody, ok := cephCommonPackage["ansible.builtin.package"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(cephCommonPackageBody["name"]), "bootwright_ceph_provider.cephCommonPackage") {
-		t.Fatalf("ceph-common package fallback must install provider-selected ceph-common package, got %v", cephCommonPackage)
-	}
-	assertIncludeRoleName(t, installTasks[recordCephCommonIdx], "bootwright.core.ownership_record")
-	if got := installTasks[verifyCephIdx]["failed_when"]; got != false {
-		t.Fatalf("ceph CLI verify must leave failure handling to the targeted assert, got failed_when=%v", got)
-	}
-	failCeph, ok := installTasks[failCephIdx]["ansible.builtin.assert"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(failCeph["fail_msg"]), "MachineInstallProfile") {
-		t.Fatalf("ceph CLI unavailable assert must point to managed OS package ownership, got %v", failCeph)
+	for _, path := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/stage_inputs.yml",
+	} {
+		if body := readRepoFile(t, path); strings.Contains(body, "ceph-common") || strings.Contains(body, "cephCommonPackage") {
+			t.Fatalf("%s must not install host Ceph client tooling", path)
+		}
 	}
 
 	block := storageCephBootstrapTasks(t)
@@ -849,11 +921,6 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	} {
 		task := block[findAnsibleTask(t, block, name)]
 		assertRedactsByDefault(t, name, task["no_log"])
-	}
-	ensureClient := block[findAnsibleTask(t, block, "Ensure Ceph client tooling is present for cephadm orchestration")]
-	ensureClientBody, ok := ensureClient["ansible.builtin.package"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(ensureClientBody["name"]), "bootwright_ceph_provider.cephCommonPackage") {
-		t.Fatalf("bootstrap stage must ensure the provider-selected ceph client package, got %v", ensureClient)
 	}
 	rmCluster := block[findAnsibleTask(t, block, "Remove existing cephadm cluster for override rebuild")]
 	if got := fmt.Sprint(rmCluster["when"]); !strings.Contains(got, "bootwright_apply_mode") || !strings.Contains(got, "override") {
@@ -909,8 +976,8 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok {
 		t.Fatalf("Run Ceph operation has no command body")
 	}
-	if got := command["argv"]; got != "{{ bootwright_ceph_op_command }}" {
-		t.Fatalf("Run Ceph operation must consume rendered argv, got %v", got)
+	if got := command["argv"]; got != "{{ ['cephadm', 'shell', '--'] + bootwright_ceph_op_command }}" {
+		t.Fatalf("Run Ceph operation must consume rendered argv inside cephadm shell, got %v", got)
 	}
 	if _, ok := run["changed_when"]; !ok {
 		t.Fatalf("Run Ceph operation must declare changed_when")

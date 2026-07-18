@@ -20,7 +20,8 @@ provisioning-playbooks concept page).
 The registration playbook must leave every storage node able to install the
 RHEL BaseOS/AppStream and `rhceph-*-tools` packages (activation-key repo sets,
 a Satellite content view, or an internal mirror all work); Bootwright verifies
-package availability fail-closed when installing `cephadm` and `ceph-common`.
+package availability fail-closed when installing `cephadm`. Ceph client
+commands run through `cephadm shell`.
 
 ## Credentials to supply
 

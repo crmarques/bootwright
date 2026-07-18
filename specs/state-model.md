@@ -136,8 +136,9 @@ Rules:
   the distribution's packages. Under
   `external`, the subscription-backed repository enablement (which purges
   unlisted repos) is also skipped so operator-enabled repo sets survive; the
-  cephadm/ceph-common install asserts remain the fail-closed package-
-  availability gate. Registration is install-only: neither `destroy` nor an
+  cephadm install assert remains the fail-closed package-availability gate.
+  Ceph commands run through `cephadm shell`, so Bootwright does not install a
+  host `ceph-common` package. Registration is install-only: neither `destroy` nor an
   entitlement change unregisters a node.
 
 Authored desired-state YAML uses block-style collections. Do not use
@@ -652,7 +653,9 @@ Rules:
   explicitly.
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
-  community repository on each node with cephadm. `spec.ceph.community.mirror`
+  community repository on each node with cephadm and runs Ceph client commands
+  inside `cephadm shell`; it does not add CentOS Stream repositories to RHEL or
+  install host `ceph-common`. `spec.ceph.community.mirror`
   overrides the `download.ceph.com` base URL. `spec.ceph.community.checksum`
   optionally pins the fetched cephadm bootstrap binary as `sha256:<hex>`; the
   binary is downloaded and executed as root, so the pin adds a content check on

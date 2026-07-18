@@ -2,10 +2,15 @@
 - name: Apply Ceph late service spec
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --mount
+      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+      - --
       - ceph
       - orch
       - apply
       - -i
-      - "{{ bootwright_ceph_remote_late_services_spec }}"
+      - /mnt/late-services.yaml
   register: bootwright_ceph_late_services_apply
   changed_when: true

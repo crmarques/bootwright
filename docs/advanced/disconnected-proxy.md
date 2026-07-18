@@ -103,8 +103,6 @@ deps-phase repo and registry work reaches the remaining rows.
 | `download.ceph.com` | `cephadm` bootstrap binary and the community Ceph repo. |
 | `quay.io` | Community Ceph daemon image (`ceph/ceph`). |
 | `dl.fedoraproject.org` | EPEL bootstrap package. |
-| `mirror.stream.centos.org` | CentOS Stream BaseOS/AppStream/CRB dependency repos. |
-| `www.centos.org` | GPG key for the CentOS Stream dependency repos. |
 
 ### Add-ons
 

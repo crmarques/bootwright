@@ -25,16 +25,4 @@ bootwright_ceph_community_repo_file: /etc/yum.repos.d/ceph.repo
 bootwright_ceph_community_release_key_path: keys/release.asc
 bootwright_ceph_community_release_gpg_fingerprint: 08B73419AC32B4E966C1A330E84AC2C0460F3994
 bootwright_ceph_community_epel_release_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
-bootwright_ceph_community_dependency_default_mirror: https://mirror.stream.centos.org
-bootwright_ceph_community_dependency_gpgkey: https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official-SHA256
-bootwright_ceph_community_dependency_gpg_fingerprint: 99DB70FAE1D7CE227FB6488205B555B38483C65D
-bootwright_ceph_community_dependency_repos:
-  - id: bootwright-centos-stream-baseos
-    name: Bootwright CentOS Stream BaseOS (community Ceph dependencies)
-    path: BaseOS
-  - id: bootwright-centos-stream-appstream
-    name: Bootwright CentOS Stream AppStream (community Ceph dependencies)
-    path: AppStream
-  - id: bootwright-centos-stream-crb
-    name: Bootwright CentOS Stream CRB (community Ceph dependencies)
-    path: CRB
+bootwright_ceph_community_obsolete_dependency_repo_file: /etc/yum.repos.d/bootwright-ceph-dependencies.repo

@@ -39,17 +39,25 @@ pre-installs `epel-release` from Fedora's canonical RPM
 mirror) with `disable_gpg_check: true` — epel-release is the bootstrap package
 that itself ships the EPEL signing key, so no key is yet trusted.
 
-**Constraint:** Community `ceph-common` depsolves against distribution base
-repos that `cephadm add-repo` never configures: `librabbitmq`, `librdkafka`,
-`python3-prettytable` (AppStream) and `libbabeltrace` (CodeReady Builder). An
-unregistered RHEL node exposes none, so depsolve fails. Bootwright adds the
-CentOS Stream BaseOS/AppStream/CRB repositories with the CentOS Official
-signing key fingerprint-pinned (`99DB70FAE1D7CE227FB6488205B555B38483C65D`).
-The release track is `<EL major>-stream` (e.g. `9-stream`), NOT dnf's
-`$releasever`, which on RHEL resolves to a point release with no matching
-CentOS Stream path. Override the mirror for disconnected sites, or set
-`spec.ceph.community.enableDependencyRepos: false` where BaseOS/AppStream/CRB
-are entitled another way.
+**Symptom:** Installing community `ceph-common` on a FIPS-enabled RHEL node
+fails a transaction test because CentOS Stream `openssl-fips-provider`
+conflicts with RHEL `openssl-fips-provider-so`.
+
+**Root cause:** Upstream community `ceph-common` RPMs are built against the
+moving CentOS Stream ABI. A current Squid RPM requires
+`libcrypto.so.3(OPENSSL_3.4.0)`, which RHEL 9.5 does not provide. Enabling
+unrestricted CentOS Stream BaseOS/AppStream/CRB repositories on RHEL lets DNF
+attempt a cross-distribution replacement of OpenSSL and other core packages;
+repository filters cannot repair the package's direct ABI requirement.
+
+**Fix:** Bootwright installs only `cephadm` on storage hosts and runs `ceph` and
+`radosgw-admin` commands through `cephadm shell`. Community setup does not add
+CentOS Stream repositories or install host `ceph-common`. This keeps the Ceph
+client ABI inside the selected Ceph daemon image and leaves the host RHEL
+package set under its own repositories. On rerun, the role removes its obsolete
+`/etc/yum.repos.d/bootwright-ceph-dependencies.repo` before a DNF transaction,
+but only after its three Bootwright section IDs prove ownership; an unrecognized
+file fails closed for operator review.
 
 **Constraint:** The renderer emits exactly one of `community.version` (a full
 x.y.z, resolving `rpm-<x.y.z>/` + `cephadm add-repo --version`, and deriving
@@ -62,7 +70,7 @@ content-verified.
 **Constraint:** The licensed IBM packages refuse to operate until the
 acceptance marker `/usr/share/ibm-storage-ceph-license/accept` exists, so it is
 written in the repository stage — before the install stage pulls `cephadm`/
-`ceph` from the vendor repo
+daemon tooling from the vendor sources
 (`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-<N>-rhel-9.repo`).
 
 **Constraint:** RHSM is converged declaratively: `redhat_subscription`
@@ -82,7 +90,6 @@ template the moment `bootwright_ceph_provider` is `set_fact`'d — so OS facts
 must be gathered first (context phase, before the repository phase) or the
 set_fact fails with `ansible_distribution_major_version is undefined`.
 
-**Constraint:** The bootstrap (storage) stage runs with `skip_prereqs` and is
-the actual consumer of the ceph CLI, so it ensures `cephCommonPackage`
-(default `ceph-common`) itself rather than trusting the prereq stage's
-possibly older tooling set.
+**Constraint:** Bootstrap, live health, and destroy use `cephadm shell` for all
+Ceph client commands. The host-level package gate covers `cephadm`; no phase
+assumes a host-installed `ceph` or `radosgw-admin` binary.

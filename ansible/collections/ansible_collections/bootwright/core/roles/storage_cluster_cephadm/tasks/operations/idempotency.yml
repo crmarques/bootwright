@@ -2,6 +2,9 @@
 - name: Check existing Ceph pool
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - pool
@@ -23,6 +26,9 @@
 - name: Check existing CephFS
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - fs
       - ls
@@ -43,6 +49,9 @@
 - name: Check existing CRUSH rule
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - crush
@@ -78,11 +87,16 @@
     - name: Export current CRUSH map
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
           - ceph
           - osd
           - getcrushmap
           - -o
-          - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap.bin"
+          - /mnt/stretch-crushmap.bin
       changed_when: false
 
     - name: Decompile current CRUSH map
@@ -133,11 +147,16 @@
     - name: Install CRUSH map with stretch rule
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
           - ceph
           - osd
           - setcrushmap
           - -i
-          - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap-new.bin"
+          - /mnt/stretch-crushmap-new.bin
       changed_when: true
 
     - name: Mark stretch CRUSH rule operation as handled
@@ -147,6 +166,9 @@
 - name: Check existing erasure-code profile
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - erasure-code-profile
@@ -168,6 +190,9 @@
 - name: Check current stretch mode
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - mon
       - dump
@@ -188,6 +213,9 @@
 - name: Check enabled mgr modules
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - mgr
       - module
@@ -215,6 +243,9 @@
 - name: Check existing RGW realm
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - radosgw-admin
       - realm
       - list
@@ -235,6 +266,9 @@
 - name: Check existing RGW zonegroup
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - radosgw-admin
       - zonegroup
       - list
@@ -255,6 +289,9 @@
 - name: Check existing RGW zone
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - radosgw-admin
       - zone
       - list
@@ -275,6 +312,9 @@
 - name: Check existing RGW user
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - radosgw-admin
       - user
       - info

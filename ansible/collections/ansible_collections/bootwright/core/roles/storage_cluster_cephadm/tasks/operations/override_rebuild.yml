@@ -2,6 +2,9 @@
 - name: Inspect existing Ceph pools for structural override rebuild
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - pool
@@ -49,6 +52,9 @@
     - name: Allow Ceph pool deletion for override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - config
           - set
@@ -59,6 +65,9 @@
     - name: Destroy structurally drifted Ceph pool for override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - osd
           - pool
@@ -73,6 +82,9 @@
     - name: Re-disable Ceph pool deletion after override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - config
           - set
@@ -97,6 +109,9 @@
 - name: Inspect existing CephFS for structural override rebuild
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - fs
       - ls
@@ -122,6 +137,9 @@
 - name: Inspect existing CephFS detail for default-data-pool override rebuild
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - fs
       - get
@@ -138,6 +156,9 @@
 - name: Inspect Ceph pools for CephFS default-data-pool resolution
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - pool
@@ -195,6 +216,9 @@
     - name: Fail drifted CephFS before override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - fs
           - fail
@@ -204,6 +228,9 @@
     - name: Destroy structurally drifted CephFS for override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - fs
           - rm
@@ -216,6 +243,9 @@
 - name: Inspect existing Ceph erasure-code profile for structural override rebuild
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - erasure-code-profile
@@ -262,6 +292,9 @@
     - name: Allow Ceph pool deletion for erasure-code profile override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - config
           - set
@@ -272,6 +305,9 @@
     - name: Destroy pool using structurally drifted erasure-code profile
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - osd
           - pool
@@ -286,6 +322,9 @@
     - name: Re-disable Ceph pool deletion after erasure-code profile override rebuild
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - config
           - set
@@ -310,6 +349,9 @@
 - name: Delete structurally drifted erasure-code profile for override rebuild
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - osd
       - erasure-code-profile

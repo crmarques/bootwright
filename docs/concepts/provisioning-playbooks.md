@@ -120,8 +120,9 @@ the machines-phase work (the OS is in place) and, with the default
 does **not** gate later phases, so do not use it for delegated registration.
 The playbook must leave every storage node able to install the distribution
 packages — activation-key repo sets, a Satellite content view, or an internal
-mirror — because the cephadm/ceph-common install asserts remain the
-fail-closed package-availability gate. See the
+mirror — because the cephadm install assert remains the fail-closed
+package-availability gate. Ceph client commands run through `cephadm shell`.
+See the
 [`examples/ceph-external-rhsm`](https://github.com/crmarques/bootwright/tree/main/examples/ceph-external-rhsm)
 snippet and the `Entitlement` section of
 [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md)

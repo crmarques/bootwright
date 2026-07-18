@@ -12,6 +12,9 @@
     - name: Probe Ceph OSD stat
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - osd
           - stat
@@ -24,6 +27,9 @@
     - name: Probe Ceph cluster health
       ansible.builtin.command:
         argv:
+          - cephadm
+          - shell
+          - --
           - ceph
           - health
           - --format

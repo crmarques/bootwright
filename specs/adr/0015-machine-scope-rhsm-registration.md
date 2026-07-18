@@ -68,8 +68,9 @@ A delegated registration is opaque (ADR 0005): Bootwright cannot observe
 whether the corporate playbook actually registered nodes or enabled the right
 repos, and does not hard-probe `subscription-manager status` (an internal
 mirror needs no RHSM). The fail-closed gate stays where package availability
-is actually consumed: the cephadm/ceph-common install asserts name delegated
-registration among the remedies.
+is actually consumed: the cephadm install assert names delegated registration
+among the remedies. Ceph client commands execute through `cephadm shell`, so
+the host does not need a separately installed `ceph-common` package.
 
 ### Lifecycle
 

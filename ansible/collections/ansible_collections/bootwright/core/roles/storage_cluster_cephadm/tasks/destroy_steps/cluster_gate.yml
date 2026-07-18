@@ -2,6 +2,9 @@
 - name: Check Ceph fsid on seed host
   ansible.builtin.command:
     argv:
+      - cephadm
+      - shell
+      - --
       - ceph
       - fsid
   register: bootwright_ceph_fsid
