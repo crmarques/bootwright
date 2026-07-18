@@ -472,7 +472,12 @@ capability flags, not on the distribution name. For `distribution: oss` the
 `provider` block carries a `community` map with a `release` (defaulting to the
 latest stable upstream Ceph release) and an optional `mirror`; the role uses it
 to configure the upstream community Ceph package repository with cephadm before
-installing `cephadm`. The `redhat` and `ibm` distributions omit `community` and
+installing `cephadm`. The role imports the Ceph release signing key from
+`<mirror>/keys/release.asc` (fingerprint-pinned) before `cephadm add-repo`,
+passes that key location through `--gpg-url` (cephadm's built-in default,
+`keys/release.gpg`, does not exist upstream), forwards a custom mirror through
+`--repo-url`, and rewrites `gpgkey=` lines in a pre-existing `ceph.repo` so
+nodes configured by earlier releases converge to the working key URL. The `redhat` and `ibm` distributions omit `community` and
 set `requiresRHSM: true` plus `rhsmManagement` (`managed` or `external` from the
 entitlement's `rhsm.management`); the `rhsm` path map is projected only when
 `rhsmManagement` is `managed`. RHSM registration itself runs earlier, in the

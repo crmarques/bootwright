@@ -18,6 +18,7 @@
 - name: Resolve community Ceph repository path segment
   ansible.builtin.set_fact:
     bootwright_ceph_community_repo_path: "rpm-{{ bootwright_ceph_community_version if bootwright_ceph_community_version | length > 0 else bootwright_ceph_community_release }}"
+    bootwright_ceph_community_gpgkey: "{{ bootwright_ceph_community_mirror }}/{{ bootwright_ceph_community_release_key_path }}"
   changed_when: false
 
 - name: Require an https community Ceph mirror
@@ -98,12 +99,25 @@
     label: "{{ item.id }}"
   when: bootwright_ceph_community_dependency_enabled
 
+- name: Trust the Ceph community release signing key
+  ansible.builtin.rpm_key:
+    key: "{{ bootwright_ceph_community_gpgkey }}"
+    fingerprint: "{{ bootwright_ceph_community_release_gpg_fingerprint }}"
+    state: present
+
 - name: Configure community Ceph package repository through cephadm
   ansible.builtin.command:
     argv: >-
       {{
         [bootwright_ceph_community_bootstrap_cephadm, 'add-repo']
         + (['--version', bootwright_ceph_community_version] if bootwright_ceph_community_version | length > 0 else ['--release', bootwright_ceph_community_release])
-        + (['--mirror', bootwright_ceph_community_mirror] if bootwright_ceph_community_mirror != bootwright_ceph_community_default_mirror else [])
+        + ['--gpg-url', bootwright_ceph_community_gpgkey]
+        + (['--repo-url', bootwright_ceph_community_mirror] if bootwright_ceph_community_mirror != bootwright_ceph_community_default_mirror else [])
       }}
     creates: "{{ bootwright_ceph_community_repo_file }}"
+
+- name: Point existing community Ceph repository at the release signing key
+  ansible.builtin.replace:
+    path: "{{ bootwright_ceph_community_repo_file }}"
+    regexp: '^gpgkey=.*$'
+    replace: "gpgkey={{ bootwright_ceph_community_gpgkey }}"

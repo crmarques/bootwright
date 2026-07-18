@@ -717,8 +717,26 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "add-repo") || !strings.Contains(got, "--release") || !strings.Contains(got, "--version") {
 		t.Fatalf("community repo task must run cephadm add-repo with both --release and --version arms, got %v", addRepo["argv"])
 	}
+	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "--gpg-url") || strings.Contains(got, "--mirror") {
+		t.Fatalf("community repo task must pass --gpg-url and never the unsupported --mirror flag, got %v", addRepo["argv"])
+	}
+	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "--repo-url") {
+		t.Fatalf("community repo task must pass custom mirrors through --repo-url, got %v", addRepo["argv"])
+	}
 	if got := fmt.Sprint(addRepo["creates"]); !strings.Contains(got, "bootwright_ceph_community_repo_file") {
 		t.Fatalf("community repo task must be idempotent via creates, got %v", addRepo["creates"])
+	}
+	releaseKeyIdx := findAnsibleTask(t, communityTasks, "Trust the Ceph community release signing key")
+	if !(releaseKeyIdx < addRepoIdx) {
+		t.Fatalf("community provider must import the Ceph release key before configuring the community repo (key=%d addRepo=%d)", releaseKeyIdx, addRepoIdx)
+	}
+	releaseKey, ok := communityTasks[releaseKeyIdx]["ansible.builtin.rpm_key"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(releaseKey["fingerprint"]), "bootwright_ceph_community_release_gpg_fingerprint") {
+		t.Fatalf("Ceph release key import must pin the release key fingerprint, got %v", communityTasks[releaseKeyIdx])
+	}
+	repoKeyHeal, ok := communityTasks[findAnsibleTask(t, communityTasks, "Point existing community Ceph repository at the release signing key")]["ansible.builtin.replace"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(repoKeyHeal["regexp"]), "gpgkey") {
+		t.Fatalf("community repo gpgkey heal task must rewrite gpgkey lines in the existing repo file, got %v", repoKeyHeal)
 	}
 
 	subscriptionTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml")

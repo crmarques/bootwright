@@ -22,6 +22,8 @@ bootwright_ceph_ca_trust_update_argv:
 bootwright_ceph_community_default_mirror: https://download.ceph.com
 bootwright_ceph_community_bootstrap_cephadm: /var/tmp/bootwright-cephadm-bootstrap
 bootwright_ceph_community_repo_file: /etc/yum.repos.d/ceph.repo
+bootwright_ceph_community_release_key_path: keys/release.asc
+bootwright_ceph_community_release_gpg_fingerprint: 08B73419AC32B4E966C1A330E84AC2C0460F3994
 bootwright_ceph_community_epel_release_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
 bootwright_ceph_community_dependency_default_mirror: https://mirror.stream.centos.org
 bootwright_ceph_community_dependency_gpgkey: https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official-SHA256
