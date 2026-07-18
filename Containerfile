@@ -1,12 +1,12 @@
-# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
-FROM docker.io/library/golang:1.25.11@sha256:995e25c0e1868fa30a57236d5d8c2252b94b8716e53eae5895cd70dcce532cf0 AS gotoolchain
+# syntax=docker/dockerfile:1.25@sha256:0adf442eae370b6087e08edc7c50b552d80ddf261576f4ebd6421006b2461f12
+FROM docker.io/library/golang:1.25.12@sha256:d2e20dc1b35aefd666909163e4ace41efb521359aa2ce31fff59d86837050f6f AS gotoolchain
 
-FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92 AS builder
+FROM docker.io/redhat/ubi9@sha256:50701171b9917ed51048b614924598d45b00bce9a64b73860c057922fc13bec2 AS builder
 
 ARG NO_PROXY
 ARG no_proxy
 ARG PIP_VERSION=26.1.2
-ARG ANSIBLE_CORE_VERSION=2.21.0
+ARG ANSIBLE_CORE_VERSION=2.21.2
 
 ENV NO_PROXY=${NO_PROXY} \
     no_proxy=${no_proxy} \
@@ -81,7 +81,7 @@ RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     if [ -z "${git_commit}" ]; then git_commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; fi; \
     make go-build VERSION="${version}" GIT_COMMIT="${git_commit}"
 
-FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92
+FROM docker.io/redhat/ubi9@sha256:50701171b9917ed51048b614924598d45b00bce9a64b73860c057922fc13bec2
 
 COPY --from=builder /src/bin/bootwright /usr/local/bin/bootwright
 

@@ -44,7 +44,7 @@ jobs:
       - name: Install Ansible
         run: >-
           python3 -m pip install --disable-pip-version-check
-          ansible-core==2.21.0
+          ansible-core==2.21.2
 
       - name: Go test
         run: go test ./...

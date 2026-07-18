@@ -313,10 +313,10 @@ bootwright_clusters:
                 name: rack1-srv3
             role: master
 bootwright_component_pins:
-    - lookupDate: "2026-05-31"
+    - lookupDate: "2026-07-18"
       name: ansible-core
       source: https://pypi.org/project/ansible-core/
-      version: 2.21.0
+      version: 2.21.2
     - lookupDate: "2026-07-14"
       name: pip
       source: https://pypi.org/project/pip/

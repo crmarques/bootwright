@@ -1,9 +1,9 @@
 apiVersion: bootwright.io/v1alpha1
 components:
     - name: ansible-core
-      version: 2.21.0
+      version: 2.21.2
       source: https://pypi.org/project/ansible-core/
-      lookupDate: "2026-05-31"
+      lookupDate: "2026-07-18"
     - name: pip
       version: 26.1.2
       source: https://pypi.org/project/pip/

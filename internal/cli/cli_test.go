@@ -3549,7 +3549,7 @@ func TestRunBootstrapPlanSuppressesSuccessfulStepOutput(t *testing.T) {
 	dir := t.TempDir()
 	fakePip := filepath.Join(dir, "pip")
 	if err := os.WriteFile(fakePip, []byte(`#!/bin/sh
-printf '%s\n' 'Collecting ansible-core==2.21.0'
+printf '%s\n' 'Collecting ansible-core==2.21.2'
 printf '%s\n' 'Installing collected packages: ansible-core'
 printf '%s\n' '[notice] A new release of pip is available' >&2
 `), 0o755); err != nil {
@@ -3563,7 +3563,7 @@ printf '%s\n' '[notice] A new release of pip is available' >&2
 		strings.NewReader("unused\n"),
 		&stdout,
 		&stderr,
-		[]bastion.BootstrapStep{{Label: "install ansible-core==2.21.0 into venv", Cmd: []string{fakePip, "install", "ansible-core==2.21.0"}}},
+		[]bastion.BootstrapStep{{Label: "install ansible-core==2.21.2 into venv", Cmd: []string{fakePip, "install", "ansible-core==2.21.2"}}},
 		nil,
 		"",
 		false,
