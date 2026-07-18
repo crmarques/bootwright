@@ -120,8 +120,25 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 		}
+		ownershipRecords, ownershipSkipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+		if err != nil {
+			return failErr(1, err)
+		}
+		if len(ownershipSkipped) > 0 && !override && !dryRun {
+			details := make([]string, 0, len(ownershipSkipped))
+			for _, warning := range ownershipSkipped {
+				details = append(details, warning.Error())
+			}
+			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --override to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
+		}
 		if runScope.Name == "infra" && sel.Active {
-			if conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots); len(conflicts) > 0 {
+			conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
+			if len(conflicts) > 0 {
+				if standingTasks, perr := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state); perr == nil {
+					conflicts = workflow.StandingDestroyScopeConflicts(ctx.RunsDir, clustersDir, state, ownershipRecords, standingTasks, conflicts)
+				}
+			}
+			if len(conflicts) > 0 {
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
@@ -141,17 +158,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
-		ownershipRecords, ownershipSkipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
-		if err != nil {
-			return failErr(1, err)
-		}
-		if len(ownershipSkipped) > 0 && !override && !dryRun {
-			details := make([]string, 0, len(ownershipSkipped))
-			for _, warning := range ownershipSkipped {
-				details = append(details, warning.Error())
-			}
-			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --override to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
-		}
 		tearsDownInfraComponents := artifactServerOnly || runScope.Name == "infra" || fullDestroy
 		var componentDecision converge.InfraComponentDestroyDecision
 		if tearsDownInfraComponents {

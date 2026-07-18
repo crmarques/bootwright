@@ -5,12 +5,14 @@ import (
 	"io"
 	"strings"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string) {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string) {
+	var substrateReset []string
 	if mode == workflow.ApplyModeOverride {
 		if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
 			cliout.NewContinuation(stdout).Warning("override", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. A change to cluster identity (seedHost/monIP/network) triggers this; an OSD-device add reconciles in place and does NOT wipe.")
@@ -22,8 +24,15 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		converge.ApplyRebuildAuthorizedStorageExtraVar(plan, converge.RebuildAuthorizedStorageClusters(objects))
 		if _, reset := workflow.OverrideDestructiveMachineSubstrate(objects); len(reset) > 0 {
 			cliout.NewContinuation(stdout).Warning("override", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
-			converge.ApplySubstrateResetExtraVar(plan, reset)
+			substrateReset = reset
 		}
+	}
+	if len(releasedClusters) > 0 {
+		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of cluster(s) "+strings.Join(releasedClusters, ", ")+" was destroyed by a previous `bootwright destroy`: this apply re-creates their machines and reinstalls any managed OS, wiping the target disks.")
+		substrateReset = workflow.UnionClusterNames(substrateReset, releasedClusters)
+	}
+	if len(substrateReset) > 0 {
+		converge.ApplySubstrateResetExtraVar(plan, substrateReset)
 	}
 	if reclaimDevices != "" {
 		owned := converge.OwnedStorageClusters(objects)
@@ -37,7 +46,21 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 	if firstBoot := workflow.BareMetalFirstInstallClusters(objects, tasks, plan.State); len(firstBoot) > 0 {
 		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
 	}
-	converge.ApplyOCPReinstallClustersExtraVar(plan, converge.RecordedContainerClusters(objects))
+	converge.ApplyOCPReinstallClustersExtraVar(plan, workflow.UnionClusterNames(converge.RecordedContainerClusters(objects), releasedContainerClusters(plan.State, releasedClusters)))
+}
+
+func releasedContainerClusters(state v1alpha1.State, released []string) []string {
+	declared := map[string]bool{}
+	for _, cluster := range state.ContainerClusters {
+		declared[cluster.Metadata.Name] = true
+	}
+	var out []string
+	for _, name := range released {
+		if declared[name] {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []string {

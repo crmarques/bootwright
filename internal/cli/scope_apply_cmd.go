@@ -242,6 +242,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir); err != nil {
 				return failErr(1, err)
 			}
+			releasedClusters, releaseErr := workflow.ConsumableSubstrateReleases(ctx.RunsDir, tasks)
+			if releaseErr != nil {
+				cliout.NewContinuation(stdout).Warning("substrate release", releaseErr.Error()+"; a destroyed cluster's rebuild authorization could not be read, so its reinstall may be refused — fix or remove the reported record and re-apply")
+			}
 			if override {
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects); err != nil {
 					return failErr(1, err)
@@ -250,6 +254,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				destructiveOverride = append(destructiveOverride, workflow.OverrideRebuildInstalledClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)...)
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
+			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
 			if reclaimDevices != "" {
 				ownedReclaim := converge.OwnedStorageClusters(objects)
 				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, override); err != nil {
@@ -260,7 +265,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
-			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices)
+			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}

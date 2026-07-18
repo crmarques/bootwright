@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
@@ -134,6 +135,13 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 			for _, name := range workflow.ContainerInstallClusterNames(tasks) {
 				if err := workflow.RemoveClusterInstallState(clustersDir, name); err != nil {
 					problems = append(problems, fmt.Errorf("remove install record for ContainerCluster/%s: %w", name, err))
+				}
+			}
+		}
+		if ScopeTearsMachineLayer(runScope) && include(workflow.DestroyTaskKindMachineInfra) {
+			for _, name := range workflow.MachineSubstrateClusters(tasks) {
+				if err := workflow.MarkSubstrateReleased(runsDir, name, time.Now()); err != nil {
+					problems = append(problems, fmt.Errorf("record substrate release for %s: %w", name, err))
 				}
 			}
 		}

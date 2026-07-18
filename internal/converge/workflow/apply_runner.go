@@ -110,6 +110,11 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if recordErr := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, now); recordErr != nil {
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 	}
+	if SubstrateReleaseClearKind(task.Entry.Kind) {
+		if recordErr := ClearSubstrateRelease(runsDir, task.Entry.Cluster); recordErr != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
+		}
+	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }
 
