@@ -142,6 +142,25 @@ func TestRenderFrameCollapsesFinishedGroups(t *testing.T) {
 	}
 }
 
+func TestRenderFrameSummaryWeightsCollapsedSteps(t *testing.T) {
+	frame := RunFrame{
+		BarLabel: "Fleet", Done: 5, Total: 5,
+		Groups: []StepGroup{
+			{Title: "ceph-prd", Steps: []Step{
+				{ID: "a", Label: "Provision infra", Status: StatusDone},
+				{ID: "b", Label: "Managed OS", Status: StatusDone},
+				{ID: "c", Label: "Custom playbooks (after machines)", Status: StatusDone, Count: 3},
+			}},
+		},
+	}
+
+	p, buf := newBufferPrinter(false)
+	p.RenderFrame(frame, 0, true)
+	if !strings.Contains(buf.String(), "ceph-prd  (5 done)") {
+		t.Fatalf("collapsed step count not weighted into group summary:\n%s", buf.String())
+	}
+}
+
 func TestRunViewInPlaceCountsWrappedRows(t *testing.T) {
 	buf := &bytes.Buffer{}
 	v := NewRunView(buf)

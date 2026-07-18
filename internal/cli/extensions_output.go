@@ -40,7 +40,7 @@ func printProvisioningPlaybookDryRun(stdout io.Writer, tasks []workflow.ApplyTas
 		}
 		lines = append(lines, cliout.TaskLine{
 			Status: cliout.StatusPending,
-			Label:  task.Entry.Label,
+			Label:  applyTaskDisplayLabel(task.Entry.Label),
 			Detail: fmt.Sprintf("limit %s · playbook %s", task.Limit, filepath.Base(task.Playbook)),
 		})
 	}

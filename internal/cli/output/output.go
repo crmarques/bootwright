@@ -497,6 +497,7 @@ type Step struct {
 	Label  string
 	Status Status
 	Detail string
+	Count  int
 }
 
 type StepGroup struct {
@@ -549,13 +550,17 @@ func finishedGroupSummary(group StepGroup) (string, bool) {
 	}
 	done, skipped, cancelled := 0, 0, 0
 	for _, step := range group.Steps {
+		weight := step.Count
+		if weight < 1 {
+			weight = 1
+		}
 		switch step.Status {
 		case StatusOK, StatusDone:
-			done++
+			done += weight
 		case StatusSkip, StatusSkipped:
-			skipped++
+			skipped += weight
 		case StatusCancel:
-			cancelled++
+			cancelled += weight
 		default:
 			return "", false
 		}
