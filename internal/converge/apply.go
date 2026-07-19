@@ -22,7 +22,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 		machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
 		hasMachine := len(machineLabels) > 0
 		hasCluster := len(destructive) > len(machineLabels)
-		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters)
+		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, workflow.OverrideDestructiveClusterScope(objects))
 		return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
 	}
 	protectedKinds := workflow.ProtectedKindSet(state)
@@ -33,7 +33,12 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	if len(blocked) == 0 {
 		return nil
 	}
-	return fmt.Errorf("apply --override would destructively rebuild %s, protected by spec.safety.protectedKinds; run `bootwright destroy --override` for that scope first, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "))
+	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
+	hasMachine := protectedKinds[v1alpha1.KindMachine] && len(machineLabels) > 0
+	clusterNames := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
+	hasCluster := len(clusterNames) > 0 || (protectedKinds[v1alpha1.KindContainerCluster] && len(reinstallDescriptors) > 0)
+	remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, clusterNames)
+	return fmt.Errorf("apply --override would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
 }
 
 func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string) error {
@@ -66,21 +71,30 @@ func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClass
 	if len(created) == 0 {
 		return nil
 	}
-	return fmt.Errorf("apply would provision new ContainerCluster(s) %s while %s remain provisioned but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would re-provision the new name from scratch and orphan the old cluster (re-imaging its hosts on bare-metal). To rename, restore the old metadata.name; to replace, run `bootwright destroy --clusters %s` first; to keep both, destroy the undeclared cluster(s) when you no longer need them", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
+	return fmt.Errorf("apply would provision new ContainerCluster(s) %s while %s remain provisioned but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would re-provision the new name from scratch and orphan the old cluster (re-imaging its hosts on bare-metal). To rename, restore the old metadata.name; to replace, temporarily restore the old cluster YAML (metadata.name %s), run `bootwright destroy --clusters %s`, then remove that YAML and re-apply — destroy resolves --clusters against the declared state, so the old cluster can only be torn down while its YAML is present; to keep both, leave the old cluster declared and destroy it the same way when you no longer need it", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
 }
 
-func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters []string) string {
+func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, clusterNames []string) string {
 	infra := "bootwright destroy --stage infra --override"
 	if len(machineClusters) > 0 {
 		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --override"
+	}
+	cluster := "bootwright destroy --override"
+	clusterScoped := false
+	if len(clusterNames) > 0 {
+		cluster = "bootwright destroy --clusters " + strings.Join(clusterNames, ",") + " --override"
+		clusterScoped = true
 	}
 	skipHint := " (add --skip-unreachable if a machine's host substrate was never provisioned or is powered off)"
 	switch {
 	case hasMachine && !hasCluster:
 		return "machine substrate is torn down by the infra stage, not the clusters stage, so run `" + infra + "` first" + skipHint
 	case hasMachine && hasCluster:
-		return "run `bootwright destroy --override` for the cluster scope AND `" + infra + "` for the machine substrate (torn down only by the infra stage) first" + skipHint
+		return "run `" + cluster + "` for the cluster scope AND `" + infra + "` for the machine substrate (torn down only by the infra stage) first" + skipHint
 	default:
+		if clusterScoped {
+			return "run `" + cluster + "` first"
+		}
 		return "run `bootwright destroy --override` for that scope first"
 	}
 }
@@ -101,6 +115,18 @@ func CheckReclaimDestroyProtection(state v1alpha1.State, ownedClusters []string,
 func StateHasManagedStorageCluster(state v1alpha1.State) bool {
 	for _, cluster := range state.StorageClusters {
 		if cluster.Spec.Ceph != nil && v1alpha1.StorageClusterManaged(cluster) {
+			return true
+		}
+	}
+	return false
+}
+
+func OverrideStorageDeviceGateApplies(selectionActive bool, selectedStorage map[string]bool, state v1alpha1.State) bool {
+	if !selectionActive {
+		return StateHasManagedStorageCluster(state)
+	}
+	for _, cluster := range state.StorageClusters {
+		if selectedStorage[cluster.Metadata.Name] && cluster.Spec.Ceph != nil && v1alpha1.StorageClusterManaged(cluster) {
 			return true
 		}
 	}

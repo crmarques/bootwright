@@ -278,6 +278,37 @@ func TestMachineServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 	}
 }
 
+func TestServiceRecordDestroyScopedByClusterScope(t *testing.T) {
+	cases := []struct {
+		path string
+		task string
+	}{
+		{
+			path: "ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml",
+			task: "Destroy recorded infra component resources",
+		},
+		{
+			path: "ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_destroy.yml",
+			task: "Destroy recorded provider resources",
+		},
+	}
+	for _, tc := range cases {
+		plays := readAnsiblePlays(t, tc.path)
+		if len(plays) != 1 {
+			t.Fatalf("%s plays = %d, want 1", tc.path, len(plays))
+		}
+		tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+		recorded := tasks[findAnsibleTask(t, tasks, tc.task)]
+		when := fmt.Sprint(recorded["when"])
+		if !strings.Contains(when, "bootwright_destroy_cluster_scope") {
+			t.Fatalf("%s task %q record cleanup must be scoped by bootwright_destroy_cluster_scope so a scoped infra destroy leaves a sibling cluster's services standing: %v", tc.path, tc.task, recorded["when"])
+		}
+		if !strings.Contains(when, "record_names") {
+			t.Fatalf("%s task %q must match the record name against the in-scope service allowlist: %v", tc.path, tc.task, recorded["when"])
+		}
+	}
+}
+
 func TestInfraComponentDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
 	roles := map[string]string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/tasks/destroy.yml":    "artifacts",

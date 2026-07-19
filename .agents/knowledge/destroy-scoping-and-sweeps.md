@@ -36,8 +36,20 @@ TestApplyDestroyScopeExtraVarsStorageGate.
 context-wide (so an unscoped destroy reclaims orphans), but the resolved
 cluster-root set (`Selection.AllRoots`) gates the executor's cleanup — without
 the gate a scoped destroy tore down a co-located cluster's VMs/disks on a
-shared hypervisor (fleet contamination). The recorded-resource sweep in
-`task_machine_infra_destroy.yml` honors the same scope var.
+shared hypervisor (fleet contamination). All three recorded-resource sweeps —
+`task_machine_infra_destroy.yml`, `task_infra_component_services_destroy.yml`
+(infra-component records: haproxy/artifacts/dns/ntp/proxy/registry), and
+`task_provider_services_destroy.yml` (bmc-emulator records) — honor the same
+`bootwright_destroy_cluster_scope` var: when it is defined (a scoped `--clusters`
+infra/full destroy) each service playbook cleans only records whose name is in
+the in-scope service allowlist, so a per-cluster component co-located on a
+shared bastion is left standing when its cluster is not selected. When the var
+is undefined (unscoped / context sweep) every host record is reclaimed, orphans
+included. The allowlist name shape matches each record writer: infra-component
+records are `providerName-name`, bmc-emulator records are `providerName` alone.
+In-scope orphaned records are left for an unscoped destroy (the existing
+"destroy it while it is still declared" doctrine); the playbooks do not attempt
+to attribute an orphan's consuming clusters.
 
 **Orphan-sweep kind allowlist:** the full-destroy record sweep reclaims exactly
 three kinds: `libvirt-domain`, `libvirt-network`, `managed-os-install`.

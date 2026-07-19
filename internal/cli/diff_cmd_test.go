@@ -1,11 +1,32 @@
 package cli
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
+	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
+
+func TestDiffOrphanRemedyScopedToSweepCoverage(t *testing.T) {
+	var buf bytes.Buffer
+	printStateCheckOrphans(cliout.New(&buf), []workflow.UndeclaredResource{
+		{Kind: "libvirt-domain", Name: "vm-a"},
+		{Kind: "kubevirt-machine", Name: "vm-b", Cluster: "hub1"},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "libvirt-domain/vm-a") || !strings.Contains(out, "a full `bootwright destroy` reclaims it") {
+		t.Fatalf("sweep-reclaimable orphan should promise reclaim:\n%s", out)
+	}
+	if !strings.Contains(out, "kubevirt-machine/vm-b") || !strings.Contains(out, "does not reclaim this record") {
+		t.Fatalf("non-sweep orphan must not be pointed at a full destroy that leaves it standing:\n%s", out)
+	}
+	if strings.Contains(out, "run `bootwright destroy` to reclaim them") {
+		t.Fatalf("the blanket destroy remedy overpromises for non-sweep kinds and must be gone:\n%s", out)
+	}
+}
 
 func TestDiffRejectsUnknownStage(t *testing.T) {
 	_, stderr, code := runCLI(t, "diff", "--stage", "bogus")

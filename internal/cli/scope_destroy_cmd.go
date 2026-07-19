@@ -234,8 +234,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		printInfraComponentDestroyBlocks(stdout, componentDecision, override)
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
+		storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
+		storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
 		if !dryRun && !yes && !plan.NoRemoteWork {
-			if !confirm(stdin, stdout, "Continue with destroy? [y/N] (default: no): ") {
+			if storagePlanned {
+				cliout.NewContinuation(stdout).Warning("data loss", "destroying storage cluster(s) "+strings.Join(storageScopeNames, ", ")+": cephadm rm-cluster --zap-osds destroys ALL OSD DATA and declared devices are wiped (wipefs + sgdisk --zap-all). This is irreversible.")
+			}
+			if !confirm(stdin, stdout, destroyConfirmPrompt(storagePlanned)) {
 				return failErr(1, errors.New("destroy aborted"))
 			}
 		}
@@ -283,8 +288,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
-			storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
-			storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
 				partialErr = fmt.Errorf("the storage teardown ran with --skip-unreachable but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
 			}

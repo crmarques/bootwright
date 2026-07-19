@@ -147,6 +147,41 @@ func OverrideDestructiveKindProtected(objects []ObjectClassification, protected 
 	return labels
 }
 
+func OverrideDestructiveClusterScope(objects []ObjectClassification) []string {
+	seen := map[string]bool{}
+	var clusters []string
+	for _, o := range objects {
+		if !isOverrideDestructive(o) || machineSubstrateKinds[o.Kind] || o.Cluster == "" {
+			continue
+		}
+		if !seen[o.Cluster] {
+			seen[o.Cluster] = true
+			clusters = append(clusters, o.Cluster)
+		}
+	}
+	sort.Strings(clusters)
+	return clusters
+}
+
+func OverrideDestructiveProtectedClusterScope(objects []ObjectClassification, protected map[string]bool) []string {
+	seen := map[string]bool{}
+	var clusters []string
+	for _, o := range objects {
+		if !isOverrideDestructive(o) || machineSubstrateKinds[o.Kind] || o.Cluster == "" {
+			continue
+		}
+		if kind := objectProtectedKind(o); kind == "" || !protected[kind] {
+			continue
+		}
+		if !seen[o.Cluster] {
+			seen[o.Cluster] = true
+			clusters = append(clusters, o.Cluster)
+		}
+	}
+	sort.Strings(clusters)
+	return clusters
+}
+
 func OverrideDestructiveMachineSubstrate(objects []ObjectClassification) (labels, clusters []string) {
 	seen := map[string]bool{}
 	for _, o := range objects {

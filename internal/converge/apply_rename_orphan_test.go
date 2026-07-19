@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -29,8 +30,19 @@ func TestCheckApplyRenameOrphan(t *testing.T) {
 	created := []workflow.ObjectClassification{newContainerClusterObject("prod-east")}
 
 	t.Run("rename co-occurrence refuses", func(t *testing.T) {
-		if err := CheckApplyRenameOrphan(stateWithClusters("prod-east"), created, dir); err == nil {
+		err := CheckApplyRenameOrphan(stateWithClusters("prod-east"), created, dir)
+		if err == nil {
 			t.Fatal("a new cluster + an undeclared provisioned cluster must refuse as a possible rename")
+		}
+		msg := err.Error()
+		for _, want := range []string{
+			"temporarily restore the old cluster YAML (metadata.name prod-a)",
+			"bootwright destroy --clusters prod-a",
+			"destroy resolves --clusters against the declared state",
+		} {
+			if !strings.Contains(msg, want) {
+				t.Fatalf("replace remedy must quote an executable sequence, missing %q: %s", want, msg)
+			}
 		}
 	})
 	t.Run("scoped apply refuses against the full declared state", func(t *testing.T) {

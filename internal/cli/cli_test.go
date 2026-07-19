@@ -1922,7 +1922,7 @@ func TestContextDeleteWithoutPurgeFails(t *testing.T) {
 	if code == 0 {
 		t.Fatal("context delete without --purge unexpectedly succeeded")
 	}
-	if !strings.Contains(stderr, "rerun with --purge --yes") {
+	if !strings.Contains(stderr, "rerun with --purge") {
 		t.Fatalf("stderr missing purge remediation: %q", stderr)
 	}
 }
@@ -1967,6 +1967,41 @@ func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(ctx.BaseDir); !os.IsNotExist(err) {
 		t.Fatalf("context delete --purge did not remove context dir: %v", err)
+	}
+}
+
+func TestContextDeletePurgeRefusesLiveEstate(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	now := time.Now().UTC()
+	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
+		Cluster:     "sno-libvirt",
+		Status:      workflow.ClusterInstallStatusInstalled,
+		Phase:       workflow.ClusterInstallPhaseComplete,
+		UpdatedAt:   now,
+		InstalledAt: &now,
+	}); err != nil {
+		t.Fatalf("SaveClusterInstallRecord: %v", err)
+	}
+
+	_, stderr, code := runCLI(t, "context", "delete", "--name", "test", "--purge", "--yes")
+	if code == 0 {
+		t.Fatal("context delete --purge must refuse while an installed cluster record stands")
+	}
+	for _, want := range []string{"still owns", "bootwright destroy --context test", "--force"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("live-estate refusal missing %q: %q", want, stderr)
+		}
+	}
+	if _, err := os.Stat(ctx.BaseDir); err != nil {
+		t.Fatalf("refused purge must leave the context intact: %v", err)
+	}
+
+	_, stderr, code = runCLI(t, "context", "delete", "--name", "test", "--purge", "--yes", "--force")
+	if code != 0 {
+		t.Fatalf("context delete --purge --force must proceed, exited %d stderr=%q", code, stderr)
+	}
+	if _, err := os.Stat(ctx.BaseDir); !os.IsNotExist(err) {
+		t.Fatalf("context delete --purge --force did not remove context dir: %v", err)
 	}
 }
 

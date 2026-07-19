@@ -291,6 +291,18 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     closed. This re-provisions the disks from scratch — it does not preserve the
     old OSD data.
 
+    If the controller no longer records the cluster as Bootwright-owned — for
+    example the context's `runs/` records were lost and you are driving from a
+    fresh checkout — a reclaim run reports **"no device will be reclaimed"** and
+    the device-empty gate keeps refusing, referring you back to reclaim. Break the
+    loop by re-establishing ownership first, by either route:
+
+    - restore the context's `runs/` records (converge-safety records) from backup,
+      then re-run the `--reclaim-devices` apply; or
+    - apply once with the data-carrying device **removed** from the `StorageCluster`
+      declaration (this records ownership without touching the disk), then re-add
+      the device and re-run the `--reclaim-devices` apply.
+
 ### Comparing against live cluster state
 
 `diff` is **live by default**: it discovers the real state of each managed Ceph

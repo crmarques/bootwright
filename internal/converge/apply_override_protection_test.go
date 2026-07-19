@@ -55,10 +55,13 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected env with destructive drift must fail closed")
 	}
-	for _, want := range []string{"StorageCluster/ceph", "nprd", "destroy --override"} {
+	for _, want := range []string{"StorageCluster/ceph", "nprd", "bootwright destroy --clusters ceph --override"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("gate error must contain %q: %v", want, err)
 		}
+	}
+	if strings.Contains(err.Error(), "destroy --override` for that scope") {
+		t.Fatalf("cluster-scope remedy must quote a scoped destroy, not the full-estate command: %v", err)
 	}
 }
 
@@ -75,7 +78,7 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected StorageCluster kind must fail closed even on an allow-default env")
 	}
-	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "destroy --override"} {
+	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "bootwright destroy --clusters ceph --override"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("granular gate error must contain %q: %v", want, err)
 		}

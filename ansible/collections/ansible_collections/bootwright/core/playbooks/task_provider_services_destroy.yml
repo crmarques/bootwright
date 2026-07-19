@@ -22,6 +22,12 @@
         | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
         | list
       }}
+    bootwright_machine_provider_record_names: >-
+      {{
+        bootwright_machine_provider_services
+        | map(attribute='providerName')
+        | list
+      }}
 
   tasks:
     - name: Destroy provider service roles
@@ -42,4 +48,6 @@
       loop: "{{ bootwright_machine_provider_ownership_records | reverse | list }}"
       loop_control:
         label: "{{ item.kind }}/{{ item.name }}"
-      when: item.kind == 'bmc-emulator'
+      when:
+        - item.kind == 'bmc-emulator'
+        - bootwright_destroy_cluster_scope is not defined or item.name in bootwright_machine_provider_record_names

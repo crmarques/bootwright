@@ -45,7 +45,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 	if reclaimDevices != "" {
 		owned := converge.OwnedStorageClusters(objects)
 		if len(owned) == 0 {
-			cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned; no device will be reclaimed (reclaim only wipes disks of an owned cluster).")
+			cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned; no device will be reclaimed (reclaim only wipes disks of an owned cluster). Ownership is recorded by a successful apply from this context; if the context's runs/ records were lost, restore them, or first apply with the data-carrying device removed from the StorageCluster declaration (records ownership), then re-add it and re-run --reclaim-devices.")
 		} else {
 			cliout.NewContinuation(stdout).Warning("reclaim", "will WIPE device(s) "+reclaimDevices+" on the owned Ceph cluster(s) "+strings.Join(owned, ", ")+" before apply — IRREVERSIBLE data loss. Only a named device that is a declared OSD device and is not mounted or a system disk is wiped.")
 		}

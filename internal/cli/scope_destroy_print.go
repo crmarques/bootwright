@@ -29,11 +29,23 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 			label += " (cluster " + o.Cluster + ")"
 		}
 		if destroySweepReclaims(o.Kind) {
-			p.Status(output.StatusWarn, label, "not in desired state; a full `bootwright destroy` reclaims it")
+			p.Status(output.StatusWarn, label, "not in desired state; "+destroyReclaimsOrphanHint)
 			continue
 		}
-		p.Status(output.StatusWarn, label, "not in desired state; a full `bootwright destroy` does not reclaim this record — destroy it while it is still declared, or clean it up manually")
+		p.Status(output.StatusWarn, label, "not in desired state; "+destroyLeavesOrphanHint)
 	}
+}
+
+const (
+	destroyReclaimsOrphanHint = "a full `bootwright destroy` reclaims it"
+	destroyLeavesOrphanHint   = "a full `bootwright destroy` does not reclaim this record — destroy it while it is still declared, or clean it up manually"
+)
+
+func destroyConfirmPrompt(storagePlanned bool) string {
+	if storagePlanned {
+		return "Confirm this DESTRUCTIVE action (accept data loss)? [y/N] (default: no): "
+	}
+	return "Continue with destroy? [y/N] (default: no): "
 }
 
 func destroySweepReclaims(kind string) bool {
@@ -121,7 +133,7 @@ func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1
 	p.Section("Will destroy")
 	var items []output.Item
 	for _, name := range storageNames {
-		items = append(items, output.Item{Label: "storage cluster " + name, Detail: "managed services and generated attachment records"})
+		items = append(items, output.Item{Label: "storage cluster " + name, Detail: "cephadm rm-cluster --zap-osds: ALL OSD DATA destroyed; declared devices wiped (wipefs + sgdisk --zap-all) — irreversible"})
 	}
 
 	names := make([]string, 0, len(state.ContainerClusters))
@@ -169,7 +181,7 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State, storageWorkName
 		items = append(items, output.Item{Label: "cluster " + name + " infra", Detail: detail})
 	}
 	for _, name := range storageNames {
-		items = append(items, output.Item{Label: "storage cluster " + name + " infra", Detail: "provider-owned machines and declared managed disks"})
+		items = append(items, output.Item{Label: "storage cluster " + name + " infra", Detail: "provider-owned machines and declared managed disks wiped — ALL OSD DATA on this storage cluster is destroyed"})
 	}
 	p.List(items)
 }

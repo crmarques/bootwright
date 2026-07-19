@@ -214,9 +214,13 @@ func printStateCheckOrphans(p *cliout.Printer, orphans []workflow.UndeclaredReso
 		case o.Provider != "":
 			detail += fmt.Sprintf(" (provider %s)", o.Provider)
 		}
+		if destroySweepReclaims(o.Kind) {
+			detail += "; re-declare it, or " + destroyReclaimsOrphanHint
+		} else {
+			detail += "; " + destroyLeavesOrphanHint
+		}
 		p.Status(cliout.StatusWarn, o.Kind+"/"+o.Name, detail)
 	}
-	p.Status(cliout.StatusWarn, "remedy", "re-declare these objects, or run `bootwright destroy` to reclaim them")
 }
 
 func stateCheckResourceStatus(class workflow.ConvergeSafetyClassification) cliout.Status {

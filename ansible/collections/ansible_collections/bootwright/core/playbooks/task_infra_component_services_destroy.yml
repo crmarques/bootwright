@@ -31,6 +31,14 @@
         | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
         | list
       }}
+    bootwright_host_infra_component_record_names: >-
+      {{
+        bootwright_host_infra_component_services
+        | map(attribute='providerName')
+        | zip(bootwright_host_infra_component_services | map(attribute='name'))
+        | map('join', '-')
+        | list
+      }}
 
   tasks:
     - name: Validate infra component service destroy scope
@@ -70,3 +78,4 @@
         - item.kind == 'infra-component'
         - bootwright_infra_component_service_destroy_scope == '' or (item.labels | default({})).get('bootwright.kind', '') == 'artifacts'
         - bootwright_infra_component_reclaim_records is not defined or item.name in bootwright_infra_component_reclaim_records.split(',')
+        - bootwright_destroy_cluster_scope is not defined or item.name in bootwright_host_infra_component_record_names
