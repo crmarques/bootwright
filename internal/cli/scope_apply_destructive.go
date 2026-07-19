@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string, ocpReinstalls []string) {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string, ocpReinstalls []string, allowDestroy bool) {
 	var substrateReset []string
 	if mode == workflow.ApplyModeOverride {
 		if len(ocpReinstalls) > 0 {
@@ -25,6 +25,11 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		}
 		converge.ApplyReconcilableOnlyStorageExtraVar(plan, converge.ReconcilableOnlyStorageClusters(objects))
 		converge.ApplyRebuildAuthorizedStorageExtraVar(plan, converge.RebuildAuthorizedStorageClusters(objects))
+		subObjectKeys := converge.SubObjectRebuildAuthorizedKeys(objects)
+		if allowDestroy {
+			subObjectKeys = workflow.UnionClusterNames(subObjectKeys, converge.AllStorageSubObjectRebuildKeys(objects))
+		}
+		converge.ApplySubObjectRebuildAuthorizedExtraVar(plan, subObjectKeys)
 		if _, reset := workflow.OverrideDestructiveMachineSubstrate(objects); len(reset) > 0 {
 			cliout.NewContinuation(stdout).Warning("override", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
 			substrateReset = reset

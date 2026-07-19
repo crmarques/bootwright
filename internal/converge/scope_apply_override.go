@@ -16,6 +16,39 @@ func OverrideDriftedStorageSubObjects(objects []workflow.ObjectClassification) [
 	return out
 }
 
+func storageSubObjectRebuildKey(o workflow.ObjectClassification) string {
+	name := strings.TrimPrefix(o.Label, o.Kind+"/")
+	name = strings.TrimPrefix(name, o.Cluster+".")
+	return o.Cluster + "/" + name
+}
+
+func SubObjectRebuildAuthorizedKeys(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if workflow.IsStorageSubObjectKind(o.Kind) && o.HasStructuralDrift() {
+			out = append(out, storageSubObjectRebuildKey(o))
+		}
+	}
+	return out
+}
+
+func AllStorageSubObjectRebuildKeys(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if workflow.IsStorageSubObjectKind(o.Kind) {
+			out = append(out, storageSubObjectRebuildKey(o))
+		}
+	}
+	return out
+}
+
+func ApplySubObjectRebuildAuthorizedExtraVar(plan *WorkflowPlan, keys []string) {
+	if len(keys) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_subobject_rebuild_authorized="+strings.Join(keys, ","))
+}
+
 func OverrideDestructiveStorageClusters(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {

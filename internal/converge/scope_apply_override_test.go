@@ -59,6 +59,52 @@ func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 	}
 }
 
+func TestSubObjectRebuildAuthorizationKeysTrackStructuralDrift(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Unix(1700000000, 0)
+	before := twoCephClustersState()
+	after := twoCephClustersState()
+	after.StoragePools[0].Spec.Ceph.Type = v1alpha1.StoragePoolTypeErasureCode
+
+	for _, cluster := range []string{"ceph-a", "ceph-b"} {
+		if err := workflow.MarkStorageSubObjectsConvergeSafety(runsDir, "ctx", "apply", before, cluster, workflow.ConvergeSafetyStatusReconciled, now); err != nil {
+			t.Fatalf("mark sub-objects of %s: %v", cluster, err)
+		}
+	}
+
+	afterTasks, err := workflow.PlanApplyTasksChecked(AllScope.ApplyTarget(), after)
+	if err != nil {
+		t.Fatalf("plan after: %v", err)
+	}
+	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+
+	drifted := SubObjectRebuildAuthorizedKeys(objects)
+	if len(drifted) != 1 || drifted[0] != "ceph-a/rbd" {
+		t.Fatalf("SubObjectRebuildAuthorizedKeys must name exactly the structurally-drifted pool as <cluster>/<name>, got %v", drifted)
+	}
+
+	all := AllStorageSubObjectRebuildKeys(objects)
+	joined := strings.Join(all, ",")
+	if !strings.Contains(joined, "ceph-a/rbd") || !strings.Contains(joined, "ceph-b/rbd") {
+		t.Fatalf("AllStorageSubObjectRebuildKeys must cover every selected cluster's sub-objects, got %v", all)
+	}
+
+	plan := &WorkflowPlan{}
+	ApplySubObjectRebuildAuthorizedExtraVar(plan, drifted)
+	if len(plan.ExtraVarPairs) != 1 || plan.ExtraVarPairs[0] != "bootwright_ceph_subobject_rebuild_authorized=ceph-a/rbd" {
+		t.Fatalf("authorized sub-object extra var = %v, want bootwright_ceph_subobject_rebuild_authorized=ceph-a/rbd", plan.ExtraVarPairs)
+	}
+
+	empty := &WorkflowPlan{}
+	ApplySubObjectRebuildAuthorizedExtraVar(empty, nil)
+	if len(empty.ExtraVarPairs) != 0 {
+		t.Fatalf("no authorized sub-objects must add no extra var, got %v", empty.ExtraVarPairs)
+	}
+}
+
 func TestRebuildAuthorizationSkipsHealthyMatchStorageCluster(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)

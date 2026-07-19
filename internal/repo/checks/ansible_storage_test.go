@@ -112,9 +112,37 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 		t.Fatalf("pool rebuild decision must be gated on the ceph-pool op under override, got %v", decide["when"])
 	}
 
-	rebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted Ceph pool for override")]
-	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
-		t.Fatalf("pool rebuild must be gated on the structural-mismatch decision, got %v", rebuild["when"])
+	ackFact := tasks[findAnsibleTask(t, tasks, "Decide whether the controller acknowledged destroying this Ceph pool")]
+	ackFactMap, ok := ackFact["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("pool destroy acknowledgement must be a set_fact, got %v", ackFact)
+	}
+	ackExpr := fmt.Sprint(ackFactMap["bootwright_ceph_op_pool_rebuild_acked"])
+	for _, want := range []string{"bootwright_ceph_subobject_rebuild_authorized", "bootwright_ceph_op_idempotency_name | default('') | length > 0"} {
+		if !strings.Contains(ackExpr, want) {
+			t.Fatalf("pool destroy acknowledgement must require %q, got %s", want, ackExpr)
+		}
+	}
+
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse unacknowledged Ceph pool destroy for override rebuild")
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("unacknowledged pool destroy refusal must be an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_pool_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
+		t.Fatalf("pool destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
+	}
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--allow-destroy") {
+		t.Fatalf("pool destroy refusal must name the --allow-destroy remedy, got %v", refuse["fail_msg"])
+	}
+
+	rebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted Ceph pool for override")
+	if !(refuseIdx < rebuildIdx) {
+		t.Fatalf("must refuse an unacknowledged destroy before the pool rebuild (refuse=%d rebuild=%d)", refuseIdx, rebuildIdx)
+	}
+	rebuild := tasks[rebuildIdx]
+	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_pool_recreate") || !strings.Contains(got, "bootwright_ceph_op_pool_rebuild_acked") {
+		t.Fatalf("pool rebuild must be gated on the structural-mismatch decision and the destroy acknowledgement, got %v", rebuild["when"])
 	}
 	block := nestedAnsibleTasks(t, rebuild, "block")
 	allowIdx := findAnsibleTask(t, block, "Allow Ceph pool deletion for override rebuild")
@@ -141,7 +169,33 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 		t.Fatalf("pool deletion failure must be an assert, got %v", assertTask)
 	}
 
-	fsRebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")]
+	fsRefuseIdx := findAnsibleTask(t, tasks, "Refuse unacknowledged CephFS destroy for override rebuild")
+	fsRefuse, ok := tasks[fsRefuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("unacknowledged CephFS destroy refusal must be an assert, got %v", tasks[fsRefuseIdx])
+	}
+	if got := fmt.Sprint(fsRefuse["that"]); !strings.Contains(got, "bootwright_ceph_op_fs_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_fs_recreate") {
+		t.Fatalf("CephFS destroy refusal must fail closed on recreate-without-acknowledgement, got %v", fsRefuse["that"])
+	}
+	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "--allow-destroy") {
+		t.Fatalf("CephFS destroy refusal must name the --allow-destroy remedy, got %v", fsRefuse["fail_msg"])
+	}
+	fsRebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")
+	if !(fsRefuseIdx < fsRebuildIdx) {
+		t.Fatalf("must refuse an unacknowledged destroy before the CephFS rebuild (refuse=%d rebuild=%d)", fsRefuseIdx, fsRebuildIdx)
+	}
+	fsRebuild := tasks[fsRebuildIdx]
+	if got := fmt.Sprint(fsRebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_fs_rebuild_acked") {
+		t.Fatalf("CephFS rebuild must be gated on the destroy acknowledgement, got %v", fsRebuild["when"])
+	}
+	fsAckFact := tasks[findAnsibleTask(t, tasks, "Decide whether the controller acknowledged destroying this CephFS")]
+	fsAckMap, ok := fsAckFact["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("CephFS destroy acknowledgement must be a set_fact, got %v", fsAckFact)
+	}
+	if got := fmt.Sprint(fsAckMap["bootwright_ceph_op_fs_rebuild_acked"]); !strings.Contains(got, "bootwright_ceph_subobject_rebuild_authorized") {
+		t.Fatalf("CephFS destroy acknowledgement must consult the authorized sub-object list, got %v", got)
+	}
 	fsBlock := nestedAnsibleTasks(t, fsRebuild, "block")
 	failIdx := findAnsibleTask(t, fsBlock, "Fail drifted CephFS before override rebuild")
 	fsRmIdx := findAnsibleTask(t, fsBlock, "Destroy structurally drifted CephFS for override rebuild")
@@ -184,9 +238,36 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 		t.Fatalf("ec-profile rebuild decision must be gated on the ec-profile op under override, got %v", decide["when"])
 	}
 
-	rebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted erasure-coded pool for override")]
-	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
-		t.Fatalf("ec-profile rebuild must be gated on the structural-mismatch decision, got %v", rebuild["when"])
+	ackFact := tasks[findAnsibleTask(t, tasks, "Decide whether the controller acknowledged destroying the erasure-coded pool")]
+	ackMap, ok := ackFact["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("ec-profile destroy acknowledgement must be a set_fact, got %v", ackFact)
+	}
+	ackExpr := fmt.Sprint(ackMap["bootwright_ceph_op_ec_rebuild_acked"])
+	for _, want := range []string{"bootwright_ceph_subobject_rebuild_authorized", "bootwright_ceph_op.structural.pool | default('') | length > 0"} {
+		if !strings.Contains(ackExpr, want) {
+			t.Fatalf("ec-profile destroy acknowledgement must require %q, got %s", want, ackExpr)
+		}
+	}
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse unacknowledged erasure-coded pool destroy for override rebuild")
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("unacknowledged ec-profile destroy refusal must be an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_ec_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
+		t.Fatalf("ec-profile destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
+	}
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--allow-destroy") {
+		t.Fatalf("ec-profile destroy refusal must name the --allow-destroy remedy, got %v", refuse["fail_msg"])
+	}
+
+	rebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted erasure-coded pool for override")
+	if !(refuseIdx < rebuildIdx) {
+		t.Fatalf("must refuse an unacknowledged destroy before the ec-profile rebuild (refuse=%d rebuild=%d)", refuseIdx, rebuildIdx)
+	}
+	rebuild := tasks[rebuildIdx]
+	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") || !strings.Contains(got, "bootwright_ceph_op_ec_rebuild_acked") {
+		t.Fatalf("ec-profile rebuild must be gated on the structural-mismatch decision and the destroy acknowledgement, got %v", rebuild["when"])
 	}
 	block := nestedAnsibleTasks(t, rebuild, "block")
 	allowIdx := findAnsibleTask(t, block, "Allow Ceph pool deletion for erasure-code profile override rebuild")
@@ -210,8 +291,8 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	}
 
 	profileRm := tasks[findAnsibleTask(t, tasks, "Delete structurally drifted erasure-code profile for override rebuild")]
-	if got := fmt.Sprint(profileRm["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
-		t.Fatalf("ec-profile delete must be gated on the structural-mismatch decision, got %v", profileRm["when"])
+	if got := fmt.Sprint(profileRm["when"]); !strings.Contains(got, "bootwright_ceph_op_ec_recreate") || !strings.Contains(got, "bootwright_ceph_op_ec_rebuild_acked") {
+		t.Fatalf("ec-profile delete must be gated on the structural-mismatch decision and the destroy acknowledgement, got %v", profileRm["when"])
 	}
 }
 
