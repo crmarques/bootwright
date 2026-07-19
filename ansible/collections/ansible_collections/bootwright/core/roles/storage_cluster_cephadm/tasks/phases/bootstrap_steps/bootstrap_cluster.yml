@@ -63,6 +63,17 @@
   ansible.builtin.command:
     argv: "{{ bootwright_ceph_bootstrap_argv }}"
   register: bootwright_ceph_bootstrap
-  changed_when: true
+  changed_when: bootwright_ceph_bootstrap.rc == 0
+  failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_conf_check.rc != 0
+
+- name: Fail with cephadm bootstrap diagnostics
+  ansible.builtin.fail:
+    msg: >-
+      cephadm bootstrap failed (rc={{ bootwright_ceph_bootstrap.rc | default('unknown') }}).
+      stderr: {{ bootwright_ceph_bootstrap.stderr | default('') | regex_replace('(?i)(password:\s*)\S+', '\1[redacted]') }}
+      stdout: {{ bootwright_ceph_bootstrap.stdout | default('') | regex_replace('(?i)(password:\s*)\S+', '\1[redacted]') }}
+  when:
+    - bootwright_ceph_conf_check.rc != 0
+    - bootwright_ceph_bootstrap.rc | default(0) != 0
