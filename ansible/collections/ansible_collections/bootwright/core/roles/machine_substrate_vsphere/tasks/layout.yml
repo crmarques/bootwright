@@ -5,7 +5,7 @@
       {{ (bootwright_component.osManaged | default(false) | bool)
          and ((bootwright_apply_mode | default('continue')) == 'override')
          and (bootwright_current_cluster.name
-              in (bootwright_substrate_reset_clusters | default('') | split(','))) }}
+              in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)) }}
     bootwright_vsphere_disks: >-
       {{
         [{'size_gb': bootwright_component.profile.diskGiB,

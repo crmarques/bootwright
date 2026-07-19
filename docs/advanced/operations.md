@@ -286,10 +286,13 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     bootwright apply --clusters ceph-storage --reclaim-devices /dev/disk/by-id/wwn-0x...,/dev/disk/by-id/wwn-0x...
     ```
 
-    Only a named device that is a declared OSD device of an owned cluster and is
-    **not mounted or a system disk** is wiped (irreversible); everything else fails
-    closed. This re-provisions the disks from scratch — it does not preserve the
-    old OSD data.
+    Only a named device that is a declared OSD device of an owned cluster, is
+    **not mounted or a system disk**, and is on a host whose OSD marker does not
+    already record it is wiped (irreversible); everything else fails closed. A
+    device the host's marker still records is skipped, so passing a cluster-wide
+    device name (for example the same `/dev/sdb` on every node) reclaims only the
+    marker-lost node and leaves the healthy nodes untouched. This re-provisions the
+    disks from scratch — it does not preserve the old OSD data.
 
     If the controller no longer records the cluster as Bootwright-owned — for
     example the context's `runs/` records were lost and you are driving from a

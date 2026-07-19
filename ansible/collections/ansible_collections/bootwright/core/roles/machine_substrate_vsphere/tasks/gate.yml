@@ -1,0 +1,56 @@
+---
+- name: Probe vSphere virtual machine disk layout
+  community.vmware.vmware_guest_disk_info:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_disk_probe
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - bootwright_vsphere_probe.instance is defined
+    - not (bootwright_vsphere_managed_os_reset | bool)
+
+- name: Resolve probed vSphere disk layout
+  ansible.builtin.set_fact:
+    bootwright_vsphere_probed_root_gib: >-
+      {{ (((bootwright_vsphere_disk_probe.guest_disk_info | default({})).get('0', {})).get('capacity_in_kb', 0) | int) // 1048576 }}
+    bootwright_vsphere_probed_disk_count: "{{ (bootwright_vsphere_disk_probe.guest_disk_info | default({})) | length }}"
+  changed_when: false
+  when:
+    - bootwright_vsphere_probe.instance is defined
+    - not (bootwright_vsphere_managed_os_reset | bool)
+
+- name: Refuse an in-place vSphere root disk resize
+  ansible.builtin.assert:
+    that:
+      - (bootwright_vsphere_probed_root_gib | int) == (bootwright_component.profile.diskGiB | int)
+    fail_msg: >-
+      Machine {{ bootwright_component.name }} declares profile diskGiB={{ bootwright_component.profile.diskGiB }}
+      but its provisioned vSphere root disk is {{ bootwright_vsphere_probed_root_gib }} GiB. Bootwright does not
+      resize a provisioned root disk in place — the guest partitions would not follow.
+      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
+      and re-apply to change its root disk size.
+  when:
+    - bootwright_vsphere_probe.instance is defined
+    - not (bootwright_vsphere_managed_os_reset | bool)
+
+- name: Refuse undeclared vSphere machine data disks
+  ansible.builtin.assert:
+    that:
+      - (bootwright_vsphere_probed_disk_count | int) == (bootwright_vsphere_disks | length)
+    fail_msg: >-
+      vSphere VM {{ bootwright_vsphere_vm_name }} for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      has {{ bootwright_vsphere_probed_disk_count }} disk(s) but its profile declares {{ bootwright_vsphere_disks | length }}.
+      Bootwright does not add or remove machine data disks in place.
+      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
+      before changing or removing machine data disks.
+  when:
+    - bootwright_vsphere_probe.instance is defined
+    - not (bootwright_vsphere_managed_os_reset | bool)

@@ -39,7 +39,7 @@
       {{ (bootwright_component.osManaged | default(false) | bool)
          and ((bootwright_apply_mode | default('continue')) == 'override')
          and (bootwright_current_cluster.name
-              in (bootwright_substrate_reset_clusters | default('') | split(','))) }}
+              in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)) }}
     bootwright_libvirt_data_disks: "{{ bootwright_component.profile.dataDisks | default([]) }}"
     bootwright_libvirt_data_disk_names: "{{ bootwright_component.profile.dataDisks | default([]) | map(attribute='name') | list }}"
     bootwright_libvirt_disk_paths: >-
@@ -66,6 +66,19 @@
   register: bootwright_libvirt_apply_domain_xml
   changed_when: false
   failed_when: false
+
+- name: Require a conclusive libvirt domain probe
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+        or (bootwright_libvirt_apply_domain_xml.stderr | default('')) is search('(Domain not found|failed to get domain)')
+    fail_msg: >-
+      Could not determine whether libvirt domain {{ bootwright_libvirt_domain_name }}
+      exists on {{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}:
+      {{ bootwright_libvirt_apply_domain_xml.stderr | default('probe failed with no detail') }}.
+      Refusing to continue — an existing foreign domain could not be detected.
+      Fix libvirt connectivity and re-run apply.
 
 - name: Resolve libvirt domain ownership for apply
   ansible.builtin.set_fact:
@@ -271,8 +284,9 @@
       Machine {{ bootwright_component.name }} declares profile diskGiB={{ bootwright_component.profile.diskGiB }}
       ({{ (bootwright_component.profile.diskGiB | int) * 1073741824 }} bytes) but its provisioned root disk is
       {{ (bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] }} bytes. Bootwright does not
-      resize a provisioned root disk in place — the guest partitions would not follow. Destroy and re-apply
-      this machine to change its root disk size.
+      resize a provisioned root disk in place — the guest partitions would not follow.
+      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
+      and re-apply to change its root disk size.
   when:
     - bootwright_libvirt_root_disk_info.rc | default(1) == 0
     - not (bootwright_libvirt_managed_os_reset | bool)

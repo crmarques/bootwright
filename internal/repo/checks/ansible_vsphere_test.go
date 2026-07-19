@@ -60,6 +60,39 @@ func TestVSphereSubstrateApplyRefusesForeignVM(t *testing.T) {
 	}
 }
 
+func TestVSphereSubstrateGateRefusesInPlaceDiskChanges(t *testing.T) {
+	tasks := readAnsibleTasks(t, vsphereSubstrateTaskRoot+"/gate.yml")
+	resizeIdx := findAnsibleTask(t, tasks, "Refuse an in-place vSphere root disk resize")
+	undeclaredIdx := findAnsibleTask(t, tasks, "Refuse undeclared vSphere machine data disks")
+	for name, idx := range map[string]int{
+		"Refuse an in-place vSphere root disk resize":  resizeIdx,
+		"Refuse undeclared vSphere machine data disks": undeclaredIdx,
+	} {
+		when := fmt.Sprint(tasks[idx]["when"])
+		if !strings.Contains(when, "not (bootwright_vsphere_managed_os_reset") {
+			t.Fatalf("%s must be skipped under --override substrate reset, got when=%v", name, tasks[idx]["when"])
+		}
+		if !strings.Contains(when, "bootwright_vsphere_probe.instance is defined") {
+			t.Fatalf("%s must only run when the VM already exists, got when=%v", name, tasks[idx]["when"])
+		}
+	}
+	body := readRepoFile(t, vsphereSubstrateTaskRoot+"/gate.yml")
+	for _, remedy := range []string{
+		"resize a provisioned root disk in place",
+		"bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes",
+	} {
+		if !strings.Contains(body, remedy) {
+			t.Fatalf("vsphere gate missing remedy text %q", remedy)
+		}
+	}
+	main := readAnsibleTasks(t, vsphereSubstrateTaskRoot+"/main.yml")
+	gateImport := findAnsibleTask(t, main, "Gate vSphere virtual machine changes")
+	applyImport := findAnsibleTask(t, main, "Apply vSphere virtual machine")
+	if gateImport >= applyImport {
+		t.Fatalf("vsphere gate (import %d) must run before apply (import %d)", gateImport, applyImport)
+	}
+}
+
 func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 	for _, rel := range []string{
 		vsphereSubstrateTaskRoot + "/destroy.yml",
@@ -136,6 +169,7 @@ func TestVSphereSubstrateRecordsOwnershipAttributesAtCreate(t *testing.T) {
 func TestVSphereTasksPinVenvInterpreterAndRedactCredentials(t *testing.T) {
 	for _, rel := range []string{
 		vsphereSubstrateTaskRoot + "/probe.yml",
+		vsphereSubstrateTaskRoot + "/gate.yml",
 		vsphereSubstrateTaskRoot + "/apply.yml",
 		vsphereSubstrateTaskRoot + "/destroy.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/insert.yml",

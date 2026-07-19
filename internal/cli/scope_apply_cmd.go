@@ -102,7 +102,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	if usesAnsible {
 		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
-		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster and is not mounted or a system disk — irreversible data loss")
+		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
 	}
 	if options.stageSelector {
 		if usesAnsible {
@@ -265,6 +265,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, override); err != nil {
 					return failErr(1, err)
 				}
+				if len(ownedReclaim) > 0 {
+					if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, ownedReclaim, reclaimDevices); len(unmatched) > 0 {
+						return failErr(2, reclaimUnmatchedError(unmatched, ownedReclaim, declared))
+					}
+				}
 				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, ownedReclaim)...)
 			}
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
@@ -322,7 +327,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {
-				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply — irreversible data loss, gated by the data-loss acknowledgement (--allow-destroy or interactive confirm)")
+				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by the data-loss acknowledgement (--allow-destroy or interactive confirm)")
 			}
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode)

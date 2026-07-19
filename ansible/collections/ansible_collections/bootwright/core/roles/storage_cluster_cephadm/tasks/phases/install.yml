@@ -89,12 +89,13 @@
     bootwright_ceph_reclaim_here: >-
       {{ (bootwright_current_storage_host.devices | default([]))
          | intersect(bootwright_ceph_reclaim_devices | default('') | split(',')
-                     | map('trim') | reject('equalto', '') | list) }}
+                     | map('trim') | reject('equalto', '') | list)
+         | difference(bootwright_ceph_owned_osd_devices | default([])) }}
   when:
     - bootwright_current_storage_host.devices | default([]) | length > 0
     - >-
       bootwright_selected_storage_cluster.name
-      in (bootwright_ceph_owned_clusters | default('') | split(',') | map('trim') | list)
+      in (bootwright_ceph_owned_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
 
 - name: Probe reclaim devices for active mounts
   ansible.builtin.command:
@@ -151,6 +152,8 @@
       Refusing to reclaim {{ item.item }} on {{ bootwright_current_storage_host.hostname }}:
       it carries LVM or dm-crypt holders, so it is almost certainly a live bluestore OSD
       data disk (an in-use OSD has no mountpoint, so the mount probe cannot catch it).
+      A device already recorded in this host's OSD marker is skipped automatically;
+      reclaim only wipes a device this host's marker does not already record.
       Drain and remove the OSD first — find its id with `cephadm shell -- ceph osd tree`,
       then `cephadm shell -- ceph orch osd rm <id>` — before reclaiming the device.
     quiet: true

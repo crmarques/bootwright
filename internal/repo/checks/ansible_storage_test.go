@@ -594,6 +594,19 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmReclaimSkipsMarkerRecordedDevices(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve OSD devices to reclaim on this host")
+	setFact, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("reclaim resolve must be a set_fact, got %v", tasks[resolveIdx])
+	}
+	here := fmt.Sprint(setFact["bootwright_ceph_reclaim_here"])
+	if !strings.Contains(here, "difference(bootwright_ceph_owned_osd_devices") {
+		t.Fatalf("reclaim resolve must subtract marker-recorded OSD devices so a uniform device name only reclaims the marker-lost host, got %v", here)
+	}
+}
+
 func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")

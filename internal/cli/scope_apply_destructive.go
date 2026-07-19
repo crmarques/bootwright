@@ -47,7 +47,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		if len(owned) == 0 {
 			cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned; no device will be reclaimed (reclaim only wipes disks of an owned cluster). Ownership is recorded by a successful apply from this context; if the context's runs/ records were lost, restore them, or first apply with the data-carrying device removed from the StorageCluster declaration (records ownership), then re-add it and re-run --reclaim-devices.")
 		} else {
-			cliout.NewContinuation(stdout).Warning("reclaim", "will WIPE device(s) "+reclaimDevices+" on the owned Ceph cluster(s) "+strings.Join(owned, ", ")+" before apply — IRREVERSIBLE data loss. Only a named device that is a declared OSD device and is not mounted or a system disk is wiped.")
+			cliout.NewContinuation(stdout).Warning("reclaim", "will WIPE device(s) "+reclaimDevices+" on the owned Ceph cluster(s) "+strings.Join(owned, ", ")+" before apply — IRREVERSIBLE data loss. Only a named device that is a declared OSD device, is not mounted or a system disk, and is on a host whose OSD marker does not already record it is wiped; a marker-recorded device is left in place.")
 		}
 		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, owned)
 	}
@@ -77,6 +77,18 @@ func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []stri
 		return nil
 	}
 	return []string{"reclaim-devices " + reclaimDevices + " on Ceph cluster(s) " + strings.Join(owned, ", ")}
+}
+
+func reclaimUnmatchedError(unmatched, owned, declared []string) error {
+	noun, verb := "entry", "does"
+	if len(unmatched) > 1 {
+		noun, verb = "entries", "do"
+	}
+	remedy := "the owned cluster(s) declare no OSD devices to match against"
+	if len(declared) > 0 {
+		remedy = "declare it in the StorageCluster or pass one of: " + strings.Join(declared, ", ")
+	}
+	return fmt.Errorf("--reclaim-devices %s %s %s not match any declared OSD device of owned Ceph cluster(s) %s — matching is by the exact declared path; %s", noun, strings.Join(unmatched, ", "), verb, strings.Join(owned, ", "), remedy)
 }
 
 func warnDestructiveApply(stdout io.Writer, destructive []string) {

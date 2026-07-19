@@ -44,7 +44,7 @@
       when:
         - bootwright_redfish_action_effective == 'boot'
         - bootwright_component.boot.redfish.setBootSource | default(true) | bool
-        - bootwright_current_cluster.name | default('') not in (bootwright_ocp_reinstall_clusters | default('') | split(','))
+        - bootwright_current_cluster.name | default('') not in (bootwright_ocp_reinstall_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
 
     - name: Boot node from Redfish virtual media
       when: bootwright_redfish_action_effective == 'boot'

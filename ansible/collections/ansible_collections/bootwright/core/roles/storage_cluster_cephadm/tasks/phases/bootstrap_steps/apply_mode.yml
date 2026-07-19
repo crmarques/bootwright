@@ -116,13 +116,13 @@
   ansible.builtin.set_fact:
     bootwright_ceph_reconcilable_only: >-
       {{ bootwright_selected_storage_cluster.name
-         in (bootwright_ceph_reconcilable_only_clusters | default('') | split(',')) }}
+         in (bootwright_ceph_reconcilable_only_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list) }}
 
 - name: Decide whether the controller authorizes a destructive rebuild of this cluster
   ansible.builtin.set_fact:
     bootwright_ceph_rebuild_authorized: >-
       {{ bootwright_selected_storage_cluster.name
-         in (bootwright_ceph_rebuild_authorized_clusters | default('') | split(',')) }}
+         in (bootwright_ceph_rebuild_authorized_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list) }}
 
 - name: Remove existing cephadm cluster for override rebuild
   ansible.builtin.command:

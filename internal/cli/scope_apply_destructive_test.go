@@ -23,6 +23,23 @@ func TestReclaimDestructiveDescriptors(t *testing.T) {
 	}
 }
 
+func TestReclaimUnmatchedError(t *testing.T) {
+	err := reclaimUnmatchedError([]string{"/dev/disk/by-id/wwn-0x5000"}, []string{"ceph1"}, []string{"/dev/sdb"})
+	msg := err.Error()
+	for _, want := range []string{"--reclaim-devices entry", "/dev/disk/by-id/wwn-0x5000", "does not match", "ceph1", "exact declared path", "/dev/sdb"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("reclaim unmatched error missing %q, got %q", want, msg)
+		}
+	}
+	multi := reclaimUnmatchedError([]string{"/dev/x", "/dev/y"}, []string{"ceph1"}, nil).Error()
+	if !strings.Contains(multi, "entries") || !strings.Contains(multi, "do not match") {
+		t.Fatalf("multiple unmatched entries must pluralize, got %q", multi)
+	}
+	if !strings.Contains(multi, "declare no OSD devices") {
+		t.Fatalf("no declared devices must state so, got %q", multi)
+	}
+}
+
 func TestDestructiveOverrideYesGuard(t *testing.T) {
 	objs := []string{"Machine/db1", "StorageCluster/ceph"}
 	cases := []struct {

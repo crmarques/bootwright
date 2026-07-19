@@ -22,6 +22,40 @@ func TestPackageRemovalGuardedByOwnershipAndRequirements(t *testing.T) {
 	}
 }
 
+func TestAuthorizationMembershipRejectsEmptyName(t *testing.T) {
+	for _, path := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/apply_mode.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/layout.yml",
+	} {
+		body := readRepoFile(t, path)
+		if !strings.Contains(body, "split(',') | map('trim') | reject('equalto', '')") {
+			t.Fatalf("%s must reject empty entries from its authorization-list split so an empty cluster name fails closed ('' in [''] is true)", path)
+		}
+	}
+}
+
+func TestInfraDestroyPlaysHonorSkipUnreachable(t *testing.T) {
+	for _, path := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_destroy.yml",
+	} {
+		plays := readAnsiblePlays(t, path)
+		if len(plays) != 1 {
+			t.Fatalf("%s play count = %d, want 1", path, len(plays))
+		}
+		ignoreUnreachable, ok := plays[0]["ignore_unreachable"].(string)
+		if !ok || !strings.Contains(ignoreUnreachable, "bootwright_destroy_skip_unreachable") {
+			t.Fatalf("%s must template ignore_unreachable from bootwright_destroy_skip_unreachable so --skip-unreachable reaches the infra stage, got %v", path, plays[0]["ignore_unreachable"])
+		}
+	}
+}
+
 func TestMachineInfraPreparePreparesHostPackages(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_prepare.yml")
 	if len(plays) != 1 {
@@ -488,6 +522,27 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 		if !strings.Contains(domainXML, want) {
 			t.Fatalf("domain XML missing context ownership metadata %q", want)
 		}
+	}
+}
+
+func TestLibvirtApplyRequiresConclusiveDomainProbe(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml")
+	probeIdx := findAnsibleTask(t, tasks, "Require a conclusive libvirt domain probe")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve libvirt domain ownership for apply")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to mutate a non-Bootwright libvirt domain on apply")
+	if !(probeIdx < resolveIdx && probeIdx < refuseIdx) {
+		t.Fatalf("conclusive-probe assert (task %d) must run before ownership resolve (%d) and refusal (%d) so an inconclusive dumpxml fails closed", probeIdx, resolveIdx, refuseIdx)
+	}
+	if _, gated := tasks[probeIdx]["when"]; gated {
+		t.Fatalf("conclusive-probe assert must not be gated on rc==0 or it cannot catch an inconclusive probe, got when=%v", tasks[probeIdx]["when"])
+	}
+	assert, ok := tasks[probeIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("conclusive-probe must be an assert, got %v", tasks[probeIdx])
+	}
+	that := fmt.Sprint(assert["that"])
+	if !strings.Contains(that, "rc | default(1) == 0") || !strings.Contains(that, "Domain not found") || !strings.Contains(that, "failed to get domain") {
+		t.Fatalf("conclusive-probe must accept only rc==0 or a domain-absent stderr, got that=%v", that)
 	}
 }
 

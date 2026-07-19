@@ -8,6 +8,9 @@
 - name: Probe vSphere virtual machine
   ansible.builtin.import_tasks: probe.yml
 
+- name: Gate vSphere virtual machine changes
+  ansible.builtin.import_tasks: gate.yml
+
 - name: Apply vSphere virtual machine
   ansible.builtin.import_tasks: apply.yml
 
