@@ -28,6 +28,15 @@ recovery workflow. `--single-host-defaults` renders only for a one-host
 topology, so a single-node lab reaches `active+clean` (multi-host CRUSH
 defaults never would).
 
+**Constraint:** `--image` is a global cephadm option, not a `bootstrap`
+subcommand flag. It must sit between the `cephadm` argv[0] and the `bootstrap`
+subcommand token (`cephadm --image <ref> bootstrap …`); appended after
+`bootstrap` (or any other flag) cephadm exits rc=2 with
+`error: unrecognized arguments: --image …`. The image pin flows from
+`bootwright_ceph_bootstrap_image`, so its conditional block prepends before the
+`bootstrap` list, while every `--mon-ip`/`--config`/`--registry-json`/etc. flag
+is a genuine bootstrap subcommand option that follows it.
+
 **Constraint:** `cephadm bootstrap` is a one-time, non-idempotent operation
 that refuses to run when `/etc/ceph/ceph.conf` already exists. The role gates
 purely on that file — the same marker cephadm itself checks. An

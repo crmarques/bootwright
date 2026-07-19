@@ -1035,6 +1035,9 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !strings.Contains(bootstrapArgv, "--image") || !strings.Contains(bootstrapArgv, "bootwright_ceph_bootstrap_image") {
 		t.Fatalf("bootstrap argv must conditionally pass --image from the rendered pin, got %v", resolveBootstrap)
 	}
+	if imageIdx, subcommandIdx := strings.Index(bootstrapArgv, "--image"), strings.Index(bootstrapArgv, "'bootstrap'"); imageIdx < 0 || subcommandIdx < 0 || imageIdx > subcommandIdx {
+		t.Fatalf("bootstrap argv must place the global --image before the bootstrap subcommand, got %v", resolveBootstrap)
+	}
 	if !strings.Contains(bootstrapArgv, "--allow-fqdn-hostname") {
 		t.Fatalf("bootstrap argv must pass --allow-fqdn-hostname (IBM recommended), got %v", resolveBootstrap)
 	}

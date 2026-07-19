@@ -3,8 +3,13 @@
   ansible.builtin.set_fact:
     bootwright_ceph_bootstrap_argv: >-
       {{
-        [
-          'cephadm',
+        ['cephadm']
+        + (
+          ['--image', bootwright_ceph_bootstrap_image]
+          if bootwright_ceph_bootstrap_image | default('') | length > 0
+          else []
+        )
+        + [
           'bootstrap',
           '--mon-ip',
           bootwright_selected_storage_cluster.bootstrap.monIP,
@@ -39,11 +44,6 @@
         + (
           ['--registry-json', bootwright_ceph_remote_registry_json]
           if bootwright_ceph_registry_credentials is defined
-          else []
-        )
-        + (
-          ['--image', bootwright_ceph_bootstrap_image]
-          if bootwright_ceph_bootstrap_image | default('') | length > 0
           else []
         )
         + (
