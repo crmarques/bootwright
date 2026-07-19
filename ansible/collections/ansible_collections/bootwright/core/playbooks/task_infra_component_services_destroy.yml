@@ -70,13 +70,12 @@
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
         tasks_from: destroy_resource.yml
-      vars:
-        bootwright_ownership_record: "{{ item }}"
       loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
       loop_control:
-        label: "{{ item.kind }}/{{ item.name }}"
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
       when:
-        - item.kind == 'infra-component'
-        - bootwright_infra_component_service_destroy_scope == '' or (item.labels | default({})).get('bootwright.kind', '') == 'artifacts'
-        - bootwright_infra_component_reclaim_records is not defined or item.name in bootwright_infra_component_reclaim_records.split(',')
-        - bootwright_destroy_cluster_scope is not defined or item.name in bootwright_host_infra_component_record_names
+        - bootwright_ownership_record.kind == 'infra-component'
+        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+        - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
+        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names

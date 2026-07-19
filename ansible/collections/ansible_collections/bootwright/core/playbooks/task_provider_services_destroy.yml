@@ -44,11 +44,10 @@
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
         tasks_from: destroy_resource.yml
-      vars:
-        bootwright_ownership_record: "{{ item }}"
       loop: "{{ bootwright_machine_provider_ownership_records | reverse | list }}"
       loop_control:
-        label: "{{ item.kind }}/{{ item.name }}"
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
       when:
-        - item.kind == 'bmc-emulator'
-        - bootwright_destroy_cluster_scope is not defined or item.name in bootwright_machine_provider_record_names
+        - bootwright_ownership_record.kind == 'bmc-emulator'
+        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_machine_provider_record_names

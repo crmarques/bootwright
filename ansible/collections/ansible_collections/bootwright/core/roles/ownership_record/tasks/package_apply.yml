@@ -26,8 +26,7 @@
 
 - name: Write package ownership records
   ansible.builtin.include_tasks: package_apply_one.yml
-  vars:
-    bootwright_ownership_package_name: "{{ item }}"
   loop: "{{ bootwright_ownership_packages }}"
   loop_control:
-    label: "{{ item }}"
+    loop_var: bootwright_ownership_package_name
+    label: "{{ bootwright_ownership_package_name }}"

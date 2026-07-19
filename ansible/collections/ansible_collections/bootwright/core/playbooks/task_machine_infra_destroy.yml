@@ -80,16 +80,15 @@
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
         tasks_from: destroy_resource.yml
-      vars:
-        bootwright_ownership_record: "{{ item }}"
       loop: "{{ bootwright_host_infra_ownership_records }}"
       loop_control:
-        label: "{{ item.kind }}/{{ item.name }}"
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
       when:
-        - item.kind in ['libvirt-domain', 'libvirt-network', 'managed-os-install']
+        - bootwright_ownership_record.kind in ['libvirt-domain', 'libvirt-network', 'managed-os-install']
         - >-
           bootwright_destroy_cluster_scope is not defined
-          or item.cluster | default('') in bootwright_destroy_cluster_scope.split(',')
+          or bootwright_ownership_record.cluster | default('') in bootwright_destroy_cluster_scope.split(',')
 
     - name: Sweep current-context libvirt domains
       ansible.builtin.include_role:
