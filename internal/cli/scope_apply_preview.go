@@ -66,7 +66,15 @@ func printApplyAvailabilityCaveat(stdout io.Writer, mode workflow.ApplyMode, clu
 	cliout.NewContinuation(stdout).Warning("override", "plan mode does not probe cluster availability; a real run additionally reinstalls (disk wipe) any installed cluster that does not report Available=True — gated by --allow-destroy")
 }
 
-func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, reclaimDevices string) {
+func forecastReinstallDescriptors(names []string) []string {
+	var out []string
+	for _, name := range names {
+		out = append(out, fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs drifted — --override reinstalls it and wipes its node disks)", name))
+	}
+	return out
+}
+
+func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, reclaimDevices, clusterScope string, reinstallDrift []string) {
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
 		return
@@ -76,7 +84,10 @@ func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.Stat
 		refusals = append(refusals, err)
 	}
 	if mode == workflow.ApplyModeOverride {
-		if err := converge.CheckApplyOverrideDestroyProtection(planState, objects, nil); err != nil {
+		if err := converge.CheckApplyOverrideDestroyProtection(planState, objects, forecastReinstallDescriptors(reinstallDrift)); err != nil {
+			refusals = append(refusals, err)
+		}
+		if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, clusterScope, reinstallDrift); err != nil {
 			refusals = append(refusals, err)
 		}
 	}

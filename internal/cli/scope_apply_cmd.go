@@ -348,7 +348,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
-			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, reclaimDevices)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, reclaimDevices, flags.clusterScope, reinstallDrift)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 			noteIneffectiveAllowDestroy(stdout, allowDestroy, true, nil)
 			printExtensionDryRun(stdout, dryRunTasks)

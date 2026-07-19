@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -55,6 +56,29 @@ func TestPrintApplyTransitionLedgerPromotesReinstall(t *testing.T) {
 	printApplyTransitionLedger(&out, tasks, runsDir, workflow.ApplyModeOverride, nil)
 	if strings.Contains(out.String(), "DESTROY & rebuild") {
 		t.Fatalf("without a reinstall flag the cluster must not show DESTROY & rebuild, got %q", out.String())
+	}
+}
+
+func TestPrintApplyGateForecastReinstallRefusal(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Environments = append(state.Environments, v1alpha1.Environment{
+		Metadata: v1alpha1.Metadata{Name: "guard"},
+		Spec:     v1alpha1.EnvironmentSpec{Safety: v1alpha1.EnvironmentSafetySpec{ProtectedKinds: []string{v1alpha1.KindContainerCluster}}},
+	})
+	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
+	runsDir := t.TempDir()
+
+	var out bytes.Buffer
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeOverride, "", "", []string{"sno-libvirt"})
+	got := out.String()
+	if !strings.Contains(got, "a real run refuses before any prompt") || !strings.Contains(got, "ContainerCluster/sno-libvirt") {
+		t.Fatalf("forecast must reproduce the protectedKinds reinstall refusal for a drifted cluster, got %q", got)
+	}
+
+	out.Reset()
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeOverride, "", "", nil)
+	if strings.Contains(out.String(), "a real run refuses before any prompt") {
+		t.Fatalf("with no reinstall drift the forecast must not raise the protection refusal, got %q", out.String())
 	}
 }
 
