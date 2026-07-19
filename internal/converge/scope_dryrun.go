@@ -77,14 +77,22 @@ type DryRunTransition struct {
 	Action string `json:"action"`
 }
 
-func BuildDryRunTransitions(tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode) *DryRunTransitions {
+func BuildDryRunTransitions(tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode, reinstallClusters []string) *DryRunTransitions {
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
 		return &DryRunTransitions{Error: err.Error()}
 	}
+	reinstall := map[string]bool{}
+	for _, name := range reinstallClusters {
+		reinstall[workflow.ObjectKindContainerCluster+"/"+name] = true
+	}
 	out := &DryRunTransitions{Objects: []DryRunTransition{}}
 	for _, tr := range workflow.ClassifyApplyTransitions(objects, mode) {
-		out.Objects = append(out.Objects, DryRunTransition{Label: tr.Label, Action: string(tr.Action)})
+		action := tr.Action
+		if reinstall[tr.Label] {
+			action = workflow.ApplyTransitionRebuild
+		}
+		out.Objects = append(out.Objects, DryRunTransition{Label: tr.Label, Action: string(action)})
 	}
 	return out
 }

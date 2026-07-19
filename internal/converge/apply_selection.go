@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
@@ -11,6 +13,97 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
+
+type KubeVirtTenantConflict struct {
+	Host    string
+	Tenants []string
+}
+
+func KubeVirtTenantsByHost(state v1alpha1.State) map[string][]string {
+	out := map[string][]string{}
+	for child, parents := range kubeVirtHostParentsByChild(state) {
+		for _, parent := range parents {
+			out[parent] = appendUniqueClusterName(out[parent], child)
+		}
+	}
+	return out
+}
+
+func installedKubeVirtTenants(clustersDir string, tenants []string) []string {
+	var out []string
+	for _, tenant := range tenants {
+		record, found, err := workflow.LoadClusterInstallRecord(clustersDir, tenant)
+		if err != nil || !found || record.Status == workflow.ClusterInstallStatusDestroyed {
+			continue
+		}
+		out = append(out, tenant)
+	}
+	return out
+}
+
+func KubeVirtTenantDestroyDescriptors(state v1alpha1.State, clustersDir string, hosts []string) []string {
+	tenantsByHost := KubeVirtTenantsByHost(state)
+	var out []string
+	seen := map[string]bool{}
+	for _, host := range hosts {
+		if seen[host] {
+			continue
+		}
+		seen[host] = true
+		installed := installedKubeVirtTenants(clustersDir, tenantsByHost[host])
+		if len(installed) == 0 {
+			continue
+		}
+		sort.Strings(installed)
+		out = append(out, fmt.Sprintf("also destroys nested cluster(s) %s hosted on %s via KubeVirt", strings.Join(installed, ", "), host))
+	}
+	return out
+}
+
+func KubeVirtTenantCollateral(state v1alpha1.State, clustersDir string, destroyedHosts, selected []string) []KubeVirtTenantConflict {
+	inScope := map[string]bool{}
+	for _, name := range selected {
+		inScope[name] = true
+	}
+	tenantsByHost := KubeVirtTenantsByHost(state)
+	var out []KubeVirtTenantConflict
+	seen := map[string]bool{}
+	for _, host := range destroyedHosts {
+		if seen[host] {
+			continue
+		}
+		seen[host] = true
+		var candidates []string
+		for _, tenant := range tenantsByHost[host] {
+			if inScope[tenant] {
+				continue
+			}
+			candidates = append(candidates, tenant)
+		}
+		blocked := installedKubeVirtTenants(clustersDir, candidates)
+		if len(blocked) == 0 {
+			continue
+		}
+		sort.Strings(blocked)
+		out = append(out, KubeVirtTenantConflict{Host: host, Tenants: blocked})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Host < out[j].Host })
+	return out
+}
+
+func KubeVirtTenantDestroyConflicts(state v1alpha1.State, clustersDir string, selectedContainer []string) []KubeVirtTenantConflict {
+	return KubeVirtTenantCollateral(state, clustersDir, selectedContainer, selectedContainer)
+}
+
+func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict) error {
+	var b strings.Builder
+	b.WriteString("refusing to destroy KubeVirt host cluster(s) still hosting nested cluster(s) left running:\n")
+	for _, c := range conflicts {
+		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts %s\n", c.Host, strings.Join(c.Tenants, ", ")))
+	}
+	b.WriteString("include the nested cluster(s) in --clusters, destroy them first, or re-run with --override to tear down the host and annihilate them")
+	return fmt.Errorf("%s", b.String())
+}
 
 func ValidateKubeVirtClusterSelection(state v1alpha1.State, containerNames []string, clustersDir string) error {
 	selected := map[string]bool{}

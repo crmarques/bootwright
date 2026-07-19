@@ -221,6 +221,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		artifactServerTargets := installOnlyArtifactServerTargets(state)
+		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, artifactServerTargets)
 		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
 			cliout.NewContinuation(stdout).Warning("artifact-server retention", serr.Error())
 		} else {
@@ -230,7 +231,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
+			var jsonReinstallDrift []string
+			if mode == workflow.ApplyModeOverride {
+				jsonReinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
+			}
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
 		var destructiveOverride []string
 		var substrateResetClusters []string
@@ -260,6 +265,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
+			rebuiltHosts := workflow.UnionClusterNames(ocpReinstallAcked, substrateResetClusters)
+			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, flags.clusterScope, rebuiltHosts); err != nil {
+				return failErr(1, err)
+			}
+			destructiveOverride = append(destructiveOverride, converge.KubeVirtTenantDestroyDescriptors(state, clustersDir, rebuiltHosts)...)
 			if reclaimDevices != "" {
 				ownedReclaim := converge.OwnedStorageClusters(objects)
 				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, override); err != nil {
@@ -276,6 +286,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters, clustersDir, ocpReinstallDescriptors, allowDestroy)
+			noteIneffectiveAllowDestroy(stdout, allowDestroy, false, destructiveOverride)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
@@ -295,6 +306,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		printApplySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		if !dryRun {
 			warnDestructiveApply(stdout, destructiveOverride)
+			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 		}
 		if !dryRun && !yes && !plan.NoRemoteWork {
 			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(destructiveOverride, allowDestroy)) {
@@ -330,7 +342,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by the data-loss acknowledgement (--allow-destroy or interactive confirm)")
 			}
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
-			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode)
+			var reinstallDrift []string
+			if mode == workflow.ApplyModeOverride {
+				reinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
+			}
+			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
+			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, reclaimDevices)
+			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
+			noteIneffectiveAllowDestroy(stdout, allowDestroy, true, nil)
 			printExtensionDryRun(stdout, dryRunTasks)
 			printProvisioningPlaybookDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)

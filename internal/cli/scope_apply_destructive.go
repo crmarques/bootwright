@@ -91,6 +91,19 @@ func reclaimUnmatchedError(unmatched, owned, declared []string) error {
 	return fmt.Errorf("--reclaim-devices %s %s %s not match any declared OSD device of owned Ceph cluster(s) %s — matching is by the exact declared path; %s", noun, strings.Join(unmatched, ", "), verb, strings.Join(owned, ", "), remedy)
 }
 
+func noteIneffectiveAllowDestroy(stdout io.Writer, allowDestroy, dryRun bool, destructive []string) {
+	if !allowDestroy {
+		return
+	}
+	if dryRun {
+		cliout.NewContinuation(stdout).Warning("dry-run", "--allow-destroy is not consumed by a dry-run; the data-loss acknowledgement applies only to a real run")
+		return
+	}
+	if len(destructive) == 0 {
+		cliout.NewContinuation(stdout).Warning("allow-destroy", "--allow-destroy had no effect: this apply plans no data-destroying action (no destructive --override rebuild, no owned-cluster device reclaim)")
+	}
+}
+
 func warnDestructiveApply(stdout io.Writer, destructive []string) {
 	if len(destructive) == 0 {
 		return

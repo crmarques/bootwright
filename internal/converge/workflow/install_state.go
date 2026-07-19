@@ -244,6 +244,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if err := guardStaleAgentISOBoot(out, name, record, found, hashMatches); err != nil {
 			return out, installedMatching, err
 		}
+		if mode == ApplyModeCreate && found && record.Status != ClusterInstallStatusDestroyed {
+			return out, installedMatching, fmt.Errorf("apply --expect-new requires a greenfield environment and ContainerCluster/%s already has an install record (status %s); drop --expect-new to reconcile it, or run bootwright destroy --stage clusters --clusters %s --yes first", name, record.Status, name)
+		}
 		if mode == ApplyModeOverride {
 			if !found || record.Status != ClusterInstallStatusInstalled {
 				continue
@@ -382,6 +385,41 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but availability could not be verified: %v — if this cluster should not be rebuilt, restore API reachability and re-run, or exclude it with --clusters)", name, availErr)})
 		case !available:
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --override reinstalls it and wipes its node disks)", name)})
+		}
+	}
+	return out
+}
+
+func OverrideReinstallInputDriftedClusters(clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask) []string {
+	var out []string
+	for _, name := range installTaskClusterNames(tasks) {
+		if !stateHasContainerCluster(state, name) {
+			continue
+		}
+		hash, structuralHash, err := clusterInstallHashes(contextName, state, name, secretsDir)
+		if err != nil {
+			continue
+		}
+		record, found, err := LoadClusterInstallRecord(clustersDir, name)
+		if err != nil || !found || record.Status != ClusterInstallStatusInstalled {
+			continue
+		}
+		if !installInputsMatch(record, hash, structuralHash) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func InstalledRecordedClusters(clustersDir string, tasks []ApplyTask) []string {
+	var out []string
+	for _, name := range installTaskClusterNames(tasks) {
+		record, found, err := LoadClusterInstallRecord(clustersDir, name)
+		if err != nil || !found {
+			continue
+		}
+		if record.Status == ClusterInstallStatusInstalled {
+			out = append(out, name)
 		}
 	}
 	return out

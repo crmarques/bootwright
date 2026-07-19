@@ -104,6 +104,25 @@ func selectArtifactServerReclaims(targets []ArtifactServerReclaimTarget, owned, 
 	return out, nil
 }
 
+func ArtifactServerReclaimPreview(ownershipDir, contextName, clustersDir string, targets []ArtifactServerReclaimTarget) ([]string, error) {
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	records, _, err := LoadContextOwnershipRecordsWithWarnings(ownershipDir, contextName)
+	if err != nil {
+		return nil, err
+	}
+	decision, err := PlanInfraComponentDestroyBlocks(contextName, nil, records, true)
+	if err != nil {
+		return nil, err
+	}
+	blocked := map[string]bool{}
+	for _, block := range decision.Blocks {
+		blocked[block.Name] = true
+	}
+	return selectArtifactServerReclaims(targets, ownedInfraComponentRecords(records), blocked, clustersDir)
+}
+
 func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []ArtifactServerReclaimTarget, reporter workflow.Reporter) error {
 	if len(targets) == 0 {
 		return nil

@@ -142,6 +142,15 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
+		var kubeVirtTenantOverrideNotice string
+		if sel.Active && len(sel.ContainerRoots) > 0 {
+			if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.ContainerRoots); len(conflicts) > 0 {
+				if !override {
+					return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
+				}
+				kubeVirtTenantOverrideNotice = converge.FormatKubeVirtTenantConflicts(conflicts).Error() + "; proceeding because --override was supplied"
+			}
+		}
 		var storageConsumerOverrideNotice string
 		if sel.Active && len(sel.StorageRoots) > 0 {
 			if conflicts := stategraph.StorageConsumerDestroyConflicts(state, sel.StorageRoots, sel.ContainerRoots); len(conflicts) > 0 {
@@ -222,6 +231,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		printDestroySafety(stdout, destroySafety, override, dryRun)
+		if kubeVirtTenantOverrideNotice != "" {
+			cliout.NewContinuation(stdout).Warning("kubevirt tenants", kubeVirtTenantOverrideNotice)
+		}
 		if storageConsumerOverrideNotice != "" {
 			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
 		}
