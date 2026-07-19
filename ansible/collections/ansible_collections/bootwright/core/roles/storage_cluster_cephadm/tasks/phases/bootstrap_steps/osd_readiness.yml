@@ -42,28 +42,86 @@
     )
   when: bootwright_ceph_osd_readiness_mode != 'skip'
 
+- name: Evaluate whether declared Ceph OSDs became ready
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_ready: >-
+      {{
+        (bootwright_ceph_osd_stat.rc | default(1) | int) == 0
+        and (
+          (bootwright_ceph_osd_readiness_mode == 'exact'
+           and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+               >= (bootwright_ceph_osd_expected_count | int))
+          or
+          (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
+           and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int) >= 1)
+        )
+      }}
+  when: bootwright_ceph_osd_readiness_mode != 'skip'
+
+- name: Collect Ceph device inventory when OSDs did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - device
+      - ls
+      - --wide
+  register: bootwright_ceph_osd_device_ls
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - not (bootwright_ceph_osd_ready | default(false) | bool)
+
+- name: Collect declared OSD service status when OSDs did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ls
+      - --service_type
+      - osd
+      - --format
+      - yaml
+  register: bootwright_ceph_osd_service_ls
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - not (bootwright_ceph_osd_ready | default(false) | bool)
+
 - name: Assert declared Ceph OSDs were created
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_osd_stat.rc | default(1) == 0
-      - >-
-        (bootwright_ceph_osd_readiness_mode == 'exact'
-         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
-             >= (bootwright_ceph_osd_expected_count | int))
-        or
-        (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int) >= 1)
+      - bootwright_ceph_osd_ready | default(false) | bool
     fail_msg: >-
       Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not create the
       declared OSDs: expected
       {{ 'exactly ' ~ bootwright_ceph_osd_expected_count if bootwright_ceph_osd_readiness_mode == 'exact' else 'at least 1' }}
       OSD(s) 'in', observed
       {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default('unknown') }}
+      (up {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_up_osds | default('unknown') }})
       after {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts. cephadm
-      accepted the OSD spec but ceph-volume did not consume the declared devices —
-      check the devices are empty and large enough, `cephadm ls`/`ceph orch device ls`
-      on the OSD hosts, and the OSD daemon logs. This apply is failing closed rather
-      than reporting success against a short or zero-OSD cluster.
+      accepted the OSD spec but ceph-volume did not consume the declared devices. The
+      device inventory below reports, per device, whether it is AVAILABLE and, if not,
+      the REJECT REASONS (for example: locked, already carries a filesystem/LVM/bluestore
+      signature, or is too small); the OSD service status shows the RUNNING count and any
+      placement events. Devices declared only through an OSD filter (all/model/size/rotational)
+      are not covered by the install-time emptiness guard, so a dirty or previously-used
+      disk reaches ceph-volume unchecked — clean the offending device on its host (confirm
+      it is disposable, then `wipefs --all` / `sgdisk --zap-all`) or exclude it from the OSD
+      device selection, and re-apply. This apply is failing closed rather than reporting
+      success against a short or zero-OSD cluster.
+      Ceph device inventory (ceph orch device ls --wide):
+      {{ (bootwright_ceph_osd_device_ls.stdout | default('') | trim) or '(device inventory unavailable — the cluster was unreachable)' }}
+      Declared OSD services (ceph orch ls --service_type osd):
+      {{ (bootwright_ceph_osd_service_ls.stdout | default('') | trim) or '(OSD service status unavailable — the cluster was unreachable)' }}
   when: bootwright_ceph_osd_readiness_mode != 'skip'
 
 - name: Capture observed Ceph health for the storage result
