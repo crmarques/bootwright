@@ -42,16 +42,16 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	destructive := driftedObjects(t, workflow.ApplyTaskKindStorageCluster, "storage.ceph", "ceph")
 	reconfigure := driftedObjects(t, workflow.ApplyTaskKindInfraComponentServices, "infra-component.bastion", "")
 
-	if err := CheckApplyOverrideDestroyProtection(v1alpha1.State{}, destructive); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(v1alpha1.State{}, destructive, nil); err != nil {
 		t.Fatalf("unprotected env must not block: %v", err)
 	}
-	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil, nil); err != nil {
 		t.Fatalf("protected env with nothing destructive must proceed: %v", err)
 	}
-	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), reconfigure); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), reconfigure, nil); err != nil {
 		t.Fatalf("protected env with only reconfigure-only drift must proceed: %v", err)
 	}
-	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), destructive)
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), destructive, nil)
 	if err == nil {
 		t.Fatal("protected env with destructive drift must fail closed")
 	}
@@ -71,7 +71,7 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 		}}}
 	}
 
-	err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), storage)
+	err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), storage, nil)
 	if err == nil {
 		t.Fatal("protected StorageCluster kind must fail closed even on an allow-default env")
 	}
@@ -80,15 +80,47 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 			t.Fatalf("granular gate error must contain %q: %v", want, err)
 		}
 	}
-	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), storage); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), storage, nil); err != nil {
 		t.Fatalf("a StorageCluster rebuild must proceed when only ContainerCluster is protected: %v", err)
+	}
+}
+
+func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
+	reinstalls := []string{"reinstall ContainerCluster/dc1-ocp (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --override reinstalls it and wipes its node disks)"}
+	protect := func(kinds ...string) v1alpha1.State {
+		return v1alpha1.State{Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "nprd"},
+			Spec:     v1alpha1.EnvironmentSpec{Safety: v1alpha1.EnvironmentSafetySpec{ProtectedKinds: kinds}},
+		}}}
+	}
+
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil, reinstalls)
+	if err == nil {
+		t.Fatal("protected env with a cluster reinstall and no drift must fail closed")
+	}
+	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "nprd", "destroy --override"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("protected-env reinstall refusal must contain %q: %v", want, err)
+		}
+	}
+	err = CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), nil, reinstalls)
+	if err == nil {
+		t.Fatal("protected ContainerCluster kind must fail closed on a reinstall")
+	}
+	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "protectedKinds", "destroy --override"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("protectedKinds reinstall refusal must contain %q: %v", want, err)
+		}
+	}
+	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), nil, reinstalls); err != nil {
+		t.Fatalf("a ContainerCluster reinstall must proceed when only StorageCluster is protected: %v", err)
 	}
 }
 
 func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T) {
 	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph-nprd", "ceph-nprd")
 
-	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), machine)
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), machine, nil)
 	if err == nil {
 		t.Fatal("protected env with a drifted managed-OS machine must fail closed")
 	}

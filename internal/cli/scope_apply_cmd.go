@@ -234,6 +234,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		var destructiveOverride []string
 		var substrateResetClusters []string
+		var ocpReinstallDescriptors []string
+		var ocpReinstallAcked []string
 		if !dryRun {
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
@@ -247,11 +249,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				cliout.NewContinuation(stdout).Warning("substrate release", releaseErr.Error()+"; a destroyed cluster's rebuild authorization could not be read, so its reinstall may be refused — fix or remove the reported record and re-apply")
 			}
 			if override {
-				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects); err != nil {
+				reinstalls := workflow.OverrideRebuildInstalledClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)
+				ocpReinstallDescriptors = workflow.ClusterReinstallDescriptors(reinstalls)
+				ocpReinstallAcked = workflow.ClusterReinstallNames(reinstalls)
+				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
 					return failErr(1, err)
 				}
 				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
-				destructiveOverride = append(destructiveOverride, workflow.OverrideRebuildInstalledClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)...)
+				destructiveOverride = append(destructiveOverride, ocpReinstallDescriptors...)
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
@@ -265,7 +270,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
-			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters, clustersDir)
+			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters, clustersDir, ocpReinstallDescriptors)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
@@ -283,8 +288,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printStageScopeNotices(stdout, runScope)
 		}
 		printApplySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
+		if !dryRun {
+			warnDestructiveApply(stdout, destructiveOverride)
+		}
 		if !dryRun && !yes && !plan.NoRemoteWork {
-			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(stdout, destructiveOverride, allowDestroy)) {
+			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(destructiveOverride, allowDestroy)) {
 				return failErr(1, errors.New("apply aborted"))
 			}
 		}
@@ -310,6 +318,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 		}
 		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
+		runOpts.OverrideAckedReinstalls = ocpReinstallAcked
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {

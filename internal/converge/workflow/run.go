@@ -48,6 +48,7 @@ type RunOptions struct {
 	Label                      string
 	AcquireRunLease            bool
 	ApplyMode                  ApplyMode
+	OverrideAckedReinstalls    []string
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 	StreamAnsible              bool
 }

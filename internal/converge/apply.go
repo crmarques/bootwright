@@ -13,8 +13,8 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification) error {
-	destructive := workflow.OverrideDestructiveDriftedObjects(objects)
+func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification, reinstallDescriptors []string) error {
+	destructive := append(workflow.OverrideDestructiveDriftedObjects(objects), reinstallDescriptors...)
 	if len(destructive) == 0 {
 		return nil
 	}
@@ -25,7 +25,11 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters)
 		return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
 	}
-	blocked := workflow.OverrideDestructiveKindProtected(objects, workflow.ProtectedKindSet(state))
+	protectedKinds := workflow.ProtectedKindSet(state)
+	blocked := workflow.OverrideDestructiveKindProtected(objects, protectedKinds)
+	if protectedKinds[v1alpha1.KindContainerCluster] {
+		blocked = append(blocked, reinstallDescriptors...)
+	}
 	if len(blocked) == 0 {
 		return nil
 	}

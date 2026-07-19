@@ -11,9 +11,12 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string) {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string, ocpReinstalls []string) {
 	var substrateReset []string
 	if mode == workflow.ApplyModeOverride {
+		if len(ocpReinstalls) > 0 {
+			cliout.NewContinuation(stdout).Warning("override", "reinstalls ContainerCluster(s) — node disks wiped: "+strings.Join(ocpReinstalls, "; "))
+		}
 		if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
 			cliout.NewContinuation(stdout).Warning("override", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. A change to cluster identity (seedHost/monIP/network) triggers this; an OSD-device add reconciles in place and does NOT wipe.")
 		}
@@ -71,11 +74,17 @@ func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []stri
 	return []string{"reclaim-devices " + reclaimDevices + " on Ceph cluster(s) " + strings.Join(owned, ", ")}
 }
 
-func destructiveApplyConfirmPrompt(stdout io.Writer, destructive []string, allowDestroy bool) string {
+func warnDestructiveApply(stdout io.Writer, destructive []string) {
+	if len(destructive) == 0 {
+		return
+	}
+	cliout.NewContinuation(stdout).Warning("data loss", "will DESTROY data — "+strings.Join(destructive, ", ")+" — disks wiped / Ceph OSD data zapped. This is irreversible. If the list names an object you did not intend to rebuild, re-run with --clusters to narrow the destructive set.")
+}
+
+func destructiveApplyConfirmPrompt(destructive []string, allowDestroy bool) string {
 	if len(destructive) == 0 || allowDestroy {
 		return "Continue with apply? [y/N] (default: no): "
 	}
-	cliout.NewContinuation(stdout).Warning("data loss", "will DESTROY data — "+strings.Join(destructive, ", ")+" — disks wiped / Ceph OSD data zapped. This is irreversible.")
 	return "Confirm this DESTRUCTIVE action (accept data loss)? [y/N] (default: no): "
 }
 
@@ -83,5 +92,5 @@ func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool) e
 	if len(destructive) == 0 || allowDestroy || !yes {
 		return nil
 	}
-	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: add --allow-destroy to proceed non-interactively, or drop --yes to confirm interactively", strings.Join(destructive, ", "))
+	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: add --allow-destroy to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with --clusters to narrow the destructive set", strings.Join(destructive, ", "))
 }
