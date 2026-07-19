@@ -95,6 +95,12 @@ deps-phase repo and registry work reaches the remaining rows.
 | `public.dhe.ibm.com` | IBM Storage Ceph `.repo` file download (unauthenticated). | IBM |
 | `cert-api.access.redhat.com`, `console.redhat.com` | Red Hat Insights — only when `rhsm.connectToInsights: true`. | Red Hat |
 
+For a mirrored vendor registry, set `Entitlement.spec.registry.url` to the
+mirror root and pin `StorageCluster.spec.ceph.image` at that root plus the
+canonical vendor repository suffix. Stream `9` uses
+`rhceph/rhceph-9-rhel9` for Red Hat or `ibm-ceph/ceph-9-rhel9` for IBM;
+arbitrary repositories below the registry root are rejected.
+
 **Community Ceph (OSS):** overridable via `spec.ceph.community.mirror` and
 `spec.ceph.image`.
 

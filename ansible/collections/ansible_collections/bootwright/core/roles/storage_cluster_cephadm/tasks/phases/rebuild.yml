@@ -1,0 +1,110 @@
+---
+- name: Classify Ceph cluster apply mode on the seed host
+  ansible.builtin.include_tasks: bootstrap_steps/apply_mode.yml
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Gather storage node OS facts for authorized rebuild
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+  when:
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+    - ansible_facts.os_family | default('') | length == 0
+
+- name: Resolve Ceph rebuild host context
+  ansible.builtin.include_tasks: ../destroy_steps/context.yml
+  when: >-
+    hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+    | default(false) | bool
+
+- name: Guard Ceph rebuild devices on every topology host
+  ansible.builtin.include_tasks: ../destroy_steps/device_gates.yml
+  when: >-
+    hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+    | default(false) | bool
+
+- name: Remove existing cephadm cluster for override rebuild on every topology host
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - rm-cluster
+      - --force
+      - --zap-osds
+      - --fsid
+      - "{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid }}"
+  register: bootwright_ceph_override_rm
+  changed_when: bootwright_ceph_override_rm.rc == 0
+  failed_when: bootwright_ceph_override_rm.rc != 0
+  when:
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid
+      | default('') | length > 0
+
+- name: Clear authorized Ceph FSID state for override rebuild on every topology host
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/var/lib/ceph/{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid }}"
+    - "/var/log/ceph/{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid }}"
+  when:
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid
+      | default('') | length > 0
+
+- name: Clear exact Ceph seed files for override rebuild
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/ceph/ceph.conf
+    - /etc/ceph/ceph.client.admin.keyring
+    - /etc/ceph/ceph.pub
+    - "{{ bootwright_ceph_ownership_marker_path }}"
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid
+      | default('') | length > 0
+
+- name: Clear exact staged Ceph files for override rebuild on the seed host
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ bootwright_ceph_remote_bootstrap_conf }}"
+    - "{{ bootwright_ceph_remote_bootstrap_spec }}"
+    - "{{ bootwright_ceph_remote_core_services_spec }}"
+    - "{{ bootwright_ceph_remote_late_services_spec }}"
+    - "{{ bootwright_ceph_remote_operations }}"
+    - "{{ bootwright_ceph_remote_private_key }}"
+    - "{{ bootwright_ceph_remote_public_key }}"
+    - "{{ bootwright_ceph_remote_known_hosts }}"
+    - "{{ bootwright_ceph_remote_ssh_config }}"
+    - "{{ bootwright_ceph_remote_registry_json }}"
+    - "{{ bootwright_ceph_remote_work_dir }}/management-services.yaml"
+    - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap.bin"
+    - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap.txt"
+    - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap-new.bin"
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+
+- name: Finalize Ceph cluster apply mode on the seed host
+  ansible.builtin.include_tasks: bootstrap_steps/apply_mode_finalize.yml
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')

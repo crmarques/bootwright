@@ -59,6 +59,9 @@ func TestEffectivePoolReplicas(t *testing.T) {
 	state := poolReplicasFixture()
 	stretch := poolFixtureCluster(state, "stretch")
 	flat := poolFixtureCluster(state, "flat")
+	single := flat
+	single.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{}
+	single.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults = true
 
 	pool := func(replicas v1alpha1.StorageCephPoolReplicas, policyRef string) v1alpha1.StoragePool {
 		return v1alpha1.StoragePool{
@@ -93,6 +96,12 @@ func TestEffectivePoolReplicas(t *testing.T) {
 			cluster: flat,
 			pool:    pool(v1alpha1.StorageCephPoolReplicas{}, ""),
 			want:    v1alpha1.StorageCephPoolReplicas{Size: DefaultReplicatedPoolSize, MinSize: DefaultReplicatedPoolMinSize},
+		},
+		{
+			name:    "single-host defaults use cephadm's 2/1 replication",
+			cluster: single,
+			pool:    pool(v1alpha1.StorageCephPoolReplicas{}, ""),
+			want:    v1alpha1.StorageCephPoolReplicas{Size: SingleHostReplicatedPoolSize, MinSize: SingleHostReplicatedMinSize},
 		},
 		{
 			name:    "placement policy fills in when authored are zero, before stretch/default",

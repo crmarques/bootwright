@@ -223,9 +223,10 @@ const (
 	StorageCephDistributionRedHat = "redhat"
 	StorageCephDistributionIBM    = "ibm"
 
-	StorageCephCommunityDefaultRelease = "squid"
+	StorageCephCommunityDefaultRelease = "20.2.2"
 
-	StorageCephSubscriptionDefaultStream = "9"
+	StorageCephIBMCallHomeEnabled  = "enabled"
+	StorageCephIBMCallHomeDisabled = "disabled"
 
 	StorageCephRoleMON          = "mon"
 	StorageCephRoleMGR          = "mgr"
@@ -291,19 +292,6 @@ func StorageCephRoles() []string {
 		StorageCephRoleGrafana,
 		StorageCephRoleAlertmanager,
 	}
-}
-
-func StorageCephRHELVersions() []string {
-	return []string{"9.6", "9.7", "10", "10.0", "10.1"}
-}
-
-func StorageCephSupportsRHELVersion(version string) bool {
-	for _, v := range StorageCephRHELVersions() {
-		if v == version {
-			return true
-		}
-	}
-	return false
 }
 
 func ClusterAdminSSHKeyName(clusterName string) string {

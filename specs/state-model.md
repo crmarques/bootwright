@@ -118,6 +118,8 @@ Rules:
   naming a `redhat-rhel` entitlement for the RHEL subscription it runs on; it
   takes no inline `rhsm` arm. Referenced secret material is declared as
   [`Secret`](#secret) objects.
+  `registry.url`, when set, is a scheme-less `host[:port][/namespace]` address
+  with no credentials, query, fragment, empty path segment, or trailing slash.
 
   The `rhsm` arm carries a who-runs-it axis: `rhsm.management` is `managed`
   (the default when unset) or `external`. Managed registration runs as a
@@ -638,11 +640,19 @@ Rules:
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `spec.ceph.release` selects which Ceph release to install for the chosen
-  distribution. For `oss` it is an upstream release name (`squid`, default) or a
-  full upstream `x.y.z` version (for example `19.2.1`); a version pins the
-  package repository to `rpm-x.y.z` reproducibly. For `redhat` and `ibm` it is
-  the product stream (for example `9`, the default), selecting the
-  `rhceph-<N>-tools` and `ibm-storage-ceph-<N>` repositories.
+  distribution. For `oss`, accepted active series are Tentacle (`tentacle` or
+  `20.2.x`) and Squid (`squid` or `19.2.x`); ended or unknown series are
+  rejected. Omitted defaults to the current exact supported release `20.2.2`,
+  pinning both `rpm-20.2.2` and the matching daemon image. For
+  `redhat`, supported product releases are `9.0` and `9.1` (the default). For
+  `ibm`, the supported product release is `9.9.1` (the default). A bare `9`
+  remains a current-stream authoring alias and normalizes to the exact default
+  for that distribution. Validation uses the resolved product release, not
+  only its leading digit, to enforce the vendor's RHEL compatibility matrix.
+  Omitted releases and stream aliases intentionally track Bootwright's current
+  catalog: normalization materializes the exact release before convergence
+  hashing, so a catalog-default change is structural drift and remains
+  override-gated. Author an exact release to avoid that implicit upgrade intent.
 - `spec.ceph.image` optionally pins the exact cephadm container image, which
   `cephadm bootstrap` applies as the default image for every Ceph daemon, making
   the running cluster version reproducible. It must pin a version tag or a
@@ -650,14 +660,23 @@ Rules:
   `release` derives `quay.io/ceph/ceph:vX.Y.Z` automatically when `image` is
   unset; a release name leaves the daemon image unpinned. `redhat` and `ibm`
   registry tags are not `x.y.z`, so reproducible pins are supplied here
-  explicitly.
+  explicitly. A subscription image repository must equal the selected
+  distribution and release's canonical repository:
+  `registry.redhat.io/rhceph/rhceph-<stream>-rhel9` for `redhat` or
+  `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9` for `ibm`.
+  When an entitlement overrides `registry.url`, `image` is required and its
+  repository must equal that mirror root plus the canonical vendor suffix
+  (`rhceph/rhceph-<stream>-rhel9` or
+  `ibm-ceph/ceph-<stream>-rhel9`). Changing only the login target or using an
+  arbitrary repository below a broad registry namespace is rejected.
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
   community repository on each node with cephadm and runs Ceph client commands
   inside `cephadm shell`; it does not add CentOS Stream repositories to RHEL or
   install host `ceph-common`. `spec.ceph.community.mirror`
-  overrides the `download.ceph.com` base URL. `spec.ceph.community.checksum`
-  optionally pins the fetched cephadm bootstrap binary as `sha256:<hex>`; the
+  overrides the `download.ceph.com` base URL and must use HTTPS.
+  `spec.ceph.community.checksum` optionally pins the fetched cephadm bootstrap
+  binary as `sha256:<hex>`; the
   binary is downloaded and executed as root, so the pin adds a content check on
   top of the HTTPS transport, and when unset the binary is fetched with no
   content pin (the default). `spec.ceph.community` must be empty for `redhat`
@@ -665,13 +684,18 @@ Rules:
 - `distribution: redhat` requires `entitlementRef` to resolve to a
   `redhat-ceph` `Entitlement`. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph
-  packages or images.
+  packages or images. Release `9.0` accepts RHEL 9.6, 9.7, 10, 10.0, or 10.1;
+  release `9.1` accepts RHEL 9.8 or 10.2.
 - `distribution: ibm` requires `entitlementRef` to resolve to an
   `ibm-storage-ceph` `Entitlement` with accepted license terms. IBM Storage Ceph
   registry access and license acceptance come from that entitlement; the RHEL
   BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` entitlement
   it names via `rhelEntitlementRef`. Neither must mix with upstream Ceph packages
-  or images.
+  or images. Release `9.9.1` accepts RHEL 9.8 or 10.2. IBM license acceptance
+  is passed non-interactively to `cephadm bootstrap`. Because that release
+  enables IBM Call Home when the license is accepted, `spec.ceph.ibm.callHome`
+  is required as either `enabled` or `disabled`; apply reconciles the manager
+  module to that explicit outbound-communication intent.
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.clusterSSHKeyRef`, when set, names the `sshKeyPair` `Secret` that
@@ -692,9 +716,12 @@ Rules:
 - `cephadm.bootstrap.singleHostDefaults: true` renders `cephadm bootstrap
   --single-host-defaults`, setting the CRUSH/replication defaults a single-node
   cluster needs to reach `active+clean`. It is valid only for a one-host,
-  non-stretch topology, and is rejected when `spec.ceph.config[global]` also sets
-  any of the three defaults the flag owns (`osd_pool_default_size`,
-  `osd_pool_default_min_size`, `osd_crush_chooseleaf_type`).
+  non-stretch topology with at least two in OSDs. A static device selection
+  producing fewer than two OSDs is rejected; a dynamic selection waits for at
+  least two before pool creation. The flag is rejected when
+  `spec.ceph.config[global]` also sets any of the three defaults it owns
+  (`osd_pool_default_size`, `osd_pool_default_min_size`,
+  `osd_crush_chooseleaf_type`).
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
@@ -776,6 +803,9 @@ Rules:
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
+  After cephadm applies the OSD specs, convergence waits for the full declared
+  static OSD count and at least one in-OSD on every dynamically selected host
+  before creating pools or reporting success.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
 - `spec.ceph.topology.stretch` enables stretch mode by presence (no `enabled`
@@ -809,6 +839,9 @@ Rules:
 - `spec.ceph.ruleName` is required.
 - `spec.ceph.failureDomain` and `spec.ceph.replicated.{size,minSize}` are the
   defaults applied to pools that reference the policy.
+- Effective `minSize` must not exceed `size`; authored values are non-negative.
+- For a host failure domain, the effective replica count must not exceed the
+  number of topology hosts carrying the `osd` role.
 
 ## StoragePool
 
@@ -847,6 +880,12 @@ Rules:
   placement.
 - On stretch-mode clusters, `ceph.replicated.size` must be `4` and `minSize`
   must be `2` when set.
+- Outside stretch mode, host-domain replicated size and erasure `k+m` must not
+  exceed the number of OSD hosts. Policy-less single-host pools inherit
+  cephadm's `2/1` replication and OSD-level failure domain when
+  `singleHostDefaults` is enabled.
+- Effective replicated `minSize` must not exceed `size`; authored values are
+  non-negative.
 
 ## StorageFilesystem
 

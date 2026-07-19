@@ -46,7 +46,7 @@ spec:
   type: ceph
   ceph:
     distribution: oss
-    release: squid
+    release: "20.2.2"
     cephadm:
       bootstrap:
         host: ceph-0
@@ -88,10 +88,11 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
-| `ceph.release` | No | `squid` (`oss`); `9` (`redhat`, `ibm`) | Ceph release for the chosen distribution. For `oss`, an upstream release name (`squid`, `reef`, `quincy`) or a full `x.y.z` version (for example `19.2.1`); a version pins the package repository and, when `ceph.image` is unset, derives the matching `quay.io/ceph/ceph:vX.Y.Z` image. For `redhat`/`ibm`, the product version — a bare stream (`9`), `major.minor` (`9.0`), or the full vendor version (for example IBM Storage Ceph `9.9.1`); only the leading major digit is consumed, selecting the `rhceph-<N>-tools` / `ibm-storage-ceph-<N>` repositories and the `ceph-<N>-rhel9` image base. |
-| `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). `redhat`/`ibm` tags are not `x.y.z`, so they pin here explicitly. |
-| `ceph.community.mirror` | No | `https://download.ceph.com` | Upstream package base URL for mirrored or disconnected environments. `oss` only. |
+| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1` (`ibm`) | Ceph release for the chosen distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid (`squid`/`19.2.x`) releases; exact versions pin the package repository and derive `quay.io/ceph/ceph:vX.Y.Z`. `redhat` accepts `9.0` or `9.1`; `ibm` accepts `9.9.1`. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create override-gated structural drift when that default advances; pin an exact release to avoid implicit upgrades. |
+| `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). A `redhat` or `ibm` image must use that distribution and release's canonical repository. |
+| `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Entitlement` object. Must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
+| `ceph.ibm.callHome` | When `ibm` | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. License acceptance enables Call Home by default, so omission is rejected. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
 | `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
 | `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
@@ -139,8 +140,16 @@ Distribution requirements:
 | Distribution | Requirements |
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
-| `redhat` | `entitlementRef` must resolve to a `redhat-ceph` entitlement; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
-| `ibm` | `entitlementRef` must resolve to an `ibm-storage-ceph` entitlement with accepted license terms, which names a `redhat-rhel` entitlement via `rhelEntitlementRef` for the RHEL subscription; node OS must be RHEL 9.6, 9.7, 10, or 10.1. |
+| `redhat` | `entitlementRef` resolves to `redhat-ceph`. Release `9.0` supports RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` supports RHEL 9.8 or 10.2. |
+| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms and a `redhat-rhel` `rhelEntitlementRef`. Release `9.9.1` supports RHEL 9.8 or 10.2. `ibm.callHome` is required. |
+
+When `Entitlement.spec.registry.url` overrides the vendor namespace,
+`ceph.image` must explicitly pin the canonical vendor repository below that
+mirror root. For release stream `9`, examples are
+`mirror.example.test/vendor/rhceph/rhceph-9-rhel9:<tag>` for Red Hat and
+`mirror.example.test/vendor/ibm-ceph/ceph-9-rhel9:<tag>` for IBM. The registry
+override controls credentials and trust; it does not permit an arbitrary image
+repository below the namespace.
 
 ### Monitoring
 
@@ -328,6 +337,10 @@ Reusable placement and replicated-pool defaults for pools that select it via
     A pool with `placementPolicyRef` set **must not** also set `ceph.replicated`;
     the referenced policy owns the pool's replication.
 
+    For `failureDomain: host`, the effective replica size cannot exceed the
+    number of topology hosts carrying the `osd` role. Effective `minSize`
+    cannot exceed `size`.
+
 ## StoragePool
 
 Owns one Ceph pool. Deleting the object from desired state leaves the live pool
@@ -359,6 +372,11 @@ running (additive-only).
       `replicated` and requires `erasure`.
     - Erasure pools are not allowed on stretch-mode clusters; on a stretch
       cluster any authored `replicated.size`/`minSize` must be `4`/`2`.
+    - Outside stretch mode, host-domain replica size and erasure `k+m` cannot
+      exceed the number of OSD hosts. With `singleHostDefaults: true`, a
+      policy-less pool uses cephadm's OSD-level `2/1` defaults and provisioning
+      requires at least two in OSDs before pool creation.
+    - Effective replicated `minSize` cannot exceed `size`.
     - The pool's structural identity is its `type` and erasure profile. Changing
       it is the only desired-state change that rebuilds a live pool
       (data-destroying, `apply --override` only); replicas, CRUSH rule, and

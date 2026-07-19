@@ -12,6 +12,9 @@ spec:
 
     release: "9.9.1"
 
+    ibm:
+      callHome: disabled
+
     entitlementRef: ibm-storage-ceph
 
     cephadm:

@@ -5,7 +5,7 @@ metadata:
 spec:
   os:
     family: rhel
-    version: "9.7"
+    version: "9.8"
     architecture: x86_64
 
   installer:

@@ -118,6 +118,149 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 	}
 }
 
+func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
+	tests := []struct {
+		name         string
+		distribution string
+		release      string
+		image        string
+		callHome     string
+		want         string
+		wantLicense  bool
+		wantCallHome []string
+		reject       []string
+	}{
+		{
+			name:         "oss version derives image",
+			distribution: v1alpha1.StorageCephDistributionOSS,
+			release:      "20.2.2",
+			want:         "bootstrap=(cephadm --image quay.io/ceph/ceph:v20.2.2 bootstrap --mon-ip 192.0.2.10",
+		},
+		{
+			name:         "ibm enabled reconciles call home",
+			distribution: v1alpha1.StorageCephDistributionIBM,
+			release:      "9.9.1",
+			image:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
+			callHome:     v1alpha1.StorageCephIBMCallHomeEnabled,
+			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
+			wantLicense:  true,
+			wantCallHome: []string{
+				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
+				`bw_run ceph mgr module enable call_home_agent`,
+				`bw_run ceph orch accept call-home-enabled`,
+			},
+			reject: []string{`bw_run ceph orch deny call-home-enabled`},
+		},
+		{
+			name:         "ibm disabled reconciles call home",
+			distribution: v1alpha1.StorageCephDistributionIBM,
+			release:      "9.9.1",
+			image:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
+			callHome:     v1alpha1.StorageCephIBMCallHomeDisabled,
+			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
+			wantLicense:  true,
+			wantCallHome: []string{
+				`bw_run ceph orch deny call-home-enabled`,
+			},
+			reject: []string{
+				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
+				`bw_run ceph mgr module enable call_home_agent`,
+				`bw_run ceph orch accept call-home-enabled`,
+				`if [[ "$ibm_call_home_enabled" == "true" ]]`,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster := v1alpha1.StorageCluster{
+				Metadata: v1alpha1.Metadata{Name: "ceph"},
+				Spec: v1alpha1.StorageClusterSpec{Type: v1alpha1.StorageClusterTypeCeph, Ceph: &v1alpha1.StorageClusterCephSpec{
+					Distribution: tc.distribution,
+					Release:      tc.release,
+					Image:        tc.image,
+					Cephadm: v1alpha1.StorageCephadmSpec{
+						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+						Bootstrap: v1alpha1.StorageCephadmBootstrap{
+							Host:       "ceph-0",
+							AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+						},
+					},
+					Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+						Hostname: "ceph-0",
+						MachineRef: v1alpha1.LocalObjectReference{
+							Name: "ceph-0",
+						},
+						Roles: []string{v1alpha1.StorageCephRoleMON},
+					}}},
+				}},
+			}
+			if tc.distribution == v1alpha1.StorageCephDistributionIBM {
+				cluster.Spec.Ceph.EntitlementRef.Name = "ibm"
+				cluster.Spec.Ceph.IBM = &v1alpha1.StorageCephIBMSpec{CallHome: tc.callHome}
+			}
+			state := v1alpha1.State{
+				Environments: []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}},
+				Entitlements: []v1alpha1.Entitlement{{
+					Metadata: v1alpha1.Metadata{Name: "ibm"},
+					Spec: v1alpha1.EntitlementSpec{
+						Type:    v1alpha1.EntitlementTypeIBMStorageCeph,
+						License: &v1alpha1.EntitlementLicense{Accept: true},
+					},
+				}},
+				Machines: []v1alpha1.Machine{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+					Spec: v1alpha1.MachineSpec{
+						Addresses: []v1alpha1.MachineAddress{{
+							Name:    "ssh",
+							Address: "192.0.2.10",
+						}},
+						Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
+							AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+							User:       "root",
+						}},
+					},
+				}},
+				StorageClusters: []v1alpha1.StorageCluster{cluster},
+			}
+			result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
+			if err != nil {
+				t.Fatalf("render.All: %v", err)
+			}
+			script := readScript(t, result.StorageAssets[0].ApplyScriptPath)
+			if !strings.Contains(script, tc.want) {
+				t.Fatalf("apply.sh bootstrap command missing provider image before subcommand:\n%s", script)
+			}
+			if got := strings.Contains(script, "--automatically-accept-license"); got != tc.wantLicense {
+				t.Fatalf("apply.sh license flag presence = %t, want %t:\n%s", got, tc.wantLicense, script)
+			}
+			if !strings.Contains(script, `bootstrap+=(${BW_CEPHADM_BOOTSTRAP_EXTRA})`) {
+				t.Fatalf("apply.sh lost bootstrap-subcommand extras:\n%s", script)
+			}
+			for _, want := range tc.wantCallHome {
+				if !strings.Contains(script, want) {
+					t.Errorf("apply.sh missing Call Home reconcile %q:\n%s", want, script)
+				}
+			}
+			for _, reject := range tc.reject {
+				if strings.Contains(script, reject) {
+					t.Errorf("apply.sh contains unwanted Call Home reconcile %q:\n%s", reject, script)
+				}
+			}
+			if tc.callHome == "" {
+				if strings.Contains(script, "IBM Call Home") {
+					t.Errorf("apply.sh rendered IBM Call Home stage for %s:\n%s", tc.distribution, script)
+				}
+				return
+			}
+			bootstrapEnd := strings.Index(script, "\nfi\n")
+			callHomeStage := strings.Index(script, "== stage 05: IBM Call Home ==")
+			if bootstrapEnd < 0 || callHomeStage < bootstrapEnd {
+				t.Errorf("IBM Call Home reconcile must run after bootstrap guard so skipped bootstrap still reconciles:\n%s", script)
+			}
+		})
+	}
+}
+
 func TestCephApplyScriptIsValidBash(t *testing.T) {
 	bash, err := exec.LookPath("bash")
 	if err != nil {

@@ -1,0 +1,33 @@
+---
+- name: Gather seed OS facts for provider rendering
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+  when: ansible_facts.os_family | default('') | length == 0
+
+- name: Resolve managed Ceph provider context on the seed host
+  ansible.builtin.include_tasks: context_provider.yml
+
+- name: Load rendered Ceph operations
+  ansible.builtin.set_fact:
+    bootwright_ceph_operations: >-
+      {{
+        (lookup('ansible.builtin.file', bootwright_selected_storage_cluster.ceph.operationsPath)
+        | from_yaml).operations | default([])
+      }}
+  delegate_to: localhost
+  become: false
+
+- name: Load cephadm registry credentials on the seed host
+  ansible.builtin.include_role:
+    name: bootwright.core.support_credentials
+    tasks_from: load
+  vars:
+    bootwright_creds_path: "{{ bootwright_ceph_registry_credentials_path }}"
+    bootwright_creds_var: bootwright_ceph_registry_credentials
+    bootwright_creds_label: "cephadm registry credentialsRef {{ bootwright_ceph_registry_credentials_path }}"
+  when:
+    - bootwright_ceph_registry_credentials_path | length > 0
+    - bootwright_ceph_registry_credentials is not defined

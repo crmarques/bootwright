@@ -34,6 +34,11 @@ func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, c
 		if policy.Spec.Ceph.RuleName == "" {
 			errs = append(errs, prefix+".ceph.ruleName is required")
 		}
+		if cluster, ok := clusters[policy.Spec.StorageClusterRef.Name]; ok && !storageClusterExternal(cluster) && !storageClusterStretchEnabled(cluster) {
+			replicas := topology.DefaultPoolReplicas(cluster, policy.Spec.Ceph.Replicated)
+			errs = append(errs, validateStorageReplicaValues(prefix+".ceph.replicated", policy.Spec.Ceph.Replicated, replicas)...)
+			errs = append(errs, validateStorageReplicatedHostCapacity(prefix+".ceph.replicated", replicas, policy.Spec.Ceph.FailureDomain, cluster)...)
+		}
 	}
 	return errs
 }
@@ -107,9 +112,66 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.minSize must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolMinSize, cluster.Metadata.Name))
 			}
 		}
+		if ok && !storageClusterExternal(cluster) && cluster.Spec.Ceph != nil && !storageClusterStretchEnabled(cluster) {
+			failureDomain := "host"
+			if cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults {
+				failureDomain = "osd"
+			}
+			replicas := pool.Spec.Ceph.Replicated
+			if policy, policyOK := policies[pool.Spec.PlacementPolicyRef.Name]; pool.Spec.PlacementPolicyRef.Name != "" && policyOK {
+				failureDomain = policy.Spec.Ceph.FailureDomain
+				replicas = policy.Spec.Ceph.Replicated
+			}
+			if poolType == v1alpha1.StoragePoolTypeReplicated && pool.Spec.PlacementPolicyRef.Name == "" {
+				replicas = topology.DefaultPoolReplicas(cluster, replicas)
+				errs = append(errs, validateStorageReplicaValues(prefix+".ceph.replicated", pool.Spec.Ceph.Replicated, replicas)...)
+				errs = append(errs, validateStorageReplicatedHostCapacity(prefix+".ceph.replicated", replicas, failureDomain, cluster)...)
+			}
+			if poolType == v1alpha1.StoragePoolTypeErasureCode && pool.Spec.Ceph.ErasureCoded != nil && (failureDomain == "" || failureDomain == "host") {
+				chunks := pool.Spec.Ceph.ErasureCoded.DataChunks + pool.Spec.Ceph.ErasureCoded.CodingChunks
+				if hosts := storageCephOSDHostCount(cluster); chunks > hosts {
+					errs = append(errs, fmt.Sprintf("%s.ceph.erasure requires %d chunks across host failure domains, but StorageCluster/%s has only %d OSD host(s)", prefix, chunks, cluster.Metadata.Name, hosts))
+				}
+			}
+		}
 		errs = append(errs, validateStoragePoolTuning(prefix+".ceph", pool.Spec.Ceph)...)
 	}
 	return errs
+}
+
+func validateStorageReplicaValues(prefix string, authored, effective v1alpha1.StorageCephPoolReplicas) []string {
+	var errs []string
+	if authored.Size < 0 {
+		errs = append(errs, prefix+".size must be non-negative")
+	}
+	if authored.MinSize < 0 {
+		errs = append(errs, prefix+".minSize must be non-negative")
+	}
+	if effective.Size > 0 && effective.MinSize > effective.Size {
+		errs = append(errs, fmt.Sprintf("%s.minSize %d must not exceed effective size %d", prefix, effective.MinSize, effective.Size))
+	}
+	return errs
+}
+
+func validateStorageReplicatedHostCapacity(prefix string, replicas v1alpha1.StorageCephPoolReplicas, failureDomain string, cluster v1alpha1.StorageCluster) []string {
+	if (failureDomain != "" && failureDomain != "host") || replicas.Size <= 0 || cluster.Spec.Ceph == nil {
+		return nil
+	}
+	hosts := storageCephOSDHostCount(cluster)
+	if replicas.Size <= hosts {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s.size %d cannot be placed across host failure domains; StorageCluster/%s has only %d OSD host(s)", prefix, replicas.Size, cluster.Metadata.Name, hosts)}
+}
+
+func storageCephOSDHostCount(cluster v1alpha1.StorageCluster) int {
+	count := 0
+	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		if topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
+			count++
+		}
+	}
+	return count
 }
 
 func validateStorageECProfile(prefix string, ec *v1alpha1.StoragePoolErasureCode) []string {

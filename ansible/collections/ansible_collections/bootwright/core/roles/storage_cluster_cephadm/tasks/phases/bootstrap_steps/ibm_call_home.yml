@@ -1,0 +1,70 @@
+---
+- name: Inspect IBM Call Home manager module state
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - module
+      - ls
+      - --format
+      - json
+  register: bootwright_ceph_ibm_call_home_modules
+  changed_when: false
+  when:
+    - bootwright_ceph_provider.name | default('') == 'ibm'
+    - bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+
+- name: Resolve IBM Call Home manager module state
+  ansible.builtin.set_fact:
+    bootwright_ceph_ibm_call_home_enabled: >-
+      {{ 'call_home_agent' in
+         ((bootwright_ceph_ibm_call_home_modules.stdout | default('{}') | from_json).enabled_modules
+          | default([])) }}
+  when:
+    - bootwright_ceph_provider.name | default('') == 'ibm'
+    - bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+
+- name: Enable IBM Call Home manager module
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - module
+      - enable
+      - call_home_agent
+  changed_when: true
+  when:
+    - bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+    - not (bootwright_ceph_ibm_call_home_enabled | default(false) | bool)
+
+- name: Accept enabled IBM Call Home state
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - accept
+      - call-home-enabled
+  changed_when: not (bootwright_ceph_ibm_call_home_enabled | default(false) | bool)
+  when: bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+
+- name: Disable IBM Call Home manager module
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - deny
+      - call-home-enabled
+  changed_when: bootwright_ceph_ibm_call_home_enabled | default(false) | bool
+  when: bootwright_ceph_provider.ibm.callHome | default('') == 'disabled'

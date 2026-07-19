@@ -3,9 +3,8 @@
 **Constraint:** `retention_time` / `retention_size` exist only on cephadm's
 `PrometheusSpec`. Every other monitoring service (loki, promtail, grafana,
 alertmanager, node-exporter) maps to `MonitoringSpec`, which rejects the keys
-and fails `ceph orch apply -i`. Retention therefore renders for the
-`prometheus` service only, even where the API/validator nominally accepts it on
-another service (the docs' `retentionTime` field on loki is inert).
+and fails `ceph orch apply -i`. Retention therefore validates and renders for
+the `prometheus` service only.
 
 **Constraint:** There is no `ceph dashboard set-loki-api-host` command: the mgr
 dashboard's `set-*` commands are generated 1:1 from its Options, none of which

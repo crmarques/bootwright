@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -139,11 +140,26 @@ func validateEntitlementRegistry(owner string, registry *v1alpha1.EntitlementReg
 	}
 	var errs []string
 	if registry.URL != "" {
-		if strings.ContainsAny(registry.URL, " \t\r\n") {
+		value := registry.URL
+		if strings.ContainsAny(value, " \t\r\n") {
 			errs = append(errs, owner+".url must not contain whitespace")
 		}
-		if proxyURLHasInlineCredentials(registry.URL) || strings.Contains(registry.URL, "@") {
+		if proxyURLHasInlineCredentials(value) || strings.Contains(value, "@") {
 			errs = append(errs, owner+".url must not embed credentials; use credentialsRef")
+		}
+		if strings.Contains(value, "://") {
+			errs = append(errs, owner+".url must be a scheme-less registry address, not a URL")
+		}
+		parsed, err := url.Parse("//" + value)
+		if err != nil || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") {
+			errs = append(errs, owner+".url must be host[:port][/path] with no scheme, query, fragment, or trailing slash")
+		} else {
+			for _, segment := range strings.Split(strings.TrimPrefix(parsed.EscapedPath(), "/"), "/") {
+				if segment == "" && parsed.Path != "" || segment == "." || segment == ".." {
+					errs = append(errs, owner+".url path must contain non-empty registry namespace segments")
+					break
+				}
+			}
 		}
 	}
 	return errs

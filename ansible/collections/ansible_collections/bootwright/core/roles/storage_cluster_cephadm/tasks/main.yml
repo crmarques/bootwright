@@ -1,6 +1,10 @@
 ---
-- name: Prepare Ceph storage role context
+- name: Resolve Ceph storage role variables
+  ansible.builtin.include_tasks: phases/context_vars.yml
+
+- name: Prepare Ceph storage node context
   ansible.builtin.include_tasks: phases/context.yml
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Prepare Ceph repository and subscription
   ansible.builtin.include_tasks: phases/repository.yml
@@ -20,6 +24,22 @@
   ansible.builtin.include_tasks: phases/install.yml
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
+- name: Guard and clean an authorized Ceph cluster rebuild
+  ansible.builtin.include_tasks: phases/rebuild.yml
+  when: not bootwright_task_storage_prereqs_only | default(false) | bool
+
+- name: End non-seed hosts after the cluster-wide rebuild phase
+  ansible.builtin.meta: end_host
+  when:
+    - not bootwright_task_storage_prereqs_only | default(false) | bool
+    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Prepare Ceph seed convergence context
+  ansible.builtin.include_tasks: phases/context_seed.yml
+  when: not bootwright_task_storage_prereqs_only | default(false) | bool
+
 - name: Bootstrap and converge Ceph cluster
   ansible.builtin.include_tasks: phases/bootstrap.yml
-  when: not bootwright_task_storage_prereqs_only | default(false) | bool
+  when:
+    - not bootwright_task_storage_prereqs_only | default(false) | bool
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')

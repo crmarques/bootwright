@@ -1,0 +1,10 @@
+---
+- name: Resolve managed Ceph provider context
+  ansible.builtin.set_fact:
+    bootwright_ceph_provider: "{{ bootwright_selected_storage_cluster.provider | default({}) }}"
+    bootwright_ceph_provider_name: "{{ bootwright_selected_storage_cluster.provider.name | default('oss') }}"
+    bootwright_ceph_bootstrap_image: "{{ bootwright_selected_storage_cluster.provider.image | default('') }}"
+    bootwright_ceph_image_base: "{{ bootwright_selected_storage_cluster.provider.imageBase | default('') }}"
+    bootwright_ceph_registry_url: "{{ bootwright_selected_storage_cluster.provider.registry.url | default('') }}"
+    bootwright_ceph_registry_credentials_path: "{{ bootwright_selected_storage_cluster.provider.registry.credentialsPath | default('') }}"
+    bootwright_ceph_registry_trust_path: "{{ bootwright_selected_storage_cluster.provider.registry.trustBundlePath | default('') }}"

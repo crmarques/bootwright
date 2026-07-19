@@ -79,11 +79,17 @@ func TestOSDReadinessExpectation(t *testing.T) {
 		c.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Hosts: hosts, OSDDrivegroups: dgs}}
 		return c
 	}
+	singleHostCluster := func(host v1alpha1.StorageCephHost) v1alpha1.StorageCluster {
+		cluster := newCluster([]v1alpha1.StorageCephHost{host}, nil)
+		cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults = true
+		return cluster
+	}
 	cases := []struct {
-		name      string
-		cluster   v1alpha1.StorageCluster
-		wantMode  string
-		wantCount int
+		name             string
+		cluster          v1alpha1.StorageCluster
+		wantMode         string
+		wantCount        int
+		wantDynamicHosts []string
 	}{
 		{
 			name:      "shorthand exact",
@@ -104,8 +110,24 @@ func TestOSDReadinessExpectation(t *testing.T) {
 			cluster: newCluster([]v1alpha1.StorageCephHost{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
 				DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 			})}, nil),
-			wantMode:  "atLeastOne",
-			wantCount: 0,
+			wantMode:         "atLeastOne",
+			wantCount:        1,
+			wantDynamicHosts: []string{"a"},
+		},
+		{
+			name:      "single-host static selection requires two in OSDs",
+			cluster:   singleHostCluster(osdHost("a", []string{"osd"}, []string{"/dev/sdb"}, nil)),
+			wantMode:  "exact",
+			wantCount: 2,
+		},
+		{
+			name: "single-host dynamic selection requires two in OSDs",
+			cluster: singleHostCluster(osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+				DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+			})),
+			wantMode:         "atLeastOne",
+			wantCount:        2,
+			wantDynamicHosts: []string{"a"},
 		},
 		{
 			name: "unmanaged only is skip",
@@ -130,12 +152,36 @@ func TestOSDReadinessExpectation(t *testing.T) {
 			wantMode:  "exact",
 			wantCount: 4,
 		},
+		{
+			name: "dynamic hosts include node and fleet placements once",
+			cluster: newCluster(
+				[]v1alpha1.StorageCephHost{
+					osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}),
+					osdHost("b", []string{"osd"}, nil, nil),
+					osdHost("c", []string{"mon"}, nil, nil),
+				},
+				[]v1alpha1.StorageCephOSDDrivegroup{{
+					ServiceID: "dynamic",
+					OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Rotational: new(bool)}},
+				}},
+			),
+			wantMode:         "atLeastOne",
+			wantCount:        2,
+			wantDynamicHosts: []string{"a", "b"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mode, count := ceph.OSDReadinessExpectation(tc.cluster)
+			mode, count, dynamicHosts := ceph.OSDReadinessExpectation(tc.cluster)
 			if mode != tc.wantMode || count != tc.wantCount {
 				t.Errorf("OSDReadinessExpectation = (%q, %d), want (%q, %d)", mode, count, tc.wantMode, tc.wantCount)
+			}
+			wantDynamicHosts := tc.wantDynamicHosts
+			if wantDynamicHosts == nil {
+				wantDynamicHosts = []string{}
+			}
+			if !reflect.DeepEqual(dynamicHosts, wantDynamicHosts) {
+				t.Errorf("OSDReadinessExpectation dynamic hosts = %v, want %v", dynamicHosts, tc.wantDynamicHosts)
 			}
 		})
 	}

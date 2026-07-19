@@ -57,6 +57,11 @@ Data Foundation external-cluster details render with placeholders for Ceph
 client secrets. Generated Ceph keys are created or read during apply and must
 not be committed.
 
+IBM Storage Ceph license acceptance enables Call Home by default. An IBM
+`StorageCluster` must therefore declare `spec.ceph.ibm.callHome` as `enabled`
+or `disabled`; apply reconciles that choice after bootstrap. Bootwright must
+not leave vendor outbound telemetry enabled through an implicit default.
+
 ## Installer Trust
 
 Cluster install trust is rendered only from explicit references:

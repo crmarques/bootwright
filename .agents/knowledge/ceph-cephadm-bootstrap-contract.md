@@ -26,7 +26,9 @@ captures the generated dashboard admin password install-only
 rotation would immediately stale that captured secret and break the documented
 recovery workflow. `--single-host-defaults` renders only for a one-host
 topology, so a single-node lab reaches `active+clean` (multi-host CRUSH
-defaults never would).
+defaults never would). Its default pool size is two, so validation rejects a
+statically countable topology below two OSDs and the readiness gate always
+requires at least two in OSDs before creating pools.
 
 **Constraint:** `--image` is a global cephadm option, not a `bootstrap`
 subcommand flag. It must sit between the `cephadm` argv[0] and the `bootstrap`

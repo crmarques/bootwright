@@ -7,7 +7,7 @@ spec:
 
   ceph:
     distribution: redhat
-    release: "9.0"
+    release: "9.1"
     entitlementRef: rhcs
     cephadm:
       bootstrap:

@@ -64,10 +64,11 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 }
 
 func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
-	mode, count := cephrender.OSDReadinessExpectation(cluster)
+	mode, count, dynamicHosts := cephrender.OSDReadinessExpectation(cluster)
 	return map[string]any{
 		"mode":          mode,
 		"expectedCount": count,
+		"dynamicHosts":  dynamicHosts,
 	}
 }
 
@@ -92,7 +93,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	var out []any
 	for _, cluster := range ManagedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
-		provider := cephprovider.Select(cluster, state.Entitlements, idx, paths.SecretsDir)
+		provider := storageCephProvider(state, cluster, idx, paths.SecretsDir)
 		asset := cephrender.StorageAssets("{{ bootwright_rendered_dir }}", v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}})[0]
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
@@ -128,6 +129,14 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		out = append(out, entry)
 	}
 	return out
+}
+
+func StorageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster) cephprovider.Provider {
+	return storageCephProvider(state, cluster, secret.NewIndex(state), "")
+}
+
+func storageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster, idx secret.Index, secretsDir string) cephprovider.Provider {
+	return cephprovider.Select(cluster, state.Entitlements, idx, secretsDir)
 }
 
 func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {

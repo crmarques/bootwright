@@ -89,7 +89,7 @@ func hostTrustScopePlanningState() v1alpha1.State {
 	}
 }
 
-func TestApplyTaskConnectedMachinesBaseExcludesArbiter(t *testing.T) {
+func TestApplyTaskConnectedMachinesBaseIncludesTopologyHosts(t *testing.T) {
 	state := hostTrustScopePlanningState()
 	target := ApplyTarget{Name: "base", PhaseNames: []string{ApplyPhaseBase}, StorageClusterNames: []string{"ceph"}}
 	tasks, err := PlanApplyTasksChecked(target, state)
@@ -103,8 +103,8 @@ func TestApplyTaskConnectedMachinesBaseExcludesArbiter(t *testing.T) {
 	if !connected["ceph-seed"] {
 		t.Errorf("base plan should connect the cephadm seed; connected=%v", connected)
 	}
-	if connected["ceph-arb"] {
-		t.Errorf("base plan must not require host trust for the arbiter; connected=%v", connected)
+	if !connected["ceph-arb"] {
+		t.Errorf("base plan should connect every topology host for authorized rebuild cleanup; connected=%v", connected)
 	}
 }
 

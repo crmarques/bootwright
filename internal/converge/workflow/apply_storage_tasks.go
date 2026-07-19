@@ -58,6 +58,9 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		ceph.Config = nil
 		ceph.MgrModules = nil
 		ceph.Monitoring = nil
+		if ceph.IBM != nil {
+			ceph.IBM.CallHome = ""
+		}
 	}
 	return clone
 }

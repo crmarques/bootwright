@@ -200,11 +200,12 @@ func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, ta
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
 				Playbook:           applyStoragePlaybook,
-				Limit:              render.StorageSeedHostName(cluster),
+				Limit:              render.StorageClusterGroupName(cluster.Metadata.Name),
 				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
 				State:              storageTaskState(state, cluster.Metadata.Name),
 				DesiredHashVars:    storageClusterDesiredHashVars(state, cluster.Metadata.Name),
 				StructuralHashVars: storageClusterStructuralHashVars(state, cluster.Metadata.Name),
+				Forks:              storageClusterNodeCount(cluster),
 			},
 		}); err != nil {
 			return nil, err

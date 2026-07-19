@@ -1,4 +1,37 @@
 ---
+- name: Wait for final managed Ceph health
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - health
+      - --format
+      - json
+  register: bootwright_ceph_final_health
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_health_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_health_delay | default(10) | int }}"
+  until: >-
+    bootwright_ceph_final_health.rc == 0
+    and ((bootwright_ceph_final_health.stdout | default('{}') | from_json).status
+         | default('UNKNOWN')) != 'HEALTH_ERR'
+
+- name: Refuse to complete an unreachable or unhealthy Ceph cluster
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_final_health.rc | default(1) == 0
+      - >-
+        ((bootwright_ceph_final_health.stdout | default('{}') | from_json).status
+         | default('UNKNOWN')) != 'HEALTH_ERR'
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} remained unreachable
+      or HEALTH_ERR after final services and storage objects were applied:
+      {{ bootwright_ceph_final_health.stdout | default(bootwright_ceph_final_health.stderr) | default('no health output') | trim }}
+      Resolve the reported health checks and re-run apply.
+
 - name: Record storage cluster ownership
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -17,3 +50,6 @@
       attributes:
         seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
         remoteWorkDir: "{{ bootwright_ceph_remote_work_dir }}"
+        health: >-
+          {{ (bootwright_ceph_final_health.stdout | default('{}') | from_json).status | default('UNKNOWN') }}
+        osdReadiness: "{{ bootwright_ceph_osd_observed | default({}) }}"

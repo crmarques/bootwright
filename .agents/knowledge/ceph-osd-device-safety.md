@@ -62,22 +62,37 @@ wipes the data disks on the next (re)install. Any osd-role host counts: the
 drivegroup and fleet shapes leave `devices` empty, so a lean
 `len(devices) > 0` check missed them and their OSD disks were silently wiped.
 
-**Symptom (zero-OSD green apply):** `ceph orch apply` registers the OSD
+**Symptom (zero-or-partial-OSD green apply):** `ceph orch apply` registers the OSD
 drivegroups with the mgr and returns immediately; cephadm creates OSDs
 asynchronously through ceph-volume. Without a readiness poll, a cluster that
 ends up with zero or fewer OSDs than declared — a busy, undersized, or
 foreign-signed device, a ceph-volume refusal, an OSD image-pull or SELinux
 failure — reports a green apply, and because the desired hash is unchanged it
-reads `match` on every later re-apply.
+reads `match` on every later re-apply. A cluster-wide `num_in_osds > 0` check
+also masks a dynamically selected host with no OSD when another host succeeds.
 
 **Fix:** The apply polls until the managed drivegroups' OSDs are `in`, then
 fails closed with an actionable message. The expectation is rendered from the
 declared topology (`osdReadiness`): `exact` (every managed selection names
 explicit devices; count is exact, multiplied by `osdsPerDevice`), `atLeastOne`
-(a filter/all selection makes the count host-resolved; only `> 0` is
-assertable), or `skip` (no managed OSD service creates OSDs). It gates on
-`num_in_osds`, not `num_up_osds`, so a transiently-down OSD on a benign
-re-apply is not a false fail, and it runs before the topology operations so
-pools/CRUSH/EC never land on a zero-OSD cluster. Observed counts and health
-are persisted so the controller classifies a silently degraded cluster as
-drift instead of a blind hash match.
+(a filter/all selection makes the count host-resolved, so every declared
+dynamic host must have at least one OSD with positive CRUSH reweight), or
+`skip` (no managed OSD service creates OSDs). The exact path gates on
+`num_in_osds`, not `num_up_osds`, while the dynamic path requires the static
+count plus at least one OSD per dynamic host and checks those host buckets in
+`ceph osd tree`; a transiently-down but still-in OSD on a benign re-apply is not
+a false fail. `singleHostDefaults` raises either expectation to at least two in
+OSDs because cephadm's single-host pool size is two; a statically countable
+selection below two is rejected before apply, while a dynamic or unmanaged
+selection must prove the minimum at runtime. The check runs before topology
+operations so pools/CRUSH/EC never land on a zero- or partial-OSD cluster.
+Observed counts and health are persisted in the on-host ownership record for
+diagnosis.
+The readiness retry tasks terminate at their configured attempt budget and
+defer failure to explicit assertions. Letting Ansible's `until` exhaust marks
+the task failed before the device, service, and CRUSH diagnostics can run even
+when the command task has `failed_when: false`.
+After all late service specs and object operations, apply performs a final
+health poll and refuses to record success while the cluster is unreachable or
+`HEALTH_ERR`; `HEALTH_WARN` remains acceptable because expected operational
+warnings do not make the desired topology unusable.

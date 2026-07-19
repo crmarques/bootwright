@@ -8,6 +8,8 @@ const (
 
 	DefaultReplicatedPoolSize    = 3
 	DefaultReplicatedPoolMinSize = 2
+	SingleHostReplicatedPoolSize = SingleHostMinimumOSDs
+	SingleHostReplicatedMinSize  = 1
 
 	CephManagementDefaultPort = 8443
 
@@ -33,11 +35,21 @@ func EffectivePoolReplicas(state v1alpha1.State, cluster v1alpha1.StorageCluster
 			break
 		}
 	}
-	if replicas.Size == 0 && cluster.Spec.Ceph.Topology.Stretch != nil {
+	return DefaultPoolReplicas(cluster, replicas)
+}
+
+func DefaultPoolReplicas(cluster v1alpha1.StorageCluster, replicas v1alpha1.StorageCephPoolReplicas) v1alpha1.StorageCephPoolReplicas {
+	if replicas.Size == 0 && cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil {
 		replicas.Size = StretchReplicatedPoolSize
 	}
-	if replicas.MinSize == 0 && cluster.Spec.Ceph.Topology.Stretch != nil {
+	if replicas.MinSize == 0 && cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil {
 		replicas.MinSize = StretchReplicatedPoolMinSize
+	}
+	if replicas.Size == 0 && cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults {
+		replicas.Size = SingleHostReplicatedPoolSize
+	}
+	if replicas.MinSize == 0 && cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults {
+		replicas.MinSize = SingleHostReplicatedMinSize
 	}
 	if replicas.Size == 0 {
 		replicas.Size = DefaultReplicatedPoolSize

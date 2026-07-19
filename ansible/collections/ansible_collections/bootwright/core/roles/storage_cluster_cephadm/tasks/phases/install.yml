@@ -162,9 +162,13 @@
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
 - name: Ensure gdisk for the reclaim device zap
-  ansible.builtin.package:
-    name: gdisk
-    state: present
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: package_apply.yml
+  vars:
+    bootwright_ownership_packages:
+      - gdisk
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
   when: bootwright_ceph_reclaim_here | default([]) | length > 0
 
 - name: Reclaim named OSD devices by wiping signatures

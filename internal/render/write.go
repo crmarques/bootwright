@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render/ceph"
+	"github.com/crmarques/bootwright/internal/render/inventory"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -25,7 +26,8 @@ func writeScript(fs FileSystem, path string, content string) error {
 	return nil
 }
 
-func scriptOptionsFor(asset StorageAsset) ceph.CephScriptOptions {
+func scriptOptionsFor(asset StorageAsset, state v1alpha1.State, cluster v1alpha1.StorageCluster) ceph.CephScriptOptions {
+	provider := inventory.StorageCephProvider(state, cluster)
 	rel := func(path string) string {
 		if path == "" {
 			return ""
@@ -41,6 +43,9 @@ func scriptOptionsFor(asset StorageAsset) ceph.CephScriptOptions {
 		BootstrapSpecFile:    rel(asset.BootstrapSpecPath),
 		CoreServicesSpecFile: rel(asset.CoreServicesSpecPath),
 		LateServicesSpecFile: rel(asset.LateServicesSpecPath),
+		BootstrapImage:       provider.Image,
+		AcceptLicense:        provider.RequiresLicense && provider.Entitlement.License.Accepted,
+		IBMCallHome:          provider.IBMCallHome,
 	}
 }
 
@@ -103,7 +108,7 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 				}
 			}
 			if asset.ApplyScriptPath != "" {
-				if err := writeScript(fs, asset.ApplyScriptPath, ceph.CephApplyScript(state, cluster, scriptOptionsFor(asset))); err != nil {
+				if err := writeScript(fs, asset.ApplyScriptPath, ceph.CephApplyScript(state, cluster, scriptOptionsFor(asset, state, cluster))); err != nil {
 					return err
 				}
 			}

@@ -46,27 +46,25 @@ credential plumbing — lives in
 [Secrets and entitlements](../concepts/secrets.md#entitlements).
 
 `spec.ceph.release` selects which release to install for the chosen
-distribution. For `oss` it is an upstream release name (`squid`, `reef`,
-`quincy`) or a full `x.y.z` version, which pins the package repository
-reproducibly and — when `image` is unset — derives the matching
-`quay.io/ceph/ceph:vX.Y.Z` daemon image. For `redhat` and `ibm` it is the
-product version: the bare stream (`9`), a `major.minor` (`9.0`), or the full
-product version exactly as the vendor publishes it — for example IBM Storage
-Ceph `9.9.1`. Only the leading **major** digit is machine-consumed: it selects
-the subscription tools repo, the yum repo file, and the container image base
-(`rhceph-9-rhel9` / `ceph-9-rhel9`), so `9.9.1` and `9` resolve to the same
-stream `9`. The minor/patch are documentation of intent and never appear in a
-repo or image name; the immutable build tag is not derivable from the product
-version, so pin `spec.ceph.image` to lock the exact build (see the note below).
-`release` defaults to the community default release for `oss` and to stream `9`
-for `redhat`/`ibm`. To mirror upstream packages for a disconnected `oss`
-install, set `spec.ceph.community.mirror` (it must stay empty for
-`redhat`/`ibm`).
+distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid
+(`squid`/`19.2.x`) releases; the default is the current exact release `20.2.2`,
+which pins both the package repository and `quay.io/ceph/ceph:v20.2.2`. Red Hat
+accepts product releases
+`9.0` and `9.1` (default `9.1`); IBM accepts `9.9.1` (the default). Bare `9` is
+a convenience alias normalized to the exact default for that distribution.
+The exact product release drives validation of the vendor RHEL matrix, while
+its stream still selects the repository and image-base names. The immutable
+vendor image build tag is not derivable from the product release, so pin
+`spec.ceph.image` to lock the exact build. To mirror upstream packages for a
+disconnected `oss` install, set an HTTPS `spec.ceph.community.mirror`.
+The catalog snapshot follows the upstream [Ceph releases](https://docs.ceph.com/en/latest/releases/),
+the [Red Hat Ceph Storage 9 compatibility guide](https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf),
+and IBM's [9.9.1 node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes).
 
 ```yaml
 ceph:
   distribution: redhat
-  release: "9"
+  release: "9.1"
   entitlementRef: rhcs           # names a redhat-ceph Entitlement
   cephadm:
     bootstrap:
@@ -82,6 +80,12 @@ to end, including the entitlement and license-acceptance workflow.
     unset, the install uses the distribution-packaged `cephadm`'s default image
     tag, which floats, so the running Ceph version is not reproducible across
     re-installs.
+
+!!! warning "IBM Call Home is an explicit choice"
+    IBM Storage Ceph 9.9.1 enables Call Home when the license is accepted.
+    Author `spec.ceph.ibm.callHome: enabled` to retain it or `disabled` to turn
+    it off after bootstrap. Validation rejects an IBM cluster that leaves the
+    outbound-communication choice implicit.
 
 ## The bootstrap seed host
 

@@ -15,6 +15,9 @@ type CephScriptOptions struct {
 	BootstrapSpecFile    string
 	CoreServicesSpecFile string
 	LateServicesSpecFile string
+	BootstrapImage       string
+	AcceptLicense        bool
+	IBMCallHome          string
 }
 
 func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) string {
@@ -83,14 +86,21 @@ func writeOrchApply(b *strings.Builder, file string) {
 
 func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) {
 	ceph := cluster.Spec.Ceph
-	args := []string{
-		"cephadm", "bootstrap",
+	args := []string{"cephadm"}
+	if opts.BootstrapImage != "" {
+		args = append(args, "--image", opts.BootstrapImage)
+	}
+	args = append(args,
+		"bootstrap",
 		"--mon-ip", topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
 		"--allow-fqdn-hostname",
 		"--dashboard-password-noupdate",
-	}
+	)
 	if ceph.Cephadm.Bootstrap.SingleHostDefaults {
 		args = append(args, "--single-host-defaults")
+	}
+	if opts.AcceptLicense {
+		args = append(args, "--automatically-accept-license")
 	}
 	if cidrs := ceph.Networks.ClusterCIDRs; len(cidrs) > 0 {
 		args = append(args, "--cluster-network", strings.Join(cidrs, ","))
@@ -108,12 +118,31 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 		fmt.Fprintf(b, " --config \"$HERE/%s\"", opts.BootstrapConfFile)
 	}
 	b.WriteString(")\n")
-	b.WriteString("  # Extra bootstrap flags from the environment, e.g. --registry-json <file>\n")
-	b.WriteString("  # for authenticated (Red Hat / IBM) registries, or --image <ref>.\n")
+	b.WriteString("  # Extra bootstrap-subcommand flags from the environment, e.g.\n")
+	b.WriteString("  # --registry-json <file> for authenticated Red Hat / IBM registries.\n")
 	b.WriteString("  # shellcheck disable=SC2206\n")
 	b.WriteString("  [[ -n \"${BW_CEPHADM_BOOTSTRAP_EXTRA:-}\" ]] && bootstrap+=(${BW_CEPHADM_BOOTSTRAP_EXTRA})\n")
 	b.WriteString("  bw_run \"${bootstrap[@]}\"\n")
 	b.WriteString("fi\n")
+	writeIBMCallHomeStage(b, opts.IBMCallHome)
+}
+
+func writeIBMCallHomeStage(b *strings.Builder, intent string) {
+	if intent == "" {
+		return
+	}
+	b.WriteString("\necho \"== stage 05: IBM Call Home ==\"\n")
+	switch intent {
+	case v1alpha1.StorageCephIBMCallHomeEnabled:
+		b.WriteString("ibm_call_home_modules=\"$(_bw_exec ceph mgr module ls --format json)\"\n")
+		b.WriteString("ibm_call_home_enabled=\"$(jq -r '(.enabled_modules // []) | index(\"call_home_agent\") != null' <<<\"$ibm_call_home_modules\")\"\n")
+		b.WriteString("if [[ \"$ibm_call_home_enabled\" != \"true\" ]]; then\n")
+		b.WriteString("  bw_run ceph mgr module enable call_home_agent\n")
+		b.WriteString("fi\n")
+		b.WriteString("bw_run ceph orch accept call-home-enabled\n")
+	case v1alpha1.StorageCephIBMCallHomeDisabled:
+		b.WriteString("bw_run ceph orch deny call-home-enabled\n")
+	}
 }
 
 func writeOperation(b *strings.Builder, op map[string]any) {

@@ -1,0 +1,22 @@
+---
+- name: Check existing Ceph configuration
+  ansible.builtin.command:
+    argv:
+      - test
+      - -f
+      - /etc/ceph/ceph.conf
+  register: bootwright_ceph_conf_check
+  changed_when: false
+  failed_when: false
+
+- name: Pre-record storage cluster ownership before bootstrap
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: storage-cluster
+    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+    bootwright_ownership_fields:
+      cluster: "{{ bootwright_selected_storage_cluster.name }}"
+      attributes:
+        seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"

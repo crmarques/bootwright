@@ -38,6 +38,9 @@ printf '%s' "$IBM_ENTITLEMENT_KEY" | bootwright secret set --name ibm-registry-c
 accept the IBM Storage Ceph license; Bootwright refuses to install the licensed
 packages without it.
 
+`spec.ceph.ibm.callHome: disabled` makes the IBM Call Home outbound-communication
+choice explicit and keeps it disabled after bootstrap.
+
 ## Node hostnames
 
 These are **provided-OS** nodes (`spec.os.provided: true`), so Bootwright cannot

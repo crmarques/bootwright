@@ -1,0 +1,17 @@
+---
+- name: Resolve managed Ceph work paths
+  ansible.builtin.set_fact:
+    bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"
+    bootwright_ceph_remote_bootstrap_conf: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/bootstrap-ceph.conf"
+    bootwright_ceph_remote_bootstrap_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/bootstrap-spec.yaml"
+    bootwright_ceph_remote_core_services_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/core-services.yaml"
+    bootwright_ceph_remote_late_services_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/late-services.yaml"
+    bootwright_ceph_remote_operations: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/operations.yaml"
+    bootwright_ceph_remote_private_key: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/cluster-ssh-key"
+    bootwright_ceph_remote_public_key: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/cluster-ssh-key.pub"
+    bootwright_ceph_remote_known_hosts: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/known_hosts"
+    bootwright_ceph_remote_ssh_config: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/ssh_config"
+    bootwright_ceph_remote_registry_json: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/registry-login.json"
+    bootwright_ceph_management: "{{ bootwright_selected_storage_cluster.management | default({}) }}"
+    bootwright_ceph_ownership_marker_path: /etc/ceph/.bootwright-owned
+    bootwright_ceph_osd_marker_path: /etc/bootwright/ceph-osd-devices.json

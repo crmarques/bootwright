@@ -31,7 +31,7 @@ var allowedImports = map[string][]string{
 	},
 	"internal/cli/output": {},
 
-	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
+	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
 	"internal/state/graph":    {"api/v1alpha1", "internal/addons/inputs", "internal/infra/artifacts", "internal/roles", "internal/state/view"},
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},

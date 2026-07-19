@@ -3,6 +3,8 @@ package workflow
 import (
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func saveRecordWithHashes(t *testing.T, runsDir string, task ApplyTask, desiredHash, structuralHash string) {
@@ -99,5 +101,42 @@ func TestMissingStructuralHashFallsBackToStructural(t *testing.T) {
 	}
 	if o := objs[0]; !o.HasStructuralDrift() || o.HasReconcilableDrift() {
 		t.Fatalf("legacy record must fall back to structural drift: structural=%v reconcilable=%v", o.HasStructuralDrift(), o.HasReconcilableDrift())
+	}
+}
+
+func TestIBMCallHomeDriftIsReconcilable(t *testing.T) {
+	runsDir := t.TempDir()
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "demo"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionIBM,
+			IBM:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
+		}},
+	}}}
+	base := storageTaskWith(
+		storageClusterDesiredHashVars(state, "demo"),
+		storageClusterStructuralHashVars(state, "demo"),
+	)
+	desiredHash, err := ApplyTaskDesiredHash(base)
+	if err != nil {
+		t.Fatalf("desired hash: %v", err)
+	}
+	structuralHash, err := ApplyTaskStructuralHash(base)
+	if err != nil {
+		t.Fatalf("structural hash: %v", err)
+	}
+	saveRecordWithHashes(t, runsDir, base, desiredHash, structuralHash)
+
+	state.StorageClusters[0].Spec.Ceph.IBM.CallHome = v1alpha1.StorageCephIBMCallHomeEnabled
+	updated := storageTaskWith(
+		storageClusterDesiredHashVars(state, "demo"),
+		storageClusterStructuralHashVars(state, "demo"),
+	)
+	objects, err := ClassifyApplyObjects([]ApplyTask{updated}, runsDir)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+	if got := objects[0]; got.Class != ConvergeSafetyDrift || !got.HasReconcilableDrift() || got.HasStructuralDrift() || !got.Reconcilable {
+		t.Fatalf("Call Home edit must be reconcilable drift: %+v", got)
 	}
 }

@@ -356,7 +356,7 @@ type. The secrets it names are declared as first-class `Secret` objects.
 | `spec.rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. |
 | `spec.rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
 | `spec.rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
-| `spec.registry.url` | No | — | Vendor registry URL; must not embed credentials (use `credentialsRef`). Defaults to `registry.redhat.io` (`redhat-ceph`) or `cp.icr.io/cp` (`ibm-storage-ceph`). |
+| `spec.registry.url` | No | — | Scheme-less mirror root `host[:port][/namespace]`; no credentials, query, fragment, or trailing slash. Defaults to `registry.redhat.io` (`redhat-ceph`) or `cp.icr.io/cp` (`ibm-storage-ceph`). A custom Ceph registry requires `StorageCluster.spec.ceph.image` at that root plus the canonical vendor repository suffix. |
 | `spec.registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat-ceph` and `ibm-storage-ceph`. |
 | `spec.registry.trustBundleRef` | No | — | Registry trust bundle. |
 | `spec.license.accept` | Conditional | `false` | Must be `true` for `ibm-storage-ceph`. |

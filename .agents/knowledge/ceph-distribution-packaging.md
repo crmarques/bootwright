@@ -1,7 +1,8 @@
 # Ceph distribution packaging: registries, repos, EPEL, and RHSM gotchas
 
-**Constraint:** Distribution facts live in one Go table (`distributionDef` in
-`internal/storage/cephprovider`) — capability flags (`requiresRHSM`,
+**Constraint:** Distribution and release facts live in one Go table
+(`distributionDef` in `internal/storage/cephprovider`) — release catalogs,
+runtime-OS matrices, capability flags (`requiresRHSM`,
 `requiresRegistry`, `requiresLicense`), repo sets, and image templates. The
 Ansible role dispatches on the rendered flags (a `community` block vs
 `requiresRHSM`), never on distribution names (ADR 0002): a new distribution is
@@ -61,8 +62,10 @@ file fails closed for operator review.
 
 **Constraint:** The renderer emits exactly one of `community.version` (a full
 x.y.z, resolving `rpm-<x.y.z>/` + `cephadm add-repo --version`, and deriving
-`quay.io/ceph/ceph:vX.Y.Z` when `image` is unset) or `community.release` (a
-codename, resolving `rpm-<name>/` + `--release`; the image floats).
+`quay.io/ceph/ceph:vX.Y.Z` when `image` is unset) or `community.release` (an
+active supported codename, resolving `rpm-<name>/` + `--release`; the image
+floats). The accepted community catalog is limited to active Tentacle
+(`20.2.x`) and Squid (`19.2.x`) series; unknown and ended series fail validation.
 `community.checksum` is normalized to bare sha256 hex and re-prefixed into
 `get_url`'s checksum so the fetched-and-executed cephadm bootstrap binary is
 content-verified.
@@ -72,6 +75,30 @@ acceptance marker `/usr/share/ibm-storage-ceph-license/accept` exists, so it is
 written in the repository stage — before the install stage pulls `cephadm`/
 daemon tooling from the vendor sources
 (`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-<N>-rhel-9.repo`).
+IBM Storage Ceph 9.9.1 also pauses `cephadm bootstrap` for interactive license
+acceptance unless `--automatically-accept-license` is present. That acceptance
+enables the `call_home_agent` mgr module by default, so the StorageCluster must
+declare `ibm.callHome: enabled|disabled`; apply acknowledges the enabled state
+or denies it to turn the module off. The 9.9.1 runtime matrix accepts RHEL 9.8
+or 10.2.
+
+**Constraint:** Vendor releases and runtime operating systems are one catalog,
+not independent regex-validated strings. Red Hat Ceph Storage 9.0 accepts RHEL
+9.6, 9.7, 10, 10.0, or 10.1; 9.1 accepts RHEL 9.8 or 10.2. IBM Storage Ceph
+9.9.1 accepts RHEL 9.8 or 10.2. Bare stream `9` is normalized to the current
+exact distribution release before hashing and rendering.
+
+**Constraint:** An entitlement registry override changes credentials and trust
+and acts as a mirror root, not permission to select an arbitrary repository. A
+subscription-backed cluster with a custom `registry.url` must pin
+`spec.ceph.image` at that root plus the distribution's canonical suffix:
+`rhceph/rhceph-<stream>-rhel9` for Red Hat or
+`ibm-ceph/ceph-<stream>-rhel9` for IBM. The same suffix check applies on the
+default vendor registry, preventing a Red Hat cluster from accepting an IBM or
+unrelated image merely because it is below the authenticated registry.
+Registry addresses are scheme-less `host[:port][/path]`; community package
+mirrors remain HTTPS URLs because cephadm refuses insecure repository
+transport.
 
 **Constraint:** RHSM is converged declaratively: `redhat_subscription`
 (machines-phase `machine_registration_rhsm` role) registers only when needed
@@ -93,3 +120,10 @@ set_fact fails with `ansible_distribution_major_version is undefined`.
 **Constraint:** Bootstrap, live health, and destroy use `cephadm shell` for all
 Ceph client commands. The host-level package gate covers `cephadm`; no phase
 assumes a host-installed `ceph` or `radosgw-admin` binary.
+
+## Vendor references
+
+- Upstream release lifecycle: <https://docs.ceph.com/en/latest/releases/>
+- Red Hat Ceph Storage 9 compatibility guide: <https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf>
+- IBM Storage Ceph 9.9.1 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
+- IBM 9.9.1 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>

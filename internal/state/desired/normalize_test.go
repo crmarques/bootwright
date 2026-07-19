@@ -2,10 +2,70 @@ package desiredstate
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
+
+func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
+	checksum := "sha256:" + strings.Repeat("A", 64)
+	cases := []struct {
+		name         string
+		ceph         v1alpha1.StorageClusterCephSpec
+		wantRelease  string
+		wantImage    string
+		wantChecksum string
+	}{
+		{
+			name:        "oss default is exact and reproducible",
+			ceph:        v1alpha1.StorageClusterCephSpec{},
+			wantRelease: "20.2.2",
+			wantImage:   "quay.io/ceph/ceph:v20.2.2",
+		},
+		{
+			name: "oss checksum and image are canonical",
+			ceph: v1alpha1.StorageClusterCephSpec{
+				Distribution: v1alpha1.StorageCephDistributionOSS,
+				Release:      "20.2.2",
+				Community:    &v1alpha1.StorageCephCommunitySpec{Checksum: checksum},
+			},
+			wantRelease:  "20.2.2",
+			wantImage:    "quay.io/ceph/ceph:v20.2.2",
+			wantChecksum: strings.Repeat("a", 64),
+		},
+		{
+			name:        "redhat default is current exact product release",
+			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionRedHat},
+			wantRelease: "9.1",
+		},
+		{
+			name:        "redhat stream alias is canonical",
+			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionRedHat, Release: "9"},
+			wantRelease: "9.1",
+		},
+		{
+			name:        "ibm default is current exact product release",
+			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionIBM},
+			wantRelease: "9.9.1",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+				Spec: v1alpha1.StorageClusterSpec{Type: v1alpha1.StorageClusterTypeCeph, Ceph: &tc.ceph},
+			}}}
+			Normalize(&state)
+			got := state.StorageClusters[0].Spec.Ceph
+			if got.Release != tc.wantRelease || got.Image != tc.wantImage {
+				t.Fatalf("normalized release/image = %q/%q, want %q/%q", got.Release, got.Image, tc.wantRelease, tc.wantImage)
+			}
+			if tc.wantChecksum != "" && got.Community.Checksum != tc.wantChecksum {
+				t.Fatalf("normalized checksum = %q, want %q", got.Community.Checksum, tc.wantChecksum)
+			}
+		})
+	}
+}
 
 func TestNormalizeDerivesSatelliteContentBaseURL(t *testing.T) {
 	state := v1alpha1.State{Entitlements: []v1alpha1.Entitlement{{

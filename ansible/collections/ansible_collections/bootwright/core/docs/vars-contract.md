@@ -327,7 +327,7 @@ bootwright_managed_os_install_groups:
           profileName: rhel-9-ceph-node-minimal-fips
           os:
             family: rhel
-            version: "9.7"
+            version: "9.8"
             architecture: x86_64
           installer:
             type: anaconda
@@ -337,8 +337,8 @@ bootwright_managed_os_install_groups:
           image:
             kind: media
             mediaType: dvd
-            key: rhel-9.7-x86_64-dvd.iso
-            path: /var/lib/bootwright/media/rhel-9.7-x86_64-dvd.iso
+            key: rhel-9.8-x86_64-dvd.iso
+            path: /var/lib/bootwright/media/rhel-9.8-x86_64-dvd.iso
             sourceOnTarget: true
           kickstart:
             hostname: ceph-0
@@ -469,8 +469,8 @@ are copied to the seed host for cephadm.
 
 The storage role dispatches its repository preparation on rendered `provider`
 capability flags, not on the distribution name. For `distribution: oss` the
-`provider` block carries a `community` map with a `release` (defaulting to the
-latest stable upstream Ceph release) and an optional `mirror`; the role uses it
+`provider` block carries a `community` map with a `version` (defaulting to exact
+`20.2.2`) or an authored codename `release`, plus an optional `mirror`; the role uses it
 to configure the upstream community Ceph package repository with cephadm before
 installing `cephadm`. The role imports the Ceph release signing key from
 `<mirror>/keys/release.asc` (fingerprint-pinned) before `cephadm add-repo`,
@@ -499,6 +499,13 @@ dependencies, before cephadm install) that installs the entitlement's
 `registry.trustBundlePath` and logs in to `registry.url` so every node can pull
 the Ceph container images cephadm orchestrates. Adding a distribution is a
 renderer/table change, not a new branch in the role.
+
+The provider also carries the release-specific `runtimeOS` matrix and, for IBM,
+`ibm.callHome`. IBM bootstrap adds `--automatically-accept-license`; the
+bootstrap phase then enables and acknowledges Call Home or denies it according
+to the required authored value. A custom entitlement `registry.url` is paired
+with an explicit daemon image under the same registry namespace by desired-state
+validation.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
 stable `phase`, `name`, and `command`. Create-style operations also declare

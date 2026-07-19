@@ -5,6 +5,8 @@
       {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).mode | default('atLeastOne') }}
     bootwright_ceph_osd_expected_count: >-
       {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).expectedCount | default(0) | int }}
+    bootwright_ceph_osd_dynamic_hosts: >-
+      {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).dynamicHosts | default([]) | list }}
 
 - name: Report skipped OSD readiness check
   ansible.builtin.debug:
@@ -31,15 +33,21 @@
   retries: "{{ bootwright_ceph_osd_readiness_retries | default(30) | int }}"
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
-    bootwright_ceph_osd_stat.rc == 0
-    and (
-      (bootwright_ceph_osd_readiness_mode == 'exact'
-       and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
-           >= (bootwright_ceph_osd_expected_count | int))
-      or
-      (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-       and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int) >= 1)
+    (
+      bootwright_ceph_osd_stat.rc == 0
+      and (
+        (bootwright_ceph_osd_readiness_mode == 'exact'
+         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+             >= (bootwright_ceph_osd_expected_count | int))
+        or
+        (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
+         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+             >= (bootwright_ceph_osd_expected_count | int))
+      )
     )
+    or
+    ((bootwright_ceph_osd_stat.attempts | default(1) | int)
+     >= (bootwright_ceph_osd_readiness_retries | default(30) | int))
   when: bootwright_ceph_osd_readiness_mode != 'skip'
 
 - name: Evaluate whether declared Ceph OSDs became ready
@@ -53,7 +61,8 @@
                >= (bootwright_ceph_osd_expected_count | int))
           or
           (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-           and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int) >= 1)
+           and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+               >= (bootwright_ceph_osd_expected_count | int))
         )
       }}
   when: bootwright_ceph_osd_readiness_mode != 'skip'
@@ -103,7 +112,7 @@
     fail_msg: >-
       Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not create the
       declared OSDs: expected
-      {{ 'exactly ' ~ bootwright_ceph_osd_expected_count if bootwright_ceph_osd_readiness_mode == 'exact' else 'at least 1' }}
+      {{ 'exactly ' ~ bootwright_ceph_osd_expected_count if bootwright_ceph_osd_readiness_mode == 'exact' else 'at least ' ~ bootwright_ceph_osd_expected_count }}
       OSD(s) 'in', observed
       {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default('unknown') }}
       (up {{ (bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_up_osds | default('unknown') }})
@@ -123,6 +132,101 @@
       Declared OSD services (ceph orch ls --service_type osd):
       {{ (bootwright_ceph_osd_service_ls.stdout | default('') | trim) or '(OSD service status unavailable — the cluster was unreachable)' }}
   when: bootwright_ceph_osd_readiness_mode != 'skip'
+
+- name: Wait for an in OSD on every dynamic-selection host
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - osd
+      - tree
+      - --format
+      - json
+  register: bootwright_ceph_osd_host_tree
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_osd_readiness_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_ceph_osd_host_tree.rc == 0
+      and (
+        (
+          ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+           | default([])
+           | selectattr('type', 'equalto', 'osd')
+           | selectattr('reweight', 'gt', 0)
+           | map(attribute='id')
+           | list)
+          | intersect(
+              ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+               | default([])
+               | selectattr('type', 'equalto', 'host')
+               | selectattr('name', 'equalto', item)
+               | map(attribute='children')
+               | list
+               | flatten)
+            )
+          | length
+        ) >= 1
+      )
+    )
+    or
+    ((bootwright_ceph_osd_host_tree.attempts | default(1) | int)
+     >= (bootwright_ceph_osd_readiness_retries | default(30) | int))
+  loop: "{{ bootwright_ceph_osd_dynamic_hosts }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_ceph_osd_dynamic_hosts | length > 0
+
+- name: Assert every dynamic-selection host was probed
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bootwright_ceph_osd_host_tree.results | default([]) | length)
+        == (bootwright_ceph_osd_dynamic_hosts | length)
+  when: bootwright_ceph_osd_dynamic_hosts | length > 0
+
+- name: Assert an in OSD exists on every dynamic-selection host
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bootwright_ceph_osd_host_result.rc | default(1) | int) == 0
+        and (
+          (
+            ((bootwright_ceph_osd_host_result.stdout | default('{}') | from_json).nodes
+             | default([])
+             | selectattr('type', 'equalto', 'osd')
+             | selectattr('reweight', 'gt', 0)
+             | map(attribute='id')
+             | list)
+            | intersect(
+                ((bootwright_ceph_osd_host_result.stdout | default('{}') | from_json).nodes
+                 | default([])
+                 | selectattr('type', 'equalto', 'host')
+                 | selectattr('name', 'equalto', bootwright_ceph_osd_host_result.item)
+                 | map(attribute='children')
+                 | list
+                 | flatten)
+              )
+            | length
+          ) >= 1
+        )
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not create
+      an in OSD on dynamic-selection host
+      {{ bootwright_ceph_osd_host_result.item | default('unknown') }} after
+      {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts. Inspect
+      `ceph orch device ls --wide`, the declared OSD service status, and the CRUSH
+      tree below; clean or exclude rejected devices, then re-apply.
+      {{ bootwright_ceph_osd_host_result.stdout | default('(CRUSH tree unavailable)') }}
+  loop: "{{ bootwright_ceph_osd_host_tree.results | default([]) }}"
+  loop_control:
+    loop_var: bootwright_ceph_osd_host_result
+    label: "{{ bootwright_ceph_osd_host_result.item | default('unknown') }}"
+  when: bootwright_ceph_osd_dynamic_hosts | length > 0
 
 - name: Capture observed Ceph health for the storage result
   ansible.builtin.command:

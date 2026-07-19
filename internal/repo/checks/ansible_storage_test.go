@@ -14,6 +14,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/container_image_base.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml",
@@ -65,6 +66,121 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 				t.Fatalf("%s must address staged input as %s inside cephadm shell", path, mountedPath)
 			}
 		}
+	}
+}
+
+func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml"
+	tasks := readAnsibleTasks(t, path)
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve OSD readiness expectation")
+	globalWaitIdx := findAnsibleTask(t, tasks, "Wait for declared Ceph OSDs to be created and in")
+	evaluateIdx := findAnsibleTask(t, tasks, "Evaluate whether declared Ceph OSDs became ready")
+	deviceDiagIdx := findAnsibleTask(t, tasks, "Collect Ceph device inventory when OSDs did not become ready")
+	serviceDiagIdx := findAnsibleTask(t, tasks, "Collect declared OSD service status when OSDs did not become ready")
+	globalAssertIdx := findAnsibleTask(t, tasks, "Assert declared Ceph OSDs were created")
+	perHostIdx := findAnsibleTask(t, tasks, "Wait for an in OSD on every dynamic-selection host")
+	coverageAssertIdx := findAnsibleTask(t, tasks, "Assert every dynamic-selection host was probed")
+	dynamicAssertIdx := findAnsibleTask(t, tasks, "Assert an in OSD exists on every dynamic-selection host")
+	healthIdx := findAnsibleTask(t, tasks, "Capture observed Ceph health for the storage result")
+	if !(resolveIdx < globalWaitIdx &&
+		globalWaitIdx < evaluateIdx &&
+		evaluateIdx < deviceDiagIdx &&
+		deviceDiagIdx < serviceDiagIdx &&
+		serviceDiagIdx < globalAssertIdx &&
+		globalAssertIdx < perHostIdx &&
+		perHostIdx < coverageAssertIdx &&
+		coverageAssertIdx < dynamicAssertIdx &&
+		dynamicAssertIdx < healthIdx) {
+		t.Fatalf("OSD readiness must evaluate and diagnose the global gate, require and assert every dynamic host, then capture health")
+	}
+
+	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(resolve["bootwright_ceph_osd_dynamic_hosts"]), "dynamicHosts") {
+		t.Fatalf("OSD readiness must resolve rendered dynamic hostnames, got %v", tasks[resolveIdx])
+	}
+
+	globalUntil := fmt.Sprint(tasks[globalWaitIdx]["until"])
+	for _, want := range []string{"num_in_osds", "bootwright_ceph_osd_readiness_mode == 'exact'", "bootwright_ceph_osd_expected_count", "bootwright_ceph_osd_stat.attempts", "bootwright_ceph_osd_readiness_retries"} {
+		if !strings.Contains(globalUntil, want) {
+			t.Fatalf("global OSD readiness must preserve exact static-path behavior %q, got %v", want, globalUntil)
+		}
+	}
+	if strings.Count(globalUntil, "bootwright_ceph_osd_expected_count") < 2 {
+		t.Fatalf("global OSD readiness must enforce expectedCount for exact and dynamic selections, got %v", globalUntil)
+	}
+	readyFacts, ok := tasks[evaluateIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("global OSD readiness must evaluate the exhausted poll before diagnostics, got %v", tasks[evaluateIdx])
+	}
+	ready := fmt.Sprint(readyFacts["bootwright_ceph_osd_ready"])
+	for _, want := range []string{"bootwright_ceph_osd_readiness_mode == 'atLeastOne'", "bootwright_ceph_osd_expected_count"} {
+		if !strings.Contains(ready, want) {
+			t.Fatalf("global OSD readiness evaluation missing %q, got %v", want, ready)
+		}
+	}
+	if strings.Count(ready, "bootwright_ceph_osd_expected_count") < 2 {
+		t.Fatalf("global OSD readiness evaluation must preserve expectedCount for exact and dynamic selections, got %v", ready)
+	}
+	globalAssert, ok := tasks[globalAssertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(globalAssert["that"]), "bootwright_ceph_osd_ready") {
+		t.Fatalf("global OSD readiness must fail through the evaluated readiness fact after diagnostics, got %v", tasks[globalAssertIdx])
+	}
+
+	perHost := tasks[perHostIdx]
+	command, ok := perHost["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("dynamic-host OSD readiness must use a command probe, got %v", perHost)
+	}
+	argv := fmt.Sprint(command["argv"])
+	for _, want := range []string{"cephadm", "shell", "ceph", "osd", "tree", "--format", "json"} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("dynamic-host OSD readiness argv missing %q: %v", want, argv)
+		}
+	}
+	until := fmt.Sprint(perHost["until"])
+	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'equalto', item", "children", "intersect", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_retries"} {
+		if !strings.Contains(until, want) {
+			t.Fatalf("dynamic-host OSD readiness condition missing %q: %v", want, until)
+		}
+	}
+	if got := fmt.Sprint(perHost["loop"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") {
+		t.Fatalf("dynamic-host OSD readiness must probe every rendered hostname, got loop=%v", got)
+	}
+	if got := fmt.Sprint(perHost["when"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") {
+		t.Fatalf("dynamic-host OSD readiness must skip empty host sets, got when=%v", got)
+	}
+	if perHost["changed_when"] != false || perHost["failed_when"] != false {
+		t.Fatalf("dynamic-host OSD readiness must be a read-only retry probe, got changed_when=%v failed_when=%v", perHost["changed_when"], perHost["failed_when"])
+	}
+	coverageAssert, ok := tasks[coverageAssertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("dynamic-host OSD readiness must assert every rendered host was probed, got %v", tasks[coverageAssertIdx])
+	}
+	coverage := fmt.Sprint(coverageAssert["that"])
+	for _, want := range []string{"bootwright_ceph_osd_host_tree.results", "bootwright_ceph_osd_dynamic_hosts"} {
+		if !strings.Contains(coverage, want) {
+			t.Fatalf("dynamic-host probe coverage assertion missing %q, got %v", want, coverage)
+		}
+	}
+	dynamicAssert, ok := tasks[dynamicAssertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("dynamic-host OSD readiness must end with an actionable per-host assertion, got %v", tasks[dynamicAssertIdx])
+	}
+	dynamicThat := fmt.Sprint(dynamicAssert["that"])
+	for _, want := range []string{"bootwright_ceph_osd_host_result.rc", "bootwright_ceph_osd_host_result.stdout", "bootwright_ceph_osd_host_result.item", "type', 'equalto', 'osd", "type', 'equalto', 'host", "intersect"} {
+		if !strings.Contains(dynamicThat, want) {
+			t.Fatalf("dynamic-host OSD assertion missing %q, got %v", want, dynamicThat)
+		}
+	}
+	if got := fmt.Sprint(tasks[dynamicAssertIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_osd_host_tree.results") {
+		t.Fatalf("dynamic-host OSD assertion must evaluate every probe result, got loop=%v", got)
+	}
+	loopControl, ok := tasks[dynamicAssertIdx]["loop_control"].(map[string]any)
+	if !ok || loopControl["loop_var"] != "bootwright_ceph_osd_host_result" {
+		t.Fatalf("dynamic-host OSD assertion must use a collision-safe loop variable, got %v", tasks[dynamicAssertIdx]["loop_control"])
+	}
+	if got := fmt.Sprint(dynamicAssert["fail_msg"]); !strings.Contains(got, "ceph orch device ls --wide") || !strings.Contains(got, "CRUSH") {
+		t.Fatalf("dynamic-host OSD assertion must provide device and CRUSH diagnostics, got fail_msg=%v", got)
 	}
 }
 
@@ -382,9 +498,11 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker for override rebuild")
 	decideIdx := findAnsibleTask(t, tasks, "Decide override rebuild ownership")
 	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
-	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")
-	if !(readIdx < decideIdx && decideIdx < gateIdx && gateIdx < zapIdx) {
-		t.Fatalf("override rebuild must read marker, decide ownership, and enforce the apply-mode gate before zapping (read=%d decide=%d gate=%d zap=%d)", readIdx, decideIdx, gateIdx, zapIdx)
+	rebuildIdx := findAnsibleTask(t, tasks, "Decide whether this cluster requires an authorized override rebuild")
+	deviceGateIdx := findAnsibleTask(t, tasks, "Refuse to wipe present Ceph devices without a valid Bootwright OSD record")
+	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild on every topology host")
+	if !(readIdx < decideIdx && decideIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < deviceGateIdx && deviceGateIdx < zapIdx) {
+		t.Fatalf("override rebuild must prove cluster and device ownership before zapping every host (read=%d decide=%d gate=%d rebuild=%d device=%d zap=%d)", readIdx, decideIdx, gateIdx, rebuildIdx, deviceGateIdx, zapIdx)
 	}
 
 	gate := tasks[gateIdx]
@@ -407,8 +525,18 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(zap["argv"]), "rm-cluster") || !strings.Contains(fmt.Sprint(zap["argv"]), "--zap-osds") {
 		t.Fatalf("override rebuild must zap via cephadm rm-cluster --zap-osds, got %v", tasks[zapIdx])
 	}
-	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_override_owned") {
-		t.Fatalf("override rebuild zap must be gated on proven ownership, got %v", tasks[zapIdx]["when"])
+	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "hostvars[bootwright_selected_storage_cluster.seedHost]") || !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") || strings.Contains(got, "inventory_hostname") {
+		t.Fatalf("override rebuild zap must consume the seed authorization on every host, got %v", tasks[zapIdx]["when"])
+	}
+	rebuild, ok := tasks[rebuildIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("rebuild decision must be a set_fact, got %v", tasks[rebuildIdx])
+	}
+	rebuildExpr := fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"])
+	for _, want := range []string{"bootwright_apply_mode", "bootwright_ceph_override_owned", "bootwright_ceph_rebuild_authorized", "bootwright_ceph_reconcilable_only", "bootwright_ceph_incomplete_bootstrap"} {
+		if !strings.Contains(rebuildExpr, want) {
+			t.Fatalf("rebuild decision must require %s, got %v", want, rebuildExpr)
+		}
 	}
 
 	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -451,9 +579,10 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 
 	detectIdx := findAnsibleTask(t, tasks, "Detect an incomplete Bootwright bootstrap eligible for override rebuild")
 	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
-	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")
-	if !(detectIdx < gateIdx && gateIdx < zapIdx) {
-		t.Fatalf("incomplete-bootstrap detection must run before the gate and the zap (detect=%d gate=%d zap=%d)", detectIdx, gateIdx, zapIdx)
+	rebuildIdx := findAnsibleTask(t, tasks, "Decide whether this cluster requires an authorized override rebuild")
+	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild on every topology host")
+	if !(detectIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < zapIdx) {
+		t.Fatalf("incomplete-bootstrap detection must run before the gate, rebuild decision, and zap (detect=%d gate=%d rebuild=%d zap=%d)", detectIdx, gateIdx, rebuildIdx, zapIdx)
 	}
 
 	detect, ok := tasks[detectIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -475,8 +604,12 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 		t.Fatalf("incomplete-bootstrap detection must require the cluster to be unreachable, got %v", detect["bootwright_ceph_incomplete_bootstrap"])
 	}
 
-	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_incomplete_bootstrap") {
-		t.Fatalf("override rebuild zap must also honor the incomplete-bootstrap decision, got %v", tasks[zapIdx]["when"])
+	rebuild, ok := tasks[rebuildIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"]), "bootwright_ceph_incomplete_bootstrap") {
+		t.Fatalf("override rebuild decision must honor the incomplete-bootstrap decision, got %v", tasks[rebuildIdx])
+	}
+	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") {
+		t.Fatalf("override rebuild zap must consume the authorized rebuild decision, got %v", tasks[zapIdx]["when"])
 	}
 
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to touch a Bootwright Ceph cluster whose ownership marker is missing")
@@ -493,7 +626,7 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 
 func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
-	rm := tasks[findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")]
+	rm := tasks[findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild on every topology host")]
 	if got := fmt.Sprint(rm["failed_when"]); !strings.Contains(got, "!= 0") {
 		t.Fatalf("override rebuild rm-cluster must fail closed before clearing config and re-bootstrapping, got failed_when=%v", rm["failed_when"])
 	}
@@ -770,6 +903,133 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Apply Ceph storage cluster")], "bootwright.core.storage_cluster_cephadm")
 }
 
+func TestStorageCephadmApplyRebuildCleansTopologyBeforeSeedBootstrap(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml")
+	if len(plays) != 1 {
+		t.Fatalf("storage apply plays = %d, want 1", len(plays))
+	}
+	if got := plays[0]["any_errors_fatal"]; got != true {
+		t.Fatalf("storage apply must abort the selected topology when one rebuild guard or cleanup fails, got %v", got)
+	}
+	if got := plays[0]["strategy"]; got != "linear" {
+		t.Fatalf("storage apply must keep rebuild guards and cleanup in lockstep before seed bootstrap, got strategy=%v", got)
+	}
+	playTasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	for _, task := range playTasks {
+		if task["name"] == "End selected storage non-seed hosts" {
+			t.Fatalf("storage base apply must retain non-seed topology hosts for rebuild cleanup")
+		}
+	}
+	seedContext := playTasks[findAnsibleTask(t, playTasks, "Validate selected storage seed context")]
+	if seedContext["run_once"] != true {
+		t.Fatalf("seed context validation must run once for the selected topology, got %v", seedContext["run_once"])
+	}
+	if got := fmt.Sprint(seedContext["ansible.builtin.assert"]); !strings.Contains(got, "ansible_play_hosts_all") || strings.Contains(got, "== inventory_hostname") {
+		t.Fatalf("seed context must validate topology membership instead of ending non-seed hosts, got %v", got)
+	}
+
+	roleTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
+	varsIdx := findAnsibleTask(t, roleTasks, "Resolve Ceph storage role variables")
+	rebuildIdx := findAnsibleTask(t, roleTasks, "Guard and clean an authorized Ceph cluster rebuild")
+	endNonSeedIdx := findAnsibleTask(t, roleTasks, "End non-seed hosts after the cluster-wide rebuild phase")
+	seedPrepareIdx := findAnsibleTask(t, roleTasks, "Prepare Ceph seed convergence context")
+	bootstrapIdx := findAnsibleTask(t, roleTasks, "Bootstrap and converge Ceph cluster")
+	if !(varsIdx < rebuildIdx && rebuildIdx < endNonSeedIdx && endNonSeedIdx < seedPrepareIdx && seedPrepareIdx < bootstrapIdx) {
+		t.Fatalf("role must resolve cheap variables, finish all-host cleanup, end non-seeds, then load seed context and bootstrap")
+	}
+	if got := fmt.Sprint(roleTasks[endNonSeedIdx]["when"]); !strings.Contains(got, "seedHost") || !strings.Contains(got, "prereqs_only") {
+		t.Fatalf("non-seed short circuit must preserve all-host prerequisite tasks and run after rebuild, got when=%v", roleTasks[endNonSeedIdx]["when"])
+	}
+	if got := fmt.Sprint(roleTasks[bootstrapIdx]["when"]); !strings.Contains(got, "inventory_hostname") || !strings.Contains(got, "seedHost") {
+		t.Fatalf("bootstrap phase must remain seed-only, got when=%v", roleTasks[bootstrapIdx]["when"])
+	}
+
+	rebuildTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/rebuild.yml")
+	classifyIdx := findAnsibleTask(t, rebuildTasks, "Classify Ceph cluster apply mode on the seed host")
+	gatherIdx := findAnsibleTask(t, rebuildTasks, "Gather storage node OS facts for authorized rebuild")
+	contextIdx := findAnsibleTask(t, rebuildTasks, "Resolve Ceph rebuild host context")
+	deviceIdx := findAnsibleTask(t, rebuildTasks, "Guard Ceph rebuild devices on every topology host")
+	rmIdx := findAnsibleTask(t, rebuildTasks, "Remove existing cephadm cluster for override rebuild on every topology host")
+	clearFSIDIdx := findAnsibleTask(t, rebuildTasks, "Clear authorized Ceph FSID state for override rebuild on every topology host")
+	clearSeedIdx := findAnsibleTask(t, rebuildTasks, "Clear exact Ceph seed files for override rebuild")
+	clearStagedIdx := findAnsibleTask(t, rebuildTasks, "Clear exact staged Ceph files for override rebuild on the seed host")
+	finalizeIdx := findAnsibleTask(t, rebuildTasks, "Finalize Ceph cluster apply mode on the seed host")
+	if !(classifyIdx < gatherIdx && gatherIdx < contextIdx && contextIdx < deviceIdx && deviceIdx < rmIdx && rmIdx < clearFSIDIdx && clearFSIDIdx < clearSeedIdx && clearSeedIdx < clearStagedIdx && clearStagedIdx < finalizeIdx) {
+		t.Fatalf("rebuild must authorize on seed, gate every host, clean every host, then finalize seed state")
+	}
+	if got := fmt.Sprint(rebuildTasks[gatherIdx]["when"]); !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") {
+		t.Fatalf("non-seed OS facts must be gathered only for an authorized cluster-wide rebuild, got when=%v", rebuildTasks[gatherIdx]["when"])
+	}
+	if got := fmt.Sprint(rebuildTasks[classifyIdx]["when"]); !strings.Contains(got, "inventory_hostname") || !strings.Contains(got, "seedHost") {
+		t.Fatalf("cluster ownership classification must remain seed-only, got when=%v", rebuildTasks[classifyIdx]["when"])
+	}
+	if got := fmt.Sprint(rebuildTasks[contextIdx]["ansible.builtin.include_tasks"]); got != "../destroy_steps/context.yml" {
+		t.Fatalf("rebuild must reuse destroy host context gates, got %v", got)
+	}
+	if got := fmt.Sprint(rebuildTasks[deviceIdx]["ansible.builtin.include_tasks"]); got != "../destroy_steps/device_gates.yml" {
+		t.Fatalf("rebuild must reuse destroy device gates, got %v", got)
+	}
+	for _, idx := range []int{contextIdx, deviceIdx, rmIdx, clearFSIDIdx} {
+		when := fmt.Sprint(rebuildTasks[idx]["when"])
+		if !strings.Contains(when, "hostvars[bootwright_selected_storage_cluster.seedHost]") || !strings.Contains(when, "bootwright_ceph_rebuild_cleanup_required") {
+			t.Fatalf("all-host rebuild task %q must consume the seed authorization, got when=%v", rebuildTasks[idx]["name"], rebuildTasks[idx]["when"])
+		}
+	}
+	rmArgv := fmt.Sprint(rebuildTasks[rmIdx]["ansible.builtin.command"])
+	if !strings.Contains(rmArgv, "--zap-osds") || !strings.Contains(rmArgv, "hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid") {
+		t.Fatalf("all-host rebuild must remove the seed-authorized fsid and zap local OSDs, got %v", rmArgv)
+	}
+	clearFSIDLoop := fmt.Sprint(rebuildTasks[clearFSIDIdx]["loop"])
+	for _, path := range []string{"/var/lib/ceph/", "/var/log/ceph/"} {
+		if !strings.Contains(clearFSIDLoop, path) || !strings.Contains(clearFSIDLoop, "hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_override_fsid") {
+			t.Fatalf("all-host rebuild cleanup must scope %s to the seed-authorized fsid, got %v", path, clearFSIDLoop)
+		}
+	}
+	for _, idx := range []int{clearSeedIdx, clearStagedIdx} {
+		when := fmt.Sprint(rebuildTasks[idx]["when"])
+		if !strings.Contains(when, "inventory_hostname") || !strings.Contains(when, "seedHost") || !strings.Contains(when, "bootwright_ceph_rebuild_cleanup_required") {
+			t.Fatalf("exact-file rebuild task %q must be seed-only and authorized, got when=%v", rebuildTasks[idx]["name"], rebuildTasks[idx]["when"])
+		}
+	}
+	seedLoop := fmt.Sprint(rebuildTasks[clearSeedIdx]["loop"])
+	for _, path := range []string{"/etc/ceph/ceph.conf", "/etc/ceph/ceph.client.admin.keyring", "/etc/ceph/ceph.pub", "bootwright_ceph_ownership_marker_path"} {
+		if !strings.Contains(seedLoop, path) {
+			t.Fatalf("seed rebuild cleanup must remove exact managed file %s, got %v", path, seedLoop)
+		}
+	}
+	stagedLoop := fmt.Sprint(rebuildTasks[clearStagedIdx]["loop"])
+	for _, path := range []string{"bootwright_ceph_remote_bootstrap_spec", "bootwright_ceph_remote_private_key", "bootwright_ceph_remote_registry_json", "management-services.yaml", "stretch-crushmap-new.bin"} {
+		if !strings.Contains(stagedLoop, path) {
+			t.Fatalf("seed rebuild cleanup must remove exact staged file %s, got %v", path, stagedLoop)
+		}
+	}
+}
+
+func TestStorageCephadmRebuildCleanupPreservesSharedCephRoots(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/rebuild.yml")
+	for _, task := range tasks {
+		file, ok := task["ansible.builtin.file"].(map[string]any)
+		if !ok || file["state"] != "absent" {
+			continue
+		}
+		paths := []any{file["path"]}
+		if loop, ok := task["loop"].([]any); ok {
+			paths = loop
+		}
+		for _, item := range paths {
+			path := fmt.Sprint(item)
+			for _, root := range []string{"/etc/ceph", "/var/lib/ceph", "/var/log/ceph", "{{ bootwright_ceph_remote_work_dir }}"} {
+				if path == root {
+					t.Fatalf("rebuild cleanup task %q must not recursively remove shared or staged root %s", task["name"], root)
+				}
+			}
+			if (strings.HasPrefix(path, "/var/lib/ceph/") || strings.HasPrefix(path, "/var/log/ceph/")) && !strings.Contains(path, "bootwright_ceph_override_fsid") {
+				t.Fatalf("rebuild cleanup task %q must scope Ceph state path %s to the authorized fsid", task["name"], path)
+			}
+		}
+	}
+}
+
 func TestMachineRegistrationRoleRegistersSafely(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_registration_apply.yml")
 	if len(plays) != 1 {
@@ -831,11 +1091,30 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		}
 	}
 
+	varsTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_vars.yml")
+	findAnsibleTask(t, varsTasks, "Resolve managed Ceph work paths")
 	contextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context.yml")
 	gatherIdx := findAnsibleTask(t, contextTasks, "Gather storage node OS facts")
-	providerFactIdx := findAnsibleTask(t, contextTasks, "Resolve managed Ceph work paths")
-	if !(gatherIdx < providerFactIdx) {
-		t.Fatalf("storage context phase must gather OS facts before materializing the provider (gather=%d provider=%d)", gatherIdx, providerFactIdx)
+	providerIdx := findAnsibleTask(t, contextTasks, "Resolve managed Ceph provider context")
+	if gatherIdx >= providerIdx {
+		t.Fatalf("host context must gather OS facts before provider templates are materialized")
+	}
+	providerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_provider.yml")
+	findAnsibleTask(t, providerTasks, "Resolve managed Ceph provider context")
+	seedContextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_seed.yml")
+	seedGatherIdx := findAnsibleTask(t, seedContextTasks, "Gather seed OS facts for provider rendering")
+	seedProviderIdx := findAnsibleTask(t, seedContextTasks, "Resolve managed Ceph provider context on the seed host")
+	operationsIdx := findAnsibleTask(t, seedContextTasks, "Load rendered Ceph operations")
+	if !(seedGatherIdx < seedProviderIdx && seedProviderIdx < operationsIdx) {
+		t.Fatalf("seed context must gather OS facts before provider templates, then load bootstrap operations")
+	}
+	seedCredentials := seedContextTasks[findAnsibleTask(t, seedContextTasks, "Load cephadm registry credentials on the seed host")]
+	if got := fmt.Sprint(seedCredentials["when"]); !strings.Contains(got, "is not defined") {
+		t.Fatalf("seed context must not reload credentials already loaded by a combined prerequisite run, got when=%v", seedCredentials["when"])
+	}
+	hostContext := mainTasks[findAnsibleTask(t, mainTasks, "Prepare Ceph storage node context")]
+	if got := fmt.Sprint(hostContext["when"]); !strings.Contains(got, "skip_prereqs") {
+		t.Fatalf("ordinary seed-only convergence must not gather host facts or load registry credentials on non-seeds, got when=%v", hostContext["when"])
 	}
 
 	repositoryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/repository.yml")
@@ -1016,9 +1295,13 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		task := block[findAnsibleTask(t, block, name)]
 		assertRedactsByDefault(t, name, task["no_log"])
 	}
-	rmCluster := block[findAnsibleTask(t, block, "Remove existing cephadm cluster for override rebuild")]
-	if got := fmt.Sprint(rmCluster["when"]); !strings.Contains(got, "bootwright_apply_mode") || !strings.Contains(got, "override") {
-		t.Fatalf("destructive cephadm rm-cluster must be gated on the override apply mode, got when=%v", rmCluster["when"])
+	rebuildDecision := block[findAnsibleTask(t, block, "Decide whether this cluster requires an authorized override rebuild")]
+	if got := fmt.Sprint(rebuildDecision["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_apply_mode") || !strings.Contains(got, "override") {
+		t.Fatalf("destructive cephadm rm-cluster must be authorized only in override apply mode, got decision=%v", rebuildDecision)
+	}
+	rmCluster := block[findAnsibleTask(t, block, "Remove existing cephadm cluster for override rebuild on every topology host")]
+	if got := fmt.Sprint(rmCluster["when"]); !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") {
+		t.Fatalf("destructive cephadm rm-cluster must consume the authorized rebuild decision, got when=%v", rmCluster["when"])
 	}
 	if got := fmt.Sprint(rmCluster["ansible.builtin.command"]); !strings.Contains(got, "rm-cluster") {
 		t.Fatalf("override rebuild must run cephadm rm-cluster, got %v", rmCluster)
@@ -1047,6 +1330,29 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !strings.Contains(bootstrapArgv, "--single-host-defaults") || !strings.Contains(bootstrapArgv, "singleHostDefaults") {
 		t.Fatalf("bootstrap argv must conditionally pass --single-host-defaults, got %v", resolveBootstrap)
 	}
+	if !strings.Contains(bootstrapArgv, "--automatically-accept-license") || !strings.Contains(bootstrapArgv, "requiresLicense") || !strings.Contains(bootstrapArgv, "license.accepted") {
+		t.Fatalf("licensed bootstrap must non-interactively accept the declared license, got %v", resolveBootstrap)
+	}
+	callHomeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml")
+	inspectCallHome := callHomeTasks[findAnsibleTask(t, callHomeTasks, "Inspect IBM Call Home manager module state")]
+	if got := fmt.Sprint(inspectCallHome["when"]); !strings.Contains(got, "ibm") || !strings.Contains(got, "callHome") {
+		t.Fatalf("Call Home inspection must be IBM-only and require explicit intent, got when=%v", inspectCallHome["when"])
+	}
+	enableCallHome := callHomeTasks[findAnsibleTask(t, callHomeTasks, "Enable IBM Call Home manager module")]
+	if got := fmt.Sprint(enableCallHome); !strings.Contains(got, "call_home_agent") || !strings.Contains(got, "enabled") {
+		t.Fatalf("Call Home enable path must enable call_home_agent for enabled intent, got %v", enableCallHome)
+	}
+	acceptCallHome := callHomeTasks[findAnsibleTask(t, callHomeTasks, "Accept enabled IBM Call Home state")]
+	if got := fmt.Sprint(acceptCallHome); !strings.Contains(got, "call-home-enabled") || !strings.Contains(got, "accept") {
+		t.Fatalf("Call Home enable path must acknowledge the enabled state, got %v", acceptCallHome)
+	}
+	disableCallHome := callHomeTasks[findAnsibleTask(t, callHomeTasks, "Disable IBM Call Home manager module")]
+	if got := fmt.Sprint(disableCallHome); !strings.Contains(got, "call-home-enabled") || !strings.Contains(got, "deny") || !strings.Contains(got, "disabled") {
+		t.Fatalf("Call Home disable path must turn off the module for disabled intent, got %v", disableCallHome)
+	}
+	if got := fmt.Sprint(disableCallHome["when"]); strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") {
+		t.Fatalf("Call Home opt-out must deny consent even when the module is already disabled, got when=%v", disableCallHome["when"])
+	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")
 	lateIdx := findAnsibleTask(t, block, "Apply Ceph late service spec")
@@ -1059,6 +1365,15 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	}
 	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "object-gateway") {
 		t.Fatalf("late operation loop has unexpected when=%v", block[lateOpsIdx]["when"])
+	}
+	finalHealthIdx := findAnsibleTask(t, block, "Wait for final managed Ceph health")
+	finalHealthAssertIdx := findAnsibleTask(t, block, "Refuse to complete an unreachable or unhealthy Ceph cluster")
+	ownershipIdx := findAnsibleTask(t, block, "Record storage cluster ownership")
+	if !(lateOpsIdx < finalHealthIdx && finalHealthIdx < finalHealthAssertIdx && finalHealthAssertIdx < ownershipIdx) {
+		t.Fatalf("final health must be proven after late operations and before recording successful ownership")
+	}
+	if got := fmt.Sprint(block[finalHealthIdx]["until"]); !strings.Contains(got, "HEALTH_ERR") || !strings.Contains(got, "bootwright_ceph_final_health.rc") {
+		t.Fatalf("final health wait must require a reachable cluster without HEALTH_ERR, got until=%v", block[finalHealthIdx]["until"])
 	}
 
 	cleanup := block[findAnsibleTask(t, block, "Remove managed Ceph work directory")]
@@ -1087,11 +1402,17 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 	t.Helper()
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/"
+	destroyBase := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
 	return readAnsibleTasksFromFiles(t,
-		base+"stage_inputs.yml",
 		base+"apply_mode.yml",
+		destroyBase+"context.yml",
+		destroyBase+"device_gates.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/rebuild.yml",
+		base+"apply_mode_finalize.yml",
+		base+"stage_inputs.yml",
 		base+"bootstrap_cluster.yml",
 		base+"ownership_marker.yml",
+		base+"ibm_call_home.yml",
 		base+"container_image_base.yml",
 		base+"registry_login.yml",
 		base+"dashboard_secret.yml",

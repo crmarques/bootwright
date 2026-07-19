@@ -2,7 +2,7 @@
 
 A Bootwright example that builds a **managed IBM Storage Ceph** cluster on
 **three physical servers**. Bootwright drives each server's **Redfish BMC** to
-**install RHEL 9.7** (anaconda + virtual media) *before* cephadm runs, then
+**install RHEL 9.8** (anaconda + virtual media) *before* cephadm runs, then
 bootstraps IBM Storage Ceph on the freshly installed OS.
 
 It is wired for an **enterprise network**: an outbound **HTTP/HTTPS proxy**,
@@ -116,12 +116,13 @@ None of this goes in YAML — it lives encrypted in the Bootwright context.
 2. **IBM Storage Ceph entitlement key** — from the IBM Container Software Library
    (`https://myibm.ibm.com/products-services/containerlibrary`). The registry
    login is username **`cp`** with that key as the password. (The IBM license is
-   accepted automatically because the entitlement sets `license.accept: true`.)
+   accepted automatically because the entitlement sets `license.accept: true`;
+   the StorageCluster explicitly keeps IBM Call Home disabled.)
 3. **BMC username/password** — the Redfish account on each server's BMC.
 4. **Proxy username/password** — if your proxy authenticates. If it does not,
    drop the `auth:` block and the `proxy-credentials` secret from
    `environment.yaml`.
-5. **The RHEL 9.7 DVD ISO** — `rhel-9.7-x86_64-dvd.iso` from
+5. **The RHEL 9.8 DVD ISO** — `rhel-9.8-x86_64-dvd.iso` from
    `https://access.redhat.com/downloads/content/rhel`.
 
 ---
@@ -129,11 +130,11 @@ None of this goes in YAML — it lives encrypted in the Bootwright context.
 ## 2. Stage the RHEL ISO
 
 ```bash
-bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
+bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
 bootwright media list
 ```
 
-The MachineImage references it as `local-media:rhel-9.7-x86_64-dvd.iso`.
+The MachineImage references it as `local-media:rhel-9.8-x86_64-dvd.iso`.
 
 ---
 
@@ -201,7 +202,7 @@ bootwright status --watch
 What apply does, in order:
 
 1. **infra** — starts the artifact server on the bastion, then for each node
-   drives its Redfish BMC to mount the RHEL 9.7 ISO as virtual media and runs the
+   drives its Redfish BMC to mount the RHEL 9.8 ISO as virtual media and runs the
    **anaconda install** (static IP on `10.20.30.0/24`, external DNS, NTP via
    chrony to the external servers, proxy for outbound). With RHEL in place, the
    machines-phase registration task registers each node with RHSM through the
@@ -258,7 +259,7 @@ infra/providers/baremetal.yaml                InfraProvider: baremetal, external
 infra/machines/bastion.yaml                   Machine: the artifact-server host (provided OS)
 infra/components/artifact-server.yaml         InfraComponent: HTTPS ISO server for the BMCs
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 10.20.30.0/24, external DNS refs
-infra/os/rhel-9-7-dvd.yaml                    MachineImage: RHEL 9.7 DVD (local-media)
+infra/os/rhel-9-8-dvd.yaml                    MachineImage: RHEL 9.8 DVD (local-media)
 infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
 clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1,
                                               mgmt-gateway HA dashboard

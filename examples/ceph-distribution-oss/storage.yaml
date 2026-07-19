@@ -7,7 +7,7 @@ spec:
 
   ceph:
     distribution: oss
-    release: squid
+    release: "20.2.2"
     community:
       mirror: https://download.ceph.com
     cephadm:

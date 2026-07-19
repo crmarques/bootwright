@@ -124,67 +124,19 @@
       {{ bootwright_selected_storage_cluster.name
          in (bootwright_ceph_rebuild_authorized_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list) }}
 
-- name: Remove existing cephadm cluster for override rebuild
-  ansible.builtin.command:
-    argv:
-      - cephadm
-      - rm-cluster
-      - --force
-      - --zap-osds
-      - --fsid
-      - "{{ bootwright_ceph_override_fsid }}"
-  register: bootwright_ceph_override_rm
-  changed_when: true
-  failed_when: bootwright_ceph_override_rm.rc != 0
-  when:
-    - (bootwright_apply_mode | default('continue')) == 'override'
-    - bootwright_ceph_override_fsid | default('') | length > 0
-    - >-
-      (
-        (bootwright_ceph_override_owned | default(false) | bool)
-        and (bootwright_ceph_rebuild_authorized | default(false) | bool)
-        and not (bootwright_ceph_reconcilable_only | default(false) | bool)
-      )
-      or (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
-
-- name: Clear residual Ceph configuration for override rebuild
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/ceph/ceph.conf
-    - /etc/ceph/ceph.client.admin.keyring
-    - /etc/ceph/ceph.pub
-    - "{{ bootwright_ceph_ownership_marker_path }}"
-  when:
-    - (bootwright_apply_mode | default('continue')) == 'override'
-    - (bootwright_ceph_override_conf | default({})).content is defined
-    - >-
-      (
-        (bootwright_ceph_override_owned | default(false) | bool)
-        and (bootwright_ceph_rebuild_authorized | default(false) | bool)
-        and not (bootwright_ceph_reconcilable_only | default(false) | bool)
-      )
-      or (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
-
-- name: Check existing Ceph configuration
-  ansible.builtin.command:
-    argv:
-      - test
-      - -f
-      - /etc/ceph/ceph.conf
-  register: bootwright_ceph_conf_check
-  changed_when: false
-  failed_when: false
-
-- name: Pre-record storage cluster ownership before bootstrap
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: resource.yml
-  vars:
-    bootwright_ownership_kind: storage-cluster
-    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
-    bootwright_ownership_fields:
-      cluster: "{{ bootwright_selected_storage_cluster.name }}"
-      attributes:
-        seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
+- name: Decide whether this cluster requires an authorized override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_rebuild_cleanup_required: >-
+      {{
+        (bootwright_apply_mode | default('continue')) == 'override'
+        and (bootwright_ceph_override_fsid | default('') | length > 0)
+        and
+        (
+          (
+            (bootwright_ceph_override_owned | default(false) | bool)
+            and (bootwright_ceph_rebuild_authorized | default(false) | bool)
+            and not (bootwright_ceph_reconcilable_only | default(false) | bool)
+          )
+          or (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
+        )
+      }}

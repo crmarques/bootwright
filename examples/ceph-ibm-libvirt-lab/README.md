@@ -1,7 +1,7 @@
 # IBM Storage Ceph on libvirt — 3-node trial lab (2 full + 1 tie-breaker)
 
 A self-contained Bootwright example that provisions **three libvirt VMs on this
-machine**, installs **RHEL 9.7** on them as Bootwright-managed OS, and builds a
+machine**, installs **RHEL 9.8** on them as Bootwright-managed OS, and builds a
 **managed IBM Storage Ceph** cluster via cephadm:
 
 | Node | Profile | Ceph roles | OSDs | Purpose |
@@ -122,9 +122,9 @@ the RHEL BaseOS/AppStream repos that cephadm/ceph need.
 
 You now have an **org ID** and an **activation key name**.
 
-### 1b. The RHEL 9.7 DVD ISO
+### 1b. The RHEL 9.8 DVD ISO
 
-Download `rhel-9.7-x86_64-dvd.iso` from
+Download `rhel-9.8-x86_64-dvd.iso` from
 `https://access.redhat.com/downloads/content/rhel` (or the Red Hat Developer
 downloads page). Save it somewhere local; you stage it into Bootwright in step 2.
 
@@ -148,27 +148,26 @@ need an **IBM entitlement key**:
 > (the org ID + activation key from step 1a) via `rhelEntitlementRef`. Setting
 > that `rhel` entitlement's `rhsm.management: external` instead delegates
 > registration to a corporate `ProvisioningPlaybook`
-> (see `examples/ceph-external-rhsm`).
+> (see `examples/ceph-external-rhsm`). The StorageCluster explicitly sets
+> `spec.ceph.ibm.callHome: disabled` so accepting the license does not opt this
+> lab into IBM Call Home outbound communication.
 
 **Version:** the StorageCluster pins `spec.ceph.release: "9.9.1"` — the IBM
-Storage Ceph product version. Only its major digit (`9`) is machine-consumed: it
-selects the `9` stream (`public.dhe.ibm.com/.../ceph` ships
-`ibm-storage-ceph-9-rhel-9.repo` as the newest) and the `ceph-9-rhel9` image
-base; the `.9.1` records which product build you intend to run. `spec.ceph.image`
-is left unset so cephadm pulls the latest 9.x image at bootstrap; pin a digest
-there if you want a frozen, reproducible version (a `:latest` tag is rejected by
-validation).
+Storage Ceph product version. Bootwright validates its RHEL 9.8 or 10.2 runtime
+matrix and uses the `9` repository/image stream. `spec.ceph.image` is left unset
+so cephadm uses the distribution-packaged default build; pin a digest there for
+a frozen, reproducible daemon image (`:latest` is rejected).
 
 ---
 
 ## 2. Stage the RHEL ISO into Bootwright
 
 ```bash
-bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
+bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
 bootwright media list
 ```
 
-The MachineImage references it as `local-media:rhel-9.7-x86_64-dvd.iso`.
+The MachineImage references it as `local-media:rhel-9.8-x86_64-dvd.iso`.
 
 ---
 
@@ -247,7 +246,7 @@ What apply does, in order:
 
 1. **infra** — defines the NAT'd libvirt network `vbr-ceph-ibm`, brings up the
    dnsmasq resolver on the host, creates the three VMs with emulated Redfish
-   BMCs, and installs RHEL 9.7 on each via the anaconda kickstart. (Time sync is
+   BMCs, and installs RHEL 9.8 on each via the anaconda kickstart. (Time sync is
    each node's own `chronyd`, reaching public NTP through the NAT'd network.)
    With the OS in place, the machines-phase registration task registers each
    node with RHSM.
@@ -364,7 +363,7 @@ infra/providers/libvirt.yaml                  InfraProvider: libvirt + VM profil
 infra/machines/bastion.yaml                   Machine: the libvirt host (localhost)
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 192.168.140.0/24, static IPs
 infra/components/lab-dns.yaml                  InfraComponent: dnsmasq resolver + forwarders
-infra/os/rhel-9-x86-64-dvd.yaml               MachineImage: RHEL 9.7 DVD (local-media)
+infra/os/rhel-9-x86-64-dvd.yaml               MachineImage: RHEL 9.8 DVD (local-media)
 infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
 clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1, mgmt-gateway HA dashboard
 clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml  Machines: ceph-1, ceph-2 (full), ceph-3 (mon)

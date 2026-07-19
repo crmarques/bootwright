@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/media"
 	"github.com/crmarques/bootwright/internal/state/view"
+	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 )
 
 const (
@@ -298,6 +300,21 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	}
 	if cluster.Spec.Ceph.Distribution == "" {
 		cluster.Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionOSS
+	}
+	ceph := cluster.Spec.Ceph
+	if ceph.Release == "" {
+		ceph.Release = cephprovider.DefaultRelease(ceph.Distribution)
+	}
+	if release, ok := cephprovider.ResolveRelease(ceph.Distribution, ceph.Release); ok {
+		ceph.Release = release.Value
+	}
+	if ceph.Distribution == v1alpha1.StorageCephDistributionOSS && ceph.Image == "" {
+		ceph.Image = cephprovider.DerivedOSSImage(ceph.Release)
+	}
+	if ceph.Community != nil && ceph.Community.Checksum != "" {
+		if checksum, err := media.NormalizeSHA256(ceph.Community.Checksum); err == nil {
+			ceph.Community.Checksum = checksum
+		}
 	}
 	adm := &cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.AddressRef.Name == "" {

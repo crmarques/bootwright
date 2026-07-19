@@ -4,14 +4,15 @@
     - name: Stage cephadm inputs
       ansible.builtin.include_tasks: bootstrap_steps/stage_inputs.yml
 
-    - name: Enforce cephadm apply mode
-      ansible.builtin.include_tasks: bootstrap_steps/apply_mode.yml
-
     - name: Bootstrap Ceph cluster
       ansible.builtin.include_tasks: bootstrap_steps/bootstrap_cluster.yml
 
     - name: Stamp Ceph ownership marker
       ansible.builtin.include_tasks: bootstrap_steps/ownership_marker.yml
+
+    - name: Reconcile IBM Call Home intent
+      ansible.builtin.include_tasks: bootstrap_steps/ibm_call_home.yml
+      when: bootwright_ceph_provider.name | default('') == 'ibm'
 
     - name: Pin cephadm container image base
       ansible.builtin.include_tasks: bootstrap_steps/container_image_base.yml

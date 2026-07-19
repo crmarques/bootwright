@@ -3,6 +3,7 @@ package cephprovider
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -18,8 +19,8 @@ const (
 
 	ibmStorageCephRepoTemplate = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-%s-rhel-{{ ansible_distribution_major_version }}.repo"
 
-	ibmImageBaseTemplate    = "cp.icr.io/cp/ibm-ceph/ceph-%s-rhel9"
-	rhcephImageBaseTemplate = "registry.redhat.io/rhceph/rhceph-%s-rhel9"
+	ibmImagePathTemplate    = "ibm-ceph/ceph-%s-rhel9"
+	rhcephImagePathTemplate = "rhceph/rhceph-%s-rhel9"
 )
 
 const (
@@ -28,9 +29,15 @@ const (
 	rhcephToolsRepoTemplate = "rhceph-%s-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
 )
 
-var ossUpstreamVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+var (
+	ossUpstreamVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+	ossSupportedReleaseNames  = map[string]bool{"squid": true, "tentacle": true}
+	ossSupportedSeries        = []string{"19.2.", "20.2."}
+)
 
 type distributionDef struct {
+	defaultRelease      string
+	releases            map[string]releaseDef
 	requiresRHSM        bool
 	requiresRegistry    bool
 	requiresLicense     bool
@@ -38,44 +45,78 @@ type distributionDef struct {
 	baseRepos           []string
 	usesRHCephToolsRepo bool
 	ibmRepoTemplate     string
-	imageBaseTemplate   string
+	imagePathTemplate   string
 	runtimeOS           RuntimeOS
+}
+
+type releaseDef struct {
+	value     string
+	stream    string
+	runtimeOS RuntimeOS
 }
 
 func (d distributionDef) requiresEntitlement() bool {
 	return d.requiresRHSM || d.requiresRegistry || d.requiresLicense
 }
 
-func rhelCephRuntimeOS(message string) RuntimeOS {
+func rhelCephRuntimeOS(versions []string, message string) RuntimeOS {
 	return RuntimeOS{
 		Family:         "rhel",
-		ExactVersions:  v1alpha1.StorageCephRHELVersions(),
+		ExactVersions:  append([]string(nil), versions...),
 		ManagedMessage: message,
 	}
 }
 
+var (
+	rhcs90RuntimeOS = rhelCephRuntimeOS(
+		[]string{"9.6", "9.7", "10", "10.0", "10.1"},
+		"Red Hat Ceph Storage 9.0 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes",
+	)
+	rhcs91RuntimeOS = rhelCephRuntimeOS(
+		[]string{"9.8", "10.2"},
+		"Red Hat Ceph Storage 9.1 requires RHEL 9.8 or 10.2 on storage nodes",
+	)
+	ibm991RuntimeOS = rhelCephRuntimeOS(
+		[]string{"9.8", "10.2"},
+		"IBM Storage Ceph 9.9.1 requires RHEL 9.8 or 10.2 on storage nodes",
+	)
+)
+
 var distributions = map[string]distributionDef{
 	v1alpha1.StorageCephDistributionOSS: {
-		runtimeOS: RuntimeOS{Family: "linux"},
+		defaultRelease: v1alpha1.StorageCephCommunityDefaultRelease,
+		runtimeOS: RuntimeOS{
+			Family:         "rhel",
+			ManagedMessage: "Community Ceph is supported on RHEL-family storage nodes",
+		},
 	},
 	v1alpha1.StorageCephDistributionRedHat: {
+		defaultRelease: "9.1",
+		releases: map[string]releaseDef{
+			"9":   {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
+			"9.0": {value: "9.0", stream: "9", runtimeOS: rhcs90RuntimeOS},
+			"9.1": {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
+		},
 		requiresRHSM:        true,
 		requiresRegistry:    true,
 		registryURL:         RedHatRegistryURL,
 		baseRepos:           []string{rhelBaseOSRepo, rhelAppStreamRepo},
 		usesRHCephToolsRepo: true,
-		imageBaseTemplate:   rhcephImageBaseTemplate,
-		runtimeOS:           rhelCephRuntimeOS("Red Hat Ceph Storage requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+		imagePathTemplate:   rhcephImagePathTemplate,
 	},
 	v1alpha1.StorageCephDistributionIBM: {
+		defaultRelease: "9.9.1",
+		releases: map[string]releaseDef{
+			"9":     {value: "9.9.1", stream: "9", runtimeOS: ibm991RuntimeOS},
+			"9.9.1": {value: "9.9.1", stream: "9", runtimeOS: ibm991RuntimeOS},
+		},
 		requiresRHSM:      true,
 		requiresRegistry:  true,
 		requiresLicense:   true,
 		registryURL:       IBMRegistryURL,
 		baseRepos:         []string{rhelBaseOSRepo, rhelAppStreamRepo},
 		ibmRepoTemplate:   ibmStorageCephRepoTemplate,
-		imageBaseTemplate: ibmImageBaseTemplate,
-		runtimeOS:         rhelCephRuntimeOS("IBM Storage Ceph requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+		imagePathTemplate: ibmImagePathTemplate,
 	},
 }
 
@@ -92,6 +133,7 @@ type Provider struct {
 	Community            Community
 	Repository           Repository
 	RuntimeOS            RuntimeOS
+	IBMCallHome          string
 }
 
 type Community struct {
@@ -111,6 +153,89 @@ type RuntimeOS struct {
 	MajorVersions  []string
 	ExactVersions  []string
 	ManagedMessage string
+}
+
+type ResolvedRelease struct {
+	Value     string
+	Stream    string
+	RuntimeOS RuntimeOS
+}
+
+func ResolveRelease(distribution, authored string) (ResolvedRelease, bool) {
+	def, ok := distributions[distribution]
+	if !ok {
+		return ResolvedRelease{}, false
+	}
+	value := authored
+	if value == "" {
+		value = def.defaultRelease
+	}
+	if distribution == v1alpha1.StorageCephDistributionOSS && !supportedOSSRelease(value) {
+		return ResolvedRelease{}, false
+	}
+	if def.releases == nil {
+		return ResolvedRelease{Value: value, RuntimeOS: def.runtimeOS}, true
+	}
+	release, ok := def.releases[value]
+	if !ok {
+		return ResolvedRelease{}, false
+	}
+	return ResolvedRelease{Value: release.value, Stream: release.stream, RuntimeOS: release.runtimeOS}, true
+}
+
+func SupportedReleases(distribution string) []string {
+	def, ok := distributions[distribution]
+	if !ok {
+		return nil
+	}
+	if distribution == v1alpha1.StorageCephDistributionOSS {
+		return []string{"19.2.x", "20.2.x", "squid", "tentacle"}
+	}
+	if def.releases == nil {
+		return nil
+	}
+	out := make([]string, 0, len(def.releases))
+	for value := range def.releases {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func supportedOSSRelease(value string) bool {
+	if ossSupportedReleaseNames[value] {
+		return true
+	}
+	if !ossUpstreamVersionPattern.MatchString(value) {
+		return false
+	}
+	for _, series := range ossSupportedSeries {
+		if strings.HasPrefix(value, series) {
+			return true
+		}
+	}
+	return false
+}
+
+func DefaultRelease(distribution string) string {
+	if def, ok := distributions[distribution]; ok {
+		return def.defaultRelease
+	}
+	return ""
+}
+
+func DefaultRegistryURL(distribution string) string {
+	if def, ok := distributions[distribution]; ok {
+		return def.registryURL
+	}
+	return ""
+}
+
+func DerivedOSSImage(release string) string {
+	if ossUpstreamVersionPattern.MatchString(release) {
+		return ossImageRepository + ":v" + release
+	}
+	return ""
 }
 
 func Distribution(cluster v1alpha1.StorageCluster) string {
@@ -137,7 +262,7 @@ func cephImage(cluster v1alpha1.StorageCluster) string {
 func communitySource(cluster v1alpha1.StorageCluster) Community {
 	release := cephRelease(cluster)
 	if release == "" {
-		release = v1alpha1.StorageCephCommunityDefaultRelease
+		release = DefaultRelease(v1alpha1.StorageCephDistributionOSS)
 	}
 	var out Community
 	if ossUpstreamVersionPattern.MatchString(release) {
@@ -157,12 +282,12 @@ func ossImage(cluster v1alpha1.StorageCluster, community Community) string {
 		return image
 	}
 	if community.Version != "" {
-		return ossImageRepository + ":v" + community.Version
+		return DerivedOSSImage(community.Version)
 	}
 	return ""
 }
 
-func imageRepository(image string) string {
+func ImageRepository(image string) string {
 	if at := strings.IndexByte(image, '@'); at >= 0 {
 		image = image[:at]
 	}
@@ -173,28 +298,40 @@ func imageRepository(image string) string {
 	return image
 }
 
-func imageBase(distribution string, def distributionDef, stream, image string) string {
-	if image != "" {
-		return imageRepository(image)
+func ExpectedImageRepository(distribution, release, registryURL string) (string, bool) {
+	def, ok := distributions[distribution]
+	if !ok {
+		return "", false
+	}
+	resolved, ok := ResolveRelease(distribution, release)
+	if !ok {
+		return "", false
 	}
 	if distribution == v1alpha1.StorageCephDistributionOSS {
-		return ossImageRepository
+		return ossImageRepository, true
 	}
-	if def.imageBaseTemplate != "" {
-		return fmt.Sprintf(def.imageBaseTemplate, stream)
+	if registryURL == "" {
+		registryURL = def.registryURL
 	}
-	return ""
+	if def.imagePathTemplate == "" || registryURL == "" || resolved.Stream == "" {
+		return "", false
+	}
+	return strings.TrimSuffix(registryURL, "/") + "/" + fmt.Sprintf(def.imagePathTemplate, resolved.Stream), true
+}
+
+func imageBase(distribution, release, registryURL, image string) string {
+	if image != "" {
+		return ImageRepository(image)
+	}
+	repository, _ := ExpectedImageRepository(distribution, release, registryURL)
+	return repository
 }
 
 func subscriptionStream(cluster v1alpha1.StorageCluster) string {
-	release := cephRelease(cluster)
-	if release == "" {
-		return v1alpha1.StorageCephSubscriptionDefaultStream
+	if release, ok := ResolveRelease(Distribution(cluster), cephRelease(cluster)); ok {
+		return release.Stream
 	}
-	if i := strings.IndexByte(release, '.'); i >= 0 {
-		return release[:i]
-	}
-	return release
+	return ""
 }
 
 func subscriptionRepository(def distributionDef, stream string) Repository {
@@ -212,6 +349,7 @@ func subscriptionRepository(def distributionDef, stream string) Repository {
 func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx secret.Index, secretsDir string) Provider {
 	distribution := Distribution(cluster)
 	def := distributions[distribution]
+	release, _ := ResolveRelease(distribution, cephRelease(cluster))
 	provider := Provider{
 		Distribution:         distribution,
 		PrerequisitePackages: []string{"firewalld", "lvm2", "podman", "chrony"},
@@ -219,7 +357,7 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 		RequiresRHSM:         def.requiresRHSM,
 		RequiresRegistry:     def.requiresRegistry,
 		RequiresLicense:      def.requiresLicense,
-		RuntimeOS:            def.runtimeOS,
+		RuntimeOS:            release.RuntimeOS,
 	}
 	if provider.RuntimeOS.Family == "" {
 		provider.RuntimeOS.Family = "linux"
@@ -231,9 +369,16 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 		provider.Repository = subscriptionRepository(def, subscriptionStream(cluster))
 		provider.Image = cephImage(cluster)
 	}
-	provider.ImageBase = imageBase(distribution, def, subscriptionStream(cluster), provider.Image)
 	if def.requiresEntitlement() && cluster.Spec.Ceph != nil {
 		provider.Entitlement, _ = entitlements.Resolve(ents, idx, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
+	}
+	registryURL := def.registryURL
+	if provider.Entitlement.Registry.URL != "" {
+		registryURL = provider.Entitlement.Registry.URL
+	}
+	provider.ImageBase = imageBase(distribution, release.Value, registryURL, provider.Image)
+	if distribution == v1alpha1.StorageCephDistributionIBM && cluster.Spec.Ceph != nil && cluster.Spec.Ceph.IBM != nil {
+		provider.IBMCallHome = cluster.Spec.Ceph.IBM.CallHome
 	}
 	return provider
 }
@@ -340,6 +485,11 @@ func Vars(provider Provider) map[string]any {
 	if provider.RequiresLicense || provider.Entitlement.License.Accepted {
 		out["license"] = map[string]any{
 			"accepted": provider.Entitlement.License.Accepted,
+		}
+	}
+	if provider.IBMCallHome != "" {
+		out["ibm"] = map[string]any{
+			"callHome": provider.IBMCallHome,
 		}
 	}
 	return out

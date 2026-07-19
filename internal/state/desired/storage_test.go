@@ -146,7 +146,7 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 		{
 			name: "oss-name",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Release = "reef"
+				state.StorageClusters[0].Spec.Ceph.Release = "squid"
 			},
 		},
 		{
@@ -196,6 +196,7 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionIBM
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 				state.StorageClusters[0].Spec.Ceph.Release = "9.9.1"
+				state.StorageClusters[0].Spec.Ceph.IBM = &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled}
 			},
 		},
 	}
@@ -640,6 +641,13 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			want: `spec.ceph.release "19.2" must be an upstream Ceph release name`,
 		},
 		{
+			name: "release-ended-oss-series",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Release = "reef"
+			},
+			want: `spec.ceph.release "reef" is not in a supported Ceph release series`,
+		},
+		{
 			name: "release-bad-redhat-stream",
 			edit: func(state *v1alpha1.State) {
 				state.Entitlements = []v1alpha1.Entitlement{{
@@ -671,7 +679,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Mirror: "ftp://mirror.example.test/ceph"}
 			},
-			want: "spec.ceph.community.mirror \"ftp://mirror.example.test/ceph\" must be an http or https URL",
+			want: "spec.ceph.community.mirror \"ftp://mirror.example.test/ceph\" must be an https URL",
 		},
 	}
 	for _, tc := range cases {
@@ -958,8 +966,12 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 		return v1alpha1.StorageCluster{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-				Cephadm:  v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{SingleHostDefaults: true}},
-				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{Hostname: "ceph-0"}}},
+				Cephadm: v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{SingleHostDefaults: true}},
+				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+					Hostname: "ceph-0",
+					Roles:    []string{v1alpha1.StorageCephRoleOSD},
+					Devices:  []string{"/dev/sdb", "/dev/sdc"},
+				}}},
 			}},
 		}
 	}
@@ -975,6 +987,47 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 	conflict.Spec.Ceph.Config = map[string]map[string]string{"global": {"osd_pool_default_size": "1"}}
 	if got := strings.Join(validateStorageCephSingleHostDefaults("p", conflict), "; "); !strings.Contains(got, "osd_pool_default_size") {
 		t.Fatalf("config conflict should be rejected, got %q", got)
+	}
+	oneOSD := base()
+	oneOSD.Spec.Ceph.Topology.Hosts[0].Devices = []string{"/dev/sdb"}
+	if got := strings.Join(validateStorageCephSingleHostDefaults("p", oneOSD), "; "); !strings.Contains(got, "requires at least 2 OSDs") {
+		t.Fatalf("one static OSD should be rejected, got %q", got)
+	}
+	dynamic := base()
+	dynamic.Spec.Ceph.Topology.Hosts[0].Devices = nil
+	dynamic.Spec.Ceph.Topology.Hosts[0].OSD = &v1alpha1.StorageCephHostOSD{
+		DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+	}
+	if errs := validateStorageCephSingleHostDefaults("p", dynamic); len(errs) != 0 {
+		t.Fatalf("dynamic single-host selection should defer count to readiness, got %v", errs)
+	}
+}
+
+func TestStorageValidationRejectsSingleHostWithOneStaticOSD(t *testing.T) {
+	state := storageValidationState()
+	state.ContainerClusters = nil
+	state.Machines = state.Machines[:1]
+	state.StoragePools = nil
+	state.StorageFilesystems = nil
+	state.StorageObjectGateways = nil
+	state.StorageExports = nil
+	state.ClusterAddons = nil
+	state.ClusterAddonBindings = nil
+	cluster := &state.StorageClusters[0]
+	cluster.Spec.Ceph.Topology.Stretch = nil
+	cluster.Spec.Ceph.Topology.Hosts = []v1alpha1.StorageCephHost{
+		storageValidationCephNode("ceph-dc1-0", "", []string{"mon", "mgr", "osd"}),
+	}
+	cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults = true
+
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "spec.ceph.cephadm.bootstrap.singleHostDefaults requires at least 2 OSDs; the statically declared topology creates 1") {
+		t.Fatalf("validateStorage errors = %q, want the single-host static OSD minimum", got)
+	}
+
+	cluster.Spec.Ceph.Topology.Hosts[0].Devices = []string{"/dev/vdb", "/dev/vdc"}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("two-OSD single-host topology should validate, got %v", errs)
 	}
 }
 

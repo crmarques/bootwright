@@ -86,8 +86,9 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
 	errs = append(errs, validateStorageCephDistribution(prefix, cluster, state)...)
 	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), ceph.Release)...)
-	errs = append(errs, validateStorageCephImage(prefix, ceph.Image)...)
+	errs = append(errs, validateStorageCephImage(prefix, cluster, state)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
+	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephFIPS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, state)...)
@@ -122,6 +123,9 @@ func validateStorageCephSingleHostDefaults(prefix string, cluster v1alpha1.Stora
 	}
 	if cluster.Spec.Ceph.Topology.Stretch != nil {
 		errs = append(errs, prefix+" must not be set with stretch mode")
+	}
+	if count, known := topology.DeclaredOSDCount(cluster); known && count < topology.SingleHostMinimumOSDs {
+		errs = append(errs, fmt.Sprintf("%s requires at least %d OSDs; the statically declared topology creates %d", prefix, topology.SingleHostMinimumOSDs, count))
 	}
 	if global := cluster.Spec.Ceph.Config["global"]; global != nil {
 		for _, key := range []string{"osd_pool_default_size", "osd_pool_default_min_size", "osd_crush_chooseleaf_type"} {
@@ -407,8 +411,8 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 		if item.service.Port < 0 || item.service.Port > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.port %d out of range", owner, item.service.Port))
 		}
-		if item.service.RetentionTime != "" && item.field != "prometheus" && item.field != "loki" {
-			errs = append(errs, owner+".retentionTime applies to prometheus and loki only")
+		if item.service.RetentionTime != "" && item.field != "prometheus" {
+			errs = append(errs, owner+".retentionTime applies to prometheus only")
 		}
 		if item.service.RetentionSize != "" && item.field != "prometheus" {
 			errs = append(errs, owner+".retentionSize applies to prometheus only")

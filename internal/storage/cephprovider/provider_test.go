@@ -20,18 +20,94 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	if provider.RequiresRHSM || provider.RequiresRegistry || provider.RequiresLicense {
 		t.Fatalf("OSS provider requires vendor material: %#v", provider)
 	}
-	if provider.Community.Release != v1alpha1.StorageCephCommunityDefaultRelease {
-		t.Fatalf("community release = %q, want default %q", provider.Community.Release, v1alpha1.StorageCephCommunityDefaultRelease)
+	if provider.Community.Version != v1alpha1.StorageCephCommunityDefaultRelease {
+		t.Fatalf("community version = %q, want default %q", provider.Community.Version, v1alpha1.StorageCephCommunityDefaultRelease)
 	}
 	community, ok := Vars(provider)["community"].(map[string]any)
 	if !ok {
 		t.Fatalf("oss provider vars missing community map: %#v", Vars(provider))
 	}
-	if community["release"] != v1alpha1.StorageCephCommunityDefaultRelease {
-		t.Fatalf("community vars release = %v, want default", community["release"])
+	if community["version"] != v1alpha1.StorageCephCommunityDefaultRelease {
+		t.Fatalf("community vars version = %v, want default", community["version"])
+	}
+	if provider.Image != "quay.io/ceph/ceph:v"+v1alpha1.StorageCephCommunityDefaultRelease {
+		t.Fatalf("default image = %q, want exact release image", provider.Image)
 	}
 	if _, hasMirror := community["mirror"]; hasMirror {
 		t.Fatalf("community vars must omit mirror when unset: %#v", community)
+	}
+}
+
+func TestResolveReleaseUsesDistributionVersionMatrix(t *testing.T) {
+	cases := []struct {
+		distribution string
+		authored     string
+		wantValue    string
+		wantStream   string
+		wantRHEL     string
+		wantOK       bool
+	}{
+		{v1alpha1.StorageCephDistributionRedHat, "", "9.1", "9", "9.8", true},
+		{v1alpha1.StorageCephDistributionRedHat, "9", "9.1", "9", "10.2", true},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.0", "9", "9.6", true},
+		{v1alpha1.StorageCephDistributionIBM, "", "9.9.1", "9", "9.8", true},
+		{v1alpha1.StorageCephDistributionIBM, "9", "9.9.1", "9", "10.2", true},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.0", "", "", "", false},
+		{v1alpha1.StorageCephDistributionRedHat, "10", "", "", "", false},
+	}
+	for _, tc := range cases {
+		release, ok := ResolveRelease(tc.distribution, tc.authored)
+		if ok != tc.wantOK {
+			t.Fatalf("ResolveRelease(%q, %q) ok = %t, want %t", tc.distribution, tc.authored, ok, tc.wantOK)
+		}
+		if !ok {
+			continue
+		}
+		if release.Value != tc.wantValue || release.Stream != tc.wantStream {
+			t.Fatalf("ResolveRelease(%q, %q) = %#v", tc.distribution, tc.authored, release)
+		}
+		found := false
+		for _, version := range release.RuntimeOS.ExactVersions {
+			found = found || version == tc.wantRHEL
+		}
+		if !found {
+			t.Fatalf("ResolveRelease(%q, %q) RHEL versions = %v, want %q", tc.distribution, tc.authored, release.RuntimeOS.ExactVersions, tc.wantRHEL)
+		}
+	}
+}
+
+func TestResolveReleaseUsesActiveOSSSeries(t *testing.T) {
+	cases := []struct {
+		release string
+		ok      bool
+	}{
+		{"", true},
+		{"tentacle", true},
+		{"20.2.2", true},
+		{"squid", true},
+		{"19.2.1", true},
+		{"reef", false},
+		{"18.2.7", false},
+		{"bananas", false},
+	}
+	for _, tc := range cases {
+		resolved, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, tc.release)
+		if ok != tc.ok {
+			t.Fatalf("ResolveRelease(oss, %q) = %#v, %t; want ok=%t", tc.release, resolved, ok, tc.ok)
+		}
+	}
+}
+
+func TestSelectIBMProviderProjectsCallHomeIntent(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution: v1alpha1.StorageCephDistributionIBM,
+		Release:      "9.9.1",
+		IBM:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
+	}}}
+	provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
+	ibm, ok := Vars(provider)["ibm"].(map[string]any)
+	if !ok || ibm["callHome"] != v1alpha1.StorageCephIBMCallHomeDisabled {
+		t.Fatalf("IBM provider vars = %#v", Vars(provider))
 	}
 }
 
@@ -40,7 +116,7 @@ func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Distribution: v1alpha1.StorageCephDistributionOSS,
-				Release:      "reef",
+				Release:      "squid",
 				Community: &v1alpha1.StorageCephCommunitySpec{
 					Mirror: "https://mirror.example.test/ceph",
 				},
@@ -48,11 +124,11 @@ func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
 		},
 	}
 	provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
-	if provider.Community.Release != "reef" || provider.Community.Mirror != "https://mirror.example.test/ceph" {
+	if provider.Community.Release != "squid" || provider.Community.Mirror != "https://mirror.example.test/ceph" {
 		t.Fatalf("community override not projected: %#v", provider.Community)
 	}
 	community := Vars(provider)["community"].(map[string]any)
-	if community["release"] != "reef" || community["mirror"] != "https://mirror.example.test/ceph" {
+	if community["release"] != "squid" || community["mirror"] != "https://mirror.example.test/ceph" {
 		t.Fatalf("community vars = %#v", community)
 	}
 }
@@ -113,15 +189,15 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 		t.Fatalf("default tools repo = %q", got)
 	}
 
-	repos := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
-	if got := repos[len(repos)-1]; got != "rhceph-10-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
-		t.Fatalf("stream tools repo = %q, want rhceph-10-tools", got)
+	repos := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9:9"), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
+	if got := repos[len(repos)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
+		t.Fatalf("stream tools repo = %q, want rhceph-9-tools", got)
 	}
-	provider := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, secret.Index{}, "/context/secrets")
-	if provider.Image != "registry.redhat.io/rhceph/rhceph-10-rhel9:10" {
+	provider := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9:9"), nil, secret.Index{}, "/context/secrets")
+	if provider.Image != "registry.redhat.io/rhceph/rhceph-9-rhel9:9" {
 		t.Fatalf("explicit image not honored: %q", provider.Image)
 	}
-	if Vars(provider)["image"] != "registry.redhat.io/rhceph/rhceph-10-rhel9:10" {
+	if Vars(provider)["image"] != "registry.redhat.io/rhceph/rhceph-9-rhel9:9" {
 		t.Fatalf("image var missing for redhat: %#v", Vars(provider))
 	}
 
@@ -134,8 +210,8 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 	if url := Select(ibm(""), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
 		t.Fatalf("default ibm repo url = %q", url)
 	}
-	if url := Select(ibm("10"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-{{ ansible_distribution_major_version }}.repo" {
-		t.Fatalf("stream ibm repo url = %q, want stream 10", url)
+	if url := Select(ibm("9"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
+		t.Fatalf("stream alias ibm repo url = %q, want stream 9", url)
 	}
 	if url := Select(ibm("9.9.1"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
 		t.Fatalf("full-version ibm repo url = %q, want stream 9 from 9.9.1", url)
@@ -158,13 +234,13 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 		want         string
 	}{
 		{"ibm default stream", v1alpha1.StorageCephDistributionIBM, "", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
-		{"ibm explicit stream", v1alpha1.StorageCephDistributionIBM, "10", "", "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9"},
+		{"ibm explicit stream", v1alpha1.StorageCephDistributionIBM, "9", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
 		{"ibm full product version", v1alpha1.StorageCephDistributionIBM, "9.9.1", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
 		{"redhat default stream", v1alpha1.StorageCephDistributionRedHat, "", "", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
 		{"oss release name", v1alpha1.StorageCephDistributionOSS, "squid", "", "quay.io/ceph/ceph"},
 		{"oss version", v1alpha1.StorageCephDistributionOSS, "19.2.1", "", "quay.io/ceph/ceph"},
 		{"ibm pinned digest", v1alpha1.StorageCephDistributionIBM, "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:abc", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
-		{"redhat pinned tag", v1alpha1.StorageCephDistributionRedHat, "10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10", "registry.redhat.io/rhceph/rhceph-10-rhel9"},
+		{"redhat pinned tag", v1alpha1.StorageCephDistributionRedHat, "9.1", "registry.redhat.io/rhceph/rhceph-9-rhel9:9", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
 		{"oss pinned tag", v1alpha1.StorageCephDistributionOSS, "19.2.1", "quay.io/ceph/ceph:v19.2.1", "quay.io/ceph/ceph"},
 	}
 	for _, tc := range cases {
@@ -189,9 +265,64 @@ func TestImageRepositoryStripsTagAndDigest(t *testing.T) {
 		"registry.example.test:5000/ceph/ceph:v1":       "registry.example.test:5000/ceph/ceph",
 	}
 	for in, want := range cases {
-		if got := imageRepository(in); got != want {
-			t.Fatalf("imageRepository(%q) = %q, want %q", in, got, want)
+		if got := ImageRepository(in); got != want {
+			t.Fatalf("ImageRepository(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T) {
+	cases := []struct {
+		name         string
+		distribution string
+		release      string
+		registry     string
+		want         string
+		wantOK       bool
+	}{
+		{
+			name:         "redhat current default",
+			distribution: v1alpha1.StorageCephDistributionRedHat,
+			want:         "registry.redhat.io/rhceph/rhceph-9-rhel9",
+			wantOK:       true,
+		},
+		{
+			name:         "redhat exact release mirror",
+			distribution: v1alpha1.StorageCephDistributionRedHat,
+			release:      "9.0",
+			registry:     "mirror.example.test/vendor",
+			want:         "mirror.example.test/vendor/rhceph/rhceph-9-rhel9",
+			wantOK:       true,
+		},
+		{
+			name:         "ibm current alias",
+			distribution: v1alpha1.StorageCephDistributionIBM,
+			release:      "9",
+			want:         "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+			wantOK:       true,
+		},
+		{
+			name:         "ibm mirror",
+			distribution: v1alpha1.StorageCephDistributionIBM,
+			release:      "9.9.1",
+			registry:     "mirror.example.test/ibm",
+			want:         "mirror.example.test/ibm/ibm-ceph/ceph-9-rhel9",
+			wantOK:       true,
+		},
+		{
+			name:         "unsupported release",
+			distribution: v1alpha1.StorageCephDistributionIBM,
+			release:      "9.9.0",
+			wantOK:       false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ExpectedImageRepository(tc.distribution, tc.release, tc.registry)
+			if ok != tc.wantOK || got != tc.want {
+				t.Fatalf("ExpectedImageRepository(%q, %q, %q) = %q, %t; want %q, %t", tc.distribution, tc.release, tc.registry, got, ok, tc.want, tc.wantOK)
+			}
+		})
 	}
 }
 

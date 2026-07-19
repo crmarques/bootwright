@@ -42,6 +42,7 @@ type StorageClusterCephSpec struct {
 	Release        string                       `yaml:"release,omitempty" json:"release,omitempty"`
 	Image          string                       `yaml:"image,omitempty" json:"image,omitempty"`
 	Community      *StorageCephCommunitySpec    `yaml:"community,omitempty" json:"community,omitempty"`
+	IBM            *StorageCephIBMSpec          `yaml:"ibm,omitempty" json:"ibm,omitempty"`
 	EntitlementRef LocalObjectReference         `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
 	Cephadm        StorageCephadmSpec           `yaml:"cephadm" json:"cephadm"`
 	Networks       StorageCephNetworks          `yaml:"networks,omitempty" json:"networks,omitempty"`
@@ -65,6 +66,10 @@ type StorageCephFIPS struct {
 type StorageCephCommunitySpec struct {
 	Mirror   string `yaml:"mirror,omitempty" json:"mirror,omitempty"`
 	Checksum string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+}
+
+type StorageCephIBMSpec struct {
+	CallHome string `yaml:"callHome" json:"callHome"`
 }
 
 type StorageCephadmSpec struct {

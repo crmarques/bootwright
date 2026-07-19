@@ -5,111 +5,12 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-func osdSelectionStaticPaths(sel *v1alpha1.StorageCephDeviceSelection) []string {
-	if sel == nil {
-		return nil
-	}
-	var paths []string
-	paths = append(paths, sel.Paths...)
-	for _, p := range sel.PathSpecs {
-		if p.Path != "" {
-			paths = append(paths, p.Path)
-		}
-	}
-	return paths
-}
-
-func osdSelectionIsStatic(sel *v1alpha1.StorageCephDeviceSelection) bool {
-	if sel == nil {
-		return false
-	}
-	if sel.All || sel.Model != "" || sel.Vendor != "" || sel.Rotational != nil ||
-		sel.Size != "" || sel.Limit != 0 {
-		return false
-	}
-	return len(sel.Paths) > 0 || len(sel.PathSpecs) > 0
-}
-
-func osdHostSpecStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
-	if osd == nil {
-		return nil
-	}
-	var paths []string
-	paths = append(paths, osdSelectionStaticPaths(osd.DataDevices)...)
-	paths = append(paths, osdSelectionStaticPaths(osd.DBDevices)...)
-	paths = append(paths, osdSelectionStaticPaths(osd.WALDevices)...)
-	return paths
-}
-
 func OSDGateDevicePaths(cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost) []string {
-	seen := map[string]bool{}
-	var out []string
-	add := func(paths []string) {
-		for _, p := range paths {
-			if p == "" || seen[p] {
-				continue
-			}
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-	add(node.Devices)
-	add(osdHostSpecStaticPaths(node.OSD))
-	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
-		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
-		for _, host := range topology.ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
-			if host == node.Hostname {
-				add(osdHostSpecStaticPaths(&cluster.Spec.Ceph.Topology.OSDDrivegroups[i].OSD))
-				break
-			}
-		}
-	}
-	return out
+	return topology.OSDHostAllStaticDevices(cluster, node)
 }
 
-func OSDReadinessExpectation(cluster v1alpha1.StorageCluster) (mode string, count int) {
-	managed := false
-	exact := true
-	total := 0
-	consider := func(osd *v1alpha1.StorageCephHostOSD, hosts int) {
-		if osd == nil || osd.Unmanaged {
-			return
-		}
-		managed = true
-		if !osdSelectionIsStatic(osd.DataDevices) {
-			exact = false
-			return
-		}
-		per := osd.OSDsPerDevice
-		if per < 1 {
-			per = 1
-		}
-		total += hosts * len(osdSelectionStaticPaths(osd.DataDevices)) * per
-	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) {
-			continue
-		}
-		if len(node.Devices) > 0 {
-			managed = true
-			total += len(node.Devices)
-			continue
-		}
-		consider(node.OSD, 1)
-	}
-	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
-		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
-		hosts := len(topology.ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD))
-		consider(&cluster.Spec.Ceph.Topology.OSDDrivegroups[i].OSD, hosts)
-	}
-	switch {
-	case !managed:
-		return "skip", 0
-	case exact:
-		return "exact", total
-	default:
-		return "atLeastOne", 0
-	}
+func OSDReadinessExpectation(cluster v1alpha1.StorageCluster) (mode string, count int, dynamicHosts []string) {
+	return topology.OSDReadinessExpectation(cluster)
 }
 
 func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
