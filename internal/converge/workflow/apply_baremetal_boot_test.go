@@ -8,11 +8,6 @@ import (
 )
 
 func TestBareMetalFirstInstallClusters(t *testing.T) {
-	objects := []ObjectClassification{
-		{Kind: ObjectKindContainerCluster, Cluster: "fresh-bm", counts: map[ConvergeSafetyClassification]int{}},
-		{Kind: ObjectKindContainerCluster, Cluster: "owned-bm", counts: map[ConvergeSafetyClassification]int{ConvergeSafetyMatch: 1}},
-		{Kind: ObjectKindContainerCluster, Cluster: "fresh-kubevirt", counts: map[ConvergeSafetyClassification]int{}},
-	}
 	tasks := []ApplyTask{
 		{Entry: TaskLedgerEntry{Kind: ApplyTaskKindNodeBoot, Cluster: "fresh-bm"}},
 		{Entry: TaskLedgerEntry{Kind: ApplyTaskKindNodeBoot, Cluster: "fresh-bm"}},
@@ -35,7 +30,7 @@ func TestBareMetalFirstInstallClusters(t *testing.T) {
 		},
 	}
 
-	got := BareMetalFirstInstallClusters(objects, tasks, state)
+	got := BareMetalFirstInstallClusters([]string{"owned-bm"}, tasks, state)
 	want := []string{"fresh-bm"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("BareMetalFirstInstallClusters = %v, want %v", got, want)

@@ -265,7 +265,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
-			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters)
+			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters, clustersDir)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}

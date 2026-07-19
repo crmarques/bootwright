@@ -6,12 +6,10 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func BareMetalFirstInstallClusters(objects []ObjectClassification, tasks []ApplyTask, state v1alpha1.State) []string {
-	recorded := map[string]bool{}
-	for _, o := range objects {
-		if o.Kind == ObjectKindContainerCluster {
-			recorded[o.Cluster] = o.Recorded()
-		}
+func BareMetalFirstInstallClusters(bootProven []string, tasks []ApplyTask, state v1alpha1.State) []string {
+	proven := map[string]bool{}
+	for _, name := range bootProven {
+		proven[name] = true
 	}
 	seen := map[string]bool{}
 	var out []string
@@ -20,7 +18,7 @@ func BareMetalFirstInstallClusters(objects []ObjectClassification, tasks []Apply
 			continue
 		}
 		cluster := task.Entry.Cluster
-		if recorded[cluster] || seen[cluster] || !clusterHasBareMetalBoot(state, cluster) {
+		if proven[cluster] || seen[cluster] || !clusterHasBareMetalBoot(state, cluster) {
 			continue
 		}
 		seen[cluster] = true

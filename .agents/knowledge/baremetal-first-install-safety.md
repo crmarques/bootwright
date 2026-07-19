@@ -6,22 +6,28 @@ this records the bare-metal-specific mechanisms.
 
 **Confirm-time disk-wipe warning:** `BareMetalFirstInstallClusters`
 (internal/converge/workflow/apply_baremetal_boot.go) names, at confirm time,
-the clusters whose planned nodeBoot (Redfish virtual-media) task has no
-convergence-safety record — the first-apply case whose boot drives
-coreos-installer to disk-wipe a physical machine (see
+the clusters whose planned nodeBoot (Redfish virtual-media) task is not
+covered by a boot-proven install record (`BootProvenContainerClusters`) — the
+case whose boot drives coreos-installer to disk-wipe a physical machine that
+bootwright cannot prove it already booted (see
 cluster-install-record-gates.md for the warning text and exclusions). nodeBoot
 tasks are emitted only for Redfish/bare-metal clusters; KubeVirt and vSphere
 boot a VM, not a physical host.
 
-**Pre-boot occupancy probe (fail-open):** for first-install clusters,
+**Pre-boot occupancy probe (fail-open probe, boot-proven opt-out):** the guard
 `container_cluster_boot_redfish/tasks/validation/occupancy.yml` queries the
 Redfish system before powering the host into the agent media, and refuses when
-the BMC reports the host already running an OS. Best-effort and FAIL-OPEN: only
-a definite `PowerState=On` plus `BootProgress.LastState=OSRunning` blocks; a
-BMC that does not populate BootProgress (older Redfish or an OEM value), a
-non-200 response, or any query error proceeds exactly as before. Owned clusters
-(legitimate re-provisions) are never in the first-install list and never reach
-this task.
+the BMC reports the host already running an OS. The probe itself is
+best-effort and FAIL-OPEN: only a definite `PowerState=On` plus
+`BootProgress.LastState=OSRunning` blocks; a BMC that does not populate
+BootProgress (older Redfish or an OEM value), a non-200 response, or any query
+error proceeds exactly as before. The guard runs for every Redfish boot except
+clusters named in `bootwright_ocp_reinstall_clusters`, which the CLI populates
+only from boot-proven install records (status `installed`, or a phase in
+{booting, nodes-booted, waiting, complete}, never `destroyed`) unioned with
+released-substrate clusters, whose rebuild legitimately faces the cluster's
+own old OS. A cluster recorded only up to `iso-created` — an interrupted
+first install — stays warned and guarded.
 
 **Duplicate BMC endpoints fail validation:** two Machines pointing at the same
 BMC endpoint would drive — and could disk-wipe — the wrong physical host, so

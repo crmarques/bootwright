@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string) {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string) {
 	var substrateReset []string
 	if mode == workflow.ApplyModeOverride {
 		if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
@@ -43,10 +43,11 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		}
 		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, owned)
 	}
-	if firstBoot := workflow.BareMetalFirstInstallClusters(objects, tasks, plan.State); len(firstBoot) > 0 {
+	bootProven := workflow.BootProvenContainerClusters(clustersDir, tasks)
+	if firstBoot := workflow.BareMetalFirstInstallClusters(bootProven, tasks, plan.State); len(firstBoot) > 0 {
 		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
 	}
-	converge.ApplyOCPReinstallClustersExtraVar(plan, workflow.UnionClusterNames(converge.RecordedContainerClusters(objects), releasedContainerClusters(plan.State, releasedClusters)))
+	converge.ApplyOCPReinstallClustersExtraVar(plan, workflow.UnionClusterNames(bootProven, releasedContainerClusters(plan.State, releasedClusters)))
 }
 
 func releasedContainerClusters(state v1alpha1.State, released []string) []string {

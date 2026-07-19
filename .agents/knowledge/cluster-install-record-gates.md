@@ -50,12 +50,19 @@ share the install task's structural projection for the same reason: without
 it, any day-2 edit flipped them to structural drift and `apply` refused with a
 false "would reinstall the machine — its disks wiped".
 
-**Semantics (first bare-metal install warning):**
+**Semantics (first bare-metal install warning + occupancy opt-out):**
 `BareMetalFirstInstallClusters` names, at confirm time, the clusters whose
-planned nodeBoot (Redfish virtual-media) task has no convergence-safety record
-— i.e. a first apply that will drive coreos-installer to disk-wipe physical
-hosts. The CLI prints: `first apply will boot the OS installer on the
-bare-metal host(s) of <names> ... coreos-installer will DISK-WIPE their target
-disks`, and each BMC is also checked for an already-running OS (Redfish
-occupancy guard) before boot. An already-recorded (owned) cluster is excluded
-— its install-state gate and healthy-skip already protect it.
+planned nodeBoot (Redfish virtual-media) task is not covered by a boot-proven
+install record — i.e. an apply that will drive coreos-installer to disk-wipe
+physical hosts bootwright cannot prove it already booted. The CLI prints:
+`first apply will boot the OS installer on the bare-metal host(s) of <names>
+... coreos-installer will DISK-WIPE their target disks`, and each BMC is also
+checked for an already-running OS (Redfish occupancy guard) before boot. A
+cluster is excluded only when `BootProvenContainerClusters` accepts its
+install record: status `installed`, or a phase in {booting, nodes-booted,
+waiting, complete}, and never status `destroyed`. A converge-safety record
+alone — e.g. an interrupted run that only created the agent ISO
+(`iso-created`) — keeps both the warning and the occupancy guard armed. The
+same boot-proven set, unioned with released-substrate clusters (a destroyed
+cluster's rebuild legitimately faces its own old OS), feeds
+`bootwright_ocp_reinstall_clusters`, the occupancy-guard opt-out list.
