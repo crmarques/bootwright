@@ -89,6 +89,7 @@
           {{ bootwright_ceph_filter_reclaim_candidates
              + (
                  bootwright_ceph_filter_host_devices
+                 | selectattr('available', 'defined')
                  | selectattr('available', 'equalto', false)
                  | rejectattr('path', 'in', bootwright_ceph_filter_excluded_paths)
                  | map('combine', {'host': bootwright_ceph_filter_host.cephHostname,
@@ -102,12 +103,16 @@
       vars:
         bootwright_ceph_filter_host_devices: >-
           {{ (bootwright_ceph_filter_device_ls.stdout | default('[]') | from_json)
+             | selectattr('name', 'defined')
              | selectattr('name', 'equalto', bootwright_ceph_filter_host.cephHostname)
-             | map(attribute='devices') | flatten | list }}
+             | map(attribute='devices', default=[]) | flatten
+             | selectattr('path', 'defined') | list }}
         bootwright_ceph_filter_excluded_paths: >-
           {{ ((bootwright_ceph_filter_osd_metadata.stdout | default('[]') | from_json)
+              | selectattr('hostname', 'defined')
               | selectattr('hostname', 'equalto', bootwright_ceph_filter_host.cephHostname)
-              | map(attribute='devices', default='') | join(',') | split(',')
+              | map(attribute='devices', default='') | map('default', '', true)
+              | join(',') | split(',')
               | map('trim') | reject('equalto', '') | map('basename')
               | map('regex_replace', '^', '/dev/') | list)
              + (bootwright_ceph_filter_host_devices
