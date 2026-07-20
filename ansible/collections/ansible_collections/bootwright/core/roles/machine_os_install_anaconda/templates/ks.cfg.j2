@@ -36,7 +36,9 @@ cdrom
 {% set localization = ks.localization | default({}) %}
 lang {{ localization.language | default('en_US.UTF-8', true) }}
 keyboard {{ localization.keyboard | default('us', true) }}
-timezone {{ localization.timezone | default('UTC', true) }} --utc
+{% set ntp_sources = bootwright_resolved_ntp_sources | default([]) %}
+{% set ntp_flag = (' --ntpservers=' ~ (ntp_sources | join(','))) if (ntp_sources | length > 0) else '' %}
+timezone {{ localization.timezone | default('UTC', true) }} --utc{{ ntp_flag }}
 {% set ssh_user = ks.sshUser | default('root', true) %}
 {% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}
 {% if ssh_user == 'root' and ssh_password_hash | length > 0 %}

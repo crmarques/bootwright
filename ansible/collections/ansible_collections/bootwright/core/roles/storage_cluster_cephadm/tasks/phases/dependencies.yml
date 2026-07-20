@@ -16,6 +16,37 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+- name: Configure the declared NTP sources on the storage node
+  ansible.builtin.blockinfile:
+    path: /etc/chrony.conf
+    marker: "# {mark} BOOTWRIGHT MANAGED NTP SOURCES"
+    block: |
+      {% for source in bootwright_resolved_ntp_sources | default([]) %}
+      server {{ source }} iburst
+      {% endfor %}
+  register: bootwright_ceph_chrony_config
+  when:
+    - "'chronyd' in bootwright_ceph_node_services"
+    - bootwright_resolved_ntp_sources | default([]) | length > 0
+
+- name: Restart chrony and step the clock when the NTP sources changed
+  when:
+    - "'chronyd' in bootwright_ceph_node_services"
+    - bootwright_ceph_chrony_config.changed | default(false) | bool
+  block:
+    - name: Restart chrony to apply the declared NTP sources
+      ansible.builtin.service:
+        name: chronyd
+        state: restarted
+
+    - name: Step the storage node clock onto the declared NTP sources
+      ansible.builtin.command:
+        argv:
+          - chronyc
+          - makestep
+      changed_when: false
+      failed_when: false
+
 - name: Wait for storage node time synchronization
   ansible.builtin.command:
     argv:
