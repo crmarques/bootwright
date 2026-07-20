@@ -34,7 +34,6 @@ const (
 	flagDryRunUsage          = "render artifacts and print the plan; change nothing remote"
 	flagAskBecomePassUsage   = "prompt for the Ansible become password (default: false as root, true otherwise)"
 	flagTrustOnFirstUseUsage = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
-	flagStrictSecretsUsage   = "abort if the context secrets-dir is not 0700 or any secret file is not 0600 (default: warn only)"
 	flagContextUsage         = "context to operate in (default: current context)"
 	flagVerboseUsage         = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )

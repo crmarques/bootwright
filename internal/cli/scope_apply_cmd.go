@@ -39,15 +39,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		dryRun          = options.defaultPlan
 		askBecomePass   bool
 		yes             bool
-		strictSecrets   bool
 		override        bool
 		allowDestroy    bool
 		expectNew       bool
 		trustOnFirstUse bool
 		verbose         bool
-		parallelism     int
-		perHost         int
-		redfish         int
 		stage           string
 		through         string
 		reclaimDevices  string
@@ -91,17 +87,13 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		addYesFlag(cmd, &yes, action)
 		addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	}
-	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, flagStrictSecretsUsage)
 	addVerboseFlag(cmd, &verbose)
 	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
 	if converge.ScopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
 		cmd.Flags().BoolVar(&allowDestroy, "allow-destroy", false, "authorize a destructive --override rebuild (machine reinstall with disks wiped, Ceph OSD zap) — required alongside --yes for such a rebuild, and pre-accepts the interactive data-loss prompt; --yes alone never authorizes data loss")
 	}
-	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
 	if usesAnsible {
-		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
-		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
 	}
 	if options.stageSelector {
@@ -123,7 +115,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 	}
 	if options.hideExecFlags {
-		for _, name := range []string{"reclaim-devices", "allow-destroy", "ask-become-pass", "strict-secrets", "verbose"} {
+		for _, name := range []string{"reclaim-devices", "allow-destroy", "ask-become-pass", "verbose"} {
 			_ = cmd.Flags().MarkHidden(name)
 		}
 	}
@@ -170,12 +162,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return failErr(1, err)
 		}
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
-		if strictSecrets {
-			if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
-				return e
-			}
+		if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
+			return e
 		}
-		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
 		var state v1alpha1.State
 		state, err = loadDesiredState(cf)
@@ -211,11 +200,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, sel.StorageWorkNames(), sel.Active, workflow.ConcurrencyLimits{
-			Parallelism:        parallelism,
-			ParallelismPerHost: perHost,
-			ParallelismRedfish: redfish,
-		}, ctx.RunsDir)
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, sel.StorageWorkNames(), sel.Active, workflow.ConcurrencyLimits{}, ctx.RunsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

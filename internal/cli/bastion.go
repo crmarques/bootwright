@@ -57,7 +57,6 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		dryRun        bool
 		yes           bool
 		askBecomePass bool
-		strictSecrets bool
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
@@ -76,16 +75,13 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned actions without changing the host")
 	addYesFlag(cmd, &yes, "bootstrap")
 	addAskBecomePassFlag(cmd, &askBecomePass)
-	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, flagStrictSecretsUsage)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
 		}
-		if strictSecrets {
-			if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
-				return e
-			}
+		if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
+			return e
 		}
 		state, err := loadDesiredState(cf)
 		if err != nil {

@@ -257,10 +257,10 @@ under `secrets/.bootwright/` on the first context-local write; the key files are
 host-local, unversioned, non-symlink regular files with mode `0600`.
 
 !!! note "Enforcing the mode requirement"
-    `bootwright apply` and `bootwright bastion setup` warn on secrets-dir or
-    secret-file mode violations by default. Pass `--strict-secrets` to either
-    command to abort instead when the secrets directory is not `0700` or any
-    secret file is not `0600`.
+    `bootwright apply` and `bootwright bastion setup` abort when the secrets
+    directory is not `0700` or any secret file is not `0600`. Other commands
+    (`destroy`, `render`, `secret set`, `secret generate`) warn on the same
+    mode violations but do not abort.
 
 On disk, context-local files contain JSON encryption envelopes (version,
 algorithm, key provider, key ID, context, secret name, material role, nonce,

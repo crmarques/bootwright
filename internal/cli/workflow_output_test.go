@@ -11,7 +11,7 @@ import (
 
 func TestPlanHidesMutationOnlyFlags(t *testing.T) {
 	plan := newPlanCmd(nil, io.Discard, io.Discard)
-	for _, name := range []string{"reclaim-devices", "allow-destroy", "ask-become-pass", "strict-secrets", "verbose"} {
+	for _, name := range []string{"reclaim-devices", "allow-destroy", "ask-become-pass", "verbose"} {
 		flag := plan.Flags().Lookup(name)
 		if flag == nil {
 			t.Fatalf("plan is missing flag %q", name)
@@ -20,7 +20,7 @@ func TestPlanHidesMutationOnlyFlags(t *testing.T) {
 			t.Fatalf("plan --help must hide mutation/execution-only flag %q", name)
 		}
 	}
-	for _, name := range []string{"parallelism", "override", "clusters"} {
+	for _, name := range []string{"override", "clusters"} {
 		flag := plan.Flags().Lookup(name)
 		if flag == nil || flag.Hidden {
 			t.Fatalf("plan should keep %q visible", name)
