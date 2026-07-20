@@ -34,6 +34,9 @@
   register: bootwright_ceph_host_spec_apply
   changed_when: true
 
+- name: Auto-reclaim dirty filter-selected OSD devices
+  ansible.builtin.include_tasks: osd_reclaim.yml
+
 - name: Apply Ceph core service spec
   ansible.builtin.command:
     argv:

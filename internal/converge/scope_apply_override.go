@@ -116,6 +116,13 @@ func OwnedStorageClusters(objects []workflow.ObjectClassification) []string {
 	return out
 }
 
+func ApplyFilterReclaimAuthorizedExtraVar(plan *WorkflowPlan, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_filter_reclaim_clusters="+strings.Join(names, ","))
+}
+
 func ApplyReclaimDevicesExtraVars(plan *WorkflowPlan, devices string, ownedClusters []string) {
 	if strings.TrimSpace(devices) == "" {
 		return

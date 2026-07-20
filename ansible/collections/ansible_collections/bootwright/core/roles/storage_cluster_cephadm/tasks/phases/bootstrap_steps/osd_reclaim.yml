@@ -1,0 +1,205 @@
+---
+- name: Resolve filter-OSD auto-reclaim authorization
+  ansible.builtin.set_fact:
+    bootwright_ceph_filter_reclaim_authorized: >-
+      {{ bootwright_selected_storage_cluster.name
+         in (bootwright_ceph_filter_reclaim_clusters | default('') | split(',')
+             | map('trim') | reject('equalto', '') | list) }}
+    bootwright_ceph_filter_osd_hosts: >-
+      {{ bootwright_selected_storage_cluster.hosts | default([])
+         | selectattr('osdReclaimAll', 'defined') | list }}
+
+- name: Auto-reclaim dirty filter-selected OSD devices before the OSD apply
+  when:
+    - bootwright_ceph_filter_reclaim_authorized | default(false) | bool
+    - bootwright_ceph_filter_osd_hosts | default([]) | length > 0
+  block:
+    - name: Resolve ceph hostnames of filter-OSD hosts
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_host_names: >-
+          {{ bootwright_ceph_filter_osd_hosts | map(attribute='cephHostname')
+             | reject('equalto', '') | list }}
+
+    - name: Refresh cephadm device inventory for filter-OSD hosts
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - orch
+          - device
+          - ls
+          - --format
+          - json
+          - --refresh
+      register: bootwright_ceph_filter_device_ls
+      changed_when: false
+      failed_when: false
+      retries: "{{ bootwright_ceph_filter_reclaim_retries | default(12) | int }}"
+      delay: "{{ bootwright_ceph_filter_reclaim_delay | default(10) | int }}"
+      until: >-
+        bootwright_ceph_filter_device_ls.rc == 0
+        and (bootwright_ceph_filter_host_names
+             | difference(
+                 (bootwright_ceph_filter_device_ls.stdout | default('[]') | from_json)
+                 | selectattr('devices', 'defined')
+                 | rejectattr('devices', 'equalto', [])
+                 | map(attribute='name') | list)) | length == 0
+
+    - name: Collect live OSD device metadata for the reclaim safety gate
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - osd
+          - metadata
+          - --format
+          - json
+      register: bootwright_ceph_filter_osd_metadata
+      changed_when: false
+      failed_when: false
+
+    - name: Resolve whether the filter-OSD reclaim safety inputs are trustworthy
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_reclaim_ready: >-
+          {{ (bootwright_ceph_filter_device_ls.rc | default(1) | int) == 0
+             and (bootwright_ceph_filter_osd_metadata.rc | default(1) | int) == 0 }}
+
+    - name: Skip filter-OSD reclaim when live OSDs cannot be enumerated
+      ansible.builtin.debug:
+        msg: >-
+          Skipping filter-OSD auto-reclaim on {{ bootwright_selected_storage_cluster.name }}:
+          the cluster device inventory (ceph orch device ls) or live OSD metadata
+          (ceph osd metadata) could not be read, so a dirty disk cannot be told apart
+          from a live OSD. Failing closed — no device is wiped. Re-run once the cluster
+          is reachable, or clean the disks manually.
+      when: not (bootwright_ceph_filter_reclaim_ready | default(false) | bool)
+
+    - name: Reset the filter-OSD reclaim candidate accumulator
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_reclaim_candidates: []
+
+    - name: Resolve dirty all-devices OSD reclaim candidates per host
+      when: bootwright_ceph_filter_reclaim_ready | default(false) | bool
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_reclaim_candidates: >-
+          {{ bootwright_ceph_filter_reclaim_candidates
+             + (
+                 bootwright_ceph_filter_host_devices
+                 | selectattr('available', 'equalto', false)
+                 | rejectattr('path', 'in', bootwright_ceph_filter_excluded_paths)
+                 | map('combine', {'host': bootwright_ceph_filter_host.cephHostname,
+                                   'inventoryHost': bootwright_ceph_filter_host.inventoryHost})
+                 | list
+               ) }}
+      loop: "{{ bootwright_ceph_filter_osd_hosts }}"
+      loop_control:
+        loop_var: bootwright_ceph_filter_host
+        label: "{{ bootwright_ceph_filter_host.cephHostname }}"
+      vars:
+        bootwright_ceph_filter_host_devices: >-
+          {{ (bootwright_ceph_filter_device_ls.stdout | default('[]') | from_json)
+             | selectattr('name', 'equalto', bootwright_ceph_filter_host.cephHostname)
+             | map(attribute='devices') | flatten | list }}
+        bootwright_ceph_filter_excluded_paths: >-
+          {{ ((bootwright_ceph_filter_osd_metadata.stdout | default('[]') | from_json)
+              | selectattr('hostname', 'equalto', bootwright_ceph_filter_host.cephHostname)
+              | map(attribute='devices') | join(',') | split(',')
+              | map('trim') | reject('equalto', '') | map('basename')
+              | map('regex_replace', '^', '/dev/') | list)
+             + (bootwright_ceph_filter_host_devices
+                | selectattr('osd_ids', 'defined') | rejectattr('osd_ids', 'equalto', [])
+                | map(attribute='path') | list) }}
+
+    - name: Probe filter-OSD reclaim candidates for mounts on their host
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - --noheadings
+          - --output
+          - MOUNTPOINT
+          - "{{ bootwright_ceph_filter_candidate.path }}"
+      register: bootwright_ceph_filter_candidate_mounts
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+      delegate_to: "{{ bootwright_ceph_filter_candidate.inventoryHost }}"
+      loop: "{{ bootwright_ceph_filter_reclaim_candidates | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_filter_candidate
+        label: "{{ bootwright_ceph_filter_candidate.host }} {{ bootwright_ceph_filter_candidate.path }}"
+
+    - name: Reset the unmounted filter-OSD reclaim accumulator
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_reclaim_final: []
+
+    - name: Resolve unmounted filter-OSD reclaim candidates
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_reclaim_final: >-
+          {{ bootwright_ceph_filter_reclaim_final
+             + ([bootwright_ceph_filter_mount_result.bootwright_ceph_filter_candidate]
+                if ((bootwright_ceph_filter_mount_result.rc | default(1) | int) == 0
+                    and (bootwright_ceph_filter_mount_result.stdout | default('') | trim | length) == 0)
+                else []) }}
+      loop: "{{ bootwright_ceph_filter_candidate_mounts.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_filter_mount_result
+        label: >-
+          {{ bootwright_ceph_filter_mount_result.bootwright_ceph_filter_candidate.host }}
+          {{ bootwright_ceph_filter_mount_result.bootwright_ceph_filter_candidate.path }}
+
+    - name: Report filter-OSD devices selected for automatic reclaim
+      ansible.builtin.debug:
+        msg: >-
+          Auto-reclaiming {{ bootwright_ceph_filter_reclaim_final | length }}
+          dirty filter-selected OSD device(s) on
+          {{ bootwright_selected_storage_cluster.name }} before the OSD apply
+          (unmounted, not backing a live OSD):
+          {{ bootwright_ceph_filter_reclaim_final | map(attribute='host')
+             | zip(bootwright_ceph_filter_reclaim_final | map(attribute='path'))
+             | map('join', ':') | list | join(', ') }}
+      when: bootwright_ceph_filter_reclaim_final | default([]) | length > 0
+
+    - name: Zap dirty filter-selected OSD devices
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - orch
+          - device
+          - zap
+          - "{{ bootwright_ceph_filter_candidate.host }}"
+          - "{{ bootwright_ceph_filter_candidate.path }}"
+          - --force
+      register: bootwright_ceph_filter_zap
+      changed_when: bootwright_ceph_filter_zap.rc == 0
+      failed_when: false
+      loop: "{{ bootwright_ceph_filter_reclaim_final | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_filter_candidate
+        label: "{{ bootwright_ceph_filter_candidate.host }} {{ bootwright_ceph_filter_candidate.path }}"
+
+    - name: Report filter-OSD candidates skipped by the reclaim safety gate
+      ansible.builtin.debug:
+        msg: >-
+          Not auto-reclaiming filter-selected OSD candidate
+          {{ bootwright_ceph_filter_candidate_result.bootwright_ceph_filter_candidate.host }}
+          {{ bootwright_ceph_filter_candidate_result.bootwright_ceph_filter_candidate.path }}
+          on {{ bootwright_selected_storage_cluster.name }}: its host mount probe failed
+          or it carries a mounted filesystem, so it may be a system or in-use disk. If it
+          is a disposable OSD disk, clean it manually (wipefs --all / sgdisk --zap-all) and
+          re-apply, or exclude it from the OSD selection.
+      loop: "{{ bootwright_ceph_filter_candidate_mounts.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_filter_candidate_result
+        label: >-
+          {{ bootwright_ceph_filter_candidate_result.bootwright_ceph_filter_candidate.host }}
+          {{ bootwright_ceph_filter_candidate_result.bootwright_ceph_filter_candidate.path }}
+      when:
+        - (bootwright_ceph_filter_candidate_result.rc | default(1) | int) != 0
+          or ((bootwright_ceph_filter_candidate_result.stdout | default('') | trim | length) != 0)

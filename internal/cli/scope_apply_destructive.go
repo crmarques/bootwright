@@ -9,7 +9,32 @@ import (
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
+
+func filterReclaimAuthorizedClusters(state v1alpha1.State, objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if o.Kind != workflow.ObjectKindStorageCluster {
+			continue
+		}
+		name := strings.TrimPrefix(o.Label, "StorageCluster/")
+		for _, sc := range state.StorageClusters {
+			if sc.Metadata.Name == name && sc.Spec.Ceph != nil && topology.ClusterHasAllDevicesOSDHost(sc) {
+				out = append(out, name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func filterReclaimDestructiveDescriptors(clusters []string) []string {
+	if len(clusters) == 0 {
+		return nil
+	}
+	return []string{"auto-reclaim dirty filter-OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
+}
 
 func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string, ocpReinstalls []string, allowDestroy bool) {
 	var substrateReset []string
@@ -30,6 +55,12 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 			subObjectKeys = workflow.UnionClusterNames(subObjectKeys, converge.AllStorageSubObjectRebuildKeys(objects))
 		}
 		converge.ApplySubObjectRebuildAuthorizedExtraVar(plan, subObjectKeys)
+		if allowDestroy {
+			if filterReclaim := filterReclaimAuthorizedClusters(plan.State, objects); len(filterReclaim) > 0 {
+				cliout.NewContinuation(stdout).Warning("all-devices OSD reclaim", "authorizes automatic disk reclaim on Ceph cluster(s) "+strings.Join(filterReclaim, ", ")+": on a host whose OSDs are declared with data_devices.all=true, EVERY disk that is unavailable to ceph-volume, has NO mounted filesystem, and is NOT already an OSD of this cluster is WIPED (ceph orch device zap) before the OSD apply — IRREVERSIBLE, and NOT limited to disks that once held Ceph. Mounted/OS/system disks and this cluster's live OSDs are never touched. Do NOT use all=true on a host that also carries data to keep or runs a second Ceph cluster: an unmounted disk of a co-resident cluster is not distinguishable and would be wiped.")
+				converge.ApplyFilterReclaimAuthorizedExtraVar(plan, filterReclaim)
+			}
+		}
 		if _, reset := workflow.OverrideDestructiveMachineSubstrate(objects); len(reset) > 0 {
 			cliout.NewContinuation(stdout).Warning("override", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
 			substrateReset = reset

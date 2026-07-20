@@ -1436,3 +1436,28 @@ func storageCephDestroyTasks(t *testing.T) []map[string]any {
 		base+"wipe_and_cleanup.yml",
 	)
 }
+
+func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
+	reclaimPath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_reclaim.yml"
+	reclaim := readRepoFile(t, reclaimPath)
+	for _, want := range []string{
+		"selectattr('osdReclaimAll', 'defined')",
+		"bootwright_ceph_filter_reclaim_authorized",
+		"bootwright_ceph_filter_reclaim_ready",
+		"rejectattr('osd_ids', 'equalto', [])",
+		"ignore_unreachable: true",
+	} {
+		if !strings.Contains(reclaim, want) {
+			t.Errorf("%s must retain reclaim safety gate %q", reclaimPath, want)
+		}
+	}
+	if !strings.Contains(reclaim, "- zap") || !strings.Contains(reclaim, "- --force") {
+		t.Errorf("%s must wipe candidates via `ceph orch device zap ... --force`", reclaimPath)
+	}
+	svc := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml")
+	reclaimIdx := strings.Index(svc, "osd_reclaim.yml")
+	coreIdx := strings.Index(svc, "/mnt/core-services.yaml")
+	if reclaimIdx < 0 || coreIdx < 0 || reclaimIdx > coreIdx {
+		t.Error("service_specs.yml must include osd_reclaim.yml before the core-services (OSD) apply")
+	}
+}

@@ -78,9 +78,15 @@
       - device
       - ls
       - --wide
+      - --refresh
   register: bootwright_ceph_osd_device_ls
   changed_when: false
   failed_when: false
+  retries: "{{ bootwright_ceph_osd_device_ls_retries | default(6) | int }}"
+  delay: "{{ bootwright_ceph_osd_device_ls_delay | default(5) | int }}"
+  until: >-
+    bootwright_ceph_osd_device_ls.rc == 0
+    and (bootwright_ceph_osd_device_ls.stdout | default('') | trim | length > 0)
   when:
     - bootwright_ceph_osd_readiness_mode != 'skip'
     - not (bootwright_ceph_osd_ready | default(false) | bool)

@@ -39,6 +39,47 @@ func DeclaredOSDCount(cluster v1alpha1.StorageCluster) (int, bool) {
 	return inspection.count, inspection.declaredCountKnown
 }
 
+func osdSelectionUsesAllDevices(selection *v1alpha1.StorageCephDeviceSelection) bool {
+	return selection != nil && selection.All
+}
+
+func OSDHostUsesAllDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) bool {
+	if cluster.Spec.Ceph == nil || !NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
+		return false
+	}
+	if host.OSD != nil && osdSelectionUsesAllDevices(host.OSD.DataDevices) {
+		return true
+	}
+	name := host.Hostname
+	if name == "" {
+		name = CanonicalHostname(cluster, host.MachineRef.Name)
+	}
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		if !osdSelectionUsesAllDevices(dg.OSD.DataDevices) {
+			continue
+		}
+		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
+			if placed == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func ClusterHasAllDevicesOSDHost(cluster v1alpha1.StorageCluster) bool {
+	if cluster.Spec.Ceph == nil {
+		return false
+	}
+	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		if OSDHostUsesAllDevices(cluster, host) {
+			return true
+		}
+	}
+	return false
+}
+
 func inspectOSDReadiness(cluster v1alpha1.StorageCluster) osdReadinessInspection {
 	inspection := osdReadinessInspection{
 		managedExact:       true,

@@ -96,3 +96,51 @@ After all late service specs and object operations, apply performs a final
 health poll and refuses to record success while the cluster is unreachable or
 `HEALTH_ERR`; `HEALTH_WARN` remains acceptable because expected operational
 warnings do not make the desired topology unusable.
+
+**Constraint (all-devices OSD auto-reclaim):** A host authored by filter renders
+`devices: []`, so the Pass-1 static gate/reclaim/marker no-op for it and a
+reinstall onto disks carrying a prior Ceph signature fails at the readiness poll
+with zero OSDs. `apply --override --allow-destroy` closes that FOR `all: true`
+hosts ONLY: the CLI emits `bootwright_ceph_filter_reclaim_clusters` for in-scope
+clusters that have a host whose OSD selection is `data_devices.all=true`
+(`topology.ClusterHasAllDevicesOSDHost`, mirrored per host by the rendered
+`osdReclaimAll` flag) — never under `--override` alone, `--yes` alone, or
+dry-run. Narrowing filters (`model`/`size`/`rotational`/`vendor`/`limit`) are
+DELIBERATELY excluded: the ansible layer only knows the boolean flag, not the
+predicate (which lives solely in `core-services.yaml`), so auto-zapping every
+unavailable disk on a narrowing-filter host would wipe disks the filter never
+targets; those hosts fall back to the readiness diagnostic + manual clean. On
+`all: true` every non-OS disk genuinely is a target, so wiping is in-scope.
+`osd_reclaim.yml` runs on the SEED in Pass 2, inserted in `service_specs.yml`
+BETWEEN the host-spec apply (which adds every host to the orchestrator) and the
+OSD (core-services) apply, so ceph resolves each host's devices for us (`ceph
+orch device ls --format json --refresh`, retried until every declared host
+reports inventory) and the zap lands before the OSD spec, on clean disks cephadm
+then consumes within the readiness wait.
+
+**Constraint (auto-reclaim safety, all fail-closed):** The reclaim is skipped
+entirely unless BOTH `ceph orch device ls` and `ceph osd metadata` return rc 0 —
+without a trustworthy live-OSD list a raw (unmounted) bluestore OSD is
+indistinguishable from a dirty disk, so an unreadable input wipes nothing. A
+candidate is a device the host reports `available: false` whose path is excluded
+by NEITHER of two independent live-OSD gates: (1) the device's OWN `osd_ids`
+field from `ceph orch device ls` is non-empty (authoritative and
+path-format-agnostic — this is what protects a live OSD on a `/dev/mapper`,
+by-id, or by-path device, where basename reconstruction would silently fail
+open); (2) its kernel path is in the `/dev/<basename>` set rebuilt from `ceph osd
+metadata` (a secondary guard for any device the inventory does not mark). Each
+survivor is then mount-probed with `lsblk` DELEGATED to its owning host
+(`ignore_unreachable: true` so a transiently-unreachable node fails the probe and
+is skipped rather than aborting the `any_errors_fatal` play); a non-empty
+mountpoint/swap OR any probe failure excludes it (protects the OS/root disk,
+in-use data disks, and unreachable/failed probes — never a false zap). Survivors
+are wiped with `ceph orch device zap <host> <path> --force`. Static-path hosts,
+non-`all:true` clusters, and unauthorized runs are never touched. KNOWN
+LIMITATION: a co-resident FOREIGN live Ceph cluster's OSDs are absent from THIS
+cluster's `osd_ids`/`ceph osd metadata` and, being raw bluestore, unmounted — so
+under `all: true` + `--override --allow-destroy` their disks would be zapped.
+`all: true` asserts every disk on the host belongs to this cluster; the CLI
+warning states this explicitly (do not use `all: true` on a host shared with
+another Ceph cluster or holding data to keep). The unreliable-diagnostic
+counterpart: the readiness-failure device dump now runs `ceph orch device ls
+--wide --refresh` with a short retry so reject reasons are populated, not empty.

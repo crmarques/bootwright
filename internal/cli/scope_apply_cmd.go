@@ -282,6 +282,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				}
 				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, ownedReclaim)...)
 			}
+			if override && allowDestroy {
+				destructiveOverride = append(destructiveOverride, filterReclaimDestructiveDescriptors(filterReclaimAuthorizedClusters(plan.State, objects))...)
+			}
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
