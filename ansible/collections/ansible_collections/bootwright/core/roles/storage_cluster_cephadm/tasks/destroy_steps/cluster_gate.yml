@@ -92,7 +92,7 @@
       on this seed — either no ownership record exists, or the on-host ownership marker is
       missing or its fsid does not match /etc/ceph — so it may be a foreign or co-resident
       cluster. Re-run a normal apply to re-stamp ownership, or remove /etc/ceph manually
-      after verifying the cluster is safe to destroy, then retry. (--force-unowned relaxes
+      after verifying the cluster is safe to destroy, then retry. (--include-unowned relaxes
       the machine VM ownership markers only; it does not relax this Ceph cluster ownership
       gate.)
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')

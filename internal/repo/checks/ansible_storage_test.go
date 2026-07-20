@@ -248,8 +248,8 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_pool_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
 		t.Fatalf("pool destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--allow-destroy") {
-		t.Fatalf("pool destroy refusal must name the --allow-destroy remedy, got %v", refuse["fail_msg"])
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--confirm-data-loss") {
+		t.Fatalf("pool destroy refusal must name the --confirm-data-loss remedy, got %v", refuse["fail_msg"])
 	}
 
 	rebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted Ceph pool for override")
@@ -293,8 +293,8 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if got := fmt.Sprint(fsRefuse["that"]); !strings.Contains(got, "bootwright_ceph_op_fs_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_fs_recreate") {
 		t.Fatalf("CephFS destroy refusal must fail closed on recreate-without-acknowledgement, got %v", fsRefuse["that"])
 	}
-	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "--allow-destroy") {
-		t.Fatalf("CephFS destroy refusal must name the --allow-destroy remedy, got %v", fsRefuse["fail_msg"])
+	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "--confirm-data-loss") {
+		t.Fatalf("CephFS destroy refusal must name the --confirm-data-loss remedy, got %v", fsRefuse["fail_msg"])
 	}
 	fsRebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")
 	if !(fsRefuseIdx < fsRebuildIdx) {
@@ -373,8 +373,8 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_ec_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
 		t.Fatalf("ec-profile destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--allow-destroy") {
-		t.Fatalf("ec-profile destroy refusal must name the --allow-destroy remedy, got %v", refuse["fail_msg"])
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--confirm-data-loss") {
+		t.Fatalf("ec-profile destroy refusal must name the --confirm-data-loss remedy, got %v", refuse["fail_msg"])
 	}
 
 	rebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted erasure-coded pool for override")

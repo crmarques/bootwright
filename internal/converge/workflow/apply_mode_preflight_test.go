@@ -16,7 +16,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindProvisioningPlaybook:   true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
-		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --override taxonomy", len(overrideReconfigureOnlyKinds), len(want))
+		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --converge-drifted taxonomy", len(overrideReconfigureOnlyKinds), len(want))
 	}
 	for kind := range want {
 		if !overrideReconfigureOnlyKinds[kind] {
@@ -25,7 +25,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 	}
 	for kind := range overrideReconfigureOnlyKinds {
 		if !want[kind] {
-			t.Errorf("overrideReconfigureOnlyKinds has unpublished kind %q; add it to the specs/state-model.md --override taxonomy", kind)
+			t.Errorf("overrideReconfigureOnlyKinds has unpublished kind %q; add it to the specs/state-model.md --converge-drifted taxonomy", kind)
 		}
 	}
 }

@@ -55,12 +55,12 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected env with destructive drift must fail closed")
 	}
-	for _, want := range []string{"StorageCluster/ceph", "nprd", "bootwright destroy --clusters ceph --override"} {
+	for _, want := range []string{"StorageCluster/ceph", "nprd", "bootwright destroy --clusters ceph --force"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("gate error must contain %q: %v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "destroy --override` for that scope") {
+	if strings.Contains(err.Error(), "destroy --force` for that scope") {
 		t.Fatalf("cluster-scope remedy must quote a scoped destroy, not the full-estate command: %v", err)
 	}
 }
@@ -78,7 +78,7 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected StorageCluster kind must fail closed even on an allow-default env")
 	}
-	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "bootwright destroy --clusters ceph --override"} {
+	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "bootwright destroy --clusters ceph --force"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("granular gate error must contain %q: %v", want, err)
 		}
@@ -89,7 +89,7 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 }
 
 func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
-	reinstalls := []string{"reinstall ContainerCluster/dc1-ocp (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --override reinstalls it and wipes its node disks)"}
+	reinstalls := []string{"reinstall ContainerCluster/dc1-ocp (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --converge-drifted reinstalls it and wipes its node disks)"}
 	protect := func(kinds ...string) v1alpha1.State {
 		return v1alpha1.State{Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "nprd"},
@@ -101,7 +101,7 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected env with a cluster reinstall and no drift must fail closed")
 	}
-	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "nprd", "destroy --override"} {
+	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "nprd", "destroy --force"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("protected-env reinstall refusal must contain %q: %v", want, err)
 		}
@@ -110,7 +110,7 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected ContainerCluster kind must fail closed on a reinstall")
 	}
-	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "protectedKinds", "destroy --override"} {
+	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "protectedKinds", "destroy --force"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("protectedKinds reinstall refusal must contain %q: %v", want, err)
 		}
@@ -127,7 +127,7 @@ func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T)
 	if err == nil {
 		t.Fatal("protected env with a drifted managed-OS machine must fail closed")
 	}
-	if want := "bootwright destroy --stage infra --clusters ceph-nprd --override"; !strings.Contains(err.Error(), want) {
+	if want := "bootwright destroy --stage infra --clusters ceph-nprd --force"; !strings.Contains(err.Error(), want) {
 		t.Fatalf("machine-substrate remedy must direct to %q: %v", want, err)
 	}
 	if strings.Contains(err.Error(), "for that scope") {

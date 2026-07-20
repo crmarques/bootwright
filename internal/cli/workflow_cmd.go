@@ -52,7 +52,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 		use:   "apply",
 		short: "Apply the provisioning graph",
 		long: "Applies the provisioning graph, reconciling desired state idempotently. It\n" +
-			"fails closed on drift or foreign ownership before mutating; --override\n" +
+			"fails closed on drift or foreign ownership before mutating; --converge-drifted\n" +
 			"authorizes Bootwright-owned destructive rebuilds. Exit codes: 0 success, 2\n" +
 			"usage error, non-zero on run failure.",
 		stageSelector: true,
@@ -182,7 +182,7 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		short: "Tear down a previously applied target",
 		long: "Tears down a previously applied target using desired state and ownership\n" +
 			"records. Destructive: --yes skips the confirmation prompt only, never implies\n" +
-			"--override; protected contexts require --override. Exit codes: 0 success, 2\n" +
+			"--force; protected contexts require --force. Exit codes: 0 success, 2\n" +
 			"usage error, non-zero on teardown failure.",
 		stageSelector: true,
 		commandLabel:  "destroy",
@@ -199,11 +199,11 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   bootwright destroy --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
 
   # Destroy a protected environment
-  bootwright destroy --stage infra --override --yes
+  bootwright destroy --stage infra --force --yes
 
   # Tear down VMs that match the naming but lost their ownership marker
   # (e.g. machine or cluster names changed after the last apply)
-  bootwright destroy --stage infra --clusters ceph-storage --force-unowned --yes
+  bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
 
   # Remove only the generated artifact publication service
   bootwright destroy --stage infra --clusters artifact-server --yes

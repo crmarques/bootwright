@@ -30,7 +30,7 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	b.WriteString("# using native CLIs (cephadm / ceph / radosgw-admin / rbd) instead of\n")
 	b.WriteString("# 'bootwright apply'. Re-runnable: create-style steps are guarded and\n")
 	b.WriteString("# skip-if-exists; set-* steps reconcile in place. The data-destroying\n")
-	b.WriteString("# --override rebuild path is bootwright-only and is not generated here.\n")
+	b.WriteString("# --converge-drifted rebuild path is bootwright-only and is not generated here.\n")
 	b.WriteString("set -euo pipefail\n")
 	b.WriteString(`HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` + "\n")
 	b.WriteString("# shellcheck source=/dev/null\n")

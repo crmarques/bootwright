@@ -26,7 +26,7 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 		t.Fatalf("vsphere destroy guard must stay gated on VM presence, got when=%v", tasks[assertIdx]["when"])
 	}
 	if !strings.Contains(assertWhen, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("vsphere destroy guard must be skipped under --force-unowned, got when=%v", tasks[assertIdx]["when"])
+		t.Fatalf("vsphere destroy guard must be skipped under --include-unowned, got when=%v", tasks[assertIdx]["when"])
 	}
 	deleteTask := tasks[deleteIdx]
 	when, _ := deleteTask["when"].(string)
@@ -70,7 +70,7 @@ func TestVSphereSubstrateGateRefusesInPlaceDiskChanges(t *testing.T) {
 	} {
 		when := fmt.Sprint(tasks[idx]["when"])
 		if !strings.Contains(when, "not (bootwright_vsphere_managed_os_reset") {
-			t.Fatalf("%s must be skipped under --override substrate reset, got when=%v", name, tasks[idx]["when"])
+			t.Fatalf("%s must be skipped under --force substrate reset, got when=%v", name, tasks[idx]["when"])
 		}
 		if !strings.Contains(when, "bootwright_vsphere_probe.instance is defined") {
 			t.Fatalf("%s must only run when the VM already exists, got when=%v", name, tasks[idx]["when"])

@@ -89,7 +89,7 @@ The catalog that ties the tree together. It sets `spec.baseDomain`
 selects the managed lab DNS
 under `spec.infraComponents.nameResolution`. It also sets
 `spec.safety.destroyProtection: requiredOverride`, so `destroy` refuses to run
-without `--override`.
+without `--force`.
 
 ### Entitlements (`infra/entitlements/`)
 

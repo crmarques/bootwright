@@ -63,9 +63,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addAskBecomePassFlag(cmd, &askBecomePass)
 	addYesFlag(cmd, &yes, "destroy")
-	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
-	cmd.Flags().BoolVar(&forceUnowned, "force-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
-	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --override. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
+	cmd.Flags().BoolVar(&override, "force", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
+	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
+	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --force. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
 		flags.executable = workspace.ResolveAnsiblePlaybook()
@@ -81,7 +81,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(2, err)
 		}
 		if skipUnreachable && !override {
-			return failErr(2, errors.New("--skip-unreachable requires --override"))
+			return failErr(2, errors.New("--skip-unreachable requires --force"))
 		}
 		runScope := scope
 		runCommandLabel := commandLabel
@@ -98,7 +98,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		fullDestroy := converge.DestroyIsFullScope(runScope)
 		if forceUnowned && !converge.ScopeTearsMachineLayer(runScope) {
-			return failErr(2, errors.New("--force-unowned relaxes machine-substrate ownership refusals, which run only in the infra stage; re-run with --stage infra (optionally with --clusters) or as a full destroy"))
+			return failErr(2, errors.New("--include-unowned relaxes machine-substrate ownership refusals, which run only in the infra stage; re-run with --stage infra (optionally with --clusters) or as a full destroy"))
 		}
 		ctx, err := cf.resolve()
 		if err != nil {
@@ -129,7 +129,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			for _, warning := range ownershipSkipped {
 				details = append(details, warning.Error())
 			}
-			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --override to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
+			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --force to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
 		}
 		if runScope.Name == "infra" && sel.Active {
 			conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
@@ -148,7 +148,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				if !override {
 					return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
 				}
-				kubeVirtTenantOverrideNotice = converge.FormatKubeVirtTenantConflicts(conflicts).Error() + "; proceeding because --override was supplied"
+				kubeVirtTenantOverrideNotice = converge.FormatKubeVirtTenantConflicts(conflicts).Error() + "; proceeding because --force was supplied"
 			}
 		}
 		var storageConsumerOverrideNotice string
@@ -158,9 +158,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 					return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
 				}
 				if !override {
-					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --override to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts)))
+					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --force to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts)))
 				}
-				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --override was supplied"
+				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --force was supplied"
 			}
 		}
 		printPlanStep(stdout, flags.output, runCommandLabel)
@@ -176,7 +176,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
 			if blocksErr != nil && !override {
-				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --override to tear down regardless", blocksErr))
+				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --force to tear down regardless", blocksErr))
 			}
 			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil && !override {
 				return failErr(1, err)
@@ -223,7 +223,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), nil, 0)
 		}
 		if !dryRun && destroySafety.RequiredOverride {
-			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))
+			return failErr(1, fmt.Errorf("%s requires --force for destroy", destroySafety.Summary()))
 		}
 		if !dryRun {
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
@@ -381,10 +381,10 @@ func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecisio
 	}
 	message := decision.Summary()
 	if override {
-		cliout.NewContinuation(stdout).Warning("destroy override", message+"; --override supplied for this command only")
+		cliout.NewContinuation(stdout).Warning("destroy force", message+"; --force supplied for this command only")
 		return
 	}
 	if dryRun {
-		cliout.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --override")
+		cliout.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --force")
 	}
 }

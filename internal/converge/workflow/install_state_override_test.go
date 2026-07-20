@@ -95,8 +95,8 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		}
 		writeKubeconfig(t, clustersDir)
 		_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, nil, &fakeClusterAvailabilityChecker{available: true}, now)
-		if err == nil || !strings.Contains(err.Error(), "--allow-destroy") || !strings.Contains(err.Error(), "was not acknowledged") {
-			t.Fatalf("unacked drifted reinstall must fail closed naming --allow-destroy, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "--confirm-data-loss") || !strings.Contains(err.Error(), "was not acknowledged") {
+			t.Fatalf("unacked drifted reinstall must fail closed naming --confirm-data-loss, got: %v", err)
 		}
 	})
 	t.Run("unacked not available fails closed", func(t *testing.T) {
@@ -116,8 +116,8 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		}
 		writeKubeconfig(t, clustersDir)
 		_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, nil, &fakeClusterAvailabilityChecker{available: false}, now)
-		if err == nil || !strings.Contains(err.Error(), "--allow-destroy") {
-			t.Fatalf("unacked unavailable reinstall must fail closed naming --allow-destroy, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "--confirm-data-loss") {
+			t.Fatalf("unacked unavailable reinstall must fail closed naming --confirm-data-loss, got: %v", err)
 		}
 	})
 }

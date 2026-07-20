@@ -24,7 +24,7 @@ func TestContinueDriftRefusalNamesConsequenceAndRemedy(t *testing.T) {
 	for _, want := range []string{
 		"os.demo", "disks wiped",
 		"StorageCluster/demo", "OSD data",
-		"revert", "--override",
+		"revert", "--converge-drifted",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("refusal must contain %q: %v", want, msg)

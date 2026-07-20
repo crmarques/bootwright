@@ -23,7 +23,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 		hasMachine := len(machineLabels) > 0
 		hasCluster := len(destructive) > len(machineLabels)
 		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, workflow.OverrideDestructiveClusterScope(objects))
-		return fmt.Errorf("apply --override would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --override reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
+		return fmt.Errorf("apply --converge-drifted would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --converge-drifted reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
 	}
 	protectedKinds := workflow.ProtectedKindSet(state)
 	blocked := workflow.OverrideDestructiveKindProtected(objects, protectedKinds)
@@ -38,7 +38,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	clusterNames := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
 	hasCluster := len(clusterNames) > 0 || (protectedKinds[v1alpha1.KindContainerCluster] && len(reinstallDescriptors) > 0)
 	remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, clusterNames)
-	return fmt.Errorf("apply --override would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
+	return fmt.Errorf("apply --converge-drifted would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
 }
 
 func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string) error {
@@ -75,14 +75,14 @@ func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClass
 }
 
 func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, clusterNames []string) string {
-	infra := "bootwright destroy --stage infra --override"
+	infra := "bootwright destroy --stage infra --force"
 	if len(machineClusters) > 0 {
-		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --override"
+		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --force"
 	}
-	cluster := "bootwright destroy --override"
+	cluster := "bootwright destroy --force"
 	clusterScoped := false
 	if len(clusterNames) > 0 {
-		cluster = "bootwright destroy --clusters " + strings.Join(clusterNames, ",") + " --override"
+		cluster = "bootwright destroy --clusters " + strings.Join(clusterNames, ",") + " --force"
 		clusterScoped = true
 	}
 	skipHint := " (add --skip-unreachable if a machine's host substrate was never provisioned or is powered off)"
@@ -95,7 +95,7 @@ func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, cluster
 		if clusterScoped {
 			return "run `" + cluster + "` first"
 		}
-		return "run `bootwright destroy --override` for that scope first"
+		return "run `bootwright destroy --force` for that scope first"
 	}
 }
 
@@ -104,10 +104,10 @@ func CheckReclaimDestroyProtection(state v1alpha1.State, ownedClusters []string,
 		return nil
 	}
 	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
-		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s in Environment %s with spec.safety.destroyProtection=%s; add --override to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "), strings.Join(protected, ", "), v1alpha1.EnvironmentDestroyProtectionRequiredOverride)
+		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s in Environment %s with spec.safety.destroyProtection=%s; add --converge-drifted to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "), strings.Join(protected, ", "), v1alpha1.EnvironmentDestroyProtectionRequiredOverride)
 	}
 	if workflow.ProtectedKindSet(state)[v1alpha1.KindStorageCluster] {
-		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s, protected by spec.safety.protectedKinds; add --override to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "))
+		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s, protected by spec.safety.protectedKinds; add --converge-drifted to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "))
 	}
 	return nil
 }

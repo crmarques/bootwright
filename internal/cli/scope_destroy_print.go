@@ -86,9 +86,9 @@ func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraCompon
 			}
 			detail := relation + strings.Join(block.Contexts, ", ")
 			if override {
-				detail += "; WILL BE TORN DOWN because --override was supplied"
+				detail += "; WILL BE TORN DOWN because --force was supplied"
 			} else {
-				detail += "; refused unless --override"
+				detail += "; refused unless --force"
 			}
 			p.Status(output.StatusWarn, label, detail)
 		}

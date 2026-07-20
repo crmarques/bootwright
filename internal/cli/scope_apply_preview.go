@@ -26,7 +26,7 @@ func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir, clusterS
 		return nil
 	}
 	var b strings.Builder
-	b.WriteString("apply --override would reinstall KubeVirt host cluster(s) whose nested cluster(s) are left out of scope and would be annihilated:\n")
+	b.WriteString("apply --converge-drifted would reinstall KubeVirt host cluster(s) whose nested cluster(s) are left out of scope and would be annihilated:\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts installed %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
@@ -63,13 +63,13 @@ func printApplyAvailabilityCaveat(stdout io.Writer, mode workflow.ApplyMode, clu
 	if len(workflow.InstalledRecordedClusters(clustersDir, tasks)) == 0 {
 		return
 	}
-	cliout.NewContinuation(stdout).Warning("override", "plan mode does not probe cluster availability; a real run additionally reinstalls (disk wipe) any installed cluster that does not report Available=True — gated by --allow-destroy")
+	cliout.NewContinuation(stdout).Warning("converge-drifted", "plan mode does not probe cluster availability; a real run additionally reinstalls (disk wipe) any installed cluster that does not report Available=True — gated by --confirm-data-loss")
 }
 
 func forecastReinstallDescriptors(names []string) []string {
 	var out []string
 	for _, name := range names {
-		out = append(out, fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs drifted — --override reinstalls it and wipes its node disks)", name))
+		out = append(out, fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs drifted — --converge-drifted reinstalls it and wipes its node disks)", name))
 	}
 	return out
 }

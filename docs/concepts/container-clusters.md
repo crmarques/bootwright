@@ -84,7 +84,7 @@ to pin a release or install OKD. `channel` is rejected for
 !!! warning "Release fields are install-time intent, not a day-2 upgrade"
     `distribution.release.*` selects what bootwright installs. Editing it on an
     already-installed cluster is classified as drift, and its only in-band
-    resolution is a reinstall — `apply --override` reinstalls the cluster, it does
+    resolution is a reinstall — `apply --converge-drifted` reinstalls the cluster, it does
     not upgrade it. In-place cluster upgrades are a non-goal today: upgrade out of
     band with `oc adm upgrade`, then be aware that the desired state still names
     the old version, so `diff` reports the cluster as drifted until a

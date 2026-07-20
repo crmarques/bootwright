@@ -35,7 +35,7 @@ those are Ceph-distribution concerns dispatched on rendered capability flags
 (ADR 0002). The task is planned only for subscription-backed distributions
 with managed RHSM, anchors provisioning playbooks as a machines-phase task
 (ADR 0005), maps to the machine-infra destroy kind for record resets, and is
-reconfigure-only under `--override` (ADR 0007 taxonomy).
+reconfigure-only under `--converge-drifted` (ADR 0007 taxonomy).
 
 ### The `management` axis
 

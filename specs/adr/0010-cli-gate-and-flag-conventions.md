@@ -86,11 +86,11 @@ touch root-owned state:
 - Overwriting stored material is acknowledged by a single gate — one
   `--yes` or one interactive `y`, never a separate `--force` plus
   confirmation dance (`media add` replace matches `secret set`).
-- `--override` is the uniform remedy that authorizes Bootwright-owned
+- `--converge-drifted` is the uniform remedy that authorizes Bootwright-owned
   destructive re-convergence (managed-OS reinstall of a drifted node,
   Ceph wipe-and-rebuild), and its help text must name that scope.
   Failure summaries preserve the exact remedy command (middle-ellipsis
-  shortening keeps the `--override` tail).
+  shortening keeps the `--converge-drifted` tail).
 - Destructive selection stays unambiguous by reservation: the cluster
   name `artifact-server` is reserved so `destroy --stage infra
   --clusters artifact-server` can only mean the generated artifact
@@ -122,7 +122,7 @@ touch root-owned state:
   shared flag help registrars; new stage-like vocabularies must derive
   from one accessor so validation, help, and completion cannot drift.
 - New destructive behavior routes through the existing `--yes` single
-  gate and the `--override` remedy vocabulary instead of inventing
+  gate and the `--converge-drifted` remedy vocabulary instead of inventing
   per-command force flags.
 - Frame byte output stays testable and consistent because it is
   confined to the output package; automation can gate on the exit-code

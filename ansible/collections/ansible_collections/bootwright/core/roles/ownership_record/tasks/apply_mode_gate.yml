@@ -4,7 +4,7 @@
     msg: >-
       {{ bootwright_gate_object }} already exists on {{ inventory_hostname }};
       apply --expect-new requires a greenfield environment. Re-run without
-      --expect-new to reconcile it, or with --override to rebuild it.
+      --expect-new to reconcile it, or with --converge-drifted to rebuild it.
   when:
     - (bootwright_apply_mode | default('continue')) == 'create'
     - bootwright_gate_exists | default(false) | bool

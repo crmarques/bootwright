@@ -143,9 +143,9 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, want := range []string{"--override", "reinstall", "wipe-and-rebuild"} {
+	for _, want := range []string{"--converge-drifted", "reinstall", "wipe-and-rebuild"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("apply --override help must name its destructive scope, missing %q:\n%s", want, stdout)
+			t.Fatalf("apply --converge-drifted help must name its destructive scope, missing %q:\n%s", want, stdout)
 		}
 	}
 	for _, reject := range []string{"--scope ", "--cluster ", "--scoped-validation", "--check", "--stream-ansible", "--ansible-playbook", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
@@ -844,8 +844,8 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(help, "--force-unowned") {
-		t.Fatalf("destroy help must document --force-unowned:\n%s", help)
+	if !strings.Contains(help, "--include-unowned") {
+		t.Fatalf("destroy help must document --include-unowned:\n%s", help)
 	}
 
 	stdout, stderr, code := runCLI(t,
@@ -863,26 +863,26 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
 	if slices.Contains(report.ExtraVars, "bootwright_destroy_force_unowned=true") {
-		t.Fatalf("destroy without --force-unowned must not emit the force extra-var: %#v", report.ExtraVars)
+		t.Fatalf("destroy without --include-unowned must not emit the force extra-var: %#v", report.ExtraVars)
 	}
 
 	stdout, stderr, code = runCLI(t,
 		"destroy",
 		"--stage", "infra",
-		"--force-unowned",
+		"--include-unowned",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("destroy --stage infra --force-unowned dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy --stage infra --include-unowned dry-run exited %d, stderr=%q", code, stderr)
 	}
 	report = scopeDryRunReport{}
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
 	if !slices.Contains(report.ExtraVars, "bootwright_destroy_force_unowned=true") {
-		t.Fatalf("destroy --force-unowned must emit the force extra-var: %#v", report.ExtraVars)
+		t.Fatalf("destroy --include-unowned must emit the force extra-var: %#v", report.ExtraVars)
 	}
 }
 
@@ -905,22 +905,22 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 		"--ask-become-pass=false",
 	)
 	if code != 2 {
-		t.Fatalf("destroy --skip-unreachable without --override must exit 2, got %d stderr=%q", code, stderr)
+		t.Fatalf("destroy --skip-unreachable without --force must exit 2, got %d stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stderr, "--skip-unreachable requires --override") {
-		t.Fatalf("destroy --skip-unreachable without --override must explain the requirement, got stderr=%q", stderr)
+	if !strings.Contains(stderr, "--skip-unreachable requires --force") {
+		t.Fatalf("destroy --skip-unreachable without --force must explain the requirement, got stderr=%q", stderr)
 	}
 
 	stdout, stderr, code := runCLI(t,
 		"destroy",
 		"--stage", "infra",
-		"--override",
+		"--force",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("destroy --stage infra --override dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy --stage infra --force dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -934,20 +934,20 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 		"destroy",
 		"--stage", "infra",
 		"--skip-unreachable",
-		"--override",
+		"--force",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("destroy --skip-unreachable --override dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy --skip-unreachable --force dry-run exited %d, stderr=%q", code, stderr)
 	}
 	report = scopeDryRunReport{}
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
 	if !slices.Contains(report.ExtraVars, "bootwright_destroy_skip_unreachable=true") {
-		t.Fatalf("destroy --skip-unreachable --override must emit the skip extra-var: %#v", report.ExtraVars)
+		t.Fatalf("destroy --skip-unreachable --force must emit the skip extra-var: %#v", report.ExtraVars)
 	}
 }
 
@@ -1073,7 +1073,7 @@ func TestProtectedDestroyRequiresOverrideBeyondYes(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("protected destroy unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	for _, want := range []string{"destroyProtection=requiredOverride", "requires --override"} {
+	for _, want := range []string{"destroyProtection=requiredOverride", "requires --force"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("protected destroy stderr missing %q:\n%s", want, stderr)
 		}
@@ -1093,7 +1093,7 @@ func TestProtectedFullDestroyRequiresOverrideBeyondYes(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("protected full destroy unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	for _, want := range []string{"destroyProtection=requiredOverride", "requires --override"} {
+	for _, want := range []string{"destroyProtection=requiredOverride", "requires --force"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("protected full destroy stderr missing %q:\n%s", want, stderr)
 		}
@@ -1142,7 +1142,7 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 		"--clusters", "sno-libvirt",
 		"--dry-run",
 		"--output", "json",
-		"--override",
+		"--force",
 		"--yes",
 		"--ask-become-pass=false",
 	)
@@ -1170,16 +1170,16 @@ func TestProtectedApplyOverrideGreenfieldNotGatedByProtection(t *testing.T) {
 		"apply",
 		"--stage", "clusters",
 		"--clusters", "sno-libvirt",
-		"--override",
+		"--converge-drifted",
 		"--yes",
 		"--ask-become-pass=false",
 	)
 	if code == 0 {
-		t.Fatalf("apply --override unexpectedly succeeded (no real infra)\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply --converge-drifted unexpectedly succeeded (no real infra)\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	for _, unwanted := range []string{"destroy-protected", "destructively rebuild"} {
 		if strings.Contains(stderr, unwanted) {
-			t.Fatalf("greenfield apply --override must not be blocked by destroy protection; stderr contained %q:\n%s", unwanted, stderr)
+			t.Fatalf("greenfield apply --converge-drifted must not be blocked by destroy protection; stderr contained %q:\n%s", unwanted, stderr)
 		}
 	}
 }
@@ -1190,13 +1190,13 @@ func TestProtectedApplyOverrideDryRunPreviews(t *testing.T) {
 		"apply",
 		"--stage", "clusters",
 		"--clusters", "sno-libvirt",
-		"--override",
+		"--converge-drifted",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("protected apply --override --dry-run should preview, exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+		t.Fatalf("protected apply --converge-drifted --dry-run should preview, exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -4404,7 +4404,7 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 
 func TestApplyClustersOverrideDryRunPassesApplyMode(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json", "--override")
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json", "--converge-drifted")
 	if code != 0 {
 		t.Fatalf("apply --stage clusters override dry-run exited %d, stderr=%q", code, stderr)
 	}
@@ -4434,18 +4434,18 @@ func TestApplyOverrideDoesNotBypassActiveRunLease(t *testing.T) {
 	stdout, stderr, code := runCLI(t,
 		"apply", "--stage", "clusters",
 		"--clusters", "sno-libvirt",
-		"--override",
+		"--converge-drifted",
 		"--yes",
 		"--ask-become-pass=false",
 	)
 	if code == 0 {
-		t.Fatalf("apply --override unexpectedly bypassed the active run lease\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply --converge-drifted unexpectedly bypassed the active run lease\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	if !strings.Contains(stderr, "apply run apply-active is still running") {
-		t.Fatalf("apply --override stderr missing active-run error:\n%s", stderr)
+		t.Fatalf("apply --converge-drifted stderr missing active-run error:\n%s", stderr)
 	}
 	if strings.Contains(stdout, "Bundle") || strings.Contains(stdout, "Workflow") {
-		t.Fatalf("apply --override progressed to workflow despite the active lease\nstdout:\n%s", stdout)
+		t.Fatalf("apply --converge-drifted progressed to workflow despite the active lease\nstdout:\n%s", stdout)
 	}
 }
 

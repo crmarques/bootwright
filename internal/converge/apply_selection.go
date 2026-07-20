@@ -101,7 +101,7 @@ func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict) error {
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
-	b.WriteString("include the nested cluster(s) in --clusters, destroy them first, or re-run with --override to tear down the host and annihilate them")
+	b.WriteString("include the nested cluster(s) in --clusters, destroy them first, or re-run with --converge-drifted to tear down the host and annihilate them")
 	return fmt.Errorf("%s", b.String())
 }
 

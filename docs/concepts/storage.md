@@ -31,7 +31,7 @@ field-table convention every table below follows.
     state declares and **never** removes a live Ceph object whose declaration was
     deleted — pools, filesystems, gateways, passthrough services, mgr modules,
     and config keys keep running until removed on the cluster out of band.
-    `apply --override` does not prune undeclared objects either; it rebuilds only
+    `apply --converge-drifted` does not prune undeclared objects either; it rebuilds only
     still-declared pools whose structural identity changed. See
     [Operations and recovery](../advanced/operations.md) for removal patterns.
 
@@ -110,7 +110,7 @@ spec:
 !!! warning "Release/image fields are install-time intent, not a day-2 upgrade"
     `ceph.release` and `ceph.image` select what cephadm bootstraps. Changing them
     on a live cluster is drift, and the only in-band resolution is a rebuild
-    (`apply --override` runs `cephadm rm-cluster --zap-osds` and re-bootstraps —
+    (`apply --converge-drifted` runs `cephadm rm-cluster --zap-osds` and re-bootstraps —
     data-destroying). Upgrade a running cluster out of band with `cephadm`/`ceph
     orch upgrade`; the desired state then names the old release, so `diff`
     reports drift until a future apply refreshes the record. Adopting an
@@ -379,7 +379,7 @@ running (additive-only).
     - Effective replicated `minSize` cannot exceed `size`.
     - The pool's structural identity is its `type` and erasure profile. Changing
       it is the only desired-state change that rebuilds a live pool
-      (data-destroying, `apply --override` only); replicas, CRUSH rule, and
+      (data-destroying, `apply --converge-drifted` only); replicas, CRUSH rule, and
       application reconcile in place.
 
 A role-typed RBD pool selecting its cluster:
@@ -451,7 +451,7 @@ desired state leaves the live filesystem running (additive-only).
     filesystem's structural identity — Ceph cannot move a live CephFS to a
     different metadata or default data pool — so changing
     `spec.cephfs.metadataPoolRef`, or which `dataPoolRefs[]` entry is the default,
-    is a data-destroying, `apply --override`-only recreate (`ceph fs rm` then
+    is a data-destroying, `apply --converge-drifted`-only recreate (`ceph fs rm` then
     recreate), not an in-place reconcile.
 
 ### Subvolume groups

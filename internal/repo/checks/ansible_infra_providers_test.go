@@ -675,7 +675,7 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("libvirt destroy guard must require the decided ownership fact, got %v", refuse["that"])
 	}
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("libvirt destroy guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
+		t.Fatalf("libvirt destroy guard must be skipped under --include-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
 }
 
@@ -735,7 +735,7 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("kubevirt delete guard message must name the managed-by ownership label, got %v", refuse["fail_msg"])
 	}
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("kubevirt delete guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
+		t.Fatalf("kubevirt delete guard must be skipped under --include-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
 
 	dvReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
@@ -755,7 +755,7 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("kubevirt DataVolume delete guard message must name the managed-by label, got %v", dvRefuse["fail_msg"])
 	}
 	if got := fmt.Sprint(tasks[dvRefuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("kubevirt DataVolume delete guard must be skipped under --force-unowned, got when=%v", tasks[dvRefuseIdx]["when"])
+		t.Fatalf("kubevirt DataVolume delete guard must be skipped under --include-unowned, got when=%v", tasks[dvRefuseIdx]["when"])
 	}
 
 	bootTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml")

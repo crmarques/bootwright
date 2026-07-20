@@ -136,7 +136,7 @@ the `state-model.md` CLI Contract). A records-based apply-mode preflight uses th
 classification to fail closed on `drift` or `foreign` before any mutation, for
 every kind, so plain `apply` never silently reconciles drift; but the
 classification is not itself a per-task execution-time skip gate. Once a run
-proceeds (a clean run, or `--override`), most provider-service and infra-component
+proceeds (a clean run, or `--converge-drifted`), most provider-service and infra-component
 config tasks have no reliable external probe: they re-run and rely on idempotent
 execution, and their record is marked `unknown` (recorded but not classified) as
 durable evidence rather than an apply-time skip. Execution-time skip-vs-fail
@@ -144,8 +144,8 @@ decisions live at the concrete-probe sites.
 Cluster install reconcile reads per-cluster install records and probes live
 cluster availability, skips completed installs, resumes only from known-safe
 phases, and fails closed when install state exists for missing or different
-inputs after node boot unless a command-scoped `--override` is given. Destroy
-requires `--override` when selected state sets
+inputs after node boot unless a command-scoped `--converge-drifted` is given. Destroy
+requires `--force` when selected state sets
 `Environment.spec.safety.destroyProtection: requiredOverride`. Concrete probes —
 cluster install records, add-on records, managed OS markers, provider metadata,
 and storage comparison results — decide whether a rerun can skip or must fail.

@@ -76,8 +76,8 @@ func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 		t.Fatalf("override over an acked API-dead cluster must rebuild (skip 0 of %d install tasks), skipped %d", total, skipped)
 	}
 	_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeOverride, nil, checker, now)
-	if err == nil || !strings.Contains(err.Error(), "--allow-destroy") || !strings.Contains(err.Error(), "could not be verified at execution") {
-		t.Fatalf("override with an unacked probe error must fail closed naming --allow-destroy, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "--confirm-data-loss") || !strings.Contains(err.Error(), "could not be verified at execution") {
+		t.Fatalf("override with an unacked probe error must fail closed naming --confirm-data-loss, got: %v", err)
 	}
 }
 
@@ -106,8 +106,8 @@ func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 	if err == nil {
 		t.Fatal("continue mode must refuse an unverifiable probe")
 	}
-	if !strings.Contains(err.Error(), "availability could not be verified") || !strings.Contains(err.Error(), "--override") || !strings.Contains(err.Error(), "--allow-destroy") {
-		t.Fatalf("refusal must name the --override --allow-destroy remedy, got: %v", err)
+	if !strings.Contains(err.Error(), "availability could not be verified") || !strings.Contains(err.Error(), "--converge-drifted") || !strings.Contains(err.Error(), "--confirm-data-loss") {
+		t.Fatalf("refusal must name the --converge-drifted --confirm-data-loss remedy, got: %v", err)
 	}
 }
 
@@ -124,8 +124,8 @@ func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
 		writeAuditKubeconfig(t, clustersDir, cluster)
 		checker := &fakeClusterAvailabilityChecker{available: true}
 		_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeContinue, nil, checker, now)
-		if err == nil || !strings.Contains(err.Error(), "no install record") || !strings.Contains(err.Error(), "--allow-destroy") {
-			t.Fatalf("record-less reachable cluster must be refused with the --allow-destroy remedy, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "no install record") || !strings.Contains(err.Error(), "--confirm-data-loss") {
+			t.Fatalf("record-less reachable cluster must be refused with the --confirm-data-loss remedy, got: %v", err)
 		}
 	})
 

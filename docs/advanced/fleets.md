@@ -169,7 +169,7 @@ error anywhere in the fleet blocks even a narrowed run. Fix the offending object
 
 ## See also
 
-- [Operations & recovery](operations.md) — destroy stages, `--override`, and
+- [Operations & recovery](operations.md) — destroy stages, `--force`, and
   recovery patterns for a fleet.
 - [Reference examples](examples.md) — `baremetal-redfish-fleet` and the larger
   multi-DC platform tree.

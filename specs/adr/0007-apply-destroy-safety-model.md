@@ -43,7 +43,7 @@ The safety mode is a single extra-var, `bootwright_apply_mode`
 (`create` | `continue` | `override`), stamped by plan composition (it replaced
 a legacy boolean `bootwright_install_override`). The Go object preflight
 enforces it against recorded state (default reconcile refuses drift/foreign,
-`--expect-new` refuses pre-existing, `--override` refuses only foreign); the
+`--expect-new` refuses pre-existing, `--converge-drifted` refuses only foreign); the
 per-role Ansible apply-mode gates enforce the identical contract against live
 existence and ownership. Defense in depth is intentional: Go decides from
 records, roles from the host.
@@ -54,11 +54,11 @@ No destructive action proceeds without proof that Bootwright created its
 target: ownership records on the controller, substrate markers (libvirt domain
 XML, vSphere annotations, KubeVirt labels, managed-OS install markers), and
 live container provenance labels for shared bastion services. Foreign fails
-closed in every mode; `--override` rebuilds owned drift but never adopts.
+closed in every mode; `--converge-drifted` rebuilds owned drift but never adopts.
 Destructive authority flows through positive, fail-safe tokens — e.g. the
 storage role wipes only clusters named in
 `bootwright_ceph_rebuild_authorized_clusters`, so an absent or stale value can
-only under-authorize. Relaxations are narrow and explicit: `--force-unowned`
+only under-authorize. Relaxations are narrow and explicit: `--include-unowned`
 lifts only per-VM marker refusals on destroy; nothing relaxes device
 data-safety checks.
 
@@ -69,7 +69,7 @@ rename signature (a new cluster provisioned while a different provisioned
 cluster is undeclared) fails closed rather than silently re-provisioning and
 orphaning. `Environment.spec.safety.destroyProtection` and `protectedKinds`
 are one shared source of truth gating both `destroy` and destructive
-`apply --override` rebuilds, enforced entirely in Go — no Ansible destroy role
+`apply --converge-drifted` rebuilds, enforced entirely in Go — no Ansible destroy role
 consumes an override extra-var. Independent of protection, destructive
 rebuilds require a data-loss acknowledgment; `--yes` never authorizes
 destruction. Remedies must route to the stage that actually clears the block

@@ -1,6 +1,6 @@
 ---
 title: Operations and Recovery
-description: The three apply modes including break-glass --override and greenfield --expect-new, destroy stages and the no-selector full-teardown default, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, and --force-unowned / --skip-unreachable.
+description: The three apply modes including break-glass --converge-drifted and greenfield --expect-new, destroy stages and the no-selector full-teardown default, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, and --include-unowned / --skip-unreachable.
 ---
 
 # Operations and recovery
@@ -12,7 +12,7 @@ boundary, recovering a single component, and the destructive rebuilds Bootwright
 performs on resources it owns.
 
 For the user-facing apply, stage, and convergence model — bare `apply`,
-`--expect-new`, and `--override` as modes, and the stage families and
+`--expect-new`, and `--converge-drifted` as modes, and the stage families and
 sub-phases — see [The desired-state model](../concepts/index.md). For the
 execution pipeline, locking, and the four-outcome classifier in depth, see
 [Architecture](../contributing/architecture.md). This page is the how-to and
@@ -30,29 +30,29 @@ mutually exclusive:
   proceed if any selected object already exists. Use it when you intend a
   from-scratch build and want a stale leftover to stop the run rather than be
   reconciled into.
-- **`apply --override`** — break-glass recovery for Bootwright-owned drift it
+- **`apply --converge-drifted`** — break-glass recovery for Bootwright-owned drift it
   knows how to rebuild (managed-OS reinstall, owned-Ceph wipe-and-rebuild,
   drifted owned-object rebuild). It is command-scoped and bypasses only
   safe-mismatch gates that have an explicit override path.
 
-!!! note "`--expect-new` and `--override` cannot be combined"
+!!! note "`--expect-new` and `--converge-drifted` cannot be combined"
     `--expect-new` asserts greenfield (fail if any selected object exists);
-    `--override` authorizes rebuilding objects that already exist. They express
+    `--converge-drifted` authorizes rebuilding objects that already exist. They express
     opposite intents.
 
-!!! tip "Growing a Ceph cluster's OSDs is a plain `apply`, not `--override`"
+!!! tip "Growing a Ceph cluster's OSDs is a plain `apply`, not `--converge-drifted`"
     Adding an OSD device to a `spec.ceph.topology` host reconciles **in place**:
     a bare `apply` classifies an OSD-device-only change as reconcilable (not
     destructive) drift, so `ceph orch apply` adds the new OSD without a
-    wipe-and-rebuild. `--override` is only for a change to cluster identity
+    wipe-and-rebuild. `--converge-drifted` is only for a change to cluster identity
     (seedHost/monIP/network), which is a genuine rebuild. Because cephadm never
     auto-removes an OSD (removal must drain data first), **removing** a device
     that still hosts an OSD is refused with guidance to drain it —
     `cephadm shell -- ceph orch osd rm <id>` — before removing it from the spec.
 
-### The fail-closed `--override` contract
+### The fail-closed `--converge-drifted` contract
 
-`apply --override` authorizes Bootwright-owned destructive *rebuilds* — drifted
+`apply --converge-drifted` authorizes Bootwright-owned destructive *rebuilds* — drifted
 owned objects, a managed-OS machine reinstall, an owned-Ceph wipe-and-rebuild.
 It never bypasses active-run leases, validation, secret checks, or
 foreign-resource ownership failures, and it never touches a resource a
@@ -61,9 +61,9 @@ non-Bootwright owner holds.
 The fail-closed interaction with destroy protection is the part operators most
 often miss:
 
-!!! warning "`apply --override` is rejected on a protected context"
+!!! warning "`apply --converge-drifted` is rejected on a protected context"
     When the selected state sets `destroyProtection: requiredOverride`,
-    `apply --override` **fails closed before any mutation** instead of rebuilding
+    `apply --converge-drifted` **fails closed before any mutation** instead of rebuilding
     the protected resources. Destruction of protected state must cross the
     destroy authorization boundary. (`--dry-run` still previews the override
     plan.)
@@ -72,18 +72,18 @@ So there are two distinct rebuild paths, and which one you use depends on
 whether the context is protected:
 
 - **Protected context** — rebuild crosses the destroy boundary. Run
-  `destroy --override` for the affected scope, then re-apply:
+  `destroy --force` for the affected scope, then re-apply:
 
   ```text
-  bootwright destroy --stage clusters --clusters ocp-3node --override
+  bootwright destroy --stage clusters --clusters ocp-3node --force
   bootwright apply --stage clusters --clusters ocp-3node --yes
   ```
 
-- **Unprotected context** — a single `apply --override` performs the
+- **Unprotected context** — a single `apply --converge-drifted` performs the
   Bootwright-owned destructive rebuild in place:
 
   ```text
-  bootwright apply --clusters ocp-3node --override
+  bootwright apply --clusters ocp-3node --converge-drifted
   ```
 
 ## Tearing down with `destroy`
@@ -163,19 +163,19 @@ context against accidental teardown. The field accepts `allow` or
 from environment, context, label, or cluster names.
 
 When the selected state sets `requiredOverride`, `destroy --stage infra` and
-`destroy --stage clusters` both require `--override` to proceed:
+`destroy --stage clusters` both require `--force` to proceed:
 
 ```text
-bootwright destroy --stage clusters --override
+bootwright destroy --stage clusters --force
 ```
 
 This is the **destroy authorization boundary**: destruction of protected state
-can be authorized only through `destroy --override`, never through
-`apply --override` (which fails closed on a protected context, as above).
+can be authorized only through `destroy --force`, never through
+`apply --converge-drifted` (which fails closed on a protected context, as above).
 
-!!! warning "`--yes` does not imply `--override`"
-    `--yes` skips only the confirmation prompt; it never implies `--override`.
-    On a protected context a `destroy` without `--override` fails closed,
+!!! warning "`--yes` does not imply `--force`"
+    `--yes` skips only the confirmation prompt; it never implies `--force`.
+    On a protected context a `destroy` without `--force` fails closed,
     regardless of `--yes`.
 
 ## Whole-input validation
@@ -218,7 +218,7 @@ maintenance.
     selection would run. Use them to confirm the scope before applying. Note
     that `diff` compares against *recorded* evidence only — an out-of-band
     change (a wiped disk, an undefined VM, a deleted namespace) is not detected
-    until the next apply refreshes the record. `diff --override` is
+    until the next apply refreshes the record. `diff --converge-drifted` is
     rejected.
 
 ### KubeVirt child clusters do not auto-include their parent
@@ -240,7 +240,7 @@ What a deletion means depends on the kind:
 | You delete… | What happens | Supported removal |
 | --- | --- | --- |
 | A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `diff` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file — destroy is ownership-record driven and can reach a resource already gone from desired state. |
-| A `ContainerCluster.spec.hosts[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--override` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
+| A `ContainerCluster.spec.hosts[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--converge-drifted` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
 | A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
 | A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |
 
@@ -249,10 +249,10 @@ Removal always crosses the destroy authorization boundary or goes out of band;
 
 ## Managed-OS reinstall and owned-Ceph rebuild
 
-Two destructive rebuilds run through `apply --override` and are gated by
+Two destructive rebuilds run through `apply --converge-drifted` and are gated by
 Bootwright ownership markers, so they apply only to resources Bootwright owns.
 
-- **Managed-OS machine reinstall.** `apply --override` bypasses the
+- **Managed-OS machine reinstall.** `apply --converge-drifted` bypasses the
   skip-if-already-installed check, undefines the substrate VM, wipes its disks,
   and rebuilds the machine from its `Machine`, `MachineImage`, and
   `MachineInstallProfile` desired state. (FIPS and other install-time
@@ -260,7 +260,7 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
   them on an installed machine.) See [Managed OS installs](managed-os.md) for the
   install model.
 
-- **Owned-Ceph cluster rebuild.** `apply --override` cleanly rebuilds a managed
+- **Owned-Ceph cluster rebuild.** `apply --converge-drifted` cleanly rebuilds a managed
   Ceph cluster with `cephadm rm-cluster --zap-osds`, but **only** when a
   Bootwright ownership marker proves the live cluster is the one Bootwright
   created. A foreign or co-resident cluster fails closed.
@@ -268,7 +268,7 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
 !!! note "Override rebuilds still-declared structure; it does not prune"
     Ceph convergence is additive-only across the whole storage domain. `apply`
     never removes a live Ceph object whose declaration was deleted, and
-    `--override` does not prune undeclared objects either — it rebuilds only
+    `--converge-drifted` does not prune undeclared objects either — it rebuilds only
     still-declared objects whose structural identity changed: a pool's `type` or
     erasure profile, or a CephFS metadata pool (a data-destroying `ceph fs rm`
     recreate). Remove undeclared Ceph objects on the cluster out of band.
@@ -343,22 +343,22 @@ rename a machine or cluster after applying: the live VM still carries the *old*
 marker, so the teardown no longer recognizes it as its own and stops with
 "it carries no Bootwright ownership marker for this context/cluster/machine".
 
-`--force-unowned` is the recovery path: it tells the machine-substrate teardown
+`--include-unowned` is the recovery path: it tells the machine-substrate teardown
 to remove a matching VM despite a missing or mismatched marker. Machine
 substrate is torn down by the infra stage, so combine it with `--stage infra`
 (a clusters-only destroy never runs the machine-substrate teardown and refuses
 the flag).
 
 ```text
-bootwright destroy --stage infra --clusters ceph-storage --force-unowned --yes
+bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
 ```
 
-!!! warning "`--force-unowned` is scoped to machine VMs"
+!!! warning "`--include-unowned` is scoped to machine VMs"
     It relaxes only the libvirt/KubeVirt/vSphere per-VM ownership-marker
     refusals. It does **not** relax the Ceph cluster or OSD-device ownership
     gates, and it never relaxes the device data-safety checks (a mounted,
     in-use, or unprobeable device still fails closed). It is independent of
-    `--override` (protected-environment teardown) and does not imply `--yes`.
+    `--force` (protected-environment teardown) and does not imply `--yes`.
     Because it removes a VM Bootwright cannot positively confirm it owns,
     confirm the target VM is yours before using it.
 
@@ -371,11 +371,11 @@ container step, one down node blocks the whole teardown.
 
 `--skip-unreachable` lets the teardown proceed on the nodes it can reach: an
 unreachable node is skipped rather than aborting the play. It **requires
-`--override`**, because a skipped node leaves the cluster only *partially*
+`--force`**, because a skipped node leaves the cluster only *partially*
 destroyed.
 
 ```text
-bootwright destroy --clusters ceph-nprd --override --skip-unreachable --yes
+bootwright destroy --clusters ceph-nprd --force --skip-unreachable --yes
 ```
 
 What "partial" means: a skipped storage node keeps its OSD device signatures and
@@ -392,7 +392,7 @@ wipe them manually, before reusing the hardware.
     no node wipes a cluster whose ownership could not be verified. Power the seed
     on (or remove the cluster manually after verifying it is safe) and retry.
     `--skip-unreachable` does not relax any device data-safety check, and like
-    `--force-unowned` it does not imply `--yes`.
+    `--include-unowned` it does not imply `--yes`.
 
 ### Never-provisioned clusters tear down automatically
 
@@ -471,7 +471,7 @@ them back, and `plan` / `--dry-run` never write them.
 ## See also
 
 - [The desired-state model](../concepts/index.md) — apply stages and the
-  apply-mode model (reconcile, `--expect-new`, `--override`), plus the destroy
+  apply-mode model (reconcile, `--expect-new`, `--converge-drifted`), plus the destroy
   stages.
 - [Architecture](../contributing/architecture.md) — the execution pipeline,
   resource locking, and the four-outcome classifier in depth.

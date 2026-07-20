@@ -139,13 +139,13 @@
           Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
           {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
           bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-          Pass --force-unowned to delete it anyway.
+          Pass --include-unowned to delete it anyway.
       when: not (bootwright_destroy_force_unowned | default(false) | bool)
 
     - name: Warn before force-deleting an unowned KubeVirt VirtualMachine
       ansible.builtin.debug:
         msg: >-
-          --force-unowned: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
+          --include-unowned: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
           namespace {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
           bootwright.io/managed-by=bootwright ownership label.
       when:
@@ -227,7 +227,7 @@
           Refusing to delete DataVolume {{ item.item }} in namespace
           {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
           bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-          Pass --force-unowned to delete it anyway.
+          Pass --include-unowned to delete it anyway.
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"
       loop_control:
         label: "{{ item.item }}"
@@ -236,7 +236,7 @@
     - name: Warn before force-deleting an unowned KubeVirt DataVolume
       ansible.builtin.debug:
         msg: >-
-          --force-unowned: deleting DataVolume {{ item.item }} in namespace
+          --include-unowned: deleting DataVolume {{ item.item }} in namespace
           {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
           bootwright.io/managed-by=bootwright ownership label.
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"

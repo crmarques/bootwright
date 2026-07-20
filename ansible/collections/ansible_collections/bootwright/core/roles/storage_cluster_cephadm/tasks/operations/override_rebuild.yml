@@ -66,10 +66,10 @@
     fail_msg: >-
       Ceph pool {{ bootwright_ceph_op_idempotency_name }} on storage cluster
       {{ bootwright_selected_storage_cluster.name }} structurally drifted on the live
-      cluster but its destructive rebuild was not acknowledged — --yes/--override alone
+      cluster but its destructive rebuild was not acknowledged — --yes/--converge-drifted alone
       never authorize data loss (the live pool no longer matches the recorded state,
       e.g. it changed out-of-band or the converge records were lost). Re-run
-      `bootwright apply --override --allow-destroy --clusters
+      `bootwright apply --converge-drifted --confirm-data-loss --clusters
       {{ bootwright_selected_storage_cluster.name }}` to authorize destroying and
       recreating the pool, or align the desired spec with the live pool.
   when:
@@ -133,7 +133,7 @@
       - bootwright_ceph_op_pool_rm.rc | default(1) == 0
     fail_msg: >-
       Failed to delete structurally drifted Ceph pool
-      {{ bootwright_ceph_op_idempotency_name }} for an --override rebuild; refusing to
+      {{ bootwright_ceph_op_idempotency_name }} for an --converge-drifted rebuild; refusing to
       continue with the pool partly removed.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
@@ -265,10 +265,10 @@
     fail_msg: >-
       CephFS {{ bootwright_ceph_op_idempotency_name }} on storage cluster
       {{ bootwright_selected_storage_cluster.name }} structurally drifted on the live
-      cluster but its destructive rebuild was not acknowledged — --yes/--override alone
+      cluster but its destructive rebuild was not acknowledged — --yes/--converge-drifted alone
       never authorize data loss (the live filesystem no longer matches the recorded
       state, e.g. it changed out-of-band or the converge records were lost). Re-run
-      `bootwright apply --override --allow-destroy --clusters
+      `bootwright apply --converge-drifted --confirm-data-loss --clusters
       {{ bootwright_selected_storage_cluster.name }}` to authorize destroying and
       recreating the filesystem, or align the desired spec with the live filesystem.
   when:
@@ -376,9 +376,9 @@
       Erasure-code profile {{ bootwright_ceph_op.structural.profile }} on storage cluster
       {{ bootwright_selected_storage_cluster.name }} structurally drifted on the live
       cluster but destroying its dependent pool {{ bootwright_ceph_op.structural.pool }}
-      was not acknowledged — --yes/--override alone never authorize data loss (the live
+      was not acknowledged — --yes/--converge-drifted alone never authorize data loss (the live
       profile no longer matches the recorded state, e.g. it changed out-of-band or the
-      converge records were lost). Re-run `bootwright apply --override --allow-destroy
+      converge records were lost). Re-run `bootwright apply --converge-drifted --confirm-data-loss
       --clusters {{ bootwright_selected_storage_cluster.name }}` to authorize destroying
       and recreating the pool, or align the desired spec with the live profile.
   when:
@@ -443,7 +443,7 @@
     fail_msg: >-
       Failed to delete pool {{ bootwright_ceph_op.structural.pool }} that uses the
       structurally drifted erasure-code profile {{ bootwright_ceph_op.structural.profile }}
-      for an --override rebuild; refusing to continue with the pool partly removed.
+      for an --converge-drifted rebuild; refusing to continue with the pool partly removed.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
     - (bootwright_apply_mode | default('continue')) == 'override'

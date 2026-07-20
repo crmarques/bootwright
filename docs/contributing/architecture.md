@@ -170,7 +170,7 @@ for the user-facing summary.
     per-cluster install records, probes live cluster availability, skips
     completed installs, resumes only from known-safe phases, and fails closed
     when install state exists for missing or different inputs after node boot
-    unless a command-scoped `--override` is given.
+    unless a command-scoped `--converge-drifted` is given.
 
 ### Run ledger and lease
 
@@ -194,7 +194,7 @@ the behavioral contract is:
   `foreign` ownership before any mutation.
 - **`apply --expect-new`:** additionally refuses to proceed when any selected
   object already exists — a greenfield assertion.
-- **`apply --override`:** command-scoped break-glass. It may continue past
+- **`apply --converge-drifted`:** command-scoped break-glass. It may continue past
   Bootwright-owned unsafe-mismatch checks that have an explicit override path:
   bypass the skip-if-already-complete install check, reinstall a managed-OS
   machine (substrate VM undefined, disks wiped, then rebuilt), and cleanly
@@ -204,14 +204,14 @@ the behavioral contract is:
   **not** bypass active-run leases, validation, secret checks, or
   foreign-resource ownership failures.
 
-`--expect-new` and `--override` are mutually exclusive.
+`--expect-new` and `--converge-drifted` are mutually exclusive.
 
-!!! warning "`destroyProtection` versus `apply --override`"
+!!! warning "`destroyProtection` versus `apply --converge-drifted`"
     When selected state sets
-    `Environment.spec.safety.destroyProtection: requiredOverride`, `apply --override`
+    `Environment.spec.safety.destroyProtection: requiredOverride`, `apply --converge-drifted`
     **fails closed before any mutation** rather than rebuilding protected
     resources. That destruction must cross the destroy authorization boundary:
-    the operator runs `destroy --override` for the affected scope and then
+    the operator runs `destroy --force` for the affected scope and then
     re-applies. Dry-run still previews the override plan. See
     [Operations and Recovery](../advanced/operations.md) for the recovery
     patterns.

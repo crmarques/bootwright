@@ -91,7 +91,7 @@
       {{
         'The cluster is reachable: if you trust it, re-stamp the marker with that fsid to adopt it.'
         if (bootwright_ceph_override_reachable | default(false) | bool)
-        else 'The cluster is unreachable and its bootstrap never completed: re-run with --override to rebuild it.'
+        else 'The cluster is unreachable and its bootstrap never completed: re-run with --converge-drifted to rebuild it.'
       }}
   when:
     - (bootwright_ceph_override_conf | default({})).content is defined

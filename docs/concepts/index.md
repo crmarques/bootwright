@@ -239,14 +239,14 @@ and resolves to exactly one cluster root.
   ownership before any mutation.
 - **`apply --expect-new`** — greenfield assertion: additionally refuse to
   proceed if any selected object already exists.
-- **`apply --override`** — break-glass recovery for Bootwright-owned drift it
+- **`apply --converge-drifted`** — break-glass recovery for Bootwright-owned drift it
   knows how to rebuild (managed-OS reinstall, owned-Ceph wipe-and-rebuild,
   drifted owned-object rebuild). It never touches foreign objects, leases,
   validation, or secret checks.
 
-!!! note "`--expect-new` and `--override` cannot be combined"
-    On a destroy-protected `Environment`, `apply --override` fails closed and
-    directs you to `destroy --override` first; see
+!!! note "`--expect-new` and `--converge-drifted` cannot be combined"
+    On a destroy-protected `Environment`, `apply --converge-drifted` fails closed and
+    directs you to `destroy --force` first; see
     [Convergence and drift](#convergence-and-drift) and
     [Operations, recovery and teardown](../advanced/operations.md).
 

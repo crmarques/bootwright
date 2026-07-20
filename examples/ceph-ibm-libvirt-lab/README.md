@@ -345,12 +345,12 @@ dnsmasq and you maintain it by hand.
 ## 7. Tear down
 
 This environment sets `safety.destroyProtection: requiredOverride`, so `destroy`
-refuses to run without `--override` — a routine `destroy --yes` cannot tear it
+refuses to run without `--force` — a routine `destroy --yes` cannot tear it
 down by accident.
 
 ```bash
-bootwright destroy --stage clusters --override --yes   # remove Ceph services/records
-bootwright destroy --stage infra --override --yes      # remove VMs, network, services
+bootwright destroy --stage clusters --force --yes   # remove Ceph services/records
+bootwright destroy --stage infra --force --yes      # remove VMs, network, services
 ```
 
 ---

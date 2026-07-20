@@ -44,8 +44,8 @@ Rules:
   `requiredOverride`. Empty means `allow`. Bootwright never infers protection
   from environment names, context names, labels, or cluster names.
 - `safety.protectedKinds`, when set, lists object kinds — `ContainerCluster`,
-  `StorageCluster`, or `Machine` — that require `--override` to destroy or to
-  destructively rebuild via `apply --override` even when `destroyProtection` is
+  `StorageCluster`, or `Machine` — that require `--force` to destroy or to
+  destructively rebuild via `apply --converge-drifted` even when `destroyProtection` is
   `allow`. It is the granular tightening: protect the fleet's Ceph and machines
   without blanket friction on scratch container clusters. An unknown kind fails
   validation naming the object and the allowed set.
@@ -634,7 +634,7 @@ Rules:
   `monitoring`, the `services[]` passthrough, and the `StoragePool`/
   `StorageFilesystem`/`StorageObjectGateway` kinds: `apply` creates and converges
   declared objects and never removes a live Ceph object whose declaration was
-  deleted; `--override` rebuilds only still-declared pools whose structural
+  deleted; `--converge-drifted` rebuilds only still-declared pools whose structural
   identity changed, never prunes. Removal is out of band, pending the open
   override/reconcile design.
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
@@ -872,7 +872,7 @@ Rules:
   (`rbd` → `rbd`, `cephfs-*` → `cephfs`, `rgw` → `rgw`);
   `spec.ceph.application` overrides the inference.
 - The pool's structural identity is its `type` (and erasure profile): the only
-  desired-state change that rebuilds a live pool (data-destroying, `--override`
+  desired-state change that rebuilds a live pool (data-destroying, `--converge-drifted`
   only). Replicas, crush rule, and application reconcile in place.
 - On stretch-mode clusters, pools inherit the stretch CRUSH rule and the
   fixed stretch replication (`size: 4` / `minSize: 2`) without a placement
@@ -898,7 +898,7 @@ Rules:
 - `spec.cephfs.metadataPoolRef` is required and must reference a
   `StoragePool` on the same `StorageCluster`. The metadata pool is part of the
   filesystem's structural identity — Ceph cannot move a live CephFS to a
-  different metadata pool — so changing it is a data-destroying, `--override`-only
+  different metadata pool — so changing it is a data-destroying, `--converge-drifted`-only
   recreate (`ceph fs rm` then recreate), never an in-place reconcile.
 - `spec.cephfs.dataPoolRefs[]` is required; each entry is a plain pool name
   (a single entry becomes the default automatically) or `{name, default}` to
@@ -906,7 +906,7 @@ Rules:
   `StoragePool` on the same `StorageCluster`, must differ from the metadata
   pool, and exactly one must be the default. The default data pool is also part
   of the filesystem's structural identity: changing which data pool is the
-  default is the same data-destroying, `--override`-only recreate as the metadata
+  default is the same data-destroying, `--converge-drifted`-only recreate as the metadata
   pool (Ceph cannot move a live CephFS to a different default data pool in place).
 - `spec.cephfs.mds.placement` defaults to every topology host with the `mds`
   role; `sites`/`hosts` narrow the selection and must resolve to at least one
@@ -1454,25 +1454,25 @@ Rules:
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
-- `destroy --stage infra|clusters --override` is required when selected state
+- `destroy --stage infra|clusters --force` is required when selected state
   contains `Environment.spec.safety.destroyProtection: requiredOverride`, or when
   the scope-filtered teardown covers an object of a kind listed in
   `Environment.spec.safety.protectedKinds` (the granular gate — a protected kind
-  absent from the scope does not require `--override`).
-  `--yes` only skips the confirmation prompt and never implies `--override`.
-- `destroy --force-unowned` relaxes the machine-substrate teardown ownership
+  absent from the scope does not require `--force`).
+  `--yes` only skips the confirmation prompt and never implies `--force`.
+- `destroy --include-unowned` relaxes the machine-substrate teardown ownership
   gates only: it tears down a libvirt domain, KubeVirt VirtualMachine, or vSphere
   VM that matches the Bootwright `<cluster>-<machine>` naming but carries a
   missing or mismatched ownership marker — the recovery path when the
   desired-state names changed after the resources were applied. It is orthogonal
-  to `--override` (it neither authorizes protected-environment teardown nor is
+  to `--force` (it neither authorizes protected-environment teardown nor is
   authorized by it), does not relax the Ceph cluster or OSD-device ownership
   gates, never relaxes the device data-safety checks (a mounted, in-use, or
   unprobeable device still fails closed), and does not imply `--yes`.
 - `destroy --skip-unreachable` tolerates powered-off or unreachable nodes during
   teardown: it skips them — their devices are NOT wiped and their local state
   remains — and continues, leaving the cluster partially destroyed. It requires
-  `--override`. Storage teardown still fails closed when a cluster's Ceph seed
+  `--force`. Storage teardown still fails closed when a cluster's Ceph seed
   host is unreachable, so ownership stays proven before any device wipe.
 - `apply` reconciles by default: it creates missing objects, skips objects
   whose recorded desired state matches the current desired state, converges
@@ -1487,7 +1487,7 @@ Rules:
   rather than install-config/agent-config identity; and any drift on a
   reconfigure-only kind (whose re-apply is idempotent and non-destructive).
   `apply --expect-new` additionally refuses to proceed when any selected object
-  already exists. `--expect-new` and `--override` are mutually exclusive.
+  already exists. `--expect-new` and `--converge-drifted` are mutually exclusive.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `state-check`.
 - `apply` is additive for every kind: it never removes, deprovisions, or
@@ -1507,10 +1507,10 @@ Rules:
   `iso-created` skips the ISO and resumes from node boot; `nodes-booted` and
   `waiting` skip the ISO and boot and resume the install wait; `complete` is a
   no-op. The `booting` phase fails closed — node-boot completion is uncertain, so
-  Bootwright refuses to reboot without `--override` (which recreates the agent
+  Bootwright refuses to reboot without `--converge-drifted` (which recreates the agent
   ISO and reboots the nodes; no completed cluster is destroyed). An unrecognized
   phase also fails closed.
-- `apply --override` is command-scoped. It may continue past Bootwright-owned
+- `apply --converge-drifted` is command-scoped. It may continue past Bootwright-owned
   unsafe mismatch checks that have an explicit override path: it bypasses the
   skip-if-already-complete install check, reinstalls a managed-OS machine (the
   substrate VM is undefined and its disks wiped, then rebuilt), and cleanly
@@ -1519,7 +1519,7 @@ Rules:
   created — a foreign or co-resident cluster fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
-- `--override`'s consequence depends on the object kind, and this split gates
+- `--converge-drifted`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
   provisioning, cluster add-ons, machine RHSM registration, provisioning-playbook
@@ -1530,23 +1530,23 @@ Rules:
   is a destructive rebuild. A kind is destructive unless it is on the
   reconfigure-only allowlist, so a newly added kind fails safe.
 - When selected state contains `Environment.spec.safety.destroyProtection:
-  requiredOverride`, `apply --override` fails closed before any mutation when the
+  requiredOverride`, `apply --converge-drifted` fails closed before any mutation when the
   drift it would resolve is a destructive rebuild (a machine or cluster), rather
   than rebuilding protected resources: that destruction must cross the destroy
-  authorization boundary, so the operator runs `destroy --override` for the
+  authorization boundary, so the operator runs `destroy --force` for the
   affected scope and then re-applies. Drift confined to reconfigure-only kinds is
   an in-place re-apply and does not trip the protection gate. `protectedKinds`
   narrows this to specific kinds: on an `allow`-default environment, a destructive
-  `apply --override` rebuild of a protected kind still fails closed the same way,
+  `apply --converge-drifted` rebuild of a protected kind still fails closed the same way,
   while an unprotected kind rebuilds. Dry-run/plan still previews the override plan.
-- Independent of `destroyProtection`, a destructive `apply --override` rebuild (a
+- Independent of `destroyProtection`, a destructive `apply --converge-drifted` rebuild (a
   managed-OS or substrate machine reinstall with disks wiped, or a container/Ceph
   cluster wipe-and-rebuild) requires an explicit data-loss acknowledgment even on an
-  unprotected environment, so a mis-scoped `--override` never silently destroys. An
+  unprotected environment, so a mis-scoped `--converge-drifted` never silently destroys. An
   interactive run confirms it at a distinct data-loss prompt naming the objects; a
-  non-interactive run must pass `--allow-destroy`. `--yes` skips the routine apply
+  non-interactive run must pass `--confirm-data-loss`. `--yes` skips the routine apply
   confirmation but never authorizes data loss (mirroring how `--yes` never implies
-  `--override`). A reconfigure-only or reconcilable-in-place override touches nothing
+  `--converge-drifted`). A reconfigure-only or reconcilable-in-place override touches nothing
   destructive and reaches neither gate.
 - `bootwright machine trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
@@ -1588,7 +1588,7 @@ Rules:
   note, never a fatal error. Under the storage additive-only rule an object on the
   cluster but not declared is reported as `real-only` (an `--adopt` candidate), not
   a deletion. `diff` accepts `--stage`, `--clusters`, and `--output` like the other
-  selection commands and rejects `--override` (it neither mutates cluster state nor
+  selection commands and rejects `--converge-drifted` (it neither mutates cluster state nor
   suppresses its report).
 - `bootwright diff --recorded` skips all cluster contact and instead produces the
   fast offline desired-vs-recorded report for automation. It compares desired
@@ -1661,5 +1661,5 @@ Rules:
   next step is instead the exact scoped retry command (`apply` with the failed
   run's `--stage`/`--clusters` selection) alongside the failed tasks' log paths
   under `runs/history/<run-id>/`, so an interrupted apply resumes without an
-  operator reaching for `--override` or `destroy`.
+  operator reaching for `--converge-drifted` or `destroy`.
 - Rendered effective state must not include secret bytes.

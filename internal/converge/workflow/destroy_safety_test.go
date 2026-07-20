@@ -21,7 +21,7 @@ func TestEvaluateDestroySafetyProtectedKinds(t *testing.T) {
 		t.Fatalf("protected StorageCluster in scope must require override, got %+v", d)
 	}
 	if d := EvaluateDestroySafety(withStorage, true, nil, clusterScope); d.RequiredOverride {
-		t.Fatal("--override must clear the granular gate")
+		t.Fatal("--force must clear the granular gate")
 	}
 	if d := EvaluateDestroySafety(containerOnly, false, nil, clusterScope); d.RequiredOverride {
 		t.Fatal("a protected kind absent from the scope must not gate the teardown")

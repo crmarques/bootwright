@@ -65,7 +65,7 @@ Destructive operations are gated, never implicit:
 
 - Create operations carry the sub-object's immutable identity in a
   `structural` block. A data-destroying rebuild runs only under
-  `apply --override`, only on a proven structural mismatch against the live
+  `apply --converge-drifted`, only on a proven structural mismatch against the live
   object, only for a cluster passing the 3-factor ownership gate, and — for
   the cluster-level zap — only when the controller's positive
   rebuild-authorization token names the cluster. All decisions are fail-safe:
@@ -75,7 +75,7 @@ Destructive operations are gated, never implicit:
   drivegroup — never an implicit all-devices default), backed by per-node OSD
   ownership markers that both the install empty-device gate and the destroy
   wipe honor.
-- The `--override` rebuild path is deliberately NOT generated into the
+- The `--converge-drifted` rebuild path is deliberately NOT generated into the
   native-CLI bundle; it is Bootwright-only.
 
 ## Consequences
@@ -88,7 +88,7 @@ Destructive operations are gated, never implicit:
   instead of apply closing it destructively.
 - Structural-hash discipline must be maintained: scale-out, role rebalance,
   and stateless-service edits must stay reconcilable-in-place (tests pin
-  this), or `--override` would wipe OSDs for a benign edit.
+  this), or `--converge-drifted` would wipe OSDs for a benign edit.
 - New Ceph features cost a renderer table/spec change plus validation, not new
   imperative role branches; a knob Bootwright does not model is still
   reachable via config options or passthrough services.
