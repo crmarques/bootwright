@@ -277,6 +277,21 @@ the internal Satellite is reached directly. To bypass an internal Satellite, lis
 its domain or hostname in `noProxy` — a CIDR alone is now handled too, but a
 domain/host entry is the most direct.
 
+### Container image pulls (cephadm / podman)
+
+cephadm runs every Ceph daemon and OSD as a **podman** container and pulls the
+Ceph image on each storage host. The play-level proxy environment only reaches
+the **seed's** Ansible-invoked `cephadm bootstrap`; the cephadm manager pulls the
+image onto the other hosts by SSHing to each and running `podman` as root
+non-interactively, which does not inherit that environment. So Bootwright writes
+a root-owned `/etc/containers/containers.conf.d/10-bootwright-ceph-proxy.conf`
+(`[engine] env` with `HTTP(S)_PROXY`/`NO_PROXY`) on every storage host — mode
+`0600` when the proxy URL carries credentials, else `0644`, and removed when no
+proxy is configured. Without it, a proxied estate's storage nodes dial the image
+registry (e.g. `quay.io`) directly and the OSD image pull times out, leaving the
+cluster with zero OSDs. Keep the image registry **out** of `noProxy` so the pull
+uses the proxy, while the internal cluster/public CIDRs stay in it.
+
 ### TLS-inspecting proxies
 
 A proxy that terminates and re-signs HTTPS (SSL-bump / TLS inspection) presents

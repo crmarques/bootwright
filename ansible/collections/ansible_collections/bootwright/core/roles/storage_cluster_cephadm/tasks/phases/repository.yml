@@ -33,11 +33,32 @@
   register: bootwright_ceph_proxy_ca
   when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
 
-- name: Update storage node trust store for corporate proxy CA
-  ansible.builtin.command:
-    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
-  changed_when: bootwright_ceph_proxy_ca.changed | default(false)
-  when: bootwright_ceph_proxy_ca.changed | default(false)
+- name: Ensure containers.conf.d directory on storage node
+  ansible.builtin.file:
+    path: /etc/containers/containers.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: bootwright_proxy_has_url | default(false) | bool
+
+- name: Configure podman proxy for cephadm image pulls on storage node
+  ansible.builtin.copy:
+    dest: /etc/containers/containers.conf.d/10-bootwright-ceph-proxy.conf
+    owner: root
+    group: root
+    mode: "{{ '0600' if bootwright_proxy_credentialed_url | default(false) else '0644' }}"
+    content: |
+      [engine]
+      env = ["HTTP_PROXY={{ bootwright_proxy_http_effective }}", "HTTPS_PROXY={{ bootwright_proxy_https_effective }}", "NO_PROXY={{ bootwright_proxy_no }}", "http_proxy={{ bootwright_proxy_http_effective }}", "https_proxy={{ bootwright_proxy_https_effective }}", "no_proxy={{ bootwright_proxy_no }}"]
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_proxy_credentialed_url | default(false)) }}"
+  when: bootwright_proxy_has_url | default(false) | bool
+
+- name: Remove podman proxy drop-in on storage node when no proxy is configured
+  ansible.builtin.file:
+    path: /etc/containers/containers.conf.d/10-bootwright-ceph-proxy.conf
+    state: absent
+  when: not (bootwright_proxy_has_url | default(false) | bool)
 
 - name: Configure community Ceph package repository
   ansible.builtin.include_tasks: ../providers/community.yml

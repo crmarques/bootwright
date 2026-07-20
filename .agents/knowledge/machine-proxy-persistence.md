@@ -22,12 +22,26 @@ left there by older runs take precedence over `/root/.pip/pip.conf`, which
 made pip skip sending `Proxy-Authorization` and fail with `407` against an
 authenticated proxy.
 
-**No containers.conf.d proxy drop-in:** podman reads containers.conf for
-rootless users too, so a `0600` drop-in breaks non-root `podman` (even
-`podman info`) while `0644` leaks proxy credentials. Containers receive
-`HTTP_PROXY` via the play-level `bootwright_proxy_env` instead. persist.yml
-also restores `0644` on containers.conf because older bootwright versions
-locked it to `0600`.
+**No containers.conf.d proxy drop-in (general managed nodes):** podman reads
+containers.conf for rootless users too, so a `0600` drop-in breaks non-root
+`podman` (even `podman info`) while `0644` leaks proxy credentials. Containers
+receive `HTTP_PROXY` via the play-level `bootwright_proxy_env` instead.
+persist.yml also restores `0644` on containers.conf because older bootwright
+versions locked it to `0600`.
+
+**Exception — dedicated Ceph storage nodes DO get a drop-in:**
+`storage_cluster_cephadm/tasks/phases/repository.yml` writes
+`/etc/containers/containers.conf.d/10-bootwright-ceph-proxy.conf` (`[engine]
+env` with `HTTP(S)_PROXY`/`NO_PROXY`, mode `0600` when the proxy URL is
+credentialed else `0644`; removed when no proxy URL). Required because the
+cephadm mgr pulls OSD/daemon images by SSHing to each host and running `podman`
+as **root, non-interactively** — that path does NOT inherit the play-level
+`bootwright_proxy_env` (only the seed's Ansible-invoked `cephadm bootstrap`
+does), so without a node-persistent source the per-host pulls dial the registry
+directly and time out (0 OSDs). Safe here because a dedicated storage node runs
+podman only as root: `0600` stays root-only (no rootless `podman` to break, no
+credential leak). This is the one place the "no drop-in" rule above is
+deliberately reversed.
 
 **Probe proxy TCP reachability before dnf:** dnf's `--setopt=timeout` does
 not cover the TCP connect phase, so a silently dropped SYN toward a dead
