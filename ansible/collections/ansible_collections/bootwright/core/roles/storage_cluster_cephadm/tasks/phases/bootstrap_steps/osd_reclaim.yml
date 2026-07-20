@@ -107,7 +107,7 @@
         bootwright_ceph_filter_excluded_paths: >-
           {{ ((bootwright_ceph_filter_osd_metadata.stdout | default('[]') | from_json)
               | selectattr('hostname', 'equalto', bootwright_ceph_filter_host.cephHostname)
-              | map(attribute='devices') | join(',') | split(',')
+              | map(attribute='devices', default='') | join(',') | split(',')
               | map('trim') | reject('equalto', '') | map('basename')
               | map('regex_replace', '^', '/dev/') | list)
              + (bootwright_ceph_filter_host_devices
