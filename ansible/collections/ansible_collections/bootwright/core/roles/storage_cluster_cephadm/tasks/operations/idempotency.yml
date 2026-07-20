@@ -21,7 +21,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_pool_list.stdout | default('[]')) | from_json)
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_pool_list.stdout | default('') | trim | default('[]', true)) | from_json)
 
 - name: Check existing CephFS
   ansible.builtin.command:
@@ -44,7 +44,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_fs_list.stdout | default('[]')) | from_json | map(attribute='name') | list)
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_fs_list.stdout | default('') | trim | default('[]', true)) | from_json | map(attribute='name') | list)
 
 - name: Check existing CRUSH rule
   ansible.builtin.command:
@@ -69,7 +69,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind in ['crush-rule', 'stretch-crush-rule']
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json | map(attribute='rule_name') | list)
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_crush_rules.stdout | default('') | trim | default('[]', true)) | from_json | map(attribute='rule_name') | list)
 
 - name: Create stretch CRUSH rule in CRUSH map
   when:
@@ -80,7 +80,7 @@
       ansible.builtin.set_fact:
         bootwright_ceph_stretch_rule_id: >-
           {{
-            ((((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json
+            ((((bootwright_ceph_crush_rules.stdout | default('') | trim | default('[]', true)) | from_json
                | map(attribute='rule_id') | list) + [0]) | max | int) + 1
           }}
 
@@ -185,7 +185,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_ec_profiles.stdout | default('[]')) | from_json)
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_ec_profiles.stdout | default('') | trim | default('[]', true)) | from_json)
 
 - name: Check current stretch mode
   ansible.builtin.command:
@@ -208,7 +208,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'stretch-mode'
-    - ((bootwright_ceph_mon_dump.stdout | default('{}')) | from_json).stretch_mode | default(false) | bool
+    - ((bootwright_ceph_mon_dump.stdout | default('') | trim | default('{}', true)) | from_json).stretch_mode | default(false) | bool
 
 - name: Check enabled mgr modules
   ansible.builtin.command:
@@ -231,7 +231,7 @@
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
   vars:
-    bootwright_ceph_mgr_module_doc: "{{ (bootwright_ceph_mgr_modules.stdout | default('{}')) | from_json }}"
+    bootwright_ceph_mgr_module_doc: "{{ (bootwright_ceph_mgr_modules.stdout | default('') | trim | default('{}', true)) | from_json }}"
   when:
     - bootwright_ceph_op_idempotency_kind == 'mgr-module'
     - >-
@@ -261,7 +261,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'rgw-realm'
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_realms.stdout | default('{}')) | from_json).realms | default([])
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_realms.stdout | default('') | trim | default('{}', true)) | from_json).realms | default([])
 
 - name: Check existing RGW zonegroup
   ansible.builtin.command:
@@ -284,7 +284,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'rgw-zonegroup'
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_zonegroups.stdout | default('{}')) | from_json).zonegroups | default([])
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_zonegroups.stdout | default('') | trim | default('{}', true)) | from_json).zonegroups | default([])
 
 - name: Check existing RGW zone
   ansible.builtin.command:
@@ -307,7 +307,7 @@
     bootwright_ceph_op_skip: true
   when:
     - bootwright_ceph_op_idempotency_kind == 'rgw-zone'
-    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_zones.stdout | default('{}')) | from_json).zones | default([])
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_zones.stdout | default('') | trim | default('{}', true)) | from_json).zones | default([])
 
 - name: Check existing RGW user
   ansible.builtin.command:

@@ -22,7 +22,7 @@
 - name: Resolve live Ceph pool for structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_pool_live: >-
-      {{ ((bootwright_ceph_pool_detail.stdout | default('[]')) | from_json
+      {{ ((bootwright_ceph_pool_detail.stdout | default('') | trim | default('[]', true)) | from_json
           | selectattr('pool_name', 'equalto', bootwright_ceph_op_idempotency_name)
           | list | first | default({})) }}
   when:
@@ -162,7 +162,7 @@
 - name: Resolve live CephFS for structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_fs_live: >-
-      {{ ((bootwright_ceph_fs_detail.stdout | default('[]')) | from_json
+      {{ ((bootwright_ceph_fs_detail.stdout | default('') | trim | default('[]', true)) | from_json
           | selectattr('name', 'equalto', bootwright_ceph_op_idempotency_name)
           | list | first | default({})) }}
   when:
@@ -211,9 +211,9 @@
 - name: Resolve live CephFS default data pool for structural override rebuild
   ansible.builtin.set_fact:
     bootwright_ceph_op_fs_default_pool_live: >-
-      {{ ((bootwright_ceph_fs_pool_detail.stdout | default('[]')) | from_json)
+      {{ ((bootwright_ceph_fs_pool_detail.stdout | default('') | trim | default('[]', true)) | from_json)
          | selectattr('pool_id', 'equalto',
-             (((((bootwright_ceph_fs_get_detail.stdout | default('{}')) | from_json).mdsmap
+             (((((bootwright_ceph_fs_get_detail.stdout | default('') | trim | default('{}', true)) | from_json).mdsmap
                 | default({})).data_pools | default([])) | first | default(-1)))
          | map(attribute='pool_name') | list | first | default('') }}
   when:

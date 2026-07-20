@@ -24,7 +24,7 @@
     that:
       - bootwright_ceph_final_health.rc | default(1) == 0
       - >-
-        ((bootwright_ceph_final_health.stdout | default('{}') | from_json).status
+        ((bootwright_ceph_final_health.stdout | default('') | trim | default('{}', true) | from_json).status
          | default('UNKNOWN')) != 'HEALTH_ERR'
     fail_msg: >-
       Ceph cluster {{ bootwright_selected_storage_cluster.name }} remained unreachable
