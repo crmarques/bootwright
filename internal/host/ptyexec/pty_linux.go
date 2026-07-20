@@ -18,7 +18,7 @@ import (
 
 const processGroupTerminationGrace = 5 * time.Second
 
-func RunCommand(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, env []string) error {
+func RunCommand(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, env []string, dir string) error {
 	master, slave, err := openPseudoTerminal()
 	if err != nil {
 		return fmt.Errorf("allocate pseudo-terminal: %w", err)
@@ -27,6 +27,7 @@ func RunCommand(ctx context.Context, stdout io.Writer, stderr io.Writer, args []
 
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Env = env
+	cmd.Dir = dir
 	cmd.Stdin = slave
 	cmd.Stdout = slave
 	cmd.Stderr = slave

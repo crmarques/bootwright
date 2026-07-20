@@ -172,11 +172,14 @@ func RunLoggedCommand(ctx context.Context, command []string, env []string, outpu
 	}
 	lockedOutputLog := &lockedWriter{w: outputLog}
 
+	workDir := stableWorkingDir()
+
 	var runErr error
 	if useControllingTTY {
-		runErr = ptyexec.RunCommand(ctx, ttyOutputWriter(stdout, stderr, lockedOutputLog), nil, command, env)
+		runErr = ptyexec.RunCommand(ctx, ttyOutputWriter(stdout, stderr, lockedOutputLog), nil, command, env, workDir)
 	} else {
 		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+		cmd.Dir = workDir
 		cmd.Stdout = teeWriter(stdout, lockedOutputLog)
 		cmd.Stderr = teeWriter(stderr, lockedOutputLog)
 		cmd.Stdin = os.Stdin
@@ -207,6 +210,15 @@ func RunLoggedCommand(ctx context.Context, command []string, env []string, outpu
 		return fmt.Errorf("run %s (output log: %s): %w", command[0], outputLogPath, runErr)
 	}
 	return nil
+}
+
+func stableWorkingDir() string {
+	for _, dir := range []string{SystemTempDir, "/"} {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return ""
 }
 
 func appendSystemTempEnv(env []string) []string {
