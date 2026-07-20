@@ -99,6 +99,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
 	errs = append(errs, validateStorageCephBootstrapPublicNetwork(prefix, cluster, machines)...)
+	errs = append(errs, validateStorageCephClusterNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
@@ -638,6 +639,54 @@ func validateStorageCephBootstrapPublicNetwork(prefix string, cluster v1alpha1.S
 		}
 	}
 	return []string{fmt.Sprintf("%s.networks.publicCIDRs: cephadm bootstrap host %q carries mon-ip %s on interface subnet %s, absent from the declared entries (%s); cephadm bootstrap aborts with \"public CIDR network ... is not configured locally\" unless a publicCIDRs entry exactly equals a locally-configured interface subnet — set the Machine/%s interfaceAddresses prefixLength and the publicCIDRs entry to the same CIDR", prefix, host, monIP, strings.Join(subnets, ","), strings.Join(publics, ","), machine.Metadata.Name)}
+}
+
+func validateStorageCephClusterNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+	ceph := cluster.Spec.Ceph
+	if ceph == nil || len(ceph.Networks.ClusterCIDRs) == 0 {
+		return nil
+	}
+	clusters := ceph.Networks.ClusterCIDRs
+	var errs []string
+	for _, node := range ceph.Topology.Hosts {
+		if !storageCephHostRunsOSD(node) {
+			continue
+		}
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok || len(machine.Spec.Network.Config.InterfaceAddresses) == 0 {
+			continue
+		}
+		if storageMachineHasClusterNetworkAddress(machine, clusters) {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("%s.networks.clusterCIDRs: Ceph OSD host %q (Machine/%s) configures no interface address inside the declared cluster network (%s); ceph-osd binds its replication socket inside cluster_network and, finding no local address there, aborts with 'unable to find any IP address in network(s)', so every OSD on the host stays down and stray outside the CRUSH map; add an interfaceAddresses entry (matching prefixLength) that places the node on the cluster network, or drop clusterCIDRs to run replication over the public network", prefix, node.Hostname, machine.Metadata.Name, strings.Join(clusters, ",")))
+	}
+	return errs
+}
+
+func storageCephHostRunsOSD(node v1alpha1.StorageCephHost) bool {
+	if node.OSD != nil {
+		return true
+	}
+	for _, role := range node.Roles {
+		if role == v1alpha1.StorageCephRoleOSD {
+			return true
+		}
+	}
+	return false
+}
+
+func storageMachineHasClusterNetworkAddress(machine v1alpha1.Machine, cidrs []string) bool {
+	for _, ia := range machine.Spec.Network.Config.InterfaceAddresses {
+		ip, ok := v1alpha1.MachineAddressByName(machine, ia.AddressRef.Name)
+		if !ok || ip == "" {
+			continue
+		}
+		if storageIPWithinAny(ip, cidrs) {
+			return true
+		}
+	}
+	return false
 }
 
 func storageConnectedSubnet(ip string, prefixLength int) (string, bool) {
