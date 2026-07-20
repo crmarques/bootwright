@@ -92,6 +92,31 @@ The readiness retry tasks terminate at their configured attempt budget and
 defer failure to explicit assertions. Letting Ansible's `until` exhaust marks
 the task failed before the device, service, and CRUSH diagnostics can run even
 when the command task has `failed_when: false`.
+
+**Constraint (dynamic-host CRUSH check is one cluster-wide poll, not per host):**
+`ceph osd tree` is a whole-cluster snapshot, so the dynamic-host wait polls it
+ONCE with an `until` that requires EVERY declared dynamic host bucket to hold an
+in OSD (a filter chain — `selectattr('name','in', hosts) | map(attribute='children')
+| map('intersect', <in-osd ids>) | map('length') | select('gt', 0) | list | length`
+`>= hosts|length`), then a single looped assert re-reads that one snapshot per
+host. Polling `ceph osd tree` once per host multiplied the attempt budget by the
+host count for zero extra signal (worst case, N hosts x 30 x delay before the
+assert fired). The per-host wait is gated on the global readiness fact so a
+globally-failed cluster fails fast at the global assert instead of also burning
+the per-host budget.
+
+**Constraint (created-but-not-booted OSDs are not a rejected-device fault):** The
+global gate deliberately keys on `num_in_osds`, so OSDs that are `in` but `down`
+and `stray` (created by ceph-volume, daemons never booted into the CRUSH map)
+PASS the global gate and fail only the per-host CRUSH check — the failure mode
+behind a green-then-stray install. The rich diagnostics (`ceph orch device ls
+--wide`, `ceph orch ps`, `ceph orch host ls`, `ceph orch ls osd`) therefore also
+run when a dynamic host has no in OSD, not only on global-gate failure, and the
+per-host assert reports the cluster-wide total/stray/down OSD counts and names
+the two distinct remedies: investigate the OSD daemons (image pull / mon
+connectivity) when OSDs exist but are stray/down, versus clean or exclude
+rejected devices when no OSD exists for the host. The earlier per-host message
+assumed rejected devices unconditionally, misdiagnosing the stray/down case.
 After all late service specs and object operations, apply performs a final
 health poll and refuses to record success while the cluster is unreachable or
 `HEALTH_ERR`; `HEALTH_WARN` remains acceptable because expected operational

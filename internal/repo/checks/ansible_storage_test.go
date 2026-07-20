@@ -75,23 +75,27 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve OSD readiness expectation")
 	globalWaitIdx := findAnsibleTask(t, tasks, "Wait for declared Ceph OSDs to be created and in")
 	evaluateIdx := findAnsibleTask(t, tasks, "Evaluate whether declared Ceph OSDs became ready")
+	perHostIdx := findAnsibleTask(t, tasks, "Wait for an in OSD on every dynamic-selection host")
+	perHostEvaluateIdx := findAnsibleTask(t, tasks, "Evaluate whether every dynamic-selection host has an in OSD")
 	deviceDiagIdx := findAnsibleTask(t, tasks, "Collect Ceph device inventory when OSDs did not become ready")
 	serviceDiagIdx := findAnsibleTask(t, tasks, "Collect declared OSD service status when OSDs did not become ready")
 	globalAssertIdx := findAnsibleTask(t, tasks, "Assert declared Ceph OSDs were created")
-	perHostIdx := findAnsibleTask(t, tasks, "Wait for an in OSD on every dynamic-selection host")
-	coverageAssertIdx := findAnsibleTask(t, tasks, "Assert every dynamic-selection host was probed")
 	dynamicAssertIdx := findAnsibleTask(t, tasks, "Assert an in OSD exists on every dynamic-selection host")
 	healthIdx := findAnsibleTask(t, tasks, "Capture observed Ceph health for the storage result")
 	if !(resolveIdx < globalWaitIdx &&
 		globalWaitIdx < evaluateIdx &&
-		evaluateIdx < deviceDiagIdx &&
+		evaluateIdx < perHostIdx &&
+		perHostIdx < perHostEvaluateIdx &&
+		perHostEvaluateIdx < deviceDiagIdx &&
 		deviceDiagIdx < serviceDiagIdx &&
 		serviceDiagIdx < globalAssertIdx &&
-		globalAssertIdx < perHostIdx &&
-		perHostIdx < coverageAssertIdx &&
-		coverageAssertIdx < dynamicAssertIdx &&
+		globalAssertIdx < dynamicAssertIdx &&
 		dynamicAssertIdx < healthIdx) {
-		t.Fatalf("OSD readiness must evaluate and diagnose the global gate, require and assert every dynamic host, then capture health")
+		t.Fatalf("OSD readiness must evaluate the global gate, poll the CRUSH tree once for every dynamic host, diagnose, then assert the global gate and each dynamic host before capturing health")
+	}
+
+	if findAnsibleTaskIndex(tasks, "Assert every dynamic-selection host was probed") >= 0 {
+		t.Fatalf("dynamic-host OSD readiness must probe the CRUSH tree once, not loop a per-host coverage assertion")
 	}
 
 	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -137,50 +141,66 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 			t.Fatalf("dynamic-host OSD readiness argv missing %q: %v", want, argv)
 		}
 	}
+	if _, looped := perHost["loop"]; looped {
+		t.Fatalf("dynamic-host OSD readiness must poll the cluster-wide CRUSH tree once, not loop per host, got loop=%v", perHost["loop"])
+	}
 	until := fmt.Sprint(perHost["until"])
-	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'equalto', item", "children", "intersect", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_retries"} {
+	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'in', bootwright_ceph_osd_dynamic_hosts", "map('intersect'", "map('length')", "select('gt', 0)", "bootwright_ceph_osd_dynamic_hosts | length", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_retries"} {
 		if !strings.Contains(until, want) {
-			t.Fatalf("dynamic-host OSD readiness condition missing %q: %v", want, until)
+			t.Fatalf("collapsed dynamic-host OSD readiness condition missing %q: %v", want, until)
 		}
 	}
-	if got := fmt.Sprint(perHost["loop"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") {
-		t.Fatalf("dynamic-host OSD readiness must probe every rendered hostname, got loop=%v", got)
+	if strings.Contains(until, "name', 'equalto', item") {
+		t.Fatalf("dynamic-host OSD readiness must not re-poll per host, got %v", until)
 	}
-	if got := fmt.Sprint(perHost["when"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") {
-		t.Fatalf("dynamic-host OSD readiness must skip empty host sets, got when=%v", got)
+	if got := fmt.Sprint(perHost["when"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") || !strings.Contains(got, "bootwright_ceph_osd_ready") {
+		t.Fatalf("dynamic-host OSD readiness must skip empty host sets and a failed global gate, got when=%v", perHost["when"])
 	}
 	if perHost["changed_when"] != false || perHost["failed_when"] != false {
 		t.Fatalf("dynamic-host OSD readiness must be a read-only retry probe, got changed_when=%v failed_when=%v", perHost["changed_when"], perHost["failed_when"])
 	}
-	coverageAssert, ok := tasks[coverageAssertIdx]["ansible.builtin.assert"].(map[string]any)
+
+	perHostEval, ok := tasks[perHostEvaluateIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
-		t.Fatalf("dynamic-host OSD readiness must assert every rendered host was probed, got %v", tasks[coverageAssertIdx])
+		t.Fatalf("dynamic-host OSD readiness must evaluate the collapsed poll into a fact before diagnostics, got %v", tasks[perHostEvaluateIdx])
 	}
-	coverage := fmt.Sprint(coverageAssert["that"])
-	for _, want := range []string{"bootwright_ceph_osd_host_tree.results", "bootwright_ceph_osd_dynamic_hosts"} {
-		if !strings.Contains(coverage, want) {
-			t.Fatalf("dynamic-host probe coverage assertion missing %q, got %v", want, coverage)
+	dynamicReady := fmt.Sprint(perHostEval["bootwright_ceph_osd_dynamic_ready"])
+	for _, want := range []string{"bootwright_ceph_osd_host_tree.rc", "name', 'in', bootwright_ceph_osd_dynamic_hosts", "map('intersect'", "bootwright_ceph_osd_dynamic_hosts | length"} {
+		if !strings.Contains(dynamicReady, want) {
+			t.Fatalf("dynamic-host readiness evaluation missing %q, got %v", want, dynamicReady)
 		}
 	}
+
+	if got := fmt.Sprint(tasks[deviceDiagIdx]["when"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_ready") {
+		t.Fatalf("readiness diagnostics must also run when a dynamic host has no in OSD, got when=%v", tasks[deviceDiagIdx]["when"])
+	}
+
 	dynamicAssert, ok := tasks[dynamicAssertIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("dynamic-host OSD readiness must end with an actionable per-host assertion, got %v", tasks[dynamicAssertIdx])
 	}
 	dynamicThat := fmt.Sprint(dynamicAssert["that"])
-	for _, want := range []string{"bootwright_ceph_osd_host_result.rc", "bootwright_ceph_osd_host_result.stdout", "bootwright_ceph_osd_host_result.item", "type', 'equalto', 'osd", "type', 'equalto', 'host", "intersect"} {
+	for _, want := range []string{"bootwright_ceph_osd_host_tree.rc", "bootwright_ceph_osd_host_tree.stdout", "bootwright_ceph_osd_dynamic_host", "type', 'equalto', 'osd", "type', 'equalto', 'host", "intersect"} {
 		if !strings.Contains(dynamicThat, want) {
 			t.Fatalf("dynamic-host OSD assertion missing %q, got %v", want, dynamicThat)
 		}
 	}
-	if got := fmt.Sprint(tasks[dynamicAssertIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_osd_host_tree.results") {
-		t.Fatalf("dynamic-host OSD assertion must evaluate every probe result, got loop=%v", got)
+	if got := fmt.Sprint(tasks[dynamicAssertIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") {
+		t.Fatalf("dynamic-host OSD assertion must evaluate the single snapshot for every rendered host, got loop=%v", got)
 	}
 	loopControl, ok := tasks[dynamicAssertIdx]["loop_control"].(map[string]any)
-	if !ok || loopControl["loop_var"] != "bootwright_ceph_osd_host_result" {
+	if !ok || loopControl["loop_var"] != "bootwright_ceph_osd_dynamic_host" {
 		t.Fatalf("dynamic-host OSD assertion must use a collision-safe loop variable, got %v", tasks[dynamicAssertIdx]["loop_control"])
 	}
-	if got := fmt.Sprint(dynamicAssert["fail_msg"]); !strings.Contains(got, "ceph orch device ls --wide") || !strings.Contains(got, "CRUSH") {
-		t.Fatalf("dynamic-host OSD assertion must provide device and CRUSH diagnostics, got fail_msg=%v", got)
+	if got := fmt.Sprint(dynamicAssert["fail_msg"]); !strings.Contains(got, "ceph orch device ls --wide") || !strings.Contains(got, "CRUSH") || !strings.Contains(got, "stray") || !strings.Contains(got, "ceph orch ps") {
+		t.Fatalf("dynamic-host OSD assertion must distinguish stray/down daemons from rejected devices and provide device, daemon, and CRUSH diagnostics, got fail_msg=%v", got)
+	}
+	dynamicVars, ok := tasks[dynamicAssertIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("dynamic-host OSD assertion must derive its stray/down counts from a vars block, got %v", tasks[dynamicAssertIdx]["vars"])
+	}
+	if got := fmt.Sprint(dynamicVars["bootwright_ceph_osd_tree_doc"]); !strings.Contains(got, "from_json") || !strings.Contains(got, "default('{}', true)") {
+		t.Fatalf("dynamic-host OSD assertion fail_msg parses the CRUSH tree eagerly, so it must guard from_json against an empty (rc!=0) stdout with default('{}', true), got %v", got)
 	}
 }
 
