@@ -111,6 +111,43 @@
     - bootwright_ceph_osd_readiness_mode != 'skip'
     - not (bootwright_ceph_osd_ready | default(false) | bool)
 
+- name: Collect Ceph orchestrator host status when OSDs did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - ls
+      - --format
+      - yaml
+  register: bootwright_ceph_osd_host_ls
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - not (bootwright_ceph_osd_ready | default(false) | bool)
+
+- name: Collect Ceph daemon placement when OSDs did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ps
+      - --format
+      - yaml
+  register: bootwright_ceph_osd_daemon_ps
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - not (bootwright_ceph_osd_ready | default(false) | bool)
+
 - name: Assert declared Ceph OSDs were created
   ansible.builtin.assert:
     that:
@@ -133,8 +170,21 @@
       it is disposable, then `wipefs --all` / `sgdisk --zap-all`) or exclude it from the OSD
       device selection, and re-apply. This apply is failing closed rather than reporting
       success against a short or zero-OSD cluster.
+      Ceph orchestrator hosts (ceph orch host ls):
+      {{ (bootwright_ceph_osd_host_ls.stdout | default('') | trim)
+      or ('(ceph orch host ls failed, rc=' ~ (bootwright_ceph_osd_host_ls.rc | default('unknown')) ~ ' — the cluster/mgr was unreachable)'
+      if (bootwright_ceph_osd_host_ls.rc | default(1) | int) != 0
+      else '(no hosts are managed by the orchestrator)') }}
+      Ceph daemon placement (ceph orch ps):
+      {{ (bootwright_ceph_osd_daemon_ps.stdout | default('') | trim)
+      or ('(ceph orch ps failed, rc=' ~ (bootwright_ceph_osd_daemon_ps.rc | default('unknown')) ~ ')'
+      if (bootwright_ceph_osd_daemon_ps.rc | default(1) | int) != 0
+      else '(no daemons are deployed)') }}
       Ceph device inventory (ceph orch device ls --wide):
-      {{ (bootwright_ceph_osd_device_ls.stdout | default('') | trim) or '(device inventory unavailable — the cluster was unreachable)' }}
+      {{ (bootwright_ceph_osd_device_ls.stdout | default('') | trim)
+      or ('(ceph orch device ls failed, rc=' ~ (bootwright_ceph_osd_device_ls.rc | default('unknown')) ~ ' — the cluster/mgr was unreachable or the command errored)'
+      if (bootwright_ceph_osd_device_ls.rc | default(1) | int) != 0
+      else '(the query succeeded but cephadm reported ZERO devices — the orchestrator has not scanned the hosts. Cross-check the host and daemon lists above: if declared hosts are online but carry few or no daemons, cephadm cannot run on them — commonly a container-image pull or registry/mirror/proxy failure; inspect `ceph log last cephadm` for `cephadm pull`/deploy errors. If the hosts are fully online with clean disks and only the inventory is stalled, force a re-scan with `ceph mgr fail`, then re-apply)') }}
       Declared OSD services (ceph orch ls --service_type osd):
       {{ (bootwright_ceph_osd_service_ls.stdout | default('') | trim) or '(OSD service status unavailable — the cluster was unreachable)' }}
   when: bootwright_ceph_osd_readiness_mode != 'skip'
