@@ -29,3 +29,37 @@
   changed_when: false
   failed_when: false
   when: "'chronyd' in bootwright_ceph_node_services"
+
+- name: Capture chrony tracking when the storage node clock did not synchronize
+  ansible.builtin.command:
+    argv:
+      - chronyc
+      - tracking
+  register: bootwright_ceph_chrony_tracking
+  changed_when: false
+  failed_when: false
+  when:
+    - "'chronyd' in bootwright_ceph_node_services"
+    - (bootwright_ceph_chrony_waitsync.rc | default(1) | int) != 0
+
+- name: Fail closed when the storage node clock is not synchronized
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_chrony_waitsync.rc | default(1) | int) == 0
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }} did not
+      synchronize its clock within the wait window. Ceph requires closely
+      synchronized clocks: monitors tolerate at most ~0.05s of skew, and a
+      skewed node makes its monitor accumulate slow ops and stall. OSD creation
+      then hangs — ceph-volume, running on the skewed node, blocks contacting
+      the degraded monitor and cephadm kills it at its command timeout
+      (podman exit 124), so no OSD is ever created. chronyd is enabled but has
+      no usable time source: in a disconnected or firewalled site the default
+      public NTP pools are unreachable (NTP is UDP/123 and is not proxyable).
+      Point this node's chrony at a reachable NTP server (an internal site time
+      server), confirm `chronyc tracking` reports a small offset and a real
+      reference, then re-apply. Current chrony state (chronyc tracking):
+      {{ bootwright_ceph_chrony_tracking.stdout | default('(chronyc tracking unavailable)') | trim }}
+    success_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }} clock is synchronized.
+  when: "'chronyd' in bootwright_ceph_node_services"
