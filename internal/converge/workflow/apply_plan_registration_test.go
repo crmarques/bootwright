@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -48,6 +49,38 @@ func TestPlanMachineRegistrationBetweenOSInstallAndStorageInfra(t *testing.T) {
 	}
 	assertTaskDeps(t, tasks, "registration.ceph-ibm", "provider.bastion", "infra-component.bastion", "osinstall.ceph-ibm")
 	assertTaskDeps(t, tasks, "storageinfra.ceph-ibm", "provider.bastion", "infra-component.bastion", "osinstall.ceph-ibm", "registration.ceph-ibm")
+}
+
+func TestPlanMachineRegistrationSkipsProvidedOSNode(t *testing.T) {
+	state := cephSubscriptionExampleState(t)
+	const providedNode = "ceph-3"
+	flipped := false
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name == providedNode {
+			state.Machines[i].Spec.OS = v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)}
+			flipped = true
+		}
+	}
+	if !flipped {
+		t.Fatalf("precondition: machine %q not found in the ceph-ibm example", providedNode)
+	}
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	task := assertTaskPresent(t, tasks, "registration.ceph-ibm")
+	if task.Limit == render.StorageClusterGroupName("ceph-ibm") {
+		t.Fatalf("registration limit must exclude the provided-OS node, got the whole group %q", task.Limit)
+	}
+	for _, host := range render.MachineInventoryHosts(state, providedNode) {
+		if host != "" && strings.Contains(task.Limit, host) {
+			t.Fatalf("registration limit %q must not target provided-OS node host %q", task.Limit, host)
+		}
+	}
+	managedHost := render.MachineInventoryHosts(state, "ceph-1")
+	if len(managedHost) == 0 || !strings.Contains(task.Limit, managedHost[0]) {
+		t.Fatalf("registration limit %q must still target the managed-OS node ceph-1 (%v)", task.Limit, managedHost)
+	}
 }
 
 func TestPlanMachineRegistrationSkippedWhenRHSMManagementExternal(t *testing.T) {

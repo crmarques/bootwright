@@ -20,6 +20,10 @@
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') | length == 0
 
+    - name: End provided-OS hosts
+      ansible.builtin.meta: end_host
+      when: bootwright_os_provided | default(false) | bool
+
     - name: End hosts outside the selected storage clusters
       ansible.builtin.meta: end_host
       when:

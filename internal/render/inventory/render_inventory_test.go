@@ -458,6 +458,18 @@ func TestHostGroupCountsLibvirtManaged(t *testing.T) {
 	}
 }
 
+func TestStorageInventoryMarksManagedOSNodeNotProvided(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "ceph-ibm-libvirt-lab")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	hosts := Inventory(state, "/context/secrets")["all"].(map[string]any)["hosts"].(map[string]any)
+	node := hosts[StorageNodeHostName("ceph-ibm", "ceph-1")].(map[string]any)
+	if got := node["bootwright_os_provided"]; got != false {
+		t.Fatalf("managed-OS ceph node bootwright_os_provided = %v, want false", got)
+	}
+}
+
 func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
@@ -489,6 +501,14 @@ func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 	node := hosts[nodeName].(map[string]any)
 	if got := node["ansible_host"]; got != "192.168.141.31" {
 		t.Fatalf("storage node ansible_host = %v, want 192.168.141.31", got)
+	}
+	if got := node["bootwright_os_provided"]; got != true {
+		t.Fatalf("provided-OS storage node bootwright_os_provided = %v, want true", got)
+	}
+	arbiterName := StorageNodeHostName("ceph-storage", "ceph-arbiter")
+	arbiter := hosts[arbiterName].(map[string]any)
+	if got := arbiter["bootwright_os_provided"]; got != true {
+		t.Fatalf("provided-OS arbiter bootwright_os_provided = %v, want true", got)
 	}
 	children := all["children"].(map[string]any)
 	groupHosts := children[GroupStorageHosts].(map[string]any)["hosts"].(map[string]any)

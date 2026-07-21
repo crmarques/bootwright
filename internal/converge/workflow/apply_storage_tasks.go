@@ -118,6 +118,21 @@ func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	return names
 }
 
+func storageClusterHasProvidedOSNode(state v1alpha1.State, cluster v1alpha1.StorageCluster) bool {
+	if cluster.Spec.Ceph == nil {
+		return false
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.MachineRef.Name == "" {
+			continue
+		}
+		if machine, ok := stateview.Machine(state, node.MachineRef.Name); ok && !v1alpha1.MachineInstallsOS(machine) {
+			return true
+		}
+	}
+	return false
+}
+
 func storageClusterNodeCount(cluster v1alpha1.StorageCluster) int {
 	if cluster.Spec.Ceph == nil {
 		return 1

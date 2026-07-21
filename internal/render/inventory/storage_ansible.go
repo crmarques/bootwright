@@ -76,7 +76,8 @@ func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	nodeName := node.MachineRef.Name
 	entry := map[string]any{}
-	if machine, ok := topology.NodeMachine(state, cluster, nodeName); ok && machine.Spec.Access.SSH != nil {
+	machine, machineOK := topology.NodeMachine(state, cluster, nodeName)
+	if machineOK && machine.Spec.Access.SSH != nil {
 		entry = machineInventoryEntry(machine, env, paths, localPolicy)
 	} else {
 		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
@@ -85,6 +86,9 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	entry["bootwright_storage_cluster_name"] = cluster.Metadata.Name
 	entry["bootwright_storage_node_name"] = nodeName
 	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster)
+	if machineOK {
+		entry["bootwright_os_provided"] = v1alpha1.MachineOSProvided(machine)
+	}
 	return entry
 }
 

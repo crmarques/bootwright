@@ -24,6 +24,10 @@
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') != bootwright_task_storage_cluster_name | default('')
 
+    - name: End provided-OS hosts
+      ansible.builtin.meta: end_host
+      when: bootwright_os_provided | default(false) | bool
+
     - name: Validate selected registration context
       ansible.builtin.assert:
         that:

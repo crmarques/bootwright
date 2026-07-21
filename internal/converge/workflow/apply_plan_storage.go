@@ -99,7 +99,7 @@ func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.Stat
 		}
 		limit := render.StorageClusterGroupName(cluster.Metadata.Name)
 		forks := storageClusterNodeCount(cluster)
-		if target.MachineScoped() {
+		if target.MachineScoped() || storageClusterHasProvidedOSNode(state, cluster) {
 			hosts := storageRegistrationSelectedHosts(state, target, cluster)
 			if len(hosts) == 0 {
 				continue
