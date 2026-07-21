@@ -158,8 +158,8 @@ func collectGetURLTasks(rel string, tasks []map[string]any, out *[]getURLTaskRef
 
 func TestGetURLDownloadsPinChecksums(t *testing.T) {
 	acceptedUnpinnable := map[string]string{
-		bootwrightCollectionRoleRoot + "/controller_openshift_tools/tasks/main.yml\x00Download OpenShift CLI checksums":                         "this IS the sha256sum.txt manifest the sibling tarball fetches pin against; pinning it would be circular",
-		bootwrightCollectionRoleRoot + "/controller_virtctl/tasks/main.yml\x00Download virtctl archive":                                         "version-matched virtctl fetched from the live host-cluster ConsoleCLIDownload; the URL and bytes are cluster-derived at run time with no published digest",
+		bootwrightCollectionRoleRoot + "/controller_openshift_tools/tasks/main.yml\x00Download OpenShift CLI checksums":                "this IS the sha256sum.txt manifest the sibling tarball fetches pin against; pinning it would be circular",
+		bootwrightCollectionRoleRoot + "/controller_virtctl/tasks/main.yml\x00Download virtctl archive":                                "version-matched virtctl fetched from the live host-cluster ConsoleCLIDownload; the URL and bytes are cluster-derived at run time with no published digest",
 		bootwrightCollectionRoleRoot + "/storage_cluster_cephadm/tasks/providers/ibm.yml\x00Install vendor Ceph repository definition": "mutable vendor-published .repo metadata file, not an executed artifact",
 	}
 
