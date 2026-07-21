@@ -8,21 +8,31 @@ import (
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
 
-func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, machineServiceTaskIDs []string) (map[string][]string, error) {
+func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, machineServiceTaskIDs []string) (map[string][]string, error) {
 	infraDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeContainer) {
 		return infraDepsByCluster, nil
 	}
 	for _, name := range clusterNames {
+		machineNames := selectedMachineNames(applyClusterMachineNames(state, name), target)
+		if target.MachineScoped() && len(machineNames) == 0 {
+			continue
+		}
+		selectedHosts := map[string]bool{}
+		for _, machineName := range machineNames {
+			if host := applyMachineHost(state, machineName); host != "" {
+				selectedHosts[host] = true
+			}
+		}
 		clusterState := stategraph.FilterStateToClusters(state, []string{name})
-		infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
+		infraHosts := retainSelectedHosts(render.HostGroupMembers(clusterState)[render.GroupInfraHosts], selectedHosts, target.MachineScoped())
 		baseDeps := append([]string(nil), machineServiceTaskIDs...)
 		prepareDepsByHost, err := planContainerMachinePrepareTasks(graph, state, name, infraHosts, baseDeps)
 		if err != nil {
 			return nil, err
 		}
 		machineTaskIDsByHost := map[string][]string{}
-		for _, machineName := range applyClusterMachineNames(state, name) {
+		for _, machineName := range machineNames {
 			host := applyMachineHost(state, machineName)
 			if host == "" {
 				continue
@@ -301,4 +311,30 @@ func virtctlDesiredHashVars(host, mirror string) map[string]string {
 		"hostCluster":   host,
 		"virtctlMirror": mirror,
 	}
+}
+
+func selectedMachineNames(names []string, target ApplyTarget) []string {
+	if !target.MachineScoped() {
+		return names
+	}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if target.MachineIncluded(name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func retainSelectedHosts(hosts []string, selected map[string]bool, scoped bool) []string {
+	if !scoped {
+		return hosts
+	}
+	out := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		if selected[host] {
+			out = append(out, host)
+		}
+	}
+	return out
 }

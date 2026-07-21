@@ -5,10 +5,13 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool) ([]string, error) {
+func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool) ([]string, error) {
 	taskIDs := []string{}
 	if phaseSet[ApplyPhaseFabric] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupProviderHosts] {
+			if !target.FabricHostIncluded(host) {
+				continue
+			}
 			taskID := "provider." + host
 			taskIDs = append(taskIDs, taskID)
 			if err := graph.Add(Activity{
@@ -37,6 +40,9 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ph
 	}
 	if phaseSet[ApplyPhaseFabric] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupInfraComponentHosts] {
+			if !target.FabricHostIncluded(host) {
+				continue
+			}
 			taskID := "infra-component." + host
 			taskIDs = append(taskIDs, taskID)
 			if err := graph.Add(Activity{

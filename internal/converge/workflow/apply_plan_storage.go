@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
 )
@@ -18,12 +20,23 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 			continue
 		}
 		managedOSMachines := managedOSMachineNames(state, cluster)
+		if target.MachineScoped() {
+			managedOSMachines = selectedMachineNames(managedOSMachines, target)
+		}
 		if len(managedOSMachines) == 0 {
 			continue
 		}
 		prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
 		if err != nil {
 			return nil, err
+		}
+		if target.MachineScoped() {
+			ids, err := planStorageManagedOSPerMachineTasks(graph, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs, prepareDepsByHost)
+			if err != nil {
+				return nil, err
+			}
+			managedOSDepsByCluster[cluster.Metadata.Name] = ids
+			continue
 		}
 		taskID := "osinstall." + cluster.Metadata.Name
 		deps := append([]string(nil), machineServiceTaskIDs...)
@@ -76,6 +89,52 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 	return managedOSDepsByCluster, nil
 }
 
+func planStorageManagedOSPerMachineTasks(graph *ActivityGraph, state v1alpha1.State, clusterName string, machineNames, machineServiceTaskIDs []string, prepareDepsByHost map[string]string) ([]string, error) {
+	var ids []string
+	for _, machineName := range machineNames {
+		requires, err := kubeVirtHostClusterApplyCapabilitiesForMachines(state, []string{machineName})
+		if err != nil {
+			return nil, err
+		}
+		host := applyMachineHost(state, machineName)
+		taskID := "osinstall." + clusterName + "." + machineName
+		ids = append(ids, taskID)
+		deps := append([]string(nil), machineServiceTaskIDs...)
+		if prepareID := prepareDepsByHost[host]; prepareID != "" {
+			deps = append(deps, prepareID)
+		}
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			Requires:             requires,
+			Provides:             []CapabilityRef{machineInstantiatedCapability(machineName), machineOSReadyCapability(machineName)},
+			ExplicitDependencies: deps,
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindManagedMachineOS,
+					Label:        "managed OS " + clusterName + " machine " + machineName,
+					Cluster:      clusterName,
+					ClusterKind:  ApplyClusterKindStorage,
+					Node:         machineName,
+					Host:         host,
+					Status:       TaskStatusPending,
+					ResourceKeys: applyManagedOSResourceKeys(state, clusterName, []string{machineName}),
+				},
+				Playbook:           applyManagedMachineOSPlaybook,
+				Limit:              render.ManagedOSHostName(clusterName, machineName),
+				ExtraVarPairs:      []string{"bootwright_task_managed_os_group_name=" + clusterName, "bootwright_task_machine_name=" + machineName},
+				State:              storageTaskState(state, clusterName),
+				StructuralHashVars: managedMachineOSStructuralHashVars(state, clusterName),
+				Forks:              1,
+				RedfishSlots:       1,
+			},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return ids, nil
+}
+
 func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
 	registrationDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
@@ -89,6 +148,16 @@ func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.Stat
 			continue
 		}
 		if !v1alpha1.StorageCephManagedRHSM(cluster, state.Entitlements) {
+			continue
+		}
+		if target.MachineScoped() {
+			ids, err := planStorageRegistrationPerMachineTasks(graph, state, target, cluster, machineServiceTaskIDs, managedOSDepsByCluster[cluster.Metadata.Name])
+			if err != nil {
+				return nil, err
+			}
+			if len(ids) > 0 {
+				registrationDepsByCluster[cluster.Metadata.Name] = ids
+			}
 			continue
 		}
 		taskID := "registration." + cluster.Metadata.Name
@@ -121,6 +190,46 @@ func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.Stat
 		}
 	}
 	return registrationDepsByCluster, nil
+}
+
+func planStorageRegistrationPerMachineTasks(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, cluster v1alpha1.StorageCluster, machineServiceTaskIDs, managedOSDeps []string) ([]string, error) {
+	var ids []string
+	for _, machineName := range selectedMachineNames(managedOSMachineNames(state, cluster), target) {
+		hosts := render.MachineInventoryHosts(state, machineName)
+		if len(hosts) == 0 {
+			continue
+		}
+		taskID := "registration." + cluster.Metadata.Name + "." + machineName
+		ids = append(ids, taskID)
+		deps := append([]string(nil), machineServiceTaskIDs...)
+		deps = append(deps, managedOSDeps...)
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			ExplicitDependencies: deps,
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindMachineRegistration,
+					Label:        "machine registration " + cluster.Metadata.Name + " machine " + machineName,
+					Cluster:      cluster.Metadata.Name,
+					ClusterKind:  ApplyClusterKindStorage,
+					Node:         machineName,
+					Status:       TaskStatusPending,
+					ResourceKeys: []string{"storage:" + cluster.Metadata.Name + ":" + machineName},
+				},
+				Playbook:           applyMachineRegistrationPlaybook,
+				Limit:              strings.Join(hosts, ":"),
+				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_machine_name=" + machineName},
+				State:              storageTaskState(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(state, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(state, cluster.Metadata.Name),
+				Forks:              1,
+			},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return ids, nil
 }
 
 func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster, registrationDepsByCluster map[string][]string) (map[string][]string, error) {

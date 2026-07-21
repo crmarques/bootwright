@@ -25,7 +25,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		}
 	}
 	addAvailablePriorPhaseCapabilities(graph, state, phaseSet, kubeVirtReqsByCluster)
-	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, phaseSet)
+	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, target, phaseSet)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 
 	clusterNames := applyClusterNames(state)
-	infraDepsByCluster, err := planContainerMachineInfraActivities(graph, state, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, machineServiceTaskIDs)
+	infraDepsByCluster, err := planContainerMachineInfraActivities(graph, state, target, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, machineServiceTaskIDs)
 	if err != nil {
 		return nil, err
 	}

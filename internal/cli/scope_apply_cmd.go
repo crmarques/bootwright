@@ -47,6 +47,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		stage           string
 		through         string
 		reclaimDevices  string
+		machinesScope   string
 	)
 	use := "apply"
 	if options.use != "" {
@@ -106,6 +107,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit %s to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply (default: all)")
+		cmd.Flags().StringVar(&machinesScope, "machines", "", flagMachinesUsage)
 	} else {
 		registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
 	}
@@ -154,6 +156,17 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(2, err)
 			}
 		}
+		if machinesScope != "" {
+			stageProvided := stage != "" || through != ""
+			var merr error
+			runScope, merr = machineApplyRunScope(machinesScope, flags.clusterScope, stageProvided, runScope)
+			if merr != nil {
+				return merr
+			}
+			if !stageProvided {
+				runCommandLabel = "machines " + action
+			}
+		}
 		if reclaimDevices != "" && !converge.ScopeIncludesApplyPhase(runScope, converge.PhaseDeps) {
 			return failErr(2, errors.New("--reclaim-devices wipes devices during the deps phase, which is not in this run's scope; re-run with a scope that includes it (--stage deps, --through base, or the full graph)"))
 		}
@@ -172,7 +185,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return failErr(1, err)
 		}
 		printPlanStep(stdout, flags.output, runCommandLabel)
-		sel, err := clusteraccess.Resolve(state, runScope.Name, flags.clusterScope)
+		sel, err := resolveScopeSelection(state, runScope.Name, flags.clusterScope, machinesScope)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -200,7 +213,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, sel.StorageWorkNames(), sel.Active, workflow.ConcurrencyLimits{}, ctx.RunsDir)
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.MachineHosts, workflow.ConcurrencyLimits{}, ctx.RunsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

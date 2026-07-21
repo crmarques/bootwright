@@ -75,6 +75,18 @@ type ApplyTarget struct {
 	PhaseNames          []string
 	StorageClusterNames []string
 	ClusterKind         string
+	MachineProvision    map[string]bool
+	MachineHosts        map[string]bool
+}
+
+func (t ApplyTarget) MachineScoped() bool { return len(t.MachineProvision) > 0 }
+
+func (t ApplyTarget) MachineIncluded(machine string) bool {
+	return !t.MachineScoped() || t.MachineProvision[machine]
+}
+
+func (t ApplyTarget) FabricHostIncluded(host string) bool {
+	return !t.MachineScoped() || t.MachineHosts[host]
 }
 
 type ApplyTask struct {

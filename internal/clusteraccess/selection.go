@@ -21,6 +21,10 @@ type Selection struct {
 
 	WorkMachines        map[string]bool
 	WorkStorageClusters map[string]bool
+
+	MachineSelection bool
+	MachineProvision map[string]bool
+	MachineHosts     map[string]bool
 }
 
 func Resolve(state v1alpha1.State, target, scope string) (Selection, error) {

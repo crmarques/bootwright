@@ -164,6 +164,18 @@ func ScopeTearsMachineLayer(scope Scope) bool {
 	return slices.Contains(scope.PhaseNames, PhaseFabric) || slices.Contains(scope.PhaseNames, PhaseMachines)
 }
 
+func ScopeIsMachineLayerOnly(scope Scope) bool {
+	if len(scope.PhaseNames) == 0 {
+		return false
+	}
+	for _, name := range scope.PhaseNames {
+		if name != PhaseFabric && name != PhaseMachines {
+			return false
+		}
+	}
+	return true
+}
+
 func ScopeTearsClusterLayer(scope Scope) bool {
 	for _, name := range scope.PhaseNames {
 		switch name {
