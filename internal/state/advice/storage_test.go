@@ -161,6 +161,25 @@ func TestStorageAdvisoriesExemptStretchFromMonCount(t *testing.T) {
 	}
 }
 
+func TestStorageAdvisoriesWarnStretchWithoutTiebreaker(t *testing.T) {
+	cluster := adviceCephCluster("stretch", v1alpha1.StorageCephDistributionOSS, "",
+		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"},
+		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"},
+	)
+	cluster.Spec.Ceph.Topology.Stretch = &v1alpha1.StorageCephStretch{FailureDomain: "datacenter"}
+	got := findingsWith(StorageAdvisories(adviceState(cluster)), "no tiebreaker/arbiter mon")
+	if len(got) != 1 {
+		t.Fatalf("an arbiter-less stretch cluster must raise one tiebreaker advisory, got %+v", StorageAdvisories(adviceState(cluster)))
+	}
+	if got[0].Severity != SeverityWarn {
+		t.Fatalf("the tiebreaker advisory must be WARN, got %q", got[0].Severity)
+	}
+	cluster.Spec.Ceph.Topology.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"}
+	if got := findingsWith(StorageAdvisories(adviceState(cluster)), "no tiebreaker/arbiter mon"); len(got) != 0 {
+		t.Fatalf("a stretch cluster with a tiebreaker must raise no tiebreaker advisory, got %+v", got)
+	}
+}
+
 func TestStorageAdvisoriesNoticeStretchPoolInheritance(t *testing.T) {
 	cluster := adviceCephCluster("ceph", v1alpha1.StorageCephDistributionOSS, "",
 		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})

@@ -436,6 +436,40 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 	}
 }
 
+func TestStretchModeWithoutTiebreakerOmitsEnableStretchMode(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					RuleName:      "stretch-rule",
+				},
+				Hosts: []v1alpha1.StorageCephHost{
+					{Hostname: "a", Site: "dc1", Roles: []string{"mon"}},
+					{Hostname: "b", Site: "dc2", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	byName := map[string]map[string]any{}
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		byName[name] = op
+	}
+	if byName["create-crush-rule-stretch-rule"] == nil {
+		t.Fatalf("stretch crush rule must still render without a tiebreaker")
+	}
+	if byName["set-mon-location-a"] == nil || byName["set-mon-location-b"] == nil {
+		t.Fatalf("mon locations must still render without a tiebreaker")
+	}
+	if byName["enable-stretch-mode"] != nil {
+		t.Fatalf("enable_stretch_mode must be skipped when no tiebreaker is authored")
+	}
+}
+
 func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	rotational := false
 	cluster := v1alpha1.StorageCluster{

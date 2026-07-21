@@ -55,3 +55,18 @@ data sites with two mon nodes each plus the arbiter (5 nodes minimum). A
 3-node layout is a flat single-site topology where the third node runs only a
 tie-breaking monitor: with one OSD host down, I/O pauses but mon quorum (3
 mons) survives — quorum HA, not data HA across sites.
+
+**Behavior:** The tiebreaker may be authored later. When
+`spec.ceph.topology.stretch` is set but `tiebreaker.host` and `tiebreaker.site`
+are both empty, validation does NOT hard-fail the tiebreaker requirements — it
+passes with a `Stretch tiebreaker` WARN advisory (arbiter-less stretch is an
+incomplete, not-recommended setup: a data-site outage loses mon quorum). This
+lets an estate stand up the two data sites first and add the mon-only arbiter
+in a third site afterward. Rendering follows suit: the mon `set_location` ops
+and the two-per-site CRUSH rule still emit, but `enable_stretch_mode` is skipped
+until the tiebreaker is authored, so apply builds a coherent 2-replicas-per-site
+cluster without the netsplit tiebreaker rather than a broken
+`enable_stretch_mode` with an empty arbiter. A PARTIALLY authored tiebreaker
+(one of host/site set) is still a hard error — that is a misconfiguration, not a
+deferral. The `dataSites==2` and two-mons-per-data-site checks stay hard in both
+cases.

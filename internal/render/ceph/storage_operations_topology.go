@@ -35,7 +35,9 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 			"replicasPerFailureDomain": 2,
 		}
 		ops = append(ops, stretchRule)
-		ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", topology.CanonicalHostname(cluster, stretch.Tiebreaker.Host), stretch.RuleName, stretch.FailureDomain))
+		if stretch.Tiebreaker.Host != "" {
+			ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", topology.CanonicalHostname(cluster, stretch.Tiebreaker.Host), stretch.RuleName, stretch.FailureDomain))
+		}
 	}
 	return ops
 }

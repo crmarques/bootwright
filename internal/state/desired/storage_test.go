@@ -124,6 +124,28 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 	}
 }
 
+func TestStorageStretchValidationAcceptsDeferredTiebreaker(t *testing.T) {
+	state := storageValidationState()
+	state.Machines = state.Machines[:6]
+	cluster := &state.StorageClusters[0].Spec.Ceph.Topology
+	cluster.Hosts = cluster.Hosts[:6]
+	cluster.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("an arbiter-less stretch cluster must validate with no hard errors, got %v", errs)
+	}
+}
+
+func TestStorageStretchValidationRejectsPartialTiebreaker(t *testing.T) {
+	state := storageValidationState()
+	cluster := &state.StorageClusters[0].Spec.Ceph.Topology
+	cluster.Hosts = cluster.Hosts[:6]
+	cluster.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{Site: "dc3"}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "tiebreaker.host is required") {
+		t.Fatalf("a partially authored tiebreaker must still fail; errors = %q", got)
+	}
+}
+
 func TestStorageValidationAcceptsManagedManagementValue(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementManaged

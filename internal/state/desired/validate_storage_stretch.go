@@ -11,6 +11,7 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
 	nodes := cluster.Spec.Ceph.Topology.Hosts
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.stretch", cluster.Metadata.Name)
+	tiebreakerDeferred := stretch.Tiebreaker.Host == "" && stretch.Tiebreaker.Site == ""
 	var errs []string
 	if stretch.FailureDomain == "" {
 		errs = append(errs, prefix+".failureDomain is required")
@@ -30,25 +31,27 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 		}
 		dataSites[site] = true
 	}
-	if stretch.Tiebreaker.Site == "" {
-		errs = append(errs, prefix+".tiebreaker.site is required")
-	} else if dataSites[stretch.Tiebreaker.Site] {
-		errs = append(errs, fmt.Sprintf("%s.tiebreaker.site %q must be distinct from dataSites", prefix, stretch.Tiebreaker.Site))
-	}
-	if stretch.Tiebreaker.Host == "" {
-		errs = append(errs, prefix+".tiebreaker.host is required")
-	} else if node, ok := storageCephNodeByName(cluster, stretch.Tiebreaker.Host); ok {
-		if stretch.Tiebreaker.Site != "" && node.Site != stretch.Tiebreaker.Site {
-			errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q is in site %q, want %q", prefix, stretch.Tiebreaker.Host, node.Site, stretch.Tiebreaker.Site))
+	if !tiebreakerDeferred {
+		if stretch.Tiebreaker.Site == "" {
+			errs = append(errs, prefix+".tiebreaker.site is required")
+		} else if dataSites[stretch.Tiebreaker.Site] {
+			errs = append(errs, fmt.Sprintf("%s.tiebreaker.site %q must be distinct from dataSites", prefix, stretch.Tiebreaker.Site))
 		}
-		if !storageCephNodeRolesOnly(node, v1alpha1.StorageCephRoleMON) {
-			errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must be mon-only", prefix, stretch.Tiebreaker.Host))
+		if stretch.Tiebreaker.Host == "" {
+			errs = append(errs, prefix+".tiebreaker.host is required")
+		} else if node, ok := storageCephNodeByName(cluster, stretch.Tiebreaker.Host); ok {
+			if stretch.Tiebreaker.Site != "" && node.Site != stretch.Tiebreaker.Site {
+				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q is in site %q, want %q", prefix, stretch.Tiebreaker.Host, node.Site, stretch.Tiebreaker.Site))
+			}
+			if !storageCephNodeRolesOnly(node, v1alpha1.StorageCephRoleMON) {
+				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must be mon-only", prefix, stretch.Tiebreaker.Host))
+			}
+			if len(node.Devices) > 0 {
+				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must not declare OSD devices", prefix, stretch.Tiebreaker.Host))
+			}
+		} else {
+			errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must name a spec.ceph.topology.hosts[] entry", prefix, stretch.Tiebreaker.Host))
 		}
-		if len(node.Devices) > 0 {
-			errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must not declare OSD devices", prefix, stretch.Tiebreaker.Host))
-		}
-	} else {
-		errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must name a spec.ceph.topology.hosts[] entry", prefix, stretch.Tiebreaker.Host))
 	}
 	if stretch.RuleName == "" {
 		errs = append(errs, prefix+".ruleName is required")
@@ -64,7 +67,7 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 			errs = append(errs, fmt.Sprintf("%s requires exactly two mon nodes in data site %q (got %d)", prefix, site, monBySite[site]))
 		}
 	}
-	if monBySite[stretch.Tiebreaker.Site] != 1 {
+	if !tiebreakerDeferred && monBySite[stretch.Tiebreaker.Site] != 1 {
 		errs = append(errs, fmt.Sprintf("%s requires exactly one tiebreaker mon in site %q (got %d)", prefix, stretch.Tiebreaker.Site, monBySite[stretch.Tiebreaker.Site]))
 	}
 	return errs

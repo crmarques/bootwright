@@ -16,8 +16,9 @@ const (
 )
 
 const (
-	cephBestPracticeGroup = "Ceph best practice"
-	stretchPoolGroup      = "Stretch pools"
+	cephBestPracticeGroup  = "Ceph best practice"
+	stretchPoolGroup       = "Stretch pools"
+	stretchTiebreakerGroup = "Stretch tiebreaker"
 )
 
 type StorageAdvisory struct {
@@ -42,8 +43,24 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageImageAdvisories(object, cluster)...)
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
+		out = append(out, storageStretchTiebreakerAdvisories(object, cluster)...)
 	}
 	return out
+}
+
+func storageStretchTiebreakerAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
+	stretch := cluster.Spec.Ceph.Topology.Stretch
+	if stretch == nil || stretch.Tiebreaker.Host != "" {
+		return nil
+	}
+	return []StorageAdvisory{{
+		Severity:    SeverityWarn,
+		Group:       stretchTiebreakerGroup,
+		Object:      object,
+		Finding:     "stretch mode is declared with no tiebreaker/arbiter mon",
+		Impact:      "a two-site stretch cluster without a tiebreaker mon in a third site loses monitor quorum if either data site fails, and apply cannot enable stretch mode, so the pools place two replicas per site but without automatic degraded-mode failover",
+		Remediation: "add a mon-only arbiter host in a third site and set spec.ceph.topology.stretch.tiebreaker.host before relying on this cluster",
+	}}
 }
 
 func environmentIsDisconnected(state v1alpha1.State) bool {
