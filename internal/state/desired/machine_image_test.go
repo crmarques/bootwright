@@ -114,7 +114,7 @@ func TestMachineInstallPackageSourceRequiresExactlyOneArm(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("validateMachineInstallProfiles accepted a packageSource with no arm set")
 	}
-	if !strings.Contains(errs[0], "packageSource must set exactly one of: mirror, redhatCDN, hostedTree") {
+	if !strings.Contains(errs[0], "packageSource must set exactly one of: mirror, fromSubscription, hostedTree") {
 		t.Fatalf("error = %q", errs[0])
 	}
 }
@@ -159,9 +159,9 @@ func TestMachineInstallPackageSourceMirrorRequiresBaseURL(t *testing.T) {
 	}
 }
 
-func TestMachineInstallPackageSourceRedhatCDNAcceptsEntitlementRef(t *testing.T) {
+func TestMachineInstallPackageSourceFromSubscriptionAcceptsEntitlementRef(t *testing.T) {
 	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
-		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+		FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 		},
 	}))
@@ -170,14 +170,14 @@ func TestMachineInstallPackageSourceRedhatCDNAcceptsEntitlementRef(t *testing.T)
 	}
 }
 
-func TestMachineInstallPackageSourceRedhatCDNRequiresEntitlementRef(t *testing.T) {
+func TestMachineInstallPackageSourceFromSubscriptionRequiresEntitlementRef(t *testing.T) {
 	errs := validateMachineInstallProfiles(machineInstallPackageSourceState(&v1alpha1.MachineInstallPackageSource{
-		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{},
+		FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{},
 	}))
 	if len(errs) == 0 {
-		t.Fatal("validateMachineInstallProfiles accepted redhatCDN source without entitlementRef")
+		t.Fatal("validateMachineInstallProfiles accepted fromSubscription source without entitlementRef")
 	}
-	if !strings.Contains(strings.Join(errs, "\n"), "packageSource.redhatCDN.entitlementRef is required") {
+	if !strings.Contains(strings.Join(errs, "\n"), "packageSource.fromSubscription.entitlementRef is required") {
 		t.Fatalf("errors = %v", errs)
 	}
 }
@@ -215,7 +215,7 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 					Anaconda: &v1alpha1.MachineInstallAnaconda{
 						ImageRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 						PackageSource: &v1alpha1.MachineInstallPackageSource{
-							RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+							FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 								EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 							},
 						},

@@ -264,7 +264,7 @@ func TestEntitlementValidation(t *testing.T) {
 	}
 }
 
-func TestMachineInstallProfileRedHatCDNRequiresRHELEntitlement(t *testing.T) {
+func TestMachineInstallProfileFromSubscriptionRequiresRHELEntitlement(t *testing.T) {
 	state := v1alpha1.State{
 		Entitlements: []v1alpha1.Entitlement{{
 			Metadata: v1alpha1.Metadata{Name: "rhcs"},
@@ -276,7 +276,7 @@ func TestMachineInstallProfileRedHatCDNRequiresRHELEntitlement(t *testing.T) {
 				Installer: v1alpha1.MachineInstallProfileInstaller{
 					Anaconda: &v1alpha1.MachineInstallAnaconda{
 						PackageSource: &v1alpha1.MachineInstallPackageSource{
-							RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+							FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 								EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 							},
 						},
@@ -291,7 +291,7 @@ func TestMachineInstallProfileRedHatCDNRequiresRHELEntitlement(t *testing.T) {
 	}
 }
 
-func TestMachineInstallProfileRedHatCDNRejectsExternalManagement(t *testing.T) {
+func TestMachineInstallProfileFromSubscriptionRejectsExternalManagement(t *testing.T) {
 	state := v1alpha1.State{
 		Entitlements: []v1alpha1.Entitlement{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
@@ -306,7 +306,7 @@ func TestMachineInstallProfileRedHatCDNRejectsExternalManagement(t *testing.T) {
 				Installer: v1alpha1.MachineInstallProfileInstaller{
 					Anaconda: &v1alpha1.MachineInstallAnaconda{
 						PackageSource: &v1alpha1.MachineInstallPackageSource{
-							RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+							FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 								EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 							},
 						},

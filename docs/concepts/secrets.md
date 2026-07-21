@@ -515,7 +515,7 @@ spec:
 The `rhsm` kickstart command is supported on Red Hat Enterprise Linux only
 (Anaconda disables it on rebuilds such as AlmaLinux, Rocky, and CentOS Stream),
 so install-time Satellite registration applies to `family: rhel` installs. An
-entitlement backing `packageSource.redhatCDN` must keep `rhsm.management:
+entitlement backing `packageSource.fromSubscription` must keep `rhsm.management:
 managed` — install-time registration *is* the package source and cannot be
 delegated (`mirror` and `hostedTree` are the delegation-compatible sources).
 OpenShift/RHCOS agent-install nodes do not use Satellite.

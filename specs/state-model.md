@@ -350,12 +350,12 @@ Rules:
   DVD carries its own packages, which install offline via `cdrom`. Set it when
   `imageRef` points at a small boot ISO, which carries no packages, to declare
   where Anaconda fetches them during installation. Exactly one arm selects the
-  source: `mirror`, `redhatCDN`, or `hostedTree`.
+  source: `mirror`, `fromSubscription`, or `hostedTree`.
 - `packageSource.mirror` installs from an HTTP(S) install tree you host:
   `baseURL` is the primary Anaconda install tree (BaseOS) and `repositories[]`
   become additional Kickstart `repo` entries (e.g. AppStream). Every `baseURL`
   must be `http://` or `https://`.
-- `packageSource.redhatCDN` sets `entitlementRef`, which must resolve to a
+- `packageSource.fromSubscription` sets `entitlementRef`, which must resolve to a
   `redhat-rhel` `Entitlement` whose `rhsm.management` is `managed`: the
   Anaconda-time registration is the package source, so it cannot be delegated
   to a provisioning playbook. RHSM organization and activation key secret refs

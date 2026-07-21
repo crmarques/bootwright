@@ -382,7 +382,7 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 		},
 	})
 	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
-		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+		FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 		},
 	}
@@ -432,7 +432,7 @@ func TestManagedOSInstallRedirectsRHSMToSatellite(t *testing.T) {
 			},
 		})
 		state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
-			RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+			FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 				EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 			},
 		}

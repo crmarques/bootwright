@@ -90,20 +90,20 @@ func TestPackageSourceReachabilitySkipsDVDMedia(t *testing.T) {
 	}
 }
 
-func TestPackageSourceReachabilitySkipsRedhatCDN(t *testing.T) {
+func TestPackageSourceReachabilitySkipsFromSubscription(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
 	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.PackageSource = &v1alpha1.MachineInstallPackageSource{
-		RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{
+		FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{
 			EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 		},
 	}
 	deps := Deps{HTTPDo: func(*http.Request, bool) (*http.Response, error) {
-		t.Fatal("redhatCDN package sources must not be probed")
+		t.Fatal("fromSubscription package sources must not be probed")
 		return nil, nil
 	}}
 
 	if checks := packageSourceReachabilityChecks(state, []Phase{{Name: "machines"}}, deps, nil); len(checks) != 0 {
-		t.Fatalf("checks = %+v, want none for redhatCDN", checks)
+		t.Fatalf("checks = %+v, want none for fromSubscription", checks)
 	}
 }
 

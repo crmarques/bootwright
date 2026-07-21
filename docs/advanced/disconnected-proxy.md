@@ -66,7 +66,7 @@ install (`registries.mirror` + `imageDigestSources`, see below).
 
 ### Managed-OS (RHEL) nodes
 
-Only when the install profile uses `packageSource.redhatCDN` (registering against
+Only when the install profile uses `packageSource.fromSubscription` (registering against
 the public Red Hat CDN). Routed through `proxyFor.machineOSInstall`. A
 `packageSource.mirror`, a `rhsm.satellite` redirect, or a `hostedTree` local tree
 replaces all of these.
@@ -195,7 +195,7 @@ GPG-signed packages from that local tree over the
 `hostedTree.artifactServerEndpoint` HTTP endpoint — no external mirror, CDN, or
 proxy at install time. The node's package fetch is local, so it is **not**
 routed through `proxyFor.machineOSInstall`. See
-[hostedTree](managed-os.md#package-source-mirror-redhatcdn-or-hostedtree) for
+[hostedTree](managed-os.md#package-source-mirror-fromsubscription-or-hostedtree) for
 the media and endpoint wiring.
 
 !!! warning "machineOSInstall must be an external proxy"
@@ -443,7 +443,7 @@ spec:
 
 ## RHSM and Satellite redirect
 
-A managed-OS `redhatCDN` install registers against the public Red Hat CDN unless
+A managed-OS `fromSubscription` install registers against the public Red Hat CDN unless
 the referenced entitlement's `rhsm` arm carries a `satellite` block, in which
 case the install registers and pulls content from that Red Hat Satellite instead
 — no `MachineImage` change is needed; on a managed Ceph cluster the same block
@@ -452,7 +452,7 @@ and binds katello-ca-consumer before registering. This is how a disconnected or
 proxied estate keeps RHEL package fetches inside the perimeter. The
 entitlement's `rhsm.management` field (`managed`, the default, or `external`)
 picks who registers: `external` delegates registration to an operator
-`ProvisioningPlaybook` and is rejected for `redhatCDN` installs, whose
+`ProvisioningPlaybook` and is rejected for `fromSubscription` installs, whose
 install-time registration *is* the package source. See
 [Managed OS installs](managed-os.md) and the entitlement model on
 [Environment](../concepts/environment.md).

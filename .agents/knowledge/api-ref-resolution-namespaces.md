@@ -50,7 +50,7 @@ address of `bootstrap.host`: `bootstrap.addressRef`, defaulting to
 `redhat-ceph` (distribution `redhat`) or `ibm-storage-ceph` (distribution
 `ibm`); empty for `oss`.
 
-**`MachineInstallProfile` `packageSource.redhatCDN.entitlementRef`:** an
+**`MachineInstallProfile` `packageSource.fromSubscription.entitlementRef`:** an
 `Entitlement` of type `redhat-rhel`.
 
 **`StorageCluster` `spec.ceph.osSubscriptionRef`:** a `redhat-rhel`

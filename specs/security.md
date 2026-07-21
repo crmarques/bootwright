@@ -225,7 +225,7 @@ Generated output boundaries are part of the safety contract:
   with restrictive file modes and must never be versioned.
 - Managed machine OS Kickstart files and remastered install ISOs may inline
   RHSM organization and activation-key material when
-  `MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN`
+  `MachineInstallProfile.spec.installer.anaconda.packageSource.fromSubscription`
   references a Red Hat RHEL entitlement. They are runtime artifacts only and
   must never be versioned.
 - Rendered storage tool inputs live under

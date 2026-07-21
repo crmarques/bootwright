@@ -77,7 +77,7 @@ spec:
     groups; a `hostedTree` package source keeps the payload off every node
     entirely.
 
-### Package source: mirror, redhatCDN, or hostedTree
+### Package source: mirror, fromSubscription, or hostedTree
 
 `packageSource` is a discriminated union — the arm you set is the source type
 (there is no `type` field). Set it under `spec.installer.anaconda` on the
@@ -107,7 +107,7 @@ spec:
               baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
-For the **Red Hat CDN** (`redhatCDN`), reference a `redhat-rhel` `Entitlement`
+For the **Red Hat CDN** (`fromSubscription`), reference a `redhat-rhel` `Entitlement`
 (an RHSM organization plus activation key); Anaconda registers the node and
 installs from the subscription CDN:
 
@@ -125,11 +125,11 @@ spec:
     anaconda:
       imageRef: rhel-9-boot
       packageSource:
-        redhatCDN:
+        fromSubscription:
           entitlementRef: rhel
 ```
 
-A `redhatCDN` entitlement must keep `rhsm.management: managed` (the default):
+A `fromSubscription` entitlement must keep `rhsm.management: managed` (the default):
 install-time registration *is* the package source, so it cannot be delegated to
 an operator playbook — `management: external` fails validation here, and
 `mirror` and `hostedTree` are the delegation-compatible sources.
@@ -218,7 +218,7 @@ lever the tip above describes, taken all the way.
     package, matching the trust of installing from a sealed DVD ISO.
 
 !!! note "Registering against a corporate Satellite"
-    A `redhatCDN` install registers against the public Red Hat CDN unless the
+    A `fromSubscription` install registers against the public Red Hat CDN unless the
     referenced entitlement's `rhsm` arm carries a `satellite` block, in which case
     the install registers and pulls content from that Red Hat Satellite instead.
     No `MachineImage` change is needed — see
@@ -367,7 +367,7 @@ CDN) only through a forward proxy, set
 `Environment.spec.proxyFor.machineOSInstall` to a declared **external** proxy.
 Bootwright renders `--proxy=` onto the `rhsm`, `url`, and `repo` Kickstart
 directives so Anaconda registers and fetches through it — useful for a
-`redhatCDN` boot-ISO install on an estate with no internal mirror but a
+`fromSubscription` boot-ISO install on an estate with no internal mirror but a
 corporate proxy. Each node brings up its network from its
 [machine network config](../concepts/machines.md) before Anaconda fetches, so a
 boot ISO needs no extra early-networking setup. For the full proxy-target model

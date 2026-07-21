@@ -59,13 +59,13 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 		if profile.Spec.Installer.Anaconda == nil {
 			continue
 		}
-		cdn := profile.Spec.Installer.Anaconda.PackageSource.GetRedhatCDN()
+		cdn := profile.Spec.Installer.Anaconda.PackageSource.GetFromSubscription()
 		if cdn == nil || cdn.EntitlementRef.Name == "" {
 			continue
 		}
 		appendEntitlement(
 			cdn.EntitlementRef.Name,
-			"MachineInstallProfile/"+profile.Metadata.Name+" installer.anaconda.packageSource.redhatCDN entitlementRef",
+			"MachineInstallProfile/"+profile.Metadata.Name+" installer.anaconda.packageSource.fromSubscription entitlementRef",
 			[]string{"machines"},
 			[]string{"machines"},
 			secretRefOwner{},

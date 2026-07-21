@@ -311,7 +311,7 @@ func validateMachineInstallProfileEntitlements(state v1alpha1.State) []string {
 		if profile.Spec.Installer.Anaconda == nil {
 			continue
 		}
-		cdn := profile.Spec.Installer.Anaconda.PackageSource.GetRedhatCDN()
+		cdn := profile.Spec.Installer.Anaconda.PackageSource.GetFromSubscription()
 		if cdn == nil {
 			continue
 		}
@@ -319,7 +319,7 @@ func validateMachineInstallProfileEntitlements(state v1alpha1.State) []string {
 		if ref == "" {
 			continue
 		}
-		field := fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.redhatCDN.entitlementRef %q", profile.Metadata.Name, ref)
+		field := fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.fromSubscription.entitlementRef %q", profile.Metadata.Name, ref)
 		entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, ref)
 		if !ok {
 			errs = append(errs, field+" does not match any Entitlement")
@@ -330,7 +330,7 @@ func validateMachineInstallProfileEntitlements(state v1alpha1.State) []string {
 			continue
 		}
 		if entitlement.Spec.RHSM != nil && v1alpha1.EntitlementRHSMManagement(entitlement.Spec.RHSM) == v1alpha1.EntitlementRHSMManagementExternal {
-			errs = append(errs, field+" has rhsm.management external; the redhatCDN package source registers during Anaconda and cannot be delegated to a provisioning playbook — use a managed entitlement or a mirror/hostedTree package source")
+			errs = append(errs, field+" has rhsm.management external; the fromSubscription package source registers during Anaconda and cannot be delegated to a provisioning playbook — use a managed entitlement or a mirror/hostedTree package source")
 		}
 	}
 	return errs

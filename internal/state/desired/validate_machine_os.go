@@ -42,8 +42,8 @@ func validateMachineInstallSubscription(prefix string, profile v1alpha1.MachineI
 	} else if ent.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
 		errs = append(errs, fmt.Sprintf("%s.subscription.entitlementRef %q resolves to type %q, want %q", prefix, ref, ent.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL))
 	}
-	if anaconda.PackageSource.GetRedhatCDN() != nil {
-		errs = append(errs, prefix+".subscription cannot be combined with installer.anaconda.packageSource.redhatCDN; redhatCDN already registers the node during install")
+	if anaconda.PackageSource.GetFromSubscription() != nil {
+		errs = append(errs, prefix+".subscription cannot be combined with installer.anaconda.packageSource.fromSubscription; fromSubscription already registers the node during install")
 	}
 	return errs
 }
@@ -259,16 +259,16 @@ func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.
 	}
 	var errs []string
 	arms := 0
-	for _, set := range []bool{ps.Mirror != nil, ps.RedhatCDN != nil, ps.HostedTree != nil} {
+	for _, set := range []bool{ps.Mirror != nil, ps.FromSubscription != nil, ps.HostedTree != nil} {
 		if set {
 			arms++
 		}
 	}
 	if arms == 0 {
-		return []string{prefix + ".packageSource must set exactly one of: mirror, redhatCDN, hostedTree (or omit packageSource for a full DVD)"}
+		return []string{prefix + ".packageSource must set exactly one of: mirror, fromSubscription, hostedTree (or omit packageSource for a full DVD)"}
 	}
 	if arms > 1 {
-		errs = append(errs, prefix+".packageSource must set exactly one of: mirror, redhatCDN, hostedTree")
+		errs = append(errs, prefix+".packageSource must set exactly one of: mirror, fromSubscription, hostedTree")
 	}
 	if m := ps.Mirror; m != nil {
 		if m.BaseURL == "" {
@@ -278,8 +278,8 @@ func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.
 		}
 		errs = append(errs, validateMachineInstallRepositories(prefix+".packageSource.mirror.repositories", m.Repositories)...)
 	}
-	if c := ps.RedhatCDN; c != nil && c.EntitlementRef.Name == "" {
-		errs = append(errs, prefix+".packageSource.redhatCDN.entitlementRef is required")
+	if c := ps.FromSubscription; c != nil && c.EntitlementRef.Name == "" {
+		errs = append(errs, prefix+".packageSource.fromSubscription.entitlementRef is required")
 	}
 	if t := ps.HostedTree; t != nil {
 		switch {

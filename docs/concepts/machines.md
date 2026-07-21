@@ -270,11 +270,11 @@ so there is no `type` field. Set it under
 | Arm | Fields | Description |
 | --- | --- | --- |
 | `mirror` | `baseURL` (required, `http(s)`), `repositories[]` (`id` + `http(s)` `baseURL`) | Install from an HTTP(S) install tree you host. `baseURL` is the primary tree (BaseOS); `repositories` are additional (e.g. AppStream). |
-| `redhatCDN` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. The entitlement must keep `rhsm.management: managed` (the default) — install-time registration is the package source and cannot be delegated; `mirror` and `hostedTree` are the delegation-compatible sources. |
+| `fromSubscription` | `entitlementRef` (required) | Register against Red Hat's CDN over the named `redhat-rhel` `Entitlement`. The entitlement must keep `rhsm.management: managed` (the default) — install-time registration is the package source and cannot be delegated; `mirror` and `hostedTree` are the delegation-compatible sources. |
 | `hostedTree` | `fromMedia` (required, `local-media:`/`file://`), `artifactServerEndpoint` | Bootwright extracts the DVD named by `fromMedia` once and serves it from the selected managed artifact server. `fromMedia` must be verifiable local media (staged via `bootwright media add`) and must differ from the referenced image's `spec.bootMedia`; `artifactServerEndpoint.endpointRef` must select an HTTP endpoint. |
 
 !!! note "Registering against a corporate Satellite"
-    A `redhatCDN` install registers against the public Red Hat CDN unless the
+    A `fromSubscription` install registers against the public Red Hat CDN unless the
     referenced entitlement's `rhsm` arm carries a `satellite` block, in which
     case the install registers and pulls content from that Red Hat Satellite
     instead. No `MachineImage` change is needed — see
@@ -314,7 +314,7 @@ spec:
               baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 ```
 
-A boot ISO from the Red Hat CDN (`redhatCDN`) references a `redhat-rhel`
+A boot ISO from the Red Hat CDN (`fromSubscription`) references a `redhat-rhel`
 [`Entitlement`](environment.md#entitlements) (an RHSM organization plus
 activation key); Anaconda registers the node and installs from the subscription
 CDN:
@@ -333,7 +333,7 @@ spec:
     anaconda:
       imageRef: rhel-9-boot
       packageSource:
-        redhatCDN:
+        fromSubscription:
           entitlementRef: rhel
 ```
 

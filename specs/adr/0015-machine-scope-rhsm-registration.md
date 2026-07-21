@@ -54,7 +54,7 @@ reconfigure-only under `--converge-drifted` (ADR 0007 taxonomy).
   work on it. A `machines`/`after` anchor runs at the same point in time but
   creates no forward edge into later phases (ADR 0005 `after` semantics), so
   it must not carry delegated registration.
-- A `packageSource.redhatCDN` install profile must reference a `managed`
+- A `packageSource.fromSubscription` install profile must reference a `managed`
   entitlement: Anaconda-time registration is the package source and cannot be
   delegated; mirror/hostedTree are the delegation-compatible sources.
 

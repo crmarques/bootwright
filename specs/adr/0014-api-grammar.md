@@ -74,7 +74,7 @@ which arm is legal (`InfraProvider` `spec.networkAttachments`, where the
 provider's `spec.type` is the kind and a mismatched arm is rejected), and
 where the arm itself is the author's choice and doubles as the
 discriminator: `MachineInstallProfile` `packageSource`
-(`mirror`/`redhatCDN`/`hostedTree`), the install profile `installer`
+(`mirror`/`fromSubscription`/`hostedTree`), the install profile `installer`
 (`anaconda` is the only backend; its presence is the discriminator), and
 `Secret` `spec.source` (`contextStore`/`file`/`generated`, where omitting
 every arm selects `contextStore`).

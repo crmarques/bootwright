@@ -57,13 +57,13 @@ func TestMachineInstallSubscriptionRejectsNonRHELType(t *testing.T) {
 	}
 }
 
-func TestMachineInstallSubscriptionRejectsRedhatCDNCombination(t *testing.T) {
+func TestMachineInstallSubscriptionRejectsFromSubscriptionCombination(t *testing.T) {
 	state := rhelSubscriptionState(
 		&v1alpha1.MachineOSSubscription{EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel-satellite"}},
-		&v1alpha1.MachineInstallPackageSource{RedhatCDN: &v1alpha1.MachineInstallPackageRedhatCDN{EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel-satellite"}}},
+		&v1alpha1.MachineInstallPackageSource{FromSubscription: &v1alpha1.MachineInstallPackageFromSubscription{EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel-satellite"}}},
 		v1alpha1.EntitlementTypeRedHatRHEL,
 	)
-	if !containsSubstring(validateMachineInstallProfiles(state), "subscription cannot be combined with installer.anaconda.packageSource.redhatCDN") {
-		t.Fatal("expected subscription+redhatCDN combination to be rejected")
+	if !containsSubstring(validateMachineInstallProfiles(state), "subscription cannot be combined with installer.anaconda.packageSource.fromSubscription") {
+		t.Fatal("expected subscription+fromSubscription combination to be rejected")
 	}
 }

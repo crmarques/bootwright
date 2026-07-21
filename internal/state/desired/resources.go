@@ -316,8 +316,8 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		if profile.Spec.Installer.Anaconda == nil {
 			continue
 		}
-		if cdn := profile.Spec.Installer.Anaconda.PackageSource.GetRedhatCDN(); cdn != nil {
-			require(fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.redhatCDN.entitlementRef", profile.Metadata.Name),
+		if cdn := profile.Spec.Installer.Anaconda.PackageSource.GetFromSubscription(); cdn != nil {
+			require(fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.packageSource.fromSubscription.entitlementRef", profile.Metadata.Name),
 				v1alpha1.KindEntitlement, cdn.EntitlementRef.Name)
 		}
 	}

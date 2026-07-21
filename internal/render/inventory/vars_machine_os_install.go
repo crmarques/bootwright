@@ -218,7 +218,7 @@ func machineInstallPackageSourceVars(source *v1alpha1.MachineInstallPackageSourc
 	if m := source.Mirror; m != nil {
 		return m.BaseURL, machineInstallRepositoryVars(m.Repositories, eff), rhsm
 	}
-	cdn := source.RedhatCDN
+	cdn := source.FromSubscription
 	if cdn == nil || cdn.EntitlementRef.Name == "" {
 		return "", machineInstallRepositoryVars(nil, eff), rhsm
 	}

@@ -166,9 +166,9 @@ type MachineImageSpec struct {
 }
 
 type MachineInstallPackageSource struct {
-	Mirror     *MachineInstallPackageMirror     `yaml:"mirror,omitempty" json:"mirror,omitempty"`
-	RedhatCDN  *MachineInstallPackageRedhatCDN  `yaml:"redhatCDN,omitempty" json:"redhatCDN,omitempty"`
-	HostedTree *MachineInstallPackageHostedTree `yaml:"hostedTree,omitempty" json:"hostedTree,omitempty"`
+	Mirror           *MachineInstallPackageMirror           `yaml:"mirror,omitempty" json:"mirror,omitempty"`
+	FromSubscription *MachineInstallPackageFromSubscription `yaml:"fromSubscription,omitempty" json:"fromSubscription,omitempty"`
+	HostedTree       *MachineInstallPackageHostedTree       `yaml:"hostedTree,omitempty" json:"hostedTree,omitempty"`
 }
 
 func (p *MachineInstallPackageSource) GetMirror() *MachineInstallPackageMirror {
@@ -178,11 +178,11 @@ func (p *MachineInstallPackageSource) GetMirror() *MachineInstallPackageMirror {
 	return p.Mirror
 }
 
-func (p *MachineInstallPackageSource) GetRedhatCDN() *MachineInstallPackageRedhatCDN {
+func (p *MachineInstallPackageSource) GetFromSubscription() *MachineInstallPackageFromSubscription {
 	if p == nil {
 		return nil
 	}
-	return p.RedhatCDN
+	return p.FromSubscription
 }
 
 func (p *MachineInstallPackageSource) GetHostedTree() *MachineInstallPackageHostedTree {
@@ -197,7 +197,7 @@ type MachineInstallPackageMirror struct {
 	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
 }
 
-type MachineInstallPackageRedhatCDN struct {
+type MachineInstallPackageFromSubscription struct {
 	EntitlementRef LocalObjectReference `yaml:"entitlementRef" json:"entitlementRef"`
 }
 

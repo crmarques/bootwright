@@ -164,7 +164,7 @@ arms become required per type (see [Required arms](#required-arms)). It is
 referenced by name from `StorageCluster.spec.ceph.entitlementRef`,
 `StorageCluster.spec.ceph.osSubscriptionRef`,
 `MachineInstallProfile.spec.subscription.entitlementRef`, and
-`MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN.entitlementRef`.
+`MachineInstallProfile.spec.installer.anaconda.packageSource.fromSubscription.entitlementRef`.
 The secrets it names are declared as first-class `Secret` objects.
 
 | Field | Required | Default | Description |
@@ -288,7 +288,7 @@ spec:
 The `rhsm` kickstart command Bootwright emits is supported on Red Hat Enterprise
 Linux only (Anaconda disables it on RHEL rebuilds such as AlmaLinux, Rocky, and
 CentOS Stream); install-time Satellite registration therefore applies to
-`family: rhel` installs. An entitlement backing `packageSource.redhatCDN` must
+`family: rhel` installs. An entitlement backing `packageSource.fromSubscription` must
 keep `rhsm.management: managed` — install-time registration *is* the package
 source and cannot be delegated (`mirror` and `hostedTree` are the
 delegation-compatible sources). OpenShift/RHCOS agent-install nodes do not use
