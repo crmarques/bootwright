@@ -248,14 +248,12 @@
       Resource attachment match={{ bootwright_redfish_vmedia_resource_attached | default(false) }},
       InsertMedia task attachment accepted={{ bootwright_redfish_vmedia_task_attached | default(false) }},
       HTTP status={{ bootwright_redfish_vmedia_status.status }},
-      artifact certificate trust mode={{ bootwright_redfish_artifact_cert_trust }}.
-      {%- if bootwright_redfish_artifact_cert_trust == 'established' %}
+      artifact certificate trust mode={{ bootwright_redfish_artifact_cert_trust }}.{%- if bootwright_redfish_artifact_cert_trust == 'established' %}
       Trust mode "established" means bootwright deliberately did not modify any
       BMC certificate settings: if the fetch failed because the BMC does not
       trust the artifact server certificate, either establish that trust out of
       band (CA-signed certificate or pre-loaded root CA) or set
-      bmc.virtualMedia.tls.trust to import-certificate or disable-verification.
-      {%- endif %}
+      bmc.virtualMedia.tls.trust to import-certificate or disable-verification.{%- endif %}
     success_msg: >-
       Redfish virtual media attachment accepted on {{ bootwright_redfish_vmedia_status.member }}
       via {{ 'direct media backend' if (bootwright_vmedia_backend_attached | default(false) | bool) else 'VirtualMedia resource' if (bootwright_redfish_vmedia_resource_attached | default(false) | bool) else 'InsertMedia task' if (bootwright_redfish_vmedia_task_attached | default(false) | bool) else 'unknown source' }},
