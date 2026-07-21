@@ -234,6 +234,19 @@ func TestConfigAndMgrFacets(t *testing.T) {
 	}
 }
 
+func TestMgrModulesAlwaysOnNotDrift(t *testing.T) {
+	cluster := managedCluster()
+	cluster.Spec.Ceph.MgrModules = []string{"balancer", "pg_autoscaler", "devicehealth"}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	disc := discovery(t, true, map[string]string{
+		cephstate.ReadMgrModuleLS: `{"enabled_modules":["dashboard"],"always_on_modules":["balancer","pg_autoscaler","devicehealth","crash"]}`,
+	})
+	report := Compare(state, cluster, disc)
+	if mods := facet(report, "mgr-modules"); mods != nil {
+		t.Fatalf("always-on desired modules must not drift, got %+v", mods)
+	}
+}
+
 func TestCrushRulesFacet(t *testing.T) {
 	cluster := managedCluster()
 	state := v1alpha1.State{

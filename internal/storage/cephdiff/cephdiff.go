@@ -546,7 +546,12 @@ func realMgrModules(disc cephstate.Discovery) []entry {
 		return nil
 	}
 	var out []entry
-	for _, module := range modules.EnabledModules {
+	seen := map[string]bool{}
+	for _, module := range append(append([]string{}, modules.EnabledModules...), modules.AlwaysOnModules...) {
+		if seen[module] {
+			continue
+		}
+		seen[module] = true
 		out = append(out, entry{key: module, fields: []kv{{"enabled", "true"}}})
 	}
 	return out
