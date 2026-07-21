@@ -218,6 +218,11 @@ $ bootwright machine list --silent                   # names only, one per line
 $ bootwright machine list --output json
 ```
 
+To provision or tear down individual machines rather than whole clusters, pass
+`--machines <names>` to `apply` or `destroy`; it runs only the `fabric` and
+`machines` phases for the named machines. See
+[Selecting machines](index.md#selecting-machines).
+
 `bootwright machine rsh --name <machine>` opens an interactive SSH shell on a
 `Machine` using the identity Bootwright already knows for it — the resolved
 `access.ssh` address, user (default `root`), private key, and the context

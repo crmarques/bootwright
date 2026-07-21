@@ -135,6 +135,23 @@ For `destroy`, a bare `--clusters` (no `--stage`) narrows to
 `destroy --stage clusters` for those roots — it tears down cluster-stage runtime
 and leaves provider infrastructure standing.
 
+### Narrow to machines
+
+`--machines <names>` restricts the run to individual `Machine`s instead of whole
+clusters (the two flags are mutually exclusive). It runs only the `fabric` and
+`machines` phases, so it prepares a node up to the point a cluster install takes
+over — provisioning one replaced node, or a shared bastion, without touching the
+rest:
+
+```text
+bootwright apply --machines dc1-master-1 --yes
+bootwright destroy --machines dc1-master-1 --force
+```
+
+A machine `destroy` tears down only that machine's substrate and never removes
+shared per-cluster networking or services the survivors still use; destroying a
+node of an installed cluster requires `--force`.
+
 ### Narrow to a stage family
 
 `apply`, `plan`, and `destroy` share two stage families, `infra` and `clusters`.

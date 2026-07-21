@@ -230,6 +230,28 @@ and resolves to exactly one cluster root.
     already prove the parent install and KubeVirt add-on are ready. See
     [KubeVirt nested clusters](../advanced/kubevirt.md).
 
+### Selecting machines
+
+`--machines` accepts a comma-separated list of `Machine` names and is an
+alternative to `--clusters` — the two are mutually exclusive. It provisions or
+tears down only the named machines and runs only the `fabric` and `machines`
+phases, so a later `apply --clusters <name>` finds those machines already
+prepared and skips their setup.
+
+- **On `apply`**, each named machine is brought to the state a cluster install
+  expects. A cluster-node machine gets its substrate created (and, for a
+  managed-OS storage node, its OS installed and registered); a shared provider
+  or service host gets its bound services converged. Without `--stage` it runs
+  `fabric` then `machines`; it also composes with `--stage fabric`,
+  `--stage machines`, or `--stage infra`.
+- **On `destroy`**, only the named machines' substrate is torn down. It refuses
+  a node of an installed cluster unless `--force`, never removes shared
+  per-cluster networking or services other machines still rely on, and leaves
+  the rest of the cluster standing.
+- A named machine that is neither a cluster node nor a shared provider or
+  service host has nothing to provision, so the command fails closed instead of
+  doing nothing silently.
+
 ## Apply modes
 
 `apply` reconciles by default. The two modifier flags are mutually exclusive:
@@ -280,6 +302,7 @@ no-`--stage` default differs from `apply`:
 | `destroy --stage clusters` | Cluster-stage runtime only (install runtime, add-on records, storage attachment records, managed storage services); leaves provider infrastructure. |
 | `destroy --stage infra` | Infrastructure teardown; without `--clusters` it also sweeps all context-owned VMs the provider adapters can identify. |
 | `destroy --clusters <names>` | Narrows to `destroy --stage clusters` for those roots. |
+| `destroy --machines <names>` | Tears down only the named machines' substrate; leaves shared services and the rest of the cluster standing, and refuses installed-cluster nodes without `--force`. |
 
 !!! note "The full teardown is the no-selector form"
     Passing `--clusters` with no `--stage` narrows to `destroy --stage
