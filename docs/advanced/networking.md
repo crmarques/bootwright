@@ -308,20 +308,20 @@ NMState.
 
 A managed name-resolution (dnsmasq) component publishes, for every machine it
 serves, a `host-record` for the machine's
-[`dnsEntry` name](../concepts/machines.md#the-dnsentry-address)
+[`fqdn` name](../concepts/machines.md#the-dnsentry-address)
 (`<machineName>.<baseDomain>` unless overridden) targeting the machine's
 `access.ssh.addressRef` IP, and a `cname` from each cluster node FQDN to the
-bound machine's `dnsEntry`. When an operator-declared `dnsEntry` lives in a
+bound machine's `fqdn`. When an operator-declared `fqdn` lives in a
 zone the managed resolver does not own, the node record degrades to a direct
 `host-record` on the same IP. The bare machine-label record (`<machineName>`
 without the domain) is not published. Bootwright itself connects to
-name-resolution-wired machines through the `dnsEntry` name, so these records
+name-resolution-wired machines through the `fqdn` name, so these records
 are load-bearing, not cosmetic.
 
 On provided (external) name resolution the operator owns the records: for each
-machine create `A <dnsEntry> → <ip>`, and for each cluster node
-`CNAME <nodeFQDN> → <dnsEntry>` (or an equivalent A record). The preflight
-group **Name resolution** resolves each machine's `dnsEntry` and each node
+machine create `A <fqdn> → <ip>`, and for each cluster node
+`CNAME <nodeFQDN> → <fqdn>` (or an equivalent A record). The preflight
+group **Name resolution** resolves each machine's `fqdn` and each node
 FQDN before apply and fails naming the exact record to create when one is
 missing or points at the wrong address; under managed resolution the same
 checks point at the apply command that converges the resolver instead.

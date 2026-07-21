@@ -87,7 +87,7 @@ Because DNS is external, add these records to your site resolvers
 (`10.20.30.2/.3`) **before** apply:
 
 ```
-ceph-1.example.com.            A   10.20.30.21     # machine dnsEntry names
+ceph-1.example.com.            A   10.20.30.21     # machine fqdn names
 ceph-2.example.com.            A   10.20.30.22
 ceph-3.example.com.            A   10.20.30.23
 node01.ceph-ibm.example.com.   CNAME ceph-1.example.com.   # node FQDNs -> machines
@@ -102,7 +102,7 @@ dashboard.ceph-ibm.example.com. A  10.20.30.81     # mgmt-gateway VIP
 ```
 
 `bootwright preflight` runs a **Name resolution** group that resolves each
-machine's `dnsEntry` name (`ceph-N.example.com`) and each node FQDN
+machine's `fqdn` name (`ceph-N.example.com`) and each node FQDN
 (`node0N.ceph-ibm.example.com`) and fails naming the exact record to create if
 one is missing or wrong.
 

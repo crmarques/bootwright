@@ -77,8 +77,8 @@ func MachineSSHAddressByName(state v1alpha1.State, name string) string {
 }
 
 func MachineConnectionAddress(state v1alpha1.State, machine v1alpha1.Machine) string {
-	dnsEntry := v1alpha1.MachineDNSEntryAddress(machine)
-	if dnsEntry == "" {
+	fqdn := v1alpha1.MachineFQDNAddress(machine)
+	if fqdn == "" {
 		return v1alpha1.MachineSSHAddress(machine)
 	}
 	if !MachineReferencesNameResolution(state, machine) {
@@ -87,7 +87,7 @@ func MachineConnectionAddress(state v1alpha1.State, machine v1alpha1.Machine) st
 	if MachineHostsManagedNameResolution(state, machine) {
 		return v1alpha1.MachineSSHAddress(machine)
 	}
-	return dnsEntry
+	return fqdn
 }
 
 func MachineConnectionAddressByName(state v1alpha1.State, name string) string {

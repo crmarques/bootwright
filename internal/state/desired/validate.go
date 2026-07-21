@@ -38,7 +38,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateSecretReferences(state))...)
 	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
 	errs = append(errs, notes(validateUniqueMachineSSHAddresses(state))...)
-	errs = append(errs, notes(validateUniqueMachineDNSEntries(state))...)
+	errs = append(errs, notes(validateUniqueMachineFQDNs(state))...)
 	errs = append(errs, notes(validateClusterBoundHostnameSource(state))...)
 	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
 	errs = append(errs, notes(validateOSDDevicesExcludeRootDisk(state))...)
@@ -46,14 +46,14 @@ func validateFindings(state v1alpha1.State) []Finding {
 	return errs
 }
 
-func validateUniqueMachineDNSEntries(state v1alpha1.State) []string {
+func validateUniqueMachineFQDNs(state v1alpha1.State) []string {
 	byName := map[string][]string{}
 	for _, machine := range state.Machines {
-		dnsEntry := strings.TrimSpace(v1alpha1.MachineDNSEntryAddress(machine))
-		if dnsEntry == "" {
+		fqdn := strings.TrimSpace(v1alpha1.MachineFQDNAddress(machine))
+		if fqdn == "" {
 			continue
 		}
-		byName[dnsEntry] = append(byName[dnsEntry], machine.Metadata.Name)
+		byName[fqdn] = append(byName[fqdn], machine.Metadata.Name)
 	}
 	entries := make([]string, 0, len(byName))
 	for entry := range byName {
@@ -67,7 +67,7 @@ func validateUniqueMachineDNSEntries(state v1alpha1.State) []string {
 			continue
 		}
 		sort.Strings(names)
-		errs = append(errs, fmt.Sprintf("dnsEntry %q is used by more than one Machine (%s); the dnsEntry name is the machine's canonical DNS identity and connection address, so a shared value would resolve — and could drive — the wrong machine. Give each Machine a unique dnsEntry address", entry, strings.Join(names, ", ")))
+		errs = append(errs, fmt.Sprintf("fqdn %q is used by more than one Machine (%s); the fqdn name is the machine's canonical DNS identity and connection address, so a shared value would resolve — and could drive — the wrong machine. Give each Machine a unique fqdn address", entry, strings.Join(names, ", ")))
 	}
 	return errs
 }

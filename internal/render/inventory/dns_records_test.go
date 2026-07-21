@@ -152,7 +152,7 @@ func TestNameResolutionRecordsFallBackToMachineLabelWithoutBaseDomain(t *testing
 		t.Fatalf("hostRecords = %v, want %v", got, want)
 	}
 	if got := recordPairs(vars["cnameRecords"]); got != nil {
-		t.Fatalf("cnameRecords = %v, want none without a dnsEntry", got)
+		t.Fatalf("cnameRecords = %v, want none without a fqdn", got)
 	}
 }
 

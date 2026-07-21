@@ -1,4 +1,4 @@
-# ADR 0017: Machine dnsEntry Address and Independent Node Identity
+# ADR 0017: Machine fqdn Address and Independent Node Identity
 
 ## Status
 
@@ -30,26 +30,26 @@ Machine names stay DNS labels; the machine's FQDN becomes a first-class
 address entry; nodes carry independent names; DNS binds the two; clusters and
 every cluster-facing surface reference node names only.
 
-### The implicit `dnsEntry` machine address
+### The implicit `fqdn` machine address
 
 Every Machine's `spec.addresses` list implicitly contains
 
 ```yaml
-- name: dnsEntry
+- name: fqdn
   address: <metadata.name>.<baseDomain>
 ```
 
 injected during normalization when the Environment declares a `baseDomain` and
-the machine does not already declare an entry named `dnsEntry`. A declared
-`dnsEntry` entry overrides the default verbatim (it must be a DNS subdomain;
+the machine does not already declare an entry named `fqdn`. A declared
+`fqdn` entry overrides the default verbatim (it must be a DNS subdomain;
 it may live in a foreign zone). `metadata.name` keeps the DNS-label
 validation unchanged.
 
-`dnsEntry` is the machine's canonical connection address: whenever Bootwright
+`fqdn` is the machine's canonical connection address: whenever Bootwright
 reaches a machine over SSH (ansible `ansible_host`, `machine rsh`,
-`cluster rsh`, trust bootstrap), it connects to the `dnsEntry` name. The
+`cluster rsh`, trust bootstrap), it connects to the `fqdn` name. The
 entry referenced by `access.ssh.addressRef` keeps its meaning as the
-machine's routable IP; it is what the `dnsEntry` DNS record must resolve to
+machine's routable IP; it is what the `fqdn` DNS record must resolve to
 and the fallback when no resolvable name exists. Two carve-outs connect by IP
 deliberately: machines that host the managed name-resolution component their
 own network references (the resolver cannot serve its own bootstrap), and
@@ -70,19 +70,19 @@ location, and DNS record name.
 
 ### DNS binding
 
-The node FQDN resolves to the machine through its `dnsEntry`:
+The node FQDN resolves to the machine through its `fqdn`:
 
 - Managed name resolution (dnsmasq): Bootwright renders a `host-record` for
-  each machine's `dnsEntry` name targeting the `access.ssh.addressRef` IP,
-  and a `cname` from each node FQDN to the bound machine's `dnsEntry` when
-  that name is itself a managed record; when the operator overrode `dnsEntry`
+  each machine's `fqdn` name targeting the `access.ssh.addressRef` IP,
+  and a `cname` from each node FQDN to the bound machine's `fqdn` when
+  that name is itself a managed record; when the operator overrode `fqdn`
   into a zone the managed resolver does not own, the node record degrades to
   a direct `host-record` on the same IP. The bare machine-label record is no
   longer published.
 - Provided (external) name resolution: the operator owns the records. A
-  preflight group "Name resolution" resolves each machine's `dnsEntry` and
+  preflight group "Name resolution" resolves each machine's `fqdn` and
   each node FQDN and fails with the exact record to create
-  (`A <dnsEntry> → <ip>`, `CNAME <nodeFQDN> → <dnsEntry>`) when resolution is
+  (`A <fqdn> → <ip>`, `CNAME <nodeFQDN> → <fqdn>`) when resolution is
   missing or points at the wrong address. For managed resolution the same
   checks remediate with the apply command that converges the resolver.
 
@@ -101,7 +101,7 @@ synthesis, install markers) keep keying on `metadata.name`.
 ### Install-profile hostname source
 
 `customizations.hostname.source: machineName` now means "OS hostname is the
-machine's `dnsEntry` name". It is valid only for machines not bound to any
+machine's `fqdn` name". It is valid only for machines not bound to any
 cluster; a cluster-bound machine's OS hostname must equal its node FQDN or
 cephadm host matching breaks, so that combination is a validation error.
 
@@ -115,7 +115,7 @@ cephadm host matching breaks, so that combination is a validation error.
   reconverge (install-marker hashes include the kickstart hostname).
 - Connection strings move from IPs to names for name-resolution-wired
   machines; SSH trust records key per address, so first contact after upgrade
-  re-establishes trust against the `dnsEntry` name.
+  re-establishes trust against the `fqdn` name.
 - The cephadm OSD service id changes from `data-<machineName>` to
   `data-<nodeShortName>`; existing clusters converge to the new service name
   on next apply.

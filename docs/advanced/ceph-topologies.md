@@ -125,7 +125,7 @@ resolve** cluster-wide:
   `bootwright preflight`, which compares each storage node's real hostname
   against the declared topology hostname before cephadm ever sees the host spec.
 
-The machine's own DNS name is separate: every `Machine` carries a `dnsEntry`
+The machine's own DNS name is separate: every `Machine` carries a `fqdn`
 address (`<machineName>.<baseDomain>` by default) that Bootwright connects to
 and that the node FQDN resolves through — see
 [Machines](../concepts/machines.md#the-dnsentry-address). A cluster-bound
@@ -140,8 +140,8 @@ dashboard's monitoring integration logs errors such as *"Could not reach
 Alertmanager's API on `http://<host>:9093` … Name or service not known"*. A
 managed `nameResolution` (dnsmasq) component referenced by the nodes'
 `NetworkConfig.nameResolutionRefs` publishes, for every machine it serves, a
-`host-record` for the machine's `dnsEntry` name at its IP and a `cname` from
-each node FQDN to the bound machine's `dnsEntry` (the bare machine label is not
+`host-record` for the machine's `fqdn` name at its IP and a `cname` from
+each node FQDN to the bound machine's `fqdn` (the bare machine label is not
 published), and publishes each object gateway's `public.dnsName` at its ingress
 VIP. Point each storage node's `NetworkConfig` `dns-resolver` at that
 component. On provided (external) DNS the operator creates the records, and

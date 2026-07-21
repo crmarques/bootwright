@@ -30,8 +30,8 @@ func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps) []C
 	}
 	var checks []Check
 	for _, machine := range state.Machines {
-		dnsEntry := v1alpha1.MachineDNSEntryAddress(machine)
-		if dnsEntry == "" || !stateview.MachineReferencesNameResolution(state, machine) {
+		fqdn := v1alpha1.MachineFQDNAddress(machine)
+		if fqdn == "" || !stateview.MachineReferencesNameResolution(state, machine) {
 			continue
 		}
 		expected := v1alpha1.MachineSSHAddress(machine)
@@ -39,11 +39,11 @@ func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps) []C
 			continue
 		}
 		managed := machineNameResolutionManaged(state, machine)
-		checks = append(checks, resolutionCheck(deps, "Machine/"+machine.Metadata.Name+" dnsEntry", dnsEntry, expected, managed,
-			fmt.Sprintf("create an A record %s -> %s on the DNS server provided by your infrastructure", dnsEntry, expected)))
-		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != dnsEntry {
+		checks = append(checks, resolutionCheck(deps, "Machine/"+machine.Metadata.Name+" fqdn", fqdn, expected, managed,
+			fmt.Sprintf("create an A record %s -> %s on the DNS server provided by your infrastructure", fqdn, expected)))
+		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != fqdn {
 			checks = append(checks, resolutionCheck(deps, "node "+hostname, hostname, expected, managed,
-				fmt.Sprintf("create a CNAME record %s -> %s (or an A record %s -> %s) on the DNS server provided by your infrastructure", hostname, dnsEntry, hostname, expected)))
+				fmt.Sprintf("create a CNAME record %s -> %s (or an A record %s -> %s) on the DNS server provided by your infrastructure", hostname, fqdn, hostname, expected)))
 		}
 	}
 	return checks

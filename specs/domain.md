@@ -51,7 +51,7 @@ Operators author desired state as twenty-one YAML kinds:
 | `Secret` | What named secret material does a `SecretRef` resolve to, and how is it obtained? |
 
 Every fact has one owner. Machines own substrate selection, OS lifecycle mode,
-OS install network, durable addresses (including the machine's `dnsEntry` DNS
+OS install network, durable addresses (including the machine's `fqdn` DNS
 name), SSH reachability, and generic capabilities. Container clusters own
 installer intent: distribution, release, platform render mode, endpoints,
 artifact access, cluster networking, node identity (each host's node

@@ -329,8 +329,8 @@ func MachineSSHAddress(machine Machine) string {
 	return address
 }
 
-func MachineDNSEntryAddress(machine Machine) string {
-	address, _ := MachineAddressByName(machine, MachineAddressDNSEntry)
+func MachineFQDNAddress(machine Machine) string {
+	address, _ := MachineAddressByName(machine, MachineAddressFQDN)
 	return address
 }
 

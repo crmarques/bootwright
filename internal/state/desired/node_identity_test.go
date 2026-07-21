@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func TestNormalizeInjectsMachineDNSEntry(t *testing.T) {
+func TestNormalizeInjectsMachineFQDN(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -18,7 +18,7 @@ func TestNormalizeInjectsMachineDNSEntry(t *testing.T) {
 			{
 				Metadata: v1alpha1.Metadata{Name: "overridden"},
 				Spec: v1alpha1.MachineSpec{Addresses: []v1alpha1.MachineAddress{{
-					Name:    v1alpha1.MachineAddressDNSEntry,
+					Name:    v1alpha1.MachineAddressFQDN,
 					Address: "srv4009.corp.example.com",
 				}}},
 			},
@@ -27,24 +27,24 @@ func TestNormalizeInjectsMachineDNSEntry(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := v1alpha1.MachineDNSEntryAddress(state.Machines[0]); got != "plain.example.test" {
-		t.Fatalf("injected dnsEntry = %q, want plain.example.test", got)
+	if got := v1alpha1.MachineFQDNAddress(state.Machines[0]); got != "plain.example.test" {
+		t.Fatalf("injected fqdn = %q, want plain.example.test", got)
 	}
-	if got := v1alpha1.MachineDNSEntryAddress(state.Machines[1]); got != "srv4009.corp.example.com" {
-		t.Fatalf("declared dnsEntry = %q, want srv4009.corp.example.com kept verbatim", got)
+	if got := v1alpha1.MachineFQDNAddress(state.Machines[1]); got != "srv4009.corp.example.com" {
+		t.Fatalf("declared fqdn = %q, want srv4009.corp.example.com kept verbatim", got)
 	}
 	count := 0
 	for _, address := range state.Machines[1].Spec.Addresses {
-		if address.Name == v1alpha1.MachineAddressDNSEntry {
+		if address.Name == v1alpha1.MachineAddressFQDN {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Fatalf("declared dnsEntry entries = %d, want exactly one (no duplicate injection)", count)
+		t.Fatalf("declared fqdn entries = %d, want exactly one (no duplicate injection)", count)
 	}
 }
 
-func TestNormalizeSkipsDNSEntryWithoutBaseDomain(t *testing.T) {
+func TestNormalizeSkipsFQDNWithoutBaseDomain(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}},
 		Machines:     []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "plain"}}},
@@ -52,62 +52,62 @@ func TestNormalizeSkipsDNSEntryWithoutBaseDomain(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := v1alpha1.MachineDNSEntryAddress(state.Machines[0]); got != "" {
-		t.Fatalf("dnsEntry = %q, want none without an Environment baseDomain", got)
+	if got := v1alpha1.MachineFQDNAddress(state.Machines[0]); got != "" {
+		t.Fatalf("fqdn = %q, want none without an Environment baseDomain", got)
 	}
 }
 
-func TestValidateMachineDNSEntryMustBeSubdomain(t *testing.T) {
+func TestValidateMachineFQDNMustBeSubdomain(t *testing.T) {
 	machine := v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: "node"},
 		Spec: v1alpha1.MachineSpec{Addresses: []v1alpha1.MachineAddress{{
-			Name:    v1alpha1.MachineAddressDNSEntry,
+			Name:    v1alpha1.MachineAddressFQDN,
 			Address: "bad_host!.example.test",
 		}}},
 	}
 	errs := validateMachineAddresses("Machine/node spec", machine)
 	if !containsSubstring(errs, "is not a DNS subdomain") {
-		t.Fatalf("expected DNS-subdomain error for dnsEntry address, got %v", errs)
+		t.Fatalf("expected DNS-subdomain error for fqdn address, got %v", errs)
 	}
 
 	ok := v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: "node"},
 		Spec: v1alpha1.MachineSpec{Addresses: []v1alpha1.MachineAddress{{
-			Name:    v1alpha1.MachineAddressDNSEntry,
+			Name:    v1alpha1.MachineAddressFQDN,
 			Address: "srv4009.corp.example.com",
 		}}},
 	}
 	if errs := validateMachineAddresses("Machine/node spec", ok); len(errs) != 0 {
-		t.Fatalf("valid dnsEntry subdomain rejected: %v", errs)
+		t.Fatalf("valid fqdn subdomain rejected: %v", errs)
 	}
 }
 
-func machineWithDNSEntry(name, entry string) v1alpha1.Machine {
+func machineWithFQDN(name, entry string) v1alpha1.Machine {
 	return v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.MachineSpec{Addresses: []v1alpha1.MachineAddress{{
-			Name:    v1alpha1.MachineAddressDNSEntry,
+			Name:    v1alpha1.MachineAddressFQDN,
 			Address: entry,
 		}}},
 	}
 }
 
-func TestValidateUniqueMachineDNSEntries(t *testing.T) {
+func TestValidateUniqueMachineFQDNs(t *testing.T) {
 	dup := v1alpha1.State{Machines: []v1alpha1.Machine{
-		machineWithDNSEntry("a", "shared.example.test"),
-		machineWithDNSEntry("b", "shared.example.test"),
-		machineWithDNSEntry("c", "unique.example.test"),
+		machineWithFQDN("a", "shared.example.test"),
+		machineWithFQDN("b", "shared.example.test"),
+		machineWithFQDN("c", "unique.example.test"),
 	}}
-	errs := validateUniqueMachineDNSEntries(dup)
-	if len(errs) != 1 || !strings.Contains(errs[0], `dnsEntry "shared.example.test"`) || !strings.Contains(errs[0], "a, b") {
-		t.Fatalf("duplicate dnsEntry must refuse and name both machines, got %v", errs)
+	errs := validateUniqueMachineFQDNs(dup)
+	if len(errs) != 1 || !strings.Contains(errs[0], `fqdn "shared.example.test"`) || !strings.Contains(errs[0], "a, b") {
+		t.Fatalf("duplicate fqdn must refuse and name both machines, got %v", errs)
 	}
 	ok := v1alpha1.State{Machines: []v1alpha1.Machine{
-		machineWithDNSEntry("a", "a.example.test"),
-		machineWithDNSEntry("b", "b.example.test"),
+		machineWithFQDN("a", "a.example.test"),
+		machineWithFQDN("b", "b.example.test"),
 	}}
-	if e := validateUniqueMachineDNSEntries(ok); len(e) != 0 {
-		t.Fatalf("distinct dnsEntry values must pass, got %v", e)
+	if e := validateUniqueMachineFQDNs(ok); len(e) != 0 {
+		t.Fatalf("distinct fqdn values must pass, got %v", e)
 	}
 }
 

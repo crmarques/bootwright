@@ -88,7 +88,7 @@ func TestInventoryStructure(t *testing.T) {
 	}
 }
 
-func TestMachineInventoryConnectsViaDNSEntryWithIPCarveOuts(t *testing.T) {
+func TestMachineInventoryConnectsViaFQDNWithIPCarveOuts(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{

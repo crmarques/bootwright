@@ -26,4 +26,4 @@ files.
 | [0014](0014-api-grammar.md) | Public API Grammar: References, Unions, Collections, Enablement | Accepted |
 | [0015](0015-machine-scope-rhsm-registration.md) | Machine-Scope RHSM Registration and External Management | Accepted |
 | [0016](0016-secret-first-class-kind.md) | Secret as a First-Class Kind | Accepted |
-| [0017](0017-machine-dnsentry-node-identity.md) | Machine dnsEntry Address and Independent Node Identity | Accepted |
+| [0017](0017-machine-fqdn-node-identity.md) | Machine fqdn Address and Independent Node Identity | Accepted |

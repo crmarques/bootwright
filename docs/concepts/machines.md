@@ -172,31 +172,31 @@ needs no SSH address or key.
 | `access.ssh.keyRef` | Yes (when `access.ssh` is set) | None | Secret containing the private SSH key material. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
 
-#### The `dnsEntry` address
+#### The `fqdn` address
 
 When the `Environment` declares a `baseDomain`, every `Machine`'s
 `spec.addresses[]` implicitly contains
 
 ```yaml
-- name: dnsEntry
+- name: fqdn
   address: <metadata.name>.<baseDomain>
 ```
 
-A declared entry named `dnsEntry` overrides the default verbatim — it must be a
+A declared entry named `fqdn` overrides the default verbatim — it must be a
 DNS subdomain (it may live in a zone outside `baseDomain`, e.g. a corporate
 `srv4009.corp.example.com`) and must be unique across machines.
 `metadata.name` itself stays a dot-free DNS label.
 
-`dnsEntry` is the machine's canonical connection address: whenever Bootwright
+`fqdn` is the machine's canonical connection address: whenever Bootwright
 reaches a machine over SSH (Ansible inventory, `machine rsh`/`exec`,
-`cluster rsh`/`exec`, trust bootstrap), it connects to the `dnsEntry` name. The
+`cluster rsh`/`exec`, trust bootstrap), it connects to the `fqdn` name. The
 entry named by `access.ssh.addressRef` keeps its meaning as the machine's
-routable IP — it is what the `dnsEntry` DNS record must resolve to, and the
+routable IP — it is what the `fqdn` DNS record must resolve to, and the
 connection fallback. Two carve-outs connect by IP deliberately: a machine whose
 network configuration references no name-resolution entry (no declared
 resolver could answer), and the machine hosting the managed name-resolution
 component its own network references (the resolver cannot serve its own
-bootstrap). How the `dnsEntry` and node records are published and preflighted
+bootstrap). How the `fqdn` and node records are published and preflighted
 is described in [Networking](../advanced/networking.md#name-resolution).
 
 A complete `Machine` (libvirt, ready mode) referencing a provider profile, a
@@ -252,7 +252,7 @@ To provision or tear down individual machines rather than whole clusters, pass
 
 `bootwright machine rsh --name <machine>` opens an interactive SSH shell on a
 `Machine` using the identity Bootwright already knows for it — the machine's
-[`dnsEntry` connection address](#the-dnsentry-address) (falling back to the
+[`fqdn` connection address](#the-dnsentry-address) (falling back to the
 `access.ssh` IP for the carve-outs described there), user (default `root`),
 private key, and the context host-key trust store recorded by
 `bootwright machine trust`. `machine exec` runs
@@ -453,7 +453,7 @@ through Anaconda.
 | `spec.installer.anaconda.packageSource` | No | None (⇒ full DVD) | Where Anaconda fetches packages when `imageRef` names a boot ISO. Omit for a full DVD image. |
 | `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` | No | None | Selects the managed artifact-server endpoint that serves this profile's managed-OS boot ISO to the BMC over Redfish virtual media. `serverRef` may default from `Environment.spec.defaults.artifactServerRef`; `endpointRef` must resolve to a **managed** artifact server. |
 | `spec.subscription.entitlementRef` | No | None | Post-install RHSM registration of the installed node: names the `redhat-rhel` `Entitlement` (registered as `managed`) the node's OS registers against after install. Must resolve to a `redhat-rhel` entitlement, and **cannot** be combined with `installer.anaconda.packageSource.fromSubscription` (which already registers the node during install). |
-| `spec.customizations.hostname.source` | No | None | Currently `machineName`: the OS hostname becomes the machine's `dnsEntry` name. Valid only for machines not bound to any cluster — a cluster-bound node's OS hostname must equal its node FQDN. |
+| `spec.customizations.hostname.source` | No | None | Currently `machineName`: the OS hostname becomes the machine's `fqdn` name. Valid only for machines not bound to any cluster — a cluster-bound node's OS hostname must equal its node FQDN. |
 | `spec.customizations.localization.language` | No | `en_US.UTF-8` | System message locale. |
 | `spec.customizations.localization.formats` | No | Follows `language` | Regional formatting locale (dates, numbers, currency). |
 | `spec.customizations.localization.keyboard` | No | `us` | Console keyboard layout. |

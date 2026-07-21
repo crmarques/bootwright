@@ -67,17 +67,17 @@ func nodeHostRecords(state v1alpha1.State, entryName string) ([]dnsmasqRecord, [
 		if address == "" {
 			continue
 		}
-		dnsEntry := v1alpha1.MachineDNSEntryAddress(machine)
-		if dnsEntry == "" {
+		fqdn := v1alpha1.MachineFQDNAddress(machine)
+		if fqdn == "" {
 			if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != machine.Metadata.Name {
 				records = append(records, dnsmasqRecord{name: hostname, address: address})
 			}
 			records = append(records, dnsmasqRecord{name: machine.Metadata.Name, address: address})
 			continue
 		}
-		records = append(records, dnsmasqRecord{name: dnsEntry, address: address})
-		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != dnsEntry {
-			cnames = append(cnames, dnsmasqRecord{name: hostname, address: dnsEntry})
+		records = append(records, dnsmasqRecord{name: fqdn, address: address})
+		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != fqdn {
+			cnames = append(cnames, dnsmasqRecord{name: hostname, address: fqdn})
 		}
 	}
 	return records, cnames

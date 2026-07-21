@@ -23,7 +23,7 @@ Rules:
 
 - `baseDomain` is required. It is the fleet DNS base domain rendered into each
   cluster's `install-config.yaml` `baseDomain`, and `Environment` is its single
-  owner. It also seeds each `Machine`'s implicit `dnsEntry` address and the
+  owner. It also seeds each `Machine`'s implicit `fqdn` address and the
   composed node FQDNs (see the `Machine` and cluster host rules).
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
@@ -276,17 +276,17 @@ Rules:
   NMState interface names for MAC injection.
 - `spec.addresses[]` owns durable named addresses used by SSH and shared
   service endpoints.
-- `spec.addresses[]` implicitly contains `{name: dnsEntry, address:
+- `spec.addresses[]` implicitly contains `{name: fqdn, address:
   <metadata.name>.<baseDomain>}` when the `Environment` declares a
-  `baseDomain` and the machine authors no entry named `dnsEntry`. An authored
-  `dnsEntry` overrides the default verbatim; it must be a DNS subdomain (it
+  `baseDomain` and the machine authors no entry named `fqdn`. An authored
+  `fqdn` overrides the default verbatim; it must be a DNS subdomain (it
   may live in a foreign zone) and must be unique across machines.
   `metadata.name` keeps its dot-free DNS-label validation.
-- `dnsEntry` is the machine's canonical connection address: SSH connections
+- `fqdn` is the machine's canonical connection address: SSH connections
   (Ansible inventory, `machine rsh`/`exec`, storage-cluster `cluster
-  rsh`/`exec`, trust bootstrap) target the `dnsEntry` name. The
+  rsh`/`exec`, trust bootstrap) target the `fqdn` name. The
   `access.ssh.addressRef` entry remains the machine's routable IP — what the
-  `dnsEntry` record must resolve to and the connection fallback. Two carve-outs
+  `fqdn` record must resolve to and the connection fallback. Two carve-outs
   connect by IP: machines whose network configuration references no
   name-resolution entry, and the machine hosting the managed name-resolution
   component its own network references.
@@ -410,7 +410,7 @@ Rules:
   `installer.anaconda.packageSource.fromSubscription`, which already registers the
   node during the Anaconda install.
 - `customizations.hostname.source` accepts `machineName`: the installed OS
-  hostname becomes the machine's `dnsEntry` name. It is valid only for
+  hostname becomes the machine's `fqdn` name. It is valid only for
   machines not bound to any cluster; a cluster-bound node's OS hostname must
   equal its node FQDN (cephadm host matching depends on it), so the
   combination is a validation error.
@@ -531,9 +531,9 @@ Rules:
   forwards every other query to `forwarders[]` (IP resolvers); with no
   `forwarders` it answers only local records.
 - The rendered record set includes, for every machine the component serves, a
-  `host-record` for the machine's `dnsEntry` name at its `access.ssh.addressRef`
-  IP and a `cname` from each bound node FQDN to that `dnsEntry` (degrading to a
-  direct `host-record` when an overridden `dnsEntry` lives in a zone the
+  `host-record` for the machine's `fqdn` name at its `access.ssh.addressRef`
+  IP and a `cname` from each bound node FQDN to that `fqdn` (degrading to a
+  direct `host-record` when an overridden `fqdn` lives in a zone the
   resolver does not own). The bare machine-label record is not published.
 - An `artifactServer` arm places with `machineRef` and optional `bindAddress`.
   `retention` is `persistent` (default) or `install-only` (reclaimed once installs
@@ -655,7 +655,7 @@ Rules:
   order, zero-padded to two digits). A bare label composes to
   `<hostname>.<cluster>.<baseDomain>`; a dotted value is an explicit FQDN used
   verbatim. The composed FQDN is the cluster-visible node identity, and its
-  DNS record resolves through the bound machine's `dnsEntry` (managed
+  DNS record resolves through the bound machine's `fqdn` (managed
   resolution renders a `cname`; provided resolution requires the operator's
   record, checked by the "Name resolution" preflight group).
 - Each node hostname must be unique inside the cluster.
@@ -686,7 +686,7 @@ Rules:
   IP (falling back to its declared hostname). A public-only `nodeSSH` is valid
   for installation but cannot power these commands. Storage-cluster access
   continues to use each node `Machine`'s `spec.access.ssh` identity,
-  connecting to the machine's `dnsEntry` address per the `Machine` rules. The
+  connecting to the machine's `fqdn` address per the `Machine` rules. The
   `--node` selector accepts the node hostname (FQDN or short label) or a
   `<role>-<ordinal>`; a machine name is rejected with guidance naming the
   node. Container-node

@@ -29,7 +29,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.Machines {
 		normalizeMachine(&state.Machines[i])
 	}
-	normalizeMachineDNSEntries(state)
+	normalizeMachineFQDNs(state)
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
 	}
@@ -168,18 +168,18 @@ func normalizeEntitlementSatellite(rhsm *v1alpha1.EntitlementRHSM) {
 	}
 }
 
-func normalizeMachineDNSEntries(state *v1alpha1.State) {
+func normalizeMachineFQDNs(state *v1alpha1.State) {
 	env := primaryEnvironment(state)
 	if env == nil || env.Spec.BaseDomain == "" {
 		return
 	}
 	for i := range state.Machines {
 		machine := &state.Machines[i]
-		if _, ok := v1alpha1.MachineAddressByName(*machine, v1alpha1.MachineAddressDNSEntry); ok {
+		if _, ok := v1alpha1.MachineAddressByName(*machine, v1alpha1.MachineAddressFQDN); ok {
 			continue
 		}
 		machine.Spec.Addresses = append(machine.Spec.Addresses, v1alpha1.MachineAddress{
-			Name:    v1alpha1.MachineAddressDNSEntry,
+			Name:    v1alpha1.MachineAddressFQDN,
 			Address: machine.Metadata.Name + "." + env.Spec.BaseDomain,
 		})
 	}

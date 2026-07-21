@@ -269,8 +269,8 @@ func machineInstallHostname(state v1alpha1.State, machine v1alpha1.Machine) stri
 	if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok {
 		return hostname
 	}
-	if dnsEntry := v1alpha1.MachineDNSEntryAddress(machine); dnsEntry != "" {
-		return dnsEntry
+	if fqdn := v1alpha1.MachineFQDNAddress(machine); fqdn != "" {
+		return fqdn
 	}
 	return machine.Metadata.Name
 }
