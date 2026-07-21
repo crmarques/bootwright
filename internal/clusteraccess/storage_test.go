@@ -25,7 +25,7 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	if summary.Type != "ceph" || summary.Management != "managed" {
 		t.Fatalf("type/management = %q/%q", summary.Type, summary.Management)
 	}
-	if summary.SeedHost != "ceph-0" {
+	if summary.SeedHost != "node01" {
 		t.Fatalf("seed node = %q", summary.SeedHost)
 	}
 	if summary.SeedAddress == "" {
@@ -50,7 +50,7 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	if len(summary.MonitorEndpoints) != 3 {
 		t.Fatalf("monitor endpoints = %v, want three", summary.MonitorEndpoints)
 	}
-	if !strings.HasPrefix(summary.MonitorEndpoints[0], "ceph-0=") || !strings.HasSuffix(summary.MonitorEndpoints[0], ":6789") {
+	if !strings.HasPrefix(summary.MonitorEndpoints[0], "node01.ceph-libvirt.bootwright.test=") || !strings.HasSuffix(summary.MonitorEndpoints[0], ":6789") {
 		t.Fatalf("monitor endpoint[0] = %q", summary.MonitorEndpoints[0])
 	}
 }

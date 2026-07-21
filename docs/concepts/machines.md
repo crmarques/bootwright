@@ -172,6 +172,33 @@ needs no SSH address or key.
 | `access.ssh.keyRef` | Yes (when `access.ssh` is set) | None | Secret containing the private SSH key material. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
 
+#### The `dnsEntry` address
+
+When the `Environment` declares a `baseDomain`, every `Machine`'s
+`spec.addresses[]` implicitly contains
+
+```yaml
+- name: dnsEntry
+  address: <metadata.name>.<baseDomain>
+```
+
+A declared entry named `dnsEntry` overrides the default verbatim — it must be a
+DNS subdomain (it may live in a zone outside `baseDomain`, e.g. a corporate
+`srv4009.corp.example.com`) and must be unique across machines.
+`metadata.name` itself stays a dot-free DNS label.
+
+`dnsEntry` is the machine's canonical connection address: whenever Bootwright
+reaches a machine over SSH (Ansible inventory, `machine rsh`/`exec`,
+`cluster rsh`/`exec`, trust bootstrap), it connects to the `dnsEntry` name. The
+entry named by `access.ssh.addressRef` keeps its meaning as the machine's
+routable IP — it is what the `dnsEntry` DNS record must resolve to, and the
+connection fallback. Two carve-outs connect by IP deliberately: a machine whose
+network configuration references no name-resolution entry (no declared
+resolver could answer), and the machine hosting the managed name-resolution
+component its own network references (the resolver cannot serve its own
+bootstrap). How the `dnsEntry` and node records are published and preflighted
+is described in [Networking](../advanced/networking.md#name-resolution).
+
 A complete `Machine` (libvirt, ready mode) referencing a provider profile, a
 network config, and a static address:
 
@@ -224,9 +251,11 @@ To provision or tear down individual machines rather than whole clusters, pass
 [Selecting machines](index.md#selecting-machines).
 
 `bootwright machine rsh --name <machine>` opens an interactive SSH shell on a
-`Machine` using the identity Bootwright already knows for it — the resolved
-`access.ssh` address, user (default `root`), private key, and the context
-host-key trust store recorded by `bootwright machine trust`. `machine exec` runs
+`Machine` using the identity Bootwright already knows for it — the machine's
+[`dnsEntry` connection address](#the-dnsentry-address) (falling back to the
+`access.ssh` IP for the carve-outs described there), user (default `root`),
+private key, and the context host-key trust store recorded by
+`bootwright machine trust`. `machine exec` runs
 a single command on the `Machine` instead of opening a shell. An unknown server
 key prompts for explicit acceptance on an interactive first connection; verify
 it out of band first. Use `machine trust --machines <machine>` to pre-record it,
@@ -240,8 +269,9 @@ $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`
-for a one-off command); the node selector accepts the Machine name, the node
-hostname, or a `<role>-<ordinal>` such as `master-0`. Container-cluster access
+for a one-off command); the node selector accepts the node hostname (FQDN or
+its short label) or a `<role>-<ordinal>` such as `master-0` — a Machine name is
+rejected with a hint naming the node. Container-cluster access
 uses `install.nodeSSH`, the `core` user, and the node's primary install IP, so
 its backing Machine does not need `access.ssh`. Storage-cluster access keeps
 using the Machine SSH identity. An unknown node key prompts for explicit
@@ -423,7 +453,7 @@ through Anaconda.
 | `spec.installer.anaconda.packageSource` | No | None (⇒ full DVD) | Where Anaconda fetches packages when `imageRef` names a boot ISO. Omit for a full DVD image. |
 | `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` | No | None | Selects the managed artifact-server endpoint that serves this profile's managed-OS boot ISO to the BMC over Redfish virtual media. `serverRef` may default from `Environment.spec.defaults.artifactServerRef`; `endpointRef` must resolve to a **managed** artifact server. |
 | `spec.subscription.entitlementRef` | No | None | Post-install RHSM registration of the installed node: names the `redhat-rhel` `Entitlement` (registered as `managed`) the node's OS registers against after install. Must resolve to a `redhat-rhel` entitlement, and **cannot** be combined with `installer.anaconda.packageSource.fromSubscription` (which already registers the node during install). |
-| `spec.customizations.hostname.source` | No | None | Currently `machineName`. |
+| `spec.customizations.hostname.source` | No | None | Currently `machineName`: the OS hostname becomes the machine's `dnsEntry` name. Valid only for machines not bound to any cluster — a cluster-bound node's OS hostname must equal its node FQDN. |
 | `spec.customizations.localization.language` | No | `en_US.UTF-8` | System message locale. |
 | `spec.customizations.localization.formats` | No | Follows `language` | Regional formatting locale (dates, numbers, currency). |
 | `spec.customizations.localization.keyboard` | No | `us` | Console keyboard layout. |

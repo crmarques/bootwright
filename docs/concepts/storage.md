@@ -49,7 +49,7 @@ spec:
     release: "20.2.2"
     cephadm:
       bootstrap:
-        host: ceph-0
+        host: node01
     topology:
       hosts:
         - machineRef: ceph-0
@@ -98,7 +98,7 @@ spec:
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
 | `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
 | `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
-| `ceph.cephadm.bootstrap.host` | Yes | — | Topology host that cephadm bootstraps on. |
+| `ceph.cephadm.bootstrap.host` | Yes | — | Topology host that cephadm bootstraps on, named by its node hostname (FQDN or short label). A machine name is rejected with guidance naming the node. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the host machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.cephadm.bootstrap.singleHostDefaults` | No | `false` | Renders cephadm's `--single-host-defaults` at bootstrap (relaxed defaults for a one-node cluster). Valid only for a **single-host, non-stretch** topology and requires at least two declared OSDs. It owns `osd_pool_default_size`, `osd_pool_default_min_size`, and `osd_crush_chooseleaf_type` at bootstrap, so those keys are rejected in `ceph.config[global]`. Referenced by the [`StoragePool`](#storagepool) cross-field rules. |
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
@@ -208,7 +208,7 @@ For cephadm service types Bootwright does not model first-class (for example
 | --- | --- | --- | --- |
 | `topology.hosts` | Yes | — | At least one host. |
 | `topology.hosts[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability and declared SSH access. |
-| `topology.hosts[].hostname` | No | `<machineRef>.<cluster>.<baseDomain>` (the bare `machineRef` name when `baseDomain` is unset, or when the node is provided-OS or its `hostname.source` is `machineName`) | cephadm host-spec hostname, rendered verbatim; must equal the host's actual hostname. |
+| `topology.hosts[].hostname` | No | `node<NN>.<cluster>.<baseDomain>` (`node01`, `node02`, … in `hosts` list order; the bare `node<NN>` label when `baseDomain` is unset) | Node hostname — the cluster's name for this node, independent of the machine name. A bare label composes to `<label>.<cluster>.<baseDomain>`; a dotted value is an explicit FQDN used verbatim. The composed FQDN is the cephadm host-spec hostname, rendered verbatim, and must equal the host's actual OS hostname. |
 | `topology.hosts[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
 | `topology.hosts[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
 | `topology.hosts[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
@@ -311,7 +311,7 @@ operator alone knows; normalize derives the rest from the topology.
 | --- | --- | --- | --- |
 | `topology.stretch.failureDomain` | Yes (when stretch is enabled) | — | CRUSH failure domain mapping sites to real buckets. |
 | `topology.stretch.dataSites[]` | No | the topology's non-tiebreaker sites | Must resolve to exactly the two mon-bearing data sites. Author only when extra OSD-only sites would be wrongly derived. |
-| `topology.stretch.tiebreaker.host` | Yes (when stretch is enabled) | — | Mon-only host with no OSD devices, in the tiebreaker site. |
+| `topology.stretch.tiebreaker.host` | Yes (when stretch is enabled) | — | Mon-only host with no OSD devices, in the tiebreaker site; named by its node hostname (FQDN or short label), never the machine name. |
 | `topology.stretch.tiebreaker.site` | No | the tiebreaker host's site | Must be distinct from `dataSites`. |
 | `topology.stretch.ruleName` | No | `stretch-rule` | Stretch CRUSH rule inherited by policy-less stretch pools. |
 
@@ -536,7 +536,7 @@ services, passthrough services, MDS, RGW, NFS, and ingress.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `placement.hosts[]` | No | — | Explicit topology hostnames; narrows below site granularity. |
+| `placement.hosts[]` | No | — | Explicit node hostnames (FQDN or short label; machine names are rejected); narrows below site granularity. |
 | `placement.sites[]` | No | — | Topology sites; narrows to hosts in the named sites. |
 | `placement.countPerHost` | No | — | Renders to the cephadm `count_per_host` (non-negative). |
 

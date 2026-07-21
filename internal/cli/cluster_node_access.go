@@ -32,7 +32,7 @@ func clusterNodeMachine(state v1alpha1.State, clusterName, selector string) (str
 func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string, error) {
 	var byHost []string
 	for _, n := range nodes {
-		if n.Hostname != "" && (n.Hostname == selector || n.NodeName == selector) {
+		if n.Hostname != "" && (n.Hostname == selector || stateview.NodeShortName(n.Hostname) == selector) {
 			byHost = append(byHost, n.MachineName)
 		}
 	}
@@ -55,9 +55,13 @@ func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string,
 		}
 	}
 	for _, n := range nodes {
-		if n.MachineName == selector {
-			return "", fmt.Errorf("%q names the bound Machine; clusters reference nodes — use node %q", selector, n.NodeName)
+		if n.MachineName != selector {
+			continue
 		}
+		if node := stateview.NodeShortName(n.Hostname); node != "" {
+			return "", fmt.Errorf("%q names the bound Machine; clusters reference nodes — use node %q", selector, node)
+		}
+		return "", fmt.Errorf("%q names the bound Machine; clusters reference nodes — select the node by hostname or <role>-<ordinal>", selector)
 	}
 	return "", fmt.Errorf("no node %q in this cluster", selector)
 }

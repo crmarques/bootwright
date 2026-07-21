@@ -355,7 +355,7 @@ offending line.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `hosts[].hostname` | Yes | — | Node hostname inside the cluster; unique within the cluster. Also the node name the day-2 node-config step targets when applying labels/taints. |
+| `hosts[].hostname` | No | `node<NN>` (`node01`, `node02`, … in `hosts` list order) | Node hostname inside the cluster, independent of the machine name; unique within the cluster. A bare label composes to `<label>.<cluster>.<baseDomain>`; a dotted value is an explicit FQDN used verbatim. Also the node name the day-2 node-config step targets when applying labels/taints. |
 | `hosts[].role` | Yes | — | `master`, `worker`, or `infra`. |
 | `hosts[].machineRef` | Yes | — | `Machine` that backs this node; no default is derived. |
 | `hosts[].labels` | No | — | Extra node labels Bootwright applies day-2. |

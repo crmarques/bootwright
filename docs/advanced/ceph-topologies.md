@@ -69,7 +69,7 @@ ceph:
   entitlementRef: rhcs           # names a redhat-ceph Entitlement
   cephadm:
     bootstrap:
-      host: ceph-0               # topology host cephadm bootstraps on
+      host: node01               # topology host cephadm bootstraps on (node hostname)
 ```
 
 The `ceph-distribution-oss`, `ceph-distribution-redhat`, and
@@ -95,37 +95,43 @@ to end, including the entitlement and license-acceptance workflow.
 of that host: the address named by `cephadm.bootstrap.addressRef`, falling back
 to `cephadm.addressRef`, and finally the host machine's SSH address.
 
-`bootstrap.host` may name a node by its `Machine` name or its registered
-hostname; both resolve, and Bootwright canonicalizes them to the registered
-hostname cephadm expects. The same is true of the other authored host
-references — `placement.hosts[]` and `topology.stretch.tiebreaker.host`.
+`bootstrap.host` names a node by its hostname — the FQDN or its short label
+(`node01`); both resolve, and Bootwright canonicalizes them to the registered
+hostname cephadm expects. A `Machine` name is rejected with guidance naming
+the node. The same is true of the other authored host references —
+`placement.hosts[]` and `topology.stretch.tiebreaker.host`.
 
 ## Host identity and FQDN node naming
 
 cephadm registers every `spec.ceph.topology.hosts[]` entry under its
-`hostname`, which defaults to the fully-qualified
-`<machineRef>.<storageClusterName>.<baseDomain>` — the OpenShift node-naming
-convention generalized to Ceph nodes (e.g. `ceph-3.ceph-ibm.bootwright.test`).
-The name is rendered verbatim into the cephadm host spec, is the name the mgr
-dashboard uses to reach monitoring services (Prometheus, Grafana,
-Alertmanager), and must equal the host's real OS hostname **and resolve**
-cluster-wide:
+`hostname` — the node's name, independent of the bound machine's name. Omitted,
+it defaults to `node<NN>` (`node01`, `node02`, … in `hosts` list order), so the
+default identity is the fully-qualified
+`node<NN>.<storageClusterName>.<baseDomain>` (e.g.
+`node03.ceph-ibm.bootwright.test`). An authored bare label composes the same
+way (`<label>.<cluster>.<baseDomain>`); a dotted value is an explicit FQDN
+taken verbatim. The name is rendered verbatim into the cephadm host spec, is
+the name the mgr dashboard uses to reach monitoring services (Prometheus,
+Grafana, Alertmanager), and must equal the host's real OS hostname **and
+resolve** cluster-wide:
 
 - For machines whose OS Bootwright installs, the contract holds by
-  construction: the installer writes the same fully-qualified name as the OS
-  hostname, and a `nameResolution` component the node's `NetworkConfig`
-  references publishes an A record for it.
+  construction: the installer writes the node FQDN as the OS hostname, and a
+  `nameResolution` component the node's `NetworkConfig` references publishes a
+  record for it.
 - For `os.provided: true` machines, the operator guarantees it. If a machine's
   real hostname differs, author `hostname:` explicitly — it is taken verbatim.
   A mismatch passes `validate` (which never reaches the host) but fails
   `bootwright preflight`, which compares each storage node's real hostname
   against the declared topology hostname before cephadm ever sees the host spec.
 
-To opt a node out of fully-qualified naming and keep the bare `Machine` name as
-the hostname (the pre-FQDN behavior), set `hostname.source: machineName` on its
-`MachineInstallProfile`; this drives both the OS hostname and the cephadm host
-identity. An explicit `hostname:` on the topology host always wins over either
-default.
+The machine's own DNS name is separate: every `Machine` carries a `dnsEntry`
+address (`<machineName>.<baseDomain>` by default) that Bootwright connects to
+and that the node FQDN resolves through — see
+[Machines](../concepts/machines.md#the-dnsentry-address). A cluster-bound
+node's OS hostname must equal its node FQDN, so
+`hostname.source: machineName` on a `MachineInstallProfile` is valid only for
+machines not bound to any cluster.
 
 ### Name resolution
 
@@ -133,11 +139,15 @@ The registered hostname must resolve from the mgr (and every node), or the
 dashboard's monitoring integration logs errors such as *"Could not reach
 Alertmanager's API on `http://<host>:9093` … Name or service not known"*. A
 managed `nameResolution` (dnsmasq) component referenced by the nodes'
-`NetworkConfig.nameResolutionRefs` publishes, for every machine it serves, an A
-record for both the fully-qualified hostname and the bare `Machine` name, and
-publishes each object gateway's `public.dnsName` at its ingress VIP. Point each
-storage node's `NetworkConfig` `dns-resolver` at that component. See
-[Networking](networking.md) for the resolver wiring.
+`NetworkConfig.nameResolutionRefs` publishes, for every machine it serves, a
+`host-record` for the machine's `dnsEntry` name at its IP and a `cname` from
+each node FQDN to the bound machine's `dnsEntry` (the bare machine label is not
+published), and publishes each object gateway's `public.dnsName` at its ingress
+VIP. Point each storage node's `NetworkConfig` `dns-resolver` at that
+component. On provided (external) DNS the operator creates the records, and
+the "Name resolution" preflight group names any missing one. See
+[Networking](networking.md#name-resolution) for the resolver wiring and record
+model.
 
 ## OSD device selection
 
@@ -271,7 +281,7 @@ ceph:
   topology:
     stretch:
       tiebreaker:
-        host: ceph-arbiter        # the tiebreaker monitor host
+        host: node03              # the tiebreaker monitor node
     hosts:
     - machineRef: ceph-dc1-0
       site: dc1
@@ -281,6 +291,9 @@ ceph:
       site: dc2
       roles: [mon, mgr, osd]
       devices: [/dev/vdb]
+    - machineRef: ceph-arbiter    # third host in the list -> node03
+      site: dc3
+      roles: [mon]
 ```
 
 !!! warning "Authoring `stretch` on an existing cluster re-rules its pools"
@@ -401,13 +414,12 @@ the controller (`clusters/<storage-cluster>/secrets/dashboard-password`, mode
 Two desired-state changes carry data-movement risk on an already-bootstrapped
 cluster:
 
-- **Adopting FQDN naming** renames the Ceph host identity of every host that
-  left `hostname` unauthored. On a live cluster that makes the rendered topology
-  name a host cephadm has never seen — cephadm would re-add it and move data.
-  FQDN naming is safe for greenfield bootstraps; on an already-bootstrapped
-  cluster either pin `hostname:` to the original name on each host, or set
-  `hostname.source: machineName` on its `MachineInstallProfile`, before the next
-  apply.
+- **Adopting the `node<NN>` naming default** renames the Ceph host identity of
+  every host that left `hostname` unauthored (previously derived from the
+  machine name). On a live cluster that makes the rendered topology name a host
+  cephadm has never seen — cephadm would re-add it and move data. The default
+  is safe for greenfield bootstraps; on an already-bootstrapped cluster pin
+  `hostname:` to the original name on each host before the next apply.
 - **Authoring `stretch`** re-rules and resizes every policy-less pool, as
   described above. Confirm the validate notice naming the inheriting pools, and
   plan for the rebalance.

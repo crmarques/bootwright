@@ -16,8 +16,6 @@ spec:
           endpointRef: bmc
 
   customizations:
-    hostname:
-      source: machineName
     ssh:
       authorizeMachineSSHKey: true
       passwordAuthentication: false

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -32,11 +33,11 @@ func TestNameResolutionRecordsIncludeDNSRefConsumers(t *testing.T) {
 	}
 }
 
-func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
-	state := v1alpha1.State{
+func storageDNSRecordsState(baseDomain string) v1alpha1.State {
+	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				BaseDomain: baseDomain,
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:         "lab-dns",
@@ -104,6 +105,10 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 			},
 		}},
 	}
+}
+
+func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
+	state := storageDNSRecordsState("example.test")
 	desiredstate.Normalize(&state)
 
 	entry := state.Environments[0].Spec.InfraComponents.NameResolution[0]
@@ -111,13 +116,43 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	vars := nameResolutionComponentVars(state, entry, component)
 
 	want := []string{
-		"ceph-1.ceph.example.test=192.168.140.21",
-		"ceph-1=192.168.140.21",
+		"ceph-1.example.test=192.168.140.21",
 		"dashboard.ceph.example.test=192.168.140.81",
 		"rgw.example.test=192.168.140.80",
 	}
 	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hostRecords = %v, want %v", got, want)
+	}
+	for _, pair := range recordPairs(vars["hostRecords"]) {
+		if strings.HasPrefix(pair, "ceph-1=") {
+			t.Fatalf("hostRecords = %v, must not publish the bare machine label", vars["hostRecords"])
+		}
+	}
+	wantCnames := []string{"node01.ceph.example.test=ceph-1.example.test"}
+	if got := recordPairs(vars["cnameRecords"]); !reflect.DeepEqual(got, wantCnames) {
+		t.Fatalf("cnameRecords = %v, want %v", got, wantCnames)
+	}
+}
+
+func TestNameResolutionRecordsFallBackToMachineLabelWithoutBaseDomain(t *testing.T) {
+	state := storageDNSRecordsState("")
+	desiredstate.Normalize(&state)
+
+	entry := state.Environments[0].Spec.InfraComponents.NameResolution[0]
+	component := state.InfraComponents[0]
+	vars := nameResolutionComponentVars(state, entry, component)
+
+	want := []string{
+		"ceph-1=192.168.140.21",
+		"dashboard.ceph.example.test=192.168.140.81",
+		"node01=192.168.140.21",
+		"rgw.example.test=192.168.140.80",
+	}
+	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {
+		t.Fatalf("hostRecords = %v, want %v", got, want)
+	}
+	if got := recordPairs(vars["cnameRecords"]); got != nil {
+		t.Fatalf("cnameRecords = %v, want none without a dnsEntry", got)
 	}
 }
 

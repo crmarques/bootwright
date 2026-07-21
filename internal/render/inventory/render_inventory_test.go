@@ -88,6 +88,83 @@ func TestInventoryStructure(t *testing.T) {
 	}
 }
 
+func TestMachineInventoryConnectsViaDNSEntryWithIPCarveOuts(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
+						Name:         "lab-dns",
+						Management:   v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "dns"},
+					}},
+				},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "dns"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotNameResolution,
+				NameResolution: &v1alpha1.NameResolutionComponent{
+					Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "resolver"},
+				},
+			},
+		}},
+		NetworkConfigs: []v1alpha1.NetworkConfig{{
+			Metadata: v1alpha1.Metadata{Name: "lan"},
+			Spec: v1alpha1.NetworkConfigSpec{
+				NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "lab-dns"}},
+			},
+		}},
+		Machines: []v1alpha1.Machine{
+			inventoryConnectionMachine("resolver", "192.0.2.10", "lan"),
+			inventoryConnectionMachine("wired", "192.0.2.11", "lan"),
+			inventoryConnectionMachine("isolated", "192.0.2.12", ""),
+		},
+	}
+	desiredstate.Normalize(&state)
+
+	policy := locality.Policy{Deps: locality.Deps{
+		Hostname:       func() (string, error) { return "controller", nil },
+		InterfaceAddrs: func() ([]net.Addr, error) { return nil, nil },
+	}}
+	env := &state.Environments[0]
+	cases := map[string]string{
+		"wired":    "wired.example.test",
+		"resolver": "192.0.2.10",
+		"isolated": "192.0.2.12",
+	}
+	for name, want := range cases {
+		machine, ok := inventoryTestMachine(state, name)
+		if !ok {
+			t.Fatalf("Machine/%s not found", name)
+		}
+		entry := machineInventoryEntry(state, machine, env, PathOptions{}, policy)
+		if got := entry["ansible_host"]; got != want {
+			t.Fatalf("machine %s ansible_host = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func inventoryConnectionMachine(name, address, networkConfig string) v1alpha1.Machine {
+	machine := v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			OS:        v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: address}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
+			},
+		},
+	}
+	if networkConfig != "" {
+		machine.Spec.Network.Config.NetworkConfigRef = v1alpha1.LocalObjectReference{Name: networkConfig}
+	}
+	return machine
+}
+
 func TestInventoryUsesLocalhostForControllerWork(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {

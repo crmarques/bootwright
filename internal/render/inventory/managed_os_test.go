@@ -83,8 +83,8 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 		t.Fatalf("installer.kernelArgs = %v, want omitted when FIPS is disabled", installer["kernelArgs"])
 	}
 	ks := osInstall["kickstart"].(map[string]any)
-	if ks["hostname"] != "ceph-0" {
-		t.Fatalf("kickstart hostname = %v", ks["hostname"])
+	if ks["hostname"] != "node01.ceph-libvirt.bootwright.test" {
+		t.Fatalf("kickstart hostname = %v, want the node FQDN", ks["hostname"])
 	}
 	if got, _ := ks["sshPasswordHash"].(string); !strings.HasPrefix(got, "$6$") {
 		t.Fatalf("kickstart sshPasswordHash = %v, want a SHA-512 crypt hash", ks["sshPasswordHash"])

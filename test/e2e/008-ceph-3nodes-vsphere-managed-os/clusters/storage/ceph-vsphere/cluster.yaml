@@ -12,7 +12,7 @@ spec:
     release: squid
     cephadm:
       bootstrap:
-        host: ceph-0
+        host: node01
     networks:
       publicCIDRs:
         - 192.168.142.0/24

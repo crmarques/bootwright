@@ -58,8 +58,8 @@ func TestContainerClusterNodeSSHTargetFallsBackToHostname(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clusterNodeSSHTarget: %v", err)
 	}
-	if target.Address != "master-0" {
-		t.Fatalf("address = %q, want master-0", target.Address)
+	if target.Address != "master-0.sno-libvirt.bootwright.test" {
+		t.Fatalf("address = %q, want master-0.sno-libvirt.bootwright.test", target.Address)
 	}
 }
 

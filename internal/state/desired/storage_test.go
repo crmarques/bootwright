@@ -110,7 +110,6 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 		}
 	}
 	arbiter := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6]
-	arbiter.Hostname = ""
 	arbiter.Roles = []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR}
 
 	Normalize(&state)
@@ -422,7 +421,7 @@ spec:
   ceph:
     cephadm:
       bootstrap:
-        host: ceph-0
+        host: node01
     monitoring:
       prometheus:
         retentionTime: 15d
@@ -505,7 +504,7 @@ spec:
   ceph:
     cephadm:
       bootstrap:
-        host: ceph-0
+        host: node01
 MONITORING
     topology:
       hosts:
@@ -1258,7 +1257,7 @@ func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageFilesystems[0].Spec.CephFS.MDS.Placement.Hosts = []string{"ceph-typo"}
 			},
-			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" is not listed in StorageCluster/ceph spec.ceph.topology.hosts`,
+			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" does not match any node hostname in StorageCluster/ceph spec.ceph.topology.hosts`,
 		},
 		{
 			name: "no-mds-role-anywhere",

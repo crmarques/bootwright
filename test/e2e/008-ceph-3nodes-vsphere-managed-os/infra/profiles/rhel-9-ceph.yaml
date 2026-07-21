@@ -13,8 +13,6 @@ spec:
       imageRef: rhel-9-x86-64-dvd
 
   customizations:
-    hostname:
-      source: machineName
     ssh:
       authorizeMachineSSHKey: true
       passwordAuthentication: false

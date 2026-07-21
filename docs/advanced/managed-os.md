@@ -318,8 +318,12 @@ spec:
 
 The customization arms, by area:
 
-- **hostname** — `customizations.hostname.source`. The default sets each node's
-  OS hostname to its FQDN; set `source: machineName` to keep the bare node name.
+- **hostname** — `customizations.hostname.source`. The default sets a
+  cluster-bound machine's OS hostname to its node FQDN (from the cluster host's
+  `hostname`). `source: machineName` sets the OS hostname to the machine's
+  [`dnsEntry` name](../concepts/machines.md#the-dnsentry-address) instead and
+  is valid only for machines not bound to any cluster — a cluster-bound node's
+  OS hostname must match its node FQDN or cephadm host matching breaks.
 - **localization** — `language`, `keyboard`, and `timezone` (each defaults to
   `en_US.UTF-8` / `us` / `UTC`, so an omitted group installs exactly as before).
   `formats` optionally splits regional formatting (dates, numbers, currency,

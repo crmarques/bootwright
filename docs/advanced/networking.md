@@ -287,7 +287,7 @@ spec:
         virtualInterfaceNetworks:
           - 192.168.141.0/24
         placement:
-          hosts: [ceph-dc1-0, ceph-dc1-1, ceph-dc1-2]
+          hosts: [node01, node02, node03]   # node hostnames, not machine names
 ```
 
 See [Ceph storage topologies](ceph-topologies.md#rgw-and-ingress) for how RGW
@@ -303,6 +303,30 @@ in its `template.networkConfig.dns-resolver` — reserve static template resolve
 servers for resolvers not declared in the environment (operator-external ones).
 Keep `nameResolutionRefs` outside `template.networkConfig`; that map is raw
 NMState.
+
+### Machine and node records
+
+A managed name-resolution (dnsmasq) component publishes, for every machine it
+serves, a `host-record` for the machine's
+[`dnsEntry` name](../concepts/machines.md#the-dnsentry-address)
+(`<machineName>.<baseDomain>` unless overridden) targeting the machine's
+`access.ssh.addressRef` IP, and a `cname` from each cluster node FQDN to the
+bound machine's `dnsEntry`. When an operator-declared `dnsEntry` lives in a
+zone the managed resolver does not own, the node record degrades to a direct
+`host-record` on the same IP. The bare machine-label record (`<machineName>`
+without the domain) is not published. Bootwright itself connects to
+name-resolution-wired machines through the `dnsEntry` name, so these records
+are load-bearing, not cosmetic.
+
+On provided (external) name resolution the operator owns the records: for each
+machine create `A <dnsEntry> → <ip>`, and for each cluster node
+`CNAME <nodeFQDN> → <dnsEntry>` (or an equivalent A record). The preflight
+group **Name resolution** resolves each machine's `dnsEntry` and each node
+FQDN before apply and fails naming the exact record to create when one is
+missing or points at the wrong address; under managed resolution the same
+checks point at the apply command that converges the resolver instead.
+
+### Cluster records
 
 Managed name-resolution services render records for `api`, `api-int`, and the
 cluster `*.apps.<cluster>.<baseDomain>` wildcard for each consuming cluster.

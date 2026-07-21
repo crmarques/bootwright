@@ -19,8 +19,6 @@ spec:
               baseURL: https://mirror.example.test/rhel/9/AppStream/x86_64/os/
 
   customizations:
-    hostname:
-      source: machineName
     ssh:
       authorizeMachineSSHKey: true
       passwordAuthentication: false
