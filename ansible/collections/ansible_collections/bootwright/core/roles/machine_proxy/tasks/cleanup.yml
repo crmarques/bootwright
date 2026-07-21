@@ -68,3 +68,10 @@
   ansible.builtin.systemd_service:
     daemon_reexec: true
   when: bootwright_proxy_cleanup_systemd_dropin.changed
+
+- name: Remove corporate proxy CA anchor
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ca_trust
+    tasks_from: remove.yml
+  vars:
+    bootwright_ca_trust_anchor: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
