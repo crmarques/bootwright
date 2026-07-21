@@ -89,6 +89,7 @@ type Deps struct {
 	CommandOutputLocalRoot func(name string, args ...string) ([]byte, error)
 	UID                    func() int
 	HTTPDo                 func(req *http.Request, insecureSkipVerify bool) (*http.Response, error)
+	LookupHost             func(name string) ([]string, error)
 }
 
 var DefaultDeps = Deps{
@@ -103,6 +104,7 @@ var DefaultDeps = Deps{
 	},
 	CommandOutputLocalRoot: localCombinedOutput,
 	UID:                    os.Getuid,
+	LookupHost:             DefaultLookupHost,
 }
 
 func localCombinedOutput(name string, args ...string) ([]byte, error) {
@@ -156,6 +158,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 	}
 	if hasState {
 		checks = append(checks, secretRefChecksScoped(state, secretsDir, selected, deps, secretScope)...)
+		checks = append(checks, nameResolutionChecks(state, selected, deps)...)
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps, hostTrustScope)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, secretsDir, deps, secretScope)...)
