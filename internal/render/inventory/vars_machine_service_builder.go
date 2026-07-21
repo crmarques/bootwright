@@ -96,6 +96,7 @@ func mergeMachineServiceVars(dst, src map[string]any) {
 	appendUniqueMapList(dst, src, "frontends", frontendVarsKey)
 	appendUniqueMapList(dst, src, "hostRecords", recordVarsKey)
 	appendUniqueMapList(dst, src, "domainRecords", recordVarsKey)
+	appendUniqueMapList(dst, src, "cnameRecords", recordVarsKey)
 	appendUniqueMapList(dst, src, "machines", machineVarsKey)
 	mergeStringListField(dst, src, "additionalIngressHosts")
 	mergeStringListField(dst, src, "upstreamSources")

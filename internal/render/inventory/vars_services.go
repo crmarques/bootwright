@@ -289,7 +289,7 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	out, _, _ := machineBoundServiceVarsBase(state, component, dns, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, entry.Name)
 	additionalHosts := append([]string(nil), dns.AdditionalIngressHosts...)
 	additionalHosts = append(additionalHosts, entry.AdditionalIngressHosts...)
-	hostRecords, domainRecords := nameResolutionRecordsVars(state, entry.Name, additionalHosts)
+	hostRecords, domainRecords, cnameRecords := nameResolutionRecordsVars(state, entry.Name, additionalHosts)
 	out["additionalIngressHosts"] = additionalHosts
 	out["image"] = managedDnsmasqImage(state)
 	if len(hostRecords) > 0 {
@@ -297,6 +297,9 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	}
 	if len(domainRecords) > 0 {
 		out["domainRecords"] = domainRecords
+	}
+	if len(cnameRecords) > 0 {
+		out["cnameRecords"] = cnameRecords
 	}
 	if len(dns.Forwarders) > 0 {
 		out["forwarders"] = stringSliceAny(dns.Forwarders)

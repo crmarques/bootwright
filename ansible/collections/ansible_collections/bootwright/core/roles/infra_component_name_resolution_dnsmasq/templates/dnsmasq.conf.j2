@@ -14,6 +14,9 @@ bind-dynamic
 {% for record in bootwright_component.hostRecords | default([]) %}
 host-record={{ record.name }},{{ record.address }}
 {% endfor %}
+{% for record in bootwright_component.cnameRecords | default([]) %}
+cname={{ record.name }},{{ record.address }}
+{% endfor %}
 {% for record in bootwright_component.domainRecords | default([]) %}
 address=/{{ record.name }}/{{ record.address }}
 {% endfor %}

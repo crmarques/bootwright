@@ -12,7 +12,7 @@ type dnsmasqRecord struct {
 	address string
 }
 
-func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additionalIngressHosts []string) ([]any, []any) {
+func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additionalIngressHosts []string) ([]any, []any, []any) {
 	hostRecords := []dnsmasqRecord{}
 	domainRecords := []dnsmasqRecord{}
 	baseDomain := clusterBaseDomain(state)
@@ -49,14 +49,16 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 			}
 		}
 	}
-	hostRecords = append(hostRecords, nodeHostRecords(state, entryName)...)
+	machineRecords, cnameRecords := nodeHostRecords(state, entryName)
+	hostRecords = append(hostRecords, machineRecords...)
 	hostRecords = append(hostRecords, gatewayHostRecords(state, entryName)...)
 	hostRecords = append(hostRecords, managementHostRecords(state, entryName)...)
-	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords)
+	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords), dnsmasqRecordVars(cnameRecords)
 }
 
-func nodeHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
+func nodeHostRecords(state v1alpha1.State, entryName string) ([]dnsmasqRecord, []dnsmasqRecord) {
 	var records []dnsmasqRecord
+	var cnames []dnsmasqRecord
 	for _, machine := range state.Machines {
 		if !machineUsesNameResolution(state, machine, entryName) {
 			continue
@@ -65,12 +67,20 @@ func nodeHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 		if address == "" {
 			continue
 		}
-		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != machine.Metadata.Name {
-			records = append(records, dnsmasqRecord{name: hostname, address: address})
+		dnsEntry := v1alpha1.MachineDNSEntryAddress(machine)
+		if dnsEntry == "" {
+			if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != machine.Metadata.Name {
+				records = append(records, dnsmasqRecord{name: hostname, address: address})
+			}
+			records = append(records, dnsmasqRecord{name: machine.Metadata.Name, address: address})
+			continue
 		}
-		records = append(records, dnsmasqRecord{name: machine.Metadata.Name, address: address})
+		records = append(records, dnsmasqRecord{name: dnsEntry, address: address})
+		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != dnsEntry {
+			cnames = append(cnames, dnsmasqRecord{name: hostname, address: dnsEntry})
+		}
 	}
-	return records
+	return records, cnames
 }
 
 func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
