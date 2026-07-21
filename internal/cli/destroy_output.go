@@ -10,6 +10,20 @@ import (
 	"github.com/crmarques/bootwright/internal/status"
 )
 
+func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecision, override bool, dryRun bool) {
+	if len(decision.Reasons) == 0 {
+		return
+	}
+	message := decision.Summary()
+	if override {
+		output.NewContinuation(stdout).Warning("destroy force", message+"; --force supplied for this command only")
+		return
+	}
+	if dryRun {
+		output.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --force")
+	}
+}
+
 type destroyReporter struct {
 	stdout  io.Writer
 	stderr  io.Writer

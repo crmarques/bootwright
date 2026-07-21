@@ -13,8 +13,11 @@ const (
 	DestroySkipUnreachableExtraVar   = "bootwright_destroy_skip_unreachable"
 )
 
-func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, forceUnowned bool, skipUnreachable bool) {
-	if infraScope {
+func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, machineScope []string, forceUnowned bool, skipUnreachable bool) {
+	switch {
+	case len(machineScope) > 0:
+		plan.ExtraVarPairs = append(plan.ExtraVarPairs, workflow.DestroyMachineScopeExtraVar+"="+strings.Join(machineScope, ","))
+	case infraScope:
 		if strings.TrimSpace(clusterScope) == "" {
 			plan.ExtraVarPairs = append(plan.ExtraVarPairs, InfraDestroyContextSweepExtraVar+"=true")
 		} else {

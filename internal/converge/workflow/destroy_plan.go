@@ -20,7 +20,12 @@ const (
 
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
 
+const DestroyMachineScopeExtraVar = "bootwright_destroy_machine_scope"
+
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
+	if destroyMachineScoped(extraVars) {
+		return destroyChain(state, limit, extraVars, infraMachineDestroySteps(), storageWorkNames), nil
+	}
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
 		return destroyChain(state, limit, extraVars, infraDestroySteps(), storageWorkNames), nil
@@ -39,6 +44,20 @@ func infraDestroySteps() []destroyStep {
 		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
 		{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
 	}
+}
+
+func infraMachineDestroySteps() []destroyStep {
+	return infraDestroySteps()[:1]
+}
+
+func destroyMachineScoped(extraVars []string) bool {
+	prefix := DestroyMachineScopeExtraVar + "="
+	for _, pair := range extraVars {
+		if strings.HasPrefix(pair, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 const DestroyStorageClustersTaskID = "destroy.storage-clusters"

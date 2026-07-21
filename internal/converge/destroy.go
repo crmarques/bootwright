@@ -164,6 +164,29 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scop
 	return problems
 }
 
+func ResetMachineConvergeRecordsAfterDestroy(runsDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds map[string]bool) []error {
+	include := destroyKindIncluded(succeededDestroyKinds)
+	if !include(workflow.DestroyTaskKindMachineInfra) {
+		return nil
+	}
+	target := InfraScope.ApplyTarget()
+	target.MachineProvision = machineProvision
+	tasks, err := workflow.PlanApplyTasksChecked(target, state)
+	if err != nil {
+		return []error{fmt.Errorf("plan machine converge-record reset: %w", err)}
+	}
+	var problems []error
+	for _, task := range tasks {
+		if destroyKindForApplyTaskKind(task.Entry.Kind) != workflow.DestroyTaskKindMachineInfra {
+			continue
+		}
+		if err := workflow.RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {
+			problems = append(problems, fmt.Errorf("remove converge record for %s: %w", task.Entry.ID, err))
+		}
+	}
+	return problems
+}
+
 func destroyKindIncluded(succeeded map[string]bool) func(string) bool {
 	if succeeded == nil {
 		return func(string) bool { return true }

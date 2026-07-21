@@ -38,6 +38,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		skipUnreachable bool
 		verbose         bool
 		stage           string
+		machinesScope   string
 	)
 	use := "destroy"
 	if options.use != "" {
@@ -73,6 +74,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to destroy: %s (sub-phases %s are apply-only); default: full teardown of clusters then infra", strings.Join(converge.DestroyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerStageCompletion(cmd, converge.DestroyStageNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy (default: all); implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
+		cmd.Flags().StringVar(&machinesScope, "machines", "", flagMachinesDestroyUsage)
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
@@ -96,6 +98,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			runCommandLabel = converge.DestroyStageCommandLabel(stage, commandLabel)
 		}
+		if machinesScope != "" {
+			var merr error
+			if runScope, runCommandLabel, merr = machineDestroyScope(flags.clusterScope, stage); merr != nil {
+				return merr
+			}
+		}
 		fullDestroy := converge.DestroyIsFullScope(runScope)
 		if forceUnowned && !converge.ScopeTearsMachineLayer(runScope) {
 			return failErr(2, errors.New("--include-unowned relaxes machine-substrate ownership refusals, which run only in the infra stage; re-run with --stage infra (optionally with --clusters) or as a full destroy"))
@@ -115,7 +123,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
 		var sel clusteraccess.Selection
 		if !artifactServerOnly {
-			sel, err = clusteraccess.Resolve(state, runScope.Name, flags.clusterScope)
+			sel, err = resolveScopeSelection(state, runScope.Name, flags.clusterScope, machinesScope)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -131,7 +139,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --force to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
 		}
-		if runScope.Name == "infra" && sel.Active {
+		if runScope.Name == "infra" && sel.Active && !sel.MachineSelection {
 			conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
 			if len(conflicts) > 0 {
 				if standingTasks, perr := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state); perr == nil {
@@ -163,11 +171,16 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --force was supplied"
 			}
 		}
+		if sel.MachineSelection && !override {
+			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots); err != nil {
+				return failErr(1, err)
+			}
+		}
 		printPlanStep(stdout, flags.output, runCommandLabel)
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
-		tearsDownInfraComponents := artifactServerOnly || runScope.Name == "infra" || fullDestroy
+		tearsDownInfraComponents := artifactServerOnly || ((runScope.Name == "infra" || fullDestroy) && !sel.MachineSelection)
 		var componentDecision converge.InfraComponentDestroyDecision
 		if tearsDownInfraComponents {
 			blocksState := sel.RenderState
@@ -201,7 +214,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if infraScope && sel.Active {
 			resolvedClusterRoots = sel.AllRoots
 		}
-		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned, skipUnreachable)
+		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, sel.MachineScopeNames(), forceUnowned, skipUnreachable)
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		safetyScope := workflow.DestroySafetyScope{}
 		if !artifactServerOnly {
@@ -309,13 +322,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, resetPartial, workflow.SucceededDestroyTaskKinds(ledger)))
+				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger))
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, resetPartial, nil))
+			printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, nil)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
@@ -324,7 +337,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly && !plan.NoRemoteWork {
-				printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State, plan.StorageWorkNames, nil, nil))
+				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, nil, nil)
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)
@@ -372,19 +385,5 @@ func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.Partia
 func printConvergeRecordResetProblems(stdout io.Writer, problems []error) {
 	for _, problem := range problems {
 		cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; run records may still claim this resource is converged — remove the reported record or re-run destroy before the next apply")
-	}
-}
-
-func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecision, override bool, dryRun bool) {
-	if len(decision.Reasons) == 0 {
-		return
-	}
-	message := decision.Summary()
-	if override {
-		cliout.NewContinuation(stdout).Warning("destroy force", message+"; --force supplied for this command only")
-		return
-	}
-	if dryRun {
-		cliout.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --force")
 	}
 }

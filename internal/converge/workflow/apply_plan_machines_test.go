@@ -38,6 +38,31 @@ func TestPlanApplyMachineScopeNarrowsContainerNodes(t *testing.T) {
 	}
 }
 
+func TestPlanDestroyMachineScopeRunsOnlyMachineInfra(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
+	tasks, err := PlanDestroyTasks("infra", state, "", []string{DestroyMachineScopeExtraVar + "=master-0"}, nil)
+	if err != nil {
+		t.Fatalf("plan machine-scoped destroy: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("machine-scoped destroy should plan exactly the machine-infra step, got %d tasks: %v", len(tasks), planTaskIDSet(tasks))
+	}
+	if tasks[0].Entry.Kind != DestroyTaskKindMachineInfra {
+		t.Fatalf("machine-scoped destroy step kind = %q, want %q", tasks[0].Entry.Kind, DestroyTaskKindMachineInfra)
+	}
+}
+
+func TestPlanDestroyInfraRunsFullChain(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
+	tasks, err := PlanDestroyTasks("infra", state, "", nil, nil)
+	if err != nil {
+		t.Fatalf("plan infra destroy: %v", err)
+	}
+	if len(tasks) != 3 {
+		t.Fatalf("infra destroy should plan the full 3-step chain, got %d", len(tasks))
+	}
+}
+
 func TestPlanApplyUnscopedPlansAllContainerNodes(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
 	target := ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric, ApplyPhaseMachines}}

@@ -36,6 +36,34 @@ func TestPlanMachinesUnknownMachine(t *testing.T) {
 	}
 }
 
+func TestDestroyMachinesAndClustersMutuallyExclusive(t *testing.T) {
+	_, stderr, code := runCLI(t, "destroy", "--machines", "master-0", "--clusters", "3-nodes-ocp-libvirt", "--dry-run")
+	if code != 2 {
+		t.Fatalf("destroy --machines+--clusters exited %d, want 2; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "--machines and --clusters are mutually exclusive") {
+		t.Fatalf("destroy --machines+--clusters stderr = %q, want mutual-exclusion message", stderr)
+	}
+}
+
+func TestDestroyMachinesRejectsClusterStage(t *testing.T) {
+	_, stderr, code := runCLI(t, "destroy", "--machines", "master-0", "--stage", "clusters", "--dry-run")
+	if code != 2 {
+		t.Fatalf("destroy --machines --stage clusters exited %d, want 2; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "only the machine substrate") {
+		t.Fatalf("destroy --machines --stage clusters stderr = %q, want machine-substrate message", stderr)
+	}
+}
+
+func TestDestroyMachinesDryRunSelectsNode(t *testing.T) {
+	initTestContext(t, "003-3nodes-libvirt")
+	_, stderr, code := runCLI(t, "destroy", "--machines", "master-0", "--dry-run")
+	if code != 0 {
+		t.Fatalf("destroy --machines master-0 --dry-run exited %d, want 0; stderr=%q", code, stderr)
+	}
+}
+
 func TestPlanMachinesSelectsSingleNode(t *testing.T) {
 	initTestContext(t, "003-3nodes-libvirt")
 	stdout, stderr, code := runCLI(t, "plan", "--machines", "master-0")

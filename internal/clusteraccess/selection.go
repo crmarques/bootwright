@@ -81,3 +81,15 @@ func (s Selection) StorageWorkNames() []string {
 	sort.Strings(out)
 	return out
 }
+
+func (s Selection) MachineScopeNames() []string {
+	if !s.MachineSelection {
+		return nil
+	}
+	out := make([]string, 0, len(s.MachineProvision))
+	for name := range s.MachineProvision {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
