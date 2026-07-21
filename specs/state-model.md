@@ -23,7 +23,8 @@ Rules:
 
 - `baseDomain` is required. It is the fleet DNS base domain rendered into each
   cluster's `install-config.yaml` `baseDomain`, and `Environment` is its single
-  owner.
+  owner. It also seeds each `Machine`'s implicit `dnsEntry` address and the
+  composed node FQDNs (see the `Machine` and cluster host rules).
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.
@@ -275,6 +276,20 @@ Rules:
   NMState interface names for MAC injection.
 - `spec.addresses[]` owns durable named addresses used by SSH and shared
   service endpoints.
+- `spec.addresses[]` implicitly contains `{name: dnsEntry, address:
+  <metadata.name>.<baseDomain>}` when the `Environment` declares a
+  `baseDomain` and the machine authors no entry named `dnsEntry`. An authored
+  `dnsEntry` overrides the default verbatim; it must be a DNS subdomain (it
+  may live in a foreign zone) and must be unique across machines.
+  `metadata.name` keeps its dot-free DNS-label validation.
+- `dnsEntry` is the machine's canonical connection address: SSH connections
+  (Ansible inventory, `machine rsh`/`exec`, storage-cluster `cluster
+  rsh`/`exec`, trust bootstrap) target the `dnsEntry` name. The
+  `access.ssh.addressRef` entry remains the machine's routable IP — what the
+  `dnsEntry` record must resolve to and the connection fallback. Two carve-outs
+  connect by IP: machines whose network configuration references no
+  name-resolution entry, and the machine hosting the managed name-resolution
+  component its own network references.
 - `spec.access.ssh` owns bastion-to-machine SSH identity and known-host
   material.
 - `spec.capabilities[]` is a generic tag list such as `openshift-node`,
@@ -333,8 +348,6 @@ spec:
     anaconda:
       imageRef: rhel-94-dvd-iso
   customizations:
-    hostname:
-      source: machineName
     ssh:
       authorizeMachineSSHKey: true
     storage:
@@ -396,7 +409,11 @@ Rules:
   operator owns it). It cannot be combined with
   `installer.anaconda.packageSource.fromSubscription`, which already registers the
   node during the Anaconda install.
-- `customizations.hostname.source` accepts `machineName`.
+- `customizations.hostname.source` accepts `machineName`: the installed OS
+  hostname becomes the machine's `dnsEntry` name. It is valid only for
+  machines not bound to any cluster; a cluster-bound node's OS hostname must
+  equal its node FQDN (cephadm host matching depends on it), so the
+  combination is a validation error.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.
 - `customizations.packages.environment` currently accepts `minimal`, which
@@ -513,6 +530,11 @@ Rules:
 - A `nameResolution` arm authoritatively answers its rendered records and
   forwards every other query to `forwarders[]` (IP resolvers); with no
   `forwarders` it answers only local records.
+- The rendered record set includes, for every machine the component serves, a
+  `host-record` for the machine's `dnsEntry` name at its `access.ssh.addressRef`
+  IP and a `cname` from each bound node FQDN to that `dnsEntry` (degrading to a
+  direct `host-record` when an overridden `dnsEntry` lives in a zone the
+  resolver does not own). The bare machine-label record is not published.
 - An `artifactServer` arm places with `machineRef` and optional `bindAddress`.
   `retention` is `persistent` (default) or `install-only` (reclaimed once installs
   complete). `listeners[]` are required — each a `name` (DNS label), a `protocol`
@@ -628,6 +650,14 @@ Rules:
   from the `hostname`: hostnames are cluster-local while `Machine` names are
   global, so an implicit same-name binding could silently capture a foreign
   `Machine`.
+- `spec.hosts[].hostname` names the node, independent of the machine name.
+  Omitted, it defaults to `node<NN>` (`node01`, `node02`, … in `hosts` list
+  order, zero-padded to two digits). A bare label composes to
+  `<hostname>.<cluster>.<baseDomain>`; a dotted value is an explicit FQDN used
+  verbatim. The composed FQDN is the cluster-visible node identity, and its
+  DNS record resolves through the bound machine's `dnsEntry` (managed
+  resolution renders a `cname`; provided resolution requires the operator's
+  record, checked by the "Name resolution" preflight group).
 - Each node hostname must be unique inside the cluster.
 - A `Machine` is node-bound by at most one cluster (and at most one host
   entry): `machineRef` entries must be disjoint across every
@@ -655,7 +685,11 @@ Rules:
   `privateKeyRef`), the `core` user, and the node's effective primary install
   IP (falling back to its declared hostname). A public-only `nodeSSH` is valid
   for installation but cannot power these commands. Storage-cluster access
-  continues to use each node `Machine`'s `spec.access.ssh`. Container-node
+  continues to use each node `Machine`'s `spec.access.ssh` identity,
+  connecting to the machine's `dnsEntry` address per the `Machine` rules. The
+  `--node` selector accepts the node hostname (FQDN or short label) or a
+  `<role>-<ordinal>`; a machine name is rejected with guidance naming the
+  node. Container-node
   first use requires an interactive OpenSSH confirmation. A verified changed
   key is rotated by removing only its effective address from the context
   known-hosts file with `ssh-keygen -R`, then reconnecting interactively.
@@ -793,10 +827,11 @@ Rules:
   --ssh-user`) and must exist on every topology host. It defaults to `root` when
   `clusterSSHKeyRef` is set, and is ignored — the first host's `access.ssh` user
   is used — when `clusterSSHKeyRef` is omitted.
-- `cephadm.bootstrap.host` names a storage topology host. The rendered
-  cephadm `--mon-ip` is always an address of this host: the address named by
-  `bootstrap.addressRef`, defaulting to `cephadm.addressRef` and finally the
-  host machine's SSH address.
+- `cephadm.bootstrap.host` names a storage topology host by its node hostname
+  (the FQDN or its short label); a machine name is rejected with guidance
+  naming the node. The rendered cephadm `--mon-ip` is always an address of
+  this host: the address named by `bootstrap.addressRef`, defaulting to
+  `cephadm.addressRef` and finally the host machine's SSH address.
 - `cephadm.bootstrap.singleHostDefaults: true` renders `cephadm bootstrap
   --single-host-defaults`, setting the CRUSH/replication defaults a single-node
   cluster needs to reach `active+clean`. It is valid only for a one-host,
@@ -809,8 +844,8 @@ Rules:
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
-- `spec.ceph.cephadm.bootstrap.host` must name a
-  `spec.ceph.topology.hosts[]` entry.
+- `spec.ceph.cephadm.bootstrap.host` must match a
+  `spec.ceph.topology.hosts[]` entry's node hostname.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
   They render to the Ceph `public_network`/`cluster_network` configuration
   (seeded at bootstrap, reconciled by `ceph config set` on later applies).
@@ -826,9 +861,11 @@ Rules:
   (`mgr/<module>/<key>`).
 - Ceph placement blocks — on `spec.ceph.monitoring` services, the `services[]`
   passthrough, the management ingress, CephFS `mds`, RGW, and ingress — share one
-  grammar: `hosts[]` and `sites[]` narrow the resolved host set (each must name a
-  topology host/site), and `countPerHost` (non-negative) sets how many daemons
-  cephadm co-locates per resolved host.
+  grammar: `hosts[]` and `sites[]` narrow the resolved host set (`hosts[]`
+  entries name topology hosts by node hostname — FQDN or short label, never
+  the machine name — and `sites[]` entries name topology sites), and
+  `countPerHost` (non-negative) sets how many daemons cephadm co-locates per
+  resolved host.
 - `spec.ceph.monitoring` declares the cephadm monitoring stack. Absent means
   the cephadm default stack with cephadm's own placement; `enabled: false`
   renders `cephadm bootstrap --skip-monitoring-stack` and forbids per-service
@@ -898,18 +935,19 @@ Rules:
   hosts instead of one spec per host. A host is owned by exactly one OSD spec —
   validation rejects a host claimed by both a fleet and a per-host
   `osd`/`devices`, or by two fleets.
-  `hostname` is the rendered cephadm host-spec
-  hostname; it defaults to the FQDN
-  `<machineRef>.<cluster>.<baseDomain>` (falling back to the bare
-  `machineRef` name when the `Environment` has no `baseDomain` or the node
-  opts out of FQDN naming) and is authored only when the
-  Ceph hostname genuinely differs from the default. It is rendered
+  `hostname` names the node, independent of the machine name, and is the
+  rendered cephadm host-spec hostname. Omitted, it defaults to `node<NN>`
+  (`node01`, `node02`, … in `hosts` list order, zero-padded to two digits); a
+  bare label composes to `<hostname>.<cluster>.<baseDomain>` (kept bare when
+  the `Environment` has no `baseDomain`); a dotted value is an explicit FQDN
+  used verbatim. It is rendered
   verbatim as the cephadm host identity and must equal the host's real OS
   hostname — self-fulfilling for Bootwright-installed machines (the installer
-  sets the OS hostname to the same default), operator-guaranteed for
+  sets the OS hostname to the same node FQDN), operator-guaranteed for
   `os.provided` machines; a mismatch passes `validate` but fails the storage
   node preflight, which asserts each node's real hostname against the declared
-  topology hostname. Hostnames must be
+  topology hostname. The per-host OSD service id derives from the node short
+  name (`data-<nodeShortName>`). Hostnames must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
@@ -921,7 +959,8 @@ Rules:
 - `spec.ceph.topology.stretch` enables stretch mode by presence (no `enabled`
   flag):
   - **Required:** `failureDomain` (CRUSH failure domain for the stretch rule)
-    and `tiebreaker.host`.
+    and `tiebreaker.host` (a topology host named by node hostname — FQDN or
+    short label; machine names are rejected).
   - **Normalized:** `dataSites` from the topology's non-tiebreaker sites,
     `tiebreaker.site` from the tiebreaker host's `site`, `ruleName` to
     `stretch-rule`. Author `dataSites` only to exclude OSD-only sites the

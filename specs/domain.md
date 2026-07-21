@@ -51,11 +51,12 @@ Operators author desired state as twenty-one YAML kinds:
 | `Secret` | What named secret material does a `SecretRef` resolve to, and how is it obtained? |
 
 Every fact has one owner. Machines own substrate selection, OS lifecycle mode,
-OS install network, durable addresses, SSH reachability, and generic
-capabilities. Container clusters own installer intent: distribution, release,
-platform render mode, endpoints, artifact access, cluster networking, and
-node-to-machine binding. Storage clusters own Ceph intent and reference
-machines by node. Providers own substrate-level capabilities and network
+OS install network, durable addresses (including the machine's `dnsEntry` DNS
+name), SSH reachability, and generic capabilities. Container clusters own
+installer intent: distribution, release, platform render mode, endpoints,
+artifact access, cluster networking, node identity (each host's node
+hostname), and node-to-machine binding. Storage clusters own Ceph intent and
+reference machines by node. Providers own substrate-level capabilities and network
 attachments. Infra components own shared service placement and endpoints.
 
 References point downward: consumer intent (`ContainerCluster`, `StorageCluster`,

@@ -242,8 +242,12 @@ gap. Two classes are fixable in the authored YAML:
   the labs sourced from the load-balancer component), the published VIPs
   (`InfraComponent.spec.loadBalancer.bindAddresses[]`), and the name-resolution
   records all agree, and that external DNS carries A records for the API/apps
-  VIPs and node FQDNs. A missing or wrong record leaves the install waiting
-  indefinitely.
+  VIPs, an A record for each machine's `dnsEntry` name, and a CNAME from each
+  node FQDN to its machine's `dnsEntry` (see
+  [Networking](advanced/networking.md#name-resolution)). The **Name
+  resolution** preflight group checks the machine and node records before
+  apply and names the exact record to create; a missing or wrong endpoint
+  record leaves the install waiting indefinitely.
 - **Disconnected trust or mirror material missing.** A disconnected or proxied
   install stalls when the nodes cannot pull release content: the mirror endpoint
   is unreachable, its CA/trust bundle is absent, or the proxy selection is wrong.

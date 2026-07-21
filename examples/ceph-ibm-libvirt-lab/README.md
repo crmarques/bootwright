@@ -4,11 +4,16 @@ A self-contained Bootwright example that provisions **three libvirt VMs on this
 machine**, installs **RHEL 9.8** on them as Bootwright-managed OS, and builds a
 **managed IBM Storage Ceph** cluster via cephadm:
 
-| Node | Profile | Ceph roles | OSDs | Purpose |
-| --- | --- | --- | --- | --- |
-| `ceph-1` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-2` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-3` | `ceph-mon`  | mon | 0 | **monitor-only tie-breaker** (quorum) |
+| Machine | Node | Profile | Ceph roles | OSDs | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `ceph-1` | `node01` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
+| `ceph-2` | `node02` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
+| `ceph-3` | `node03` | `ceph-mon` | mon | 0 | **monitor-only tie-breaker** (quorum) |
+
+The machines keep their `Machine` names (`ceph-1`…`ceph-3`); the cluster names
+its nodes `node01`–`node03` (the `topology.hosts` default, in list order), and
+the cluster YAML references nodes — `bootstrap.host: node01`, placements on
+`node01`/`node02` — never machine names.
 
 All three storage types are configured: **block (RBD)**, **file (CephFS)**, and
 **object (RGW with an ingress VIP)**.
@@ -253,7 +258,7 @@ What apply does, in order:
    node with RHSM.
 2. **clusters** — on every node: enables the RHEL + IBM Storage Ceph repos,
    accepts the IBM license, logs in to `cp.icr.io`, installs cephadm, then
-   bootstraps the cluster from `ceph-1`, adds `ceph-2` and the `ceph-3`
+   bootstraps the cluster from `node01`, adds `node02` and the `node03`
    tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW pools, the CephFS
    filesystem, and the RGW service with its ingress VIP.
 
@@ -269,7 +274,7 @@ Re-running `apply --yes` is idempotent. For a focused storage rerun:
 sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-lab/secrets/ceph-node-ssh \
   root@192.168.140.21 'cephadm shell -- ceph -s'
 
-# Expect: HEALTH_OK, 3 mons (ceph-1, ceph-2, ceph-3), 2 mgr, 6 OSDs,
+# Expect: HEALTH_OK, 3 mons (node01, node02, node03), 2 mgr, 6 OSDs,
 # 1 cephfs, an rgw service, a mgmt-gateway, and two ingress services
 # (rgw.lab + mgmt-gateway.lab). Inspect more:
 #   ceph orch host ls

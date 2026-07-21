@@ -10,11 +10,16 @@ It is wired for an **enterprise network**: an outbound **HTTP/HTTPS proxy**,
 run them. The only managed service is a small **artifact server** on the bastion
 that serves the RHEL ISO to the BMCs.
 
-| Node | Ceph roles | OSDs | Purpose |
-| --- | --- | --- | --- |
-| `ceph-1` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-2` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-3` | mon | 0 | **monitor-only tie-breaker** (quorum) |
+| Machine | Node | Ceph roles | OSDs | Purpose |
+| --- | --- | --- | --- | --- |
+| `ceph-1` | `node01` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
+| `ceph-2` | `node02` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
+| `ceph-3` | `node03` | mon | 0 | **monitor-only tie-breaker** (quorum) |
+
+The machines keep their `Machine` names (`ceph-1`…`ceph-3`); the cluster names
+its nodes `node01`–`node03` (the `topology.hosts` default, in list order), and
+the cluster YAML references nodes — `bootstrap.host: node01`, placements on
+`node01`/`node02` — never machine names.
 
 All three storage types are configured: **block (RBD)**, **file (CephFS)**, and
 **object (RGW with an ingress VIP)**, plus an HA **Ceph Dashboard** behind the
@@ -82,9 +87,12 @@ Because DNS is external, add these records to your site resolvers
 (`10.20.30.2/.3`) **before** apply:
 
 ```
-ceph-1.example.com.            A   10.20.30.21
+ceph-1.example.com.            A   10.20.30.21     # machine dnsEntry names
 ceph-2.example.com.            A   10.20.30.22
 ceph-3.example.com.            A   10.20.30.23
+node01.ceph-ibm.example.com.   CNAME ceph-1.example.com.   # node FQDNs -> machines
+node02.ceph-ibm.example.com.   CNAME ceph-2.example.com.
+node03.ceph-ibm.example.com.   CNAME ceph-3.example.com.
 ceph-1-bmc.example.com.        A   <ceph-1 BMC IP>
 ceph-2-bmc.example.com.        A   <ceph-2 BMC IP>
 ceph-3-bmc.example.com.        A   <ceph-3 BMC IP>
@@ -92,6 +100,11 @@ bastion.example.com.           A   10.20.30.10
 rgw.ceph-ibm.example.com.      A   10.20.30.80     # RGW ingress VIP
 dashboard.ceph-ibm.example.com. A  10.20.30.81     # mgmt-gateway VIP
 ```
+
+`bootwright preflight` runs a **Name resolution** group that resolves each
+machine's `dnsEntry` name (`ceph-N.example.com`) and each node FQDN
+(`node0N.ceph-ibm.example.com`) and fails naming the exact record to create if
+one is missing or wrong.
 
 ### 0d. An SSH key for the bastion
 
@@ -209,8 +222,8 @@ What apply does, in order:
    proxy.
 2. **clusters** — on every node (through the proxy): enables the RHEL +
    IBM Storage Ceph repos, accepts the IBM license, logs in to `cp.icr.io`,
-   installs cephadm, then bootstraps from `ceph-1`, adds `ceph-2` and the
-   `ceph-3` tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW pools, the
+   installs cephadm, then bootstraps from `node01`, adds `node02` and the
+   `node03` tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW pools, the
    CephFS filesystem, the RGW service with its ingress VIP, the NFS export
    service with its ingress VIP, and the `mgmt-gateway` dashboard with its VIP.
 

@@ -34,7 +34,7 @@ means there is no default — an omitted optional field stays unset.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.baseDomain` | Yes | — | Fleet DNS base domain rendered into selected container clusters. |
+| `spec.baseDomain` | Yes | — | Fleet DNS base domain rendered into selected container clusters. Also seeds each machine's implicit `dnsEntry` address and the composed node FQDNs; see [Machines](machines.md#the-dnsentry-address). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
 | `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |
