@@ -1,0 +1,171 @@
+---
+- name: Resolve all-devices OSD hosts for the coverage report
+  ansible.builtin.set_fact:
+    bootwright_ceph_coverage_osd_hosts: >-
+      {{ bootwright_selected_storage_cluster.hosts | default([])
+         | selectattr('osdReclaimAll', 'defined') | list }}
+
+- name: Report all-devices OSD disks left unclaimed after the OSD apply
+  when:
+    - bootwright_ceph_coverage_osd_hosts | default([]) | length > 0
+  block:
+    - name: Resolve ceph hostnames of all-devices OSD hosts for the coverage report
+      ansible.builtin.set_fact:
+        bootwright_ceph_coverage_host_names: >-
+          {{ bootwright_ceph_coverage_osd_hosts | map(attribute='cephHostname')
+             | reject('equalto', '') | list }}
+
+    - name: Refresh cephadm device inventory for the OSD coverage report
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - orch
+          - device
+          - ls
+          - --format
+          - json
+          - --refresh
+      register: bootwright_ceph_coverage_device_ls
+      changed_when: false
+      failed_when: false
+      retries: "{{ bootwright_ceph_coverage_retries | default(6) | int }}"
+      delay: "{{ bootwright_ceph_coverage_delay | default(10) | int }}"
+      until: >-
+        bootwright_ceph_coverage_device_ls.rc == 0
+        and (bootwright_ceph_coverage_host_names
+             | difference(
+                 (bootwright_ceph_coverage_device_ls.stdout | default('[]', true) | from_json)
+                 | selectattr('devices', 'defined')
+                 | rejectattr('devices', 'equalto', [])
+                 | map(attribute='name') | list)) | length == 0
+
+    - name: Collect live OSD device metadata for the OSD coverage report
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - osd
+          - metadata
+          - --format
+          - json
+      register: bootwright_ceph_coverage_osd_metadata
+      changed_when: false
+      failed_when: false
+
+    - name: Resolve whether the OSD coverage inputs are trustworthy
+      ansible.builtin.set_fact:
+        bootwright_ceph_coverage_ready: >-
+          {{ (bootwright_ceph_coverage_device_ls.rc | default(1) | int) == 0
+             and (bootwright_ceph_coverage_osd_metadata.rc | default(1) | int) == 0 }}
+
+    - name: Skip the OSD coverage report when the cluster cannot be read
+      ansible.builtin.debug:
+        msg: >-
+          Skipping the all-devices OSD coverage report on
+          {{ bootwright_selected_storage_cluster.name }}: the cluster device inventory
+          (ceph orch device ls) or live OSD metadata (ceph osd metadata) could not be
+          read, so a disk left unclaimed cannot be told apart from a live OSD. No
+          coverage warning is emitted; re-run once the cluster is reachable.
+      when: not (bootwright_ceph_coverage_ready | default(false) | bool)
+
+    - name: Reset the unclaimed all-devices OSD disk accumulator
+      ansible.builtin.set_fact:
+        bootwright_ceph_coverage_unclaimed: []
+
+    - name: Resolve unclaimed all-devices OSD disks per host
+      when: bootwright_ceph_coverage_ready | default(false) | bool
+      ansible.builtin.set_fact:
+        bootwright_ceph_coverage_unclaimed: >-
+          {{ bootwright_ceph_coverage_unclaimed
+             + (
+                 bootwright_ceph_coverage_host_devices
+                 | selectattr('available', 'defined')
+                 | selectattr('available', 'equalto', false)
+                 | rejectattr('path', 'in', bootwright_ceph_coverage_excluded_paths)
+                 | map('combine', {'host': bootwright_ceph_coverage_host.cephHostname,
+                                   'inventoryHost': bootwright_ceph_coverage_host.inventoryHost})
+                 | list
+               ) }}
+      loop: "{{ bootwright_ceph_coverage_osd_hosts }}"
+      loop_control:
+        loop_var: bootwright_ceph_coverage_host
+        label: "{{ bootwright_ceph_coverage_host.cephHostname }}"
+      vars:
+        bootwright_ceph_coverage_host_devices: >-
+          {{ (bootwright_ceph_coverage_device_ls.stdout | default('[]', true) | from_json)
+             | selectattr('name', 'defined')
+             | selectattr('name', 'equalto', bootwright_ceph_coverage_host.cephHostname)
+             | map(attribute='devices', default=[]) | flatten
+             | selectattr('path', 'defined') | list }}
+        bootwright_ceph_coverage_excluded_paths: >-
+          {{ ((bootwright_ceph_coverage_osd_metadata.stdout | default('[]', true) | from_json)
+              | selectattr('hostname', 'defined')
+              | selectattr('hostname', 'equalto', bootwright_ceph_coverage_host.cephHostname)
+              | map(attribute='devices', default='') | map('default', '', true)
+              | join(',') | split(',')
+              | map('trim') | reject('equalto', '') | map('basename')
+              | map('regex_replace', '^', '/dev/') | list)
+             + (bootwright_ceph_coverage_host_devices
+                | selectattr('osd_ids', 'defined') | rejectattr('osd_ids', 'equalto', [])
+                | map(attribute='path') | list) }}
+
+    - name: Probe unclaimed all-devices OSD disks for mounts on their host
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - --noheadings
+          - --output
+          - MOUNTPOINT
+          - "{{ bootwright_ceph_coverage_candidate.path }}"
+      register: bootwright_ceph_coverage_candidate_mounts
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+      delegate_to: "{{ bootwright_ceph_coverage_candidate.inventoryHost }}"
+      loop: "{{ bootwright_ceph_coverage_unclaimed | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_coverage_candidate
+        label: "{{ bootwright_ceph_coverage_candidate.host }} {{ bootwright_ceph_coverage_candidate.path }}"
+
+    - name: Reset the residual all-devices OSD disk accumulator
+      ansible.builtin.set_fact:
+        bootwright_ceph_coverage_residual: []
+
+    - name: Resolve residual unmounted all-devices OSD disks not backing an OSD
+      ansible.builtin.set_fact:
+        bootwright_ceph_coverage_residual: >-
+          {{ bootwright_ceph_coverage_residual
+             + ([bootwright_ceph_coverage_mount_result.bootwright_ceph_coverage_candidate]
+                if ((bootwright_ceph_coverage_mount_result.rc | default(1) | int) == 0
+                    and (bootwright_ceph_coverage_mount_result.stdout | default('') | trim | length) == 0)
+                else []) }}
+      loop: "{{ bootwright_ceph_coverage_candidate_mounts.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_coverage_mount_result
+        label: >-
+          {{ bootwright_ceph_coverage_mount_result.bootwright_ceph_coverage_candidate.host }}
+          {{ bootwright_ceph_coverage_mount_result.bootwright_ceph_coverage_candidate.path }}
+
+    - name: Warn that all-devices OSD hosts carry data disks not backing an OSD
+      ansible.builtin.debug:
+        msg: >-
+          Coverage warning for all-devices (all:true) OSD host(s) on
+          {{ bootwright_selected_storage_cluster.name }}:
+          {{ bootwright_ceph_coverage_residual | length }} data disk(s) are unmounted,
+          are not backing any OSD, and were not claimed by cephadm. An all:true host
+          expects every data disk to become an OSD, so this cluster is running short of
+          its declared OSD count — the OSD readiness check still passed because a
+          filter/all selection only requires at least one OSD per host. This is almost
+          always a residual on-disk signature (filesystem/LVM/bluestore) that ceph-volume
+          refuses. Confirm each disk is disposable, then clean it
+          (wipefs --all / sgdisk --zap-all) and re-apply, or re-apply with
+          --converge-drifted --confirm-data-loss to auto-reclaim it. Disks:
+          {{ bootwright_ceph_coverage_residual | map(attribute='host')
+             | zip(bootwright_ceph_coverage_residual | map(attribute='path'))
+             | map('join', ':') | list | join(', ') }}
+      when: bootwright_ceph_coverage_residual | default([]) | length > 0

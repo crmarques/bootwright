@@ -17,6 +17,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_coverage_report.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml",
@@ -1501,5 +1502,34 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	coreIdx := strings.Index(svc, "/mnt/core-services.yaml")
 	if reclaimIdx < 0 || coreIdx < 0 || reclaimIdx > coreIdx {
 		t.Error("service_specs.yml must include osd_reclaim.yml before the core-services (OSD) apply")
+	}
+}
+
+func TestStorageCephadmAllDevicesCoverageReportIsNonDestructive(t *testing.T) {
+	coveragePath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_coverage_report.yml"
+	coverage := readRepoFile(t, coveragePath)
+	for _, want := range []string{
+		"selectattr('osdReclaimAll', 'defined')",
+		"bootwright_ceph_coverage_ready",
+		"rejectattr('osd_ids', 'equalto', [])",
+		"ignore_unreachable: true",
+		"MOUNTPOINT",
+		"bootwright_ceph_coverage_residual",
+		"ansible.builtin.debug",
+	} {
+		if !strings.Contains(coverage, want) {
+			t.Errorf("%s must retain coverage-report element %q", coveragePath, want)
+		}
+	}
+	for _, forbidden := range []string{"\n          - zap", "\n          - --force", "state: absent"} {
+		if strings.Contains(coverage, forbidden) {
+			t.Errorf("%s must stay non-destructive (found %q); the coverage report only reads and warns", coveragePath, forbidden)
+		}
+	}
+	boot := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	readinessIdx := strings.Index(boot, "osd_readiness.yml")
+	coverageIdx := strings.Index(boot, "osd_coverage_report.yml")
+	if readinessIdx < 0 || coverageIdx < 0 || readinessIdx > coverageIdx {
+		t.Error("bootstrap.yml must include osd_coverage_report.yml after osd_readiness.yml")
 	}
 }

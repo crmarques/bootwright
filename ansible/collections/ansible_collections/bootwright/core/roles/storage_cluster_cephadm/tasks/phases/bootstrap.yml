@@ -29,6 +29,9 @@
     - name: Wait for declared Ceph OSDs to be created
       ansible.builtin.include_tasks: bootstrap_steps/osd_readiness.yml
 
+    - name: Report all-devices OSD disks left unclaimed
+      ansible.builtin.include_tasks: bootstrap_steps/osd_coverage_report.yml
+
     - name: Identify the stretch tiebreaker mon
       ansible.builtin.set_fact:
         bootwright_ceph_stretch_tiebreaker: >-
