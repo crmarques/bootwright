@@ -15,17 +15,11 @@
     bootwright_process_cleanup_mark_changed: false
 
 - name: Remove mirror registry trust anchor
-  ansible.builtin.file:
-    path: "{{ bootwright_mr_trust_anchor }}"
-    state: absent
-  register: bootwright_mr_trust_removed
-
-- name: Update CA trust store
-  ansible.builtin.command:
-    argv:
-      - update-ca-trust
-  when: bootwright_mr_trust_removed.changed | default(false)
-  changed_when: bootwright_mr_trust_removed.changed | default(false)
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ca_trust
+    tasks_from: remove.yml
+  vars:
+    bootwright_ca_trust_anchor: "{{ bootwright_mr_trust_anchor }}"
 
 - name: Close mirror registry port on host firewall
   ansible.posix.firewalld:

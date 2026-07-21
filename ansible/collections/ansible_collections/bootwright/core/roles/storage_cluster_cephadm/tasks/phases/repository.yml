@@ -16,20 +16,12 @@
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
 - name: Trust corporate proxy CA on storage node
-  ansible.builtin.copy:
-    src: "{{ bootwright_proxy_trust_bundle_ref }}"
-    dest: "{{ bootwright_ceph_proxy_ca_anchor_path }}"
-    owner: root
-    group: root
-    mode: "0644"
-  register: bootwright_ceph_proxy_ca
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ca_trust
+  vars:
+    bootwright_ca_trust_source: "{{ bootwright_proxy_trust_bundle_ref }}"
+    bootwright_ca_trust_anchor: "{{ bootwright_ceph_proxy_ca_anchor_path }}"
   when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
-
-- name: Update storage node trust store for the proxy CA
-  ansible.builtin.command:
-    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
-  changed_when: bootwright_ceph_proxy_ca.changed | default(false)
-  when: bootwright_ceph_proxy_ca.changed | default(false)
 
 - name: Ensure containers.conf.d directory on storage node
   ansible.builtin.file:

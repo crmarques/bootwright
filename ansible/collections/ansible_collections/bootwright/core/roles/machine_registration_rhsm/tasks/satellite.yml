@@ -1,21 +1,13 @@
 ---
 - name: Trust corporate Satellite CA on node
-  ansible.builtin.copy:
-    src: "{{ bootwright_registration_satellite_ca_path }}"
-    dest: "{{ bootwright_registration_satellite_ca_anchor_path }}"
-    owner: root
-    group: root
-    mode: "0644"
-  register: bootwright_registration_satellite_ca
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ca_trust
+  vars:
+    bootwright_ca_trust_source: "{{ bootwright_registration_satellite_ca_path }}"
+    bootwright_ca_trust_anchor: "{{ bootwright_registration_satellite_ca_anchor_path }}"
   when:
     - bootwright_registration_satellite_hostname | length > 0
     - bootwright_registration_satellite_ca_path | length > 0
-
-- name: Update node trust store for corporate Satellite
-  ansible.builtin.command:
-    argv: "{{ bootwright_registration_ca_trust_update_argv }}"
-  changed_when: bootwright_registration_satellite_ca.changed | default(false)
-  when: bootwright_registration_satellite_ca.changed | default(false)
 
 - name: Bind node subscription-manager to corporate Satellite
   ansible.builtin.dnf:

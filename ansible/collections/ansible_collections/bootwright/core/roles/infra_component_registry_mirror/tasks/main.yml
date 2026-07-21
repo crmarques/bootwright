@@ -118,22 +118,12 @@
     - bootwright_mr_htpasswd_needs_write | default(false) | bool
 
 - name: Install registry trust bundle on host
-  ansible.builtin.copy:
-    src: "{{ bootwright_mr_trust_path }}"
-    dest: "{{ bootwright_mr_trust_anchor }}"
-    owner: root
-    group: root
-    mode: "0644"
-    remote_src: false
-  register: bootwright_mr_trust_installed
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ca_trust
+  vars:
+    bootwright_ca_trust_source: "{{ bootwright_mr_trust_path }}"
+    bootwright_ca_trust_anchor: "{{ bootwright_mr_trust_anchor }}"
   when: (bootwright_mr_trust_path | length) > 0
-
-- name: Update CA trust store
-  ansible.builtin.command:
-    argv:
-      - update-ca-trust
-  when: bootwright_mr_trust_installed.changed | default(false)
-  changed_when: bootwright_mr_trust_installed.changed | default(false)
 
 - name: Run mirror registry container
   containers.podman.podman_container:

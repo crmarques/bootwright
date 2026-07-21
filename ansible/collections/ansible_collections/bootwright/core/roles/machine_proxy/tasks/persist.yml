@@ -3,28 +3,20 @@
   when: bootwright_proxy_enabled
   block:
     - name: Trust corporate proxy CA on host
-      ansible.builtin.copy:
-        src: "{{ bootwright_proxy_trust_bundle_ref }}"
-        dest: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
-        owner: root
-        group: root
-        mode: "0644"
-      register: bootwright_proxy_ca_anchor
+      ansible.builtin.include_role:
+        name: bootwright.core.support_ca_trust
+      vars:
+        bootwright_ca_trust_source: "{{ bootwright_proxy_trust_bundle_ref }}"
+        bootwright_ca_trust_anchor: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
       when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
 
     - name: Remove corporate proxy CA anchor when no trust bundle is declared
-      ansible.builtin.file:
-        path: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
-        state: absent
-      register: bootwright_proxy_ca_anchor_removed
+      ansible.builtin.include_role:
+        name: bootwright.core.support_ca_trust
+        tasks_from: remove.yml
+      vars:
+        bootwright_ca_trust_anchor: /etc/pki/ca-trust/source/anchors/bootwright-proxy-ca.crt
       when: not (bootwright_proxy_trust_bundle_ref | default('') | length > 0)
-
-    - name: Update host trust store for corporate proxy CA
-      ansible.builtin.command:
-        argv:
-          - update-ca-trust
-      changed_when: (bootwright_proxy_ca_anchor.changed | default(false)) or (bootwright_proxy_ca_anchor_removed.changed | default(false))
-      when: (bootwright_proxy_ca_anchor.changed | default(false)) or (bootwright_proxy_ca_anchor_removed.changed | default(false))
 
     - name: Render /etc/environment proxy lines
       ansible.builtin.blockinfile:

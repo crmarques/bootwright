@@ -1,0 +1,13 @@
+---
+- name: Remove CA trust anchor
+  ansible.builtin.file:
+    path: "{{ bootwright_ca_trust_anchor }}"
+    state: absent
+  register: bootwright_ca_trust_removed
+
+- name: Update trust store for the removed CA anchor
+  ansible.builtin.command:
+    argv:
+      - update-ca-trust
+  changed_when: true
+  when: bootwright_ca_trust_removed.changed | default(false) | bool

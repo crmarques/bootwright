@@ -1,19 +1,11 @@
 ---
 - name: Install cephadm registry trust on storage node
-  ansible.builtin.copy:
-    src: "{{ bootwright_ceph_registry_trust_path }}"
-    dest: "{{ bootwright_ceph_ca_trust_anchor_path }}"
-    owner: root
-    group: root
-    mode: "0644"
-  register: bootwright_ceph_registry_trust
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ca_trust
+  vars:
+    bootwright_ca_trust_source: "{{ bootwright_ceph_registry_trust_path }}"
+    bootwright_ca_trust_anchor: "{{ bootwright_ceph_ca_trust_anchor_path }}"
   when: bootwright_ceph_registry_trust_path | length > 0
-
-- name: Update storage node trust store
-  ansible.builtin.command:
-    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
-  changed_when: bootwright_ceph_registry_trust.changed | default(false)
-  when: bootwright_ceph_registry_trust.changed | default(false)
 
 - name: Log storage node into cephadm registry
   containers.podman.podman_login:

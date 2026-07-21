@@ -1,0 +1,16 @@
+---
+- name: Install CA trust anchor
+  ansible.builtin.copy:
+    src: "{{ bootwright_ca_trust_source }}"
+    dest: "{{ bootwright_ca_trust_anchor }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_ca_trust_installed
+
+- name: Update trust store for the installed CA anchor
+  ansible.builtin.command:
+    argv:
+      - update-ca-trust
+  changed_when: true
+  when: bootwright_ca_trust_installed.changed | default(false) | bool
