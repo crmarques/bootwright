@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	cephrender "github.com/crmarques/bootwright/internal/render/ceph"
 	secret "github.com/crmarques/bootwright/internal/secrets"
@@ -136,7 +137,13 @@ func StorageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster) 
 }
 
 func storageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster, idx secret.Index, secretsDir string) cephprovider.Provider {
-	return cephprovider.Select(cluster, state.Entitlements, idx, secretsDir)
+	provider := cephprovider.Select(cluster, state.Entitlements, idx, secretsDir)
+	if !provider.RequiresRHSM {
+		if ent, ok := v1alpha1.StorageClusterOSSubscriptionEntitlement(cluster, state); ok {
+			provider.OSRegistration, _ = entitlements.Resolve(state.Entitlements, idx, ent.Metadata.Name, "", secretsDir)
+		}
+	}
+	return provider
 }
 
 func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {

@@ -147,7 +147,7 @@ func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.Stat
 		if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
 			continue
 		}
-		if !v1alpha1.StorageCephManagedRHSM(cluster, state.Entitlements) {
+		if !v1alpha1.StorageClusterManagedRegistration(cluster, state) {
 			continue
 		}
 		if target.MachineScoped() {

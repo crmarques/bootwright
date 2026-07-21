@@ -28,6 +28,26 @@ func validateMachineImages(state v1alpha1.State) []string {
 	return errs
 }
 
+func validateMachineInstallSubscription(prefix string, profile v1alpha1.MachineInstallProfile, anaconda *v1alpha1.MachineInstallAnaconda, state v1alpha1.State) []string {
+	sub := profile.Spec.Subscription
+	if sub == nil {
+		return nil
+	}
+	var errs []string
+	ref := sub.EntitlementRef.Name
+	if ref == "" {
+		errs = append(errs, prefix+".subscription.entitlementRef is required")
+	} else if ent, ok := v1alpha1.EntitlementByName(state.Entitlements, ref); !ok {
+		errs = append(errs, fmt.Sprintf("%s.subscription.entitlementRef %q does not match any Entitlement", prefix, ref))
+	} else if ent.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
+		errs = append(errs, fmt.Sprintf("%s.subscription.entitlementRef %q resolves to type %q, want %q", prefix, ref, ent.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL))
+	}
+	if anaconda.PackageSource.GetRedhatCDN() != nil {
+		errs = append(errs, prefix+".subscription cannot be combined with installer.anaconda.packageSource.redhatCDN; redhatCDN already registers the node during install")
+	}
+	return errs
+}
+
 func validateMachineInstallProfiles(state v1alpha1.State) []string {
 	var errs []string
 	images := indexMachineImages(state.MachineImages)
@@ -82,6 +102,7 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 				artifactServerEndpointValidation{Required: true, RequireManaged: true, RequireHTTP: true},
 			)...)
 		}
+		errs = append(errs, validateMachineInstallSubscription(prefix, profile, anaconda, state)...)
 		customizations := profile.Spec.Customizations
 		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
 			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))

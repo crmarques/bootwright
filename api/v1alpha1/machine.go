@@ -217,7 +217,12 @@ type MachineInstallProfile struct {
 type MachineInstallProfileSpec struct {
 	OS             MachineInstallOS               `yaml:"os" json:"os"`
 	Installer      MachineInstallProfileInstaller `yaml:"installer" json:"installer"`
+	Subscription   *MachineOSSubscription         `yaml:"subscription,omitempty" json:"subscription,omitempty"`
 	Customizations MachineInstallCustomizations   `yaml:"customizations,omitempty" json:"customizations,omitempty"`
+}
+
+type MachineOSSubscription struct {
+	EntitlementRef LocalObjectReference `yaml:"entitlementRef" json:"entitlementRef"`
 }
 
 type MachineInstallOS struct {

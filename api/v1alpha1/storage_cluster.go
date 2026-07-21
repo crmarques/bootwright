@@ -37,6 +37,65 @@ func StorageCephManagedRHSM(cluster StorageCluster, ents []Entitlement) bool {
 	return EntitlementRHSMManagement(rhsm) == EntitlementRHSMManagementManaged
 }
 
+func StorageClusterManagedRegistration(cluster StorageCluster, state State) bool {
+	if StorageCephManagedRHSM(cluster, state.Entitlements) {
+		return true
+	}
+	_, ok := StorageClusterOSSubscriptionEntitlement(cluster, state)
+	return ok
+}
+
+func StorageClusterOSSubscriptionEntitlement(cluster StorageCluster, state State) (Entitlement, bool) {
+	if cluster.Spec.Ceph == nil {
+		return Entitlement{}, false
+	}
+	name := ""
+	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		ref := machineOSSubscriptionRef(state, host.MachineRef.Name)
+		if ref == "" {
+			continue
+		}
+		if name != "" && name != ref {
+			return Entitlement{}, false
+		}
+		name = ref
+	}
+	if name == "" {
+		return Entitlement{}, false
+	}
+	ent, ok := EntitlementByName(state.Entitlements, name)
+	if !ok || ent.Spec.Type != EntitlementTypeRedHatRHEL {
+		return Entitlement{}, false
+	}
+	if EntitlementRHSMManagement(ent.Spec.RHSM) != EntitlementRHSMManagementManaged {
+		return Entitlement{}, false
+	}
+	return ent, true
+}
+
+func machineOSSubscriptionRef(state State, machineName string) string {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name != machineName {
+			continue
+		}
+		profileRef := machine.Spec.OS.InstallProfileRef.Name
+		if profileRef == "" {
+			return ""
+		}
+		for _, profile := range state.MachineInstallProfiles {
+			if profile.Metadata.Name != profileRef {
+				continue
+			}
+			if profile.Spec.Subscription == nil {
+				return ""
+			}
+			return profile.Spec.Subscription.EntitlementRef.Name
+		}
+		return ""
+	}
+	return ""
+}
+
 type StorageClusterCephSpec struct {
 	Distribution   string                       `yaml:"distribution,omitempty" json:"distribution,omitempty"`
 	Release        string                       `yaml:"release,omitempty" json:"release,omitempty"`

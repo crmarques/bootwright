@@ -4,8 +4,42 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/entitlements"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
+
+func TestVarsEmitsOSRegistrationRHSMForOSS(t *testing.T) {
+	provider := Provider{
+		Distribution: v1alpha1.StorageCephDistributionOSS,
+		OSRegistration: entitlements.Resolved{
+			Name: "rhel-satellite",
+			RHSM: entitlements.RHSM{
+				Management:        v1alpha1.EntitlementRHSMManagementManaged,
+				OrganizationPath:  "/context/secrets/org",
+				ActivationKeyPath: "/context/secrets/ak",
+				Satellite:         entitlements.RHSMSatellite{Hostname: "satellite.example.com", ContentBaseURL: "https://satellite.example.com/pulp/content"},
+			},
+		},
+	}
+	vars := Vars(provider)
+	if vars["requiresRHSM"] != false {
+		t.Fatalf("requiresRHSM = %v, want false (OSS must not flip the vendor-RHSM flag)", vars["requiresRHSM"])
+	}
+	if vars["rhsmManagement"] != v1alpha1.EntitlementRHSMManagementManaged {
+		t.Fatalf("rhsmManagement = %v, want managed", vars["rhsmManagement"])
+	}
+	rhsm, ok := vars["rhsm"].(map[string]any)
+	if !ok {
+		t.Fatalf("vars missing rhsm map: %#v", vars)
+	}
+	if rhsm["organizationPath"] != "/context/secrets/org" || rhsm["activationKeyPath"] != "/context/secrets/ak" {
+		t.Fatalf("rhsm paths = %#v", rhsm)
+	}
+	sat, ok := rhsm["satellite"].(map[string]any)
+	if !ok || sat["hostname"] != "satellite.example.com" {
+		t.Fatalf("rhsm satellite = %#v", rhsm["satellite"])
+	}
+}
 
 func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{

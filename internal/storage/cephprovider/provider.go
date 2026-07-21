@@ -123,6 +123,7 @@ var distributions = map[string]distributionDef{
 type Provider struct {
 	Distribution         string
 	Entitlement          entitlements.Resolved
+	OSRegistration       entitlements.Resolved
 	RequiresRHSM         bool
 	RequiresRegistry     bool
 	RequiresLicense      bool
@@ -427,6 +428,12 @@ func Vars(provider Provider) map[string]any {
 			management = v1alpha1.EntitlementRHSMManagementManaged
 		}
 		out["rhsmManagement"] = management
+	} else if provider.OSRegistration.Name != "" {
+		management := provider.OSRegistration.RHSM.Management
+		if management == "" {
+			management = v1alpha1.EntitlementRHSMManagementManaged
+		}
+		out["rhsmManagement"] = management
 	}
 	if len(provider.Repository.RedHatRepos) > 0 || provider.Repository.IBMRepoURL != "" {
 		repo := map[string]any{}
@@ -451,13 +458,17 @@ func Vars(provider Provider) map[string]any {
 		}
 		out["runtimeOS"] = os
 	}
-	if provider.Entitlement.RHSM.OrganizationPath != "" || provider.Entitlement.RHSM.ActivationKeyPath != "" {
+	regRHSM := provider.Entitlement.RHSM
+	if !provider.RequiresRHSM && provider.OSRegistration.Name != "" {
+		regRHSM = provider.OSRegistration.RHSM
+	}
+	if regRHSM.OrganizationPath != "" || regRHSM.ActivationKeyPath != "" {
 		rhsm := map[string]any{
-			"organizationPath":  provider.Entitlement.RHSM.OrganizationPath,
-			"activationKeyPath": provider.Entitlement.RHSM.ActivationKeyPath,
-			"connectToInsights": provider.Entitlement.RHSM.ConnectToInsights,
+			"organizationPath":  regRHSM.OrganizationPath,
+			"activationKeyPath": regRHSM.ActivationKeyPath,
+			"connectToInsights": regRHSM.ConnectToInsights,
 		}
-		if satellite := provider.Entitlement.RHSM.Satellite; satellite.Hostname != "" {
+		if satellite := regRHSM.Satellite; satellite.Hostname != "" {
 			sat := map[string]any{"hostname": satellite.Hostname}
 			if satellite.ContentBaseURL != "" {
 				sat["contentBaseURL"] = satellite.ContentBaseURL
