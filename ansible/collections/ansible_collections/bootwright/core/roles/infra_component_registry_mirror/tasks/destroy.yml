@@ -1,18 +1,11 @@
 ---
-- name: Remove mirror registry container
-  containers.podman.podman_container:
-    name: "{{ bootwright_registry_mirror_container_name }}"
-    state: absent
-
-- name: Reap orphan mirror registry from a leaked container instance
+- name: Remove mirror registry container and reap orphans
   ansible.builtin.include_role:
-    name: bootwright.core.support_process_cleanup
+    name: bootwright.core.support_component_teardown
+    tasks_from: container.yml
   vars:
-    bootwright_process_cleanup_podman_filters:
-      - "label=bootwright.kind=registry"
-      - "label=bootwright.provider={{ bootwright_component.providerName }}"
-      - "label=bootwright.name={{ bootwright_component.name }}"
-    bootwright_process_cleanup_mark_changed: false
+    bootwright_component_teardown_container: "{{ bootwright_registry_mirror_container_name }}"
+    bootwright_component_teardown_kind: registry
 
 - name: Remove mirror registry trust anchor
   ansible.builtin.include_role:
@@ -31,15 +24,9 @@
     - bootwright_firewalld_available | default(false)
   failed_when: false
 
-- name: Remove mirror registry state directory
-  ansible.builtin.file:
-    path: "{{ bootwright_registry_mirror_root }}"
-    state: absent
-
-- name: Remove mirror registry ownership record
+- name: Remove mirror registry state and ownership record
   ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
+    name: bootwright.core.support_component_teardown
+    tasks_from: state.yml
   vars:
-    bootwright_ownership_kind: infra-component
-    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_component_teardown_state_dir: "{{ bootwright_registry_mirror_root }}"

@@ -1,18 +1,11 @@
 ---
-- name: Remove HAProxy container
-  containers.podman.podman_container:
-    name: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
-    state: absent
-
-- name: Reap orphan HAProxy from a leaked container instance
+- name: Remove HAProxy container and reap orphans
   ansible.builtin.include_role:
-    name: bootwright.core.support_process_cleanup
+    name: bootwright.core.support_component_teardown
+    tasks_from: container.yml
   vars:
-    bootwright_process_cleanup_podman_filters:
-      - "label=bootwright.kind=load-balancer"
-      - "label=bootwright.provider={{ bootwright_component.providerName }}"
-      - "label=bootwright.name={{ bootwright_component.name }}"
-    bootwright_process_cleanup_mark_changed: false
+    bootwright_component_teardown_container: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_component_teardown_kind: load-balancer
 
 - name: Remove load balancer state directory
   ansible.builtin.file:

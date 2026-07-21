@@ -351,16 +351,30 @@ func TestInfraComponentDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_proxy_squid/tasks/destroy.yml":             "proxy",
 		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_registry_mirror/tasks/destroy.yml":         "registry",
 	}
+	helper := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/support_component_teardown/tasks/container.yml")
+	if strings.Contains(helper, "bootwright_process_cleanup_pattern") {
+		t.Fatalf("component teardown helper must not cleanup provider containers by process pattern")
+	}
+	for _, want := range []string{
+		"bootwright_process_cleanup_podman_filters:",
+		"label=bootwright.kind={{ bootwright_component_teardown_kind }}",
+		"label=bootwright.provider={{ bootwright_component.providerName }}",
+		"label=bootwright.name={{ bootwright_component.name }}",
+	} {
+		if !strings.Contains(helper, want) {
+			t.Fatalf("component teardown helper cleanup missing %q", want)
+		}
+	}
 	for path, kind := range roles {
 		body := readRepoFile(t, path)
 		if strings.Contains(body, "bootwright_process_cleanup_pattern") {
 			t.Fatalf("%s must not cleanup provider containers by process pattern", path)
 		}
 		for _, want := range []string{
-			"bootwright_process_cleanup_podman_filters:",
-			"label=bootwright.kind=" + kind,
-			"label=bootwright.provider={{ bootwright_component.providerName }}",
-			"label=bootwright.name={{ bootwright_component.name }}",
+			"bootwright.core.support_component_teardown",
+			"tasks_from: container.yml",
+			"bootwright_component_teardown_kind: " + kind,
+			"bootwright_component_teardown_container:",
 		} {
 			if !strings.Contains(body, want) {
 				t.Fatalf("%s cleanup missing %q", path, want)

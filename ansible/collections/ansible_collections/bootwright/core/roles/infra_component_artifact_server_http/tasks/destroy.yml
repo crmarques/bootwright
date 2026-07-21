@@ -1,18 +1,11 @@
 ---
-- name: Remove boot artifact server container
-  containers.podman.podman_container:
-    name: "{{ bootwright_artifacts_container_name }}"
-    state: absent
-
-- name: Reap orphan boot artifact server from a leaked container instance
+- name: Remove boot artifact server container and reap orphans
   ansible.builtin.include_role:
-    name: bootwright.core.support_process_cleanup
+    name: bootwright.core.support_component_teardown
+    tasks_from: container.yml
   vars:
-    bootwright_process_cleanup_podman_filters:
-      - "label=bootwright.kind=artifacts"
-      - "label=bootwright.provider={{ bootwright_component.providerName }}"
-      - "label=bootwright.name={{ bootwright_component.name }}"
-    bootwright_process_cleanup_mark_changed: false
+    bootwright_component_teardown_container: "{{ bootwright_artifacts_container_name }}"
+    bootwright_component_teardown_kind: artifacts
 
 - name: Close boot artifact ports on host firewall
   ansible.posix.firewalld:
@@ -27,15 +20,9 @@
   when:
     - bootwright_firewalld_available | default(false)
 
-- name: Remove boot artifact state directory
-  ansible.builtin.file:
-    path: "{{ bootwright_artifacts_root }}"
-    state: absent
-
-- name: Remove boot artifact ownership record
+- name: Remove boot artifact state and ownership record
   ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
+    name: bootwright.core.support_component_teardown
+    tasks_from: state.yml
   vars:
-    bootwright_ownership_kind: infra-component
-    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_component_teardown_state_dir: "{{ bootwright_artifacts_root }}"

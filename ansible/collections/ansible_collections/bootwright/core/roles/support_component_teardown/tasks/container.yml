@@ -1,0 +1,15 @@
+---
+- name: Remove infra component container
+  containers.podman.podman_container:
+    name: "{{ bootwright_component_teardown_container }}"
+    state: absent
+
+- name: Reap orphan infra component from a leaked container instance
+  ansible.builtin.include_role:
+    name: bootwright.core.support_process_cleanup
+  vars:
+    bootwright_process_cleanup_podman_filters:
+      - "label=bootwright.kind={{ bootwright_component_teardown_kind }}"
+      - "label=bootwright.provider={{ bootwright_component.providerName }}"
+      - "label=bootwright.name={{ bootwright_component.name }}"
+    bootwright_process_cleanup_mark_changed: false

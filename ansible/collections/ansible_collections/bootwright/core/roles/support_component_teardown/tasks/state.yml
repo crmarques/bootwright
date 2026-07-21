@@ -1,0 +1,13 @@
+---
+- name: Remove infra component state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_component_teardown_state_dir }}"
+    state: absent
+
+- name: Remove infra component ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
