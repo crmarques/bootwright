@@ -92,7 +92,7 @@ func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 	if machine.Spec.Access.SSH == nil {
 		return sshTarget{}, fmt.Errorf("machine %q declares no SSH access (spec.access.ssh)", name)
 	}
-	address := v1alpha1.MachineSSHAddress(machine)
+	address := stateview.MachineConnectionAddress(state, machine)
 	if address == "" {
 		return sshTarget{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
 	}

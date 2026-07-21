@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/sshtrust"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 const checkGroupHostTrust = "SSH host trust"
@@ -67,7 +68,7 @@ func ManagedHostTrustChecks(state v1alpha1.State, secretsDir string, deps Deps, 
 		checks = append(checks, hostTrustCheck(missingStatus, "managed known_hosts", knownHostsPath+" missing", "Strict SSH host-key checking needs the managed known_hosts file"))
 	}
 	for _, machine := range machines {
-		address := v1alpha1.MachineSSHAddress(machine)
+		address := stateview.MachineConnectionAddress(state, machine)
 		record, ok := store.Find(machine.Metadata.Name)
 		name := "Machine/" + machine.Metadata.Name
 		switch {

@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/infra/locality"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 const defaultHostTrustScanTimeout = 5 * time.Second
@@ -72,7 +73,7 @@ func BuildPlan(ctx context.Context, state v1alpha1.State, store Store, selected,
 			continue
 		}
 		seen[machine.Metadata.Name] = true
-		report, record, write, err := EvaluateHost(ctx, machine, store, replace[machine.Metadata.Name], scan, policy)
+		report, record, write, err := EvaluateHost(ctx, state, machine, store, replace[machine.Metadata.Name], scan, policy)
 		if err != nil {
 			return plan, err
 		}
@@ -98,14 +99,14 @@ func BuildPlan(ctx context.Context, state v1alpha1.State, store Store, selected,
 	return plan, nil
 }
 
-func EvaluateHost(ctx context.Context, machine v1alpha1.Machine, store Store, replace bool, scan func(context.Context, string, time.Duration) ([]ScannedKey, error), policy locality.Policy) (HostReport, HostRecord, bool, error) {
+func EvaluateHost(ctx context.Context, state v1alpha1.State, machine v1alpha1.Machine, store Store, replace bool, scan func(context.Context, string, time.Duration) ([]ScannedKey, error), policy locality.Policy) (HostReport, HostRecord, bool, error) {
 	report := HostReport{Name: machine.Metadata.Name}
 	if machine.Spec.Access.SSH == nil {
 		report.Action = "skip"
 		report.Reason = "Machine has no spec.access.ssh"
 		return report, HostRecord{}, false, nil
 	}
-	report.Address = v1alpha1.MachineSSHAddress(machine)
+	report.Address = stateview.MachineConnectionAddress(state, machine)
 	if locality.IsControllerLocalMachine(machine, policy) {
 		report.Action = "skip"
 		report.Reason = "controller-local Machine"

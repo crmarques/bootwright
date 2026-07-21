@@ -57,7 +57,7 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 		if h.Spec.Access.SSH == nil && !locality.IsControllerLocalMachine(h, localPolicy) {
 			continue
 		}
-		hosts[name] = machineInventoryEntry(h, env, paths, localPolicy)
+		hosts[name] = machineInventoryEntry(state, h, env, paths, localPolicy)
 	}
 	for _, cluster := range ManagedStorageClusters(state) {
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
@@ -155,8 +155,8 @@ func ManagedOSHostName(clusterName, machineName string) string {
 	return "machine__storage__" + clusterName + "__" + machineName
 }
 
-func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
-	sshAddress := v1alpha1.MachineSSHAddress(h)
+func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
+	sshAddress := stateview.MachineConnectionAddress(state, h)
 	entry := map[string]any{
 		"ansible_host":         sshAddress,
 		"bootwright_host_name": h.Metadata.Name,
@@ -260,7 +260,7 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 			if providerMachine.Spec.Access.SSH == nil && !locality.IsControllerLocalMachine(providerMachine, localPolicy) {
 				return
 			}
-			entry = machineInventoryEntry(providerMachine, env, paths, localPolicy)
+			entry = machineInventoryEntry(state, providerMachine, env, paths, localPolicy)
 		} else if providerHost == "localhost" {
 			entry = localmachineInventoryEntry()
 		} else {

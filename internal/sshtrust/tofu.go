@@ -42,7 +42,7 @@ func OfferTrustOnFirstUse(ctx context.Context, contextDir string, state v1alpha1
 	interact.Begin()
 	accepted := 0
 	for _, machine := range candidates {
-		report, record, write, err := EvaluateHost(ctx, machine, store, false, deps.Scan, policy)
+		report, record, write, err := EvaluateHost(ctx, state, machine, store, false, deps.Scan, policy)
 		if err != nil {
 			interact.Warn("Machine/"+machine.Metadata.Name, err.Error())
 			continue

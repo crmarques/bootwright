@@ -49,7 +49,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	idx := secret.NewIndex(e.state)
 	targets := make([]hookSSHTarget, 0, len(machines))
 	for i, m := range machines {
-		address := v1alpha1.MachineSSHAddress(m.machine)
+		address := stateview.MachineConnectionAddress(e.state, m.machine)
 		if m.machine.Spec.Access.SSH == nil || address == "" {
 			return nil, fmt.Errorf("hook %s target machine %s has no resolvable SSH access", hook.Name, m.machine.Metadata.Name)
 		}

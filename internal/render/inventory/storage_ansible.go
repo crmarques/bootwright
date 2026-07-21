@@ -78,7 +78,7 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	entry := map[string]any{}
 	machine, machineOK := topology.NodeMachine(state, cluster, nodeName)
 	if machineOK && machine.Spec.Access.SSH != nil {
-		entry = machineInventoryEntry(machine, env, paths, localPolicy)
+		entry = machineInventoryEntry(state, machine, env, paths, localPolicy)
 	} else {
 		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
 	}
