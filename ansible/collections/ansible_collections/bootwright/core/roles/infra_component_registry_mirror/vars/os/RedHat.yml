@@ -1,5 +1,5 @@
 ---
-bootwright_mr_packages:
+bootwright_registry_mirror_packages:
   - podman
   - httpd-tools
   - openssl

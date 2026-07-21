@@ -1,7 +1,7 @@
 ---
 - name: Remove mirror registry container
   containers.podman.podman_container:
-    name: "{{ bootwright_mr_container_name }}"
+    name: "{{ bootwright_registry_mirror_container_name }}"
     state: absent
 
 - name: Reap orphan mirror registry from a leaked container instance
@@ -19,7 +19,7 @@
     name: bootwright.core.support_ca_trust
     tasks_from: remove.yml
   vars:
-    bootwright_ca_trust_anchor: "{{ bootwright_mr_trust_anchor }}"
+    bootwright_ca_trust_anchor: "{{ bootwright_registry_mirror_trust_anchor }}"
 
 - name: Close mirror registry port on host firewall
   ansible.posix.firewalld:
@@ -33,7 +33,7 @@
 
 - name: Remove mirror registry state directory
   ansible.builtin.file:
-    path: "{{ bootwright_mr_root }}"
+    path: "{{ bootwright_registry_mirror_root }}"
     state: absent
 
 - name: Remove mirror registry ownership record

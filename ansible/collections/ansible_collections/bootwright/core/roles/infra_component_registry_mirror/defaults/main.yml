@@ -1,7 +1,7 @@
 ---
-bootwright_mr_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
-bootwright_mr_data_dir: "{{ bootwright_mr_root }}/data"
-bootwright_mr_auth_dir: "{{ bootwright_mr_root }}/auth"
-bootwright_mr_certs_dir: "{{ bootwright_mr_root }}/certs"
-bootwright_mr_container_name: "bootwright-mirror-registry-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
-bootwright_mr_trust_anchor: "/etc/pki/ca-trust/source/anchors/bootwright-mirror-{{ bootwright_component.machineAddress | default(bootwright_component.machineRef) }}.crt"
+bootwright_registry_mirror_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+bootwright_registry_mirror_data_dir: "{{ bootwright_registry_mirror_root }}/data"
+bootwright_registry_mirror_auth_dir: "{{ bootwright_registry_mirror_root }}/auth"
+bootwright_registry_mirror_certs_dir: "{{ bootwright_registry_mirror_root }}/certs"
+bootwright_registry_mirror_container_name: "bootwright-mirror-registry-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+bootwright_registry_mirror_trust_anchor: "/etc/pki/ca-trust/source/anchors/bootwright-mirror-{{ bootwright_component.machineAddress | default(bootwright_component.machineRef) }}.crt"

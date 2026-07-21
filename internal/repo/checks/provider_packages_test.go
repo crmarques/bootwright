@@ -37,7 +37,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 			tasks:   "main.yml",
 			load:    "Load mirror registry package list",
 			install: "Install mirror registry packages",
-			varName: "{{ bootwright_mr_packages }}",
+			varName: "{{ bootwright_registry_mirror_packages }}",
 		},
 		{
 			role:    "infra_component_ntp_chrony",
@@ -93,7 +93,7 @@ func TestProviderHtpasswdPackagesAreOSSpecific(t *testing.T) {
 		{
 			role:       "infra_component_registry_mirror",
 			path:       "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_registry_mirror",
-			varName:    "bootwright_mr_packages",
+			varName:    "bootwright_registry_mirror_packages",
 			debianWant: []string{"apache2-utils"},
 			redHatWant: []string{"httpd-tools"},
 		},
