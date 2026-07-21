@@ -177,7 +177,7 @@ func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T)
 		}},
 	}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "INFO")
 	for _, check := range checks {
 		if check.Name == "metal-ocp KubeVirt API" {
@@ -199,7 +199,7 @@ func TestKubeVirtHostClusterExternalStillRequiresKubeconfig(t *testing.T) {
 		},
 	}}}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
 }
 
@@ -221,8 +221,40 @@ func TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig(t
 		}},
 	}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
+}
+
+func TestKubeVirtHostClusterChecksSkipOutOfScopeProviders(t *testing.T) {
+	clustersDir := t.TempDir()
+	state := v1alpha1.State{
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "srv4203"},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "child-node-1"},
+			Spec: v1alpha1.MachineSpec{
+				Substrate: v1alpha1.MachineSubstrate{
+					ProviderRef: v1alpha1.LocalObjectReference{Name: "child-provider"},
+				},
+			},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "child-provider"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+					HostClusterRef: &v1alpha1.LocalObjectReference{Name: "ocp-prd-01"},
+					Namespace:      "bootwright-child-ocp",
+				},
+			},
+		}},
+	}
+	deps := Deps{StatPath: os.Stat}
+	scope := &SecretScope{Machines: map[string]bool{"srv4203": true}, StorageClusters: map[string]bool{}}
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", deps, scope)
+	if checkPresent(checks, "ocp-prd-01 kubeconfig") {
+		t.Fatalf("out-of-scope KubeVirt host cluster kubeconfig must not be checked when its provider is not selected: %+v", checkNames(checks))
+	}
 }
 
 func TestKubeVirtNetworkRefCheckProbesDerivedNAD(t *testing.T) {
@@ -372,6 +404,43 @@ func TestVirtctlPreflightGatedOnDepsProvisioning(t *testing.T) {
 	fullApply := CollectChecks(state, nil, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
 	if hasVirtctl(fullApply) {
 		t.Fatalf("a full apply (no --stage) includes deps, so the hard gate must be skipped")
+	}
+}
+
+func TestKubeVirtToolingGatesSkipOutOfScopeMachines(t *testing.T) {
+	state := v1alpha1.State{
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "kv"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type:     v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{HostClusterRef: &v1alpha1.LocalObjectReference{Name: "host"}, Namespace: "ns"},
+			},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "srv4203"},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "child-node-1"},
+			Spec:     v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "kv"}}},
+		}},
+	}
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			if name == "kubectl" || name == "virtctl" {
+				return "", errors.New("not found")
+			}
+			return "/bin/" + name, nil
+		},
+		StatPath:               func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+		CommandOutput:          func(string, ...string) ([]byte, error) { return []byte("Python 3.12.4"), nil },
+		CommandOutputLocalRoot: func(string, ...string) ([]byte, error) { return []byte("Python 3.12.4"), nil },
+		UID:                    func() int { return 1000 },
+	}
+	scope := &SecretScope{Machines: map[string]bool{"srv4203": true}, StorageClusters: map[string]bool{}}
+	checks := CollectChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, true, "test", "/context/secrets", "/clusters", deps, nil, scope)
+	for _, name := range []string{"kubectl", "virtctl"} {
+		if checkPresent(checks, name) {
+			t.Fatalf("%s tooling must not be required when no in-scope machine provisions on a KubeVirt provider: %+v", name, checkNames(checks))
+		}
 	}
 }
 
@@ -1107,7 +1176,7 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 			return []byte("networkattachmentdefinition.k8s.cni.cncf.io/vmnet\n"), nil
 		},
 	}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "/clusters", sourceDir, deps)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "/clusters", sourceDir, deps, nil)
 	assertPreflightCheckStatus(t, checks, "hub-kubeconfig KubeVirt API", "OK")
 	assertPreflightCheckStatus(t, checks, "vmnet network", "OK")
 	if !probedCRD || !probedNAD {

@@ -9,7 +9,7 @@ import (
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
-func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir, secretsDir string, deps Deps) []Check {
+func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir, secretsDir string, deps Deps, secretScope *SecretScope) []Check {
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
 		return nil
 	}
@@ -24,6 +24,9 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 	var checks []Check
 	for _, p := range state.InfraProviders {
 		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil || p.Spec.KubeVirt.HostClusterRef.Name == "" {
+			continue
+		}
+		if !kubeVirtProviderInScope(p.Metadata.Name, state, secretScope) {
 			continue
 		}
 		name := p.Spec.KubeVirt.HostClusterRef.Name
@@ -53,6 +56,9 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			continue
 		}
 		if k.HostClusterRef != nil && k.HostClusterRef.Name != "" {
+			continue
+		}
+		if !kubeVirtProviderInScope(p.Metadata.Name, state, secretScope) {
 			continue
 		}
 		refName := k.KubeconfigRef.Name
@@ -90,6 +96,18 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 		checks = append(checks, kubeVirtNetworkRefChecks(p, path, deps)...)
 	}
 	return checks
+}
+
+func kubeVirtProviderInScope(providerName string, state v1alpha1.State, secretScope *SecretScope) bool {
+	if secretScope == nil {
+		return true
+	}
+	for _, machine := range state.Machines {
+		if machine.Spec.Substrate.ProviderRef.Name == providerName && secretScope.allowsMachine(machine.Metadata.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {

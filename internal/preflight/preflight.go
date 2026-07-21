@@ -127,7 +127,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright bastion setup", deps),
 		)
 	}
-	if phaseInScope("machines", selected, hasState) && stateNeedsKubeVirt(state) {
+	if phaseInScope("machines", selected, hasState) && stateNeedsKubeVirt(state, secretScope) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
 	if hasState {
@@ -138,7 +138,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 		checks = append(checks, vspherePyvmomiCheck(deps))
 	}
 	if phaseInScope("base", selected, hasState) {
-		if stateNeedsKubeVirt(state) && !phaseInScope("deps", selected, hasState) {
+		if stateNeedsKubeVirt(state, secretScope) && !phaseInScope("deps", selected, hasState) {
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH, or include the deps stage so bootwright provisions it from the host cluster", deps))
 		}
 	}
@@ -158,7 +158,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 		checks = append(checks, secretRefChecksScoped(state, secretsDir, selected, deps, secretScope)...)
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps, hostTrustScope)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
-		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, secretsDir, deps)...)
+		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, secretsDir, deps, secretScope)...)
 		checks = append(checks, vsphereVCenterChecks(state, selected, contextName, secretsDir, deps)...)
 	}
 	return checks
@@ -208,12 +208,15 @@ func anyPhaseInScope(names []string, selected []Phase) bool {
 	return false
 }
 
-func stateNeedsKubeVirt(state v1alpha1.State) bool {
+func stateNeedsKubeVirt(state v1alpha1.State, secretScope *SecretScope) bool {
 	providers := map[string]v1alpha1.InfraProvider{}
 	for _, provider := range state.InfraProviders {
 		providers[provider.Metadata.Name] = provider
 	}
 	for _, machine := range state.Machines {
+		if !secretScope.allowsMachine(machine.Metadata.Name) {
+			continue
+		}
 		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
 		if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
 			return true
