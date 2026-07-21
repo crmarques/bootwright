@@ -16,6 +16,9 @@ func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
 	seedNode := ""
 	if cluster.Spec.Ceph != nil {
 		seedNode = cluster.Spec.Ceph.Cephadm.Bootstrap.Host
+		if node, ok := topology.CephNodeByName(cluster, seedNode); ok && node.MachineRef.Name != "" {
+			seedNode = node.MachineRef.Name
+		}
 	}
 	return StorageNodeHostName(cluster.Metadata.Name, seedNode)
 }
@@ -109,7 +112,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
 			"hosts":               storageHostsVars(state, cluster),
 			"bootstrap": map[string]any{
-				"host":               ceph.Cephadm.Bootstrap.Host,
+				"host":               topology.CanonicalHostname(cluster, ceph.Cephadm.Bootstrap.Host),
 				"monIP":              topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
 				"singleHostDefaults": ceph.Cephadm.Bootstrap.SingleHostDefaults,
 			},

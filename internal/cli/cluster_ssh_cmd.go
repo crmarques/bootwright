@@ -23,7 +23,7 @@ func newClusterRshCmd() *cobra.Command {
 		Long: `Open an interactive remote shell on a node of a container or storage cluster over
 SSH. Container cluster nodes use the cluster's install.nodeSSH private key and
 the core user; storage cluster nodes use the backing Machine's SSH identity.
-Select the node by its Machine name, its hostname, or its <role>-<ordinal>
+Select the node by its node name, its FQDN, or its <role>-<ordinal>
 (e.g. master-0); on a single-node cluster --node may be omitted. Run a single
 command instead with 'cluster exec'.
 
@@ -36,7 +36,7 @@ command instead with 'cluster exec'.
   bootwright cluster rsh --name sno-libvirt`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name (required)")
-	cmd.Flags().StringVar(&node, "node", "", "node to connect to: Machine name, hostname, or <role>-<ordinal> (default: the only node)")
+	cmd.Flags().StringVar(&node, "node", "", "node to connect to: node name, FQDN, or <role>-<ordinal> (default: the only node)")
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
@@ -60,7 +60,7 @@ func newClusterExecCmd() *cobra.Command {
 		Use:   "exec --name <cluster> --node <node> -- <command>...",
 		Short: "Run a command on a cluster node over SSH",
 		Long: `Run a single command on a node of a container or storage cluster over SSH and
-return its output. Select the node by its Machine name, its hostname, or its
+return its output. Select the node by its node name, its FQDN, or its
 <role>-<ordinal> (e.g. master-0); on a single-node cluster --node may be omitted.
 Drop into an interactive shell instead with 'cluster rsh'.
 
@@ -70,7 +70,7 @@ Drop into an interactive shell instead with 'cluster rsh'.
   bootwright cluster exec --name managed-01 --node master-0 -- systemctl status kubelet`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name (required)")
-	cmd.Flags().StringVar(&node, "node", "", "node to run the command on: Machine name, hostname, or <role>-<ordinal> (default: the only node)")
+	cmd.Flags().StringVar(&node, "node", "", "node to run the command on: node name, FQDN, or <role>-<ordinal> (default: the only node)")
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)

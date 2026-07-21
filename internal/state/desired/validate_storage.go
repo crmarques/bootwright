@@ -144,7 +144,11 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 	if adm.Bootstrap.Host == "" {
 		errs = append(errs, prefix+".bootstrap.host is required")
 	} else if !storageCephNodeExists(cluster, adm.Bootstrap.Host) {
-		errs = append(errs, fmt.Sprintf("%s.bootstrap.host %q is not listed in spec.ceph.topology.hosts", prefix, adm.Bootstrap.Host))
+		msg := fmt.Sprintf("%s.bootstrap.host %q does not match any node hostname in spec.ceph.topology.hosts", prefix, adm.Bootstrap.Host)
+		if storageCephMachineRefExists(cluster, adm.Bootstrap.Host) {
+			msg += "; it names the bound Machine, but clusters reference nodes — use the node's hostname"
+		}
+		errs = append(errs, msg)
 	} else {
 		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.addressRef", cluster, adm.Bootstrap.Host, adm.Bootstrap.AddressRef.Name, machines, adm.AddressRef.Name)...)
 	}
@@ -539,7 +543,11 @@ func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlac
 		if clusterOK {
 			node, ok := storageCephNodeByName(cluster, host)
 			if !ok {
-				errs = append(errs, fmt.Sprintf("%s %q is not listed in StorageCluster/%s spec.ceph.topology.hosts", owner, host, cluster.Metadata.Name))
+				msg := fmt.Sprintf("%s %q does not match any node hostname in StorageCluster/%s spec.ceph.topology.hosts", owner, host, cluster.Metadata.Name)
+				if storageCephMachineRefExists(cluster, host) {
+					msg += "; it names the bound Machine, but clusters reference nodes — use the node's hostname"
+				}
+				errs = append(errs, msg)
 			} else if role != "" && !topology.NodeHasRole(node, role) {
 				errs = append(errs, fmt.Sprintf("%s %q does not have role %q in StorageCluster/%s", owner, host, role, cluster.Metadata.Name))
 			}
@@ -830,11 +838,23 @@ func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alph
 		return v1alpha1.StorageCephHost{}, false
 	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if node.Hostname == name || node.MachineRef.Name == name {
+		if node.Hostname == name || stateview.NodeShortName(node.Hostname) == name {
 			return node, true
 		}
 	}
 	return v1alpha1.StorageCephHost{}, false
+}
+
+func storageCephMachineRefExists(cluster v1alpha1.StorageCluster, name string) bool {
+	if cluster.Spec.Ceph == nil {
+		return false
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.MachineRef.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func storageCephNodeRolesOnly(node v1alpha1.StorageCephHost, role string) bool {

@@ -8,6 +8,7 @@ import (
 
 type ClusterNode struct {
 	MachineName string
+	NodeName    string
 	Role        string
 	Roles       []string
 	Hostname    string
@@ -28,6 +29,7 @@ func ClusterNodes(state v1alpha1.State, clusterName string) ([]ClusterNode, bool
 		for _, host := range ocp.Spec.Hosts {
 			nodes = append(nodes, ClusterNode{
 				MachineName: host.MachineRef.Name,
+				NodeName:    NodeShortName(host.Hostname),
 				Role:        host.Role,
 				Hostname:    host.Hostname,
 				Ordinal:     roleCounts[host.Role],
@@ -48,6 +50,7 @@ func ClusterNodes(state v1alpha1.State, clusterName string) ([]ClusterNode, bool
 		for i, host := range sc.Spec.Ceph.Topology.Hosts {
 			nodes = append(nodes, ClusterNode{
 				MachineName: host.MachineRef.Name,
+				NodeName:    NodeShortName(host.Hostname),
 				Role:        strings.Join(host.Roles, ","),
 				Roles:       host.Roles,
 				Hostname:    host.Hostname,

@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -29,7 +30,7 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 				},
 			}
 		}
-		doc := cephadmPlacementService("osd", "data-"+node.MachineRef.Name, []string{node.Hostname}, 0, spec)
+		doc := cephadmPlacementService("osd", "data-"+stateview.NodeShortName(node.Hostname), []string{node.Hostname}, 0, spec)
 		applyCephOSDServiceFields(doc, node.OSD)
 		docs = append(docs, doc)
 	}

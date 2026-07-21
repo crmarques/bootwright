@@ -112,6 +112,10 @@ func registerClusterNodeCompletion(cmd *cobra.Command) {
 		}
 		out := make([]string, 0, len(nodes))
 		for _, n := range nodes {
+			if n.NodeName != "" {
+				out = append(out, n.NodeName)
+				continue
+			}
 			out = append(out, n.MachineName)
 		}
 		return out, cobra.ShellCompDirectiveNoFileComp

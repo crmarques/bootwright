@@ -66,7 +66,7 @@ func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
 
 func HostByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
 	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-		if host.Hostname == name || host.MachineRef.Name == name {
+		if host.Hostname == name || stateview.NodeShortName(host.Hostname) == name {
 			return host, true
 		}
 	}
@@ -173,7 +173,7 @@ func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.Stor
 		return v1alpha1.StorageCephHost{}, false
 	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if node.Hostname == name || node.MachineRef.Name == name {
+		if node.Hostname == name || stateview.NodeShortName(node.Hostname) == name || node.MachineRef.Name == name {
 			return node, true
 		}
 	}
@@ -198,9 +198,6 @@ func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCe
 	add(host.Devices)
 	add(dataDeviceStaticPaths(host.OSD))
 	name := host.Hostname
-	if name == "" {
-		name = CanonicalHostname(cluster, host.MachineRef.Name)
-	}
 	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
 		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
 		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
@@ -245,9 +242,6 @@ func OSDHostAllStaticDevices(cluster v1alpha1.StorageCluster, host v1alpha1.Stor
 	add(host.Devices)
 	add(allDeviceStaticPaths(host.OSD))
 	name := host.Hostname
-	if name == "" {
-		name = CanonicalHostname(cluster, host.MachineRef.Name)
-	}
 	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
 		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
 		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {

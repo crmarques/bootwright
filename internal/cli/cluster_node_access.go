@@ -30,14 +30,9 @@ func clusterNodeMachine(state v1alpha1.State, clusterName, selector string) (str
 }
 
 func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string, error) {
-	for _, n := range nodes {
-		if n.MachineName == selector {
-			return n.MachineName, nil
-		}
-	}
 	var byHost []string
 	for _, n := range nodes {
-		if n.Hostname != "" && (n.Hostname == selector || shortHostLabel(n.Hostname) == selector) {
+		if n.Hostname != "" && (n.Hostname == selector || n.NodeName == selector) {
 			byHost = append(byHost, n.MachineName)
 		}
 	}
@@ -59,14 +54,12 @@ func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string,
 			count++
 		}
 	}
-	return "", fmt.Errorf("no node %q in this cluster", selector)
-}
-
-func shortHostLabel(hostname string) string {
-	if i := strings.IndexByte(hostname, '.'); i >= 0 {
-		return hostname[:i]
+	for _, n := range nodes {
+		if n.MachineName == selector {
+			return "", fmt.Errorf("%q names the bound Machine; clusters reference nodes — use node %q", selector, n.NodeName)
+		}
 	}
-	return hostname
+	return "", fmt.Errorf("no node %q in this cluster", selector)
 }
 
 func parseRoleOrdinal(selector string) (string, int, bool) {
@@ -98,6 +91,9 @@ func clusterNodeRoster(nodes []stateview.ClusterNode) string {
 }
 
 func nodeSelectorHint(n stateview.ClusterNode) string {
+	if n.NodeName != "" {
+		return n.NodeName
+	}
 	if n.Kind == stateview.MachineClusterKindContainer && n.Role != "" {
 		return fmt.Sprintf("%s-%d", n.Role, n.Ordinal)
 	}

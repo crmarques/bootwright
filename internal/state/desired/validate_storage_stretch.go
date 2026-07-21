@@ -50,7 +50,11 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must not declare OSD devices", prefix, stretch.Tiebreaker.Host))
 			}
 		} else {
-			errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must name a spec.ceph.topology.hosts[] entry", prefix, stretch.Tiebreaker.Host))
+			msg := fmt.Sprintf("%s.tiebreaker.host %q must name a spec.ceph.topology.hosts[] entry by node hostname", prefix, stretch.Tiebreaker.Host)
+			if storageCephMachineRefExists(cluster, stretch.Tiebreaker.Host) {
+				msg += "; it names the bound Machine, but clusters reference nodes — use the node's hostname"
+			}
+			errs = append(errs, msg)
 		}
 	}
 	if stretch.RuleName == "" {
