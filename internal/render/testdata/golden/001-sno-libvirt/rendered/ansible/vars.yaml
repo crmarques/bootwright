@@ -265,7 +265,7 @@ bootwright_clusters:
                       table-id: 254
       nodeSSHPrivateKeyPath: /bootwright-golden/secrets/sno-libvirt-cluster-admin-ssh-key
       nodes:
-        master-0:
+        master-0.sno-libvirt.bootwright.test:
             machineRef:
                 name: master-0
             role: master
@@ -490,6 +490,8 @@ bootwright_machines:
           name: ssh
         - address: 192.168.132.1
           name: cluster-lan
+        - address: bastion.bootwright.test
+          name: dnsEntry
       capabilities:
         - container-runtime
         - libvirt
@@ -505,6 +507,8 @@ bootwright_machines:
     - addresses:
         - address: 192.168.132.20
           name: ip
+        - address: master-0.bootwright.test
+          name: dnsEntry
       capabilities:
         - openshift-node
       name: master-0

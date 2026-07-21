@@ -14,8 +14,8 @@ spec:
     serviceID: lab
     placement:
       hosts:
-        - ceph-1
-        - ceph-2
+        - node01
+        - node02
       countPerHost: 1
     frontendPort: 8080
     ingresses:
@@ -26,5 +26,5 @@ spec:
           - 192.168.140.0/24
         placement:
           hosts:
-            - ceph-1
-            - ceph-2
+            - node01
+            - node02

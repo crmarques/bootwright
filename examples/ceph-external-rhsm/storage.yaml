@@ -11,7 +11,7 @@ spec:
     entitlementRef: rhcs
     cephadm:
       bootstrap:
-        host: ceph-0
+        host: node01
     topology:
       hosts:
         - machineRef: ceph-0

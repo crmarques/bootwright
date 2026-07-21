@@ -2,7 +2,7 @@ additionalNTPSources:
     - 192.168.132.1
 apiVersion: v1beta1
 hosts:
-    - hostname: master-0
+    - hostname: master-0.sno-libvirt.bootwright.test
       interfaces:
         - macAddress: 52:54:00:16:3c:f8
           name: primary

@@ -44,6 +44,8 @@ machines:
               address: localhost
             - name: cluster-lan
               address: 192.168.132.1
+            - name: dnsEntry
+              address: bastion.bootwright.test
         access:
             ssh:
                 addressRef: ssh
@@ -74,6 +76,8 @@ machines:
         addresses:
             - name: ip
               address: 192.168.132.20
+            - name: dnsEntry
+              address: master-0.bootwright.test
 networkConfigs:
     - apiVersion: bootwright.io/v1alpha1
       kind: NetworkConfig
@@ -236,7 +240,7 @@ containerClusters:
             serviceNetwork:
                 - 172.30.0.0/16
         hosts:
-            - hostname: master-0
+            - hostname: master-0.sno-libvirt.bootwright.test
               role: master
               machineRef: master-0
 secrets:

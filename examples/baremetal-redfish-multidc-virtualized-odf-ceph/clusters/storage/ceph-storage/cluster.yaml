@@ -11,7 +11,7 @@ spec:
     entitlementRef: rhcs
     cephadm:
       bootstrap:
-        host: ceph-dc1-0
+        host: node01
     networks:
       publicCIDRs:
       - 192.168.141.0/24
@@ -24,7 +24,7 @@ spec:
       stretch:
         failureDomain: datacenter
         tiebreaker:
-          host: ceph-arbiter
+          host: node07
       hosts:
       - machineRef: ceph-dc1-0
         site: dc1

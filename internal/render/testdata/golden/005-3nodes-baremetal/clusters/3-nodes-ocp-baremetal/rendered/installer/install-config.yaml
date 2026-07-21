@@ -28,6 +28,6 @@ platform:
 proxy:
     httpProxy: http://proxy.bootwright.test:3128
     httpsProxy: http://proxy.bootwright.test:3128
-    noProxy: .bootwright.test,192.168.140.0/24,.3-nodes-ocp-baremetal.bootwright.test,.cluster.local,.svc,10.128.0.0/14,127.0.0.1,172.30.0.0/16,192.168.140.10,192.168.140.11,192.168.140.20,192.168.140.21,192.168.140.22,192.168.140.5,::1,bastion.bootwright.test,localhost
+    noProxy: .bootwright.test,192.168.140.0/24,.3-nodes-ocp-baremetal.bootwright.test,.cluster.local,.svc,10.128.0.0/14,127.0.0.1,172.30.0.0/16,192.168.140.10,192.168.140.11,192.168.140.20,192.168.140.21,192.168.140.22,192.168.140.5,::1,bastion.bootwright.test,localhost,rack1-srv1.bootwright.test,rack1-srv2.bootwright.test,rack1-srv3.bootwright.test
 pullSecret: '{"auths":{"bootwright-secret-ref:openshift-pull-secret":{}}}'
 sshKey: <bootwright-ssh-key-ref:3-nodes-ocp-baremetal-cluster-admin-ssh-key>

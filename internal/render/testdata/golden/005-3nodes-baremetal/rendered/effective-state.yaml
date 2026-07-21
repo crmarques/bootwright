@@ -44,6 +44,8 @@ machines:
               address: bastion.bootwright.test
             - name: lab-lan
               address: 192.168.140.5
+            - name: dnsEntry
+              address: bastion.bootwright.test
         access:
             ssh:
                 addressRef: ssh
@@ -93,6 +95,8 @@ machines:
         addresses:
             - name: ip
               address: 192.168.140.20
+            - name: dnsEntry
+              address: rack1-srv1.bootwright.test
     - apiVersion: bootwright.io/v1alpha1
       kind: Machine
       metadata:
@@ -138,6 +142,8 @@ machines:
         addresses:
             - name: ip
               address: 192.168.140.21
+            - name: dnsEntry
+              address: rack1-srv2.bootwright.test
     - apiVersion: bootwright.io/v1alpha1
       kind: Machine
       metadata:
@@ -183,6 +189,8 @@ machines:
         addresses:
             - name: ip
               address: 192.168.140.22
+            - name: dnsEntry
+              address: rack1-srv3.bootwright.test
 networkConfigs:
     - apiVersion: bootwright.io/v1alpha1
       kind: NetworkConfig
@@ -326,13 +334,13 @@ containerClusters:
             serviceNetwork:
                 - 172.30.0.0/16
         hosts:
-            - hostname: master-0
+            - hostname: master-0.3-nodes-ocp-baremetal.bootwright.test
               role: master
               machineRef: rack1-srv1
-            - hostname: master-1
+            - hostname: master-1.3-nodes-ocp-baremetal.bootwright.test
               role: master
               machineRef: rack1-srv2
-            - hostname: master-2
+            - hostname: master-2.3-nodes-ocp-baremetal.bootwright.test
               role: master
               machineRef: rack1-srv3
 secrets:

@@ -19,8 +19,6 @@ spec:
     entitlementRef: rhel
 
   customizations:
-    hostname:
-      source: machineName
     ssh:
       authorizeMachineSSHKey: true
       passwordAuthentication: false

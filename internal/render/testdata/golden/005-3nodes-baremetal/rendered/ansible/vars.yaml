@@ -300,15 +300,15 @@ bootwright_clusters:
                       table-id: 254
       nodeSSHPrivateKeyPath: /bootwright-golden/secrets/3-nodes-ocp-baremetal-cluster-admin-ssh-key
       nodes:
-        master-0:
+        master-0.3-nodes-ocp-baremetal.bootwright.test:
             machineRef:
                 name: rack1-srv1
             role: master
-        master-1:
+        master-1.3-nodes-ocp-baremetal.bootwright.test:
             machineRef:
                 name: rack1-srv2
             role: master
-        master-2:
+        master-2.3-nodes-ocp-baremetal.bootwright.test:
             machineRef:
                 name: rack1-srv3
             role: master
@@ -408,6 +408,8 @@ bootwright_machines:
           name: ssh
         - address: 192.168.140.5
           name: lab-lan
+        - address: bastion.bootwright.test
+          name: dnsEntry
       capabilities:
         - container-runtime
         - artifact-server
@@ -419,18 +421,24 @@ bootwright_machines:
     - addresses:
         - address: 192.168.140.20
           name: ip
+        - address: rack1-srv1.bootwright.test
+          name: dnsEntry
       capabilities:
         - openshift-node
       name: rack1-srv1
     - addresses:
         - address: 192.168.140.21
           name: ip
+        - address: rack1-srv2.bootwright.test
+          name: dnsEntry
       capabilities:
         - openshift-node
       name: rack1-srv2
     - addresses:
         - address: 192.168.140.22
           name: ip
+        - address: rack1-srv3.bootwright.test
+          name: dnsEntry
       capabilities:
         - openshift-node
       name: rack1-srv3
@@ -469,6 +477,9 @@ bootwright_proxy:
         - ::1
         - bastion.bootwright.test
         - localhost
+        - rack1-srv1.bootwright.test
+        - rack1-srv2.bootwright.test
+        - rack1-srv3.bootwright.test
     noProxyLiteral:
         - .3-nodes-ocp-baremetal.bootwright.test
         - .bootwright.test
@@ -484,3 +495,6 @@ bootwright_proxy:
         - ::1
         - bastion.bootwright.test
         - localhost
+        - rack1-srv1.bootwright.test
+        - rack1-srv2.bootwright.test
+        - rack1-srv3.bootwright.test

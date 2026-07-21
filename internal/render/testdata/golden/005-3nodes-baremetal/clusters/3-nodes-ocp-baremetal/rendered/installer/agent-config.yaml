@@ -1,6 +1,6 @@
 apiVersion: v1beta1
 hosts:
-    - hostname: master-0
+    - hostname: master-0.3-nodes-ocp-baremetal.bootwright.test
       interfaces:
         - macAddress: 00:25:90:5a:10:01
           name: eno1
@@ -65,7 +65,7 @@ hosts:
       role: master
       rootDeviceHints:
         deviceName: /dev/sda
-    - hostname: master-1
+    - hostname: master-1.3-nodes-ocp-baremetal.bootwright.test
       interfaces:
         - macAddress: 00:25:90:5a:11:01
           name: eno1
@@ -130,7 +130,7 @@ hosts:
       role: master
       rootDeviceHints:
         deviceName: /dev/sda
-    - hostname: master-2
+    - hostname: master-2.3-nodes-ocp-baremetal.bootwright.test
       interfaces:
         - macAddress: 00:25:90:5a:12:01
           name: eno1
