@@ -192,6 +192,23 @@
       name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
       paths:
         - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
-        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
       attributes: {}
   when: bootwright_component.osManaged | default(false) | bool
+
+- name: Probe remaining managed-OS install machines in this cluster
+  ansible.builtin.find:
+    paths: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}"
+    file_type: directory
+    recurse: false
+    excludes:
+      - _source
+  register: bootwright_vsphere_os_install_remaining
+  when: bootwright_component.osManaged | default(false) | bool
+
+- name: Remove shared per-cluster source-ISO cache after the last machine
+  ansible.builtin.file:
+    path: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
+    state: absent
+  when:
+    - bootwright_component.osManaged | default(false) | bool
+    - (bootwright_vsphere_os_install_remaining.matched | default(0)) == 0
