@@ -142,6 +142,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&inputDir, "input-dir", "", "render context-free from this input directory (no configured context); secrets render as {{ secret <name> }} placeholders")
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "write concrete tool input files to this directory")
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster and StorageCluster names to render with --output-dir")
+	registerClusterScopeCompletion(cmd, clusterKindAny)
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")
 	addOutputFlag(cmd, &output)
 	cmd.AddCommand(

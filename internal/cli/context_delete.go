@@ -26,6 +26,7 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		Example: `  bootwright context delete --name lab --purge --yes`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
+	registerContextNameCompletion(cmd, "name")
 	cmd.Flags().BoolVar(&purge, "purge", false, "also delete the context base directory")
 	cmd.Flags().BoolVar(&force, "force", false, "delete the context even while it still owns running resources or installed clusters, abandoning them — their infrastructure keeps running and their ownership/install records and install-captured credentials (kubeconfigs, kubeadmin password) are lost. Prefer `bootwright destroy --context <name>` first")
 	addYesFlag(cmd, &yes, "delete")

@@ -54,6 +54,7 @@ func newMachineListCmd(stdout io.Writer) *cobra.Command {
   bootwright machine list --output json`,
 	}
 	cmd.Flags().StringVar(&clusters, "clusters", "", "comma-separated cluster names; list only their Machines (default: all)")
+	registerClusterScopeCompletion(cmd, clusterKindAny)
 	cmd.Flags().BoolVar(&silent, "silent", false, "print only Machine names, one per line")
 	addOutputFlag(cmd, &format)
 	cf := addCommonFlags()

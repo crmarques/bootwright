@@ -37,6 +37,7 @@ func newContextUseCmd(stdout io.Writer) *cobra.Command {
 		Example: `  bootwright context use --name lab`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
+	registerContextNameCompletion(cmd, "name")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)

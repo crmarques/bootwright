@@ -54,6 +54,7 @@ func newHostTrustCmd(stdin io.Reader, stdout io.Writer, _ io.Writer) *cobra.Comm
   bootwright machine trust --output json --dry-run`,
 	}
 	cmd.Flags().StringVar(&machines, "machines", "", "comma-separated Machine names to trust (default: all declared)")
+	registerMachineScopeCompletion(cmd)
 	cmd.Flags().StringVar(&replace, "replace", "", "comma-separated Machine names whose changed host key may be re-trusted")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report trust changes without writing the trust store")
 	addYesFlag(cmd, &yes, "trust")

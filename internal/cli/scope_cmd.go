@@ -27,6 +27,7 @@ func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommo
 	addOutputFlagDryRun(cmd, &f.output)
 	if allowClusterScope {
 		cmd.Flags().StringVar(&f.clusterScope, "clusters", "", "comma-separated "+targetKind+" names to "+scopeAction+" (default: all)")
+		registerClusterScopeCompletion(cmd, clusterKindForTargetLabel(targetKind))
 	}
 }
 

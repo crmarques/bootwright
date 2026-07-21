@@ -38,6 +38,7 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "cluster name to scaffold (required)")
 	cmd.Flags().StringVar(&provider, "provider", provider, "example provider ("+strings.Join(scaffold.KnownProviders(), "|")+")")
+	registerFlagCompletion(cmd, "provider", scaffold.KnownProviders())
 	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory to write the example into (default: the --name value)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite files in a non-empty output directory")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {

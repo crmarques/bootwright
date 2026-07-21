@@ -23,6 +23,7 @@ func newSecretShowCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context-local secret name to print (required)")
 	cmd.Flags().StringVar(&part, "part", part, "secret material part (primary|private|public|tls-key)")
+	registerFlagCompletion(cmd, "part", secretPartNames())
 	_ = cmd.MarkFlagRequired("name")
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
@@ -84,6 +85,14 @@ var secretShowParts = []struct {
 	{"private", secret.MaterialSSHPrivate},
 	{"public", secret.MaterialSSHPublic},
 	{"tls-key", secret.MaterialTLSKey},
+}
+
+func secretPartNames() []string {
+	names := make([]string, 0, len(secretShowParts))
+	for _, p := range secretShowParts {
+		names = append(names, p.part)
+	}
+	return names
 }
 
 func presentSecretParts(store *secret.ContextStore, name, exclude string) []string {

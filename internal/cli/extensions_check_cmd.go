@@ -31,6 +31,7 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to check (default: all)")
+	registerClusterScopeCompletion(cmd, clusterKindContainer)
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {

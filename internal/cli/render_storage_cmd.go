@@ -32,6 +32,7 @@ func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&storageScope, "clusters", "", "comma-separated StorageCluster names to render (default: all)")
+	registerClusterScopeCompletion(cmd, clusterKindStorage)
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {

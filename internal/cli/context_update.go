@@ -32,6 +32,7 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
   bootwright context update --name lab -f ~/lab-input --yes`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
+	registerContextNameCompletion(cmd, "name")
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the context input (required)")
 	addYesFlag(cmd, &yes, "replace")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {

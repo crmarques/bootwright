@@ -39,6 +39,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to render, default: all (the openshift-install agent inputs are container-cluster only)")
+	registerClusterScopeCompletion(cmd, clusterKindContainer)
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under the context runtime/installer dir with secret material inlined for direct openshift-install consumption (mode 0600)")
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
