@@ -1,0 +1,123 @@
+# ADR 0017: Machine dnsEntry Address and Independent Node Identity
+
+## Status
+
+Accepted
+
+## Context
+
+A Machine's `metadata.name` doubles today as the seed of every cluster-visible
+node identity: when a cluster host omits `hostname`, normalization composes
+`<machineName>.<cluster>.<baseDomain>` and that string becomes the agent
+installer hostname, the kickstart OS hostname, the cephadm host identity, and
+the dnsmasq record set. The machine name is additionally published as a bare
+DNS label record, and several storage surfaces (cephadm bootstrap seed
+selection, stretch tiebreaker, OSD service ids, CLI `--node` selectors) accept
+the machine name where a node identity is meant. Operators whose hardware
+carries real corporate FQDNs (`srv4009.<domain>`) cannot express that name:
+`metadata.name` is validated as a dot-free DNS label, and widening it to a
+subdomain would leak dots into MAC synthesis, inventory host keys, service
+ids, and install markers.
+
+Machine identity (the hardware's stable DNS name) and node identity (the
+cluster's name for the role a machine currently plays) are different concepts
+with different lifecycles: machines outlive cluster membership, and a cluster
+rebuild may bind the same node name to different hardware.
+
+## Decision
+
+Machine names stay DNS labels; the machine's FQDN becomes a first-class
+address entry; nodes carry independent names; DNS binds the two; clusters and
+every cluster-facing surface reference node names only.
+
+### The implicit `dnsEntry` machine address
+
+Every Machine's `spec.addresses` list implicitly contains
+
+```yaml
+- name: dnsEntry
+  address: <metadata.name>.<baseDomain>
+```
+
+injected during normalization when the Environment declares a `baseDomain` and
+the machine does not already declare an entry named `dnsEntry`. A declared
+`dnsEntry` entry overrides the default verbatim (it must be a DNS subdomain;
+it may live in a foreign zone). `metadata.name` keeps the DNS-label
+validation unchanged.
+
+`dnsEntry` is the machine's canonical connection address: whenever Bootwright
+reaches a machine over SSH (ansible `ansible_host`, `machine rsh`,
+`cluster rsh`, trust bootstrap), it connects to the `dnsEntry` name. The
+entry referenced by `access.ssh.addressRef` keeps its meaning as the
+machine's routable IP; it is what the `dnsEntry` DNS record must resolve to
+and the fallback when no resolvable name exists. Two carve-outs connect by IP
+deliberately: machines that host the managed name-resolution component their
+own network references (the resolver cannot serve its own bootstrap), and
+machines whose network configuration references no name-resolution entry at
+all (no resolver is declared that could answer).
+
+### Independent node names
+
+A cluster host's `hostname` field names the node, not the machine. A bare
+label composes to `<hostname>.<cluster>.<baseDomain>`; a dotted value is an
+explicit FQDN used verbatim. When `hostname` is omitted the node defaults to
+`node<NN>` (`node01`, `node02`, … in `hosts` list order, zero-padded to two
+digits), so the default node FQDN is `node<NN>.<cluster>.<baseDomain>` and
+never embeds the machine name. Node hostnames must be unique within a
+cluster. The composed FQDN remains the single cluster-visible identity: agent
+installer hostname, kickstart OS hostname, cephadm host identity, CRUSH/mon
+location, and DNS record name.
+
+### DNS binding
+
+The node FQDN resolves to the machine through its `dnsEntry`:
+
+- Managed name resolution (dnsmasq): Bootwright renders a `host-record` for
+  each machine's `dnsEntry` name targeting the `access.ssh.addressRef` IP,
+  and a `cname` from each node FQDN to the bound machine's `dnsEntry` when
+  that name is itself a managed record; when the operator overrode `dnsEntry`
+  into a zone the managed resolver does not own, the node record degrades to
+  a direct `host-record` on the same IP. The bare machine-label record is no
+  longer published.
+- Provided (external) name resolution: the operator owns the records. A
+  preflight group "Name resolution" resolves each machine's `dnsEntry` and
+  each node FQDN and fails with the exact record to create
+  (`A <dnsEntry> → <ip>`, `CNAME <nodeFQDN> → <dnsEntry>`) when resolution is
+  missing or points at the wrong address. For managed resolution the same
+  checks remediate with the apply command that converges the resolver.
+
+### Node-name-only cluster surfaces
+
+Cluster-facing surfaces stop accepting machine names: cephadm
+`bootstrap.host`, OSD drivegroup host selectors, and the stretch tiebreaker
+reference node hostnames only (validation rejects machine-name tokens);
+storage topology host resolution drops its machine-name alias arms; the OSD
+per-host service id derives from the node short name; CLI `--node` selectors,
+completion, and roster hints present node names (role-ordinal aliases stay).
+`machineRef` remains the only place a cluster names a machine, and
+machine-scoped surfaces (`machine rsh`, `--machines`, ownership records, MAC
+synthesis, install markers) keep keying on `metadata.name`.
+
+### Install-profile hostname source
+
+`customizations.hostname.source: machineName` now means "OS hostname is the
+machine's `dnsEntry` name". It is valid only for machines not bound to any
+cluster; a cluster-bound machine's OS hostname must equal its node FQDN or
+cephadm host matching breaks, so that combination is a validation error.
+
+## Consequences
+
+- Existing states that relied on machine-name-derived node FQDNs get renamed
+  node identities (`node01.<cluster>.<baseDomain>` instead of
+  `<machine>.<cluster>.<baseDomain>`) unless they pin `hostname` explicitly.
+  This is greenfield-oriented: deployed clusters keep their names by adding
+  explicit `hostname` entries before upgrading, or accept a managed-OS
+  reconverge (install-marker hashes include the kickstart hostname).
+- Connection strings move from IPs to names for name-resolution-wired
+  machines; SSH trust records key per address, so first contact after upgrade
+  re-establishes trust against the `dnsEntry` name.
+- The cephadm OSD service id changes from `data-<machineName>` to
+  `data-<nodeShortName>`; existing clusters converge to the new service name
+  on next apply.
+- Operators on provided DNS get actionable preflight failures naming each
+  missing record instead of mid-apply connection errors.
