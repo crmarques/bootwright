@@ -27,6 +27,7 @@
     name: bootwright.core.cluster_network_load_balancer_vips
     tasks_from: destroy.yml
   when:
+    - bootwright_destroy_machine_scope is not defined
     - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | selectattr('machineRef', 'equalto', bootwright_host_name) | list | length > 0
 
 - name: Destroy substrate per machine
@@ -37,3 +38,6 @@
   loop_control:
     loop_var: bootwright_component
     label: "{{ bootwright_component.clusterName }}/{{ bootwright_component.name }}"
+  when: >-
+    bootwright_destroy_machine_scope is not defined
+    or bootwright_component.name in bootwright_destroy_machine_scope.split(',')

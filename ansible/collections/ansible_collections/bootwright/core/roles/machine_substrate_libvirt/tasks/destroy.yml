@@ -158,6 +158,7 @@
       context whose VMs would lose networking. Verify and remove it manually,
       or pass --include-unowned to remove it anyway.
   when:
+    - bootwright_destroy_machine_scope is not defined
     - bootwright_libvirt_network_present | bool
     - not (bootwright_destroy_force_unowned | default(false) | bool)
 
@@ -167,6 +168,7 @@
     state: absent
     uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
   failed_when: false
+  when: bootwright_destroy_machine_scope is not defined
 
 - name: Remove libvirt network ownership record
   ansible.builtin.include_role:
@@ -175,3 +177,4 @@
   vars:
     bootwright_ownership_kind: libvirt-network
     bootwright_ownership_name: "{{ bootwright_current_cluster.name }}"
+  when: bootwright_destroy_machine_scope is not defined

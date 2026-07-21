@@ -73,8 +73,10 @@
         loop_var: bootwright_managed_os_component
         label: "{{ bootwright_managed_os_component.clusterName }}/{{ bootwright_managed_os_component.name }}"
       when: >-
-        bootwright_destroy_cluster_scope is not defined
-        or bootwright_managed_os_component.clusterName | default('') in bootwright_destroy_cluster_scope.split(',')
+        (bootwright_destroy_cluster_scope is not defined
+         or bootwright_managed_os_component.clusterName | default('') in bootwright_destroy_cluster_scope.split(','))
+        and (bootwright_destroy_machine_scope is not defined
+             or bootwright_managed_os_component.name in bootwright_destroy_machine_scope.split(','))
 
     - name: Destroy recorded machine infrastructure resources
       ansible.builtin.include_role:
@@ -89,6 +91,9 @@
         - >-
           bootwright_destroy_cluster_scope is not defined
           or bootwright_ownership_record.cluster | default('') in bootwright_destroy_cluster_scope.split(',')
+        - >-
+          bootwright_destroy_machine_scope is not defined
+          or bootwright_ownership_record.machine | default('') in bootwright_destroy_machine_scope.split(',')
 
     - name: Sweep current-context libvirt domains
       ansible.builtin.include_role:
