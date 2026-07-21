@@ -15,12 +15,12 @@
 
 - name: Determine whether the Satellite egress is bypassed by a no_proxy CIDR
   ansible.builtin.set_fact:
-    bootwright_registration_server_bypassed: "{{ (bootwright_registration_server_bypassed | default(false)) or ((bootwright_registration_satellite_ips | ansible.utils.ipaddr(item)) | length > 0) }}"
-  loop: "{{ ((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list }}"
-  loop_control:
-    label: "{{ item }}"
+    bootwright_registration_server_bypassed: >-
+      {{ (bootwright_registration_server_bypassed | default(false) | bool)
+         or (bootwright_registration_satellite_ips | bootwright.core.bootwright_ip_in_cidrs(bootwright_registration_no_proxy_cidrs)) }}
   vars:
     bootwright_registration_satellite_ips: "{{ (bootwright_registration_satellite_resolve.stdout_lines | default([])) | map('split') | map('first') | unique | list }}"
+    bootwright_registration_no_proxy_cidrs: "{{ ((bootwright_proxy | default({})).noProxy | default([])) | select('search', '/') | list }}"
   when:
     - bootwright_proxy_enabled | default(false) | bool
     - bootwright_registration_satellite_hostname | length > 0
