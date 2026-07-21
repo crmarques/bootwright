@@ -46,6 +46,13 @@ Foundation add-on attaching exported storage) runs inside the consuming
 cluster's add-on tasks and reports under that cluster. `applyrun_test.go`
 pins the absent Prepare/Publish phases.
 
+**Gotcha: `applyOutputStatus` is a worst-of severity aggregator, not a
+progress roll-up.** It ranks StatusOK/Done LOWEST, so reusing it to fold a
+group's child statuses into one progress/completion status masks a Done child
+behind any less-advanced sibling — a group that has actually finished reads as
+still-working. Group progress needs a separate monotonic aggregator; do not
+route group-completion roll-ups through `applyOutputStatus`.
+
 **Boundary: phase aggregation lives in internal/status.** The apply
 phase aggregation itself (cluster kinds, phase grouping, terminal
 states) is owned and tested by `internal/status` (`applyrun_test.go`);

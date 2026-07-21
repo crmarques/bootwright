@@ -21,7 +21,7 @@ error wording; `TestStageFlagCompletionOffersCanonicalValues` pins that
 apply/plan/diff complete the full vocabulary while destroy completes
 families only. A drift here means one surface fell behind.
 
-**Constraint: `--override` help must name the destructive scope it
+**Constraint: `--converge-drifted` help must name the destructive scope it
 authorizes.** Managed-OS VM reinstall and Ceph wipe-and-rebuild — never
 understated as "install-mismatch checks". The guarding test matches
 single tokens so the assertion survives cobra's help line wrapping, and a

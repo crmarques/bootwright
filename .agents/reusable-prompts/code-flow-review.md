@@ -105,12 +105,13 @@ verify their current form in `specs/`. Prompt-specific additions:
   explicit `--adopt` YAML/history write, and that it neither explodes an absent root
   into noisy child diffs nor hides missing/undeclared live resources once the root
   exists.
-- **Override pair.** `--override` on `apply`/`destroy` authorizes Bootwright-owned
-  destructive rebuilds (drifted-owned rebuild, managed-OS reinstall, owned-Ceph
-  wipe-and-rebuild, protected destroy); `--allow-destroy` and `--skip-unreachable`
-  gate the data-loss cases, `--expect-new` is its greenfield opposite. Confirm
-  override never touches foreign objects, skips objects already matching desired
-  state, and never turns a read-only inspect into a mutation.
+- **Converge/force pair.** `apply --converge-drifted` and `destroy --force`
+  authorize Bootwright-owned destructive rebuilds (drifted-owned rebuild,
+  managed-OS reinstall, owned-Ceph wipe-and-rebuild, protected destroy);
+  `--confirm-data-loss` and `--skip-unreachable` gate the data-loss cases,
+  `--expect-new` is the greenfield opposite. Confirm neither flag touches foreign
+  objects, skips objects already matching desired state, and never turns a
+  read-only inspect into a mutation.
 - **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
   rendering, storage intent, planning, locking, ledgers, status, orchestration;
   Ansible executes configuration and installation on the bastion and targets.
@@ -141,11 +142,11 @@ Walk each reviewed flow in order, then record it in the matrix below:
    succinctly, but reports granular drift when roots exist, such as missing declared
    resources or undeclared live Ceph pools, add-ons, VMs, services, endpoints, or
    storage exports; and that only `--adopt` writes (to desired YAML plus history).
-9. **Override pair.** For `apply`/`destroy` accepting `--override` (and the
-   `--allow-destroy`/`--skip-unreachable`/`--expect-new` gates), trace the same
-   scenario with and without it. Confirm only the documented unsafe-mismatch
-   behavior changes, override skips already-matching and foreign objects, and no
-   read-only flow mutates or suppresses drift.
+9. **Converge/force pair.** For `apply --converge-drifted` and `destroy --force`
+   (and the `--confirm-data-loss`/`--skip-unreachable`/`--expect-new` gates), trace
+   the same scenario with and without them. Confirm only the documented
+   unsafe-mismatch behavior changes, the flag skips already-matching and foreign
+   objects, and no read-only flow mutates or suppresses drift.
 10. **Go↔Ansible contract.** Check every var, generated path, inventory group, host
    target, role input, and expected output Ansible consumes.
 11. **Ansible execution.** Review playbooks, roles, tasks, handlers, templates,
@@ -184,8 +185,8 @@ nondeterministic rendering; wrong installer platform output; wrong machine, MAC,
 hostname, endpoint, DNS, proxy, mirror, trust, or certificate data; task-graph
 ordering, scope, resume, install-record, or ledger mistakes; locks that miss shared
 hosts or BMC targets; errors swallowed, wrapped too vaguely, or reported after side
-effects; missing non-mutating desired-vs-real state check; state-check reports that
-explode an absent cluster into noisy child diffs instead of one absence; state-check
+effects; missing non-mutating desired-vs-real state check; `diff` reports that
+explode an absent cluster into noisy child diffs instead of one absence; `diff`
 reports that hide missing or undeclared live resources after the root exists; tests
 that pass only because fixtures miss the path.
 
@@ -225,9 +226,10 @@ example that could not be traced, with the reason.
 
 ## 2. Flow Trace
 The trace matrix for each reviewed flow — compact but complete enough to show how
-intent reaches final output. Include desired-vs-real state-check behavior and
-`--override` vs. no-override behavior when supported. Call out silent behavior
-changes and spec/code disagreements as you go.
+intent reaches final output. Include desired-vs-real `diff` behavior and
+converge/force behavior (`apply --converge-drifted` / `destroy --force`) vs. its
+absence when supported. Call out silent behavior changes and spec/code
+disagreements as you go.
 
 ## 3. Findings
 Severity order. Per finding: **Severity** (Critical/High/Medium/Low), **Type** (Bug
@@ -255,7 +257,7 @@ sequencing, a short design pass, or broader coverage), **Later** (larger cleanup
 that should follow evidence from earlier fixes). Per item: affected artifacts,
 approach, validation, and **Risk** (Low/Medium/High). Include tests for
 non-mutating desired-vs-real checks, absent-root reporting, granular drift
-reporting, and `--override`/no-override pairs when relevant. End with any open
+reporting, and `--converge-drifted`/`--force` pairs when relevant. End with any open
 question that blocks a safe fix or changes prioritization.
 
 ## Fix Mode (only if the user explicitly requests fixes)

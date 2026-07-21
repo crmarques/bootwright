@@ -26,7 +26,7 @@ failed one exists.
 **Semantics: failure details are shortened with a middle ellipsis.**
 `middleEllipsisDetail` (180-rune limit, fixed 44-rune tail) elides the
 MIDDLE instead of tail-truncating, so a trailing actionable clause such
-as "rerun with --override to rebuild it" survives next to the leading
+as "rerun with --converge-drifted to rebuild it" survives next to the leading
 description. The implementation is rune-based so a multibyte character
 is never split. (`internal/converge/workflow/apply_failures.go` applies
 the same middle-ellipsis rule to over-long apply failure reasons.)

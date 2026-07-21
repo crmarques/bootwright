@@ -37,6 +37,7 @@ means there is no default — an omitted optional field stays unset.
 | `spec.baseDomain` | Yes | — | Fleet DNS base domain rendered into selected container clusters. |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
+| `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |
 | `spec.containerClusters[]` | No | All loaded | Active `ContainerCluster` selection list. When set, loaded container clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.storageClusters[]` | No | All loaded | Active `StorageCluster` selection list. When set, loaded storage clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.defaults.install.pullSecretRef` | No | — | Default pull secret for clusters that omit `install.pullSecretRef`. |
@@ -151,148 +152,21 @@ the default) or copied into the encrypted context store (`context`).
 
 ## Entitlements
 
-Entitlements are no longer part of `Environment`. An entitlement is its own
+Entitlements are not an `Environment` field. An entitlement is its own
 first-class `Entitlement` kind — one object per file, shared fleet-wide, and in a
-tree layout it lives under `infra/entitlements/<name>.yaml`. This section is the
-field reference for that kind; [Secrets & entitlements](secrets.md#entitlements)
-covers the same ground alongside the secrets it names.
+tree layout it lives under `infra/entitlements/<name>.yaml`. The canonical field
+reference lives on [Secrets & entitlements](secrets.md#entitlements): the
+`spec.type` vocabulary (`redhat-rhel`, `redhat-ceph`, `ibm-storage-ceph`), the
+required `rhsm`/`registry`/`license` arms per type, the
+`rhsm.management: managed`/`external` axis, and the
+[Corporate Satellite](secrets.md#corporate-satellite) redirect.
 
-Each `Entitlement` declares named vendor-controlled access for one product.
-`metadata.name` and `spec.type` are always required; `spec.type` is the
-discriminator, and the `rhsm`, `registry`, and `license`
-arms become required per type (see [Required arms](#required-arms)). It is
-referenced by name from `StorageCluster.spec.ceph.entitlementRef`,
+An `Entitlement` is referenced by name from
+`StorageCluster.spec.ceph.entitlementRef`,
 `StorageCluster.spec.ceph.osSubscriptionRef`,
 `MachineInstallProfile.spec.subscription.entitlementRef`, and
-`MachineInstallProfile.spec.installer.anaconda.packageSource.fromSubscription.entitlementRef`.
-The secrets it names are declared as first-class `Secret` objects.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `metadata.name` | Yes | — | Entitlement name referenced by storage or OS install inputs. |
-| `spec.type` | Yes | — | Discriminator: `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
-| `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`ProvisioningPlaybook`](provisioning-playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). `ibm-storage-ceph` carries no `rhsm`; its nodes register RHEL through a separate `redhat-rhel` subscription named by the profile `subscription` or the cluster `osSubscriptionRef`. |
-| `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
-| `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
-| `spec.rhsm.connectToInsights` | No | `false` | Whether registered RHEL nodes enroll in Insights. |
-| `spec.rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. See [Corporate Satellite](#corporate-satellite). |
-| `spec.rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
-| `spec.rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
-| `spec.registry.url` | No | — | Scheme-less mirror root `host[:port][/namespace]`; no credentials, query, fragment, or trailing slash. Defaults to `registry.redhat.io` (`redhat-ceph`) or `cp.icr.io/cp` (`ibm-storage-ceph`). A custom Ceph registry requires `StorageCluster.spec.ceph.image` at that root plus the canonical vendor repository suffix. |
-| `spec.registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat-ceph` and `ibm-storage-ceph`. |
-| `spec.registry.trustBundleRef` | No | — | Registry trust bundle. |
-| `spec.license.accept` | Conditional | `false` | Must be `true` for `ibm-storage-ceph`. |
-
-### Types
-
-Exactly one of three `spec.type` values is accepted; any other value is rejected.
-
-| `spec.type` | Meaning |
-| --- | --- |
-| `redhat-rhel` | A Red Hat RHEL subscription (RHSM) — the RHEL BaseOS/AppStream repos. |
-| `redhat-ceph` | A single Red Hat subscription covering both RHEL and the `rhceph` tools repo, plus `registry.redhat.io` access. |
-| `ibm-storage-ceph` | IBM Storage Ceph product access (registry + license), running on RHEL registered separately via the storage nodes' `MachineInstallProfile.spec.subscription` or `StorageCluster.spec.ceph.osSubscriptionRef`. |
-
-### Required arms
-
-The required `rhsm`/`registry`/`license` arms follow from
-`spec.type`:
-
-| `spec.type` | Required arms |
-| --- | --- |
-| `redhat-rhel` | `rhsm` (`organizationRef` + `activationKeyRef`) |
-| `redhat-ceph` | `rhsm` + `registry.credentialsRef` |
-| `ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` (no inline `rhsm`) |
-
-IBM Storage Ceph ships its own image registry (`cp.icr.io`) and product license
-but runs on RHEL it does not itself entitle, so its RHEL subscription is a
-separate `redhat-rhel` entitlement named by the storage nodes'
-`MachineInstallProfile.spec.subscription.entitlementRef` (managed-OS nodes) or
-`StorageCluster.spec.ceph.osSubscriptionRef` (provided-OS nodes) — an inline
-`rhsm` arm on an `ibm-storage-ceph` entitlement is rejected. (`redhat-ceph`
-stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
-tools repo, so its own `rhsm` arm covers both.)
-
-The required `rhsm` secret refs assume the default `rhsm.management: managed`,
-where Bootwright registers the storage nodes itself in a machines-phase task —
-after the OS is in place, before the Ceph deps work. Under `management:
-external` the arm carries only `management`: Bootwright plans no registration
-task and demands no RHSM secrets; the operator delegates registration to a
-[`ProvisioningPlaybook`](provisioning-playbooks.md) at `stage: deps`,
-`timing: before` (which gates the Ceph deps work), and it must leave nodes
-able to install the distribution packages. The `examples/ceph-external-rhsm`
-snippet shows the pattern;
-[`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md)
-is normative.
-
-### Corporate Satellite
-
-By default an `rhsm` arm registers against the public Red Hat CDN
-(`subscription.redhat.io`). Add an optional `rhsm.satellite` block to redirect
-registration to a corporate Red Hat Satellite (or Capsule): the same
-`organizationRef` and `activationKeyRef` are interpreted against the Satellite,
-and the CA named by `trustBundleRef` is trusted before registration. One block
-covers both the install-time Anaconda kickstart (`rhsm --server-hostname …
---rhsm-baseurl …`) and the machines-phase registration task's
-`subscription-manager register` — run after the OS is in place, before the Ceph
-deps work — so nodes never fall back to the CDN. Because the redirect lives on
-the entitlement,
-a [`MachineImage`](machines.md) boot ISO or a Ceph cluster that already
-references the entitlement inherits Satellite with no other changes.
-
-```yaml
-apiVersion: bootwright.io/v1alpha1
-kind: Environment
-metadata:
-  name: corp
-spec:
-  baseDomain: corp.example.com
----
-apiVersion: bootwright.io/v1alpha1
-kind: Entitlement
-metadata:
-  name: rhel
-spec:
-  type: redhat-rhel
-  rhsm:
-    organizationRef: rhel-org
-    activationKeyRef: rhel-activation-key
-    connectToInsights: true
-    satellite:
-      hostname: satellite.corp.example.com
-      trustBundleRef: corp-satellite-ca
-      # contentBaseURL defaults to https://satellite.corp.example.com/pulp/content
----
-apiVersion: bootwright.io/v1alpha1
-kind: Secret
-metadata:
-  name: corp-satellite-ca      # bootwright secret set --name corp-satellite-ca --from-file satellite-ca.pem
-spec:
-  type: caBundle
----
-apiVersion: bootwright.io/v1alpha1
-kind: Secret
-metadata:
-  name: rhel-org
-spec:
-  type: opaque
----
-apiVersion: bootwright.io/v1alpha1
-kind: Secret
-metadata:
-  name: rhel-activation-key
-spec:
-  type: opaque
-```
-
-The `rhsm` kickstart command Bootwright emits is supported on Red Hat Enterprise
-Linux only (Anaconda disables it on RHEL rebuilds such as AlmaLinux, Rocky, and
-CentOS Stream); install-time Satellite registration therefore applies to
-`family: rhel` installs. An entitlement backing `packageSource.fromSubscription` must
-keep `rhsm.management: managed` — install-time registration *is* the package
-source and cannot be delegated (`mirror` and `hostedTree` are the
-delegation-compatible sources). OpenShift/RHCOS agent-install nodes do not use
-Satellite.
+`MachineInstallProfile.spec.installer.anaconda.packageSource.fromSubscription.entitlementRef`;
+the secrets it names are declared as first-class `Secret` objects.
 
 ## Component images
 

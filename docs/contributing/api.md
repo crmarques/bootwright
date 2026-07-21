@@ -87,8 +87,10 @@ and it must never move physical facts into cluster intent.
     desired-state validators. Use a machine-profile arm for virtual substrates,
     or explicit `Machine.spec.hardware` inventory for physical ones.
 2.  **Register the dispatch triplet** (`substrateRole`, `bmcRole`, `bootRole`)
-    and its `RoleContract` in `internal/roles`. Real backends use status
-    `supported`; schema-only backends use `scaffold`; no-op arms resolve to the
+    and its `RoleContract` in `internal/roles`. A registered backend carries
+    status `supported`; an unregistered or schema-only triplet resolves through
+    `LookupDispatch` to `StatusUnknown`, and `DispatchSupport.ApplySupported()`
+    treats only `supported` as apply-supported. No-op arms resolve to the
     explicit `*_none` roles so dispatch stays visible rather than silently
     absent.
 3.  **Add the converging roles** under the matching families in
@@ -102,12 +104,17 @@ and it must never move physical facts into cluster intent.
     [platform render mode and substrate type](../concepts/index.md#platform-render-mode-and-substrate-type)
     for how the mode is derived.
 
-!!! note "`scaffold` vs `supported`"
+!!! note "Schema-accepts is not apply-supported"
     The schema can accept provider facts for a substrate before an apply adapter
-    exists. A `scaffold` status lets the type system describe a backend that is
-    not yet apply-supported; promote it to `supported` only when the converging
-    roles and renderer support land. Keep "schema-accepts" and "apply-supported"
-    distinct in code, tests, and docs.
+    exists. There is **no** `scaffold` status: an unregistered or schema-only
+    dispatch triplet resolves to `StatusUnknown` (not `StatusSupported`), so
+    `DispatchSupport.ApplySupported()` reports it as not apply-supported.
+    `ApplySupport` in the `scaffold` package (under `internal/state`) maps each
+    scaffolded provider to its real `DispatchSupport`, so the CLI's substrate display never
+    implies apply support a backend does not have. Promote a backend by landing
+    the converging roles and renderer support and registering its triplet as
+    `supported`; keep "schema-accepts" and "apply-supported" distinct in code,
+    tests, and docs.
 
 The normative contracts are in `specs/architecture.md` (Providers and Platform
 Rendering) and `specs/adr/0002-ansible-provider-dispatch.md`. Prefer the official
@@ -128,7 +135,9 @@ resolved graph into Ansible vars, and place the converging role under
 
 ## Adding a CLI verb
 
-CLI commands live in `internal/cli` and are wired in `cli.go`. Each command
+CLI commands live in `internal/cli` and are registered in
+`internal/cli/root.go` (`newRootCmd`); `cli.go` is the process entry point
+(`Run`, called from `cmd/bootwright/main.go`). Each command
 should be a **thin adapter**: translate flags into options, then call into
 `internal/converge/workflow`. Orchestration logic stays in the workflow package,
 not in the command. Human-readable output goes through `internal/cli/output`.
@@ -143,18 +152,25 @@ help, and discovery. A read-only verb must not:
 - acquire a mutating run lease, or
 - mutate provider, BMC, cluster, or storage state.
 
-Most read-only verbs must not contact hosts at all. Two deliberate carve-outs:
+Most read-only verbs must not contact hosts at all. Four deliberate carve-outs:
 
 - `render` *does* write generated outputs — rendered tool inputs and
   `effective-state.yaml` — into context state. Those are outputs, not runtime
   records, and `render` still never contacts hosts.
 - `preflight` (and `apply` before its host check) may record SSH server-key
   trust on first use, under interactive confirmation only.
+- default `diff` *does* contact clusters — read-only Ceph discovery on each
+  managed seed and a shallow `ClusterVersion` reachability check for
+  `ContainerCluster`s — but reads live state strictly read-only and writes no
+  runtime records. Only `diff --recorded` is fully offline.
+- `diff --adopt` additionally writes desired-state *input* YAML, snapshotting the
+  prior input to history first, while mutating no provider, BMC, cluster, or
+  storage state.
 
 !!! warning "Honour the existing flag vocabulary"
     Reuse the established narrowing flags rather than inventing parallel ones.
     `--stage` accepts the two families `infra` and `clusters` and, on `apply`,
-    `plan`, and `state-check`, their five ordered sub-phases (`fabric`,
+    `plan`, and `diff`, their five ordered sub-phases (`fabric`,
     `machines`, `deps`, `base`, `add-ons`); `destroy --stage` takes only the two
     families. `--clusters` takes a comma-separated list of `ContainerCluster`
     *and* `StorageCluster` names from one shared namespace, so each bare name must

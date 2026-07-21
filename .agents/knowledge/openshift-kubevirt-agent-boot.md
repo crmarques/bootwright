@@ -37,3 +37,9 @@ name in a shared namespace, and would refuse or mis-delete.
 agent ISO (~1–1.5 GiB) with headroom. A larger release payload makes
 `virtctl image-upload` fail on an ISO above this size — raise the variable,
 do not shrink it.
+
+**Negative pin (`virtctl image-upload` kept deliberately):** uploading the
+agent ISO through `virtctl image-upload` has no clean declarative CR equivalent
+(evaluated 2026-06-28) — a DataVolume upload source still needs the imperative
+upload-proxy stream. It stays as-is on purpose; do not re-propose replacing it
+with a pure-CR flow.

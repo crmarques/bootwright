@@ -230,6 +230,32 @@ Alternatively serve a BMC-trusted certificate (then declare
 `InfraComponent.spec.artifactServer.tls.minVersion`/`tls.ciphers` (see
 [Artifact Server](concepts/infrastructure.md#artifact-server)).
 
+## Install never completes
+
+An agent-based OpenShift/OKD install (or a Ceph bootstrap) that boots the nodes
+but never reaches a ready cluster is almost always an environment-reachability
+gap. Two classes are fixable in the authored YAML:
+
+- **Endpoint DNS or VIP not reachable.** The agent bootstrap converges only once
+  the API, api-int, and ingress endpoints resolve and their virtual IPs answer.
+  Confirm the cluster endpoints (`ContainerCluster.spec.install.endpoints`, in
+  the labs sourced from the load-balancer component), the published VIPs
+  (`InfraComponent.spec.loadBalancer.bindAddresses[]`), and the name-resolution
+  records all agree, and that external DNS carries A records for the API/apps
+  VIPs and node FQDNs. A missing or wrong record leaves the install waiting
+  indefinitely.
+- **Disconnected trust or mirror material missing.** A disconnected or proxied
+  install stalls when the nodes cannot pull release content: the mirror endpoint
+  is unreachable, its CA/trust bundle is absent, or the proxy selection is wrong.
+  Provide one mirror endpoint source and its trust material, and confirm the
+  proxy and `no_proxy`/CIDR bypass selection reach the mirror and the release
+  upstreams — see
+  [Disconnected & proxied installs](advanced/disconnected-proxy.md).
+
+Watch progress with `bootwright status --watch`; the per-task logs under
+`/var/lib/bootwright/contexts/<context>/runs/` show which host or endpoint the
+install is waiting on.
+
 ## Resources no longer in desired state (orphans)
 
 `apply` is additive: it creates and converges what desired state declares and
@@ -263,9 +289,9 @@ reclamation workflow.
 dashboard, which Bootwright captures only during the install (see
 [Ceph topologies](advanced/ceph-topologies.md#accessing-a-managed-cluster)). If the
 stored `dashboard-password` file is lost, or the in-cluster password was changed
-and no longer matches the stored copy, reset it directly on the cluster. The
-`ceph` CLI is on the seed node's PATH after bootstrap, so no `cephadm shell` is
-needed:
+and no longer matches the stored copy, reset it directly on the cluster through
+`cephadm shell` — the containerized Ceph client that ships with cephadm, so no
+host `ceph` package is required:
 
 ```bash
 # SSH to the seed node (the SSH line from cluster info)
@@ -273,14 +299,20 @@ ssh root@192.168.134.20
 
 # Set a new admin password. Modern Ceph requires the password to be supplied
 # from a file via -i (a positional password argument is rejected), and enforces
-# a policy: at least 8 characters and not a common word.
-umask 077
-printf 'NewStr0ngPassw0rd' > /tmp/dash-pass
-sudo ceph dashboard ac-user-set-password admin -i /tmp/dash-pass
-rm -f /tmp/dash-pass
+# a policy: at least 8 characters and not a common word. Feed it on stdin so no
+# plaintext file is left on disk:
+printf 'NewStr0ngPassw0rd' | \
+  sudo cephadm shell -- ceph dashboard ac-user-set-password admin -i -
+
+# Or mount a host file into the shell instead of using stdin:
+#   umask 077
+#   printf 'NewStr0ngPassw0rd' > /tmp/dash-pass
+#   sudo cephadm shell -m /tmp/dash-pass:/tmp/dash-pass -- \
+#     ceph dashboard ac-user-set-password admin -i /tmp/dash-pass
+#   rm -f /tmp/dash-pass
 
 # confirm the dashboard URL the active mgr is serving
-sudo ceph mgr services
+sudo cephadm shell -- ceph mgr services
 ```
 
 To keep `bootwright cluster info` accurate, write the same value back to the

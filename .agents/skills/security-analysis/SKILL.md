@@ -30,11 +30,12 @@ security issues and propose or apply fixes.
   unsafe permissions on rendered output, temp file handling.
 - Destructive-operation safety: idempotency and ownership of delete, undefine,
   wipe, zap, format, reset, and remove paths; that read-only commands (`status`,
-  `state-check`, `render`, `plan`, `validate`, `check`) never mutate or contact
-  hosts; `destroyProtection` and command-scoped `--override` enforced before any
-  mutation, with `--yes` as confirmation only that never broadens scope; destroy
-  acting on proven Bootwright ownership and the selected scope, failing closed on
-  foreign, stale, or out-of-scope state.
+  `diff`, `render`, `plan`, `validate`, `preflight`) never mutate or contact
+  hosts; `destroyProtection` and the command-scoped gate flags — apply
+  `--converge-drifted` (with `--confirm-data-loss` for data-loss rebuilds) and
+  destroy `--force` — enforced before any mutation, with `--yes` as confirmation
+  only that never broadens scope; destroy acting on proven Bootwright ownership
+  and the selected scope, failing closed on foreign, stale, or out-of-scope state.
 - Logging and telemetry: leakage of secrets, tokens, or private host data
   into logs, errors, or rendered output.
 - Cryptography and TLS: certificate validation, trust stores, weak or

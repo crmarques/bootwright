@@ -23,11 +23,12 @@ uses:
 bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
 ```
 
-The scaffold writes nine `apiVersion: bootwright.io/v1alpha1` files:
+The scaffold writes ten `apiVersion: bootwright.io/v1alpha1` files:
 
 ```text
 my-sno-lab/
   environment.yaml
+  secrets.yaml
   infra/
     providers/
       provider.yaml
@@ -101,8 +102,8 @@ addresses, and SSH access — never install intent.
 
 The cluster machine network plus a reusable NMState host template for the agent
 install. It owns `spec.machineNetwork[].cidr`, the name-resolution selection
-(`nameResolutionRefs`), and the NMState `template` (interface `primary`, the DNS
-resolver, and the default route).
+(`nameResolutionRefs`), and the NMState `template` (interface `primary` and the
+default route).
 
 ### InfraProvider (`infra/providers/provider.yaml`)
 

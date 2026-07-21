@@ -228,7 +228,7 @@ sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-baremetal/secrets/ceph-node-ss
 # Expect HEALTH_OK, 3 mons, 2 mgr, 6 OSDs, 1 cephfs, an rgw service, an nfs
 # service, a mgmt-gateway, and three ingress services.
 
-bootwright cluster access --name ceph-ibm
+bootwright cluster info --name ceph-ibm
 # Dashboard: https://dashboard.ceph-ibm.example.com:8443  (user admin; password file printed)
 ```
 

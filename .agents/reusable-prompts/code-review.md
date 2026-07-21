@@ -119,9 +119,9 @@ joins, temp-file handling, cleanup, or permissions; shell invocation where direc
 leaks and misplaced `defer`; CLI commands embedding domain logic that belongs in
 loaders, renderers, orchestrators, or roles; non-mutating surfaces (`validate`,
 `preflight`, `plan`, `diff`, `status`) drifting from the selected graph that
-apply/destroy actually load; `--override` changing more than the narrow
-documented safety barrier; tests needing real infrastructure where a fake would
-prove the behavior.
+apply/destroy actually load; `apply --converge-drifted` changing more than the
+narrow documented safety barrier (with `--confirm-data-loss` gating data loss);
+tests needing real infrastructure where a fake would prove the behavior.
 
 **Go↔Ansible drift.** Go mutating hosts or the bastion directly instead of
 rendering intent and orchestrating; installed-cluster API calls bypassing the
@@ -179,7 +179,7 @@ supply-chain surface: what guarantees integrity between the catalog, the
 registered store copy, and the manifests and playbooks applied to clusters.
 Report only what code evidence supports.
 
-**State-check implementation.** Audit the non-mutating desired-vs-real surfaces:
+**State-inspection surfaces.** Audit the non-mutating desired-vs-real surfaces:
 `plan` (preview without contacting anything), `preflight` (live, read-only
 readiness), `status` (recorded run/ledger view plus next step), and `diff` —
 live comparison by default, `--recorded` for the offline last-apply view,
@@ -189,8 +189,8 @@ absence succinctly, and report granular drift when roots exist, including
 missing declared resources and undeclared live resources such as Ceph pools,
 filesystems, gateways, add-ons, VMs, services, endpoints, or storage exports.
 Check text and JSON output, drift exit codes, permission/root behavior, behavior
-with and without `--override`, and that no probe or `--adopt` path mutates a
-live system.
+with and without apply's `--converge-drifted` (and `--confirm-data-loss`), and
+that no probe or `--adopt` path mutates a live system.
 
 **Duplication and dead code.** One domain rule in multiple packages or roles; one
 concept as several types/structs/helpers, or several names; one name reused for
@@ -213,8 +213,9 @@ artifacts, benefit, and the smallest migration path. Otherwise keep it.
 rendered installer, Ansible, or lock-file output; command construction and external
 process failure; filesystem permissions/cleanup/path validation; secret redaction
 and sensitive-output gates; script dry-run/preflight; Ansible idempotency and
-generated-variable shape; non-mutating desired-vs-real state checks; `--override`
-vs. no-override behavior; objective drift reports for absent roots and partially
+generated-variable shape; non-mutating desired-vs-real state checks;
+`--converge-drifted`/`--confirm-data-loss` vs. plain-`apply` behavior; objective
+drift reports for absent roots and partially
 present resources; and a regression test for each high-confidence finding.
 
 ## Output Format

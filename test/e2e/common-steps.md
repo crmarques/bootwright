@@ -7,14 +7,15 @@ customization. Return there at the end for bastion-side teardown.
 These steps assume `$CASE` is exported and the active context has been
 initialized on the bastion. Context paths are fixed under
 `/var/lib/bootwright/contexts/$CASE`.
-If `print-env` was blocked because proxy credentials would be printed,
-run the `proxy-credentials` `secret set` command below first, then rerun
-`bootwright print-env --sensitive` for proxy exports.
+If a shell outside Bootwright needs the same proxy the case declares, export
+`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` yourself from the Environment's proxy
+component values (see [proxy.md](proxy.md)); when the proxy requires
+credentials, run the `proxy-credentials` `secret set` command below first.
 
 ## 1. Save And Generate Secrets
 
-The case context input references four or five secrets through
-`environment.yaml` `spec.secrets:`:
+The case context input declares four or five first-class `kind: Secret` objects
+in `secrets.yaml` (a multi-document file) that other kinds reference by name:
 
 | Secret | Form | Required for |
 | --- | --- | --- |

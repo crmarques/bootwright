@@ -1,6 +1,6 @@
-# destroy --force-unowned is uniform across substrates
+# destroy --include-unowned is uniform across substrates
 
-**Constraint:** `destroy --force-unowned` semantics
+**Constraint:** `destroy --include-unowned` semantics
 (`bootwright_destroy_force_unowned`) are uniform across substrates:
 every ownership refusal assert — the vSphere annotation marker, the
 libvirt domain-XML marker, the KubeVirt VirtualMachine managed-by label

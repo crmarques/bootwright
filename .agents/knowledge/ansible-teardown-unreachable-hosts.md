@@ -31,7 +31,7 @@ the fail-closed default mode.
 whose connection probes failed. That is what makes the fail-closed gate work:
 `Require storage hosts reachable unless --skip-unreachable` is an assert, so
 it fires with actionable guidance (power the nodes on, or re-run with
-`--override --skip-unreachable`) instead of a raw SSH error, and
+`--force --skip-unreachable`) instead of a raw SSH error, and
 `any_errors_fatal` turns that one failure into a whole-play abort before any
 node wipes a device. Under `--skip-unreachable` the assert is skipped and
 `meta: end_host` drops the unreachable host instead.

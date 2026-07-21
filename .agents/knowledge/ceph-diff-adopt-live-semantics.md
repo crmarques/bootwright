@@ -22,8 +22,8 @@ Config, crush-rules, and mgr-modules facets ignore real-only entirely (their
 live side is dominated by Ceph defaults, not operator intent).
 
 **Semantics:** Health diffs only the status against the implicit `HEALTH_OK`
-invariant. A transient `HEALTH_WARN` is treated as OK, matching `state-check
---probe`'s `storageHealthDegraded` gate (only `HEALTH_ERR` is degraded) — the
+invariant. A transient `HEALTH_WARN` is treated as OK, matching live `diff`'s
+`storageHealthDegraded` gate (only `HEALTH_ERR` is degraded) — the
 two read-only surfaces must agree on whether a WARN cluster is in sync. OSD
 counts are deliberately not compared as health fields.
 

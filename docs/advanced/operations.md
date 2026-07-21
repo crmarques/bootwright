@@ -20,20 +20,13 @@ does not restate those models.
 
 ## The three apply modes
 
-`apply` reconciles by default. Two modifier flags change that, and they are
-mutually exclusive:
-
-- **bare `apply`** — reconcile: create what is missing, skip objects whose
-  recorded desired state matches current, and fail closed on drift or foreign
-  ownership before any mutation.
-- **`apply --expect-new`** — greenfield assertion: additionally refuse to
-  proceed if any selected object already exists. Use it when you intend a
-  from-scratch build and want a stale leftover to stop the run rather than be
-  reconciled into.
-- **`apply --converge-drifted`** — break-glass recovery for Bootwright-owned drift it
-  knows how to rebuild (managed-OS reinstall, owned-Ceph wipe-and-rebuild,
-  drifted owned-object rebuild). It is command-scoped and bypasses only
-  safe-mismatch gates that have an explicit override path.
+`apply` reconciles by default; two mutually exclusive modifier flags change that
+— `--expect-new` (greenfield assertion: refuse if any selected object already
+exists) and `--converge-drifted` (break-glass recovery for Bootwright-owned drift
+it knows how to rebuild — managed-OS reinstall, owned-Ceph wipe-and-rebuild,
+drifted owned-object rebuild). See
+[Apply modes](../concepts/index.md#apply-modes) for the full model; the rest of
+this section covers the operational contract that this page owns.
 
 !!! note "`--expect-new` and `--converge-drifted` cannot be combined"
     `--expect-new` asserts greenfield (fail if any selected object exists);
@@ -57,6 +50,18 @@ owned objects, a managed-OS machine reinstall, an owned-Ceph wipe-and-rebuild.
 It never bypasses active-run leases, validation, secret checks, or
 foreign-resource ownership failures, and it never touches a resource a
 non-Bootwright owner holds.
+
+`--converge-drifted` authorizes the rebuild; a **separate** acknowledgement
+authorizes the *data loss* it entails. When a run would destroy data, it stops at
+an interactive prompt — `Confirm this DESTRUCTIVE action (accept data loss)?` —
+and proceeds only on `y`. For automation, pass `--confirm-data-loss` alongside
+`--yes`; `--yes` on its own skips only the ordinary confirmation and **never**
+authorizes data loss, so a destructive rebuild under `--yes` without
+`--confirm-data-loss` fails closed. The same acknowledgement authorizes the two
+storage data-loss operations: the `all: true` OSD auto-reclaim that zaps dirty
+declared disks before an OSD apply, and an explicit `--reclaim-devices` run
+(below). `--confirm-data-loss` has no effect on a run that plans no data-loss
+action.
 
 The fail-closed interaction with destroy protection is the part operators most
 often miss:
@@ -173,6 +178,31 @@ This is the **destroy authorization boundary**: destruction of protected state
 can be authorized only through `destroy --force`, never through
 `apply --converge-drifted` (which fails closed on a protected context, as above).
 
+### Protecting specific kinds
+
+`destroyProtection` guards the **whole** context. To protect only certain kinds —
+leaving the rest at `allow` — list them in
+`Environment.spec.safety.protectedKinds[]`. The accepted kinds are
+`ContainerCluster`, `StorageCluster`, and `Machine`:
+
+```yaml
+spec:
+  safety:
+    protectedKinds:
+      - StorageCluster
+      - Machine
+```
+
+A listed kind crosses the same destroy authorization boundary as
+`destroyProtection: requiredOverride`, but scoped to that kind. Even when
+`destroyProtection` is `allow`, a `destroy` whose scope tears down a protected
+kind requires `--force`, and an `apply --converge-drifted` that would
+destructively rebuild one fails closed and directs you to `destroy --force` that
+scope first. Reconfigure-only drift — an in-place service re-apply that touches
+no data, OS, or VM — does not trip it; only destructive rebuilds of the protected
+kind do. `destroyProtection` and `protectedKinds` combine: a resource is
+protected if either covers it.
+
 !!! warning "`--yes` does not imply `--force`"
     `--yes` skips only the confirmation prompt; it never implies `--force`.
     On a protected context a `destroy` without `--force` fails closed,
@@ -206,20 +236,45 @@ maintenance.
   bootwright apply --stage infra --yes
   ```
 
+- **A cumulative build-out with `--through <stage>`.** Where `--stage` limits a
+  run to exactly one phase, `--through` runs every phase from the beginning up to
+  and including the named one. The two are mutually exclusive. It is accepted by
+  `apply`, `plan`, and `diff` (not `destroy`), and takes the same family and
+  sub-phase names as `--stage`:
+
+  ```text
+  bootwright apply --through machines --yes
+  ```
+
 - **A surgical sub-phase rerun.** `apply` and `plan` additionally accept the
   single-phase selectors `fabric`, `machines`, `deps`, `base`, and `add-ons` for
   surgical reruns within a family. These are reruns, not peers of the `infra`
   and `clusters` families; `destroy` does not accept them.
 
+- **One machine.** `--machines <names>` narrows the run to individual `Machine`s
+  instead of whole clusters (mutually exclusive with `--clusters`). It runs only
+  the `fabric` and `machines` phases, so it rebuilds or tears down one machine's
+  substrate — a replaced node or a shared bastion — without touching the rest.
+  See [Multi-cluster fleets](fleets.md#narrow-to-machines) and
+  [Machines](../concepts/machines.md).
+
+  ```text
+  bootwright apply --machines ceph-osd-1 --yes
+  bootwright destroy --machines ceph-osd-1 --force
+  ```
+
 !!! note "Check before you rebuild"
-    `bootwright diff` reports which roots are `missing`, `match`,
-    `drift`, or `foreign` against the last recorded apply, without contacting
-    hosts. `bootwright plan` (or `apply --dry-run`) shows the task graph a
-    selection would run. Use them to confirm the scope before applying. Note
-    that `diff` compares against *recorded* evidence only — an out-of-band
-    change (a wiped disk, an undefined VM, a deleted namespace) is not detected
-    until the next apply refreshes the record. `diff --converge-drifted` is
-    rejected.
+    `bootwright diff` is **live by default**: it probes the selected clusters
+    read-only — Ceph discovery on the seed, a shallow `ClusterVersion` check per
+    container cluster — and prints the desired-vs-real differences, exiting `3` on
+    any difference. So plain `diff` **does** catch an out-of-band change — a wiped
+    disk, an undefined VM, a deleted namespace — wherever discovery reaches it.
+    For a fast offline check, `bootwright diff --recorded` skips all cluster
+    contact and classifies each root as `missing`, `match`, `drift`, or `foreign`
+    against the last recorded apply; that variant is the one blind to out-of-band
+    changes until the next apply refreshes the record. `bootwright plan` (or
+    `apply --dry-run`) shows the task graph a selection would run. Use them to
+    confirm the scope before applying.
 
 ### KubeVirt child clusters do not auto-include their parent
 

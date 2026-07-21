@@ -20,9 +20,11 @@ changes, also run the checks from `definition-stewardship`.
   temporary branch onto current local `main`, perform needed fixes or
   adjustments, rerun `make check-fast`, and repeat until the branch is ready or
   a real blocker remains.
-- Current `make check-fast` runs the cheap local guardrails: CLI file-size,
-  Go source visibility, gofmt, stale-term, Containerfile pinning, and E2E
-  dependency checks.
+- Current `make check-fast` syncs the embedded ansible bundle (needs
+  `ansible-playbook`), runs the cheap local guardrails — CLI file-size, Go source
+  visibility, gofmt, stale-term, Containerfile pinning, shellcheck, and E2E
+  dependency checks — and then runs the full `go test ./...` unit-test suite,
+  which is the dominant cost and the main verification signal.
 - If `make check-fast` cannot run or fails, report the blocker instead of a
   successful handoff.
 - Report any validation command that could not be run, including the reason.

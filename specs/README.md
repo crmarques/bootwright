@@ -20,8 +20,6 @@ written for **both humans and coding agents**.
   detail; they must not duplicate spec content.
 - Implementation code must conform to these specs or update the specs in
   the same change.
-- Avoid architecture that only works for the initial SNO plus bare-metal
-  lab.
 
 ## Layout
 

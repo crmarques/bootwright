@@ -80,7 +80,9 @@ verify their current form in `specs/`. Prompt-specific additions:
 - **State checking.** The public contract must give operators a well-named,
   non-mutating command to compare selected desired state with the recorded last apply. The
   spec/UX must distinguish this from `status`, `render`, `apply`, `destroy`, and
-  dry-run, and define how `--override` behaves or is rejected without mutation.
+  dry-run, and define how the destructive-override flags (currently apply
+  `--converge-drifted` / destroy `--force`) behave or are rejected without
+  mutation.
 
 ## Posture
 
@@ -169,8 +171,8 @@ Per issue: **Severity** (Critical/High/Medium/Low), **Evidence** (command, help,
 spec, doc, example path), **Problem**, **User impact**, **Recommendation**. Cover
 help text, dry-run, scoping, destructive-action confirmation, non-interactive use,
 output locations, error actionability, secret/trust handling, desired-vs-real
-state checking, `--override` vs. no-override behavior, and generated-output
-boundaries.
+state checking, the destructive-override flags (apply `--converge-drifted` /
+destroy `--force`) vs. their absence, and generated-output boundaries.
 
 ## 6. Swap and Evolution Invariants
 For provider/substrate swap, connected↔disconnected, proxied↔direct,
@@ -207,8 +209,9 @@ follow-up change.
 - Treat user-authored YAML as the product API and generated artifacts as outputs.
 - Prefer schema and CLI improvements that make authoring simpler and more complete
   without coupling to implementation detail; keep every snippet safe to commit.
-- Require a non-mutating state-check contract with a good command name and
+- Require a non-mutating state-comparison contract with a good command name and
   objective reports: succinct root absence, granular drift for existing roots,
-  and no mutation or report suppression from `--override`.
+  and no mutation or report suppression from the destructive-override flags
+  (apply `--converge-drifted` / destroy `--force`).
 - Every recommendation must pass the Aggregation test. Prefer fewer, stronger
   recommendations; when something is already right, say so briefly and move on.

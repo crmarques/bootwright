@@ -12,9 +12,14 @@ The initial container-cluster install scope is direct `openshift-install agent`
 execution against single-node and multi-node cluster machines.
 
 Managed and imported Ceph storage are in scope as peer storage-cluster phases.
-Apply and destroy can target the whole graph or selected `ContainerCluster` and
-`StorageCluster` components. Initial post-install bootstrap of early platform
-components is in scope when declared as cluster-bound add-ons. Day-2 GitOps
+Apply and destroy can target the whole graph, selected `ContainerCluster` and
+`StorageCluster` components, or selected `Machine` objects (per-machine
+provision/teardown through a machine-scoped selection). Machine-scoped selection
+reaches only cluster-member machines and shared-service or provider hosts; a
+standalone managed-OS machine that belongs to no cluster is fail-closed, because
+Bootwright installs a managed OS only on cluster-member machines. Initial
+post-install bootstrap of early platform components is in scope when declared as
+cluster-bound add-ons. Day-2 GitOps
 publication of fleet content is out of scope for this repository.
 
 ## Operating Model
@@ -124,3 +129,5 @@ OS-ready or Bootwright-managed OS state and `ceph-node` capability.
 - Validation errors name the owning object and exact field.
 - Provider swaps should leave cluster intent stable whenever the cluster itself
   is not changing.
+- Design for the general fleet — multiple substrates and single- or multi-node
+  topologies — not only the initial single-node bare-metal lab.

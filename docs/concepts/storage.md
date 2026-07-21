@@ -88,22 +88,26 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
-| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1` (`ibm`) | Ceph release for the chosen distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid (`squid`/`19.2.x`) releases; exact versions pin the package repository and derive `quay.io/ceph/ceph:vX.Y.Z`. `redhat` accepts `9.0` or `9.1`; `ibm` accepts `9.9.1`. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create override-gated structural drift when that default advances; pin an exact release to avoid implicit upgrades. |
+| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1` (`ibm`) | Ceph release for the chosen distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid (`squid`/`19.2.x`) releases; exact versions pin the package repository and derive `quay.io/ceph/ceph:vX.Y.Z`. `redhat` accepts `9.0` or `9.1`; `ibm` accepts `9.9.1`. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create structural drift gated behind `apply --converge-drifted` when that default advances; pin an exact release to avoid implicit upgrades. |
 | `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). A `redhat` or `ibm` image must use that distribution and release's canonical repository. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
+| `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the community package payload fetched from `community.mirror`. `oss` only. |
 | `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Entitlement` object. Must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
+| `ceph.osSubscriptionRef` | No | — | Names a `redhat-rhel` `Entitlement` supplying the RHEL subscription for provided-OS Ceph nodes (managed-OS nodes name it on their `MachineInstallProfile.spec.subscription` instead). Must resolve to a `redhat-rhel` entitlement. Chiefly paired with `distribution: ibm`, whose product entitlement does not itself entitle RHEL. See [Secrets](secrets.md#entitlements). |
 | `ceph.ibm.callHome` | When `ibm` | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. License acceptance enables Call Home by default, so omission is rejected. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
 | `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
 | `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
 | `ceph.cephadm.bootstrap.host` | Yes | — | Topology host that cephadm bootstraps on. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the host machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
+| `ceph.cephadm.bootstrap.singleHostDefaults` | No | `false` | Renders cephadm's `--single-host-defaults` at bootstrap (relaxed defaults for a one-node cluster). Valid only for a **single-host, non-stretch** topology and requires at least two declared OSDs. It owns `osd_pool_default_size`, `osd_pool_default_min_size`, and `osd_crush_chooseleaf_type` at bootstrap, so those keys are rejected in `ceph.config[global]`. Referenced by the [`StoragePool`](#storagepool) cross-field rules. |
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
 | `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that **every** Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. |
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |
+| `ceph.management` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it. See [The management gateway and HA dashboard](../advanced/ceph-topologies.md#the-management-gateway-and-ha-dashboard). |
 | `ceph.services[]` | No | — | Raw cephadm service-spec passthrough for unmodeled service types; see [Passthrough services](#passthrough-services). |
 | `ceph.topology` | Yes | — | Hosts, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
 
@@ -183,8 +187,8 @@ Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
 ### Passthrough services
 
 For cephadm service types Bootwright does not model first-class (for example
-`nfs`, `loki`), `ceph.services[]` renders field-for-field into a `ceph orch
-apply` document.
+`rbd-mirror`, `snmp-gateway`), `ceph.services[]` renders field-for-field into a
+`ceph orch apply` document.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |

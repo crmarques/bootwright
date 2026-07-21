@@ -78,12 +78,16 @@ treat the table as authoritative for what actually runs.
 
 | Substrate | Apply support | Notes |
 | --- | --- | --- |
-| libvirt (emulated/sushy Redfish BMC) | OpenShift / OKD | Full apply coverage; no real hardware needed. |
-| Bare metal (Redfish virtual media) | OpenShift / OKD | Real BMCs over Redfish virtual media. |
+| libvirt (emulated/sushy Redfish BMC) | OpenShift / OKD / Ceph | Full apply coverage; no real hardware needed. |
+| Bare metal (Redfish virtual media) | OpenShift / OKD / Ceph | Real BMCs over Redfish virtual media. |
 | vSphere (vCenter-managed VMs) | OpenShift / OKD | |
 | KubeVirt (OpenShift Virtualization VMs) | OpenShift / OKD | Nested child clusters on a Bootwright-managed parent. |
-| Ceph (via cephadm, or imported) | Ceph storage | Storage clusters, not container clusters. |
 | IPMI | Not supported | Not apply-supported today. |
+
+Ceph is a **storage** cluster family, not a substrate of its own: managed Ceph
+converges through cephadm on OS-ready or Bootwright-installed (managed-OS) nodes,
+and imported external Ceph is also supported. Those storage clusters run on the
+libvirt and bare-metal Redfish substrates above rather than in a row of their own.
 
 Two topologies are intentionally first-step today: KubeVirt nested clusters
 require an installed parent cluster advertising the `kubevirt` add-on, and

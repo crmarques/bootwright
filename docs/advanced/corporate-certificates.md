@@ -58,7 +58,7 @@ spec:
   API hostnames it covers. Bootwright renders a day-2 `APIServer` cluster config
   (`spec.servingCerts.namedCertificates`) plus the TLS secret in
   `openshift-config`.
-- **`ingress.defaultCertificate`** sets the default ingress certificate.
+- **`ingress.defaultCertificateRef`** sets the default ingress certificate.
   Bootwright renders a day-2 `IngressController` (`spec.defaultCertificate`) plus
   the TLS secret in `openshift-ingress`.
 

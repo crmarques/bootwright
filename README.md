@@ -45,7 +45,7 @@ bootwright render effective
 bootwright plan
 bootwright apply --yes
 bootwright status --watch
-bootwright cluster access
+bootwright cluster info
 ```
 
 `apply` is the normal convergence path. Use `--stage infra` to prepare
@@ -72,7 +72,9 @@ current-context VM cleanup.
 
 ## Start Here
 
-The user-facing docs are published from [`docs/`](docs/) as this [link](https://crmarques.github.io/bootwright/). Browse them in-tree or once Pages is enabled on the repo:
+The user-facing docs are published at
+[https://crmarques.github.io/bootwright/](https://crmarques.github.io/bootwright/)
+and can also be browsed in-tree under [`docs/`](docs/).
 
 | Audience | Start |
 | --- | --- |
@@ -107,14 +109,6 @@ If a release binary is not available yet, build the CLI from the repository
 root with the [`Containerfile`](Containerfile) and copy the binary out of the
 image:
 
-If your build host reaches the internet through an authenticated proxy, the
-credential never becomes a build-arg, `ENV`, or image layer: copy
-[`proxy.env.example`](proxy.env.example) to `proxy.env`, fill in the real
-`user:password@host`, and pass it as a BuildKit secret. The file is git-ignored,
-mounted on a tmpfs only during each network step, and absent from the finished
-image and `docker history`. Omit `--secret` entirely to build without a proxy.
-`NO_PROXY` is not sensitive, so it stays an ordinary build-arg.
-
 ```bash
 export NO_PROXY="localhost,127.0.0.1,.local,10."
 
@@ -132,6 +126,14 @@ docker rm bootwright-bin
 sudo install -m 0755 ./bootwright /usr/local/bin/bootwright
 bootwright version
 ```
+
+> **Building behind an authenticated proxy.** The `--secret id=proxy,src=proxy.env`
+> line above keeps the credential out of build-args, `ENV`, and image layers: copy
+> [`proxy.env.example`](proxy.env.example) to `proxy.env`, fill in the real
+> `user:password@host`, and pass it as the BuildKit secret shown. The file is
+> git-ignored, mounted on a tmpfs only during each network step, and absent from
+> the finished image and `docker history`. Omit `--secret` entirely to build
+> without a proxy. `NO_PROXY` is not sensitive, so it stays an ordinary build-arg.
 
 ## Desired-State Contract
 
@@ -192,8 +194,8 @@ bootwright validate -f ./lab-input
 bootwright context init --name lab -f ./lab-input
 bootwright context current
 bootwright cluster list
-bootwright cluster access
-bootwright cluster access --name demo-ocp
+bootwright cluster info
+bootwright cluster info --name demo-ocp
 bootwright secret list
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
@@ -207,7 +209,7 @@ bootwright render effective
 bootwright plan
 bootwright apply --yes
 bootwright status --watch
-bootwright cluster access
+bootwright cluster info
 bootwright preflight all --dry-run
 bootwright apply --stage infra --dry-run
 bootwright apply --stage infra --yes
@@ -233,26 +235,21 @@ separate prerequisite command; its read-only dependency checks run under
 and tears down the whole context for `destroy` (clusters then infra). Top-level
 groups are `validate`,
 `context`, `machine`, `bastion`, `cluster`, `example`,
-`media`, `secret`, `preflight`, `status`, `diff`, `plan`,
+`media`, `secret`, `add-ons`, `preflight`, `status`, `diff`, `plan`,
 `render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
-`--output json` where available for automation. `bootwright cluster access` prints
+`--output json` where available for automation. `bootwright cluster info` prints
 URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs
 while the terminal shows a ledger-backed fleet dashboard with log paths,
 phase status, running work, and concise failures. `bootwright apply --yes` is
-the normal end-to-end workflow.
-`bootwright apply --stage clusters` provisions selected storage clusters,
-OpenShift or OKD clusters, bound add-ons, and declared storage integrations as
-dependency-ready tasks. Use `--clusters` for scoped maintenance or recovery.
-`bootwright destroy --stage clusters` removes cluster-stage runtime, managed
-storage services, add-on records, and generated storage attachment records.
-`bootwright destroy --stage infra` removes selected infrastructure from current
-desired state and Bootwright ownership records; without `--clusters` it also
-sweeps current-context VM artifacts provider adapters can identify.
+the normal end-to-end workflow. The `--stage` and `--clusters` selectors scope
+apply and destroy to one stage or to named clusters for build-out, recovery, or
+teardown; see [Operations and Recovery](docs/advanced/operations.md) for the
+full stage and selector semantics.
 
 `bootwright render --output-dir ./rendered --clusters <cluster> --sensitive`
 exports concrete external CLI inputs, including

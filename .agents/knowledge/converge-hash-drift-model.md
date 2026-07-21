@@ -1,7 +1,7 @@
 # Convergence-record hashing: keying, scope, and projection traps
 
 Convergence-safety records store desired hashes per apply task. Getting the
-key, the hash input, or the projection wrong makes `state-check`/`apply`
+key, the hash input, or the projection wrong makes `diff --recorded`/`apply`
 misreport drift — usually as false drift on a clean fleet.
 
 **Key by task identity, never by lock key:** records are keyed by
@@ -9,12 +9,12 @@ misreport drift — usually as false drift on a clean fleet.
 scheduler's mutual-exclusion lock keys and are deliberately SHARED across tasks
 mutating the same resource (`host:<host>:mutating`, `storage:<name>`). A past
 bug keyed records by the shared lock: several tasks wrote one file, last writer
-won, and state-check reported drift on a clean apply. Pinned by
+won, and diff --recorded reported drift on a clean apply. Pinned by
 TestStateCheckSharedResourceKeyTasksMatch.
 
 **Scope-independent hash inputs:** a task's carried State is the FILTERED set on
 a `--clusters` run, so any task hashing the full State misreports drift across
-scopes — the virtctl task did exactly this (unscoped state-check showed drift
+scopes — the virtctl task did exactly this (unscoped diff --recorded showed drift
 after a scoped apply, fail-closing the next reconcile; audit finding M8).
 Project only the inputs the task depends on (`virtctlDesiredHashVars`: host
 cluster identity + mirror override); `map[string]string` marshals with sorted
@@ -56,7 +56,7 @@ apply_tasks.go. Any predicate keyed on object kind — the storage override
 data-loss warning, reconcilable-only zap suppression, reclaim-devices gate,
 refusal consequence text — must compare against object-kind constants.
 
-**Two record-loading disciplines:** state-check loads leniently (a per-file
+**Two record-loading disciplines:** diff --recorded loads leniently (a per-file
 read/decode failure becomes a warning naming the file, record reported
 not-found) so one corrupt file under `runs/safety/` never bricks the read-only
 report; apply preflight loads STRICT (`LoadConvergeSafetyRecord`) so a corrupt
@@ -67,7 +67,7 @@ is a positive token — `cephadm rm-cluster --force --zap-osds` runs only for
 clusters the controller named as structurally drifted; absent/empty authorizes
 NO wipe (a stale bundle can only under-authorize). Its sibling
 `bootwright_ceph_reconcilable_only_clusters` marks OSD-add-only drift that
-`--override` must reconcile additively instead of zapping.
+`--converge-drifted` must reconcile additively instead of zapping.
 
 **Display twins:** `ApplyTransitionAction` (create/reconcile/rebuild/refuse/
 unchanged) mirrors `EvaluateApplyModePreflight` for the read-only

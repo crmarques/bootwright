@@ -32,11 +32,11 @@ read, decode, or validate (truncated atomic-writer leftovers; role-written
 records that never ran Go validation) — one corrupt file must never hide every
 other record and block the sweep that would reclaim it. Only a directory-traversal
 failure errors. `LoadResourcesWithWarnings`/`LoadContextWithWarnings` surface
-per-record skip reasons so destroy preview and state-check name the dropped
+per-record skip reasons so destroy preview and diff name the dropped
 files. Guarded by TestLoadResourcesSkipsBadRecordWithoutDroppingGood.
 
 **LoadContext is the single context-scoped entry point:** destroy planning, the
-destroy run inventory, and state-check orphan reporting all read through it, so
+destroy run inventory, and diff orphan reporting all read through it, so
 the records that gate a destroy, the records it executes against, and the
 preview are always the same set. It drops records stamped with a different
 context, keeps unstamped (pre-context-field) records, and applies no filter when

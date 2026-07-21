@@ -58,7 +58,7 @@ spec:
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.distribution` | No | `type: openshift` | OpenShift or OKD release selection. |
+| `spec.distribution` | No | `type: openshift` | OpenShift or OKD release selection. Optional in shape only: an omitted block defaults `type: openshift`, which then requires `release.version` or `release.image`, so an absent or empty `distribution` fails validation. See [Distribution](#distribution). |
 | `spec.install` | No | — | Install method, mode, platform, endpoints, artifact access, trust, serving certificates, and node SSH. |
 | `spec.security` | No | — | Cluster security posture. Today: FIPS mode. See [Security](#security). |
 | `spec.controlPlane.replicas` | No | — | Control-plane replica count; when set, must equal the master host count. |
@@ -71,15 +71,24 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `distribution.type` | No | `openshift` | `openshift` or `okd`. |
-| `distribution.release.version` | No | — | Release version for the OpenShift release path. |
+| `distribution.release.version` | One of version/image | — | Release version (the OpenShift release path). |
 | `distribution.release.channel` | No | — | Optional release channel for the OpenShift release path. |
-| `distribution.release.image` | No | — | Explicit release image (the OKD / pinned-install path). |
+| `distribution.release.image` | One of version/image | — | Explicit release image (the OKD / pinned-install path). |
 
-A release is pinned by `version` (or `image`); `channel` is recorded metadata
-that does not by itself select a release, so authoring `channel` without
-`version` pins nothing. `image` is the explicit-image path and is the usual way
-to pin a release or install OKD. `channel` is rejected for
-`distribution.type: okd`.
+!!! note "Cross-field rule: one of version/image is required"
+    A release is pinned by `version` or `image`, and **at least one of the two
+    must be set**: an `openshift` distribution requires `version` unless `image`
+    is given, and an `okd` distribution requires `image` or `version`. `image`
+    is the explicit-image path and the usual way to pin a release or install
+    OKD. Because the whole `spec.distribution` block still defaults to
+    `type: openshift`, omitting it fails validation for the missing
+    `version`/`image` — the block is optional in shape only.
+
+`channel` never selects a release on its own — it is recorded metadata layered on
+top of a `version`. Authoring only `channel`, with no `version` and no `image`,
+is **rejected by validation**, not merely ineffective: an `openshift` cluster
+still fails for the missing `version`/`image`, and an `okd` cluster rejects
+`channel` outright (`channel` is supported only for `openshift`).
 
 !!! warning "Release fields are install-time intent, not a day-2 upgrade"
     `distribution.release.*` selects what bootwright installs. Editing it on an

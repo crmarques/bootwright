@@ -13,13 +13,13 @@ stop-not-fail. Tests: the M2 cases in
 
 **M8 — scoped-apply hash must be scope-independent.** The virtctl task hashed
 its carried State, which is the `--clusters`-filtered set on a scoped run, so
-an unscoped state-check reported drift after a clean scoped apply and
+an unscoped diff --recorded reported drift after a clean scoped apply and
 fail-closed the next reconcile. Invariant: tasks hash a projection of only
 their real inputs (`virtctlDesiredHashVars`). Test:
 `TestVirtctlTaskDesiredHashIsScopeIndependent`
 (internal/converge/workflow/apply_plan_container.go's planner).
 
-**M11 — state-check --clusters validation must match apply.** `StateCheck`
+**M11 — diff --recorded --clusters validation must match apply.** `StateCheck`
 threads the resolved scope name (`converge.Scope.Name`: "all", "add-ons",
 "through-base", …) into `clusteraccess.Resolve` instead of a hardcoded "all",
 so a container-only stage rejects a StorageCluster name with the same

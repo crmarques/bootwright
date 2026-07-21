@@ -48,14 +48,24 @@ Two cross-resource mechanisms make add-ons composable: advertised capabilities
 and binding-scoped inputs.
 
 **Advertised capabilities.** `ClusterAddon.spec.provides[]` advertises
-capabilities that other desired state may depend on. Accepted values are
-`kubevirt`, `dataFoundation`, and `nmstate`. Use `kubevirt` on the OpenShift
-Virtualization add-on so KubeVirt child infrastructure waits for the host cluster
-to be ready (see [KubeVirt child clusters](../advanced/kubevirt.md)). Use
-`dataFoundation` on the Data Foundation operator add-on (Red Hat ODF or IBM
-Fusion) so storage-export input effects wait for external-mode components to be
-ready. Use `nmstate` on the Kubernetes NMState Operator add-on so add-ons that
-apply `nmstate.io` resources order after it.
+capabilities that other desired state may depend on. `provides[]` is **not a
+closed enum**: any token matching `^[A-Za-z0-9][A-Za-z0-9._-]*$` is accepted and
+participates in `requires`/`provides` apply ordering. Three tokens additionally
+carry built-in Bootwright semantics beyond ordering:
+
+- `kubevirt` on the OpenShift Virtualization add-on makes KubeVirt child
+  infrastructure wait for the host cluster to be ready (see
+  [KubeVirt child clusters](../advanced/kubevirt.md)).
+- `dataFoundation` on the Data Foundation operator add-on (Red Hat ODF or IBM
+  Fusion) makes storage-export input effects wait for external-mode components to
+  be ready.
+- `nmstate` on the Kubernetes NMState Operator add-on makes add-ons that apply
+  `nmstate.io` resources order after it.
+
+Because those three well-known names are matched only by the free-form regex,
+validation does **not** catch a typo in them: a misspelled `kubevirt` still
+validates and still participates in ordering, but silently loses its special
+behavior. Spell the built-in names exactly.
 
 !!! warning "`provides[]` requires a readiness check"
     An add-on that advertises any `provides[]` capability must declare at least
@@ -378,13 +388,25 @@ everywhere else in the input tree.
 | `hooks[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |
 | `hooks[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the hook; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
 | `hooks[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
+| `hooks[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
+| `hooks[].manifests[].reclaimRendered` | No | `false` | Delete the rendered plaintext manifest from disk after it applies. Recommended for manifests that embed secret outputs (e.g. the Rook external-details `Secret`), so decrypted material does not linger on the controller. |
 
 The `target` selects machines a playbook runs against — exactly one of
 `boundCluster` (the bound container cluster's nodes), `fromInput` (dereference a
 binding input's `resourceRef` value to its object, then to that object's nodes —
 a `StorageExport` resolves through its `storageClusterRef` to the Ceph nodes), or
-a static `clusters`/`machines` list. `target.limit` is `firstReachable`
-(default) or `all`. A hook can never target the controller/localhost.
+`static` — a literal `{clusters: [...], machines: [...]}` list keyed the same way
+as `boundCluster`/`fromInput`, with **at least one** of the two lists non-empty.
+`target.limit` is `firstReachable` (default) or `all`. A hook can never target
+the controller/localhost.
+
+```yaml
+target:
+  static:
+    clusters: [ceph-dc1]     # ContainerCluster or StorageCluster names
+    machines: [bastion]      # Machine names; at least one of the two lists set
+  limit: all
+```
 
 A hook run receives scoped variables: `bootwright_hook_name`,
 `bootwright_hook_lifecycle`, `bootwright_addon_name`,

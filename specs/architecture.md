@@ -35,8 +35,8 @@ node boot task has completed. Post-install add-on apply is scheduled after that
 install wait.
 
 Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
-tool inputs under `storage/<storageCluster>/`. The `machine-infra` stage
-prepares selected machines when needed. The `clusters` stage schedules an
+tool inputs under `storage/<storageCluster>/`. The `machines` sub-phase (within
+the `infra` family) prepares selected machines when needed. The `clusters` stage schedules an
 Ansible storage task against a synthetic seed inventory entry, launches
 `cephadm bootstrap` on the seed node, applies cephadm service specs, runs
 topology and storage operations, and writes Data Foundation attachment records.
@@ -131,7 +131,7 @@ Convergence is resumable by default. Each mutating workflow task runs under its
 existing resource lock, derives a non-secret desired hash and Bootwright owner
 identity, and writes a durable convergence-safety record. The records classifier
 compares that recorded evidence against current desired state into the four
-outcomes `state-check` reports (`missing`/`foreign`/`match`/`drift`; defined in
+outcomes `diff --recorded` reports (`missing`/`foreign`/`match`/`drift`; defined in
 the `state-model.md` CLI Contract). A records-based apply-mode preflight uses that
 classification to fail closed on `drift` or `foreign` before any mutation, for
 every kind, so plain `apply` never silently reconciles drift; but the
@@ -153,18 +153,18 @@ and storage comparison results — decide whether a rerun can skip or must fail.
 Ownership evidence is a named cross-boundary contract: executing collection
 roles write ownership through `bootwright.core.ownership_record` at mutation
 time; Go reads those records for destroy scoping, host package removal gating,
-orphan reporting, and state-check, and stamps destroy-status attributes. The one
+orphan reporting, and `diff --recorded`, and stamps destroy-status attributes. The one
 Go write is the partial-destroy path: after `--skip-unreachable` leaves a storage
 cluster only partly torn down, Go stamps `destroyStatus=partial` onto that
 StorageCluster's ownership record so it is not treated as fully gone. Run,
 install, and convergence-safety ledgers remain Go-written.
 
-State-check and orphan reporting are additive-first: they enumerate only the
+`diff --recorded` and orphan reporting are additive-first: they enumerate only the
 resources the loaded desired state currently declares, and orphan correlation is
 machine-, cluster-, component-, and provider-grained. An object removed from
 desired state after an apply is therefore neither drift nor orphan — it falls out
 of enumeration rather than being flagged — so out-of-band removal is an explicit
-`destroy` step, not a state-check outcome. A later same-name re-declaration can
+`destroy` step, not a `diff --recorded` outcome. A later same-name re-declaration can
 classify `match` against the stale pre-destroy evidence until it is re-applied.
 This is the documented additive-only posture, not a gap.
 

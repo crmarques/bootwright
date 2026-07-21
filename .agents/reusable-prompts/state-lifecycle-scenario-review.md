@@ -25,7 +25,7 @@ Read current repo state before judging:
    `specs/architecture.md`, `specs/state-model.md`, and `specs/security.md`.
 3. Relevant prompt context only when useful: `idempotency-safety-audit.md`,
    `cli-schema-ux-rethink.md`, `provisioning-logic-review.md`.
-4. Current CLI, selection, validation, planning, `state-check`, `apply`,
+4. Current CLI, selection, validation, planning, `diff`, `apply`,
    `destroy`, ownership records, install records, convergence-safety records,
    provider adapters, Ansible roles, tests, docs, and examples in scope.
 
@@ -34,11 +34,11 @@ Use read-only commands first:
 ```bash
 git status --short
 rg --files AGENTS.md .agents specs docs examples test internal api ansible cmd
-rg -n 'state-check|apply|destroy|override|expect-new|force-unowned|skip-unreachable|destroyProtection|requiredOverride|foreign|drift|ownership|install-record|convergence|safety|orphan|undeclared|partial|stale|unsupported' specs docs cmd internal api ansible test examples
+rg -n 'diff|apply|destroy|converge-drifted|force|expect-new|include-unowned|skip-unreachable|destroyProtection|requiredOverride|foreign|drift|ownership|install-record|convergence|safety|orphan|undeclared|partial|stale|unsupported' specs docs cmd internal api ansible test examples
 rg -n 'rm -rf|wipefs|mkfs|sgdisk|parted|zap|rm-cluster|undefine|oc delete|kubectl delete|ceph .*rm|PowerState|ResetType|InsertMedia|EjectMedia|Delete|Remove|Destroy' internal ansible scripts test
 go run ./cmd/bootwright apply --help
 go run ./cmd/bootwright destroy --help
-go run ./cmd/bootwright state-check --help
+go run ./cmd/bootwright diff --help
 go test ./internal/... # or narrower packages when the trace is focused
 ```
 
@@ -57,9 +57,9 @@ class just because the code path looks inconvenient.
 - **Starting state:** absent; owned match; owned drift; foreign; stale or missing
   records; failed before records were written; partially destroyed; live object
   deleted out of band; YAML removed; same name reused for different identity.
-- **Operations:** `state-check`, `plan`, `apply`, `apply --expect-new`,
-  `apply --override`, scoped `--stage/--through/--clusters`, `destroy --stage`,
-  full `destroy`, recreate after destroy, and `context update`.
+- **Operations:** `diff`, `plan`, `apply`, `apply --expect-new`,
+  `apply --converge-drifted`, scoped `--stage/--through/--clusters`,
+  `destroy --stage`, full `destroy`, recreate after destroy, and `context update`.
 - **Change types:** greenfield apply; import/adoption attempt; topology change;
   provider endpoint change; machine or disk change; OpenShift topology change;
   Ceph topology, placement, pool, filesystem, gateway, or export change; infra
@@ -91,15 +91,15 @@ and which safety lock would prevent the surprise.
   load balancers, artifact services, or context-wide cleanup.
 - `--yes`, non-interactive mode, or automation removes the only human review of a
   destructive plan.
-- `--override`, `--force-unowned`, or `--skip-unreachable` is accepted where its
-  effect is unclear, too broad, or not shown before mutation.
+- `--converge-drifted`/`--force`, `--include-unowned`, or `--skip-unreachable` is
+  accepted where its effect is unclear, too broad, or not shown before mutation.
 - Two contexts share a provider, BMC, VM namespace, host, disk, Ceph cluster, or
   OpenShift cluster.
 - A foreign resource matches Bootwright names, labels, addresses, or partial
   metadata closely enough to tempt unsafe adoption.
 - A new kind or provider adapter lacks an explicit destructive vs.
   reconfigure-only classification.
-- `state-check` is intentionally record-based; identify which destructive paths
+- `diff --recorded` is intentionally record-based; identify which destructive paths
   still need live probes immediately before mutation.
 
 Useful probes:
@@ -120,9 +120,10 @@ rg -n 'changed_when|failed_when|check_mode|creates:|removes:|ignore_errors|no_lo
   on drift, foreign ownership, destructive ambiguity, and unsupported states.
 - `apply --expect-new` fails closed if any selected object already exists or has
   ownership evidence.
-- `apply --override` is command-scoped break glass. It may cross only documented
-  Bootwright-owned drift barriers and must not bypass validation, leases, secret
-  checks, foreign ownership, destroy protection, or active-run safety.
+- `apply --converge-drifted` is command-scoped break glass. It may cross only
+  documented Bootwright-owned drift barriers and must not bypass validation,
+  leases, secret checks, foreign ownership, destroy protection, or active-run
+  safety. Data-loss rebuilds additionally require `--confirm-data-loss`.
 - `destroy` is the removal boundary. `--yes` only skips prompts; it never grants
   override, ownership relaxation, scope widening, or destructive rebuild.
 - Deleting YAML is additive for `apply`; it must not delete live infrastructure.
@@ -142,8 +143,8 @@ shape, required evidence, refusal message, recovery path, and tests.
   silently.
 - **Ownership lock:** every wipe, rebuild, uninstall, VM delete, package removal,
   or Ceph zap verifies durable owner identity plus live identity where possible.
-- **Drift lock:** `--override` is allowed only for classified Bootwright-owned
-  drift with documented consequences.
+- **Drift lock:** `apply --converge-drifted` is allowed only for classified
+  Bootwright-owned drift with documented consequences.
 - **Protection lock:** protected roots cannot be destructively rebuilt by
   `apply`; destruction must cross `destroy` with protected-scope override.
 - **Stale-record lock:** name reuse, YAML deletion, context update, and stale

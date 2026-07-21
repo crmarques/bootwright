@@ -71,38 +71,26 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 	files := []string{
 		"README.md",
-		"docs/index.md",
-		"docs/getting-started/index.md",
-		"docs/getting-started/installation.md",
-		"docs/getting-started/openshift.md",
-		"docs/getting-started/ceph.md",
-		"docs/concepts/index.md",
-		"docs/concepts/environment.md",
-		"docs/concepts/machines.md",
-		"docs/concepts/infrastructure.md",
-		"docs/concepts/container-clusters.md",
-		"docs/concepts/storage.md",
-		"docs/concepts/add-ons.md",
-		"docs/concepts/provisioning-playbooks.md",
-		"docs/concepts/secrets.md",
-		"docs/advanced/index.md",
-		"docs/advanced/fleets.md",
-		"docs/advanced/disconnected-proxy.md",
-		"docs/advanced/corporate-certificates.md",
-		"docs/advanced/managed-os.md",
-		"docs/advanced/ceph-topologies.md",
-		"docs/advanced/kubevirt.md",
-		"docs/advanced/networking.md",
-		"docs/advanced/ownership-and-safety.md",
-		"docs/advanced/operations.md",
-		"docs/advanced/examples.md",
-		"docs/troubleshooting.md",
-		"docs/contributing/index.md",
-		"docs/contributing/api.md",
-		"docs/contributing/architecture.md",
 		"specs/architecture.md",
 		"specs/state-model.md",
 		"ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md",
+	}
+	docsDir := filepath.Join(repoRoot(t), "docs")
+	if err := filepath.WalkDir(docsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot(t), path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	}); err != nil {
+		t.Fatalf("walk docs: %v", err)
 	}
 	rejected := []string{
 		"spec.bootArtifactsHttp",

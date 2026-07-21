@@ -81,7 +81,7 @@ surfaces the partial-destroy marker kept on the ownership record.
 keys on the record ROLE — role=reference is released (extra-var
 `bootwright_infra_component_release_records`, comma-joined names: the roles skip
 every destructive step but remove this context's reference record); role=owner
-is BLOCKED unless `--override` when any sibling context holds a reference OR a
+is BLOCKED unless `--force` when any sibling context holds a reference OR a
 co-owner record for the same (kind,name,host). Co-owners block because the
 reference-role writer is not yet authorable — two contexts driving one shared
 service each stamp an owner record. Failing to enumerate sibling contexts at

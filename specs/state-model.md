@@ -44,11 +44,13 @@ Rules:
   `requiredOverride`. Empty means `allow`. Bootwright never infers protection
   from environment names, context names, labels, or cluster names.
 - `safety.protectedKinds`, when set, lists object kinds — `ContainerCluster`,
-  `StorageCluster`, or `Machine` — that require `--force` to destroy or to
-  destructively rebuild via `apply --converge-drifted` even when `destroyProtection` is
-  `allow`. It is the granular tightening: protect the fleet's Ceph and machines
-  without blanket friction on scratch container clusters. An unknown kind fails
-  validation naming the object and the allowed set.
+  `StorageCluster`, or `Machine` — that require `--force` on `destroy` even when
+  `destroyProtection` is `allow`. `apply` takes no `--force`: a destructive
+  `apply --converge-drifted` rebuild of a protected kind instead fails closed,
+  routing the operator through `destroy --force` for the affected scope followed
+  by a re-apply. It is the granular tightening: protect the fleet's Ceph and
+  machines without blanket friction on scratch container clusters. An unknown kind
+  fails validation naming the object and the allowed set.
 - `defaults.install.pullSecretRef` and `defaults.install.nodeSSH` fill omitted
   cluster install values only.
 - `defaults.artifactServerRef`, when set, is the fleet-wide default artifact
@@ -58,6 +60,10 @@ Rules:
 - `defaults.clientsMirror`, when set, must be an `http(s)` URL. It overrides the
   base URL Bootwright downloads the OpenShift clients (`oc`,
   `openshift-install`) from, for disconnected or mirrored labs.
+- `defaults.virtctlMirror`, when set, must be an `http(s)` URL. It is the
+  `clientsMirror` counterpart for `virtctl` (the KubeVirt client used for VM
+  image uploads): it overrides the base URL Bootwright downloads `virtctl` from,
+  for disconnected or mirrored labs.
 - `infraComponents.*[]` entries are service access catalog entries. Each
   entry's `management` is either `external` with direct access configuration
   or `managed` with `componentRef` pointing at an `InfraComponent` arm of the
@@ -121,6 +127,14 @@ Rules:
   [`Secret`](#secret) objects.
   `registry.url`, when set, is a scheme-less `host[:port][/namespace]` address
   with no credentials, query, fragment, empty path segment, or trailing slash.
+  `registry.trustBundleRef`, when set, names a CA-bundle `Secret` trusting that
+  registry.
+  `rhsm.satellite`, when set, binds RHSM registration to a Red Hat
+  Satellite/Capsule: `hostname` is required and must be a bare host (no scheme or
+  path); `trustBundleRef` names the Capsule CA `Secret`; and `contentBaseURL` is
+  a validated `http(s)` content root that normalizes to
+  `https://<hostname>/pulp/content` when omitted. It is rejected when
+  `rhsm.management` is `external` (the operator playbook owns Satellite binding).
 
   The `rhsm` arm carries a who-runs-it axis: `rhsm.management` is `managed`
   (the default when unset) or `external`. Managed registration runs as a
@@ -346,6 +360,11 @@ Rules:
   discriminator (there is no `type` field).
 - `spec.installer.anaconda.imageRef` references a `MachineImage`. Additional
   install-time package sources are owned by this Anaconda installer block.
+- `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint`, when set,
+  selects which managed artifact-server endpoint serves the managed-OS boot ISO
+  to the BMC over Redfish virtual media. It uses the same `serverRef`/`endpointRef`
+  shape and managed-endpoint requirement as
+  `ContainerCluster.spec.install.agent.redfishVirtualMedia`.
 - `spec.installer.anaconda.packageSource` is omitted for a full DVD image — the
   DVD carries its own packages, which install offline via `cdrom`. Set it when
   `imageRef` points at a small boot ISO, which carries no packages, to declare
@@ -369,6 +388,14 @@ Rules:
   Bootwright does not render persistent repo files or `repo --install` from it;
   future updates use the installed system's normal Red Hat/RHSM repositories or
   later provisioning roles.
+- `spec.subscription.entitlementRef`, when set, must resolve to a `redhat-rhel`
+  `Entitlement` (any other type is rejected). When that entitlement's
+  `rhsm.management` is `managed` it drives the machines-phase
+  `registration.<cluster>` task that registers the installed node with RHSM after
+  the OS is in place; an `external` entitlement plans no registration (the
+  operator owns it). It cannot be combined with
+  `installer.anaconda.packageSource.fromSubscription`, which already registers the
+  node during the Anaconda install.
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.
@@ -395,6 +422,11 @@ Rules:
   `customizations.services.disabled[]` render Kickstart service state. A
   machine that references a managed OS install profile requires `sshd` in the
   enabled list so Bootwright can reconnect after installation.
+- `customizations.ssh.authorizeMachineSSHKey: true` renders the machine's
+  `access.ssh.keyRef` public key into the installed system's authorized keys so
+  Bootwright can reconnect after the install — set it alongside the `sshd` rule
+  above. `customizations.ssh.passwordAuthentication: true` enables sshd password
+  authentication (default: key-only).
 - `customizations.security.selinux.mode` accepts `enforcing`, `permissive`, or
   `disabled`.
 - `customizations.security.firewall.enabled` renders Kickstart firewall state.
@@ -421,6 +453,12 @@ Rules:
   is not defaulted here, so each `Machine` sets its own BMC credential.
 - Libvirt, vSphere, and KubeVirt providers declare `machineProfiles[]`.
   Machines select a profile through `Machine.spec.substrate.profileRef`.
+- Libvirt providers require `libvirt.machineRef` (a `libvirt`-capable `Machine`,
+  the hypervisor host) and `libvirt.uri` (the libvirt connection URI).
+  `libvirt.bmcEmulationDefaults` configures the emulated Redfish BMC and is
+  currently required for libvirt apply support: `enabled`, `protocol`, `emulator`,
+  `bindAddress` (defaults to all interfaces), `port`/`vMediaPort`,
+  `auth.credentialsRef`, and `disableCertificateVerification`.
 - Profile fields the selected provider's adapter does not consume are
   rejected: `template` and `failureDomainRef` are vSphere-only, and
   `dataDisks` are consumed by the libvirt and vSphere adapters only.
@@ -429,15 +467,29 @@ Rules:
   `failureDomains[].server` must equal a declared `vcenters[].server`.
   With several declared failure domains every profile must set
   `failureDomainRef`; with exactly one, an empty ref resolves to it.
+- vSphere providers require `spec.vsphere.vcenters[]`: each entry sets `server`
+  (unique across entries — list several `datacenters[]` under one entry rather
+  than repeating a server), `credentialsRef`, and optional `port` and
+  `disableCertificateVerification`. `spec.vsphere.nodeNetworking` (`external` and
+  `internal`, each carrying `networkSubnetCidr[]`) is required when a failure
+  domain declares more than one `topology.networks` entry.
 - vSphere `spec.vsphere.isoStaging` overrides where boot and install ISOs
   are uploaded; when authored it must set at least one of
   `{datastore, folder}`. Absent fields default to the machine's
   failure-domain `topology.datastore` and the stock vmedia folder.
 - `networkAttachments[]` names provider-specific attachment targets. Machines
-  bind to them through `spec.network.config.attachmentRef`.
+  bind to them through `spec.network.config.attachmentRef`. Each entry sets a
+  `name` and exactly one arm matching the provider `type`: `libvirt.bridge`,
+  `vsphere.portgroup`, `baremetal.vlan` (`0`–`4094`), or `kubevirt.networkRef`. A
+  KubeVirt `networkRef` requires `name` and `namespace` (a DNS label); `kind`
+  defaults to `ClusterUserDefinedNetwork` and `apiGroup` defaults from the kind —
+  `k8s.ovn.org` for `ClusterUserDefinedNetwork`/`UserDefinedNetwork`,
+  `k8s.cni.cncf.io` for `NetworkAttachmentDefinition`.
 - KubeVirt providers set exactly one of `hostClusterRef` or `kubeconfigRef`.
   `hostClusterRef` references a Bootwright `ContainerCluster`; `kubeconfigRef`
-  references a secret containing an external virtualization kubeconfig.
+  references a secret containing an external virtualization kubeconfig. They also
+  require `kubevirt.namespace` (the target VM namespace); optional
+  `kubevirt.storageClassRef` selects the DataVolume storage class.
 
 ## InfraComponent
 
@@ -461,6 +513,15 @@ Rules:
 - A `nameResolution` arm authoritatively answers its rendered records and
   forwards every other query to `forwarders[]` (IP resolvers); with no
   `forwarders` it answers only local records.
+- An `artifactServer` arm places with `machineRef` and optional `bindAddress`.
+  `retention` is `persistent` (default) or `install-only` (reclaimed once installs
+  complete). `listeners[]` are required — each a `name` (DNS label), a `protocol`
+  of `http` or `https`, and a unique `port` (`1`–`65535`). `endpoints[]` each name
+  a served surface with `name`, `listenerRef` (a declared listener), and
+  `addressRef` (a `Machine.spec.addresses[]` value). `tls` (`minVersion` — a TLS
+  1.0–1.3 spelling — and `ciphers`) requires at least one `https` listener.
+- An `ntp` arm takes `upstreamSources[]`: the upstream NTP servers (host or IP)
+  chrony syncs from.
 
 ## NetworkConfig
 
@@ -576,6 +637,15 @@ Rules:
 - `spec.distribution.type` accepts `openshift` (default, materialized by
   `render effective`) or `okd`; `openshift` clusters require a pull secret via
   `spec.install.pullSecretRef` or the `Environment` default.
+- `spec.distribution.release` selects the release to install. `version` (an
+  `x.y.z`) is required for both `openshift` and `okd` unless `release.image` is
+  set (a pinned release image; a mutable or `:latest` tag is rejected) — either
+  one alone suffices. `channel` is openshift-only (rejected for `okd`) and, when
+  omitted for an openshift cluster carrying a `version` and no `image`, defaults
+  to the derived `stable-<x.y>` of the version's leading `x.y`.
+- `spec.security.fips.enabled: true` renders a FIPS-mode install and is accepted
+  only for `distribution.type: openshift`; `okd` (community SCOS) is not
+  FIPS-validated and is rejected.
 - `spec.install.nodeSSH` (and the `Environment` `defaults.install.nodeSSH` that
   fills it when omitted) sets `keyPairRef`, or `publicKeyRef` with an optional
   `privateKeyRef`. `keyPairRef` is mutually exclusive with the other two, and
@@ -595,10 +665,18 @@ Rules:
   omitted; `render effective` materializes the defaults. Each list is
   defaulted independently, and an authored list — even a partial one — is
   left untouched.
+- `spec.networking.networkType`, when set, overrides the cluster CNI plugin
+  (rendered verbatim as install-config `networking.networkType`); omitted uses
+  the installer default (`OVNKubernetes`).
 - `spec.install.mode` accepts `connected` (default) or `disconnected`;
   `spec.install.method` accepts `agent` (default). `disconnected` requires
   `Environment.spec.registries.mirror` (trust bundle plus an external mirror URL
   or a managed registry component).
+- `spec.install.agent.bootArtifacts.artifactServerEndpoint`, when set, selects
+  the artifact-server endpoint that serves the agent boot artifacts (the
+  rootfs/kernel/initramfs the nodes fetch at boot). It takes effect only under
+  `spec.install.mode: disconnected`; a connected install pulls them from the
+  release payload.
 - `spec.install.additionalTrustBundleRefs[]` are cluster-scoped additional CA
   trust-bundle secret names, merged with fleet-wide
   `Environment.spec.installTrust.caBundleRefs[]`.
@@ -610,6 +688,10 @@ Rules:
   OpenShift has no install-time infra role, so an infra host installs as a
   worker and is promoted day-2 with the `node-role.kubernetes.io/infra`
   label, a `NoSchedule` taint, and the infra MachineConfigPool.
+- `spec.hosts[].labels` (a string map, non-empty keys) and `spec.hosts[].taints[]`
+  (each `key` required, optional `value`, `effect` one of `NoSchedule`,
+  `PreferNoSchedule`, or `NoExecute`) are day-2-owned node intent applied after
+  install — reconcilable-in-place drift, not install-config/agent-config identity.
 - `spec.controlPlane.replicas`, when set, must equal the number of `master`
   nodes. `spec.compute[]` declare worker machine pools; their summed `replicas`
   must equal the number of `worker` nodes. A single all-`master` topology omits
@@ -742,22 +824,48 @@ Rules:
   `ceph mgr module enable` operations. Modules removed from the spec are not
   disabled (additive-only); module settings are declared under `config.mgr`
   (`mgr/<module>/<key>`).
+- Ceph placement blocks — on `spec.ceph.monitoring` services, the `services[]`
+  passthrough, the management ingress, CephFS `mds`, RGW, and ingress — share one
+  grammar: `hosts[]` and `sites[]` narrow the resolved host set (each must name a
+  topology host/site), and `countPerHost` (non-negative) sets how many daemons
+  cephadm co-locates per resolved host.
 - `spec.ceph.monitoring` declares the cephadm monitoring stack. Absent means
   the cephadm default stack with cephadm's own placement; `enabled: false`
   renders `cephadm bootstrap --skip-monitoring-stack` and forbids per-service
   blocks. The `prometheus`, `grafana`, and `alertmanager` services place by
   the topology roles of the same names exactly like `mon`/`mgr` (narrow with
-  `placement.sites`/`hosts`); `nodeExporter` keeps the cephadm all-hosts
-  default unless authored. Service knobs render 1:1 into the cephadm service
-  spec: `port`, and (prometheus only) `retentionTime`/`retentionSize` as
-  `retention_time`/`retention_size`. An authored service must resolve to at
-  least one host.
+  `placement.sites`/`hosts`); `nodeExporter`, `loki`, and `promtail` carry no
+  topology role and keep the cephadm all-hosts default unless narrowed by
+  explicit `placement.hosts`/`sites`. Service knobs render 1:1 into the cephadm
+  service spec: `port`, `networks[]` (CIDRs the daemon binds), and (prometheus
+  only) `retentionTime`/`retentionSize` as `retention_time`/`retention_size`. An
+  authored service must resolve to at least one host.
+- `spec.ceph.management`, when set, publishes the cephadm mgmt-gateway (the HA
+  front door to the Ceph dashboard/Grafana). `dnsName` and `ingress` are required;
+  `ingress` mirrors the RGW ingress VIP shape — `name`, `address`, `prefixLength`,
+  optional `virtualInterfaceNetworks[]`, and a `placement` that defaults to every
+  `ingress`-role host, narrowed by `sites`/`hosts` (under stretch it must cover
+  both data sites). `port` sets the gateway port (`0`–`65535`). `tls`, when set,
+  supplies the gateway certificate through `certificateRef`+`keyRef`. `enableAuth`
+  and `oauth2Proxy` are coupled: `enableAuth: true` requires an `oauth2Proxy`
+  block (`providerDisplayName`, `clientId`, `oidcIssuerUrl`, and `clientSecretRef`
+  required; optional `redirectUrl`, `httpsAddress`, `allowlistDomains[]`,
+  `cookieSecretRef`), and an `oauth2Proxy` block requires `enableAuth: true`.
+- `spec.ceph.security.fips.enabled: true` requires distribution `redhat` or `ibm`
+  (rejected for `oss`) and gates the cluster on FIPS-mode Ceph hosts: every host
+  that installs a managed OS must reference a `MachineInstallProfile` whose
+  `customizations.security.fips.enabled` is also `true`.
 - `spec.ceph.services[]` is the cephadm service-spec passthrough for service
-  types Bootwright does not model first-class (`nfs`, `loki`, ...):
+  types Bootwright does not model first-class (`snmp-gateway`, `oauth2-proxy`, ...):
   `serviceType`, `serviceID`, `placement`, and `spec` render field for field
   into a `ceph orch apply` document. Types owned by a first-class surface
-  (topology roles, monitoring, gateways) are rejected; `placement` requires
-  explicit `hosts` or `sites`.
+  (topology roles, monitoring, gateways) are rejected — the reserved set is
+  `host`, `mon`, `mgr`, `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`,
+  `alertmanager`, `node-exporter`, `nfs`, `loki`, and `promtail`; `placement`
+  requires explicit `hosts` or `sites`. `nfs` is owned by the
+  [`StorageNFSExport`](#storagenfsexport) kind and `loki`/`promtail` by
+  `spec.ceph.monitoring`, so they must be declared there, not through this
+  passthrough.
 - `spec.ceph.topology.hosts[]` require a `machineRef` to a `ceph-node`
   `Machine` and at least one `roles[]` value from `mon`, `mgr`,
   `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`, `alertmanager`.
@@ -841,6 +949,9 @@ Rules:
 - `spec.ceph.ruleName` is required.
 - `spec.ceph.failureDomain` and `spec.ceph.replicated.{size,minSize}` are the
   defaults applied to pools that reference the policy.
+- `spec.ceph.crushDeviceClass`, when set, pins the CRUSH device class (for
+  example `ssd`, `hdd`, `nvme`) the policy's rule targets, restricting the pool
+  to OSDs of that class.
 - Effective `minSize` must not exceed `size`; authored values are non-negative.
 - For a host failure domain, the effective replica count must not exceed the
   number of topology hosts carrying the `osd` role.
@@ -876,6 +987,9 @@ Rules:
 - The pool's structural identity is its `type` (and erasure profile): the only
   desired-state change that rebuilds a live pool (data-destroying, `--converge-drifted`
   only). Replicas, crush rule, and application reconcile in place.
+- `spec.ceph.mirroring`, when set, enables RBD mirroring on the pool: `mode` is
+  `image` (mirror only images with the mirror flag set) or `pool` (mirror every
+  image in the pool).
 - On stretch-mode clusters, pools inherit the stretch CRUSH rule and the
   fixed stretch replication (`size: 4` / `minSize: 2`) without a placement
   policy; a `placementPolicyRef` is needed only for genuinely divergent
@@ -914,6 +1028,16 @@ Rules:
   role; `sites`/`hosts` narrow the selection and must resolve to at least one
   `mds`-capable host. On stretch-mode clusters the resolved placement must
   cover at least two MDS-capable hosts per data site.
+- `spec.cephfs.mds` also carries `activeCount` (active MDS ranks; default `1`),
+  `standbyReplay` (a hot standby per rank), `standbyCountWanted` (extra cold
+  standbys; non-negative), and a `serviceSpec` escape hatch (`unmanaged`,
+  `extraContainerArgs`/`extraEntrypointArgs`, `networks[]` CIDRs). An
+  active+standby intent the resolved placement cannot host is rejected — it would
+  converge to a permanent `MDS_INSUFFICIENT_STANDBY`.
+- `spec.cephfs.subvolumeGroups[]` declare CephFS subvolume groups: each needs a
+  unique `name` and optionally `mode` (an octal such as `0755`), `uid`/`gid`
+  (non-negative), `sizeBytes` (a non-negative quota), and `poolLayoutRef` (a
+  same-cluster `StoragePool` giving the group's data layout).
 
 ## StorageObjectGateway
 
@@ -1230,8 +1354,8 @@ A playbook is planned only when its `stage` is in the run's phase set (the
 `--clusters` filter). An `after` playbook waits for the anchor stage's core tasks
 in scope; a `before` playbook gates every anchor-stage core task in scope and
 itself lands after the previous stage. Playbooks flow through `apply`, `plan`,
-`validate`, and `state-check` on the existing `--stage`/`--clusters` axes; there
-is no dedicated CLI verb. Because a playbook is opaque, `state-check` reports it
+and `diff --recorded` on the existing `--stage`/`--clusters` axes; there
+is no dedicated CLI verb. Because a playbook is opaque, `diff --recorded` reports it
 as `match` (declared inputs unchanged) or `drift` (changed, will re-run) from the
 input hash only — it never observes node reality.
 
@@ -1411,6 +1535,17 @@ Rules:
   root. `destroy --stage infra
   --clusters` additionally accepts the literal `artifact-server` to remove only
   the generated artifact publication service.
+- `--machines`, on `apply`/`plan`/`destroy`, is the per-machine alternative to
+  `--clusters` and is mutually exclusive with it: a comma-separated list of
+  `Machine` names. On `apply`/`plan` the scope is limited to the `fabric` and
+  `machines` sub-phases (a `--stage`/`--through` outside that machine layer is
+  rejected); on `destroy` it is limited to the machine-substrate teardown (a
+  `--stage` other than `infra` is rejected). A named machine must have
+  provisioning work — be a cluster node or host a shared service or provider —
+  so teardown (or provisioning) of a standalone managed-OS machine that belongs
+  to no cluster is fail-closed (Bootwright installs a managed OS only on
+  cluster-member machines). Destroying a machine that is a node of an installed
+  cluster fails closed unless `--force`.
 - `apply --stage infra` includes provider, infra-components, machine-infra, and
   storage-infra work.
 - `apply --stage clusters` includes storage-cluster, container-cluster, and
@@ -1429,10 +1564,10 @@ Rules:
     and wait for `openshift-install`.
   - `add-ons` applies declarative cluster add-ons and attaches storage.
 
-  `apply`, `plan`, and `state-check` accept sub-phase `--stage` values.
+  `apply`, `plan`, and `diff` accept sub-phase `--stage` values.
   `destroy --stage` accepts only the two families (`infra`, `clusters`);
   sub-phases are apply-only and rejected on `destroy`.
-- `--through <stage>`, on `apply`, `plan`, and `state-check`, runs every stage
+- `--through <stage>`, on `apply`, `plan`, and `diff`, runs every stage
   from the beginning up to and including `<stage>`, cumulatively; `--stage` and
   `--through` are mutually exclusive.
 - `destroy --stage infra` tears down infrastructure for the current context.
@@ -1491,7 +1626,7 @@ Rules:
   `apply --expect-new` additionally refuses to proceed when any selected object
   already exists. `--expect-new` and `--converge-drifted` are mutually exclusive.
   Every selected object is classified independently against the recorded last
-  apply by the same classification that powers `state-check`.
+  apply by the same classification that powers `diff --recorded`.
 - `apply` is additive for every kind: it never removes, deprovisions, or
   unconfigures a live resource whose declaration was deleted from desired state.
   Deletion is not a plannable apply action; removal crosses the destroy
@@ -1550,6 +1685,17 @@ Rules:
   confirmation but never authorizes data loss (mirroring how `--yes` never implies
   `--converge-drifted`). A reconfigure-only or reconcilable-in-place override touches nothing
   destructive and reaches neither gate.
+- `apply --reclaim-devices <paths>` takes a comma-separated list of block-device
+  paths to WIPE in-band before a managed-Ceph apply — the recovery path for an
+  owned OSD disk whose on-node marker was lost (for example by a managed-OS
+  reinstall). It is irreversible and fail-closed: it wipes only a named device
+  that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a
+  system disk, and is on a host whose OSD marker does not already record it; a
+  path that matches no declared OSD device is rejected, and if no selected
+  cluster is recorded Bootwright-owned nothing is reclaimed. The wipe runs in the
+  `deps` phase, so the run scope must include it (`--stage deps`, `--through
+  base`, or the full graph), and it is gated by the same data-loss acknowledgment
+  (`--confirm-data-loss` or an interactive confirm).
 - `bootwright machine trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
   runs never record trust on first use, so pipelines record it with `machine

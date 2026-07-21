@@ -478,11 +478,11 @@ default HTTPS listener on port `8443`.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `artifactServer.machineRef` | Yes | — | Machine that runs the service. |
-| `artifactServer.bindAddress` | No | — | Bind address; must be a valid IP when set. |
+| `artifactServer.bindAddress` | No | `0.0.0.0` | Bind address; must be a valid IP when set. Normalize injects `0.0.0.0` when omitted. |
 | `artifactServer.retention` | No | `persistent` | `persistent` keeps the service until an explicit destroy; `install-only` reclaims it automatically at the end of the apply that finishes installing every cluster it serves, and re-provisions it on demand when a later apply must install or rebuild a node it serves. |
 | `artifactServer.tls.minVersion` | No | server default | Lowest TLS version the HTTPS listeners accept (`TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`); renders `ssl_protocols` from it up to `TLSv1.3`. Lower it for a legacy BMC HTTPS client. |
 | `artifactServer.tls.ciphers` | No | server default | OpenSSL cipher string rendered verbatim as `ssl_ciphers` (e.g. `DEFAULT:@SECLEVEL=0`). Requires an `https` listener. |
-| `artifactServer.listeners[]` | Yes | — | At least one listener. |
+| `artifactServer.listeners[]` | No | one `https` listener on port `8443` | Listener list. When omitted, the normalize phase injects a single `https` listener named `https` on port `8443`; author `listeners[]` to change or add listeners. |
 | `artifactServer.listeners[].name` | Yes | — | Listener name; DNS label, unique within the service. |
 | `artifactServer.listeners[].protocol` | Yes | — | `http` or `https`. |
 | `artifactServer.listeners[].port` | Yes | — | Listener port; `1..65535`, unique within the service. |
@@ -542,8 +542,8 @@ shape. Each requires its own `implementation` value (see the table above).
 | --- | --- | --- | --- | --- |
 | `implementation` | All | Yes | — | Closed value per arm: `squid` / `dnsmasq` / `chrony` / `mirror-registry`. |
 | `machineRef` | All | Yes | — | Machine that runs the service. |
-| `bindAddress` | All | No | — | Bind address; must be a valid IP when set. |
-| `port` | All | No | — | Service port; must be `0..65535`. |
+| `bindAddress` | All | No | `0.0.0.0` | Bind address; must be a valid IP when set. |
+| `port` | All | No | `3128`/`53`/`123`/`5000` (squid/dnsmasq/chrony/mirror-registry) | Service port; must be `0..65535`. |
 | `endpoints[]` | All | No | — | Named endpoint selectors. |
 | `endpoints[].name` | All | Yes | — | Endpoint selector name; unique within the service. |
 | `endpoints[].addressRef` | All | Yes | — | Must resolve to a `Machine.spec.addresses[].name` on the placement machine. |
@@ -551,11 +551,13 @@ shape. Each requires its own `implementation` value (see the table above).
 | `forwarders[]` | `nameResolution` | No | — | Upstream DNS forwarders; each must be a valid IP address. |
 | `upstreamSources[]` | `ntp` | No | — | Upstream time sources. |
 
-!!! note "Listening surface defaults live on the renderer"
-    Providers and components declare *where* and *how* a service runs; the
-    renderer owns the default listening surface (for example the squid `3128`,
-    DNS `53`, NTP `123`, mirror-registry `5000`, and artifact HTTPS `8443`
-    ports) when a `port` is omitted. These defaults are not authored fields here.
+!!! note "Port and bind-address defaults are normalize-injected"
+    `port` and `bindAddress` are authorable fields with defaults the normalize
+    phase injects before renderers and validators read them. An omitted `port`
+    becomes the per-implementation default — squid `3128`, dnsmasq `53`, chrony
+    `123`, mirror-registry `5000` (and the artifact server's HTTPS listener
+    `8443`) — and an omitted `bindAddress` becomes `0.0.0.0`. Run
+    `render effective` to see the injected values.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

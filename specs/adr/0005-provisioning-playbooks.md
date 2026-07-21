@@ -23,7 +23,7 @@ against machines, anchored to one of the five provisioning sub-phases
 (`fabric`, `machines`, `deps`, `base`, `add-ons`) with `before`/`after` timing.
 It is authored as desired-state YAML and executed by the normal `apply` flow
 through the existing scheduler and `ansible.CommandRunner`; there is no new
-imperative CLI verb. Playbooks flow through `apply`/`plan`/`validate`/`state-check`
+imperative CLI verb. Playbooks flow through `apply`/`plan`/`validate`/`diff`
 on the existing `--stage`/`--clusters` axes.
 
 Three cross-cutting decisions are recorded here.
@@ -69,7 +69,7 @@ rather than run fleet-wide (an empty `--limit` would target every host).
 
 ## Consequences
 
-- Playbooks are opaque: `state-check` classifies them as match/drift from a
+- Playbooks are opaque: `diff --recorded` classifies them as match/drift from a
   content-and-spec input hash only (`run: onChange` skips an unchanged run;
   `run: always` re-runs every apply). It cannot observe what a playbook did on a
   node. This is the honest contract, documented as such.

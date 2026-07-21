@@ -278,7 +278,7 @@ so there is no `type` field. Set it under
     referenced entitlement's `rhsm` arm carries a `satellite` block, in which
     case the install registers and pulls content from that Red Hat Satellite
     instead. No `MachineImage` change is needed — see
-    [Environment › Corporate Satellite](environment.md#corporate-satellite).
+    [Secrets & entitlements › Corporate Satellite](secrets.md#corporate-satellite).
 
 ### Boot media vs DVD
 
@@ -315,7 +315,7 @@ spec:
 ```
 
 A boot ISO from the Red Hat CDN (`fromSubscription`) references a `redhat-rhel`
-[`Entitlement`](environment.md#entitlements) (an RHSM organization plus
+[`Entitlement`](secrets.md#entitlements) (an RHSM organization plus
 activation key); Anaconda registers the node and installs from the subscription
 CDN:
 
@@ -421,6 +421,8 @@ through Anaconda.
 | `spec.installer.anaconda` | Yes | None | Anaconda installer block (its presence is the installer discriminator). |
 | `spec.installer.anaconda.imageRef` | Yes | None | Names a `MachineImage`. |
 | `spec.installer.anaconda.packageSource` | No | None (⇒ full DVD) | Where Anaconda fetches packages when `imageRef` names a boot ISO. Omit for a full DVD image. |
+| `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` | No | None | Selects the managed artifact-server endpoint that serves this profile's managed-OS boot ISO to the BMC over Redfish virtual media. `serverRef` may default from `Environment.spec.defaults.artifactServerRef`; `endpointRef` must resolve to a **managed** artifact server. |
+| `spec.subscription.entitlementRef` | No | None | Post-install RHSM registration of the installed node: names the `redhat-rhel` `Entitlement` (registered as `managed`) the node's OS registers against after install. Must resolve to a `redhat-rhel` entitlement, and **cannot** be combined with `installer.anaconda.packageSource.fromSubscription` (which already registers the node during install). |
 | `spec.customizations.hostname.source` | No | None | Currently `machineName`. |
 | `spec.customizations.localization.language` | No | `en_US.UTF-8` | System message locale. |
 | `spec.customizations.localization.formats` | No | Follows `language` | Regional formatting locale (dates, numbers, currency). |

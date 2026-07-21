@@ -121,12 +121,12 @@ Set the e2e case name and initialize a context from the mounted fixture:
 export CASE=<case-directory>
 bootwright context init --name "$CASE" -f "/work/test/e2e/$CASE" --yes
 bootwright status
-eval "$(bootwright print-env)"
 ```
 
-If `print-env` reports that proxy credentials would be printed, create
-the `proxy-credentials` secret in [common-steps.md](common-steps.md) first, then
-rerun it with `--sensitive`.
+In an externally proxied environment, export the proxy values shown in
+[Optional Proxy Env For The Container Build](#optional-proxy-env-for-the-container-build)
+above, and create the `proxy-credentials` secret in
+[common-steps.md](common-steps.md) first if the proxy requires authentication.
 
 ## Bootstrap Bastion Dependencies
 

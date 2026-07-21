@@ -98,9 +98,9 @@ cd ~/bootwright
 
 Bootwright commands use the proxy selected by
 `Environment.spec.proxyFor.bootwright` from the active context, not ambient
-shell proxy variables. Use `bootwright print-env` when a shell outside
-Bootwright needs the same proxy exports. If proxy credentials would be printed,
-rerun it with `--sensitive` after creating the credential secret.
+shell proxy variables. When a shell outside Bootwright needs the same proxy,
+export `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` yourself from the Environment's
+proxy component values, as shown below.
 
 Leave unset for direct internet access. Replace the placeholder URL before
 exporting:
@@ -123,12 +123,12 @@ on the bastion:
 export CASE=<case-directory>
 bootwright context init --name "$CASE" -f "test/e2e/$CASE" --yes
 bootwright status
-eval "$(bootwright print-env)"
 ```
 
-If `print-env` reports that proxy credentials would be printed, create
-the `proxy-credentials` secret in [common-steps.md](common-steps.md) first, then
-rerun it with `--sensitive`.
+In an externally proxied environment, export the proxy values shown in
+[Optional Proxy Env](#optional-proxy-env) above, and create the
+`proxy-credentials` secret in [common-steps.md](common-steps.md) first if the
+proxy requires authentication.
 
 ## Bootstrap Bastion Dependencies
 

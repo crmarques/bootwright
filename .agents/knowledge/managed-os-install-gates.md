@@ -19,10 +19,10 @@ greenfield host has the port closed and never trips this.
 
 **Ownership and match are separate predicates:** a Bootwright-owned marker is
 one whose owner == bootwright, regardless of whether its hash still matches
-desired. `--override` may rebuild an OWNED host whose hash drifted, but must
+desired. `--converge-drifted` may rebuild an OWNED host whose hash drifted, but must
 NEVER adopt, reinstall, or wipe a host Bootwright does not own — a reachable
 host without a Bootwright-owned marker is foreign (or manually prepared) and
-fails closed even under `--override`.
+fails closed even under `--converge-drifted`.
 
 **Override rebuild is driven, not merely permitted:** the drifted-owned refusal
 only suppresses the fail; a separate `bootwright_managed_os_force_rebuild` fact
@@ -63,3 +63,25 @@ node keeps a lingering `/dev/sr0`.
 include (`Install managed OS media when needed`), so an already-installed node
 prints a single skipped line instead of ~31 individually skipped inner tasks;
 the block inside keeps the same guard as defense-in-depth.
+
+**Destroy-protection remedy routes machine substrate to the infra stage:**
+machine-substrate kinds (managed-OS install, per-host machine-infra steps) are
+torn down ONLY by the infra stage — a clusters-stage `destroy --force` never
+touches their convergence records, so pointing a blocked managed-OS machine at
+the clusters destroy loops forever (destroy, re-apply, blocked again).
+`overrideDestroyRemedy` therefore emits
+`bootwright destroy --stage infra --clusters <affected> --force`, and hints
+`--skip-unreachable` because a machine whose host substrate was never
+provisioned or is powered off (e.g. a nested cluster on a host cluster that
+never came up) would otherwise fail closed at the infra destroy.
+`OverrideDestructiveMachineSubstrate` reports the distinct clusters so the
+remedy can scope the command. Pinned by
+TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy (which also locks
+out the old dead-end "for that scope" guidance).
+
+**`customizations.storage.wipe` is a latent dead field:** the renderer projects
+a var for it, but `ks.cfg.j2` never reads that var — the kickstart's `clearpart`
+is unconditional, so authoring `storage.wipe: false` does NOT preserve existing
+partitions. Do not treat the field as a working guard; wiring it up (or removing
+it) is unfinished work, and any managed-OS install currently wipes the disk
+regardless of its value.

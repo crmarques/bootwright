@@ -7,11 +7,11 @@ Silently stamping today's hashes as the install baseline would absorb real
 install-input drift as "installed and in sync" — the change would never be
 applied and every later gate would compare against a forged baseline. The
 operator chooses explicitly: rebuild (`apply --stage clusters --clusters
-<name> --override --yes`) or restore `clusters/<name>/runtime/install-record.json`
+<name> --converge-drifted --confirm-data-loss --yes`) or restore `clusters/<name>/runtime/install-record.json`
 if the running cluster genuinely matches. A record-less cluster whose
 kubeconfig does not report Available=True fails with
 `has existing kubeconfig but does not report Available=True; refusing to
-regenerate installer inputs without --override`. A fresh cluster (no
+regenerate installer inputs without --converge-drifted`. A fresh cluster (no
 kubeconfig at all) installs normally. See `guardUnrecordedCluster` in
 `internal/converge/workflow/install_state.go`.
 
@@ -26,16 +26,16 @@ enumerates the per-cluster record files (not desired state), which is how a
 rename (old record orphans, new name re-provisions) or an orphan (declaration
 removed without destroy) is detected.
 
-**Semantics (override healthy-skip):** `apply --override` does **not**
+**Semantics (override healthy-skip):** `apply --converge-drifted` does **not**
 reinstall a healthy cluster. A cluster whose record matches the desired
 install inputs, is `installed`, and whose kubeconfig probe reports
 Available=True has its install tasks skipped:
-`cluster already installed and Available=True for desired install inputs; --override rebuilds only drifted objects, not a healthy in-sync cluster`.
-This protects healthy clusters caught in a scoped `apply --override` aimed at
+`cluster already installed and Available=True for desired install inputs; --converge-drifted rebuilds only drifted objects, not a healthy in-sync cluster`.
+This protects healthy clusters caught in a scoped `apply --converge-drifted` aimed at
 some other drifted object. A probe **error** (`oc` missing from PATH, API
 refusing connection on a hard-down cluster) is treated as not-available under
 override — override exists precisely to rebuild an unreachable cluster — so
-the install tasks run. Without `--override`, the same probe error is a hard
+the install tasks run. Without `--converge-drifted`, the same probe error is a hard
 refusal instead.
 
 **Semantics (structural hash migration safety):** Install records carry both

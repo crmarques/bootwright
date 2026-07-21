@@ -4,14 +4,14 @@ Substrate VM names (`<cluster>-<machine>`) carry no context component, so a
 second Bootwright context or a foreign owner can hold a same-named object.
 Every destructive touch verifies a live ownership marker first.
 
-**Apply-side guard (no --force-unowned escape):** before the override reset
+**Apply-side guard (no --include-unowned escape):** before the override reset
 destroys/undefines a libvirt domain, or a plain apply redefines it, the apply
 path requires the Bootwright ownership marker for THIS context/cluster/machine
 in the domain XML (`machine_substrate_libvirt/tasks/machine.yml`; vSphere has
 the identical guard on its override reset via the VM annotation in
 `machine_substrate_vsphere/tasks/probe.yml`). An absent domain fails the probe
 and skips the guard, so first apply still creates. Apply fails closed with NO
-`--force-unowned` escape — that flag exists only on destroy.
+`--include-unowned` escape — that flag exists only on destroy.
 
 **Destroy-side verification per substrate:** libvirt reads the domain-XML
 marker; vSphere asserts the vCenter annotation (`bootwright:context=`,

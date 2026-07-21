@@ -16,7 +16,8 @@ the conventions every domain page shares. The domain pages —
 [Environment](environment.md), [Machines](machines.md),
 [Infrastructure](infrastructure.md),
 [Container clusters](container-clusters.md), [Storage](storage.md),
-[Add-ons](add-ons.md), and [Secrets](secrets.md) — teach each concept and
+[Add-ons](add-ons.md), [Provisioning playbooks](provisioning-playbooks.md),
+and [Secrets](secrets.md) — teach each concept and
 document that domain's API fields together. For the execution internals (the
 render pipeline, execution identities, resource locks, the ownership-record
 cross-boundary contract, and the four-outcome classifier in depth) see
@@ -63,6 +64,9 @@ links point to the domain page where each kind is documented in full.
 | [`ClusterAddon`](add-ons.md) | A reusable post-install component applied to an installed cluster. |
 | [`ClusterAddonProfile`](add-ons.md) | An ordered reusable add-on set. |
 | [`ClusterAddonBinding`](add-ons.md) | One cluster's selected profiles, add-ons, and binding-scoped input values. |
+| [`ProvisioningPlaybook`](provisioning-playbooks.md) | An operator-supplied Ansible playbook run against machines at a chosen provisioning stage, before or after the built-in work. |
+| [`Secret`](secrets.md) | One named unit of secret material: its `spec.type` (what the material is) and optional `spec.source` (how the bytes are obtained). |
+| [`Entitlement`](secrets.md) | Named vendor-controlled access for one product: RHSM subscription, product registry, and license for RHEL or Ceph. |
 
 Post-install components do not live under `ContainerCluster.spec.install`, and
 external storage is not a `ContainerCluster` field — both are separate kinds the
@@ -436,7 +440,8 @@ schemas before any mutation.
 - Use the domain pages — [Environment](environment.md),
   [Machines](machines.md), [Infrastructure](infrastructure.md),
   [Container clusters](container-clusters.md), [Storage](storage.md),
-  [Add-ons](add-ons.md), [Secrets](secrets.md) — for field-level options.
+  [Add-ons](add-ons.md), [Provisioning playbooks](provisioning-playbooks.md),
+  [Secrets](secrets.md) — for field-level options.
 - Use [Advanced Scenarios](../advanced/index.md) for provider, networking,
   storage, and recovery scenarios.
 - Use [Architecture](../contributing/architecture.md) for the execution and

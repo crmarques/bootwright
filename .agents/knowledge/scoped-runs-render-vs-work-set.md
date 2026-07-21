@@ -31,14 +31,14 @@ trust. Pseudo-hosts (localhost, agent-node hosts) resolve to no Machine. When
 the scope empties the machine list, the managed known_hosts file check drops
 too. Pinned by TestManagedHostTrustChecksScopeExcludesOutOfScopeMachine.
 
-**state-check mirrors apply exactly:** it threads the resolved scope name into
+**diff --recorded mirrors apply exactly:** it threads the resolved scope name into
 `clusteraccess.Resolve` (a container-only stage like add-ons rejects a
 StorageCluster name with the same "unknown cluster" error apply raises — M11),
 takes `StorageClusterNames` from `Selection.StorageWorkNames()` (the same
 single source scoped apply uses), and classifies a StorageCluster's
 sub-objects only when the selected graph plans that cluster's task — so a
 render reference never reports spurious pool/export drift and a scoped
-state-check never exits 3 where the identically-scoped apply is a no-op.
+diff --recorded never exits 3 where the identically-scoped apply is a no-op.
 
 **Orphan detection needs the FULL state:** undeclared-resource reporting must
 compare ownership records against the full desired state captured before

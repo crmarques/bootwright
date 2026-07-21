@@ -46,10 +46,14 @@ cluster's nodes with that cluster; reserve `infra/` for objects genuinely shared
 across clusters.
 
 !!! note "One object per file"
-    Each input YAML file holds exactly one object, and the filename matches
-    `metadata.name`. A fleet is many small files organized by directory, not a
-    few multi-document files. This is the authoring layout `specs/state-model.md`
-    defines; every example and `bootwright example init` follow it.
+    As a rule, each input YAML file holds exactly one object and the filename
+    matches `metadata.name`; a fleet is many small files organized by directory,
+    not a few multi-document files. Two sanctioned exceptions: similar `Secret`
+    objects are grouped into a single multi-document `secrets.yaml`, and a
+    cluster's root object lives in `cluster.yaml` rather than a file named after
+    its `metadata.name`. This is the authoring layout `specs/state-model.md`
+    defines; every example and `bootwright example init` output follow it,
+    exceptions included.
 
 ## The single cluster-selection namespace
 
@@ -69,9 +73,9 @@ model.
 
 Shared services are `InfraComponent` objects placed on machines and selected from
 the `Environment`'s service catalog. One component can back the whole fleet: a
-single artifact server, load balancer, NTP source, DNS resolver, proxy, or mirror
-registry serving every cluster that needs it. In the fleet example one managed
-artifact server is declared once and consumed by both clusters:
+single artifact server, NTP source, DNS resolver, proxy, or mirror registry
+serving every cluster that needs it. In the fleet example one managed artifact
+server is declared once and consumed by both clusters:
 
 ```yaml
 spec:
@@ -100,13 +104,19 @@ spec:
           endpointRef: bmc
 ```
 
-The same pattern applies to the other shared services — a `loadBalancer`,
-`nameResolution`, `ntp`, `proxy`, or `registry` component is declared under
+The same pattern applies to the other shared services — a `nameResolution`,
+`ntp`, `proxy`, or `registry` component is declared under
 `spec.infraComponents.*[]` and referenced by `componentRef`. A cluster that needs
 a different artifact server sets `artifactServerEndpoint.serverRef`; every
 consumer-owned endpoint keeps its own `endpointRef`. See
 [Infrastructure](../concepts/infrastructure.md) for the component and endpoint
 field reference.
+
+Load balancers are the exception: there is **no** `loadBalancer`
+`spec.infraComponents` catalog slot. A shared load balancer is declared as a
+standalone `InfraComponent` and shared by referencing it from a cluster's
+`install.endpoints[].source.componentRef`, not through the environment service
+catalog — see [Infrastructure](../concepts/infrastructure.md).
 
 !!! note "Validate shared bindings early"
     A shared default's `serverRef` and `endpointRef` are validated where they are
@@ -166,6 +176,15 @@ bootwright apply --stage clusters --clusters dc1-ocp --yes
 (`fabric`, `machines`, `deps`, `base`, `add-ons`) for even tighter reruns;
 `destroy` accepts only the two families. The full stage model — families versus
 sub-phases — is on [Concepts → Apply stages](../concepts/index.md).
+
+Where `--stage` limits a run to exactly one phase, `--through <stage>` limits it
+to every phase from the beginning **up to and including** that stage — a
+cumulative build-out rather than a single slice. The two are mutually exclusive.
+Use it to converge a fleet incrementally up to a checkpoint:
+
+```text
+bootwright apply --through machines --clusters dc1-ocp --yes
+```
 
 ### Whole-input validation
 

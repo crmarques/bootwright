@@ -89,9 +89,11 @@ KVM and permission to manage libvirt on the provider host.
    vi "test/e2e/$CASE/environment.yaml"
    ```
 
-   If `print-env` reports that proxy credentials would be printed,
-   create the `proxy-credentials` secret in [common-steps.md](common-steps.md)
-   first, then rerun it with `--sensitive`.
+   In an externally proxied environment, export the proxy values the
+   Environment declares (`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`) into your shell,
+   and create the `proxy-credentials` secret in
+   [common-steps.md](common-steps.md) first if the proxy requires
+   authentication.
 
 5. Follow [common-steps.md](common-steps.md) to create secrets, set up bastion
    dependencies, provision infra, install, verify, and destroy the cluster.

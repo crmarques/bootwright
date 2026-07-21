@@ -282,15 +282,18 @@ The S3 endpoint is `http://rgw.ceph.bootwright.test` (RGW ingress VIP
 `192.168.140.80`) and the Ceph Dashboard is served HA through the native
 `mgmt-gateway` at `https://dashboard.ceph.bootwright.test:8443` (a separate
 mgmt-gateway VIP `192.168.140.81`, fronted by a `keepalive_only` ingress).
-`bootwright cluster access` reports that dashboard URL plus the admin password
+`bootwright cluster info` reports that dashboard URL plus the admin password
 file:
 
 ```bash
-bootwright cluster access --name ceph-ibm
+bootwright cluster info --name ceph-ibm
 # Dashboard: https://dashboard.ceph.bootwright.test:8443
 # Dashboard user: admin
 # Dashboard password file: .../secrets/dashboard-password
 ```
+
+Add `--secrets` (`bootwright cluster info --name ceph-ibm --secrets`) to print
+the dashboard password inline instead of only the file path.
 
 ### Resolving the lab names from your workstation
 

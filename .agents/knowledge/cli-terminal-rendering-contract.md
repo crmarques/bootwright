@@ -10,9 +10,9 @@ so the block reads as a unified diff; add lines are real-state-only
 
 **Semantics: RunView redraws in place or appends, never both.** On an
 interactive terminal it redraws the frame in place on every `Render`;
-otherwise (piped, CI, or forced via `Streaming()` under
-`--stream-ansible` so the frame does not fight raw ansible output for
-the cursor) it emits one append-only transition line per step as it
+otherwise (piped, CI, or forced via `Streaming()` so the frame does not
+fight raw ansible output for the cursor) it emits one append-only
+transition line per step as it
 becomes RUNNING or terminal, deduplicated by (step ID, status), with no
 cursor control. RunView is NOT safe for concurrent use — the
 apply/destroy scheduler drives it from a single goroutine reading task

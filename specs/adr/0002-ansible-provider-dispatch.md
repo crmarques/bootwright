@@ -27,25 +27,23 @@ ansible/collections/ansible_collections/bootwright/core/
     task_*.yml            focused task playbooks
     check_*.yml           read-only checks
     tasks/<domain>/       reusable playbook task files scoped by domain
-  roles/
-    check_*               check-specific preflight capabilities
-    controller_*          controller-local setup
-    machine_base          base packages for service-bearing machines
-    machine_proxy         proxy facts and persisted proxy settings
-    provider_host_*       provider-host substrate setup and host-scoped cleanup
-    machine_os_install_*  Bootwright-managed OS installation (anaconda)
-    support_*             cross-domain credentials, context secrets, and cleanup
-    ownership_record      durable ownership and package records for destroy scoping
-    provider_service_*    provider services, including explicit no-op BMC services
-    infra_component_*     machine-bound InfraComponent services
-    machine_substrate_*   per-cluster substrate state
-    cluster_network_*     per-cluster networking state
-    container_cluster_*   agent install, boot, media, wait, and destroy
-    storage_cluster_*     external storage convergence
-    check_* / diagnostic_* validation and diagnostics
+  roles/                  one role per capability, named <family>_<detail>
   plugins/filter/         collection-scoped filters
   docs/                   variable contracts
 ```
+
+Roles are grouped by a domain-layer family prefix rather than a flat list:
+`machine_*`, `provider_host_*`, `provider_service_*`, `infra_component_*`,
+`machine_substrate_*`, `cluster_network_*`, `container_cluster_*`,
+`storage_cluster_*`, `machine_registration_*`, `controller_*`, `support_*`,
+and read-only `check_*` / `diagnostic_*`, alongside singletons such as
+`ownership_record`. A role's family names its domain layer; a `_*` suffix in
+the dispatch names below marks a family the Go registry projects an exact role
+name into (one kind, several substrate backends). This ADR does not enumerate
+the roles on disk — that list changes with each provider and would rot here.
+The current inventory is the collection's own `roles/` directory and the
+per-role input contracts in
+[`vars-contract.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md).
 
 Workflow playbooks are thin wrappers. `workflow_infra_apply.yml` imports the
 external reachability check, provider-service task playbook,
@@ -136,7 +134,8 @@ change, not a role conditional.
 
 The `ownership_record` role owns durable resource and package ownership
 records: executing roles include it at mutation time, and Go reads the records
-for destroy scoping, package removal gating, orphan reporting, and state-check.
+for destroy scoping, package removal gating, orphan reporting, and recorded-drift
+classification (`diff --recorded`).
 The record contract is documented in
 [`ownership-records.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/ownership-records.md).
 

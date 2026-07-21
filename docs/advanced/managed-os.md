@@ -9,8 +9,8 @@ Bootwright can install a machine's operating system before any cluster or storag
 work runs — the path most commonly used for Ceph storage nodes, which need a
 managed RHEL before cephadm. This page is the task how-to. The object model and
 every field live on [Machines](../concepts/machines.md); the worked end-to-end
-lab is `examples/ceph-ibm-libvirt-lab` (its `infra/os/` subtree is the source for
-the snippets below) and `examples/ceph-ibm-baremetal-redfish` for bare metal.
+lab is `examples/ceph-ibm-libvirt-lab` (the snippets below are adapted from its
+`infra/os/` subtree) and `examples/ceph-ibm-baremetal-redfish` for bare metal.
 
 ## When Bootwright installs the OS
 
@@ -198,7 +198,7 @@ lever the tip above describes, taken all the way.
         anaconda:
           packageSource:
             hostedTree:
-              fromMedia: local-media:rhel-9.6-x86_64-dvd.iso
+              fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
               artifactServerEndpoint:
                 endpointRef: tree
     ```
@@ -223,6 +223,29 @@ lever the tip above describes, taken all the way.
     the install registers and pulls content from that Red Hat Satellite instead.
     No `MachineImage` change is needed — see
     [Disconnected & proxied installs](disconnected-proxy.md).
+
+### Subscribing the installed OS
+
+`packageSource.fromSubscription` registers the node only to *install* packages
+from the subscription CDN. A `mirror`, a full DVD, and a `hostedTree` install
+never touch RHSM, so the OS they lay down is left unregistered. To register the
+installed OS for day-2 — RHSM-subscribed so it can pull errata and updates after
+the install — set `spec.subscription.entitlementRef` on the
+`MachineInstallProfile`:
+
+```yaml
+spec:
+  subscription:
+    entitlementRef: rhel
+```
+
+- It references a managed `redhat-rhel` `Entitlement` (the same RHSM organization
+  plus activation key shape used elsewhere), and Bootwright registers the node
+  with `subscription-manager` as a profile-level day-2 step once the OS is in
+  place — the way to subscribe a `mirror`, DVD, or `hostedTree` install.
+- It **cannot** be combined with `installer.anaconda.packageSource.fromSubscription`,
+  which already registers the node during Anaconda; setting both fails
+  validation.
 
 ### Checksum, trust, and headers
 
@@ -267,7 +290,6 @@ spec:
     storage:
       rootDevice:
         source: machineRootDeviceHints
-      wipe: true
     packages:
       environment: minimal
       installWeakDeps: false
@@ -312,7 +334,10 @@ The customization arms, by area:
 - **ssh** — `authorizeMachineSSHKey` authorizes the machine SSH key during
   install; `passwordAuthentication` enables or disables password SSH auth.
 - **storage** — `rootDevice.source: machineRootDeviceHints` consumes the
-  machine's root device hints (see below); `wipe` wipes the root device first.
+  machine's root device hints (see below). A managed install **always** clears
+  the target disk — the rendered Kickstart runs `clearpart --all --initlabel`,
+  scoped to the resolved root disk when the machine's root-device hints identify
+  one — so there is no separate opt-in wipe control to set here.
 - **packages** — `environment` (for example `minimal`), `install[]`,
   `excludeDocs`, and the tri-state `installWeakDeps`.
 - **services** — `enabled[]` and `disabled[]`.

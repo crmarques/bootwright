@@ -109,8 +109,11 @@ touch root-owned state:
 - Exit codes are contract: 0 success, 1 run/load failure, 2 usage
   error, and `diff` exits 3 when out of sync while still printing a
   parsable report.
-- Raw ansible output routes to per-run/per-task logs by default;
-  `--stream-ansible` tees it to the terminal.
+- Raw ansible output routes to per-run/per-task logs by default; `-v` /
+  `--verbose` tees the full Ansible task output to the terminal AND the run
+  log, and un-censors values normally hidden as "censored due to no_log"
+  (secrets and BMC/registry/RHSM/proxy credentials, tokens, generated Ceph
+  keys) so both destinations carry them in the clear.
 
 ## Consequences
 

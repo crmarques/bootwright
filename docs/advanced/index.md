@@ -16,6 +16,7 @@ topology, nested KubeVirt clusters, custom networking, or recovery.
 | --- | --- |
 | [Multi-cluster fleets & shared services](fleets.md) | One `Environment` selecting many clusters, the single selection namespace, shared `InfraComponent` services, and scoped apply/destroy. |
 | [Disconnected & proxied installs](disconnected-proxy.md) | Environment proxy defaults, managed vs external proxies, the three proxy targets, mirror registries, image digest sources, and trust. |
+| [Corporate TLS certificates & trusted CAs](corporate-certificates.md) | Replacing the default API/ingress serving certificates with corporate-issued ones, and adding corporate CAs to the cluster install trust. |
 | [Managed OS installs](managed-os.md) | When Bootwright installs the node OS itself: `MachineImage` media, `MachineInstallProfile` customizations, staging media, and Anaconda over a proxy. |
 | [Ceph storage topologies](ceph-topologies.md) | Managed vs imported Ceph, pools, CephFS, RGW, stretch mode, and storage access. |
 | [KubeVirt nested clusters](kubevirt.md) | A child `ContainerCluster` whose machines come from a KubeVirt `InfraProvider`, and the parent/child apply ordering. |

@@ -66,7 +66,7 @@ Useful read-only commands:
 git status --short
 rg --files internal api ansible specs examples test .agents
 rg -n "Activity|Task|Apply|Plan|Scheduler|lock|capabil|kubevirt|hostClusterRef|machine.os|ceph|addon|infra" internal ansible specs examples test
-go test ./internal/state/graph ./internal/converge/workflow ./internal/converge/render
+go test ./internal/state/graph ./internal/converge/workflow ./internal/render
 ```
 
 Report any useful check that could not run.

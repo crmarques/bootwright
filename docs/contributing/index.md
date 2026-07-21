@@ -29,3 +29,5 @@ stand up clusters, start with the
   pipeline, execution identities, resource locks, cluster install scheduling, the
   four-outcome convergence classifier, the three apply modes, the rendering
   contract, the ownership-record cross-boundary contract, and the Ansible bundle.
+- **[Building and testing](building-and-testing.md)** — how to compile, run the
+  tests, and pass the check gates.

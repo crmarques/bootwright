@@ -36,12 +36,12 @@ zap-and-rebuild, continue to the idempotent bootstrap skip and re-stamp.
 `cephadm bootstrap` runs. A crash that writes `/etc/ceph/ceph.conf` but aborts
 before the post-bootstrap marker still leaves the controller-side record, so
 the half-converged cluster classifies as owned and is recoverable by re-running
-`apply`. `continue`, `--override`, and `destroy` all key on this record —
+`apply`. `continue`, `--converge-drifted`, and `destroy` all key on this record —
 without it the only escape from a mid-bootstrap crash is manual `/etc/ceph`
 removal. The post-bootstrap writes refresh it with the fsid marker and
 enriched paths/labels/attributes; both are refreshed on every apply.
 
-**Semantics:** `--override` does not always wipe. The controller classifies a
+**Semantics:** `--converge-drifted` does not always wipe. The controller classifies a
 cluster whose only drift is an OSD-device add as reconcilable in place and
 names it in `bootwright_ceph_reconcilable_only_clusters`; for such a cluster
 override must NOT zap — `ceph orch apply` adds the new OSD additively. An

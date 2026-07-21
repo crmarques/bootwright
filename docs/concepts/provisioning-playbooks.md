@@ -38,8 +38,9 @@ The three common cases map directly:
 - **before installing cluster deps** → `stage: deps, timing: before`
 - **after installing clusters** → `stage: base, timing: after`
 
-`after` waits for the stage's built-in work; `before` gates it (the stage waits
-for the playbook). A playbook runs during any `apply` whose `--stage` includes
+`timing` defaults to `after` when omitted. `after` waits for the stage's built-in
+work; `before` gates it (the stage waits for the playbook). A playbook runs
+during any `apply` whose `--stage` includes
 its stage and whose `--clusters` scope includes its target, so
 `apply --stage base --clusters prod` re-runs exactly the base-stage playbooks for
 `prod`.
@@ -85,6 +86,11 @@ init`/`update` copies the whole input tree, so `ansible-playbook` finds them at
 run time. Vendored roles/collections are the **air-gap-safe** way to ship
 dependencies; a Galaxy `requirements.yml` install (which needs network) is not
 supported.
+
+`spec.enabled` defaults to `true`. Set `enabled: false` to keep the playbook in
+desired state — it still loads and validates — while skipping it: Bootwright
+plans no run for it and drops it from `provides`/`requires` ordering. It is the
+declarative way to park a playbook without deleting the object.
 
 ## Targeting
 

@@ -45,19 +45,21 @@ description. Treat "explicit" narrowly:
   - `apply --expect-new` is the **greenfield assert**: it additionally must
     **fail closed** (refuse, mutate nothing) if any selected object already
     exists — recorded by Bootwright or otherwise present.
-  - `apply --override` is the only **break-glass** mode: it rebuilds objects that
-    have drifted and creates what is missing, but leaves objects that already
-    match untouched (no gratuitous rebuild) and **never** rebuilds a foreign
-    object. It does not bypass leases, validation, secrets, destroy-protection, or
-    foreign ownership.
+  - `apply --converge-drifted` is the only **break-glass** mode: it rebuilds
+    objects that have drifted and creates what is missing, but leaves objects that
+    already match untouched (no gratuitous rebuild) and **never** rebuilds a
+    foreign object. It does not bypass leases, validation, secrets,
+    destroy-protection, or foreign ownership. Data-loss rebuilds (managed-OS
+    reinstall, owned-Ceph wipe-and-rebuild) additionally require the separate
+    `--confirm-data-loss` gate, which `--yes` never implies.
 - An object that already matches is never destroyed to be recreated by any mode;
   forcing a clean recreate of a matching object is a `destroy` (which must drop it
   entirely and reset its convergence records) followed by `apply`.
 - Every audited flow must be evaluated under all three modes when the command is
-  `apply`, and with and without `--override` for other commands that support it.
-  `--override` may permit only the documented destructive convergence path
-  (rebuild drift / owned teardown); it must not turn a read-only state check into a
-  mutating command, suppress drift, or broaden scope silently.
+  `apply`, and with and without `--force` for `destroy`. The destructive-override
+  flags may permit only the documented destructive path (rebuild drift / owned
+  teardown); they must not turn a read-only state check into a mutating command,
+  suppress drift, or broaden scope silently.
 - A `destroy`, `reset`, `cleanup`, `remove`, `purge`, `wipe`, or replacement
   path is destructive only when the command, flags, and selected desired state
   authorize that exact scope. `--yes` skips confirmation only; it is not
@@ -80,8 +82,9 @@ blocking question when it changes the verdict:
   `ContainerCluster` and `StorageCluster` names, provider and machine roots,
   ignored-example paths when named.
 - **Command intent**: exact command, flags, context, target selection, stage,
-  non-interactive mode, `--yes`, `--override`, dry-run/preview flags, and any
-  environment variables that affect execution.
+  non-interactive mode, `--yes`, `--converge-drifted`/`--confirm-data-loss`/
+  `--force`, dry-run/preview flags, and any environment variables that affect
+  execution.
 - **Observed environment state**: already provisioned resources, partial state,
   ownership records, install records, safety records, provider metadata,
   cluster runtime state, foreign/shared resources, stale records, missing
@@ -90,8 +93,9 @@ blocking question when it changes the verdict:
   explicit destroy, scoped cleanup, or unknown.
 - **Destruction authorization**: yes/no, with the exact text, command, or
   environment description that authorizes it.
-- **Override pair**: when the command accepts `--override`, the expected behavior
-  with and without it, and the exact safety refusal or continuation it changes.
+- **Converge/force pair**: when the command accepts a destructive-override flag
+  (`apply --converge-drifted` or `destroy --force`), the expected behavior with
+  and without it, and the exact safety refusal or continuation it changes.
 
 If no scenario input file is provided and the review depends on it, ask one
 blocking question for the file. You may still audit generic safety guidance and
@@ -146,7 +150,7 @@ Useful read-only commands:
 ```bash
 git status --short
 rg --files AGENTS.md .agents specs internal api ansible scripts test examples
-rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|virsh|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--override|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot' internal ansible scripts Makefile specs docs examples test .github
+rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|virsh|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--converge-drifted|--confirm-data-loss|--force|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot' internal ansible scripts Makefile specs docs examples test .github
 rg -n 'func .*Apply|func .*Destroy|cobra.Command|RunE|PreRunE|argsNeedLocalRoot|sudo|ownership|Safety|DestroyProtection|Override|ContextSweep|Ledger|InstallRecord|Lock' internal cmd api test
 go test ./internal/...            # or narrower packages when review scope is narrow
 ansible-playbook --syntax-check <playbook>    # when the playbook is in scope and tools exist
@@ -179,19 +183,22 @@ help, examples, and tests for:
 - Read-only command guarantees for `preflight`, `status`, `render`, validation,
   planning, help, discovery, and probes.
 - Desired-vs-real state checking: a well-named command exists, is explicitly
-  non-mutating, loads the same selected desired-state graph as converge/destroy,
-  compares against the durable last-apply convergence record without mutation (it
-  does not live-probe), and neither the report nor its docs overstate that as live
-  reality. The comparison primitive is shared: `apply`'s mode preflight and
-  `state-check` classify objects through the same path (`ClassifyConvergeSafety`
-  per task, aggregated per object), so a divergence the state check reports is the
-  same divergence a default `apply` fails on. Verify the two cannot drift apart.
+  non-mutating, and loads the same selected desired-state graph as
+  converge/destroy. `diff` reads live reality read-only by **default**;
+  `diff --recorded` compares against the durable last-apply convergence record
+  offline; `diff --adopt` is the only mode that writes (folding discovered live
+  state back into desired YAML). Neither the report nor its docs may overstate a
+  recorded comparison as live reality. The comparison primitive is shared:
+  `apply`'s mode preflight and `diff --recorded` classify objects through the same
+  path (`ClassifyConvergeSafety` per task, aggregated per object), so a divergence
+  the recorded check reports is the same divergence a default `apply` fails on.
+  Verify the two cannot drift apart.
 - Convergence-record lifecycle: a successful `destroy` must drop the component
   entirely AND reset its convergence records to absent (so a later `apply`
   recreates it rather than skipping a gone object as matched, and `--expect-new`
   no longer refuses it). Audit whether destroy clears the converge-safety,
   install, and ownership records for everything it tore down.
-- State-check report quality: when a selected cluster or storage cluster is
+- Diff report quality: when a selected cluster or storage cluster is
   wholly absent, the report says that succinctly instead of dumping every child
   object as missing; when the root exists, the report names material differences
   at the owned-resource level, such as missing declared Ceph pools,
@@ -202,11 +209,13 @@ help, examples, and tests for:
   and command-scoped overrides.
 - `destroy --stage infra|clusters` scope rules, context-wide cleanup rules,
   selected cluster behavior, ownership-record use, and `destroyProtection`.
-- Confirmation semantics: `--yes` vs. `--override`, non-interactive behavior,
+- Confirmation semantics: `--yes` vs. the destructive-override and data-loss gates
+  (`--converge-drifted`/`--confirm-data-loss`/`--force`), non-interactive behavior,
   output that names affected context/resources before mutation, and no hidden
   broadening from environment names.
-- Override semantics across flows: for every supported command, compare behavior
-  with and without `--override`, and verify that read-only state checks ignore,
+- Converge/force semantics across flows: for every supported command, compare
+  behavior with and without the destructive-override flags
+  (`--converge-drifted`/`--force`), and verify that read-only state checks ignore,
   reject, or strictly no-op the flag rather than mutating or suppressing drift.
 - Runtime-state trust: when ownership records, install records, safety records,
   leases, generated hashes, and provider metadata are sufficient evidence, and
@@ -240,11 +249,13 @@ Walk these checkpoints:
    `Environment` selection, `--clusters`, `--stage`, and context selection limit
    the graph? Are unselected resources excluded from mutation?
 3. **Authorization.** What exact command flag, environment field, or scenario
-   statement authorizes destructive behavior? Are `destroyProtection`,
-   `--override`, and confirmation prompts enforced before mutation?
-4. **Override pair.** If the command supports `--override`, walk the same
-   scenario without it and with it. Which refusal disappears, which mutations
-   become allowed, and which read-only guarantees must remain unchanged?
+   statement authorizes destructive behavior? Are `destroyProtection`, the
+   destructive-override flags (`--converge-drifted`/`--confirm-data-loss`/
+   `--force`), and confirmation prompts enforced before mutation?
+4. **Converge/force pair.** If the command supports a destructive-override flag
+   (`apply --converge-drifted` or `destroy --force`), walk the same scenario
+   without it and with it. Which refusal disappears, which mutations become
+   allowed, and which read-only guarantees must remain unchanged?
 5. **State comparison command.** Can the operator run a clearly named,
    non-mutating command to compare selected desired state against the recorded
    last apply? Does it detect root absence, partial presence, missing desired resources,
@@ -320,22 +331,24 @@ selection.
 phases, creates what is missing, and fails closed on drift or foreign ownership —
 it must never delete-and-recreate to converge. `apply --expect-new` must fail
 closed when any selected object already exists. `apply
---override` may rebuild drifted owned objects and create missing ones, but must
-leave matching objects untouched and never rebuild a foreign object. A clean
+--converge-drifted` may rebuild drifted owned objects and create missing ones, but
+must leave matching objects untouched and never rebuild a foreign object. A clean
 recreate of a matching object is a `destroy` then `apply`, not an `apply` flag.
 
-**Override safety.** Audit `apply` under all three modes and other `--override`
-commands both ways. `apply --override` must rebuild only drifted/owned objects
-(skipping matches, refusing foreign); without override, drift fails closed under
-bare `apply` and any pre-existing object fails closed under `--expect-new`. Override
-must not bypass leases, validation, secrets, or `destroyProtection`, turn a
-read-only state check into a mutating command, or suppress reported drift. For
-storage sub-objects (StoragePool/Filesystem/ObjectGateway/Export), `--override` must
+**Converge/force safety.** Audit `apply` under all three modes and `destroy` under
+`--force` both ways. `apply --converge-drifted` must rebuild only drifted/owned
+objects (skipping matches, refusing foreign); without it, drift fails closed under
+bare `apply` and any pre-existing object fails closed under `--expect-new`. Neither
+`--converge-drifted` nor `--confirm-data-loss` may bypass leases, validation,
+secrets, or `destroyProtection`, turn a read-only state check into a mutating
+command, or suppress reported drift. For storage sub-objects
+(StoragePool/Filesystem/ObjectGateway/Export), `--converge-drifted` must
 destroy-and-recreate only on a structurally-immutable change (a pool's type/erasure
-profile, a CephFS's metadata pool) proven against the live cluster; reconcilable
-drift (replica size/min-size, crush rule, application) must reconcile in place
-without data loss, and the destructive path must fail closed and leave no lingering
-permissive state (e.g. `mon_allow_pool_delete`).
+profile, a CephFS's metadata pool) proven against the live cluster, and a data-loss
+recreate additionally requires `--confirm-data-loss`; reconcilable drift (replica
+size/min-size, crush rule, application) must reconcile in place without data loss,
+and the destructive path must fail closed and leave no lingering permissive state
+(e.g. `mon_allow_pool_delete`).
 
 **Go-Ansible contract.** Go should classify intent, scope, ownership, locks, and
 safe drift before rendering and launching Ansible. Ansible should not infer
@@ -350,8 +363,9 @@ destructive paths.
 
 **Tests.** Look for missing tests that prove second identical apply is safe,
 read-only commands do not mutate, ambiguous state fails closed, destroy scope is
-bounded, `--yes` is not `--override`, confirmation abort is no-op, ownership
-records cannot authorize foreign deletion, and Ansible roles are safe to rerun.
+bounded, `--yes` is not a destructive-override flag, confirmation abort is no-op,
+ownership records cannot authorize foreign deletion, and Ansible roles are safe to
+rerun.
 
 ## Complete Code and Script Audit
 
@@ -359,8 +373,9 @@ Do not stop at guidance review. Audit the implementation surface that can affect
 the scenarios:
 
 - CLI command setup, flag parsing, pre-run validation, root/sudo handoff,
-  confirmation prompts, non-interactive behavior, `--override` behavior, the
-  desired-vs-real state-check command, and output routing.
+  confirmation prompts, non-interactive behavior, `--converge-drifted`/
+  `--confirm-data-loss`/`--force` behavior, the desired-vs-real `diff` command,
+  and output routing.
 - Desired-state selection, strict decode, normalization, validation, and scoped
   graph closure.
 - Planner, scheduler, resource locks, leases, ledgers, ownership records,
@@ -395,8 +410,9 @@ that clearly and name the highest residual risk.
 ## 2. Scenario Input and Assumptions
 The scenario file(s) reviewed; each scenario extracted from them; command intent;
 current environment state; expected behavior; destruction authorization yes/no
-with evidence; expected behavior with and without `--override` when supported;
-missing facts and whether they block a verdict.
+with evidence; expected behavior with and without the destructive-override flags
+(`--converge-drifted`/`--force`) when supported; missing facts and whether they
+block a verdict.
 
 ## 3. Safety Guidance Review
 Current specs, docs, AGENTS rules, reusable prompts, CLI/help text, examples, and
@@ -407,8 +423,8 @@ and should remain unchanged.
 ## 4. Scenario Flow Trace
 The trace matrix for each scenario. Include CLI path, selection, validation,
 planning, locks, records, generated contract, Ansible/script path, external
-commands, the desired-vs-real state-check path, override/no-override behavior,
-and final side effect. Mark verdict as **safe**, **unsafe**, **unproven**, or
+commands, the desired-vs-real `diff` path, converge/force behavior vs. its
+absence, and final side effect. Mark verdict as **safe**, **unsafe**, **unproven**, or
 **out of scope**.
 
 ## 5. Findings
@@ -435,9 +451,9 @@ trace cleared them.
 Existing tests that prove safety; missing tests for each finding; useful checks
 that could not run. Include focused regression tests for no-op rerun, read-only
 commands, confirmation abort, destroy protection, foreign ownership, stale
-records, scoped destroy, `--override` vs. no-override behavior, non-mutating
-desired-vs-real state checks, absent-root reporting, granular drift reporting,
-and Ansible role idempotency when relevant.
+records, scoped destroy, `--converge-drifted`/`--force` vs. their absence,
+non-mutating desired-vs-real state checks, absent-root reporting, granular drift
+reporting, and Ansible role idempotency when relevant.
 
 ## 9. Improvement Plan
 Group into **Now** (high-confidence safety fixes and regression tests small

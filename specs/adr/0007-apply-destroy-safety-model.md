@@ -26,16 +26,26 @@ re-derive it per feature.
 Every apply task records a non-secret desired hash (plus, for install-bearing
 kinds, a structural projection excluding day-2-owned intent) keyed by task
 identity. One classification primitive — missing / match / drift / foreign —
-is shared by the apply-mode preflight, `state-check`, and `diff --recorded`,
-and one predicate (`taskDriftReconcilable`) decides reconcilable-in-place
-versus structural for all of them, so gate and report can never disagree.
-Classification compares desired against *recorded* desired only; out-of-band
-live divergence is deliberately invisible here and belongs to the per-role
-Ansible reconcile gates and `diff` (live). Records are written only on task
-success; destroy removes them (including storage sub-object records) so
+is shared by the apply-mode preflight and `diff --recorded` (the internal
+StateCheck engine), and one predicate (`taskDriftReconcilable`) decides
+reconcilable-in-place versus structural for all of them, so gate and report can
+never disagree. Classification compares desired against *recorded* desired only;
+out-of-band live divergence is deliberately invisible here and belongs to the
+per-role Ansible reconcile gates and `diff` (live). Records are written only on
+task success; destroy removes them (including storage sub-object records) so
 torn-down objects reclassify as missing, and a partial teardown
 (`--skip-unreachable`) keeps them so `apply --expect-new` fails closed atop
 residual state.
+
+Destruction also leaves a positive re-authorization trail. On destroy,
+Bootwright writes a per-cluster substrate release that records that the
+cluster's substrate was deliberately torn down and so authorizes the subsequent
+`apply` to reinstall it; the matching per-machine install task clears the
+release once it has reprovisioned. The release is a fail-safe token like the
+others here — its absence can only withhold, never manufacture, authority to
+reinstall — closing the window where a re-run after a destroy would otherwise
+have to guess whether a missing substrate is greenfield intent or an
+interrupted teardown.
 
 ### One explicit mode variable, enforced on both sides
 
@@ -79,15 +89,28 @@ destruction. Remedies must route to the stage that actually clears the block
 
 A `--clusters` scope keeps the plan state render-inclusive (attachments still
 render against referenced clusters) but every mutating and gating surface —
-provisioning tasks, preflight secrets and host trust, state-check objects,
-destroy teardown — keys on the work set of directly named roots (nil = no
-narrowing; non-nil empty = none). Scope gate variables are composed in exactly
-one place per verb so the task-graph, single-playbook, and dry-run paths carry
-identical gates. Scoped destroys restrict recorded-resource cleanup to
-selected roots; scoped applies refuse to re-render shared machine services
+provisioning tasks, preflight secrets and host trust, `diff --recorded`
+objects, destroy teardown — keys on the work set of directly named roots (nil =
+no narrowing; non-nil empty = none). Scope gate variables are composed in
+exactly one place per verb so the task-graph, single-playbook, and dry-run
+paths carry identical gates. Scoped destroys restrict recorded-resource cleanup
+to selected roots; scoped applies refuse to re-render shared machine services
 whose config derives from the full fleet (degrading), while self-contained
 services re-provision identically and pass — an unclassified service defaults
 to degrading.
+
+The `--machines` apply/destroy selection axis follows the same
+render-inclusive / work-set-gated model at machine granularity. The render
+still produces the full `RenderState` (a machine renders in the context of its
+whole cluster), and the work set narrows through a per-machine `ApplyTarget`
+gate rather than a per-cluster one: the target carries the named machines and
+their hosts, and every task consults it before provisioning or tearing down a
+given machine. `--machines` runs only the fabric and machines phases and is
+mutually exclusive with `--clusters`. A machine that is a node of a cluster or
+carries a shared service resolves to real substrate work; a standalone
+managed-OS teardown fails closed, because Bootwright installs a managed OS only
+on cluster-member machines and refuses to invent per-machine teardown for a
+machine with no provisioning work.
 
 ### One mutating run at a time
 

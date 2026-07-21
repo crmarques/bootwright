@@ -5,12 +5,14 @@ description: The Bootwright execution pipeline, convergence classifier, and rend
 
 # Architecture
 
-This page is the execution and pipeline deep dive behind the user-facing model
-in [The desired-state model](../concepts/index.md). It covers the render
-pipeline, execution identities, resource locks, the convergence classifier, the
-apply modes, and the contributor-facing contracts that hold the system together.
-It does **not** restate the user-facing stage, platform, or selection model — see
-the cross-links below for those.
+This page is the contributor-facing deep dive behind the user-facing model in
+[The desired-state model](../concepts/index.md). The normative contract is
+[`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md);
+this page does **not** restate it. It keeps only the material a contributor needs
+that the spec does not spell out — execution identities, the normalize examples,
+the corrected diff semantics, the rendered-input inspection workflow, and the
+extension checklists — and links into the spec for everything else. When this
+page and the spec disagree, the spec wins — please fix this page.
 
 For the user-facing mental model first, read these once and do not expect them
 repeated here:
@@ -27,21 +29,22 @@ repeated here:
 ## The pipeline
 
 Bootwright is a desired-state loader, validator, renderer, and idempotent apply
-pipeline. Validated desired state flows through layered phases:
+pipeline: `load and strict decode -> normalize defaults -> validate ownership and
+references -> render effective state and tool inputs -> apply substrate, machine
+OS, storage, cluster, and add-on phases`. `status`, `diff`, `render`, `plan`, and
+`validate` are read-only verbs, not pipeline stages: they observe the same model
+without mutating it.
 
-```text
-YAML desired state
-  -> load and strict decode
-  -> normalize defaults
-  -> validate ownership and references
-  -> render effective state and tool inputs
-  -> apply substrate, machine OS, storage, cluster, and add-on phases
-```
-
-`status`, `diff`, `render`, `plan`, and `validate` are read-only verbs,
-not pipeline stages: they observe the same model without mutating it. See
-[Operations and Recovery](../advanced/operations.md) for the operator-facing
-verb model.
+The full layer breakdown — the durable run ledger and lease, per-cluster install
+records, the agent-install dependency stages and post-install add-on wait, the
+storage peer phase, the KubeVirt parent/child graph edges, the DAG orchestrator
+and executor split, and the resource-lock keys — is specified in
+[`specs/architecture.md` → Layers](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md).
+One contributor-facing caveat the spec does not stress: those internal dependency
+stages (`machine-infra`, install-wait, add-on apply) are **not** the CLI
+`--stage infra|clusters` families and their
+`fabric`/`machines`/`deps`/`base`/`add-ons` sub-phases, which are owned by
+[The desired-state model → Apply stages and families](../concepts/index.md#apply-stages-and-families).
 
 ### Normalize before render
 
@@ -77,115 +80,46 @@ environment defaults. That keeps provider swaps and release changes explicit. Se
 [The desired-state model → Object ownership](../concepts/index.md#object-ownership)
 for the full ownership table.
 
-## Orchestration, executor, and resource locks
-
-Bootwright is the cross-cluster DAG orchestrator; Ansible (the `bootwright.core`
-collection) remains the executor for machine-level work. Bootwright owns the
-dependency graph and runs independent tasks concurrently where locks allow it.
-Ansible, `oc`, `openshift-install`, `cephadm`, SSH, and SCP do the per-host work,
-and their process output stays in root-managed run, task, and cluster logs
-instead of streaming through the terminal.
-
-Provider, `InfraComponent`, machine-infrastructure, and storage playbooks use
-Ansible-native parallelism. Bootwright enforces resource locks **before**
-launching concurrent playbooks:
-
-- one mutating task per provider or service machine (until roles are classified
-  more finely);
-- one task per Redfish system or BMC target;
-- `kubevirt:<host-cluster-or-kubeconfig>:<namespace>` for nested child-VM
-  infrastructure and boot tasks.
-
-### Cluster install scheduling
-
-The OpenShift agent install is scheduled as dependency stages: prepare provider
-and machine infrastructure, create the cluster agent ISO with
-`openshift-install`, boot each declared node through its rendered boot adapter as
-parallel node tasks, then run `openshift-install agent wait-for install-complete`
-after **every** node boot task has completed. Post-install add-on apply is
-scheduled after that install wait; an add-on whose hooks target another
-cluster's machines (for example a Data Foundation add-on's exporter hook
-running on a Ceph node) additionally waits on that cluster's provisioning
-task before running.
-
-Storage apply is a **peer phase**, not a sub-step of cluster install. The
-`machine-infra` stage prepares selected machines when needed; the `clusters`
-stage schedules an Ansible storage task against a synthetic seed inventory entry,
-launches `cephadm bootstrap` on the seed node, applies cephadm service specs,
-and runs topology and storage operations. Imported storage clusters skip this
-storage task entirely.
-
-!!! note "Internal stages versus the `--stage` flag"
-    The internal dependency stages above (for example `machine-infra`,
-    install-wait, add-on apply) are not the same vocabulary as the CLI
-    `--stage infra|clusters` families and their `fabric`/`machines`/`deps`/`base`/
-    `add-ons` sub-phases. The CLI model is owned by
-    [The desired-state model → Apply stages and families](../concepts/index.md#apply-stages-and-families).
-
-### KubeVirt parent/child edge behavior
-
-For a KubeVirt child `ContainerCluster` that references a Bootwright-managed
-virtualization cluster through `hostClusterRef`, only the full graph and explicit
-parent+child `--clusters` selections add graph edges from the child work to both
-the parent install wait and the parent add-on task that provides
-`kubevirt`.
-
-!!! warning "A scoped child apply does not pull in the parent"
-    A scoped child apply does **not** expand its scope to install the parent. It
-    fails before any mutation unless the parent is selected too, or local runtime
-    records prove the parent install and the KubeVirt add-on are already ready.
-    This is the first supported nested topology, and the dependency is explicit
-    by design.
-
 ## Convergence and the four-outcome classifier
 
-Convergence is resumable by default. Each mutating workflow task runs under its
-resource lock, derives a non-secret desired hash and a Bootwright owner identity,
-and writes a durable **convergence-safety record**. The records classifier
-compares that recorded evidence against current desired state and yields four
-outcomes:
+Each mutating workflow task runs under its resource lock, derives a non-secret
+desired hash and a Bootwright owner identity, and writes a durable
+**convergence-safety record**. The records classifier compares that recorded
+evidence against current desired state and yields four outcomes — `missing`,
+`match`, `drift`, `foreign` — specified in
+[`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md)
+and summarized for operators in
+[The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift).
 
-| Outcome | Meaning |
-| --- | --- |
-| `missing` | No record for the resource. |
-| `match` | The recorded desired hash equals the current desired hash. |
-| `drift` | The recorded desired hash differs from the current one. |
-| `foreign` | The record carries a non-Bootwright owner. |
+Two contributor-facing subtleties are easy to get backwards:
 
-This is exactly what `diff` reports against recorded evidence — never live
-hosts. See
-[The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift)
-for the user-facing summary.
+!!! warning "`diff --recorded` is the offline classifier; plain `diff` is live"
+    The four-outcome classification is what **`diff --recorded`** reports —
+    offline, with no cluster contact, against recorded evidence. The default
+    `diff` instead compares desired state against **live reality**: read-only
+    Ceph discovery on each managed seed plus a shallow
+    reachability/`ClusterVersion` check for `ContainerCluster`s. `diff --adopt`
+    folds that live observation back into authored desired-state YAML,
+    snapshotting the prior input to history first. A verb that means to stay
+    fully offline must pass `--recorded`.
 
 !!! warning "Classification is NOT an apply-time skip gate"
-    The four-outcome classification is what `diff` reports; it is **not**
-    itself an apply-time skip gate. Most provider-service and infra-component
-    config tasks have no reliable external probe, so they **re-run and rely on
-    idempotent execution**, and their record is marked `unknown` (recorded but
-    not classified) as durable evidence rather than a skip decision.
-
-    Apply-time fail-closed gating lives **only at the concrete-probe sites**:
-    cluster install records, add-on records, managed OS markers, provider
-    metadata, and storage comparison results. Cluster install reconcile reads
-    per-cluster install records, probes live cluster availability, skips
-    completed installs, resumes only from known-safe phases, and fails closed
-    when install state exists for missing or different inputs after node boot
-    unless a command-scoped `--converge-drifted` is given.
-
-### Run ledger and lease
-
-Apply records a durable run ledger under the context state directory plus a
-short-lived local lease for the process updating it. Cluster install tasks
-additionally record per-cluster install state with a non-secret desired-input
-fingerprint so repeated applies can skip completed installs and resume only from
-known-safe phases. `bootwright status` reads that ledger without contacting
-provider hosts, BMCs, or clusters; `bootwright status --watch` follows it until
-the run reaches a terminal state.
+    The four-outcome classification is what `diff --recorded` reports; it is
+    **not** itself an apply-time skip gate. Most provider-service and
+    infra-component config tasks have no reliable external probe, so they
+    **re-run and rely on idempotent execution**, and their record is marked
+    `unknown` (recorded but not classified) as durable evidence rather than a
+    skip decision. Apply-time fail-closed gating lives **only at the
+    concrete-probe sites**: cluster install records, add-on records, managed OS
+    markers, provider metadata, and storage comparison results. Cluster install
+    reconcile probes live availability, skips completed installs, resumes only
+    from known-safe phases, and fails closed on missing or different inputs after
+    node boot unless a command-scoped `--converge-drifted` is given.
 
 ## The three apply modes
 
-`apply` selects how strictly Bootwright treats pre-existing state. The user-facing
-overview is in
+`apply` selects how strictly Bootwright treats pre-existing state. The
+user-facing overview is in
 [The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift);
 the behavioral contract is:
 
@@ -194,73 +128,39 @@ the behavioral contract is:
   `foreign` ownership before any mutation.
 - **`apply --expect-new`:** additionally refuses to proceed when any selected
   object already exists — a greenfield assertion.
-- **`apply --converge-drifted`:** command-scoped break-glass. It may continue past
-  Bootwright-owned unsafe-mismatch checks that have an explicit override path:
-  bypass the skip-if-already-complete install check, reinstall a managed-OS
-  machine (substrate VM undefined, disks wiped, then rebuilt), and cleanly
-  rebuild a managed Ceph cluster via `cephadm rm-cluster --zap-osds` — allowed
-  **only** when a Bootwright ownership marker proves the live cluster is the one
-  Bootwright created (a foreign or co-resident cluster fails closed). It must
-  **not** bypass active-run leases, validation, secret checks, or
-  foreign-resource ownership failures.
+- **`apply --converge-drifted`:** command-scoped break-glass past Bootwright-owned
+  unsafe-mismatch checks that have an explicit override path (bypass the
+  skip-if-complete install check, reinstall a managed-OS machine, cleanly rebuild
+  a Bootwright-owned managed Ceph cluster — a foreign or co-resident cluster
+  fails closed). It must **not** bypass active-run leases, validation, secret
+  checks, or foreign-resource ownership failures.
 
-`--expect-new` and `--converge-drifted` are mutually exclusive.
-
-!!! warning "`destroyProtection` versus `apply --converge-drifted`"
-    When selected state sets
-    `Environment.spec.safety.destroyProtection: requiredOverride`, `apply --converge-drifted`
-    **fails closed before any mutation** rather than rebuilding protected
-    resources. That destruction must cross the destroy authorization boundary:
-    the operator runs `destroy --force` for the affected scope and then
-    re-applies. Dry-run still previews the override plan. See
-    [Operations and Recovery](../advanced/operations.md) for the recovery
-    patterns.
+`--expect-new` and `--converge-drifted` are mutually exclusive. Under
+`Environment.spec.safety.destroyProtection: requiredOverride`,
+`apply --converge-drifted` fails closed before any mutation: that destruction
+must cross the destroy authorization boundary (`destroy --force` for the scope,
+then re-apply). See
+[Operations and Recovery](../advanced/operations.md) for the recovery patterns.
 
 ## The rendering contract
 
 Rendering turns validated desired state into the concrete installer, provider,
-and storage CLI inputs Bootwright drives. The render targets are:
+and storage CLI inputs Bootwright drives. The per-target render sources —
+`install-config.yaml`, `agent-config.yaml` hosts, machine and endpoint provider
+variables, the single shared-service graph, storage tool inputs, managed machine
+OS inputs, and extension apply plans — are specified in
+[`specs/architecture.md` → Ownership Boundaries](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md).
+Two contracts any new render path must honour:
 
-- **`install-config.yaml`** ← `ContainerCluster`, `Environment`, selected
-  machines, machine `NetworkConfig` references, endpoints, and the platform
-  render mode.
-- **`agent-config.yaml`** hosts ← `ContainerCluster.spec.hosts`, referenced
-  `Machine` objects, `NetworkConfig` templates, per-machine network overrides,
-  and **provider or generated substrate MAC inventory**.
-- **Machine and endpoint provider variables** ← resolve
-  `Machine.spec.network.config.attachmentRef` against
-  `InfraProvider.spec.networkAttachments[]`; boot variables come from substrate
-  facts, provider capabilities, and cluster artifact access.
-- **Shared service variables** ← the single machine-service graph (built from
-  `InfraComponent`, environment catalog selections, `NetworkConfig` DNS refs, and
-  cluster endpoint sources). The graph owns service identity, consuming clusters,
-  machine placement, conflict fields, and mergeable overlay fields, and it is
-  resolved once before validation, rendering, status, or scoped apply checks make
-  decisions. A partial `apply --stage infra --clusters …` therefore cannot
-  silently narrow a service another cluster still depends on.
-- **Storage tool inputs** (under `rendered/storage/<storageCluster>/`) ← cephadm
-  host, core service, and late service specs; explicit operation metadata;
-  Ansible storage contracts; and generated Data Foundation manifests, for managed
-  storage only (imported clusters skip them).
-- **Managed machine OS inputs** ← `Machine`, `MachineImage`, and
-  `MachineInstallProfile`, reusing the same machine-component, provider, BMC,
-  virtual-media boot, and SSH-trust contracts as cluster node flows.
-- **Extension apply plans** ← `ClusterAddonBinding` expansion,
-  `ClusterAddonProfile` order, and `ClusterAddon` generated resources or manifest
-  paths. They do **not** mutate installer input.
-
-!!! note "Render is a second enforcement line"
-    Rendering is a second enforcement line behind validation for name resolution.
-    Every render entry point fails before writing anything when an endpoint
-    load-balancer bind or a managed Ceph topology host address does not resolve,
-    instead of degrading to output with empty values.
-
-### Shared parsing
-
-ISO references are resolved by the single Bootwright managed media resolver.
-Providers, OS installers, and future user-supplied ISO fields must not duplicate
-`local-media:`, `file://`, or HTTP(S) parsing. The `local-media:<filename.iso>`
-form resolves against the host-local media store at `/var/lib/bootwright/media/`.
+- **Rendering is a second enforcement line** behind validation for name
+  resolution. Every render entry point fails before writing anything when an
+  endpoint load-balancer bind or a managed Ceph topology host address does not
+  resolve, instead of degrading to output with empty values.
+- **ISO references resolve only through the single Bootwright managed media
+  resolver.** Providers, OS installers, and future user-supplied ISO fields must
+  not duplicate `local-media:`, `file://`, or HTTP(S) parsing; the
+  `local-media:<filename.iso>` form resolves against the host-local media store
+  at `/var/lib/bootwright/media/`.
 
 ### Inspecting rendered inputs
 
@@ -282,53 +182,40 @@ manifest of every written path.
 ## The ownership-record cross-boundary contract
 
 Ownership evidence is a named cross-boundary contract between the Ansible
-executor and the Go orchestrator. Executing collection roles record per-host
+executor and the Go orchestrator: executing collection roles record per-host
 resource and package ownership through `bootwright.core.ownership_record` at
-mutation time, and Go reads those records for:
-
-- destroy scoping (removing resources Bootwright created or configured, including
-  ones no longer in the input YAML);
-- host package-removal gating (a package is removed only when ownership records
-  prove Bootwright installed it and no remaining record on that host still
-  requires it);
-- orphan reporting;
-- `diff` classification.
-
-Run, install, and convergence-safety ledgers remain Go-written. This split keeps
-a single source of truth for "what Bootwright owns on each host" while letting Go
-own the run lifecycle. See [Operations and Recovery](../advanced/operations.md)
-for how destroy consumes these records.
+mutation time, and Go reads those records for destroy scoping, host
+package-removal gating, orphan reporting, and `diff` classification, while run,
+install, and convergence-safety ledgers stay Go-written. The full contract —
+including the partial-destroy `destroyStatus=partial` stamp — is in
+[`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md);
+[Operations and Recovery](../advanced/operations.md) covers how destroy consumes
+these records.
 
 ## The Ansible bundle
 
-The Ansible source tree is authored under `ansible/` in the repository.
-`make sync-bundle` packs that source plus pinned external collections into the
-generated embedded archive at `internal/converge/bundle/ansible_bundle.zip`, and
-`make build` runs that sync before compiling the CLI. The generated archive is
-not versioned.
+The Ansible source tree is authored under `ansible/`; `make sync-bundle` packs it
+plus pinned external collections into the generated, unversioned embedded archive
+at `internal/converge/bundle/ansible_bundle.zip`, and `make build` runs that sync
+before compiling the CLI. A source checkout without the generated archive must
+still compile and report an empty embedded bundle for commands that need Ansible
+until the operator runs `make build`. See
+[Building and testing](building-and-testing.md).
 
-!!! note
-    A source checkout without the generated archive must still compile and report
-    an empty embedded bundle for commands that need Ansible until the operator
-    runs `make build`.
+## Extending the providers
 
-## Providers and extension
-
-Provider adapters consume capability arms instead of inferring behavior from
-names. The current capability arms are:
-
-- machine profiles: `libvirt`, `vsphere`, `kubevirt`;
-- explicit machines: `baremetal`.
-
-Adding a substrate means adding a capability arm, validation, renderer support,
-and an apply adapter — without moving physical facts into cluster intent.
-Provider and BMC behavior must be handled by capability discovery and advertised
-metadata before any supplier-specific branching; such workarounds are allowed
-only when discovery cannot express the behavior, and must stay isolated, minimal,
-tested, and documented. Adapters should reuse the official CLI capabilities of
-the tools Bootwright drives before adding custom orchestration around the same
-operation — for example, install completion stays delegated to
-`openshift-install agent wait-for install-complete`.
+Provider adapters consume capability arms — machine profiles for `libvirt`,
+`vsphere`, and `kubevirt`, explicit machines for `baremetal` — instead of
+inferring behavior from names, and all four are apply-supported today. Adding a
+substrate means adding a capability arm, validation, renderer support, and an
+apply adapter, without moving physical facts into cluster intent; provider and
+BMC behavior must come from capability discovery and advertised metadata before
+any supplier-specific branching, and adapters should reuse the official CLI
+capabilities of the tools Bootwright drives (for example
+`openshift-install agent wait-for install-complete`) before adding custom
+orchestration. The narrative contract is in
+[`specs/architecture.md` → Providers](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md).
+The two checklists below are the contributor-unique part.
 
 ### Adding a managed infrastructure service
 

@@ -3,7 +3,7 @@
 Durable ownership evidence is written at mutation time by the executing
 collection roles through `bootwright.core.ownership_record` and read by Go
 (`internal/ownership`) for destroy scoping, host package removal
-gating, orphan reporting, and state-check. Run, install, and convergence-safety
+gating, orphan reporting, and `diff --recorded`. Run, install, and convergence-safety
 ledgers remain Go-written; this contract covers only ownership evidence.
 
 Records live under the rendered `bootwright_ownership_dir` (the context

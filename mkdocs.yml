@@ -126,6 +126,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Contributing:
       - contributing/index.md
+      - Building and testing: contributing/building-and-testing.md
       - API: contributing/api.md
       - Architecture: contributing/architecture.md
 

@@ -6,6 +6,10 @@ changing behavior in an area — an accepted decision may already fix the shape
 of the change or record why the obvious alternative was rejected. Incident and
 constraint knowledge lives in [`.agents/knowledge/`](../../.agents/knowledge/KNOWLEDGE.md).
 
+A superseded ADR is deleted rather than kept with a Superseded status, and its
+number is retired — so the gaps at 0001 and 0003 are intentional, not missing
+files.
+
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0002](0002-ansible-provider-dispatch.md) | Ansible Collection Layout And Provider Dispatch | Accepted |
@@ -21,3 +25,4 @@ constraint knowledge lives in [`.agents/knowledge/`](../../.agents/knowledge/KNO
 | [0013](0013-addon-catalog-and-hooks.md) | Add-on Catalog, Hook Lifecycle, and OLM Readiness Gating | Accepted |
 | [0014](0014-api-grammar.md) | Public API Grammar: References, Unions, Collections, Enablement | Accepted |
 | [0015](0015-machine-scope-rhsm-registration.md) | Machine-Scope RHSM Registration and External Management | Accepted |
+| [0016](0016-secret-first-class-kind.md) | Secret as a First-Class Kind | Accepted |

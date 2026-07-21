@@ -3,7 +3,7 @@
 **Constraint (task hashes must not embed the scope filter):** A task that
 hashes the full planning `State` breaks under `--clusters` scoping, because
 that State is the scope-filtered set: hashing it makes an unscoped
-`state-check` report drift after a scoped apply, and the next reconcile then
+`diff --recorded` report drift after a scoped apply, and the next reconcile then
 fails closed on that phantom drift. Tasks must hash a projection of only the
 desired-state inputs they actually depend on. Example: the per-host virtctl
 provision hashes `virtctlDesiredHashVars` — the KubeVirt host cluster identity
@@ -14,7 +14,7 @@ full planning State for execution.
 
 **When it bites:** Any new plan task whose convergence hash is derived from
 `State` directly will reproduce the bug: scoped apply succeeds, unscoped
-`state-check` flips to drift, next `apply` refuses.
+`diff --recorded` flips to drift, next `apply` refuses.
 
 **Semantics (base-only runs reuse the deps ISO):** In the container-cluster
 plan chain (machine infra prepare/provision/finalize → agent ISO (deps) →

@@ -22,6 +22,24 @@ its area.
 | `go-dependencies` | Adding, upgrading, replacing, or removing Go module dependencies |
 | `code-quality` | Adding, modifying, deleting, or reviewing code (Go, Python, shell, Ansible YAML, Jinja2) |
 
+## Reusable Prompts
+
+Long-form review and audit prompts live in `/.agents/reusable-prompts/`. Load one
+when a task matches its focus; each is self-contained and grounds itself in the
+current specs and code before judging.
+
+| Prompt | Use When |
+| --- | --- |
+| `architecture.md` | Rethinking internal architecture — package boundaries, the Go↔Ansible split, repo/script distribution, or role taxonomy |
+| `cli-schema-ux-rethink.md` | Rethinking the CLI and desired-state schema from first principles (three-alternatives design critique) |
+| `specs-ux.md` | Auditing the *current* user-facing contract — operator UX, authoring ergonomics, and definition/spec quality |
+| `code-review.md` | Auditing implementation quality and safety — correctness, dead code, duplication, error handling, script/CI safety |
+| `code-flow-review.md` | Tracing real input end-to-end to final output for bugs, intent drift, and Go↔Ansible contract mismatches |
+| `provisioning-logic-review.md` | Reviewing the provisioning graph — closure, dependency ordering, locks, parallelism, and resumability |
+| `idempotency-safety-audit.md` | Auditing idempotency and destructive-operation safety against a provisioning scenario |
+| `security-audit.md` | Running a dedicated deep security pass — secrets, privilege, TLS/trust, and supply chain |
+| `state-lifecycle-scenario-review.md` | Pressure-testing lifecycle transitions (apply/destroy/recreate) across many ownership and state scenarios |
+
 ## Knowledge Base
 
 When a user reports an error or unexpected failure, check
@@ -35,6 +53,7 @@ the directory.
 | --- | --- |
 | Failure symptom map + constraints/semantics by area | `.agents/knowledge/KNOWLEDGE.md` |
 | Accepted decisions | `specs/adr/README.md` |
+| Deferred / open work | `.agents/knowledge/BACKLOG.md` |
 
 Knowledge is written to these stores, never to source comments (see the
 Comments core invariant in `/AGENTS.md` and the code-quality skill).

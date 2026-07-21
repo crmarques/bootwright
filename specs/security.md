@@ -181,8 +181,9 @@ External proxy entries carry direct URLs and optional auth refs. Managed proxy
 entries reference an `InfraComponent` with `spec.proxy`, and the runtime URL is
 derived from the selected service machine and port.
 
-Commands that print proxy shell exports containing referenced credentials must
-fail unless the operator passes `--sensitive`.
+Any command that prints proxy shell exports with embedded credentials must gate
+that output behind `--sensitive`; without the flag the referenced credentials
+must not be emitted.
 
 ## Generated Artifacts
 

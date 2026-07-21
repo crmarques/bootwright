@@ -117,17 +117,17 @@ run *before* any mutation if its precondition is not met:
 
 ## Apply modes and what they protect
 
-`apply` has three modes. The default is the safe one; the other two are
-deliberate ([full reference](../concepts/index.md#apply-modes)):
+`apply` has three modes — bare `apply` (reconcile), `--expect-new` (assert a
+greenfield build), and `--converge-drifted` (break-glass rebuild) — described in
+full under [Apply modes](../concepts/index.md#apply-modes). What matters here is
+how each treats resources Bootwright does **not** own:
 
-| Mode | Use it to | Destructive? |
-| --- | --- | --- |
-| `apply` (reconcile) | Build out and converge day to day | No — fails closed on drift/foreign |
-| `apply --expect-new` | Assert a greenfield build — refuse if **any** selected object already exists | No — it only refuses |
-| `apply --converge-drifted` | Break-glass: rebuild Bootwright-owned drift it knows how to rebuild | **Yes** — see below |
-
-`--expect-new` is a guardrail, not a risk: use it on a first build so a stale
-context or a name collision fails loudly instead of half-converging.
+- Bare `apply` and `--expect-new` are non-destructive. Bare `apply` fails closed
+  on drift or foreign ownership; `--expect-new` additionally refuses if any
+  selected object already exists — a guardrail for first builds, so a stale
+  context or a name collision fails loudly instead of half-converging.
+- `--converge-drifted` is the only mode that destroys, and only over resources a
+  Bootwright ownership marker proves it created (see below).
 
 !!! danger "`--converge-drifted` can destroy data"
     `apply --converge-drifted` is the only `apply` form that destroys. It may reinstall a
@@ -135,7 +135,12 @@ context or a name collision fails loudly instead of half-converging.
     rebuilt) and cleanly rebuild a managed Ceph cluster via
     `cephadm rm-cluster --zap-osds` — and only when a Bootwright ownership marker
     proves the live cluster is the one Bootwright created. It **never** touches
-    foreign objects, run leases, validation, or secret checks. Always
+    foreign objects, run leases, validation, or secret checks. Beyond
+    `--converge-drifted` itself there is a **separate** data-loss confirmation
+    gate: a destructive rebuild is authorized only by the interactive data-loss
+    prompt, or by `--confirm-data-loss` paired with `--yes` for automation —
+    `--yes` alone does **not** authorize data loss (see
+    [Operations](operations.md#the-fail-closed-converge-drifted-contract)). Always
     `plan`/`--dry-run` an override first and read exactly what it intends to
     rebuild.
 
@@ -149,11 +154,13 @@ A few habits keep operators on the safe side of these guardrails:
   graph before any override or teardown. `diff` shows drift without
   touching hosts.
 - **Limit blast radius with scope.** `--clusters <names>` and `--stage` narrow a
-  run to specific clusters or to the `infra`/`clusters` family. Scope an override
-  to the one cluster you mean to rebuild, not the whole fleet. Note a scoped
-  apply cannot silently narrow a shared service another cluster still needs (see
-  [Multi-cluster fleets](fleets.md)), and a KubeVirt child needs its parent in
-  scope (see [KubeVirt nested clusters](kubevirt.md)).
+  run to specific clusters or to the `infra`/`clusters` family, and `--machines
+  <names>` narrows it to individual `Machine`s for a per-machine rebuild or
+  teardown. Scope an override to the one cluster or machine you mean to rebuild,
+  not the whole fleet. Note a scoped apply cannot silently narrow a shared
+  service another cluster still needs (see [Multi-cluster fleets](fleets.md)),
+  and a KubeVirt child needs its parent in scope (see
+  [KubeVirt nested clusters](kubevirt.md)).
 - **Protect production.** Set destroy protection in desired state so any
   destructive rebuild must first cross the destroy-authorization boundary:
 
@@ -182,9 +189,13 @@ A few habits keep operators on the safe side of these guardrails:
 | Question | Command |
 | --- | --- |
 | What will this run do? | `bootwright plan` / `bootwright apply --dry-run` |
-| Has anything drifted from the last apply? | `bootwright diff` |
+| Has anything drifted from the last apply (offline)? | `bootwright diff --recorded` |
+| Has the live cluster drifted from desired state? | `bootwright diff` (contacts clusters read-only) |
 | What is the current run doing? | `bootwright status` / `status --watch` |
-| What does Bootwright own here, and what is orphaned? | `bootwright diff` and the orphan reporting in [Operations, recovery & teardown](operations.md) |
+| What does Bootwright own here, and what is orphaned? | `bootwright diff --recorded` and the orphan reporting in [Operations, recovery & teardown](operations.md) |
 
-`diff` and `status` read recorded evidence and the run ledger without
+`diff --recorded` and `status` read recorded evidence and the run ledger without
 contacting provider hosts, BMCs, or clusters, so they are always safe to run.
+Plain `diff` instead contacts the clusters read-only — SSH to the Ceph seed for
+discovery, a `ClusterVersion` probe per container cluster — and is likewise
+non-mutating.

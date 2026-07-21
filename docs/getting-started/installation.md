@@ -116,7 +116,10 @@ bootwright context update --name lab -f ./my-lab
 ```
 
 `context init` fails if the named context already exists; rerun with `--yes` to
-drop the existing context and recreate it from the source. See
+drop the existing context and recreate it from the source. Remove a context you
+no longer need with `bootwright context delete --name lab` (add `--purge` to also
+drop its base directory) — destroy any resources it still owns first, so their
+records and install-captured credentials are not abandoned. See
 [The desired-state model](../concepts/index.md) for contexts, stages, and the
 apply modes.
 
