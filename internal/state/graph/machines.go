@@ -37,6 +37,33 @@ func MachineOwningClusterRoots(state v1alpha1.State, machines map[string]bool) (
 	return container, storage
 }
 
+func MachinesWithoutProvisioningWork(state v1alpha1.State, names []string) []string {
+	serviceHosts := map[string]bool{}
+	for _, service := range ResolveMachineServices(state).Services {
+		if service.MachineRef != "" {
+			serviceHosts[service.MachineRef] = true
+		}
+	}
+	providerHosts := map[string]bool{}
+	for _, provider := range state.InfraProviders {
+		if provider.Spec.Libvirt != nil && provider.Spec.Libvirt.MachineRef.Name != "" {
+			providerHosts[provider.Spec.Libvirt.MachineRef.Name] = true
+		}
+	}
+	var out []string
+	for _, name := range names {
+		if serviceHosts[name] || providerHosts[name] {
+			continue
+		}
+		container, storage := MachineOwningClusterRoots(state, map[string]bool{name: true})
+		if len(container) > 0 || len(storage) > 0 {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
 func machineOwningClusterSet(state v1alpha1.State, machines map[string]bool) map[string]bool {
 	container, storage := MachineOwningClusterRoots(state, machines)
 	out := make(map[string]bool, len(container)+len(storage))

@@ -14,6 +14,9 @@ func ResolveMachines(state v1alpha1.State, scope string) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
+	if orphans := stategraph.MachinesWithoutProvisioningWork(state, names); len(orphans) > 0 {
+		return Selection{}, fmt.Errorf("machine(s) %s have no provisioning work: each is not a node of any cluster and hosts no shared service or provider, so there is nothing to provision or tear down for them; declare the machine as a cluster node, or (for a machine that installs a managed OS) note that Bootwright installs a managed OS only on cluster-member machines", strings.Join(orphans, ", "))
+	}
 	provision, hosts := stategraph.MachineWorkObjects(state, names)
 	container, storage := stategraph.MachineOwningClusterRoots(state, provision)
 	storageSet := make(map[string]bool, len(storage))
