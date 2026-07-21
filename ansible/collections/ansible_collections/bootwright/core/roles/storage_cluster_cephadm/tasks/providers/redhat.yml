@@ -1,0 +1,3 @@
+---
+- name: Configure subscription-backed Ceph package repositories
+  ansible.builtin.include_tasks: subscription.yml

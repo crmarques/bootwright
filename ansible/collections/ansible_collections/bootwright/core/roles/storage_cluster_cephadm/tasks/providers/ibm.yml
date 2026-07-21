@@ -1,0 +1,38 @@
+---
+- name: Require accepted license for licensed Ceph distribution
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_provider.license.accepted | default(false) | bool
+    fail_msg: >-
+      Ceph distribution {{ bootwright_ceph_provider_name }} requires license acceptance;
+      set the Environment entitlement license.accept=true.
+  when: bootwright_ceph_provider.requiresLicense | default(false) | bool
+
+- name: Configure subscription-backed Ceph package repositories
+  ansible.builtin.include_tasks: subscription.yml
+
+- name: Install vendor Ceph repository definition
+  ansible.builtin.get_url:
+    url: "{{ bootwright_ceph_provider.repository.ibmRepoURL }}"
+    dest: /etc/yum.repos.d/ibm-storage-ceph.repo
+    owner: root
+    group: root
+    mode: "0644"
+  when: bootwright_ceph_provider.repository.ibmRepoURL | default('') | length > 0
+
+- name: Install vendor Ceph license package
+  ansible.builtin.package:
+    name: ibm-storage-ceph-license
+    state: present
+  when: bootwright_ceph_provider.requiresLicense | default(false) | bool
+
+- name: Accept vendor Ceph license provisions
+  ansible.builtin.file:
+    path: /usr/share/ibm-storage-ceph-license/accept
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+  when: bootwright_ceph_provider.requiresLicense | default(false) | bool

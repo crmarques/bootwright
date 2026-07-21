@@ -1,24 +1,16 @@
 ---
-- name: Validate community Ceph storage node OS
+- name: Validate Ceph storage node OS for the rendered distribution
   ansible.builtin.assert:
     that:
       - ansible_os_family == 'RedHat'
-    fail_msg: >-
-      Ceph distribution {{ bootwright_ceph_provider_name }} is supported on RHEL-family storage nodes only;
-      {{ bootwright_current_storage_host.hostname }} reported
-      {{ ansible_distribution | default('<unknown>') }} (os_family {{ ansible_os_family | default('<unknown>') }}).
-  when: bootwright_ceph_provider.community is defined
-
-- name: Validate subscription-backed Ceph storage node OS
-  ansible.builtin.assert:
-    that:
-      - ansible_os_family == 'RedHat'
-      - ansible_distribution_version in (bootwright_ceph_provider.runtimeOS.exactVersions | default([]))
+      - >-
+        (bootwright_ceph_provider.runtimeOS.exactVersions | default([]) | length == 0)
+        or ansible_distribution_version in bootwright_ceph_provider.runtimeOS.exactVersions
     fail_msg: >-
       {{ bootwright_ceph_provider.runtimeOS.message | default('selected Ceph distribution is incompatible with this storage node OS') }};
       {{ bootwright_current_storage_host.hostname }} reported
-      {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }}.
-  when: bootwright_ceph_provider.requiresRHSM | default(false) | bool
+      {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }}
+      (os_family {{ ansible_os_family | default('<unknown>') }}).
 
 - name: Load Ceph storage node OS variables
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
@@ -32,6 +24,12 @@
     mode: "0644"
   register: bootwright_ceph_proxy_ca
   when: bootwright_proxy_trust_bundle_ref | default('') | length > 0
+
+- name: Update storage node trust store for the proxy CA
+  ansible.builtin.command:
+    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
+  changed_when: bootwright_ceph_proxy_ca.changed | default(false)
+  when: bootwright_ceph_proxy_ca.changed | default(false)
 
 - name: Ensure containers.conf.d directory on storage node
   ansible.builtin.file:
@@ -60,10 +58,5 @@
     state: absent
   when: not (bootwright_proxy_has_url | default(false) | bool)
 
-- name: Configure community Ceph package repository
-  ansible.builtin.include_tasks: ../providers/community.yml
-  when: bootwright_ceph_provider.community is defined
-
-- name: Configure subscription-backed Ceph package repository
-  ansible.builtin.include_tasks: ../providers/subscription.yml
-  when: bootwright_ceph_provider.requiresRHSM | default(false) | bool
+- name: Configure Ceph package repository for the rendered distribution
+  ansible.builtin.include_tasks: "../providers/{{ bootwright_ceph_provider_name }}.yml"

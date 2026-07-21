@@ -1138,24 +1138,41 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	}
 
 	repositoryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/repository.yml")
-	communityDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure community Ceph package repository")
-	subscriptionDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure subscription-backed Ceph package repository")
-	if got := fmt.Sprint(repositoryTasks[communityDispatchIdx]["when"]); !strings.Contains(got, "community is defined") {
-		t.Fatalf("community repository dispatch must gate on the rendered community block, got when=%v", got)
+	osValidateIdx := findAnsibleTask(t, repositoryTasks, "Validate Ceph storage node OS for the rendered distribution")
+	osValidate, ok := repositoryTasks[osValidateIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage node OS validation must be an assert, got %v", repositoryTasks[osValidateIdx])
 	}
-	if got := fmt.Sprint(repositoryTasks[subscriptionDispatchIdx]["when"]); !strings.Contains(got, "requiresRHSM") {
-		t.Fatalf("subscription repository dispatch must gate on requiresRHSM, got when=%v", got)
+	if got := fmt.Sprint(osValidate["that"]); !strings.Contains(got, "runtimeOS.exactVersions") || !strings.Contains(got, "ansible_os_family == 'RedHat'") {
+		t.Fatalf("storage node OS validation must enforce the rendered runtimeOS matrix on RHEL-family nodes, got that=%v", osValidate["that"])
+	}
+	dispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure Ceph package repository for the rendered distribution")
+	if !(osValidateIdx < dispatchIdx) {
+		t.Fatalf("repository dispatch must run after the OS validation (validate=%d dispatch=%d)", osValidateIdx, dispatchIdx)
+	}
+	if got := fmt.Sprint(repositoryTasks[dispatchIdx]["ansible.builtin.include_tasks"]); !strings.Contains(got, "providers/{{ bootwright_ceph_provider_name }}.yml") {
+		t.Fatalf("repository preparation must dispatch to the rendered distribution's provider task file, got %v", got)
 	}
 	for _, rel := range []string{
-		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/community.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/redhat.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/ibm.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml",
 	} {
 		if tasks := readAnsibleTasks(t, rel); len(tasks) == 0 {
 			t.Fatalf("%s has no tasks", rel)
 		}
 	}
+	for _, rel := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/redhat.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/ibm.yml",
+	} {
+		if body := readRepoFile(t, rel); !strings.Contains(body, "include_tasks: subscription.yml") {
+			t.Fatalf("%s must compose the shared subscription task file", rel)
+		}
+	}
 
-	communityTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/community.yml")
+	communityTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml")
 	downloadIdx := findAnsibleTask(t, communityTasks, "Download cephadm utility to configure community Ceph repository")
 	addRepoIdx := findAnsibleTask(t, communityTasks, "Configure community Ceph package repository through cephadm")
 	if !(downloadIdx < addRepoIdx) {
@@ -1194,7 +1211,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("community repo gpgkey heal task must rewrite gpgkey lines in the existing repo file, got %v", repoKeyHeal)
 	}
 	communitySource := strings.Join([]string{
-		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/community.yml"),
+		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml"),
 		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/vars/os/RedHat.yml"),
 	}, "\n")
 	for _, forbidden := range []string{"mirror.stream.centos.org", "community_dependency_default_mirror", "ansible.builtin.yum_repository"} {
@@ -1225,8 +1242,13 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(subscriptionTasks[repoEnableIdx]["when"]); !strings.Contains(got, "external") {
 		t.Fatalf("subscription repo enablement must skip external rhsm management, got when=%v", got)
 	}
-	licenseAcceptIdx := findAnsibleTask(t, subscriptionTasks, "Accept vendor Ceph license provisions")
-	if got := fmt.Sprint(subscriptionTasks[licenseAcceptIdx]["when"]); !strings.Contains(got, "requiresLicense") {
+	ibmTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/ibm.yml")
+	licenseRequireIdx := findAnsibleTask(t, ibmTasks, "Require accepted license for licensed Ceph distribution")
+	licenseAcceptIdx := findAnsibleTask(t, ibmTasks, "Accept vendor Ceph license provisions")
+	if !(licenseRequireIdx < licenseAcceptIdx) {
+		t.Fatalf("IBM provider must require license acceptance before accepting provisions (require=%d accept=%d)", licenseRequireIdx, licenseAcceptIdx)
+	}
+	if got := fmt.Sprint(ibmTasks[licenseAcceptIdx]["when"]); !strings.Contains(got, "requiresLicense") {
 		t.Fatalf("license acceptance must gate on requiresLicense, got when=%v", got)
 	}
 

@@ -160,7 +160,7 @@ func TestGetURLDownloadsPinChecksums(t *testing.T) {
 	acceptedUnpinnable := map[string]string{
 		bootwrightCollectionRoleRoot + "/controller_openshift_tools/tasks/main.yml\x00Download OpenShift CLI checksums":                         "this IS the sha256sum.txt manifest the sibling tarball fetches pin against; pinning it would be circular",
 		bootwrightCollectionRoleRoot + "/controller_virtctl/tasks/main.yml\x00Download virtctl archive":                                         "version-matched virtctl fetched from the live host-cluster ConsoleCLIDownload; the URL and bytes are cluster-derived at run time with no published digest",
-		bootwrightCollectionRoleRoot + "/storage_cluster_cephadm/tasks/providers/subscription.yml\x00Install vendor Ceph repository definition": "mutable vendor-published .repo metadata file, not an executed artifact",
+		bootwrightCollectionRoleRoot + "/storage_cluster_cephadm/tasks/providers/ibm.yml\x00Install vendor Ceph repository definition": "mutable vendor-published .repo metadata file, not an executed artifact",
 	}
 
 	var gets []getURLTaskRef
@@ -176,7 +176,7 @@ func TestGetURLDownloadsPinChecksums(t *testing.T) {
 	for _, g := range gets {
 		_, hasChecksum := g.body["checksum"]
 
-		if strings.HasSuffix(g.rel, "providers/community.yml") && strings.Contains(g.name, "cephadm") {
+		if strings.HasSuffix(g.rel, "providers/oss.yml") && strings.Contains(g.name, "cephadm") {
 			sawCephadm = true
 			if !hasChecksum {
 				t.Errorf("the community cephadm get_url %q in %s must pin a checksum: (M9 fix); it fetches then executes the bootstrap binary", g.name, g.rel)

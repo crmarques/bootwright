@@ -467,17 +467,25 @@ used to limit the bootstrap play. Every storage host renders
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
 
-The storage role dispatches its repository preparation on rendered `provider`
-capability flags, not on the distribution name. For `distribution: oss` the
-`provider` block carries a `community` map with a `version` (defaulting to exact
-`20.2.2`) or an authored codename `release`, plus an optional `mirror`; the role uses it
-to configure the upstream community Ceph package repository with cephadm before
-installing `cephadm`. The role imports the Ceph release signing key from
-`<mirror>/keys/release.asc` (fingerprint-pinned) before `cephadm add-repo`,
-passes that key location through `--gpg-url` (cephadm's built-in default,
-`keys/release.gpg`, does not exist upstream), forwards a custom mirror through
-`--repo-url`, and rewrites `gpgkey=` lines in a pre-existing `ceph.repo` so
-nodes configured by earlier releases converge to the working key URL. The `redhat` and `ibm` distributions omit `community` and
+The storage role dispatches its repository preparation on the rendered
+`provider.name` (the distribution): the repository phase validates the node OS
+against the rendered `runtimeOS` matrix, then includes
+`tasks/providers/<name>.yml` — `oss.yml`, `redhat.yml`, or `ibm.yml`. Behavior
+inside those files stays keyed to rendered capability flags and data
+(`requiresRHSM`, `requiresLicense`, `rhsmManagement`, `repository.*`,
+`community.*`), never re-derived from the name: `redhat.yml` and `ibm.yml` are
+thin compositions of the shared `subscription.yml` task file, and `ibm.yml`
+adds the vendor-specific repository and license steps. For `distribution: oss`
+the `provider` block carries a `community` map with a `version` (defaulting to
+exact `20.2.2`) or an authored codename `release`, plus an optional `mirror`;
+`oss.yml` uses it to configure the upstream community Ceph package repository
+with cephadm before installing `cephadm`. It imports the Ceph release signing
+key from `<mirror>/keys/release.asc` (fingerprint-pinned) before
+`cephadm add-repo`, passes that key location through `--gpg-url` (cephadm's
+built-in default, `keys/release.gpg`, does not exist upstream), forwards a
+custom mirror through `--repo-url`, and rewrites `gpgkey=` lines in a
+pre-existing `ceph.repo` so nodes configured by earlier releases converge to
+the working key URL. The `redhat` and `ibm` distributions omit `community` and
 set `requiresRHSM: true` plus `rhsmManagement` (`managed` or `external` from the
 entitlement's `rhsm.management`); the `rhsm` path map is projected only when
 `rhsmManagement` is `managed`. RHSM registration itself runs earlier, in the
@@ -489,16 +497,18 @@ feeds `provider.rhsm.*` into the `machine_registration_rhsm` role
 binding, proxy CA trust, the node-side Satellite-in-CIDR bypass decision,
 `rhsm.conf` `[server]` proxy and `[rhsm]` `repo_ca_cert` convergence,
 `subscription-manager` registration and refresh, and optional Insights
-enrollment. The storage role's subscription task file then enables
+enrollment. The shared `subscription.yml` task file then enables
 `repository.redhatRepos` (skipped when `rhsmManagement` is `external`, so
-operator-enabled repo sets are never purged), installs the optional
-`repository.ibmRepoURL` vendor `.repo`, and — when `requiresLicense: true` —
+operator-enabled repo sets are never purged); `ibm.yml` installs the
+`repository.ibmRepoURL` vendor `.repo` and — when `requiresLicense: true` —
 installs and accepts the vendor license. Distributions that set
 `requiresRegistry: true` additionally run a registry stage (after host
 dependencies, before cephadm install) that installs the entitlement's
 `registry.trustBundlePath` and logs in to `registry.url` so every node can pull
 the Ceph container images cephadm orchestrates. Adding a distribution is a
-renderer/table change, not a new branch in the role.
+renderer/table change plus one provider task file keyed by its name (or a
+composition of the shared subscription file), not new branches in the shared
+flow.
 
 The provider also carries the release-specific `runtimeOS` matrix and, for IBM,
 `ibm.callHome`. IBM bootstrap adds `--automatically-accept-license`; the
