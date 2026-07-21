@@ -39,64 +39,15 @@
     bootwright_creds_label: "proxy auth ref {{ bootwright_proxy_credentials_ref }}"
   when: (bootwright_proxy_credentials_ref | length) > 0
 
-- name: Stat existing Squid htpasswd
-  ansible.builtin.stat:
-    path: "{{ bootwright_squid_auth_dir }}/htpasswd"
-  register: bootwright_squid_htpasswd_stat
+- name: Converge Squid htpasswd
+  ansible.builtin.include_role:
+    name: bootwright.core.support_htpasswd
+  vars:
+    bootwright_htpasswd_path: "{{ bootwright_squid_auth_dir }}/htpasswd"
+    bootwright_htpasswd_credentials: "{{ bootwright_squid_credentials }}"
+    bootwright_htpasswd_owner: "{{ bootwright_squid_runtime_uid }}"
+    bootwright_htpasswd_group: "{{ bootwright_squid_runtime_gid }}"
   when: (bootwright_proxy_credentials_ref | length) > 0
-
-- name: Verify existing Squid htpasswd matches current credentials
-  ansible.builtin.command:
-    argv:
-      - htpasswd
-      - -vi
-      - "{{ bootwright_squid_auth_dir }}/htpasswd"
-      - "{{ bootwright_squid_credentials.username }}"
-    stdin: "{{ bootwright_squid_credentials.password }}"
-  register: bootwright_squid_htpasswd_verify
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  changed_when: false
-  failed_when: false
-  when:
-    - (bootwright_proxy_credentials_ref | length) > 0
-    - bootwright_squid_htpasswd_stat.stat.exists | default(false)
-
-- name: Decide whether to rewrite Squid htpasswd
-  ansible.builtin.set_fact:
-    bootwright_squid_htpasswd_needs_write: >-
-      {{
-        not (bootwright_squid_htpasswd_stat.stat.exists | default(false))
-        or (bootwright_squid_htpasswd_verify.rc | default(1)) != 0
-      }}
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  changed_when: false
-  when: (bootwright_proxy_credentials_ref | length) > 0
-
-- name: Generate Squid htpasswd
-  ansible.builtin.command:
-    argv:
-      - htpasswd
-      - -niB
-      - "{{ bootwright_squid_credentials.username }}"
-    stdin: "{{ bootwright_squid_credentials.password }}"
-  register: bootwright_squid_htpasswd
-  changed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when:
-    - (bootwright_proxy_credentials_ref | length) > 0
-    - bootwright_squid_htpasswd_needs_write | default(false) | bool
-
-- name: Write Squid htpasswd
-  ansible.builtin.copy:
-    dest: "{{ bootwright_squid_auth_dir }}/htpasswd"
-    owner: "{{ bootwright_squid_runtime_uid }}"
-    group: "{{ bootwright_squid_runtime_gid }}"
-    mode: "0600"
-    content: "{{ bootwright_squid_htpasswd.stdout }}\n"
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when:
-    - (bootwright_proxy_credentials_ref | length) > 0
-    - bootwright_squid_htpasswd_needs_write | default(false) | bool
 
 - name: Write Squid configuration
   ansible.builtin.template:

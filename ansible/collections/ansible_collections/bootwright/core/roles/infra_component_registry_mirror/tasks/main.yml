@@ -58,64 +58,13 @@
     bootwright_creds_label: "registry mirror credentialsRef {{ bootwright_registry_mirror_credentials_path }}"
   when: (bootwright_registry_mirror_credentials_path | length) > 0
 
-- name: Stat existing mirror htpasswd
-  ansible.builtin.stat:
-    path: "{{ bootwright_registry_mirror_auth_dir }}/htpasswd"
-  register: bootwright_registry_mirror_htpasswd_stat
+- name: Converge mirror htpasswd
+  ansible.builtin.include_role:
+    name: bootwright.core.support_htpasswd
+  vars:
+    bootwright_htpasswd_path: "{{ bootwright_registry_mirror_auth_dir }}/htpasswd"
+    bootwright_htpasswd_credentials: "{{ bootwright_registry_mirror_credentials }}"
   when: (bootwright_registry_mirror_credentials_path | length) > 0
-
-- name: Verify existing mirror htpasswd matches current credentials
-  ansible.builtin.command:
-    argv:
-      - htpasswd
-      - -vi
-      - "{{ bootwright_registry_mirror_auth_dir }}/htpasswd"
-      - "{{ bootwright_registry_mirror_credentials.username }}"
-    stdin: "{{ bootwright_registry_mirror_credentials.password }}"
-  register: bootwright_registry_mirror_htpasswd_verify
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  changed_when: false
-  failed_when: false
-  when:
-    - (bootwright_registry_mirror_credentials_path | length) > 0
-    - bootwright_registry_mirror_htpasswd_stat.stat.exists | default(false)
-
-- name: Decide whether to rewrite mirror htpasswd
-  ansible.builtin.set_fact:
-    bootwright_registry_mirror_htpasswd_needs_write: >-
-      {{
-        not (bootwright_registry_mirror_htpasswd_stat.stat.exists | default(false))
-        or (bootwright_registry_mirror_htpasswd_verify.rc | default(1)) != 0
-      }}
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  changed_when: false
-  when: (bootwright_registry_mirror_credentials_path | length) > 0
-
-- name: Generate mirror htpasswd
-  ansible.builtin.command:
-    argv:
-      - htpasswd
-      - -niB
-      - "{{ bootwright_registry_mirror_credentials.username }}"
-    stdin: "{{ bootwright_registry_mirror_credentials.password }}"
-  register: bootwright_registry_mirror_htpasswd
-  changed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when:
-    - (bootwright_registry_mirror_credentials_path | length) > 0
-    - bootwright_registry_mirror_htpasswd_needs_write | default(false) | bool
-
-- name: Write mirror htpasswd
-  ansible.builtin.copy:
-    dest: "{{ bootwright_registry_mirror_auth_dir }}/htpasswd"
-    owner: root
-    group: root
-    mode: "0600"
-    content: "{{ bootwright_registry_mirror_htpasswd.stdout }}\n"
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when:
-    - (bootwright_registry_mirror_credentials_path | length) > 0
-    - bootwright_registry_mirror_htpasswd_needs_write | default(false) | bool
 
 - name: Install registry trust bundle on host
   ansible.builtin.include_role:

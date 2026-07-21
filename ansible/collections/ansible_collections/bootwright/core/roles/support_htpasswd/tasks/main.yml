@@ -1,0 +1,58 @@
+---
+- name: Stat existing htpasswd
+  ansible.builtin.stat:
+    path: "{{ bootwright_htpasswd_path }}"
+  register: bootwright_htpasswd_stat
+
+- name: Verify existing htpasswd matches current credentials
+  ansible.builtin.command:
+    argv:
+      - htpasswd
+      - -vi
+      - "{{ bootwright_htpasswd_path }}"
+      - "{{ bootwright_htpasswd_credentials.username }}"
+    stdin: "{{ bootwright_htpasswd_credentials.password }}"
+  register: bootwright_htpasswd_verify
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  changed_when: false
+  failed_when: false
+  when: bootwright_htpasswd_stat.stat.exists | default(false)
+
+- name: Decide whether to rewrite htpasswd
+  ansible.builtin.set_fact:
+    bootwright_htpasswd_needs_write: >-
+      {{
+        not (bootwright_htpasswd_stat.stat.exists | default(false))
+        or (bootwright_htpasswd_verify.rc | default(1)) != 0
+      }}
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  changed_when: false
+
+- name: Generate htpasswd entry
+  ansible.builtin.command:
+    argv:
+      - htpasswd
+      - -niB
+      - "{{ bootwright_htpasswd_credentials.username }}"
+    stdin: "{{ bootwright_htpasswd_credentials.password }}"
+  register: bootwright_htpasswd_generated
+  changed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when: bootwright_htpasswd_needs_write | bool
+
+- name: Write htpasswd
+  ansible.builtin.copy:
+    dest: "{{ bootwright_htpasswd_path }}"
+    owner: "{{ bootwright_htpasswd_owner | default('root') }}"
+    group: "{{ bootwright_htpasswd_group | default('root') }}"
+    mode: "0600"
+    content: "{{ bootwright_htpasswd_generated.stdout }}\n"
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when: bootwright_htpasswd_needs_write | bool
+
+- name: Enforce htpasswd ownership and permissions
+  ansible.builtin.file:
+    path: "{{ bootwright_htpasswd_path }}"
+    owner: "{{ bootwright_htpasswd_owner | default('root') }}"
+    group: "{{ bootwright_htpasswd_group | default('root') }}"
+    mode: "0600"
