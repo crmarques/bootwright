@@ -38,9 +38,54 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateSecretReferences(state))...)
 	errs = append(errs, notes(validateUniqueBMCAddresses(state))...)
 	errs = append(errs, notes(validateUniqueMachineSSHAddresses(state))...)
+	errs = append(errs, notes(validateUniqueMachineDNSEntries(state))...)
+	errs = append(errs, notes(validateClusterBoundHostnameSource(state))...)
 	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
 	errs = append(errs, notes(validateOSDDevicesExcludeRootDisk(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
+	return errs
+}
+
+func validateUniqueMachineDNSEntries(state v1alpha1.State) []string {
+	byName := map[string][]string{}
+	for _, machine := range state.Machines {
+		dnsEntry := strings.TrimSpace(v1alpha1.MachineDNSEntryAddress(machine))
+		if dnsEntry == "" {
+			continue
+		}
+		byName[dnsEntry] = append(byName[dnsEntry], machine.Metadata.Name)
+	}
+	entries := make([]string, 0, len(byName))
+	for entry := range byName {
+		entries = append(entries, entry)
+	}
+	sort.Strings(entries)
+	var errs []string
+	for _, entry := range entries {
+		names := byName[entry]
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		errs = append(errs, fmt.Sprintf("dnsEntry %q is used by more than one Machine (%s); the dnsEntry name is the machine's canonical DNS identity and connection address, so a shared value would resolve — and could drive — the wrong machine. Give each Machine a unique dnsEntry address", entry, strings.Join(names, ", ")))
+	}
+	return errs
+}
+
+func validateClusterBoundHostnameSource(state v1alpha1.State) []string {
+	var errs []string
+	for _, machine := range state.Machines {
+		if !v1alpha1.MachineInstallsOS(machine) {
+			continue
+		}
+		profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+		if !ok || profile.Spec.Customizations.Hostname.Source != v1alpha1.MachineInstallHostnameMachineName {
+			continue
+		}
+		if binding, ok := stateview.MachineCluster(state, machine.Metadata.Name); ok {
+			errs = append(errs, fmt.Sprintf("Machine/%s references MachineInstallProfile/%s with customizations.hostname.source %q, but the machine is bound to cluster %q as a node; a cluster node's OS hostname must equal its node FQDN, so the machine-name hostname source is only valid for machines not bound to any cluster", machine.Metadata.Name, profile.Metadata.Name, v1alpha1.MachineInstallHostnameMachineName, binding.Cluster))
+		}
+	}
 	return errs
 }
 
@@ -179,6 +224,18 @@ var labelName = regexp.MustCompile(`^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$`)
 var labelValue = regexp.MustCompile(`^([A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?)?$`)
 
 func IsDNSLabel(s string) bool { return dnsLabel.MatchString(s) }
+
+func isDNSSubdomainName(s string) bool {
+	if s == "" || len(s) > 253 || !dnsSubdomain.MatchString(s) {
+		return false
+	}
+	for _, part := range strings.Split(s, ".") {
+		if len(part) > 63 {
+			return false
+		}
+	}
+	return true
+}
 
 func isLabelKey(s string) bool {
 	prefix, name, ok := strings.Cut(s, "/")

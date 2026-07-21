@@ -76,6 +76,59 @@ func MachineSSHAddressByName(state v1alpha1.State, name string) string {
 	return ""
 }
 
+func MachineConnectionAddress(state v1alpha1.State, machine v1alpha1.Machine) string {
+	dnsEntry := v1alpha1.MachineDNSEntryAddress(machine)
+	if dnsEntry == "" {
+		return v1alpha1.MachineSSHAddress(machine)
+	}
+	if !MachineReferencesNameResolution(state, machine) {
+		return v1alpha1.MachineSSHAddress(machine)
+	}
+	if MachineHostsManagedNameResolution(state, machine) {
+		return v1alpha1.MachineSSHAddress(machine)
+	}
+	return dnsEntry
+}
+
+func MachineConnectionAddressByName(state v1alpha1.State, name string) string {
+	if m, ok := Machine(state, name); ok {
+		return MachineConnectionAddress(state, m)
+	}
+	return ""
+}
+
+func MachineReferencesNameResolution(state v1alpha1.State, machine v1alpha1.Machine) bool {
+	config := machine.Spec.Network.Config
+	if config.Spec != nil && len(config.Spec.NameResolutionRefs) > 0 {
+		return true
+	}
+	if config.NetworkConfigRef.Name == "" {
+		return false
+	}
+	network, ok := NetworkConfig(state, config.NetworkConfigRef.Name)
+	return ok && len(network.Spec.NameResolutionRefs) > 0
+}
+
+func MachineHostsManagedNameResolution(state v1alpha1.State, machine v1alpha1.Machine) bool {
+	env := Environment(state)
+	if env == nil {
+		return false
+	}
+	for _, entry := range env.Spec.InfraComponents.NameResolution {
+		if entry.Management != v1alpha1.EnvironmentComponentManaged {
+			continue
+		}
+		component, ok := InfraComponent(state, entry.ComponentRef.Name)
+		if !ok || component.Spec.NameResolution == nil {
+			continue
+		}
+		if component.Spec.NameResolution.MachineRef.Name == machine.Metadata.Name {
+			return true
+		}
+	}
+	return false
+}
+
 func MachineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInstall, machine v1alpha1.InstallMachine) (v1alpha1.NetworkConfig, bool) {
 	if machine.Network.Spec != nil {
 		return v1alpha1.NetworkConfig{

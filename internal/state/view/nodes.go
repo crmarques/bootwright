@@ -13,6 +13,13 @@ func ComposeFQDN(host, clusterName, baseDomain string) string {
 	return host + "." + clusterName + "." + baseDomain
 }
 
+func NodeShortName(hostname string) string {
+	if i := strings.Index(hostname, "."); i >= 0 {
+		return hostname[:i]
+	}
+	return hostname
+}
+
 func IsSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return len(ocp.Spec.Hosts) == 1 && ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
 }

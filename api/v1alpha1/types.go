@@ -54,6 +54,7 @@ const (
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 	MachineInstallPackageEnvMinimal   = "minimal"
+	MachineAddressDNSEntry            = "dnsEntry"
 
 	MachineInstallDefaultLanguage = "en_US.UTF-8"
 	MachineInstallDefaultKeyboard = "us"

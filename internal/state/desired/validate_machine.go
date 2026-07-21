@@ -204,6 +204,9 @@ func validateMachineAddresses(prefix string, machine v1alpha1.Machine) []string 
 		if address.Address == "" {
 			errs = append(errs, owner+".address is required")
 		}
+		if address.Name == v1alpha1.MachineAddressDNSEntry && address.Address != "" && !isDNSSubdomainName(address.Address) {
+			errs = append(errs, fmt.Sprintf("%s.address %q is not a DNS subdomain; %q names the machine's canonical DNS entry and must be a resolvable fully-qualified name", owner, address.Address, v1alpha1.MachineAddressDNSEntry))
+		}
 	}
 	return errs
 }

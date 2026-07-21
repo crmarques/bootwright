@@ -1,6 +1,7 @@
 package desiredstate
 
 import (
+	"fmt"
 	"net"
 	"sort"
 	"strings"
@@ -28,6 +29,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.Machines {
 		normalizeMachine(&state.Machines[i])
 	}
+	normalizeMachineDNSEntries(state)
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
 	}
@@ -163,6 +165,23 @@ func normalizeEntitlementSatellite(rhsm *v1alpha1.EntitlementRHSM) {
 	sat.Hostname = strings.TrimSpace(sat.Hostname)
 	if sat.ContentBaseURL == "" && sat.Hostname != "" {
 		sat.ContentBaseURL = "https://" + sat.Hostname + "/pulp/content"
+	}
+}
+
+func normalizeMachineDNSEntries(state *v1alpha1.State) {
+	env := primaryEnvironment(state)
+	if env == nil || env.Spec.BaseDomain == "" {
+		return
+	}
+	for i := range state.Machines {
+		machine := &state.Machines[i]
+		if _, ok := v1alpha1.MachineAddressByName(*machine, v1alpha1.MachineAddressDNSEntry); ok {
+			continue
+		}
+		machine.Spec.Addresses = append(machine.Spec.Addresses, v1alpha1.MachineAddress{
+			Name:    v1alpha1.MachineAddressDNSEntry,
+			Address: machine.Metadata.Name + "." + env.Spec.BaseDomain,
+		})
 	}
 }
 
@@ -323,7 +342,6 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if adm.ClusterSSHKeyRef.Name != "" && adm.ClusterSSHUser == "" {
 		adm.ClusterSSHUser = "root"
 	}
-	normalizeStorageStretch(cluster)
 }
 
 func normalizeNodeHostnames(state *v1alpha1.State) {
@@ -334,9 +352,8 @@ func normalizeNodeHostnames(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		cluster := &state.ContainerClusters[i]
 		for j := range cluster.Spec.Hosts {
-			if host := &cluster.Spec.Hosts[j]; host.Hostname == "" {
-				host.Hostname = defaultNodeHostname(state, host.MachineRef.Name, cluster.Metadata.Name, baseDomain)
-			}
+			host := &cluster.Spec.Hosts[j]
+			host.Hostname = nodeHostname(host.Hostname, j, cluster.Metadata.Name, baseDomain)
 		}
 	}
 	for i := range state.StorageClusters {
@@ -345,36 +362,22 @@ func normalizeNodeHostnames(state *v1alpha1.State) {
 			continue
 		}
 		for j := range cluster.Spec.Ceph.Topology.Hosts {
-			if host := &cluster.Spec.Ceph.Topology.Hosts[j]; host.Hostname == "" {
-				host.Hostname = defaultNodeHostname(state, host.MachineRef.Name, cluster.Metadata.Name, baseDomain)
-			}
+			host := &cluster.Spec.Ceph.Topology.Hosts[j]
+			host.Hostname = nodeHostname(host.Hostname, j, cluster.Metadata.Name, baseDomain)
 		}
+		normalizeStorageStretch(cluster)
 	}
 }
 
-func defaultNodeHostname(state *v1alpha1.State, machineName, clusterName, baseDomain string) string {
-	if machineName == "" {
-		return ""
+func nodeHostname(declared string, index int, clusterName, baseDomain string) string {
+	name := declared
+	if name == "" {
+		name = fmt.Sprintf("node%02d", index+1)
 	}
-	if baseDomain == "" || nodeOptsOutOfFQDN(state, machineName) {
-		return machineName
+	if strings.Contains(name, ".") || baseDomain == "" {
+		return name
 	}
-	return stateview.ComposeFQDN(machineName, clusterName, baseDomain)
-}
-
-func nodeOptsOutOfFQDN(state *v1alpha1.State, machineName string) bool {
-	machine, ok := stateview.Machine(*state, machineName)
-	if !ok {
-		return false
-	}
-	if v1alpha1.MachineOSProvided(machine) {
-		return true
-	}
-	profile, ok := stateview.MachineInstallProfile(*state, machine.Spec.OS.InstallProfileRef.Name)
-	if !ok {
-		return false
-	}
-	return profile.Spec.Customizations.Hostname.Source == v1alpha1.MachineInstallHostnameMachineName
+	return stateview.ComposeFQDN(name, clusterName, baseDomain)
 }
 
 func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
@@ -387,7 +390,7 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	}
 	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Host != "" {
 		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-			if host.Hostname == stretch.Tiebreaker.Host || host.MachineRef.Name == stretch.Tiebreaker.Host {
+			if host.Hostname == stretch.Tiebreaker.Host || stateview.NodeShortName(host.Hostname) == stretch.Tiebreaker.Host {
 				stretch.Tiebreaker.Site = host.Site
 				break
 			}

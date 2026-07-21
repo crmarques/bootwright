@@ -329,6 +329,11 @@ func MachineSSHAddress(machine Machine) string {
 	return address
 }
 
+func MachineDNSEntryAddress(machine Machine) string {
+	address, _ := MachineAddressByName(machine, MachineAddressDNSEntry)
+	return address
+}
+
 func MachineOSProvided(machine Machine) bool {
 	return machine.Spec.OS.Provided != nil && *machine.Spec.OS.Provided
 }
