@@ -1,20 +1,9 @@
 ---
-- name: Check whether node is already registered with RHSM
-  ansible.builtin.command:
-    argv:
-      - subscription-manager
-      - identity
-  register: bootwright_registration_identity
-  changed_when: false
-  failed_when: false
-
 - name: Register node with RHSM
   community.general.redhat_subscription:
     state: present
     org_id: "{{ lookup('ansible.builtin.file', bootwright_registration_organization_path) | trim }}"
     activationkey: "{{ lookup('ansible.builtin.file', bootwright_registration_activation_key_path) | trim }}"
-    force_register: true
-  when: bootwright_registration_identity.rc != 0
   register: bootwright_registration_register
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 

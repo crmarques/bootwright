@@ -1,0 +1,63 @@
+---
+- name: Deregister cluster machines from RHSM
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  ignore_unreachable: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  vars:
+    bootwright_selected_storage_cluster: >-
+      {{
+        bootwright_storage_clusters
+        | default([])
+        | selectattr('name', 'equalto', bootwright_storage_cluster_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  pre_tasks:
+    - name: End hosts that are not managed storage nodes
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_cluster_name | default('') | length == 0
+
+    - name: End hosts outside the selected storage clusters
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_destroy_storage_scope is defined
+        - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
+
+    - name: End hosts outside the selected machines
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_destroy_machine_scope is defined
+        - bootwright_storage_node_name | default('') not in (bootwright_destroy_machine_scope | split(','))
+
+    - name: End hosts whose storage cluster does not manage RHSM
+      ansible.builtin.meta: end_host
+      when: bootwright_selected_storage_cluster.provider.rhsmManagement | default('') != 'managed'
+
+    - name: Resolve proxy environment
+      block:
+        - name: Import proxy egress facts
+          ansible.builtin.include_role:
+            name: bootwright.core.machine_proxy
+            tasks_from: facts
+      rescue:
+        - name: Continue best-effort without a resolved proxy environment
+          ansible.builtin.set_fact:
+            bootwright_proxy_env: {}
+  tasks:
+    - name: Probe node reachability before deregistration
+      ansible.builtin.ping:
+      register: bootwright_registration_reachable_probe
+      ignore_unreachable: true
+      failed_when: false
+
+    - name: End unreachable nodes
+      ansible.builtin.meta: end_host
+      when: bootwright_registration_reachable_probe.unreachable | default(false) | bool
+
+    - name: Deregister machine from RHSM
+      ansible.builtin.include_role:
+        name: bootwright.core.machine_registration_rhsm
+        tasks_from: deregister.yml

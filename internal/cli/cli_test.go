@@ -978,6 +978,7 @@ func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
 	wantIDs := []string{
 		"destroy.storage-clusters",
 		"destroy.container-clusters",
+		"destroy.machine-registration",
 		"destroy.machine-infra",
 		"destroy.infra-components",
 		"destroy.provider-services",

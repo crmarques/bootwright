@@ -1,0 +1,15 @@
+---
+- name: Deregister node from RHSM
+  block:
+    - name: Remove node RHSM registration
+      community.general.redhat_subscription:
+        state: absent
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  rescue:
+    - name: Warn that RHSM deregistration did not complete
+      ansible.builtin.debug:
+        msg: >-
+          Could not unregister {{ inventory_hostname }} from RHSM. Its Satellite
+          consumer may remain and reject re-registration after reinstall because the
+          host reports the same DMI system UUID; delete the stale content host on the
+          Satellite if the next apply fails to register.

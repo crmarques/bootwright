@@ -14,7 +14,7 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs := []string{"destroy.machine-infra", "destroy.infra-components", "destroy.provider-services"}
+	wantIDs := []string{"destroy.machine-registration", "destroy.machine-infra", "destroy.infra-components", "destroy.provider-services"}
 	if len(tasks) != len(wantIDs) {
 		t.Fatalf("planned %d tasks, want %d: %+v", len(tasks), len(wantIDs), tasks)
 	}
@@ -22,8 +22,12 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 		if task.Entry.ID != wantIDs[i] {
 			t.Fatalf("task[%d] = %s, want %s", i, task.Entry.ID, wantIDs[i])
 		}
-		if task.Limit != limit {
-			t.Fatalf("task[%d] limit = %q, want %q", i, task.Limit, limit)
+		wantLimit := limit
+		if task.Entry.ID == "destroy.machine-registration" {
+			wantLimit = "bootwright_storage_hosts"
+		}
+		if task.Limit != wantLimit {
+			t.Fatalf("task[%d] limit = %q, want %q", i, task.Limit, wantLimit)
 		}
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
@@ -71,6 +75,7 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 	wantIDs := []string{
 		"destroy.storage-clusters",
 		"destroy.container-clusters",
+		"destroy.machine-registration",
 		"destroy.machine-infra",
 		"destroy.infra-components",
 		"destroy.provider-services",

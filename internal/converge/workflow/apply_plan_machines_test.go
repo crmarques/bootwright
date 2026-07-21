@@ -38,17 +38,20 @@ func TestPlanApplyMachineScopeNarrowsContainerNodes(t *testing.T) {
 	}
 }
 
-func TestPlanDestroyMachineScopeRunsOnlyMachineInfra(t *testing.T) {
+func TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
 	tasks, err := PlanDestroyTasks("infra", state, "", []string{DestroyMachineScopeExtraVar + "=master-0"}, nil)
 	if err != nil {
 		t.Fatalf("plan machine-scoped destroy: %v", err)
 	}
-	if len(tasks) != 1 {
-		t.Fatalf("machine-scoped destroy should plan exactly the machine-infra step, got %d tasks: %v", len(tasks), planTaskIDSet(tasks))
+	if len(tasks) != 2 {
+		t.Fatalf("machine-scoped destroy should plan the registration and machine-infra steps, got %d tasks: %v", len(tasks), planTaskIDSet(tasks))
 	}
-	if tasks[0].Entry.Kind != DestroyTaskKindMachineInfra {
-		t.Fatalf("machine-scoped destroy step kind = %q, want %q", tasks[0].Entry.Kind, DestroyTaskKindMachineInfra)
+	if tasks[0].Entry.Kind != DestroyTaskKindMachineRegistration {
+		t.Fatalf("machine-scoped destroy step[0] kind = %q, want %q", tasks[0].Entry.Kind, DestroyTaskKindMachineRegistration)
+	}
+	if tasks[1].Entry.Kind != DestroyTaskKindMachineInfra {
+		t.Fatalf("machine-scoped destroy step[1] kind = %q, want %q", tasks[1].Entry.Kind, DestroyTaskKindMachineInfra)
 	}
 }
 
@@ -58,8 +61,8 @@ func TestPlanDestroyInfraRunsFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan infra destroy: %v", err)
 	}
-	if len(tasks) != 3 {
-		t.Fatalf("infra destroy should plan the full 3-step chain, got %d", len(tasks))
+	if len(tasks) != 4 {
+		t.Fatalf("infra destroy should plan the full 4-step chain, got %d", len(tasks))
 	}
 }
 

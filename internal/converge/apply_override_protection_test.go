@@ -120,6 +120,52 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 	}
 }
 
+func managedRHSMStorageState(clusterName string) v1alpha1.State {
+	return v1alpha1.State{
+		Entitlements: []v1alpha1.Entitlement{{
+			Metadata: v1alpha1.Metadata{Name: "rhcs"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatCeph,
+				RHSM: &v1alpha1.EntitlementRHSM{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "key"},
+				},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: clusterName},
+			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+				Distribution:   v1alpha1.StorageCephDistributionRedHat,
+				EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+			}},
+		}},
+	}
+}
+
+func TestCheckApplyOverrideDestroyProtectionManagedRHSMReimageRoutesToDestroy(t *testing.T) {
+	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph", "ceph")
+
+	err := CheckApplyOverrideDestroyProtection(managedRHSMStorageState("ceph"), machine, nil)
+	if err == nil {
+		t.Fatal("in-place reimage of a managed-RHSM storage node must be routed to destroy, not reimaged in place")
+	}
+	for _, want := range []string{"managed-RHSM", "bootwright destroy --stage infra --clusters ceph --force", "RHSM"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("managed-RHSM reimage refusal must contain %q: %v", want, err)
+		}
+	}
+
+	ossState := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionOSS,
+		}},
+	}}}
+	if err := CheckApplyOverrideDestroyProtection(ossState, machine, nil); err != nil {
+		t.Fatalf("OSS (non-managed-RHSM) storage node keeps in-place reimage: %v", err)
+	}
+}
+
 func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T) {
 	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph-nprd", "ceph-nprd")
 

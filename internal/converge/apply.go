@@ -30,10 +30,14 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	if protectedKinds[v1alpha1.KindContainerCluster] {
 		blocked = append(blocked, reinstallDescriptors...)
 	}
+	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
+	if rhsmClusters := managedRegistrationClustersInScope(state, machineClusters); len(rhsmClusters) > 0 {
+		remedy := overrideDestroyRemedy(true, false, rhsmClusters, nil)
+		return fmt.Errorf("apply --converge-drifted would reimage managed-RHSM storage node(s) of Ceph cluster(s) %s in place, stranding their Satellite registration so the reused host DMI UUID blocks re-registration; %s, then re-apply — destroy unregisters the node from RHSM before wiping it", strings.Join(rhsmClusters, ", "), remedy)
+	}
 	if len(blocked) == 0 {
 		return nil
 	}
-	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
 	hasMachine := protectedKinds[v1alpha1.KindMachine] && len(machineLabels) > 0
 	clusterNames := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
 	hasCluster := len(clusterNames) > 0 || (protectedKinds[v1alpha1.KindContainerCluster] && len(reinstallDescriptors) > 0)
@@ -72,6 +76,19 @@ func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClass
 		return nil
 	}
 	return fmt.Errorf("apply would provision new ContainerCluster(s) %s while %s remain provisioned but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would re-provision the new name from scratch and orphan the old cluster (re-imaging its hosts on bare-metal). To rename, restore the old metadata.name; to replace, temporarily restore the old cluster YAML (metadata.name %s), run `bootwright destroy --clusters %s`, then remove that YAML and re-apply — destroy resolves --clusters against the declared state, so the old cluster can only be torn down while its YAML is present; to keep both, leave the old cluster declared and destroy it the same way when you no longer need it", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
+}
+
+func managedRegistrationClustersInScope(state v1alpha1.State, machineClusters []string) []string {
+	var out []string
+	for _, name := range machineClusters {
+		for _, cluster := range state.StorageClusters {
+			if cluster.Metadata.Name == name && v1alpha1.StorageClusterManagedRegistration(cluster, state) {
+				out = append(out, name)
+				break
+			}
+		}
+	}
+	return out
 }
 
 func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, clusterNames []string) string {

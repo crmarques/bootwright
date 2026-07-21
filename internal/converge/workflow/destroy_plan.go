@@ -7,15 +7,17 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
 const (
-	DestroyTaskKindMachineInfra     = "destroyMachineInfra"
-	DestroyTaskKindInfraComponents  = "destroyInfraComponents"
-	DestroyTaskKindProviderServices = "destroyProviderServices"
-	DestroyTaskKindStorageCluster   = "destroyStorageCluster"
-	DestroyTaskKindContainerCluster = "destroyContainerCluster"
+	DestroyTaskKindMachineRegistration = "destroyMachineRegistration"
+	DestroyTaskKindMachineInfra        = "destroyMachineInfra"
+	DestroyTaskKindInfraComponents     = "destroyInfraComponents"
+	DestroyTaskKindProviderServices    = "destroyProviderServices"
+	DestroyTaskKindStorageCluster      = "destroyStorageCluster"
+	DestroyTaskKindContainerCluster    = "destroyContainerCluster"
 )
 
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
@@ -40,6 +42,7 @@ func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extr
 
 func infraDestroySteps() []destroyStep {
 	return []destroyStep{
+		{id: "destroy.machine-registration", kind: DestroyTaskKindMachineRegistration, label: "Machine registration", playbook: roles.PlaybookTaskMachineRegistrationDeregister, limit: render.GroupStorageHosts},
 		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
 		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
 		{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
@@ -47,7 +50,7 @@ func infraDestroySteps() []destroyStep {
 }
 
 func infraMachineDestroySteps() []destroyStep {
-	return infraDestroySteps()[:1]
+	return infraDestroySteps()[:2]
 }
 
 func destroyMachineScoped(extraVars []string) bool {
@@ -74,6 +77,7 @@ type destroyStep struct {
 	kind     string
 	label    string
 	playbook string
+	limit    string
 }
 
 func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) []ApplyTask {
@@ -98,10 +102,14 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		if prev != "" {
 			entry.OrderingDependencies = []string{prev}
 		}
+		taskLimit := limit
+		if step.limit != "" {
+			taskLimit = step.limit
+		}
 		tasks = append(tasks, ApplyTask{
 			Entry:         entry,
 			Playbook:      step.playbook,
-			Limit:         limit,
+			Limit:         taskLimit,
 			ExtraVarPairs: append([]string(nil), extraVars...),
 			State:         state,
 		})

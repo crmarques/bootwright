@@ -62,6 +62,9 @@ echo destroy-stderr-line >&2
 		t.Fatalf("destroy streamed ansible to the terminal\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
 	for _, task := range ledger.Tasks {
+		if task.Status == TaskStatusSkipped {
+			continue
+		}
 		if task.Status != TaskStatusOK {
 			t.Fatalf("task %s status = %s, want ok", task.ID, task.Status)
 		}
