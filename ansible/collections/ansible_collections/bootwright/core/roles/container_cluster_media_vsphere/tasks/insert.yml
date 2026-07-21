@@ -168,9 +168,9 @@
 
     - name: Record vSphere virtual media attachment
       ansible.builtin.set_fact:
-        bootwright_redfish_vmedia_backend_attached: true
-        bootwright_redfish_vmedia_backend: vsphere-datastore
-        bootwright_redfish_vmedia_backend_image: "{{ bootwright_vsphere_media_fetch }}"
-        bootwright_redfish_vmedia_backend_image_name: "{{ bootwright_vsphere_media_stage_path | basename }}"
+        bootwright_vmedia_backend_attached: true
+        bootwright_vmedia_backend: vsphere-datastore
+        bootwright_vmedia_backend_image: "{{ bootwright_vsphere_media_fetch }}"
+        bootwright_vmedia_backend_image_name: "{{ bootwright_vsphere_media_stage_path | basename }}"
       changed_when: false
       no_log: "{{ bootwright_no_log | default(true) | bool }}"

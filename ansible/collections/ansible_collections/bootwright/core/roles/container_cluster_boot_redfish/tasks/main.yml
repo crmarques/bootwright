@@ -10,14 +10,14 @@
   block:
     - name: Select Redfish boot action
       ansible.builtin.set_fact:
-        bootwright_redfish_action_effective: "{{ bootwright_redfish_action | default('boot') }}"
+        bootwright_vmedia_action_effective: "{{ bootwright_vmedia_action | default('boot') }}"
       changed_when: false
 
     - name: Validate selected Redfish boot action
       ansible.builtin.assert:
         that:
-          - bootwright_redfish_action_effective in ['boot', 'cleanup_media']
-        fail_msg: "Unsupported boot_redfish action {{ bootwright_redfish_action_effective }}"
+          - bootwright_vmedia_action_effective in ['boot', 'cleanup_media']
+        fail_msg: "Unsupported boot_redfish action {{ bootwright_vmedia_action_effective }}"
 
     - name: Validate Redfish boot inputs
       ansible.builtin.import_tasks: stage/validate.yml
@@ -30,24 +30,24 @@
 
     - name: Prepare Redfish virtual media
       ansible.builtin.import_tasks: media/prepare.yml
-      when: bootwright_redfish_action_effective in ['boot', 'cleanup_media']
+      when: bootwright_vmedia_action_effective in ['boot', 'cleanup_media']
 
     - name: Validate declared MACs against Redfish inventory
       ansible.builtin.import_tasks: validation/macs.yml
       when:
-        - bootwright_redfish_action_effective == 'boot'
+        - bootwright_vmedia_action_effective == 'boot'
         - bootwright_component.boot.redfish.setBootSource | default(true) | bool
         - (bootwright_component.interfaces | default([]) | length) > 0
 
     - name: Guard against wiping an occupied host
       ansible.builtin.import_tasks: validation/occupancy.yml
       when:
-        - bootwright_redfish_action_effective == 'boot'
+        - bootwright_vmedia_action_effective == 'boot'
         - bootwright_component.boot.redfish.setBootSource | default(true) | bool
         - bootwright_current_cluster.name | default('') not in (bootwright_ocp_reinstall_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
 
     - name: Boot node from Redfish virtual media
-      when: bootwright_redfish_action_effective == 'boot'
+      when: bootwright_vmedia_action_effective == 'boot'
       block:
         - name: Power node from virtual media
           ansible.builtin.import_tasks: boot/power.yml

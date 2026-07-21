@@ -22,7 +22,7 @@ def bootwright_redfish_url(ref, base_url):
     return base_text + "/" + ref_text
 
 
-def bootwright_redfish_action_descriptors(resource, action_name):
+def bootwright_vmedia_action_descriptors(resource, action_name):
     descriptors = []
     for path, source, vendor, action in _iter_action_objects(resource, action_name):
         target = action.get("target")
@@ -306,7 +306,7 @@ def _canonical_mac(value):
 class FilterModule:
     def filters(self):
         return {
-            "bootwright_redfish_action_descriptors": bootwright_redfish_action_descriptors,
+            "bootwright_vmedia_action_descriptors": bootwright_vmedia_action_descriptors,
             "bootwright_redfish_mac_validation": bootwright_redfish_mac_validation,
             "bootwright_redfish_url": bootwright_redfish_url,
             "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,

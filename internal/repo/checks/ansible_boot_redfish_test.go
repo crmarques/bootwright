@@ -102,7 +102,7 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", mainTasks[actionIdx]["name"])
 	}
-	if got := actionFacts["bootwright_libvirt_media_action"]; got != "{{ bootwright_redfish_action_effective | default('boot') }}" {
+	if got := actionFacts["bootwright_libvirt_media_action"]; got != "{{ bootwright_vmedia_action_effective | default('boot') }}" {
 		t.Fatalf("%s must default to boot action, got %v", mainTasks[actionIdx]["name"], got)
 	}
 	validateAction, ok := mainTasks[validateActionIdx]["ansible.builtin.assert"].(map[string]any)
@@ -152,7 +152,7 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", mainTasks[recordIdx]["name"])
 	}
-	if recordFacts["bootwright_redfish_vmedia_backend_attached"] != true || recordFacts["bootwright_redfish_vmedia_backend"] != "libvirt-direct" {
+	if recordFacts["bootwright_vmedia_backend_attached"] != true || recordFacts["bootwright_vmedia_backend"] != "libvirt-direct" {
 		t.Fatalf("%s must mark direct libvirt virtual media attached, got %v", mainTasks[recordIdx]["name"], recordFacts)
 	}
 }
@@ -344,11 +344,11 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("boot_redfish action validation must not keep managed-only action %q: %v", forbidden, validateAction["that"])
 		}
 	}
-	if got := mainTasks[prepareIdx]["when"]; got != "bootwright_redfish_action_effective in ['boot', 'cleanup_media']" {
+	if got := mainTasks[prepareIdx]["when"]; got != "bootwright_vmedia_action_effective in ['boot', 'cleanup_media']" {
 		t.Fatalf("boot_redfish media preparation must only run for media actions, got when=%v", got)
 	}
 	for _, want := range []string{
-		"bootwright_redfish_action_effective == 'boot'",
+		"bootwright_vmedia_action_effective == 'boot'",
 		"bootwright_component.boot.redfish.setBootSource | default(true) | bool",
 		"(bootwright_component.interfaces | default([]) | length) > 0",
 	} {
@@ -356,7 +356,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("boot_redfish MAC validation when missing %q: %v", want, mainTasks[validateMACsIdx]["when"])
 		}
 	}
-	if got := mainTasks[bootSequenceIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
+	if got := mainTasks[bootSequenceIdx]["when"]; got != "bootwright_vmedia_action_effective == 'boot'" {
 		t.Fatalf("boot_redfish boot sequence must only run for boot action, got when=%v", got)
 	}
 	assertIncludeTasksFile(t, bootSequenceTasks[powerIdx], "boot/power.yml")
@@ -572,8 +572,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 		t.Fatalf("%s is not a set_fact task", powerTasks[initInsertIdx]["name"])
 	}
 	for _, want := range []string{
-		"bootwright_redfish_vmedia_backend_attached",
-		"bootwright_redfish_vmedia_backend | default",
+		"bootwright_vmedia_backend_attached",
+		"bootwright_vmedia_backend | default",
 		"skipped-direct-backend",
 		"pre-attached",
 	} {
@@ -623,7 +623,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no set_fact task", powerTasks[resetActionsIdx]["name"])
 	}
-	if got := resetActionsFact["bootwright_redfish_system_reset_actions"].(string); !strings.Contains(got, "bootwright_redfish_action_descriptors") || !strings.Contains(got, "#ComputerSystem.Reset") {
+	if got := resetActionsFact["bootwright_redfish_system_reset_actions"].(string); !strings.Contains(got, "bootwright_vmedia_action_descriptors") || !strings.Contains(got, "#ComputerSystem.Reset") {
 		t.Fatalf("reset action metadata must use ComputerSystem.Reset descriptors, got %v", got)
 	}
 	if got := resetActionsFact["bootwright_redfish_system_default_reset_target"].(string); !strings.Contains(got, "/Actions/ComputerSystem.Reset") {
@@ -715,7 +715,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("virtual media action resolver must support %q, got %v", want, actionFact)
 		}
 	}
-	if !strings.Contains(actionFact["bootwright_redfish_vmedia_vmm_control_actions"].(string), "bootwright_redfish_action_descriptors") {
+	if !strings.Contains(actionFact["bootwright_redfish_vmedia_vmm_control_actions"].(string), "bootwright_vmedia_action_descriptors") {
 		t.Fatalf("virtual media action resolver must discover VMM actions as descriptors, got %v", actionFact["bootwright_redfish_vmedia_vmm_control_actions"])
 	}
 	candidateFact, ok := prepareTasks[resolveActionCandidatesIdx]["ansible.builtin.set_fact"].(map[string]any)

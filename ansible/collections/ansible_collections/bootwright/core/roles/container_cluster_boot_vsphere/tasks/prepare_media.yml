@@ -2,7 +2,7 @@
 - name: Prepare vSphere virtual media
   ansible.builtin.include_role:
     name: "{{ bootwright_component.mediaPrepareRole }}"
-  when: not (bootwright_redfish_vmedia_backend_attached | default(false) | bool)
+  when: not (bootwright_vmedia_backend_attached | default(false) | bool)
 
 - name: Load vCenter credentials
   ansible.builtin.include_role:

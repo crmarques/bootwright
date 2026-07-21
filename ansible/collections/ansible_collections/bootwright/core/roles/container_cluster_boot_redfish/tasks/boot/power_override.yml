@@ -24,7 +24,7 @@
 
 - name: Resolve Redfish reset action metadata
   ansible.builtin.set_fact:
-    bootwright_redfish_system_reset_actions: "{{ (bootwright_redfish_system_boot_probe.json | default({})) | bootwright.core.bootwright_redfish_action_descriptors('#ComputerSystem.Reset') }}"
+    bootwright_redfish_system_reset_actions: "{{ (bootwright_redfish_system_boot_probe.json | default({})) | bootwright.core.bootwright_vmedia_action_descriptors('#ComputerSystem.Reset') }}"
     bootwright_redfish_system_default_reset_target: "{{ '/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/Actions/ComputerSystem.Reset' }}"
   changed_when: false
 

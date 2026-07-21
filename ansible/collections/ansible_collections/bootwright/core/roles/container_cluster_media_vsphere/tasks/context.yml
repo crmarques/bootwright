@@ -1,7 +1,7 @@
 ---
 - name: Resolve vSphere virtual media action
   ansible.builtin.set_fact:
-    bootwright_vsphere_media_action: "{{ bootwright_redfish_action_effective | default('boot') }}"
+    bootwright_vsphere_media_action: "{{ bootwright_vmedia_action_effective | default('boot') }}"
   changed_when: false
 
 - name: Validate vSphere virtual media action

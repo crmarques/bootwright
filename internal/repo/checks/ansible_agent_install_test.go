@@ -655,7 +655,7 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	if got := cleanVars["bootwright_component"]; got != "{{ bootwright_cleanup_media_component }}" {
 		t.Fatalf("media cleanup component var got %v", got)
 	}
-	if got := cleanVars["bootwright_redfish_action"]; got != "cleanup_media" {
+	if got := cleanVars["bootwright_vmedia_action"]; got != "cleanup_media" {
 		t.Fatalf("media cleanup action got %v", got)
 	}
 	cleanLoopControl, ok := tasks[cleanMediaIdx]["loop_control"].(map[string]any)

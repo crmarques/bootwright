@@ -4,7 +4,7 @@
     that:
       - (bootwright_component.boot.redfish.baseUrl | default('') | length) > 0
       - >-
-        bootwright_redfish_action_effective != 'boot'
+        bootwright_vmedia_action_effective != 'boot'
         or (bootwright_component.boot.agentIso.fetchUrl | default('') | length) > 0
     fail_msg: >-
       boot_redfish needs the renderer to project bootwright_component.boot.redfish.baseUrl

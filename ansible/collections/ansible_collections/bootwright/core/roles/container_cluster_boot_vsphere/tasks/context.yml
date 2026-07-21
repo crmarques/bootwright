@@ -1,7 +1,7 @@
 ---
 - name: Select vSphere boot action
   ansible.builtin.set_fact:
-    bootwright_vsphere_boot_action: "{{ bootwright_redfish_action | default('boot') }}"
+    bootwright_vsphere_boot_action: "{{ bootwright_vmedia_action | default('boot') }}"
   changed_when: false
 
 - name: Validate selected vSphere boot action

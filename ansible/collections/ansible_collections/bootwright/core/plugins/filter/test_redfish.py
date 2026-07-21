@@ -14,7 +14,7 @@ assert _spec and _spec.loader, "could not locate redfish.py next to test file"
 _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 
-bootwright_redfish_action_descriptors = _module.bootwright_redfish_action_descriptors
+bootwright_vmedia_action_descriptors = _module.bootwright_vmedia_action_descriptors
 bootwright_redfish_ethernet_macs = _module.bootwright_redfish_ethernet_macs
 bootwright_redfish_mac_validation = _module.bootwright_redfish_mac_validation
 bootwright_redfish_power_on_reset_type = _module.bootwright_redfish_power_on_reset_type
@@ -53,7 +53,7 @@ class RedfishActionDescriptors(unittest.TestCase):
             },
         }
 
-        got = bootwright_redfish_action_descriptors(resource, "#VirtualMedia.VmmControl")
+        got = bootwright_vmedia_action_descriptors(resource, "#VirtualMedia.VmmControl")
 
         self.assertEqual(
             got,
@@ -88,13 +88,13 @@ class RedfishActionDescriptors(unittest.TestCase):
             },
         }
 
-        got = bootwright_redfish_action_descriptors(resource, "#VirtualMedia.VmmControl")
+        got = bootwright_vmedia_action_descriptors(resource, "#VirtualMedia.VmmControl")
 
         self.assertEqual(got, [])
 
     def test_bad_input_returns_empty_list(self):
-        self.assertEqual(bootwright_redfish_action_descriptors([], "#VirtualMedia.VmmControl"), [])
-        self.assertEqual(bootwright_redfish_action_descriptors({}, ""), [])
+        self.assertEqual(bootwright_vmedia_action_descriptors([], "#VirtualMedia.VmmControl"), [])
+        self.assertEqual(bootwright_vmedia_action_descriptors({}, ""), [])
 
 
 class RedfishVMMControlActions(unittest.TestCase):
@@ -396,14 +396,14 @@ class RedfishMACInventory(unittest.TestCase):
 class FilterRegistration(unittest.TestCase):
     def test_filter_module_exposes_filter(self):
         registered = _module.FilterModule().filters()
-        self.assertIn("bootwright_redfish_action_descriptors", registered)
+        self.assertIn("bootwright_vmedia_action_descriptors", registered)
         self.assertIn("bootwright_redfish_mac_validation", registered)
         self.assertIn("bootwright_redfish_url", registered)
         self.assertIn("bootwright_redfish_vmedia_attached", registered)
         self.assertIn("bootwright_redfish_vmm_control_actions", registered)
         self.assertIs(
-            registered["bootwright_redfish_action_descriptors"],
-            bootwright_redfish_action_descriptors,
+            registered["bootwright_vmedia_action_descriptors"],
+            bootwright_vmedia_action_descriptors,
         )
         self.assertIs(
             registered["bootwright_redfish_mac_validation"],

@@ -1,7 +1,7 @@
 ---
 - name: Resolve direct libvirt virtual media action
   ansible.builtin.set_fact:
-    bootwright_libvirt_media_action: "{{ bootwright_redfish_action_effective | default('boot') }}"
+    bootwright_libvirt_media_action: "{{ bootwright_vmedia_action_effective | default('boot') }}"
   changed_when: false
 
 - name: Validate direct libvirt virtual media action
@@ -70,10 +70,10 @@
 
 - name: Record direct libvirt virtual media attachment
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_backend_attached: true
-    bootwright_redfish_vmedia_backend: libvirt-direct
-    bootwright_redfish_vmedia_backend_image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
-    bootwright_redfish_vmedia_backend_image_name: "{{ bootwright_component.boot.agentIso.stagePath | basename }}"
+    bootwright_vmedia_backend_attached: true
+    bootwright_vmedia_backend: libvirt-direct
+    bootwright_vmedia_backend_image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
+    bootwright_vmedia_backend_image_name: "{{ bootwright_component.boot.agentIso.stagePath | basename }}"
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_libvirt_media_insert_requested | bool

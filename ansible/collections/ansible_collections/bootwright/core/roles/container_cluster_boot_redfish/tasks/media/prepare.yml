@@ -167,9 +167,9 @@
 
 - name: Resolve VirtualMedia action URLs
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_insert_actions: "{{ bootwright_redfish_vmedia_selected | bootwright.core.bootwright_redfish_action_descriptors('#VirtualMedia.InsertMedia') }}"
-    bootwright_redfish_vmedia_eject_actions: "{{ bootwright_redfish_vmedia_selected | bootwright.core.bootwright_redfish_action_descriptors('#VirtualMedia.EjectMedia') }}"
-    bootwright_redfish_vmedia_vmm_control_actions: "{{ bootwright_redfish_vmedia_selected | bootwright.core.bootwright_redfish_action_descriptors('#VirtualMedia.VmmControl') }}"
+    bootwright_redfish_vmedia_insert_actions: "{{ bootwright_redfish_vmedia_selected | bootwright.core.bootwright_vmedia_action_descriptors('#VirtualMedia.InsertMedia') }}"
+    bootwright_redfish_vmedia_eject_actions: "{{ bootwright_redfish_vmedia_selected | bootwright.core.bootwright_vmedia_action_descriptors('#VirtualMedia.EjectMedia') }}"
+    bootwright_redfish_vmedia_vmm_control_actions: "{{ bootwright_redfish_vmedia_selected | bootwright.core.bootwright_vmedia_action_descriptors('#VirtualMedia.VmmControl') }}"
   changed_when: false
 
 - name: Resolve VirtualMedia standard and VMM action candidates

@@ -109,7 +109,7 @@
         name: "{{ bootwright_cleanup_media_component.cleanupMediaRole }}"
       vars:
         bootwright_component: "{{ bootwright_cleanup_media_component }}"
-        bootwright_redfish_action: cleanup_media
+        bootwright_vmedia_action: cleanup_media
       loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('cleanupMediaRole', 'defined') | list }}"
       loop_control:
         loop_var: bootwright_cleanup_media_component

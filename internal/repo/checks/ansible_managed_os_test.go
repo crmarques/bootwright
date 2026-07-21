@@ -188,7 +188,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[cleanupMediaIdx]["name"], topTasks[cleanupMediaIdx])
 	}
-	if cleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupVars["bootwright_redfish_action_effective"] != "cleanup" {
+	if cleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupVars["bootwright_vmedia_action_effective"] != "cleanup" {
 		t.Fatalf("%s must clean resolved managed OS media, got vars=%v", topTasks[cleanupMediaIdx]["name"], cleanupVars)
 	}
 	assertIncludeRoleName(t, topTasks[baremetalEjectIdx], "{{ bootwright_component.cleanupMediaRole }}")
@@ -196,7 +196,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx])
 	}
-	if baremetalVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || baremetalVars["bootwright_redfish_action"] != "cleanup_media" {
+	if baremetalVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || baremetalVars["bootwright_vmedia_action"] != "cleanup_media" {
 		t.Fatalf("%s must eject resolved managed OS media via cleanup_media, got vars=%v", topTasks[baremetalEjectIdx]["name"], baremetalVars)
 	}
 	baremetalEjectWhen := fmt.Sprint(topTasks[baremetalEjectIdx]["when"])
@@ -512,7 +512,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s must pass persistent cleanup vars, got %v", tasks[persistentCleanupIdx]["name"], tasks[persistentCleanupIdx])
 	}
-	if persistentCleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || persistentCleanupVars["bootwright_redfish_action_effective"] != "cleanup_persistent" {
+	if persistentCleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || persistentCleanupVars["bootwright_vmedia_action_effective"] != "cleanup_persistent" {
 		t.Fatalf("%s must clean only persistent managed OS media, got vars=%v", tasks[persistentCleanupIdx]["name"], persistentCleanupVars)
 	}
 	redHat := readAnsibleStringListVar(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/vars/os/RedHat.yml", "bootwright_machine_os_install_anaconda_packages")
