@@ -8,6 +8,10 @@ import (
 )
 
 func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTask, error) {
+	return PlanApplyTasksCheckedWithHashState(target, state, state)
+}
+
+func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State, hashState v1alpha1.State) ([]ApplyTask, error) {
 	phaseSet := map[string]bool{}
 	for _, phase := range target.PhaseNames {
 		phaseSet[phase] = true
@@ -30,19 +34,19 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		return nil, err
 	}
 
-	managedOSDepsByCluster, err := planStorageManagedOSInstallActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs)
+	managedOSDepsByCluster, err := planStorageManagedOSInstallActivities(graph, state, hashState, target, phaseSet, includeStorage, machineServiceTaskIDs)
 	if err != nil {
 		return nil, err
 	}
-	registrationDepsByCluster, err := planStorageRegistrationActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster)
+	registrationDepsByCluster, err := planStorageRegistrationActivities(graph, state, hashState, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster)
 	if err != nil {
 		return nil, err
 	}
-	storageInfraDepsByCluster, err := planStorageInfraActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster, registrationDepsByCluster)
+	storageInfraDepsByCluster, err := planStorageInfraActivities(graph, state, hashState, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster, registrationDepsByCluster)
 	if err != nil {
 		return nil, err
 	}
-	storageDepsByCluster, err := planStorageClusterActivities(graph, state, target, phaseSet, includeStorage, machineServiceTaskIDs, storageInfraDepsByCluster)
+	storageDepsByCluster, err := planStorageClusterActivities(graph, state, hashState, target, phaseSet, includeStorage, machineServiceTaskIDs, storageInfraDepsByCluster)
 	if err != nil {
 		return nil, err
 	}

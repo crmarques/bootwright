@@ -102,6 +102,7 @@ type ApplyTask struct {
 	CollectionsPath    string
 	SkipWhenConverged  bool
 	State              v1alpha1.State
+	DesiredHashState   *v1alpha1.State
 	DesiredHashVars    any
 	StructuralHashVars any
 	Extension          *extensionplan.ExtensionPlan

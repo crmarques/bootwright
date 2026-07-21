@@ -239,7 +239,11 @@ func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	if task.DesiredHashVars != nil {
 		payload.FabricVars = task.DesiredHashVars
 	} else {
-		state := hashScopedState(task.State)
+		src := task.State
+		if task.DesiredHashState != nil {
+			src = *task.DesiredHashState
+		}
+		state := hashScopedState(src)
 		payload.State = &state
 	}
 	data, err := json.Marshal(payload)

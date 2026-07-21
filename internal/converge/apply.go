@@ -150,7 +150,7 @@ func OverrideStorageDeviceGateApplies(selectionActive bool, selectedStorage map[
 	return false
 }
 
-func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, machineProvision, machineHosts map[string]bool, limits workflow.ConcurrencyLimits, runsDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
+func PlanScopedApply(runScope Scope, plan *WorkflowPlan, fullState v1alpha1.State, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, machineProvision, machineHosts map[string]bool, limits workflow.ConcurrencyLimits, runsDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_apply_mode="+string(mode))
 	applyTarget := runScope.ApplyTarget()
 	if clusterSelectionActive {
@@ -158,7 +158,7 @@ func PlanScopedApply(runScope Scope, plan *WorkflowPlan, mode workflow.ApplyMode
 	}
 	applyTarget.MachineProvision = machineProvision
 	applyTarget.MachineHosts = machineHosts
-	tasks, err := workflow.PlanApplyTasksChecked(applyTarget, plan.State)
+	tasks, err := workflow.PlanApplyTasksCheckedWithHashState(applyTarget, plan.State, fullState)
 	if err != nil {
 		return workflow.ApplyTarget{}, nil, workflow.ConcurrencyLimits{}, nil, err
 	}

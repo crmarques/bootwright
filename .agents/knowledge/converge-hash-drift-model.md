@@ -21,6 +21,27 @@ cluster identity + mirror override); `map[string]string` marshals with sorted
 keys so the input is order-stable. Pinned by
 TestVirtctlTaskDesiredHashIsScopeIndependent.
 
+**Storage/managed-OS tasks hash the FULL desired state, not their carried
+State:** the managed-OS install/prepare and storage infra/cluster/registration
+tasks keep the full-State marshal shape (a projected `DesiredHashVars` would
+change the payload bytes and false-drift every recorded Ceph fleet on upgrade —
+the third-bullet constraint), so they cannot fix scope-divergence the way
+virtctl did. But `storageTaskState` re-derives its machine set from whatever
+State it is handed, and the `--clusters` scoper (`filterStateToStorageClustersForApply`)
+drops the container clusters that consume a StorageExport while the per-task
+`storageTaskState`/`FilterStateToStorageClusters` keeps their machines — so a
+DataFoundation attachment made a whole-cluster run and a `--clusters` run hash
+different machine sets, and the next `--clusters --converge-drifted` saw a
+freshly-installed OS as structurally drifted and tripped the destroy-protection
+gate. Fix: the plan threads the unscoped desired state as `hashState`
+(`PlanApplyTasksCheckedWithHashState`) and these tasks compute their hash vars
+from it while still rendering from the scoped `State`; managed-OS keeps the
+`State`-payload path via `ApplyTask.DesiredHashState`, so the hash value is
+byte-identical to what an older whole-cluster/`--machines` run recorded (no
+schema bump, no re-baseline). Pinned by
+TestManagedOSHashIsScopeInvariantWithFullHashState and
+TestManagedOSClustersScopedHashMatchesRecordedWholeClusterHash.
+
 **Fabric tasks hash a host-scoped projection:** `FabricHostDesiredVars` (the
 deterministic per-host rendered fabric vars) is hashed instead of the whole
 state so an unrelated fleet edit does not flip the infrastructure root to

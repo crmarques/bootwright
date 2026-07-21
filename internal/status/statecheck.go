@@ -17,7 +17,7 @@ func StateCheck(state v1alpha1.State, clusterScope, stageTarget string, applyTar
 	if sel.Active {
 		applyTarget.StorageClusterNames = sel.StorageWorkNames()
 	}
-	tasks, err := workflow.PlanApplyTasksChecked(applyTarget, state)
+	tasks, err := workflow.PlanApplyTasksCheckedWithHashState(applyTarget, state, fullState)
 	if err != nil {
 		return workflow.StateCheckReport{}, err
 	}

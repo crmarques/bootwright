@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string) (map[string][]string, error) {
+func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string) (map[string][]string, error) {
 	managedOSDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
 		return managedOSDepsByCluster, nil
@@ -26,7 +26,7 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 		if len(managedOSMachines) == 0 {
 			continue
 		}
-		prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+		prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, hashState, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +70,8 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 				Limit:              managedOSInstallLimit(cluster.Metadata.Name, managedOSMachines, target.MachineScoped()),
 				ExtraVarPairs:      []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
 				State:              storageTaskState(state, cluster.Metadata.Name),
-				StructuralHashVars: managedMachineOSStructuralHashVars(state, cluster.Metadata.Name),
+				DesiredHashState:   managedOSDesiredHashState(hashState, cluster.Metadata.Name),
+				StructuralHashVars: managedMachineOSStructuralHashVars(hashState, cluster.Metadata.Name),
 				Forks:              len(managedOSMachines),
 				RedfishSlots:       len(managedOSMachines),
 			},
@@ -81,7 +82,7 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 	return managedOSDepsByCluster, nil
 }
 
-func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
+func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
 	registrationDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
 		return registrationDepsByCluster, nil
@@ -127,8 +128,8 @@ func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.Stat
 				Limit:              limit,
 				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name},
 				State:              storageTaskState(state, cluster.Metadata.Name),
-				DesiredHashVars:    storageClusterDesiredHashVars(state, cluster.Metadata.Name),
-				StructuralHashVars: storageClusterStructuralHashVars(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(hashState, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(hashState, cluster.Metadata.Name),
 				Forks:              forks,
 			},
 		}); err != nil {
@@ -164,7 +165,7 @@ func storageRegistrationSelectedHosts(state v1alpha1.State, target ApplyTarget, 
 	return hosts
 }
 
-func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster, registrationDepsByCluster map[string][]string) (map[string][]string, error) {
+func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster, registrationDepsByCluster map[string][]string) (map[string][]string, error) {
 	storageInfraDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseDeps] && includeStorage) {
 		return storageInfraDepsByCluster, nil
@@ -199,8 +200,8 @@ func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, targ
 				Limit:              render.StorageClusterGroupName(cluster.Metadata.Name),
 				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
 				State:              storageTaskState(state, cluster.Metadata.Name),
-				DesiredHashVars:    storageClusterDesiredHashVars(state, cluster.Metadata.Name),
-				StructuralHashVars: storageClusterStructuralHashVars(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(hashState, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(hashState, cluster.Metadata.Name),
 				Forks:              storageClusterNodeCount(cluster),
 			},
 		}); err != nil {
@@ -210,7 +211,7 @@ func planStorageInfraActivities(graph *ActivityGraph, state v1alpha1.State, targ
 	return storageInfraDepsByCluster, nil
 }
 
-func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, storageInfraDepsByCluster map[string][]string) (map[string][]string, error) {
+func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, storageInfraDepsByCluster map[string][]string) (map[string][]string, error) {
 	storageDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseBase] && includeStorage) {
 		return storageDepsByCluster, nil
@@ -244,8 +245,8 @@ func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, ta
 				Limit:              render.StorageClusterGroupName(cluster.Metadata.Name),
 				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
 				State:              storageTaskState(state, cluster.Metadata.Name),
-				DesiredHashVars:    storageClusterDesiredHashVars(state, cluster.Metadata.Name),
-				StructuralHashVars: storageClusterStructuralHashVars(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(hashState, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(hashState, cluster.Metadata.Name),
 				Forks:              storageClusterNodeCount(cluster),
 			},
 		}); err != nil {
@@ -255,7 +256,7 @@ func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, ta
 	return storageDepsByCluster, nil
 }
 
-func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State, clusterName string, machineNames []string, deps []string) (map[string]string, error) {
+func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, clusterName string, machineNames []string, deps []string) (map[string]string, error) {
 	out := map[string]string{}
 	seen := map[string]bool{}
 	for _, machineName := range machineNames {
@@ -286,7 +287,8 @@ func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State
 				ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
 				Forks:              1,
 				State:              storageTaskState(state, clusterName),
-				StructuralHashVars: managedMachineOSStructuralHashVars(state, clusterName),
+				DesiredHashState:   managedOSDesiredHashState(hashState, clusterName),
+				StructuralHashVars: managedMachineOSStructuralHashVars(hashState, clusterName),
 			},
 		}); err != nil {
 			return nil, err

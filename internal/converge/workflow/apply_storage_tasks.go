@@ -15,6 +15,11 @@ func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	return filtered
 }
 
+func managedOSDesiredHashState(state v1alpha1.State, name string) *v1alpha1.State {
+	s := storageTaskState(state, name)
+	return &s
+}
+
 func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.State {
 	s := hashScopedState(storageTaskState(state, name))
 	s.StoragePlacementPolicies = nil
