@@ -1,4 +1,16 @@
 ---
+- name: Report managed OS installation in progress
+  ansible.builtin.debug:
+    msg: >-
+      Installing the operating system on {{ bootwright_component.osInstall.ssh.address }}
+      with the Anaconda installer. The next steps wait for the machine to reboot into
+      the installer, partition its disks, install packages, and boot the new OS before
+      its SSH port answers again. This can take up to 30 minutes with no output here;
+      follow live progress on the machine console (for example its BMC or KVM virtual
+      console).
+  when:
+    - bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool
+
 - name: Wait for previous managed OS SSH port to stop
   ansible.builtin.wait_for:
     host: "{{ bootwright_component.osInstall.ssh.address }}"
