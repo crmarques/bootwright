@@ -16,20 +16,26 @@ func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageClus
 		return []string{fmt.Sprintf("%s.distribution %q must be one of {%s, %s, %s}",
 			prefix, cluster.Spec.Ceph.Distribution, v1alpha1.StorageCephDistributionOSS, v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM)}
 	}
+	var errs []string
 	ref := cluster.Spec.Ceph.EntitlementRef.Name
 	switch distribution {
 	case v1alpha1.StorageCephDistributionOSS:
 		if ref != "" {
-			return []string{prefix + ".entitlementRef must be empty when distribution=oss"}
+			errs = append(errs, prefix+".entitlementRef must be empty when distribution=oss")
 		}
-		return nil
 	case v1alpha1.StorageCephDistributionRedHat:
-		return validateStorageCephDistributionEntitlement(prefix, state, ref, v1alpha1.EntitlementTypeRedHatCeph)
+		errs = append(errs, validateStorageCephDistributionEntitlement(prefix, state, ref, v1alpha1.EntitlementTypeRedHatCeph)...)
 	case v1alpha1.StorageCephDistributionIBM:
-		return validateStorageCephDistributionEntitlement(prefix, state, ref, v1alpha1.EntitlementTypeIBMStorageCeph)
-	default:
-		return nil
+		errs = append(errs, validateStorageCephDistributionEntitlement(prefix, state, ref, v1alpha1.EntitlementTypeIBMStorageCeph)...)
 	}
+	if osRef := cluster.Spec.Ceph.OSSubscriptionRef.Name; osRef != "" {
+		if ent, ok := v1alpha1.EntitlementByName(state.Entitlements, osRef); !ok {
+			errs = append(errs, fmt.Sprintf("%s.osSubscriptionRef %q does not match any Entitlement", prefix, osRef))
+		} else if ent.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
+			errs = append(errs, fmt.Sprintf("%s.osSubscriptionRef %q resolves to type %q, want %q", prefix, osRef, ent.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL))
+		}
+	}
+	return errs
 }
 
 func validateStorageCephDistributionEntitlement(prefix string, state v1alpha1.State, ref, wantType string) []string {

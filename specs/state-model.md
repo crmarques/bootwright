@@ -114,9 +114,10 @@ Rules:
   A `redhat-rhel` and a `redhat-ceph` entitlement require `rhsm`
   (`organizationRef`, `activationKeyRef`); `redhat-ceph` also requires
   `registry.credentialsRef`. An `ibm-storage-ceph` entitlement requires
-  `registry.credentialsRef`, `license.accept: true`, and `rhelEntitlementRef`
-  naming a `redhat-rhel` entitlement for the RHEL subscription it runs on; it
-  takes no inline `rhsm` arm. Referenced secret material is declared as
+  `registry.credentialsRef` and `license.accept: true`; it takes no inline
+  `rhsm` arm. The RHEL subscription it runs on is named separately by the
+  storage nodes' `MachineInstallProfile.spec.subscription` or
+  `StorageCluster.spec.ceph.osSubscriptionRef`. Referenced secret material is declared as
   [`Secret`](#secret) objects.
   `registry.url`, when set, is a scheme-less `host[:port][/namespace]` address
   with no credentials, query, fragment, empty path segment, or trailing slash.
@@ -689,8 +690,9 @@ Rules:
 - `distribution: ibm` requires `entitlementRef` to resolve to an
   `ibm-storage-ceph` `Entitlement` with accepted license terms. IBM Storage Ceph
   registry access and license acceptance come from that entitlement; the RHEL
-  BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` entitlement
-  it names via `rhelEntitlementRef`. Neither must mix with upstream Ceph packages
+  BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` subscription
+  the nodes register with (profile `subscription` or cluster `osSubscriptionRef`).
+  Neither must mix with upstream Ceph packages
   or images. Release `9.9.1` accepts RHEL 9.8 or 10.2. IBM license acceptance
   is passed non-interactively to `cephadm bootstrap`. Because that release
   enables IBM Call Home when the license is accepted, `spec.ceph.ibm.callHome`

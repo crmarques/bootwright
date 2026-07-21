@@ -15,6 +15,9 @@ spec:
         artifactServerEndpoint:
           endpointRef: bmc
 
+  subscription:
+    entitlementRef: rhel
+
   customizations:
     hostname:
       source: machineName

@@ -12,6 +12,9 @@ spec:
     anaconda:
       imageRef: rhel-9-x86-64-dvd
 
+  subscription:
+    entitlementRef: rhel
+
   customizations:
     ssh:
       authorizeMachineSSHKey: true

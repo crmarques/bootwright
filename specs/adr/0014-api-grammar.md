@@ -66,7 +66,7 @@ spec, `StorageExport` spec, and `StoragePool` `spec.ceph`. Two carve-outs:
   | ------------------ | -------------------------------------------------------- |
   | `redhat-rhel`      | `rhsm`                                                    |
   | `redhat-ceph`      | `rhsm` + `registry.credentialsRef`                        |
-  | `ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` + `rhelEntitlementRef` (an inline `rhsm` arm is rejected) |
+  | `ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` (an inline `rhsm` arm is rejected; RHEL registration is named by the node `MachineInstallProfile.spec.subscription` or `StorageCluster.spec.ceph.osSubscriptionRef`) |
 
 A **presence union** carries no discriminator — authoring exactly one arm
 selects the kind. It is used where the surrounding document already fixes

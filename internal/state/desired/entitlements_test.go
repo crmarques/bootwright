@@ -81,11 +81,10 @@ func TestEntitlementValidation(t *testing.T) {
 		},
 		{
 			name: "ibm-valid",
-			entitlements: []v1alpha1.Entitlement{rhel(), {
+			entitlements: []v1alpha1.Entitlement{{
 				Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
 				Spec: v1alpha1.EntitlementSpec{
-					Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-					RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+					Type: v1alpha1.EntitlementTypeIBMStorageCeph,
 					Registry: &v1alpha1.EntitlementRegistry{
 						CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
 					},
@@ -95,11 +94,10 @@ func TestEntitlementValidation(t *testing.T) {
 		},
 		{
 			name: "ibm-license-not-accepted",
-			entitlements: []v1alpha1.Entitlement{rhel(), {
+			entitlements: []v1alpha1.Entitlement{{
 				Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
 				Spec: v1alpha1.EntitlementSpec{
-					Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-					RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+					Type: v1alpha1.EntitlementTypeIBMStorageCeph,
 					Registry: &v1alpha1.EntitlementRegistry{
 						CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
 					},
@@ -109,11 +107,10 @@ func TestEntitlementValidation(t *testing.T) {
 		},
 		{
 			name: "ibm-inline-rhsm-rejected",
-			entitlements: []v1alpha1.Entitlement{rhel(), {
+			entitlements: []v1alpha1.Entitlement{{
 				Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
 				Spec: v1alpha1.EntitlementSpec{
-					Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-					RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+					Type: v1alpha1.EntitlementTypeIBMStorageCeph,
 					RHSM: &v1alpha1.EntitlementRHSM{
 						OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
 						ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
@@ -125,83 +122,6 @@ func TestEntitlementValidation(t *testing.T) {
 				},
 			}},
 			want: "rhsm is not allowed for ibm-storage-ceph",
-		},
-		{
-			name: "ibm-missing-rhel-ref",
-			entitlements: []v1alpha1.Entitlement{{
-				Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
-				Spec: v1alpha1.EntitlementSpec{
-					Type: v1alpha1.EntitlementTypeIBMStorageCeph,
-					Registry: &v1alpha1.EntitlementRegistry{
-						CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
-					},
-					License: &v1alpha1.EntitlementLicense{Accept: true},
-				},
-			}},
-			want: "rhelEntitlementRef is required for ibm-storage-ceph",
-		},
-		{
-			name: "ibm-rhel-ref-unknown",
-			entitlements: []v1alpha1.Entitlement{{
-				Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
-				Spec: v1alpha1.EntitlementSpec{
-					Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-					RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "absent"},
-					Registry: &v1alpha1.EntitlementRegistry{
-						CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
-					},
-					License: &v1alpha1.EntitlementLicense{Accept: true},
-				},
-			}},
-			want: `does not match any Entitlement`,
-		},
-		{
-			name: "ibm-rhel-ref-wrong-type",
-			entitlements: []v1alpha1.Entitlement{
-				{
-					Metadata: v1alpha1.Metadata{Name: "rhcs"},
-					Spec: v1alpha1.EntitlementSpec{
-						Type: v1alpha1.EntitlementTypeRedHatCeph,
-						RHSM: &v1alpha1.EntitlementRHSM{
-							OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-							ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-						},
-						Registry: &v1alpha1.EntitlementRegistry{
-							CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"},
-						},
-					},
-				},
-				{
-					Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
-					Spec: v1alpha1.EntitlementSpec{
-						Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-						RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
-						Registry: &v1alpha1.EntitlementRegistry{
-							CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
-						},
-						License: &v1alpha1.EntitlementLicense{Accept: true},
-					},
-				},
-			},
-			want: `resolves to type "redhat-ceph", want "redhat-rhel"`,
-		},
-		{
-			name: "non-ibm-rhel-ref-rejected",
-			entitlements: []v1alpha1.Entitlement{rhel(), {
-				Metadata: v1alpha1.Metadata{Name: "rhcs"},
-				Spec: v1alpha1.EntitlementSpec{
-					Type:               v1alpha1.EntitlementTypeRedHatCeph,
-					RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-					RHSM: &v1alpha1.EntitlementRHSM{
-						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-					},
-					Registry: &v1alpha1.EntitlementRegistry{
-						CredentialsRef: v1alpha1.SecretRef{Name: "redhat-registry"},
-					},
-				},
-			}},
-			want: "rhelEntitlementRef is only valid for the ibm-storage-ceph type",
 		},
 		{
 			name: "registry-url-credentials",

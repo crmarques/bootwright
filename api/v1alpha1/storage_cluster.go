@@ -30,7 +30,7 @@ func StorageCephManagedRHSM(cluster StorageCluster, ents []Entitlement) bool {
 	if cluster.Spec.Ceph == nil || !StorageCephDistributionSubscriptionBacked(cluster.Spec.Ceph.Distribution) {
 		return false
 	}
-	rhsm := EntitlementEffectiveRHSM(ents, cluster.Spec.Ceph.EntitlementRef.Name)
+	rhsm := EntitlementRHSMByName(ents, cluster.Spec.Ceph.EntitlementRef.Name)
 	if rhsm == nil {
 		return false
 	}
@@ -49,16 +49,18 @@ func StorageClusterOSSubscriptionEntitlement(cluster StorageCluster, state State
 	if cluster.Spec.Ceph == nil {
 		return Entitlement{}, false
 	}
-	name := ""
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-		ref := machineOSSubscriptionRef(state, host.MachineRef.Name)
-		if ref == "" {
-			continue
+	name := cluster.Spec.Ceph.OSSubscriptionRef.Name
+	if name == "" {
+		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+			ref := machineOSSubscriptionRef(state, host.MachineRef.Name)
+			if ref == "" {
+				continue
+			}
+			if name != "" && name != ref {
+				return Entitlement{}, false
+			}
+			name = ref
 		}
-		if name != "" && name != ref {
-			return Entitlement{}, false
-		}
-		name = ref
 	}
 	if name == "" {
 		return Entitlement{}, false
@@ -97,21 +99,22 @@ func machineOSSubscriptionRef(state State, machineName string) string {
 }
 
 type StorageClusterCephSpec struct {
-	Distribution   string                       `yaml:"distribution,omitempty" json:"distribution,omitempty"`
-	Release        string                       `yaml:"release,omitempty" json:"release,omitempty"`
-	Image          string                       `yaml:"image,omitempty" json:"image,omitempty"`
-	Community      *StorageCephCommunitySpec    `yaml:"community,omitempty" json:"community,omitempty"`
-	IBM            *StorageCephIBMSpec          `yaml:"ibm,omitempty" json:"ibm,omitempty"`
-	EntitlementRef LocalObjectReference         `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
-	Cephadm        StorageCephadmSpec           `yaml:"cephadm" json:"cephadm"`
-	Networks       StorageCephNetworks          `yaml:"networks,omitempty" json:"networks,omitempty"`
-	Security       StorageCephSecurity          `yaml:"security,omitempty" json:"security,omitempty"`
-	Config         map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
-	MgrModules     []string                     `yaml:"mgrModules,omitempty" json:"mgrModules,omitempty"`
-	Monitoring     *StorageCephMonitoring       `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
-	Management     *StorageCephManagement       `yaml:"management,omitempty" json:"management,omitempty"`
-	Services       []StorageCephService         `yaml:"services,omitempty" json:"services,omitempty"`
-	Topology       StorageCephTopology          `yaml:"topology" json:"topology"`
+	Distribution      string                       `yaml:"distribution,omitempty" json:"distribution,omitempty"`
+	Release           string                       `yaml:"release,omitempty" json:"release,omitempty"`
+	Image             string                       `yaml:"image,omitempty" json:"image,omitempty"`
+	Community         *StorageCephCommunitySpec    `yaml:"community,omitempty" json:"community,omitempty"`
+	IBM               *StorageCephIBMSpec          `yaml:"ibm,omitempty" json:"ibm,omitempty"`
+	EntitlementRef    LocalObjectReference         `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
+	OSSubscriptionRef LocalObjectReference         `yaml:"osSubscriptionRef,omitempty" json:"osSubscriptionRef,omitempty"`
+	Cephadm           StorageCephadmSpec           `yaml:"cephadm" json:"cephadm"`
+	Networks          StorageCephNetworks          `yaml:"networks,omitempty" json:"networks,omitempty"`
+	Security          StorageCephSecurity          `yaml:"security,omitempty" json:"security,omitempty"`
+	Config            map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
+	MgrModules        []string                     `yaml:"mgrModules,omitempty" json:"mgrModules,omitempty"`
+	Monitoring        *StorageCephMonitoring       `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
+	Management        *StorageCephManagement       `yaml:"management,omitempty" json:"management,omitempty"`
+	Services          []StorageCephService         `yaml:"services,omitempty" json:"services,omitempty"`
+	Topology          StorageCephTopology          `yaml:"topology" json:"topology"`
 }
 
 type StorageCephSecurity struct {

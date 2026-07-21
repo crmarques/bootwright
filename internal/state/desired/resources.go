@@ -321,10 +321,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				v1alpha1.KindEntitlement, cdn.EntitlementRef.Name)
 		}
 	}
-	for _, entitlement := range state.Entitlements {
-		require(fmt.Sprintf("Entitlement/%s spec.rhelEntitlementRef", entitlement.Metadata.Name),
-			v1alpha1.KindEntitlement, entitlement.Spec.RHELEntitlementRef.Name)
-	}
 	for _, policy := range state.StoragePlacementPolicies {
 		require(fmt.Sprintf("StoragePlacementPolicy/%s spec.storageClusterRef", policy.Metadata.Name),
 			v1alpha1.KindStorageCluster, policy.Spec.StorageClusterRef.Name)

@@ -7,55 +7,7 @@ import (
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
-func TestResolveFollowsRHELEntitlementRef(t *testing.T) {
-	ents := []v1alpha1.Entitlement{
-		{
-			Metadata: v1alpha1.Metadata{Name: "rhel"},
-			Spec: v1alpha1.EntitlementSpec{
-				Type: v1alpha1.EntitlementTypeRedHatRHEL,
-				RHSM: &v1alpha1.EntitlementRHSM{
-					OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
-					ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
-				},
-			},
-		},
-		{
-			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
-			Spec: v1alpha1.EntitlementSpec{
-				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-				Registry: &v1alpha1.EntitlementRegistry{
-					CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
-				},
-				License: &v1alpha1.EntitlementLicense{Accept: true},
-			},
-		},
-	}
-
-	resolved, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
-	if !ok {
-		t.Fatal("Resolve(ibm-ceph) not found")
-	}
-	if resolved.RHSM.OrganizationPath != "/secrets/ibm-org" || resolved.RHSM.ActivationKeyPath != "/secrets/ibm-key" {
-		t.Fatalf("rhsm sourced via rhelEntitlementRef = %#v", resolved.RHSM)
-	}
-	if resolved.Registry.CredentialsPath != "/secrets/ibm-registry" {
-		t.Fatalf("registry credentials = %q", resolved.Registry.CredentialsPath)
-	}
-	if !resolved.License.Accepted {
-		t.Fatalf("license accepted = %v", resolved.License.Accepted)
-	}
-
-	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
-	if !ok {
-		t.Fatal("Resolve(rhel) not found")
-	}
-	if rhel.RHSM.OrganizationPath != "/secrets/ibm-org" {
-		t.Fatalf("rhel inline rhsm = %#v", rhel.RHSM)
-	}
-}
-
-func TestResolveCarriesSatellite(t *testing.T) {
+func TestResolveRHELCarriesOwnRHSMAndIBMCarriesNone(t *testing.T) {
 	ents := []v1alpha1.Entitlement{
 		{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
@@ -64,24 +16,55 @@ func TestResolveCarriesSatellite(t *testing.T) {
 				RHSM: &v1alpha1.EntitlementRHSM{
 					OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
 					ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
-					Satellite: &v1alpha1.EntitlementRHSMSatellite{
-						Hostname:       "satellite.corp.example.com",
-						ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
-						TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
-					},
 				},
 			},
 		},
 		{
 			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
 			Spec: v1alpha1.EntitlementSpec{
-				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-				Registry:           &v1alpha1.EntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"}},
-				License:            &v1alpha1.EntitlementLicense{Accept: true},
+				Type:     v1alpha1.EntitlementTypeIBMStorageCeph,
+				Registry: &v1alpha1.EntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"}},
+				License:  &v1alpha1.EntitlementLicense{Accept: true},
 			},
 		},
 	}
+
+	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
+	if !ok {
+		t.Fatal("Resolve(rhel) not found")
+	}
+	if rhel.RHSM.OrganizationPath != "/secrets/rhel-org" || rhel.RHSM.ActivationKeyPath != "/secrets/rhel-key" {
+		t.Fatalf("rhel rhsm = %#v", rhel.RHSM)
+	}
+
+	ibm, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
+	if !ok {
+		t.Fatal("Resolve(ibm-ceph) not found")
+	}
+	if ibm.RHSM.OrganizationPath != "" || ibm.RHSM.ActivationKeyPath != "" || ibm.RHSM.Management != "" {
+		t.Fatalf("ibm-ceph must carry no inline rhsm; RHEL registration comes from the profile subscription, got %#v", ibm.RHSM)
+	}
+	if ibm.Registry.CredentialsPath != "/secrets/ibm-registry" || !ibm.License.Accepted {
+		t.Fatalf("ibm registry/license = %#v %#v", ibm.Registry, ibm.License)
+	}
+}
+
+func TestResolveCarriesSatellite(t *testing.T) {
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatRHEL,
+			RHSM: &v1alpha1.EntitlementRHSM{
+				OrganizationRef:  v1alpha1.SecretRef{Name: "rhel-org"},
+				ActivationKeyRef: v1alpha1.SecretRef{Name: "rhel-key"},
+				Satellite: &v1alpha1.EntitlementRHSMSatellite{
+					Hostname:       "satellite.corp.example.com",
+					ContentBaseURL: "https://satellite.corp.example.com/pulp/content",
+					TrustBundleRef: v1alpha1.SecretRef{Name: "corp-satellite-ca"},
+				},
+			},
+		},
+	}}
 
 	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
@@ -91,14 +74,6 @@ func TestResolveCarriesSatellite(t *testing.T) {
 		sat.ContentBaseURL != "https://satellite.corp.example.com/pulp/content" ||
 		sat.TrustBundlePath != "/secrets/corp-satellite-ca" {
 		t.Fatalf("rhel satellite = %#v", rhel.RHSM.Satellite)
-	}
-
-	ibm, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
-	if !ok {
-		t.Fatal("Resolve(ibm-ceph) not found")
-	}
-	if sat := ibm.RHSM.Satellite; sat.Hostname != "satellite.corp.example.com" || sat.TrustBundlePath != "/secrets/corp-satellite-ca" {
-		t.Fatalf("ibm satellite via rhelEntitlementRef = %#v", ibm.RHSM.Satellite)
 	}
 
 	bare := []v1alpha1.Entitlement{{
@@ -121,24 +96,13 @@ func TestResolveCarriesSatellite(t *testing.T) {
 }
 
 func TestResolveExternalManagementCarriesNoMaterial(t *testing.T) {
-	ents := []v1alpha1.Entitlement{
-		{
-			Metadata: v1alpha1.Metadata{Name: "rhel"},
-			Spec: v1alpha1.EntitlementSpec{
-				Type: v1alpha1.EntitlementTypeRedHatRHEL,
-				RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
-			},
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeRedHatRHEL,
+			RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
 		},
-		{
-			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
-			Spec: v1alpha1.EntitlementSpec{
-				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-				Registry:           &v1alpha1.EntitlementRegistry{CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"}},
-				License:            &v1alpha1.EntitlementLicense{Accept: true},
-			},
-		},
-	}
+	}}
 
 	rhel, ok := Resolve(ents, secret.Index{}, "rhel", "registry.redhat.io", "/secrets")
 	if !ok {
@@ -149,17 +113,6 @@ func TestResolveExternalManagementCarriesNoMaterial(t *testing.T) {
 	}
 	if rhel.RHSM.OrganizationPath != "" || rhel.RHSM.ActivationKeyPath != "" || rhel.RHSM.Satellite.Hostname != "" {
 		t.Fatalf("external rhsm must resolve no material, got %#v", rhel.RHSM)
-	}
-
-	ibm, ok := Resolve(ents, secret.Index{}, "ibm-ceph", "cp.icr.io/cp", "/secrets")
-	if !ok {
-		t.Fatal("Resolve(ibm-ceph) not found")
-	}
-	if ibm.RHSM.Management != v1alpha1.EntitlementRHSMManagementExternal {
-		t.Fatalf("ibm rhsm management via rhelEntitlementRef = %q, want external", ibm.RHSM.Management)
-	}
-	if ibm.Registry.CredentialsPath != "/secrets/ibm-registry" || !ibm.License.Accepted {
-		t.Fatalf("registry/license must resolve regardless of rhsm management, got %#v %#v", ibm.Registry, ibm.License)
 	}
 }
 

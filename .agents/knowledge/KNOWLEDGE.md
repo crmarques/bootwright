@@ -130,7 +130,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 
 | Topic | File |
 | --- | --- |
-| entitlements.Resolve keeps secrets behind names and derives provider/product from spec.type to preserve the pre-first-class render contract; rhsm resolves identically inline or via rhelEntitlementRef; Satellite projects into vars with a stable CA path. | [entitlement-resolution-vars.md](entitlement-resolution-vars.md) |
+| entitlements.Resolve keeps secrets behind names and derives provider/product from spec.type to preserve the pre-first-class render contract; rhsm resolves from the entitlement's own arm (ibm-storage-ceph carries none; its nodes register via a separate redhat-rhel subscription named by the profile subscription or cluster osSubscriptionRef); Satellite projects into vars with a stable CA path. | [entitlement-resolution-vars.md](entitlement-resolution-vars.md) |
 | How plaintext secret copies on disk are kept short-lived: post-lease sweep reclaims SIGKILL orphans, store materialization is all-or-nothing, MkdirAll needs explicit Chmod, and preflight rejects only over-broad modes. | [plaintext-secret-lifecycle.md](plaintext-secret-lifecycle.md) |
 | The NUL-wrapped placeholder sentinel switches resolution to {{ secret }} tokens (render-only, short-circuits before source paths leak); portable bundles are leak-scanned; manifest Secrets must handle both placeholder dialects in stringData. | [portable-secret-placeholders.md](portable-secret-placeholders.md) |
 | secret.Index is the single seam from Secret declarations to per-role paths; materialize verifies-or-renews generated material via the same request derivation preflight uses; SEC1 note for ECDSA SSH keys. | [secret-index-resolution.md](secret-index-resolution.md) |

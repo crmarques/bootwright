@@ -106,8 +106,9 @@ Storage Ceph runs on RHEL it does not itself entitle:
   drops the org/key secrets (see the `ceph-external-rhsm` example).
 - `ibm-storage-ceph` (`type: ibm-storage-ceph`) logs each node
   into the IBM registry `cp.icr.io/cp` for the container images, accepts the
-  product license (`license.accept: true`), and names the RHEL entitlement via
-  `rhelEntitlementRef: rhel`. Its `registry.credentialsRef` resolves to the
+  product license (`license.accept: true`). The RHEL subscription is named
+  separately by the storage nodes (`MachineInstallProfile.spec.subscription` or
+  the cluster `spec.ceph.osSubscriptionRef`). Its `registry.credentialsRef` resolves to the
   `ibm-ceph-registry` secret (username `cp`, the IBM entitlement key as the
   password).
 

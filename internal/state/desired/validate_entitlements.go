@@ -15,57 +15,34 @@ func validateEntitlements(state v1alpha1.State) []string {
 			errs = append(errs, e)
 		}
 		owner := fmt.Sprintf("Entitlement/%s spec", entitlement.Metadata.Name)
-		errs = append(errs, validateEntitlementType(owner, entitlement, state)...)
+		errs = append(errs, validateEntitlementType(owner, entitlement)...)
 		errs = append(errs, validateEntitlementRegistry(owner+".registry", entitlement.Spec.Registry)...)
 	}
 	return errs
 }
 
-func validateEntitlementType(owner string, entitlement v1alpha1.Entitlement, state v1alpha1.State) []string {
+func validateEntitlementType(owner string, entitlement v1alpha1.Entitlement) []string {
 	spec := entitlement.Spec
 	switch spec.Type {
 	case v1alpha1.EntitlementTypeRedHatRHEL:
-		errs := validateEntitlementRHSMRequired(owner+".rhsm", spec.RHSM)
-		return append(errs, rejectRHELEntitlementRef(owner, spec)...)
+		return validateEntitlementRHSMRequired(owner+".rhsm", spec.RHSM)
 	case v1alpha1.EntitlementTypeRedHatCeph:
 		errs := validateEntitlementRHSMRequired(owner+".rhsm", spec.RHSM)
-		errs = append(errs, validateEntitlementRegistryCredentialsRequired(owner+".registry", spec.Registry)...)
-		return append(errs, rejectRHELEntitlementRef(owner, spec)...)
+		return append(errs, validateEntitlementRegistryCredentialsRequired(owner+".registry", spec.Registry)...)
 	case v1alpha1.EntitlementTypeIBMStorageCeph:
 		errs := validateEntitlementRegistryCredentialsRequired(owner+".registry", spec.Registry)
 		if spec.License == nil || !spec.License.Accept {
 			errs = append(errs, owner+".license.accept must be true for ibm-storage-ceph")
 		}
 		if spec.RHSM != nil {
-			errs = append(errs, owner+".rhsm is not allowed for ibm-storage-ceph; reference a redhat-rhel entitlement via rhelEntitlementRef for the RHEL subscription")
+			errs = append(errs, owner+".rhsm is not allowed for ibm-storage-ceph; register the RHEL OS via a MachineInstallProfile spec.subscription that references a redhat-rhel entitlement")
 		}
-		return append(errs, validateEntitlementRHELRef(owner+".rhelEntitlementRef", spec.RHELEntitlementRef, state)...)
+		return errs
 	case "":
 		return []string{owner + ".type is required"}
 	default:
 		return []string{fmt.Sprintf("%s.type %q must be one of {%s}", owner, spec.Type, strings.Join(v1alpha1.EntitlementTypes(), ", "))}
 	}
-}
-
-func rejectRHELEntitlementRef(owner string, spec v1alpha1.EntitlementSpec) []string {
-	if spec.RHELEntitlementRef.Name != "" {
-		return []string{owner + ".rhelEntitlementRef is only valid for the ibm-storage-ceph type"}
-	}
-	return nil
-}
-
-func validateEntitlementRHELRef(owner string, ref v1alpha1.LocalObjectReference, state v1alpha1.State) []string {
-	if ref.Name == "" {
-		return []string{owner + " is required for ibm-storage-ceph; name a redhat-rhel entitlement for the RHEL subscription"}
-	}
-	target, ok := v1alpha1.EntitlementByName(state.Entitlements, ref.Name)
-	if !ok {
-		return []string{fmt.Sprintf("%s %q does not match any Entitlement", owner, ref.Name)}
-	}
-	if target.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
-		return []string{fmt.Sprintf("%s %q resolves to type %q, want %q", owner, ref.Name, target.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL)}
-	}
-	return nil
 }
 
 func validateEntitlementRHSMRequired(owner string, rhsm *v1alpha1.EntitlementRHSM) []string {

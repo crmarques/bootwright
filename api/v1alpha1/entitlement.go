@@ -9,11 +9,10 @@ type Entitlement struct {
 }
 
 type EntitlementSpec struct {
-	Type               string               `yaml:"type" json:"type"`
-	RHELEntitlementRef LocalObjectReference `yaml:"rhelEntitlementRef,omitempty" json:"rhelEntitlementRef,omitempty"`
-	RHSM               *EntitlementRHSM     `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
-	Registry           *EntitlementRegistry `yaml:"registry,omitempty" json:"registry,omitempty"`
-	License            *EntitlementLicense  `yaml:"license,omitempty" json:"license,omitempty"`
+	Type     string               `yaml:"type" json:"type"`
+	RHSM     *EntitlementRHSM     `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
+	Registry *EntitlementRegistry `yaml:"registry,omitempty" json:"registry,omitempty"`
+	License  *EntitlementLicense  `yaml:"license,omitempty" json:"license,omitempty"`
 }
 
 type EntitlementRHSM struct {
@@ -43,18 +42,12 @@ func EntitlementByName(ents []Entitlement, name string) (Entitlement, bool) {
 	return Entitlement{}, false
 }
 
-func EntitlementEffectiveRHSM(ents []Entitlement, name string) *EntitlementRHSM {
+func EntitlementRHSMByName(ents []Entitlement, name string) *EntitlementRHSM {
 	entitlement, ok := EntitlementByName(ents, name)
 	if !ok {
 		return nil
 	}
-	rhsm := entitlement.Spec.RHSM
-	if rhsm == nil && entitlement.Spec.RHELEntitlementRef.Name != "" {
-		if rhel, ok := EntitlementByName(ents, entitlement.Spec.RHELEntitlementRef.Name); ok {
-			rhsm = rhel.Spec.RHSM
-		}
-	}
-	return rhsm
+	return entitlement.Spec.RHSM
 }
 
 type EntitlementRHSMSatellite struct {

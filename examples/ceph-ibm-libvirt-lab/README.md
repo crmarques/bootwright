@@ -144,8 +144,9 @@ need an **IBM entitlement key**:
 
 > The IBM Storage Ceph license is accepted automatically on each node because
 > the `ibm-storage-ceph` entitlement sets `license.accept: true`. That entitlement
-> holds only the IBM registry + license and names the separate `rhel` entitlement
-> (the org ID + activation key from step 1a) via `rhelEntitlementRef`. Setting
+> holds only the IBM registry + license; the storage nodes name the separate
+> `rhel` entitlement (the org ID + activation key from step 1a) via each
+> `MachineInstallProfile.spec.subscription`. Setting
 > that `rhel` entitlement's `rhsm.management: external` instead delegates
 > registration to a corporate `ProvisioningPlaybook`
 > (see `examples/ceph-external-rhsm`). The StorageCluster explicitly sets

@@ -41,6 +41,32 @@ func TestVarsEmitsOSRegistrationRHSMForOSS(t *testing.T) {
 	}
 }
 
+func TestVarsEmitsOSRegistrationRHSMForIBM(t *testing.T) {
+	provider := Provider{
+		Distribution: v1alpha1.StorageCephDistributionIBM,
+		RequiresRHSM: true,
+		OSRegistration: entitlements.Resolved{
+			Name: "rhel",
+			RHSM: entitlements.RHSM{
+				Management:        v1alpha1.EntitlementRHSMManagementManaged,
+				OrganizationPath:  "/context/secrets/ibm-org",
+				ActivationKeyPath: "/context/secrets/ibm-key",
+			},
+		},
+	}
+	vars := Vars(provider)
+	if vars["rhsmManagement"] != v1alpha1.EntitlementRHSMManagementManaged {
+		t.Fatalf("rhsmManagement = %v, want managed", vars["rhsmManagement"])
+	}
+	rhsm, ok := vars["rhsm"].(map[string]any)
+	if !ok {
+		t.Fatalf("ibm registration rhsm must come from the profile subscription: %#v", vars)
+	}
+	if rhsm["organizationPath"] != "/context/secrets/ibm-org" || rhsm["activationKeyPath"] != "/context/secrets/ibm-key" {
+		t.Fatalf("ibm rhsm from OSRegistration = %#v", rhsm)
+	}
+}
+
 func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Spec: v1alpha1.StorageClusterSpec{
@@ -465,37 +491,23 @@ func TestSelectRedHatProviderProjectsSatellite(t *testing.T) {
 }
 
 func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {
-	ents := []v1alpha1.Entitlement{
-		{
-			Metadata: v1alpha1.Metadata{Name: "rhel"},
-			Spec: v1alpha1.EntitlementSpec{
-				Type: v1alpha1.EntitlementTypeRedHatRHEL,
-				RHSM: &v1alpha1.EntitlementRHSM{
-					OrganizationRef:  v1alpha1.SecretRef{Name: "ibm-org"},
-					ActivationKeyRef: v1alpha1.SecretRef{Name: "ibm-key"},
-				},
+	ents := []v1alpha1.Entitlement{{
+		Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
+		Spec: v1alpha1.EntitlementSpec{
+			Type: v1alpha1.EntitlementTypeIBMStorageCeph,
+			Registry: &v1alpha1.EntitlementRegistry{
+				CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
 			},
+			License: &v1alpha1.EntitlementLicense{Accept: true},
 		},
-		{
-			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
-			Spec: v1alpha1.EntitlementSpec{
-				Type:               v1alpha1.EntitlementTypeIBMStorageCeph,
-				RHELEntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
-				Registry: &v1alpha1.EntitlementRegistry{
-					CredentialsRef: v1alpha1.SecretRef{Name: "ibm-registry"},
-				},
-				License: &v1alpha1.EntitlementLicense{Accept: true},
-			},
-		},
-	}
+	}}
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution:   v1alpha1.StorageCephDistributionIBM,
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "ibm-ceph"},
 	}}}
 	vars := Vars(Select(cluster, ents, secret.Index{}, "/context/secrets"))
-	rhsm := vars["rhsm"].(map[string]any)
-	if rhsm["organizationPath"] != "/context/secrets/ibm-org" || rhsm["activationKeyPath"] != "/context/secrets/ibm-key" {
-		t.Fatalf("rhsm vars (via rhelEntitlementRef) = %#v", rhsm)
+	if _, ok := vars["rhsm"]; ok {
+		t.Fatalf("ibm Select alone must project no rhsm; RHEL registration comes from the profile subscription, got %#v", vars["rhsm"])
 	}
 	registry := vars["registry"].(map[string]any)
 	if registry["url"] != IBMRegistryURL {

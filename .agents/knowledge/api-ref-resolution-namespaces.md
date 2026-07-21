@@ -53,9 +53,11 @@ address of `bootstrap.host`: `bootstrap.addressRef`, defaulting to
 **`MachineInstallProfile` `packageSource.redhatCDN.entitlementRef`:** an
 `Entitlement` of type `redhat-rhel`.
 
-**`Entitlement` `spec.rhelEntitlementRef`:** a `redhat-rhel` `Entitlement`
-supplying the RHEL subscription this entitlement depends on but does not
-carry. Required for `ibm-storage-ceph`; rejected on every other type.
+**`StorageCluster` `spec.ceph.osSubscriptionRef`:** a `redhat-rhel`
+`Entitlement` supplying the RHEL subscription the storage nodes register with,
+independent of the Ceph product `entitlementRef`. Covers provided-OS nodes;
+managed-OS nodes name their subscription via
+`MachineInstallProfile.spec.subscription.entitlementRef` instead.
 
 **`StorageFilesystem` `spec.ceph.subvolumeGroups[].poolLayoutRef`:** a
 `StoragePool` on the same storage cluster (`--pool_layout`).

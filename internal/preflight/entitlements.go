@@ -9,7 +9,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 		if !ok {
 			return
 		}
-		rhsm := v1alpha1.EntitlementEffectiveRHSM(state.Entitlements, refName)
+		rhsm := v1alpha1.EntitlementRHSMByName(state.Entitlements, refName)
 		if rhsm != nil && v1alpha1.EntitlementRHSMManagement(rhsm) == v1alpha1.EntitlementRHSMManagementManaged {
 			if rhsm.OrganizationRef.Name != "" {
 				out = append(out, secretRefRequirement{
@@ -66,6 +66,18 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State) []secretRefRe
 		appendEntitlement(
 			cdn.EntitlementRef.Name,
 			"MachineInstallProfile/"+profile.Metadata.Name+" installer.anaconda.packageSource.redhatCDN entitlementRef",
+			[]string{"machines"},
+			[]string{"machines"},
+			secretRefOwner{},
+		)
+	}
+	for _, profile := range state.MachineInstallProfiles {
+		if profile.Spec.Subscription == nil || profile.Spec.Subscription.EntitlementRef.Name == "" {
+			continue
+		}
+		appendEntitlement(
+			profile.Spec.Subscription.EntitlementRef.Name,
+			"MachineInstallProfile/"+profile.Metadata.Name+" subscription entitlementRef",
 			[]string{"machines"},
 			[]string{"machines"},
 			secretRefOwner{},

@@ -58,9 +58,10 @@ reconfigure-only under `--converge-drifted` (ADR 0007 taxonomy).
   entitlement: Anaconda-time registration is the package source and cannot be
   delegated; mirror/hostedTree are the delegation-compatible sources.
 
-The `ibm-storage-ceph` → `rhelEntitlementRef` indirection carries `management`
-with the rest of the rhsm arm, so one `redhat-rhel` entitlement states who owns
-registration for both consumers.
+For `ibm-storage-ceph`, the RHEL subscription (and its `management` axis) is
+named by the storage nodes' `MachineInstallProfile.spec.subscription` or the
+cluster's `StorageCluster.spec.ceph.osSubscriptionRef`; the earlier
+`rhelEntitlementRef` indirection on the entitlement has been removed.
 
 ### Honest-failure contract for delegation
 

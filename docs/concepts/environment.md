@@ -159,19 +159,19 @@ covers the same ground alongside the secrets it names.
 
 Each `Entitlement` declares named vendor-controlled access for one product.
 `metadata.name` and `spec.type` are always required; `spec.type` is the
-discriminator, and the `rhsm`, `registry`, `license`, and `rhelEntitlementRef`
+discriminator, and the `rhsm`, `registry`, and `license`
 arms become required per type (see [Required arms](#required-arms)). It is
 referenced by name from `StorageCluster.spec.ceph.entitlementRef`,
-`MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN.entitlementRef`,
-and — for `ibm-storage-ceph` — from another entitlement's
-`spec.rhelEntitlementRef`. The secrets it names are declared as first-class
-`Secret` objects.
+`StorageCluster.spec.ceph.osSubscriptionRef`,
+`MachineInstallProfile.spec.subscription.entitlementRef`, and
+`MachineInstallProfile.spec.installer.anaconda.packageSource.redhatCDN.entitlementRef`.
+The secrets it names are declared as first-class `Secret` objects.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `metadata.name` | Yes | — | Entitlement name referenced by storage or OS install inputs. |
 | `spec.type` | Yes | — | Discriminator: `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
-| `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`ProvisioningPlaybook`](provisioning-playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). For `ibm-storage-ceph` the value arrives through `rhelEntitlementRef`. |
+| `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`ProvisioningPlaybook`](provisioning-playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). `ibm-storage-ceph` carries no `rhsm`; its nodes register RHEL through a separate `redhat-rhel` subscription named by the profile `subscription` or the cluster `osSubscriptionRef`. |
 | `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
 | `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
 | `spec.rhsm.connectToInsights` | No | `false` | Whether registered RHEL nodes enroll in Insights. |
@@ -182,7 +182,6 @@ and — for `ibm-storage-ceph` — from another entitlement's
 | `spec.registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat-ceph` and `ibm-storage-ceph`. |
 | `spec.registry.trustBundleRef` | No | — | Registry trust bundle. |
 | `spec.license.accept` | Conditional | `false` | Must be `true` for `ibm-storage-ceph`. |
-| `spec.rhelEntitlementRef` | Conditional | — | Names a `redhat-rhel` entitlement supplying the RHEL subscription. Required for `ibm-storage-ceph`; rejected on every other type (which carry `rhsm` inline). |
 
 ### Types
 
@@ -192,22 +191,24 @@ Exactly one of three `spec.type` values is accepted; any other value is rejected
 | --- | --- |
 | `redhat-rhel` | A Red Hat RHEL subscription (RHSM) — the RHEL BaseOS/AppStream repos. |
 | `redhat-ceph` | A single Red Hat subscription covering both RHEL and the `rhceph` tools repo, plus `registry.redhat.io` access. |
-| `ibm-storage-ceph` | IBM Storage Ceph product access (registry + license), running on RHEL entitled by a separate `redhat-rhel` entitlement. |
+| `ibm-storage-ceph` | IBM Storage Ceph product access (registry + license), running on RHEL registered separately via the storage nodes' `MachineInstallProfile.spec.subscription` or `StorageCluster.spec.ceph.osSubscriptionRef`. |
 
 ### Required arms
 
-The required `rhsm`/`registry`/`license`/`rhelEntitlementRef` arms follow from
+The required `rhsm`/`registry`/`license` arms follow from
 `spec.type`:
 
 | `spec.type` | Required arms |
 | --- | --- |
 | `redhat-rhel` | `rhsm` (`organizationRef` + `activationKeyRef`) |
 | `redhat-ceph` | `rhsm` + `registry.credentialsRef` |
-| `ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` + `rhelEntitlementRef` (no inline `rhsm`) |
+| `ibm-storage-ceph` | `registry.credentialsRef` + `license.accept: true` (no inline `rhsm`) |
 
 IBM Storage Ceph ships its own image registry (`cp.icr.io`) and product license
 but runs on RHEL it does not itself entitle, so its RHEL subscription is a
-separate `redhat-rhel` entitlement named via `rhelEntitlementRef` — an inline
+separate `redhat-rhel` entitlement named by the storage nodes'
+`MachineInstallProfile.spec.subscription.entitlementRef` (managed-OS nodes) or
+`StorageCluster.spec.ceph.osSubscriptionRef` (provided-OS nodes) — an inline
 `rhsm` arm on an `ibm-storage-ceph` entitlement is rejected. (`redhat-ceph`
 stays bundled: a single Red Hat subscription entitles both RHEL and the `rhceph`
 tools repo, so its own `rhsm` arm covers both.)

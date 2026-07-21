@@ -49,7 +49,7 @@ func Resolve(ents []v1alpha1.Entitlement, idx secret.Index, name, defaultRegistr
 		Provider: provider,
 		Product:  product,
 	}
-	if rhsm := v1alpha1.EntitlementEffectiveRHSM(ents, name); rhsm != nil {
+	if rhsm := v1alpha1.EntitlementRHSMByName(ents, name); rhsm != nil {
 		out.RHSM.Management = v1alpha1.EntitlementRHSMManagement(rhsm)
 		if out.RHSM.Management != v1alpha1.EntitlementRHSMManagementExternal {
 			out.RHSM.OrganizationPath = secret.ResolveMaterialPath(rhsm.OrganizationRef.Name, idx, secretsDir, secret.MaterialPrimary)

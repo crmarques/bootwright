@@ -422,18 +422,17 @@ func Vars(provider Provider) map[string]any {
 			"product":  provider.Entitlement.Product,
 		}
 	}
-	if provider.RequiresRHSM {
-		management := provider.Entitlement.RHSM.Management
-		if management == "" {
-			management = v1alpha1.EntitlementRHSMManagementManaged
+	regRHSM := provider.Entitlement.RHSM
+	regManagement := provider.Entitlement.RHSM.Management
+	if regManagement == "" && provider.OSRegistration.Name != "" {
+		regRHSM = provider.OSRegistration.RHSM
+		regManagement = provider.OSRegistration.RHSM.Management
+		if regManagement == "" {
+			regManagement = v1alpha1.EntitlementRHSMManagementManaged
 		}
-		out["rhsmManagement"] = management
-	} else if provider.OSRegistration.Name != "" {
-		management := provider.OSRegistration.RHSM.Management
-		if management == "" {
-			management = v1alpha1.EntitlementRHSMManagementManaged
-		}
-		out["rhsmManagement"] = management
+	}
+	if regManagement != "" {
+		out["rhsmManagement"] = regManagement
 	}
 	if len(provider.Repository.RedHatRepos) > 0 || provider.Repository.IBMRepoURL != "" {
 		repo := map[string]any{}
@@ -457,10 +456,6 @@ func Vars(provider Provider) map[string]any {
 			os["message"] = provider.RuntimeOS.ManagedMessage
 		}
 		out["runtimeOS"] = os
-	}
-	regRHSM := provider.Entitlement.RHSM
-	if !provider.RequiresRHSM && provider.OSRegistration.Name != "" {
-		regRHSM = provider.OSRegistration.RHSM
 	}
 	if regRHSM.OrganizationPath != "" || regRHSM.ActivationKeyPath != "" {
 		rhsm := map[string]any{

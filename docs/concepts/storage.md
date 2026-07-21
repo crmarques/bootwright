@@ -141,7 +141,7 @@ Distribution requirements:
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
 | `redhat` | `entitlementRef` resolves to `redhat-ceph`. Release `9.0` supports RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` supports RHEL 9.8 or 10.2. |
-| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms and a `redhat-rhel` `rhelEntitlementRef`. Release `9.9.1` supports RHEL 9.8 or 10.2. `ibm.callHome` is required. |
+| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. Release `9.9.1` supports RHEL 9.8 or 10.2. `ibm.callHome` is required. |
 
 When `Entitlement.spec.registry.url` overrides the vendor namespace,
 `ceph.image` must explicitly pin the canonical vendor repository below that

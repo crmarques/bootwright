@@ -138,10 +138,8 @@ func StorageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster) 
 
 func storageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster, idx secret.Index, secretsDir string) cephprovider.Provider {
 	provider := cephprovider.Select(cluster, state.Entitlements, idx, secretsDir)
-	if !provider.RequiresRHSM {
-		if ent, ok := v1alpha1.StorageClusterOSSubscriptionEntitlement(cluster, state); ok {
-			provider.OSRegistration, _ = entitlements.Resolve(state.Entitlements, idx, ent.Metadata.Name, "", secretsDir)
-		}
+	if ent, ok := v1alpha1.StorageClusterOSSubscriptionEntitlement(cluster, state); ok {
+		provider.OSRegistration, _ = entitlements.Resolve(state.Entitlements, idx, ent.Metadata.Name, "", secretsDir)
 	}
 	return provider
 }

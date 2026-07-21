@@ -14,18 +14,20 @@ emitted values, never authored input. When an entitlement declares no registry
 URL, the distribution's default registry fills in (`registry.redhat.io` or
 `cp.icr.io/cp`).
 
-**Inline vs deferred rhsm:** an Entitlement carries its `rhsm` arm inline
-(types `redhat-rhel` and `redhat-ceph`) or, for `ibm-storage-ceph`, defers it
-to the `redhat-rhel` entitlement named by `spec.rhelEntitlementRef`
-(`v1alpha1.EntitlementEffectiveRHSM` is the single indirection point).
-`Resolve` populates `Resolved.RHSM` identically in both cases, so downstream
-rendering (`cephprovider.Vars`) does not distinguish the two — the IBM
-entitlement contributes only registry and license arms while its RHSM
-(including any Satellite redirect and the `management` axis) is inherited
-through the reference. `Resolved.RHSM.Management` defaults to `managed`;
+**Per-entitlement rhsm, no indirection:** an Entitlement carries its `rhsm` arm
+inline for `redhat-rhel` and `redhat-ceph`; `ibm-storage-ceph` carries no `rhsm`
+(only registry and license). `Resolve` populates `Resolved.RHSM` from the
+entitlement's own arm via `v1alpha1.EntitlementRHSMByName`, so an
+`ibm-storage-ceph` resolve carries no RHSM at all. IBM (and OSS) storage nodes
+register RHEL through a separate `redhat-rhel` subscription named by the node's
+`MachineInstallProfile.spec.subscription` or the cluster's
+`StorageCluster.spec.ceph.osSubscriptionRef`; the render layer
+(`storageCephProvider`) resolves that entitlement into `Provider.OSRegistration`
+and `cephprovider.Vars` emits its `rhsm`/`rhsmManagement` when the Ceph
+entitlement carries none. `Resolved.RHSM.Management` defaults to `managed`;
 under `external` no secret paths or Satellite resolve, `Vars` emits
 `rhsmManagement` but no `rhsm` map, and the machines-phase registration task
-is not planned. Guarded by `TestResolveFollowsRHELEntitlementRef`,
+is not planned. Guarded by `TestResolveRHELCarriesOwnRHSMAndIBMCarriesNone`,
 `TestResolveCarriesSatellite`, `TestResolveExternalManagementCarriesNoMaterial`,
 and `TestSelectExternalRHSMManagementProjectsNoRHSMVars`.
 

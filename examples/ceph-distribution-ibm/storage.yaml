@@ -11,6 +11,7 @@ spec:
     ibm:
       callHome: disabled
     entitlementRef: ibm-storage-ceph
+    osSubscriptionRef: rhel
     cephadm:
       bootstrap:
         host: ceph-0
