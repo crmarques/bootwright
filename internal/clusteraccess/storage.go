@@ -4,10 +4,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -75,6 +77,10 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		summary.HealthCommand = summary.SSHCommand + " sudo cephadm shell -- ceph -s"
 		summary.ShellCommand = summary.SSHCommand + " sudo cephadm shell"
 		summary.DashboardURL = "https://" + summary.SeedAddress + ":" + cephDashboardPort
+		if domain := storageAccessDomain(state); domain != "" {
+			alias := stateview.ComposeFQDN("mgr", cluster.Metadata.Name, domain)
+			summary.DashboardURL = "https://" + alias + ":" + cephDashboardPort
+		}
 	}
 	if mgmt := cluster.Spec.Ceph.Management; mgmt != nil && mgmt.DNSName != "" {
 		summary.DashboardURL = "https://" + mgmt.DNSName + ":" + cephManagementPort(mgmt.Port)
@@ -88,6 +94,13 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		}
 	}
 	return summary
+}
+
+func storageAccessDomain(state v1alpha1.State) string {
+	if env := stateview.Environment(state); env != nil {
+		return strings.TrimSpace(env.Spec.Domains.StorageClustersDomain())
+	}
+	return ""
 }
 
 func cephManagementPort(port int) string {

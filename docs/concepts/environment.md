@@ -77,7 +77,7 @@ spec:
 | `spec.domains.machines` | No | `domains.base` | Zone for machine `fqdn` names. |
 | `spec.domains.clusters` | No | `domains.base` | Umbrella zone the container/storage cluster keys default from. |
 | `spec.domains.containerClusters` | No | `domains.clusters` | Zone for container clusters: node FQDNs and each cluster's `install-config.yaml` `baseDomain`. |
-| `spec.domains.storageClusters` | No | `domains.clusters` | Zone for storage clusters: Ceph node FQDNs. |
+| `spec.domains.storageClusters` | No | `domains.clusters` | Zone for storage clusters: Ceph node FQDNs and the `mgr.<cluster>.<zone>` dashboard alias `cluster info` prints. |
 
 Defaulting chain: `machines` → `base`; `clusters` → `base`;
 `containerClusters` → `clusters`; `storageClusters` → `clusters`. An

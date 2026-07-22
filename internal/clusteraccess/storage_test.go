@@ -41,7 +41,7 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	if summary.ShellCommand != wantSSH+" sudo cephadm shell" {
 		t.Fatalf("shell command = %q", summary.ShellCommand)
 	}
-	if summary.DashboardURL != "https://"+summary.SeedAddress+":8443" {
+	if summary.DashboardURL != "https://mgr.ceph-libvirt.bootwright.test:8443" {
 		t.Fatalf("dashboard url = %q", summary.DashboardURL)
 	}
 	if summary.ConfigPath != "/etc/ceph/ceph.conf" || summary.KeyringPath != "/etc/ceph/ceph.client.admin.keyring" {
@@ -52,6 +52,22 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	}
 	if !strings.HasPrefix(summary.MonitorEndpoints[0], "node01.ceph-libvirt.bootwright.test=") || !strings.HasSuffix(summary.MonitorEndpoints[0], ":6789") {
 		t.Fatalf("monitor endpoint[0] = %q", summary.MonitorEndpoints[0])
+	}
+}
+
+func TestStorageAccessSummaryFallsBackToSeedAddressWithoutDomain(t *testing.T) {
+	state := loadFixtureState(t, cephFixture)
+	state.Environments = nil
+	summaries := StorageSummaries(state, "")
+	if len(summaries) != 1 {
+		t.Fatalf("summaries = %+v, want one storage cluster", summaries)
+	}
+	summary := summaries[0]
+	if summary.SeedAddress == "" {
+		t.Fatal("seed address not resolved from machine")
+	}
+	if summary.DashboardURL != "https://"+summary.SeedAddress+":8443" {
+		t.Fatalf("dashboard url = %q, want IP-based fallback", summary.DashboardURL)
 	}
 }
 

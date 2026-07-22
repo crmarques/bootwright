@@ -399,6 +399,14 @@ monitor list, a health-check command, the dashboard URL, and the dashboard
 credential file path. Run the **Health check** line; `HEALTH_OK` from `ceph -s`
 confirms the cluster is reachable and healthy.
 
+When `spec.domains.storageClusters` is set, the dashboard URL is
+`https://mgr.<cluster>.<domains.storageClusters>` instead of the seed node's
+bare address, even without an explicit `spec.ceph.management` block — the same
+`mgr.` alias convention the HA gateway uses below. Bootwright does not publish
+that DNS record itself outside the HA gateway case; without a `nameResolution`
+component (or another record) pointing it at the active mgr, resolve it
+manually or fall back to the seed node's address.
+
 `cephadm bootstrap` enables the dashboard and generates a one-time random
 `admin` password. Bootwright captures it **during the install** and saves it on
 the controller (`clusters/<storage-cluster>/secrets/dashboard-password`, mode
