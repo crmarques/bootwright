@@ -72,12 +72,43 @@
   become: true
   when: bootwright_host_storage_nodes | length > 0
 
-- name: Assert storage container filesystem free space
+- name: Resolve the storage state filesystem budget for this host
+  ansible.builtin.set_fact:
+    bootwright_preflight_storage_free_gib: >-
+      {{ ((bootwright_preflight_storage_container_df.stdout_lines[-1].split()[3] | int) / 1048576) | round(1) }}
+    bootwright_preflight_storage_required_gib: >-
+      {{ bootwright_host_storage_nodes | map(attribute='rootFSGiB', default=20) | list | max }}
+  changed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Assert storage state filesystem clears the absolute floor
   ansible.builtin.assert:
     that:
-      - (bootwright_preflight_storage_container_df.stdout_lines[-1].split()[3] | int) >= 10485760
-    fail_msg: "Storage node {{ bootwright_host_name }} needs at least 10 GiB free for /var/lib/containers or /var/lib."
+      - (bootwright_preflight_storage_container_df.stdout_lines[-1].split()[3] | int) >= 20971520
+    fail_msg: >-
+      Storage node {{ bootwright_host_name }} has only
+      {{ bootwright_preflight_storage_free_gib }} GiB free on the filesystem holding
+      /var/lib/ceph and /var/lib/containers, below the 20 GiB floor a cephadm node
+      needs for container images, the cephadm data directory, the crash spool and the
+      systemd journal. Enlarge the node's root filesystem (spec.machineOSInstall
+      kickstart storage.rootDisk selects the disk it grows into) before apply.
   when: bootwright_host_storage_nodes | length > 0
+
+- name: Warn when the storage state filesystem is below the per-node budget
+  ansible.builtin.debug:
+    msg: >-
+      Storage node {{ bootwright_host_name }} has
+      {{ bootwright_preflight_storage_free_gib }} GiB free on the filesystem holding
+      /var/lib/ceph, below the {{ bootwright_preflight_storage_required_gib }} GiB this
+      node's declared roles need at steady state (mon RocksDB, the Prometheus TSDB,
+      Grafana, Alertmanager and Loki all land there). The cluster will install, but the
+      filesystem is expected to run short and Ceph's CephNodeDiskspaceWarning alert will
+      fire on the trailing fill rate. Enlarge the root filesystem, move roles off this
+      node, or lower spec.ceph.monitoring.prometheus.retentionSize.
+  when:
+    - bootwright_host_storage_nodes | length > 0
+    - (bootwright_preflight_storage_free_gib | float)
+      < (bootwright_preflight_storage_required_gib | float)
 
 - name: Read Bootwright OSD device ownership marker for preflight
   ansible.builtin.slurp:

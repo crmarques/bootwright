@@ -57,10 +57,10 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 				if service.config.RetentionTime != "" {
 					spec["retention_time"] = service.config.RetentionTime
 				}
-				if service.config.RetentionSize != "" {
-					spec["retention_size"] = service.config.RetentionSize
-				}
 			}
+		}
+		if service.serviceType == "prometheus" {
+			spec["retention_size"] = PrometheusRetentionSize(cluster)
 		}
 		doc := cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec)
 		if service.config != nil {

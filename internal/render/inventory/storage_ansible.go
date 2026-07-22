@@ -260,6 +260,7 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
 			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
 			"devices":       cephrender.OSDGateDevicePaths(cluster, node),
+			"rootFSGiB":     cephrender.NodeRootFilesystemGiB(cluster, node),
 		}
 		if topology.OSDHostUsesAllDevices(cluster, node) {
 			host["osdReclaimAll"] = true
