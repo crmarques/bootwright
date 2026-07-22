@@ -1133,7 +1133,11 @@ func TestStretchTiebreakerOmitsCRUSHLocation(t *testing.T) {
 	byHost := map[string]map[string]any{}
 	for _, doc := range CephadmBootstrapSpec(v1alpha1.State{}, cluster) {
 		m := doc.(map[string]any)
-		byHost[m["hostname"].(string)] = m
+		hostname, ok := m["hostname"].(string)
+		if !ok {
+			continue
+		}
+		byHost[hostname] = m
 	}
 	if _, present := byHost["arbiter"]["location"]; present {
 		t.Fatalf("stretch tiebreaker must not carry a CRUSH host-spec location: %v", byHost["arbiter"])

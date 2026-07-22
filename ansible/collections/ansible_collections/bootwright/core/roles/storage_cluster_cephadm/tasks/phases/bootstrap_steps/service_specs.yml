@@ -18,7 +18,7 @@
     - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
     - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
 
-- name: Apply Ceph host spec
+- name: Apply Ceph host, mon, and mgr specs
   ansible.builtin.command:
     argv:
       - cephadm
@@ -37,7 +37,7 @@
 - name: Auto-reclaim dirty filter-selected OSD devices
   ansible.builtin.include_tasks: osd_reclaim.yml
 
-- name: Apply Ceph core service spec
+- name: Apply Ceph OSD service spec
   ansible.builtin.command:
     argv:
       - cephadm

@@ -67,11 +67,6 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 		}
 		docs = append(docs, host)
 	}
-	return docs
-}
-
-func CephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
-	var docs []any
 	monHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON)
 	if len(monHosts) > 0 {
 		docs = append(docs, cephadmPlacementService("mon", "", monHosts, 0, nil))
@@ -80,8 +75,11 @@ func CephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 	if len(mgrHosts) > 0 {
 		docs = append(docs, cephadmPlacementService("mgr", "", mgrHosts, 0, nil))
 	}
-	docs = append(docs, cephadmOSDServices(cluster)...)
 	return docs
+}
+
+func CephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
+	return cephadmOSDServices(cluster)
 }
 
 func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {

@@ -1444,7 +1444,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(disableCallHome["when"]); strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") {
 		t.Fatalf("Call Home opt-out must deny consent even when the module is already disabled, got when=%v", disableCallHome["when"])
 	}
-	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
+	coreIdx := findAnsibleTask(t, block, "Apply Ceph OSD service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")
 	lateIdx := findAnsibleTask(t, block, "Apply Ceph late service spec")
 	lateOpsIdx := findAnsibleTask(t, block, "Run rendered Ceph late operations")

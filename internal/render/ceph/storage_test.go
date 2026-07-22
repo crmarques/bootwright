@@ -48,8 +48,8 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	}
 
 	bootstrapDocs := readYAMLDocs(t, asset.BootstrapSpecPath)
-	if len(bootstrapDocs) != 7 {
-		t.Fatalf("bootstrap docs got %d, want 7", len(bootstrapDocs))
+	if len(bootstrapDocs) != 9 {
+		t.Fatalf("bootstrap docs got %d, want 9 (7 hosts + mon + mgr)", len(bootstrapDocs))
 	}
 	host := docByField(t, bootstrapDocs, "hostname", "node-01.ceph-storage.bootwright.test")
 	if got := host["service_type"]; got != "host" {
@@ -65,7 +65,7 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 
 	coreServices := readYAMLDocs(t, asset.CoreServicesSpecPath)
 	lateServices := readYAMLDocs(t, asset.LateServicesSpecPath)
-	mon := serviceDoc(t, coreServices, "mon", "")
+	mon := serviceDoc(t, bootstrapDocs, "mon", "")
 	monHosts := stringSlice(t, mon["placement"].(map[string]any)["hosts"])
 	wantMons := []string{"node-01.ceph-storage.bootwright.test", "node-02.ceph-storage.bootwright.test", "node-04.ceph-storage.bootwright.test", "node-05.ceph-storage.bootwright.test", "node-07.ceph-storage.bootwright.test"}
 	if !reflect.DeepEqual(monHosts, wantMons) {
