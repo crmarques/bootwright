@@ -1,7 +1,7 @@
 ---
 - import_playbook: check_become.yml
   vars:
-    bootwright_become_check_hosts: bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_ocp_hosts:bootwright_boot_hosts
+    bootwright_become_check_hosts: bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_ocp_hosts:bootwright_boot_hosts:bootwright_storage_hosts
 
 - import_playbook: check_preflight.yml
 - import_playbook: task_machine_infra_prepare.yml

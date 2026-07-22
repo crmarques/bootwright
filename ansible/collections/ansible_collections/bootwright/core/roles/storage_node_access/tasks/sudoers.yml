@@ -1,0 +1,83 @@
+---
+- name: Probe the storage node orchestration sudoers grant
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} cat {{ bootwright_node_access.sudoersPath | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_sudoers_probe
+  changed_when: false
+  failed_when: false
+
+- name: Reconcile the storage node orchestration sudoers grant
+  when: >-
+    (bootwright_node_access_sudoers_probe.rc | default(1) | int) != 0
+    or (bootwright_node_access_sudoers_probe.stdout | default('') | trim)
+       != (bootwright_node_access_sudoers_lines | join('\n'))
+  block:
+    - name: Stage the storage node orchestration sudoers grant
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} install -d -m 0755 -o root -g root
+          {{ bootwright_node_access.sudoersPath | dirname | quote }}
+          && printf '%s\n' {{ bootwright_node_access_sudoers_lines | map('quote') | join(' ') }}
+          | {{ bootwright_node_access_sudo }} tee {{ bootwright_node_access_sudoers_temp | quote }} >/dev/null
+          && {{ bootwright_node_access_sudo }} chown root:root {{ bootwright_node_access_sudoers_temp | quote }}
+          && {{ bootwright_node_access_sudo }} chmod 0440 {{ bootwright_node_access_sudoers_temp | quote }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Validate the staged storage node orchestration sudoers grant
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} visudo -cf {{ bootwright_node_access_sudoers_temp | quote }}
+      delegate_to: localhost
+      become: false
+      register: bootwright_node_access_visudo
+      changed_when: false
+
+    - name: Install the validated storage node orchestration sudoers grant
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} mv -f {{ bootwright_node_access_sudoers_temp | quote }}
+          {{ bootwright_node_access.sudoersPath | quote }}
+          && {{ bootwright_node_access_sudo }} chown root:root {{ bootwright_node_access.sudoersPath | quote }}
+          && {{ bootwright_node_access_sudo }} chmod 0440 {{ bootwright_node_access.sudoersPath | quote }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+  rescue:
+    - name: Remove the rejected storage node orchestration sudoers grant
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} rm -f {{ bootwright_node_access_sudoers_temp | quote }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Fail on a rejected storage node orchestration sudoers grant
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to install {{ bootwright_node_access.sudoersPath }} on Machine
+          {{ bootwright_storage_node_name | default(inventory_hostname) }}: the staged
+          grant was rejected before it was moved into place, so sudo on the node is
+          untouched and root SSH was not revoked
+          ({{ (bootwright_node_access_visudo | default({})).stderr | default('visudo did not run') | trim }}).
+          The grant Bootwright writes is exactly
+          "{{ bootwright_node_access_sudoers_lines | join(' / ') }}"; check that
+          {{ bootwright_node_access.sudoersPath | dirname }} is included from
+          /etc/sudoers and that {{ bootwright_node_access.user }} is a valid user name,
+          then re-apply.
+      delegate_to: localhost
+      become: false

@@ -1,0 +1,64 @@
+---
+- name: Probe the storage node orchestration account
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_target_endpoint, 'sudo -n true'] }}"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_target_probe
+  changed_when: false
+  failed_when: false
+
+- name: Probe the storage node install account
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_install_endpoint, 'true'] }}"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_install_probe
+  changed_when: false
+  failed_when: false
+
+- name: Fail when no storage node identity answers
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} at
+      {{ bootwright_node_access.address }} answered neither the Ceph orchestration account
+      {{ bootwright_node_access.user }} (with passwordless sudo) nor the install account
+      {{ bootwright_node_access.installUser }}, using the Machine access key
+      {{ bootwright_node_access.installPrivateKeyPath }}. Bootwright refuses to guess a
+      third identity, so the node is untouched. Restore one of the two: power the node on
+      and confirm sshd is running, then re-authorize that key for
+      {{ bootwright_node_access.installUser }} (or, once root login is already revoked, for
+      {{ bootwright_node_access.user }}) and confirm {{ bootwright_node_access.user }} still
+      holds its NOPASSWD grant in {{ bootwright_node_access.sudoersPath }}. Re-apply after
+      one identity answers; if the node was reinstalled out of band, destroy the storage
+      cluster and re-apply instead.
+  delegate_to: localhost
+  become: false
+  when:
+    - (bootwright_node_access_target_probe.rc | default(1) | int) != 0
+    - (bootwright_node_access_install_probe.rc | default(1) | int) != 0
+
+- name: Select the storage node access identity
+  ansible.builtin.set_fact:
+    bootwright_node_access_ready: "{{ (bootwright_node_access_target_probe.rc | default(1) | int) == 0 }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Resolve the storage node access endpoint and privilege prefix
+  ansible.builtin.set_fact:
+    bootwright_node_access_endpoint: >-
+      {{
+        bootwright_node_access_target_endpoint
+        if (bootwright_node_access_ready | bool)
+        else bootwright_node_access_install_endpoint
+      }}
+    bootwright_node_access_sudo: >-
+      {{
+        'sudo -n'
+        if ((bootwright_node_access_ready | bool) or bootwright_node_access.installUser != 'root')
+        else ''
+      }}
+  delegate_to: localhost
+  become: false
+  changed_when: false

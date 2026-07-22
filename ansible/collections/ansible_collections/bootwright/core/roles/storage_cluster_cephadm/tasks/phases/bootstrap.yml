@@ -26,6 +26,9 @@
     - name: Apply Ceph base service specs
       ansible.builtin.include_tasks: bootstrap_steps/service_specs.yml
 
+    - name: Reconcile the cephadm SSH user
+      ansible.builtin.include_tasks: bootstrap_steps/ssh_user.yml
+
     - name: Wait for declared Ceph OSDs to be created
       ansible.builtin.include_tasks: bootstrap_steps/osd_readiness.yml
 

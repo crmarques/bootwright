@@ -80,7 +80,7 @@
   ansible.builtin.copy:
     content: |
       Host *
-        User {{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}
+        User {{ bootwright_selected_storage_cluster.clusterSSH.user }}
         IdentityFile {{ bootwright_ceph_remote_private_key }}
         UserKnownHostsFile {{ bootwright_ceph_remote_known_hosts }}
         StrictHostKeyChecking yes
@@ -98,7 +98,12 @@
       - -F
       - "{{ bootwright_ceph_remote_ssh_config }}"
       - "{{ item.address }}"
-      - "true"
+      - >-
+        {{
+          'true'
+          if bootwright_selected_storage_cluster.clusterSSH.user == 'root'
+          else 'sudo -n true'
+        }}
   register: bootwright_ceph_seed_ssh_check
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"

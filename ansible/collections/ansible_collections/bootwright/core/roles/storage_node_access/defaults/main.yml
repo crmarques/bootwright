@@ -1,0 +1,5 @@
+---
+bootwright_node_access_ssh_timeout: 600
+bootwright_node_access_ssh_connect_timeout: 10
+bootwright_node_access_temp_suffix: .bootwright-tmp
+bootwright_node_access_sshd_drop_in_line: PermitRootLogin no

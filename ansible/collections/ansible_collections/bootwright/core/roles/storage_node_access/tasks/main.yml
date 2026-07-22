@@ -1,0 +1,32 @@
+---
+- name: Manage the Ceph orchestration account on the storage node
+  when: bootwright_node_access is defined
+  block:
+    - name: Resolve storage node access context
+      ansible.builtin.include_tasks: context.yml
+
+    - name: Probe storage node access identities
+      ansible.builtin.include_tasks: probe.yml
+
+    - name: Ensure the storage node orchestration account
+      ansible.builtin.include_tasks: account.yml
+
+    - name: Ensure the storage node orchestration sudoers grant
+      ansible.builtin.include_tasks: sudoers.yml
+
+    - name: Authorize the machine access key for the storage node orchestration account
+      ansible.builtin.include_tasks: authorize.yml
+
+    - name: Verify the storage node orchestration account
+      ansible.builtin.include_tasks: verify.yml
+
+    - name: Revoke root SSH on the storage node
+      ansible.builtin.include_tasks: revoke.yml
+      when: (bootwright_node_access.rootLogin | default('keep', true)) == 'revoke'
+
+    - name: Restore root SSH on the storage node
+      ansible.builtin.include_tasks: restore.yml
+      when: (bootwright_node_access.rootLogin | default('keep', true)) != 'revoke'
+
+    - name: Stamp the storage node access marker
+      ansible.builtin.include_tasks: marker.yml

@@ -1,0 +1,47 @@
+---
+- name: Read the live cephadm SSH user
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - cephadm
+      - get-user
+  register: bootwright_ceph_live_ssh_user
+  changed_when: false
+  failed_when: false
+
+- name: Resolve the live cephadm SSH user
+  ansible.builtin.set_fact:
+    bootwright_ceph_live_ssh_user_name: "{{ bootwright_ceph_live_ssh_user.stdout | default('', true) | trim }}"
+  changed_when: false
+
+- name: Require a readable live cephadm SSH user
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_live_ssh_user.rc | default(1) | int) == 0
+      - bootwright_ceph_live_ssh_user_name | length > 0
+    fail_msg: >-
+      Could not read the live cephadm SSH user for storage cluster
+      {{ bootwright_selected_storage_cluster.name }}
+      (`ceph cephadm get-user` exited {{ bootwright_ceph_live_ssh_user.rc | default('unknown') }}:
+      {{ bootwright_ceph_live_ssh_user.stderr | default('') | trim }}). Bootwright fails
+      closed rather than leave spec.ceph.cephadm.clusterSSH.user unreconciled: a cluster
+      still orchestrating over the previous identity would lose every host the moment root
+      login is revoked. Check `cephadm shell -- ceph -s` and `cephadm shell -- ceph mgr
+      module ls` on {{ bootwright_selected_storage_cluster.seedHost }}, then re-apply.
+
+- name: Set the cephadm SSH user
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - cephadm
+      - set-user
+      - "{{ bootwright_selected_storage_cluster.clusterSSH.user }}"
+  register: bootwright_ceph_set_ssh_user
+  changed_when: true
+  when: bootwright_ceph_live_ssh_user_name != bootwright_selected_storage_cluster.clusterSSH.user

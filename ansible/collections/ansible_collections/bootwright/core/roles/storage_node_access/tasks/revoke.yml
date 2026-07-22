@@ -1,0 +1,133 @@
+---
+- name: Probe the storage node root login drop-in
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} cat {{ bootwright_node_access.sshdDropInPath | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_drop_in_probe
+  changed_when: false
+  failed_when: false
+
+- name: Reconcile the storage node root login drop-in
+  when: >-
+    (bootwright_node_access_drop_in_probe.rc | default(1) | int) != 0
+    or (bootwright_node_access_drop_in_probe.stdout | default('') | trim)
+       != bootwright_node_access_sshd_drop_in_line
+  block:
+    - name: Stage the storage node root login drop-in
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} install -d -m 0755 -o root -g root
+          {{ bootwright_node_access.sshdDropInPath | dirname | quote }}
+          && printf '%s\n' {{ bootwright_node_access_sshd_drop_in_line | quote }}
+          | {{ bootwright_node_access_sudo }} tee {{ bootwright_node_access.sshdDropInPath | quote }} >/dev/null
+          && {{ bootwright_node_access_sudo }} chown root:root {{ bootwright_node_access.sshdDropInPath | quote }}
+          && {{ bootwright_node_access_sudo }} chmod 0644 {{ bootwright_node_access.sshdDropInPath | quote }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Validate the storage node sshd configuration before revoking root SSH
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} sshd -t
+      delegate_to: localhost
+      become: false
+      register: bootwright_node_access_sshd_check
+      changed_when: false
+
+    - name: Reload sshd on the storage node after revoking root SSH
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} systemctl reload sshd
+      delegate_to: localhost
+      become: false
+      changed_when: true
+  rescue:
+    - name: Remove the rejected storage node root login drop-in
+      ansible.builtin.command:
+        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+      vars:
+        bootwright_node_access_command: >-
+          {{ bootwright_node_access_sudo }} rm -f {{ bootwright_node_access.sshdDropInPath | quote }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Fail on a rejected storage node sshd configuration
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to revoke root SSH on Machine
+          {{ bootwright_storage_node_name | default(inventory_hostname) }}: sshd rejected
+          the configuration carrying {{ bootwright_node_access.sshdDropInPath }}, so the
+          drop-in was removed and sshd was never reloaded
+          ({{ (bootwright_node_access_sshd_check | default({})).stderr | default('sshd -t did not run') | trim }}).
+          Root login is unchanged and the node stays reachable. Fix the pre-existing sshd
+          configuration on the node (sshd -t names the offending file and line), then
+          re-apply.
+      delegate_to: localhost
+      become: false
+
+- name: Verify the storage node orchestration account after revoking root SSH
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_target_endpoint, 'sudo -n true'] }}"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_revoke_verify
+  changed_when: false
+  failed_when: false
+
+- name: Require the storage node orchestration account after revoking root SSH
+  ansible.builtin.assert:
+    that:
+      - (bootwright_node_access_revoke_verify.rc | default(1) | int) == 0
+    fail_msg: >-
+      Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} stopped
+      answering {{ bootwright_node_access.user }}@{{ bootwright_node_access.address }} with
+      passwordless sudo immediately after the sshd reload that revoked root login
+      (rc={{ bootwright_node_access_revoke_verify.rc | default('unknown') }}:
+      {{ bootwright_node_access_revoke_verify.stderr | default('') | trim }}). The install
+      identity's key is still authorized, so recover over
+      {{ bootwright_node_access.installUser }} or the node console: remove
+      {{ bootwright_node_access.sshdDropInPath }}, run sshd -t, reload sshd, and re-apply.
+  delegate_to: localhost
+  become: false
+
+- name: Probe the storage node install account authorized key
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_public_key | quote }}
+      {{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_install_key_probe
+  changed_when: false
+  failed_when: false
+
+- name: Deauthorize the machine access key for the storage node install account
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_deauthorize_script: >-
+      f={{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }};
+      t="$f{{ bootwright_node_access_temp_suffix }}";
+      grep -vxF {{ bootwright_node_access_public_key | quote }} "$f" > "$t" || true;
+      cat "$t" > "$f";
+      rm -f "$t"
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} sh -c {{ bootwright_node_access_deauthorize_script | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: (bootwright_node_access_install_key_probe.rc | default(1) | int) == 0

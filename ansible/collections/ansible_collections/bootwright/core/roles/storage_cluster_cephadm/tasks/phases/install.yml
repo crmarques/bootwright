@@ -57,7 +57,7 @@
 
 - name: Authorize cephadm cluster SSH key on storage node
   ansible.posix.authorized_key:
-    user: "{{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}"
+    user: "{{ bootwright_selected_storage_cluster.clusterSSH.user }}"
     key: "{{ lookup('ansible.builtin.file', bootwright_selected_storage_cluster.clusterSSH.publicKeyPath) }}"
     state: present
     manage_dir: true

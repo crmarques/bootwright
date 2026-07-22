@@ -1,0 +1,31 @@
+---
+- name: Probe the storage node access marker
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} cat {{ bootwright_node_access.markerPath | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_marker_probe
+  changed_when: false
+  failed_when: false
+
+- name: Stamp the storage node access marker
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} install -d -m 0755 -o root -g root
+      {{ bootwright_node_access.markerPath | dirname | quote }}
+      && printf '%s\n' {{ bootwright_node_access_marker_payload | quote }}
+      | {{ bootwright_node_access_sudo }} tee {{ bootwright_node_access.markerPath | quote }} >/dev/null
+      && {{ bootwright_node_access_sudo }} chown root:root {{ bootwright_node_access.markerPath | quote }}
+      && {{ bootwright_node_access_sudo }} chmod 0644 {{ bootwright_node_access.markerPath | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: >-
+    (bootwright_node_access_marker_probe.rc | default(1) | int) != 0
+    or (bootwright_node_access_marker_probe.stdout | default('') | trim)
+       != bootwright_node_access_marker_payload

@@ -1,0 +1,147 @@
+---
+- name: Probe the storage node orchestration account entry
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      getent passwd {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_account_probe
+  changed_when: false
+  failed_when: false
+
+- name: Create the storage node orchestration account
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} useradd --create-home --user-group
+      --shell /bin/bash --comment 'Bootwright Ceph orchestration'
+      {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: (bootwright_node_access_account_probe.rc | default(1) | int) != 0
+
+- name: Probe the storage node orchestration account password state
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} passwd --status {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_password_probe
+  changed_when: false
+  failed_when: false
+
+- name: Lock the storage node orchestration account password
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} passwd --lock {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: >-
+    (bootwright_node_access_password_probe.rc | default(1) | int) != 0
+    or not (bootwright_node_access_password_probe.stdout | default('') | regex_search('^\S+\s+(L|LK)\b'))
+
+- name: Probe the storage node orchestration account group membership
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      id -nG {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_groups_probe
+  changed_when: false
+  failed_when: false
+
+- name: Remove the storage node orchestration account from wheel
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} gpasswd --delete
+      {{ bootwright_node_access.user | quote }} wheel
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: "'wheel' in (bootwright_node_access_groups_probe.stdout | default('') | split())"
+
+- name: Probe sudo on the storage node
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, 'command -v sudo'] }}"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_sudo_probe
+  changed_when: false
+  failed_when: false
+
+- name: Install sudo on the storage node
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_install_script: >-
+      if command -v dnf >/dev/null 2>&1; then exec dnf -y install sudo;
+      else exec yum -y install sudo; fi
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} sh -c {{ bootwright_node_access_install_script | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: (bootwright_node_access_sudo_probe.rc | default(1) | int) != 0
+
+- name: Read the storage node orchestration account passwd entry
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      getent passwd {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_account_entry
+  changed_when: false
+  failed_when: false
+
+- name: Read the storage node install account passwd entry
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      getent passwd {{ bootwright_node_access.installUser | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_install_entry
+  changed_when: false
+  failed_when: false
+
+- name: Validate the storage node account passwd entries
+  ansible.builtin.assert:
+    that:
+      - (bootwright_node_access_account_entry.rc | default(1) | int) == 0
+      - (bootwright_node_access_account_entry.stdout | default('') | trim | split(':') | length) >= 7
+      - (bootwright_node_access_install_entry.rc | default(1) | int) == 0
+      - (bootwright_node_access_install_entry.stdout | default('') | trim | split(':') | length) >= 7
+    fail_msg: >-
+      Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} did not
+      return a usable passwd entry for {{ bootwright_node_access.user }} or
+      {{ bootwright_node_access.installUser }}, so Bootwright cannot locate the home
+      directories it must write authorized_keys into. Nothing was revoked. Check that
+      name resolution for both accounts works on the node (getent passwd), then re-apply.
+  delegate_to: localhost
+  become: false
+
+- name: Resolve the storage node account home directories
+  ansible.builtin.set_fact:
+    bootwright_node_access_home: "{{ (bootwright_node_access_account_entry.stdout | trim | split(':'))[5] }}"
+    bootwright_node_access_group: "{{ (bootwright_node_access_account_entry.stdout | trim | split(':'))[3] }}"
+    bootwright_node_access_install_home: "{{ (bootwright_node_access_install_entry.stdout | trim | split(':'))[5] }}"
+    bootwright_node_access_install_group: "{{ (bootwright_node_access_install_entry.stdout | trim | split(':'))[3] }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false

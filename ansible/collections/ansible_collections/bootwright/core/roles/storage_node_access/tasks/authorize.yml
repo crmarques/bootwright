@@ -1,0 +1,59 @@
+---
+- name: Ensure the storage node orchestration account SSH directory
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} install -d -m 0700
+      -o {{ bootwright_node_access.user | quote }} -g {{ bootwright_node_access_group | quote }}
+      {{ (bootwright_node_access_home ~ '/.ssh') | quote }}
+      && {{ bootwright_node_access_sudo }} touch
+      {{ (bootwright_node_access_home ~ '/.ssh/authorized_keys') | quote }}
+      && {{ bootwright_node_access_sudo }} chown
+      {{ bootwright_node_access.user | quote }}:{{ bootwright_node_access_group | quote }}
+      {{ (bootwright_node_access_home ~ '/.ssh/authorized_keys') | quote }}
+      && {{ bootwright_node_access_sudo }} chmod 0600
+      {{ (bootwright_node_access_home ~ '/.ssh/authorized_keys') | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Probe the storage node orchestration account authorized key
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_public_key | quote }}
+      {{ (bootwright_node_access_home ~ '/.ssh/authorized_keys') | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_key_probe
+  changed_when: false
+  failed_when: false
+
+- name: Authorize the machine access key for the storage node orchestration account
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      printf '%s\n' {{ bootwright_node_access_public_key | quote }}
+      | {{ bootwright_node_access_sudo }} tee -a
+      {{ (bootwright_node_access_home ~ '/.ssh/authorized_keys') | quote }} >/dev/null
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: (bootwright_node_access_key_probe.rc | default(1) | int) != 0
+
+- name: Restore SELinux labels on the storage node orchestration account SSH directory
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      command -v restorecon >/dev/null 2>&1
+      && {{ bootwright_node_access_sudo }} restorecon -R
+      {{ (bootwright_node_access_home ~ '/.ssh') | quote }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  when: (bootwright_node_access_key_probe.rc | default(1) | int) != 0

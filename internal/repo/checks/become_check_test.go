@@ -42,7 +42,7 @@ func TestRootTargetPlaybooksRunBecomeCheckFirst(t *testing.T) {
 		path  string
 		hosts string
 	}{
-		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml", "bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml", "bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_ocp_hosts:bootwright_boot_hosts:bootwright_storage_hosts"},
 		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_container_cluster_apply.yml", "bootwright_ocp_hosts:bootwright_boot_hosts"},
 		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_apply.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_machine_task_hosts"},
 		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},

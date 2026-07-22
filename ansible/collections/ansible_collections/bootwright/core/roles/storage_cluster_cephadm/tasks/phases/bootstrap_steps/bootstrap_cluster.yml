@@ -44,11 +44,7 @@
           if bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
           else []
         )
-        + (
-          ['--ssh-user', bootwright_selected_storage_cluster.clusterSSH.user]
-          if bootwright_selected_storage_cluster.clusterSSH.user | default('') | length > 0
-          else []
-        )
+        + ['--ssh-user', bootwright_selected_storage_cluster.clusterSSH.user]
         + (
           ['--registry-json', bootwright_ceph_remote_registry_json]
           if bootwright_ceph_registry_credentials is defined
