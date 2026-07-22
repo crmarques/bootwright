@@ -21,10 +21,21 @@ optional input resource selection, and secret references, never secret bytes.
 
 Rules:
 
-- `baseDomain` is required. It is the fleet DNS base domain rendered into each
-  cluster's `install-config.yaml` `baseDomain`, and `Environment` is its single
-  owner. It also seeds each `Machine`'s implicit `fqdn` address and the
-  composed node FQDNs (see the `Machine` and cluster host rules).
+- `domains` owns the fleet DNS zones, one key per identity class, and
+  `Environment` is their single owner (ADR 0018). `domains.base` is the only
+  required key and is the default the others fall back to: `domains.machines`
+  and `domains.clusters` default to `domains.base`, and
+  `domains.containerClusters` and `domains.storageClusters` default to
+  `domains.clusters`. Each `Machine`'s implicit `fqdn` composes from
+  `domains.machines`, container-cluster node FQDNs and each cluster's
+  `install-config.yaml` `baseDomain` from `domains.containerClusters`, and
+  storage-cluster node FQDNs from `domains.storageClusters` (see the `Machine`
+  and cluster host rules). `spec.domains` is a DNS object, distinct from the
+  `spec.containerClusters[]` / `spec.storageClusters[]` selection lists below.
+  The single top-level `baseDomain` field is the predecessor of this object —
+  `domains.base` is its successor, and `baseDomain: x` is equivalent to
+  `domains: {base: x}` with every other key defaulted; the `domains` model is
+  the target the code migrates to (BACKLOG B-019).
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.
@@ -277,8 +288,9 @@ Rules:
 - `spec.addresses[]` owns durable named addresses used by SSH and shared
   service endpoints.
 - `spec.addresses[]` implicitly contains `{name: fqdn, address:
-  <metadata.name>.<baseDomain>}` when the `Environment` declares a
-  `baseDomain` and the machine authors no entry named `fqdn`. An authored
+  <metadata.name>.<domains.machines>}` when the `Environment` declares a
+  domain (`domains.machines`, which defaults to `domains.base`) and the machine
+  authors no entry named `fqdn`. An authored
   `fqdn` overrides the default verbatim; it must be a DNS subdomain (it
   may live in a foreign zone) and must be unique across machines.
   `metadata.name` keeps its dot-free DNS-label validation.
@@ -653,7 +665,9 @@ Rules:
 - `spec.hosts[].hostname` names the node, independent of the machine name.
   Omitted, it defaults to `node<NN>` (`node01`, `node02`, … in `hosts` list
   order, zero-padded to two digits). A bare label composes to
-  `<hostname>.<cluster>.<baseDomain>`; a dotted value is an explicit FQDN used
+  `<hostname>.<cluster>.<domains.containerClusters>` (the container-cluster
+  zone; `domains.containerClusters` defaults to `domains.clusters`, which
+  defaults to `domains.base`); a dotted value is an explicit FQDN used
   verbatim. The composed FQDN is the cluster-visible node identity, and its
   DNS record resolves through the bound machine's `fqdn` (managed
   resolution renders a `cname`; provided resolution requires the operator's
@@ -938,8 +952,10 @@ Rules:
   `hostname` names the node, independent of the machine name, and is the
   rendered cephadm host-spec hostname. Omitted, it defaults to `node<NN>`
   (`node01`, `node02`, … in `hosts` list order, zero-padded to two digits); a
-  bare label composes to `<hostname>.<cluster>.<baseDomain>` (kept bare when
-  the `Environment` has no `baseDomain`); a dotted value is an explicit FQDN
+  bare label composes to `<hostname>.<cluster>.<domains.storageClusters>` (the
+  storage-cluster zone; `domains.storageClusters` defaults to
+  `domains.clusters`, which defaults to `domains.base`; kept bare when the
+  `Environment` declares no domain); a dotted value is an explicit FQDN
   used verbatim. It is rendered
   verbatim as the cephadm host identity and must equal the host's real OS
   hostname — self-fulfilling for Bootwright-installed machines (the installer

@@ -174,17 +174,22 @@ needs no SSH address or key.
 
 #### The `fqdn` address
 
-When the `Environment` declares a `baseDomain`, every `Machine`'s
+When the `Environment` declares a domain, every `Machine`'s
 `spec.addresses[]` implicitly contains
 
 ```yaml
 - name: fqdn
-  address: <metadata.name>.<baseDomain>
+  address: <metadata.name>.<machine domain>
 ```
 
+The machine domain is the `Environment`'s machine zone: today the single
+`baseDomain`, and under the planned domain model (ADR 0018) the dedicated
+`domains.machines` key (which defaults to `domains.base`) — see
+[Environment → Domain model](environment.md#domain-model).
+
 A declared entry named `fqdn` overrides the default verbatim — it must be a
-DNS subdomain (it may live in a zone outside `baseDomain`, e.g. a corporate
-`srv4009.corp.example.com`) and must be unique across machines.
+DNS subdomain (it may live in a zone outside the machine domain, e.g. a
+corporate `srv4009.corp.example.com`) and must be unique across machines.
 `metadata.name` itself stays a dot-free DNS label.
 
 `fqdn` is the machine's canonical connection address: whenever Bootwright

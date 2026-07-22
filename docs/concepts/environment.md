@@ -34,7 +34,7 @@ means there is no default — an omitted optional field stays unset.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.baseDomain` | Yes | — | Fleet DNS base domain rendered into selected container clusters. Also seeds each machine's implicit `fqdn` address and the composed node FQDNs; see [Machines](machines.md#the-dnsentry-address). |
+| `spec.baseDomain` | Yes | — | Fleet DNS base domain rendered into selected container clusters. Also seeds each machine's implicit `fqdn` address and the composed node FQDNs; see [Machines](machines.md#the-dnsentry-address). The planned per-class domain model (ADR 0018) replaces this single field with a `spec.domains` object — see [Domain model](#domain-model). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
 | `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |
@@ -53,6 +53,52 @@ means there is no default — an omitted optional field stays unset.
 | `spec.registries` | No | — | Disconnected mirror and image digest source settings. See [Registries](#registries). |
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
 | `spec.componentImages` | No | — | Managed service image pins by component type and implementation. See [Component images](#component-images). |
+
+## Domain model
+
+Today the `Environment` carries one fleet DNS zone, `spec.baseDomain`, and
+every machine `fqdn` and cluster node FQDN composes under it.
+
+The planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md))
+replaces that single field with a `spec.domains` object that names a zone per
+identity class, so machines can live in a corporate zone while the clusters
+Bootwright builds live in a separate cloud zone (and container and storage
+clusters in distinct subzones):
+
+```yaml
+spec:
+  domains:
+    base: example.net              # required; the default for the others
+    machines: corp.example.net     # machine fqdn zone
+    clusters: cloud.example.net    # cluster zone umbrella
+    containerClusters: ocp.cloud.example.net
+    storageClusters: ceph.cloud.example.net
+```
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `spec.domains.base` | Yes | — | Fleet base zone; the fallback every other key defaults to. |
+| `spec.domains.machines` | No | `domains.base` | Zone for machine `fqdn` names. |
+| `spec.domains.clusters` | No | `domains.base` | Umbrella zone the container/storage cluster keys default from. |
+| `spec.domains.containerClusters` | No | `domains.clusters` | Zone for container clusters: node FQDNs and each cluster's `install-config.yaml` `baseDomain`. |
+| `spec.domains.storageClusters` | No | `domains.clusters` | Zone for storage clusters: Ceph node FQDNs. |
+
+Defaulting chain: `machines` → `base`; `clusters` → `base`;
+`containerClusters` → `clusters`; `storageClusters` → `clusters`. An
+`Environment` that sets only `base` behaves exactly like a single `baseDomain`.
+
+Composition under the model:
+
+- **Machine** — `fqdn` defaults to `<machine name>.<domains.machines>`.
+- **Container cluster** — the cluster zone is
+  `<cluster name>.<domains.containerClusters>`; a node whose `hostname` is a
+  bare label resolves to `<hostname>.<cluster name>.<domains.containerClusters>`.
+- **Storage cluster** — the cluster zone is
+  `<cluster name>.<domains.storageClusters>`; a node whose `hostname` is a bare
+  label resolves to `<hostname>.<cluster name>.<domains.storageClusters>`.
+
+`spec.domains` (DNS zones) is distinct from the `spec.containerClusters[]` /
+`spec.storageClusters[]` selection lists (cluster membership) above.
 
 ## Artifact Server Default
 

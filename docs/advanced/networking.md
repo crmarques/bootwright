@@ -309,7 +309,9 @@ NMState.
 A managed name-resolution (dnsmasq) component publishes, for every machine it
 serves, a `host-record` for the machine's
 [`fqdn` name](../concepts/machines.md#the-dnsentry-address)
-(`<machineName>.<baseDomain>` unless overridden) targeting the machine's
+(`<machineName>.<machine domain>` unless overridden — the machine domain is
+`baseDomain` today, `domains.machines` under [ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md))
+targeting the machine's
 `access.ssh.addressRef` IP, and a `cname` from each cluster node FQDN to the
 bound machine's `fqdn`. The `fqdn` host-record is published even when an
 operator-declared `fqdn` lives in a foreign zone: the managed resolver
@@ -334,7 +336,9 @@ apply does — and point at the apply command.
 ### Cluster records
 
 Managed name-resolution services render records for `api`, `api-int`, and the
-cluster `*.apps.<cluster>.<baseDomain>` wildcard for each consuming cluster.
+cluster `*.apps.<cluster>.<baseDomain>` wildcard for each consuming cluster
+(the container-cluster zone `domains.containerClusters` under
+[ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)).
 Console, OAuth, and other `*.apps` routes are already covered by that wildcard —
 do not re-author them. Use `additionalIngressHosts[]` (on the environment entry
 or the managed `InfraComponent.spec.nameResolution`) only for hostnames the
