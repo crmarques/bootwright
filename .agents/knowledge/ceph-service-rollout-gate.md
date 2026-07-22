@@ -25,7 +25,10 @@ closed with the per-service running/declared counts, `ceph orch ps`, and
 `ceph log last 100 cephadm`. OSD services are excluded because
 `osd_readiness.yml` already gates them against the CRUSH map, which is stricter
 than a daemon count. Tunable through `bootwright_ceph_service_readiness_retries`
-(default 60) and `bootwright_ceph_service_readiness_delay` (default 10).
+(default 90) and `bootwright_ceph_service_readiness_delay` (default 10) — 15
+minutes, deliberately more generous than the OSD gate, because a first install
+pulls the grafana/prometheus/alertmanager/haproxy/keepalived images on every
+placement host and a false failure costs a whole re-apply.
 
 **Constraint:** the poll is expressed as a pure Jinja expression, repeated
 verbatim in `until` and in the `set_fact` that records the verdict — `until`

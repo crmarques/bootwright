@@ -13,7 +13,7 @@
   register: bootwright_ceph_service_ls
   changed_when: false
   failed_when: false
-  retries: "{{ bootwright_ceph_service_readiness_retries | default(60) | int }}"
+  retries: "{{ bootwright_ceph_service_readiness_retries | default(90) | int }}"
   delay: "{{ bootwright_ceph_service_readiness_delay | default(10) | int }}"
   until: >-
     (
@@ -45,7 +45,7 @@
     )
     or
     ((bootwright_ceph_service_ls.attempts | default(1) | int)
-     >= (bootwright_ceph_service_readiness_retries | default(60) | int))
+     >= (bootwright_ceph_service_readiness_retries | default(90) | int))
 
 - name: Evaluate whether declared Ceph services became ready
   ansible.builtin.set_fact:
@@ -125,7 +125,7 @@
     fail_msg: >-
       Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not roll out every
       declared service after
-      {{ bootwright_ceph_service_readiness_retries | default(60) }} attempts: cephadm
+      {{ bootwright_ceph_service_readiness_retries | default(90) }} attempts: cephadm
       accepted the service specs but some daemons never reached the running state.
       Declared services and their running/declared daemon counts:
       {% for service in bootwright_ceph_service_short %}
