@@ -15,6 +15,7 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	ops = append(ops, cephMgrAndLoggingOperations(cluster)...)
 	ops = append(ops, cephObjectGatewayOperations(state, cluster)...)
 	ops = append(ops, nfsExportOperations(state, cluster)...)
+	ops = append(ops, cephStretchInternalPoolOperations(cluster)...)
 	return map[string]any{
 		"apiVersion": "bootwright.io/v1alpha1",
 		"kind":       "StorageOperations",

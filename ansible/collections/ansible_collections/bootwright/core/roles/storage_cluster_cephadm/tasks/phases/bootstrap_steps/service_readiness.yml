@@ -1,0 +1,147 @@
+---
+- name: Wait for declared Ceph services to reach their daemon count
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ls
+      - --format
+      - json
+  register: bootwright_ceph_service_ls
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_service_readiness_retries | default(60) | int }}"
+  delay: "{{ bootwright_ceph_service_readiness_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_ceph_service_ls.rc == 0
+      and (
+        (
+          (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+          | rejectattr('service_type', 'equalto', 'osd')
+          | rejectattr('unmanaged', 'defined')
+          | map(attribute='status.running', default=0)
+          | list
+        )
+        | zip(
+            (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+            | rejectattr('service_type', 'equalto', 'osd')
+            | rejectattr('unmanaged', 'defined')
+            | map(attribute='status.size', default=0)
+            | list
+          )
+        | map('max')
+        | list
+      ) == (
+        (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+        | rejectattr('service_type', 'equalto', 'osd')
+        | rejectattr('unmanaged', 'defined')
+        | map(attribute='status.running', default=0)
+        | list
+      )
+    )
+    or
+    ((bootwright_ceph_service_ls.attempts | default(1) | int)
+     >= (bootwright_ceph_service_readiness_retries | default(60) | int))
+
+- name: Evaluate whether declared Ceph services became ready
+  ansible.builtin.set_fact:
+    bootwright_ceph_services_ready: >-
+      {{
+        (bootwright_ceph_service_ls.rc | default(1) | int) == 0
+        and (
+          (
+            (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+            | rejectattr('service_type', 'equalto', 'osd')
+            | rejectattr('unmanaged', 'defined')
+            | map(attribute='status.running', default=0)
+            | list
+          )
+          | zip(
+              (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+              | rejectattr('service_type', 'equalto', 'osd')
+              | rejectattr('unmanaged', 'defined')
+              | map(attribute='status.size', default=0)
+              | list
+            )
+          | map('max')
+          | list
+        ) == (
+          (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+          | rejectattr('service_type', 'equalto', 'osd')
+          | rejectattr('unmanaged', 'defined')
+          | map(attribute='status.running', default=0)
+          | list
+        )
+      }}
+
+- name: Collect Ceph daemon placement when declared services did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ps
+      - --format
+      - yaml
+  register: bootwright_ceph_service_daemon_ps
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_ceph_services_ready | default(false) | bool)
+
+- name: Collect recent cephadm events when declared services did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - log
+      - last
+      - "100"
+      - cephadm
+  register: bootwright_ceph_service_cephadm_log
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_ceph_services_ready | default(false) | bool)
+
+- name: Assert declared Ceph services reached their daemon count
+  vars:
+    bootwright_ceph_service_short: >-
+      {{
+        (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
+        | rejectattr('service_type', 'equalto', 'osd')
+        | rejectattr('unmanaged', 'defined')
+        | list
+      }}
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_services_ready | default(false) | bool
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not roll out every
+      declared service after
+      {{ bootwright_ceph_service_readiness_retries | default(60) }} attempts: cephadm
+      accepted the service specs but some daemons never reached the running state.
+      Declared services and their running/declared daemon counts:
+      {% for service in bootwright_ceph_service_short %}
+      {{ service.service_name | default(service.service_type) }}
+      ({{ service.status.running | default(0) }}/{{ service.status.size | default(0) }})
+      {% endfor %}
+      A service stuck at 0 running is almost always a container-image pull failure on the
+      placement hosts (registry, mirror, or proxy) or a placement that resolves to no
+      eligible host; a service stuck partway is usually a port conflict or a failed
+      keepalived/haproxy VIP binding. This apply is failing closed rather than recording
+      success against a cluster whose declared services are still deploying.
+      Ceph daemon placement (ceph orch ps):
+      {{ (bootwright_ceph_service_daemon_ps.stdout | default('') | trim)
+      or ('(ceph orch ps failed, rc=' ~ (bootwright_ceph_service_daemon_ps.rc | default('unknown')) ~ ')'
+      if (bootwright_ceph_service_daemon_ps.rc | default(1) | int) != 0
+      else '(no daemons are deployed)') }}
+      Recent cephadm events (ceph log last 100 cephadm):
+      {{ (bootwright_ceph_service_cephadm_log.stdout | default('') | trim)
+      or '(cephadm event log unavailable)' }}

@@ -1,6 +1,16 @@
 package topology
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"regexp"
+	"strings"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+var (
+	internalPoolNames      = []string{".mgr", ".nfs", "device_health_metrics"}
+	internalPoolSubstrings = []string{".rgw."}
+)
 
 const (
 	StretchReplicatedPoolSize    = 4
@@ -18,6 +28,32 @@ const (
 
 	CephDashboardDefaultUser = "admin"
 )
+
+func IsInternalPool(name string) bool {
+	for _, item := range internalPoolNames {
+		if name == item {
+			return true
+		}
+	}
+	for _, item := range internalPoolSubstrings {
+		if strings.Contains(name, item) {
+			return true
+		}
+	}
+	return false
+}
+
+func InternalPoolPattern() string {
+	quoted := make([]string, 0, len(internalPoolNames))
+	for _, name := range internalPoolNames {
+		quoted = append(quoted, regexp.QuoteMeta(name))
+	}
+	parts := []string{"^(" + strings.Join(quoted, "|") + ")$"}
+	for _, item := range internalPoolSubstrings {
+		parts = append(parts, regexp.QuoteMeta(item))
+	}
+	return strings.Join(parts, "|")
+}
 
 func EffectivePoolReplicas(state v1alpha1.State, cluster v1alpha1.StorageCluster, pool v1alpha1.StoragePool) v1alpha1.StorageCephPoolReplicas {
 	replicas := pool.Spec.Ceph.Replicated

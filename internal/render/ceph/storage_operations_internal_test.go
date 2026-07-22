@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func TestCephFSStandbySubvolumeAndMDSServiceSpecRender(t *testing.T) {
@@ -1307,5 +1308,96 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 	}
 	if !reflect.DeepEqual(modules, want) {
 		t.Fatalf("mgr module ops = %v, want %v", modules, want)
+	}
+}
+
+func TestStretchInternalPoolsReconcileRendersLast(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					RuleName:      "stretch-rule",
+				},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "a", Site: "dc1", Roles: []string{"mon"}},
+					{Name: "b", Site: "dc2", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	if len(ops) == 0 {
+		t.Fatal("no operations rendered")
+	}
+	last := ops[len(ops)-1]
+	if name, _ := last["name"].(string); name != "reconcile-stretch-internal-pools" {
+		t.Fatalf("internal-pool reconcile must render last, got %q", name)
+	}
+	if phase, _ := last["phase"].(string); phase != "late-topology" {
+		t.Fatalf("internal-pool reconcile phase = %q, want late-topology", phase)
+	}
+	if cmd, _ := last["command"].([]string); len(cmd) != 0 {
+		t.Fatalf("internal-pool reconcile must be structured (no argv), got %v", cmd)
+	}
+	idem, _ := last["idempotency"].(map[string]any)
+	if idem["kind"] != "stretch-internal-pools" || idem["name"] != "stretch-rule" {
+		t.Fatalf("internal-pool reconcile idempotency = %v", idem)
+	}
+	structural, _ := last["structural"].(map[string]any)
+	if structural["ruleName"] != "stretch-rule" {
+		t.Fatalf("internal-pool reconcile ruleName = %v", structural["ruleName"])
+	}
+	if structural["size"] != topology.StretchReplicatedPoolSize || structural["minSize"] != topology.StretchReplicatedPoolMinSize {
+		t.Fatalf("internal-pool reconcile must carry the stretch replication constants, got %v", structural)
+	}
+	pattern, _ := structural["poolPattern"].(string)
+	if pattern != topology.InternalPoolPattern() {
+		t.Fatalf("internal-pool reconcile poolPattern = %q", pattern)
+	}
+}
+
+func TestStretchInternalPoolsReconcileRendersWithTiebreaker(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					RuleName:      "stretch-rule",
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "arbiter"},
+				},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "a", Site: "dc1", Roles: []string{"mon"}},
+					{Name: "arbiter", Site: "dc3", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
+		if name, _ := op["name"].(string); name == "reconcile-stretch-internal-pools" {
+			return
+		}
+	}
+	t.Fatal("pools created after enable_stretch_mode are not re-homed by it, so the reconcile must render with a tiebreaker too")
+}
+
+func TestNonStretchClusterOmitsInternalPoolReconcile(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Nodes: []v1alpha1.StorageCephNode{{Name: "a", Roles: []string{"mon"}}},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	for _, op := range CephOperations(state, cluster)["operations"].([]map[string]any) {
+		if name, _ := op["name"].(string); name == "reconcile-stretch-internal-pools" {
+			t.Fatal("a flat cluster has no stretch rule to place internal pools on")
+		}
 	}
 }

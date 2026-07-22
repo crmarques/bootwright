@@ -6,5 +6,7 @@
     loop_var: bootwright_ceph_op
     label: "{{ bootwright_ceph_op.name | default('<unnamed>') }}"
   when:
-    - bootwright_ceph_op.command | default([]) | length > 0
-    - bootwright_ceph_op.phase | default('storage') == 'object-gateway'
+    - >-
+      (bootwright_ceph_op.command | default([]) | length > 0)
+      or (bootwright_ceph_op.idempotency.kind | default('') == 'stretch-internal-pools')
+    - bootwright_ceph_op.phase | default('storage') in ['object-gateway', 'late-topology']

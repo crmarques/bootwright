@@ -163,6 +163,106 @@
       ansible.builtin.set_fact:
         bootwright_ceph_op_skip: true
 
+- name: List live Ceph pools for the stretch internal-pool reconcile
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - osd
+      - pool
+      - ls
+      - detail
+      - --format
+      - json
+  register: bootwright_ceph_stretch_pool_detail
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_op_idempotency_kind == 'stretch-internal-pools'
+
+- name: Place Ceph internal pools on the stretch placement
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'stretch-internal-pools'
+    - not bootwright_ceph_op_skip | bool
+  block:
+    - name: Select the Ceph internal pools nobody declares
+      ansible.builtin.set_fact:
+        bootwright_ceph_stretch_internal_pools: >-
+          {{
+            (bootwright_ceph_stretch_pool_detail.stdout | default('') | trim | default('[]', true) | from_json)
+            | selectattr('type', 'equalto', 1)
+            | map(attribute='pool_name')
+            | select('search', bootwright_ceph_op.structural.poolPattern)
+            | list
+          }}
+
+    - name: Report the Ceph internal pools left off the stretch placement
+      ansible.builtin.debug:
+        msg: >-
+          No Ceph internal pool matches {{ bootwright_ceph_op.structural.poolPattern }} yet on
+          {{ bootwright_selected_storage_cluster.name }}: nothing to place on
+          {{ bootwright_ceph_op.structural.ruleName }}.
+      when: bootwright_ceph_stretch_internal_pools | length == 0
+
+    - name: Set the stretch CRUSH rule on Ceph internal pools
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - osd
+          - pool
+          - set
+          - "{{ bootwright_ceph_stretch_internal_pool }}"
+          - crush_rule
+          - "{{ bootwright_ceph_op.structural.ruleName }}"
+      loop: "{{ bootwright_ceph_stretch_internal_pools }}"
+      loop_control:
+        loop_var: bootwright_ceph_stretch_internal_pool
+      changed_when: true
+
+    - name: Set the stretch replica size on Ceph internal pools
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - osd
+          - pool
+          - set
+          - "{{ bootwright_ceph_stretch_internal_pool }}"
+          - size
+          - "{{ bootwright_ceph_op.structural.size }}"
+      loop: "{{ bootwright_ceph_stretch_internal_pools }}"
+      loop_control:
+        loop_var: bootwright_ceph_stretch_internal_pool
+      changed_when: true
+
+    - name: Set the stretch minimum replica size on Ceph internal pools
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - osd
+          - pool
+          - set
+          - "{{ bootwright_ceph_stretch_internal_pool }}"
+          - min_size
+          - "{{ bootwright_ceph_op.structural.minSize }}"
+      loop: "{{ bootwright_ceph_stretch_internal_pools }}"
+      loop_control:
+        loop_var: bootwright_ceph_stretch_internal_pool
+      changed_when: true
+
+    - name: Mark the stretch internal-pool operation as handled
+      ansible.builtin.set_fact:
+        bootwright_ceph_op_skip: true
+
 - name: Check existing erasure-code profile
   ansible.builtin.command:
     argv:

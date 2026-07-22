@@ -48,9 +48,14 @@ func TestCephApplyScriptReproducesEveryOperation(t *testing.T) {
 		}
 		if len(cmd) == 0 {
 			idem, _ := op["idempotency"].(map[string]any)
-			if kind, _ := idem["kind"].(string); kind == "stretch-crush-rule" {
+			kind, _ := idem["kind"].(string)
+			if kind == "stretch-crush-rule" {
 				if !strings.Contains(script, "bw_stretch_crush_rule") {
 					t.Fatalf("stretch rule op %q not emitted as bw_stretch_crush_rule", name)
+				}
+			} else if kind == "stretch-internal-pools" {
+				if !strings.Contains(script, "bw_stretch_internal_pools") {
+					t.Fatalf("stretch internal-pool op %q not emitted as bw_stretch_internal_pools", name)
 				}
 			} else if !strings.Contains(script, "[todo]") {
 				t.Fatalf("argv-less op %q missing stub in apply.sh", name)

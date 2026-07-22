@@ -20,6 +20,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_coverage_report.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml",
 	}
 	for _, path := range paths {
@@ -219,6 +220,7 @@ func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 		"bootwright_ceph_op_idempotency_name",
 		"bootwright_ceph_op_idempotency_kind == 'ceph-pool'",
 		"bootwright_ceph_op_idempotency_kind == 'rgw-user'",
+		"bootwright_ceph_op_idempotency_kind == 'stretch-internal-pools'",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("storage operation runner missing explicit idempotency fragment %q", want)
@@ -232,6 +234,48 @@ func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("storage operation runner must not infer idempotency from %q", forbidden)
 		}
+	}
+}
+
+func TestStorageStretchInternalPoolsReconcileOffDeclaredPools(t *testing.T) {
+	body := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml")
+	reconcile := body[findAnsibleTask(t, body, "Place Ceph internal pools on the stretch placement")]
+	if got := fmt.Sprint(reconcile["when"]); !strings.Contains(got, "stretch-internal-pools") {
+		t.Fatalf("internal-pool reconcile must be gated on its idempotency kind, got when=%v", reconcile["when"])
+	}
+	tasks := nestedAnsibleTasks(t, reconcile, "block")
+
+	selectIdx := findAnsibleTask(t, tasks, "Select the Ceph internal pools nobody declares")
+	selectFact, ok := tasks[selectIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("internal-pool selection must be a set_fact, got %v", tasks[selectIdx])
+	}
+	selection := fmt.Sprint(selectFact["bootwright_ceph_stretch_internal_pools"])
+	if !strings.Contains(selection, "structural.poolPattern") {
+		t.Fatalf("internal-pool selection must use the rendered pattern rather than a duplicated name list, got %v", selection)
+	}
+	if !strings.Contains(selection, "selectattr('type', 'equalto', 1)") {
+		t.Fatalf("internal-pool selection must skip erasure-coded pools, whose size is set by the profile, got %v", selection)
+	}
+	if !strings.Contains(selection, "default('[]', true)") {
+		t.Fatalf("internal-pool selection parses pool detail eagerly, so from_json must be guarded against an empty (rc!=0) stdout, got %v", selection)
+	}
+	for name, setting := range map[string]string{
+		"Set the stretch CRUSH rule on Ceph internal pools":           "crush_rule",
+		"Set the stretch replica size on Ceph internal pools":         "size",
+		"Set the stretch minimum replica size on Ceph internal pools": "min_size",
+	} {
+		task := tasks[findAnsibleTask(t, tasks, name)]
+		if got := fmt.Sprint(task["ansible.builtin.command"]); !strings.Contains(got, setting) {
+			t.Fatalf("%q must set %s, got %v", name, setting, got)
+		}
+		if got := fmt.Sprint(task["loop"]); !strings.Contains(got, "bootwright_ceph_stretch_internal_pools") {
+			t.Fatalf("%q must iterate the selected internal pools, got loop=%v", name, task["loop"])
+		}
+	}
+	handled := tasks[findAnsibleTask(t, tasks, "Mark the stretch internal-pool operation as handled")]
+	if got := fmt.Sprint(handled["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_op_skip") {
+		t.Fatalf("the argv-less internal-pool operation must mark itself handled so execute.yml does not run an empty command, got %v", got)
 	}
 }
 
@@ -1410,8 +1454,31 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(block[topologyIdx]["when"]); !strings.Contains(got, "topology") || !strings.Contains(got, "storage") {
 		t.Fatalf("topology/storage operation loop has unexpected when=%v", block[topologyIdx]["when"])
 	}
-	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "object-gateway") {
+	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "object-gateway") || !strings.Contains(got, "late-topology") {
 		t.Fatalf("late operation loop has unexpected when=%v", block[lateOpsIdx]["when"])
+	}
+	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "stretch-internal-pools") {
+		t.Fatalf("late operation loop must admit the argv-less internal-pool reconcile, got when=%v", block[lateOpsIdx]["when"])
+	}
+	serviceReadyIdx := findAnsibleTask(t, block, "Wait for declared Ceph services to reach their daemon count")
+	serviceAssertIdx := findAnsibleTask(t, block, "Assert declared Ceph services reached their daemon count")
+	if !(lateIdx < serviceReadyIdx && serviceReadyIdx < serviceAssertIdx && serviceAssertIdx < lateOpsIdx) {
+		t.Fatalf("declared services must be proven deployed after the late specs and before the late operations read what their daemons create")
+	}
+	serviceReady := block[serviceReadyIdx]
+	for _, want := range []string{"status.running", "status.size", "map('max')", "rejectattr('service_type', 'equalto', 'osd')", "rejectattr('unmanaged', 'defined')", "bootwright_ceph_service_ls.attempts", "bootwright_ceph_service_readiness_retries"} {
+		if got := fmt.Sprint(serviceReady["until"]); !strings.Contains(got, want) {
+			t.Fatalf("service readiness wait must contain %q, got until=%v", want, serviceReady["until"])
+		}
+	}
+	serviceAssert, ok := block[serviceAssertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(serviceAssert["that"]), "bootwright_ceph_services_ready") {
+		t.Fatalf("service readiness must fail closed on the recorded verdict, got %v", block[serviceAssertIdx])
+	}
+	for _, want := range []string{"ceph orch ps", "cephadm"} {
+		if got := fmt.Sprint(serviceAssert["fail_msg"]); !strings.Contains(got, want) {
+			t.Fatalf("service readiness failure must report %q diagnostics, got fail_msg=%v", want, serviceAssert["fail_msg"])
+		}
 	}
 	finalHealthIdx := findAnsibleTask(t, block, "Wait for final managed Ceph health")
 	finalHealthAssertIdx := findAnsibleTask(t, block, "Refuse to complete an unreachable or unhealthy Ceph cluster")
@@ -1467,6 +1534,7 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 		base+"topology_operations.yml",
 		base+"late_service_specs.yml",
 		base+"management_services.yml",
+		base+"service_readiness.yml",
 		base+"late_operations.yml",
 		base+"result_and_ownership.yml",
 		base+"cleanup.yml",

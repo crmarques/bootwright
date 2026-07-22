@@ -43,6 +43,21 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 	return ops
 }
 
+func cephStretchInternalPoolOperations(cluster v1alpha1.StorageCluster) []map[string]any {
+	stretch := cluster.Spec.Ceph.Topology.Stretch
+	if stretch == nil || stretch.RuleName == "" {
+		return nil
+	}
+	op := operationWithIdempotency("late-topology", "reconcile-stretch-internal-pools", "stretch-internal-pools", stretch.RuleName)
+	op["structural"] = map[string]any{
+		"ruleName":    stretch.RuleName,
+		"size":        topology.StretchReplicatedPoolSize,
+		"minSize":     topology.StretchReplicatedPoolMinSize,
+		"poolPattern": topology.InternalPoolPattern(),
+	}
+	return []map[string]any{op}
+}
+
 func cephCrushHostLocationOperations(cluster v1alpha1.StorageCluster, stretch *v1alpha1.StorageCephStretch) []map[string]any {
 	mode, _, _ := topology.OSDReadinessExpectation(cluster)
 	if mode == "skip" {

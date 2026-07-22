@@ -582,11 +582,7 @@ func poolTypeString(erasure bool) string {
 }
 
 func isInternalPool(name string) bool {
-	switch name {
-	case ".mgr", "device_health_metrics", ".nfs":
-		return true
-	}
-	return strings.Contains(name, ".rgw.")
+	return topology.IsInternalPool(name)
 }
 
 func joinSorted(items []string) string {

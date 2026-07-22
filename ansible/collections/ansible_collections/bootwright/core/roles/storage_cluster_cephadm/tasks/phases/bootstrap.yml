@@ -75,6 +75,9 @@
     - name: Apply secret-bearing management services
       ansible.builtin.include_tasks: bootstrap_steps/management_services.yml
 
+    - name: Wait for declared Ceph services to be deployed
+      ansible.builtin.include_tasks: bootstrap_steps/service_readiness.yml
+
     - name: Run Ceph late operations
       ansible.builtin.include_tasks: bootstrap_steps/late_operations.yml
 

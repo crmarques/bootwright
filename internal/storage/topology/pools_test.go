@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -163,5 +164,29 @@ func TestStoragePoolCRUSHRule(t *testing.T) {
 	}
 	if got := StoragePoolCRUSHRule(state, flat, pool("")); got != "" {
 		t.Fatalf("empty ref on a non-stretch cluster should resolve to no rule: got %q", got)
+	}
+}
+
+func TestInternalPoolPatternMatchesIsInternalPool(t *testing.T) {
+	pattern := regexp.MustCompile(InternalPoolPattern())
+
+	internal := []string{".mgr", ".nfs", "device_health_metrics", ".rgw.root", "default.rgw.log", "default.rgw.control", "default.rgw.meta", "zone-a.rgw.buckets.index"}
+	declared := []string{"odf-rbd", "odf-cephfs-data", "odf-cephfs-metadata", "odf-rgw", "rgw-data", "mgr-pool", "nfs"}
+
+	for _, name := range internal {
+		if !IsInternalPool(name) {
+			t.Fatalf("IsInternalPool(%q) = false, want true", name)
+		}
+		if !pattern.MatchString(name) {
+			t.Fatalf("InternalPoolPattern does not match internal pool %q", name)
+		}
+	}
+	for _, name := range declared {
+		if IsInternalPool(name) {
+			t.Fatalf("IsInternalPool(%q) = true, want false", name)
+		}
+		if pattern.MatchString(name) {
+			t.Fatalf("InternalPoolPattern matches declared pool %q", name)
+		}
 	}
 }

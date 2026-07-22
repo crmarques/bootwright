@@ -57,6 +57,21 @@ be deploying when the topology operations run — `ceph mon set_location` and
 until the tiebreaker mon has joined so those fail-closed, no-retry ops do not
 miss on a slow arbiter rollout.
 
+**Constraint:** `ceph mon enable_stretch_mode` is also what re-homes the pools
+nobody declares — `.mgr`, `.nfs`, `device_health_metrics` and the rgw metadata
+pools (`.rgw.root`, `<zone>.rgw.*`) — onto the stretch rule at size 4 / minSize 2.
+Bootwright's pool operations only cover authored `StoragePool` objects, so on the
+arbiter-less path (no `enable_stretch_mode`) those pools keep CRUSH rule 0 at
+size 3: three replicas spread by `host` across both data sites, which drops below
+`min_size` when a whole site fails and takes the mgr and the whole object gateway
+down with it. A `reconcile-stretch-internal-pools` operation (idempotency kind
+`stretch-internal-pools`, phase `late-topology`) therefore enumerates the live
+pools and sets `crush_rule`/`size`/`min_size` on every internal one. It runs in
+the late phase, after the service-readiness gate, because rgw creates its pools
+when its first daemon starts — earlier, the pools do not exist yet and there is
+nothing to match. It also runs when the tiebreaker IS authored: pools created
+after `enable_stretch_mode` do not get re-homed retroactively.
+
 **Constraint:** Stretch replication is fixed at size 4 / minSize 2 (two
 replicas per data site) — a Ceph requirement for two-site stretch. Non-4/2
 stretch is unsupported: these are render-time domain constants, validation

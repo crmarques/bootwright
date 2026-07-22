@@ -58,7 +58,7 @@ func storageStretchTiebreakerAdvisories(object string, cluster v1alpha1.StorageC
 		Group:       stretchTiebreakerGroup,
 		Object:      object,
 		Finding:     "stretch mode is declared with no tiebreaker/arbiter mon",
-		Impact:      "a two-site stretch cluster without a tiebreaker mon in a third site loses monitor quorum if either data site fails, and apply cannot enable stretch mode, so the pools place two replicas per site but without automatic degraded-mode failover",
+		Impact:      "a two-site stretch cluster without a tiebreaker mon in a third site loses monitor quorum if either data site fails, and apply cannot enable stretch mode, so every pool places two replicas per site (apply reconciles the Ceph-internal pools onto the same rule in place of the stretch-mode re-homing) but without automatic degraded-mode failover",
 		Remediation: "add a mon-only arbiter node in a third site and set spec.ceph.topology.stretch.tiebreaker.node before relying on this cluster",
 	}}
 }
