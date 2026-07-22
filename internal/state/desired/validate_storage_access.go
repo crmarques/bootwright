@@ -23,10 +23,15 @@ func validateStorageCephadmSSHPosture(prefix string, cluster v1alpha1.StorageClu
 	if revoking && cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("%s.clusterSSH.keyRef is required when a storage node Machine sets spec.access.rootLogin %q; without it cephadm's cluster identity is the node Machine access key, so the key Bootwright drives the node with would also open the passwordless-sudo %q account. Declare an sshKeyPair Secret (spec.source.generated) and name it here", prefix, v1alpha1.MachineRootLoginRevoke, user))
 	}
+	clusterKey := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name
 	for i, node := range cluster.Spec.Ceph.Topology.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok || !v1alpha1.MachineRevokesRootLogin(machine) {
 			continue
+		}
+		if machine.Spec.Access.SSH != nil && clusterKey != "" && machine.Spec.Access.SSH.KeyRef.Name == clusterKey {
+			errs = append(errs, fmt.Sprintf("%s.clusterSSH.keyRef %q is also Machine/%s spec.access.ssh.keyRef; the cephadm cluster identity would be the same key Bootwright drives the node with, so revoking root login moves that key into the Ceph mon config-key store and it opens the passwordless-sudo %q account. Declare a second sshKeyPair Secret (spec.source.generated) for the cluster identity", prefix, clusterKey, machine.Metadata.Name, user))
+			break
 		}
 		if v1alpha1.MachineSSHUser(machine) == user {
 			errs = append(errs, fmt.Sprintf("%s.topology.nodes[%d].machineRef %q resolves to Machine/%s whose spec.access.ssh.user is already %q while spec.access.rootLogin is %q; the install-window identity and the post-install account must differ, otherwise the account Bootwright provisions is the one it already connects with. Leave spec.access.ssh.user as the pre-existing identity", strings.TrimSuffix(prefix, ".cephadm"), i, node.MachineRef.Name, machine.Metadata.Name, user, v1alpha1.MachineRootLoginRevoke))

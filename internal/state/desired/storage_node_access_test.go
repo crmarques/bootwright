@@ -62,6 +62,20 @@ func TestRevokedRootLoginAcceptsDedicatedClusterKey(t *testing.T) {
 	}
 }
 
+func TestRevokedRootLoginRejectsReusingTheMachineAccessKey(t *testing.T) {
+	state := storageValidationState()
+	revokeRootOnStorageMachines(&state)
+	reused := state.Machines[0].Spec.Access.SSH.KeyRef.Name
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.KeyRef = v1alpha1.LocalObjectReference{Name: reused}
+	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
+	state.Secrets = append(state.Secrets, clusterSSHSecret(reused, v1alpha1.SecretTypeSSHKeyPair))
+	Normalize(&state)
+	errs := validateStorage(state)
+	if !containsSubstring(errs, "Declare a second sshKeyPair Secret") {
+		t.Fatalf("expected rejection of a cluster key reusing the machine access key, got: %v", errs)
+	}
+}
+
 func TestRevokedRootLoginRejectsRootClusterSSHUser(t *testing.T) {
 	state := storageValidationState()
 	revokeRootOnStorageMachines(&state)
