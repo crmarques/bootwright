@@ -10,6 +10,7 @@ environments:
         proxyFor:
             bootwright: default
             containerClusterInstall: default
+            machineOSInstall: none
         infraComponents:
             proxies:
                 - name: default

@@ -207,9 +207,13 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	seen := map[string]bool{}
+	defaults := 0
 	for i, entry := range env.Spec.InfraComponents.ArtifactServers {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		if entry.Default {
+			defaults++
+		}
 		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			if entry.ComponentRef.Name != "" {
@@ -226,6 +230,9 @@ func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, compo
 		default:
 			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
+	}
+	if defaults > 1 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers must not mark more than one entry default", env.Metadata.Name))
 	}
 	return errs
 }

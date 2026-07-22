@@ -42,13 +42,12 @@ means there is no default — an omitted optional field stays unset.
 | `spec.storageClusters[]` | No | All loaded | Active `StorageCluster` selection list. When set, loaded storage clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.defaults.install.pullSecretRef` | No | — | Default pull secret for clusters that omit `install.pullSecretRef`. |
 | `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [Container clusters](container-clusters.md)). |
-| `spec.defaults.artifactServerRef` | No | — | Default artifact server name for consumer-owned `artifactServerEndpoint.serverRef` fields. |
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
 | `spec.defaults.virtctlMirror` | No | — | HTTP(S) base URL for a mirrored, version-matched `virtctl`. Empty means fetch from each KubeVirt host cluster's OpenShift Virtualization ConsoleCLIDownload; set it for disconnected labs. Validated as an `http(s)` URL when set. |
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
-| `spec.proxyFor.bootwright` | No | inherit default | Proxy used by Bootwright runtime actions. A `proxies[]` name overrides; `none` opts out; empty inherits the `default: true` proxy. |
-| `spec.proxyFor.containerClusterInstall` | No | inherit default | Proxy rendered into cluster install input. A `proxies[]` name overrides; `none` opts out; empty inherits the `default: true` proxy. |
-| `spec.proxyFor.machineOSInstall` | No | inherit default | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. Only an **external** proxy applies (the node installs before any managed proxy exists), so a managed value or a managed inherited default is rejected. A `proxies[]` name overrides; `none` opts out; empty inherits the `default: true` proxy. |
+| `spec.proxyFor.bootwright` | No | inherit default | Proxy used by Bootwright runtime actions. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
+| `spec.proxyFor.containerClusterInstall` | No | inherit default | Proxy rendered into cluster install input. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
+| `spec.proxyFor.machineOSInstall` | No | inherit default | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. Only an **external** proxy applies (the node installs before any managed proxy exists), so a managed value or a managed inherited default is rejected. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
 | `spec.infraComponents` | No | — | Catalog of external or managed service access entries. See [Infra-component catalog](#infra-component-catalog). |
 | `spec.registries` | No | — | Disconnected mirror and image digest source settings. See [Registries](#registries). |
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
@@ -102,20 +101,26 @@ Composition under the model:
 
 ## Artifact Server Default
 
-`defaults.artifactServerRef` names a catalog entry in
-`spec.infraComponents.artifactServers[]`. It defaults only the server selector:
-consumers still declare their own `artifactServerEndpoint.endpointRef`, because
-endpoint purpose belongs to the consumer.
+One `spec.infraComponents.artifactServers[]` entry may carry `default: true`,
+marking the server every consumer inherits when its
+`artifactServerEndpoint.serverRef` is empty. It defaults only the server
+selector: consumers still declare their own `artifactServerEndpoint.endpointRef`,
+because endpoint purpose belongs to the consumer.
 
 ```yaml
 spec:
-  defaults:
-    artifactServerRef: default
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        management: managed
+        componentRef: artifact-server
 ```
 
-Consumers may override the server by setting
-`artifactServerEndpoint.serverRef`; otherwise Bootwright applies this default
-when resolving the endpoint.
+When exactly one `artifactServers[]` entry is defined it is the default even
+without the flag, so a single-server fleet may omit `default: true`. Consumers
+may override the server by setting `artifactServerEndpoint.serverRef`; otherwise
+Bootwright applies this default when resolving the endpoint.
 
 ## Infra-component catalog
 
@@ -131,7 +136,7 @@ managed-only are rejected on external entries and vice versa.
 | Field | Required | Description |
 | --- | --- | --- |
 | `proxies[].name` | Yes | DNS-label entry name (not `none`). |
-| `proxies[].default` | No | Marks the proxy every consumer inherits when its `proxyFor` slot is empty. At most one `proxies[]` entry may set it. |
+| `proxies[].default` | No | Marks the proxy every consumer inherits when its `proxyFor` slot is empty. At most one `proxies[]` entry may set it; when exactly one proxy is defined it is the default even without the flag. |
 | `proxies[].management` | Yes | `external` or `managed`. |
 | `proxies[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.proxy`. Rejected on external entries. |
 | `proxies[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
@@ -147,12 +152,13 @@ managed-only are rejected on external entries and vice versa.
 | `nameResolution[].address` | For `external` | Resolver IP address (external entries only). |
 | `nameResolution[].additionalIngressHosts[]` | No | Extra ingress hostnames. |
 | `artifactServers[].name` | Yes | DNS-label entry name (not `none`). |
+| `artifactServers[].default` | No | Marks the artifact server consumers inherit when `artifactServerEndpoint.serverRef` is empty. At most one `artifactServers[]` entry may set it; when exactly one is defined it is the default even without the flag. |
 | `artifactServers[].management` | Yes | `external` or `managed`. |
 | `artifactServers[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.artifactServer`. |
 | `artifactServers[].endpoints[].name` | For `external` | Endpoint name; `endpoints` is required on external entries, rejected on managed. |
 | `artifactServers[].endpoints[].url` | For `external` | Endpoint `http(s)` URL. |
 | `registries[].name` | Yes | DNS-label entry name (not `none`). |
-| `registries[].default` | No | Marks the default registry; at most one entry may set it. |
+| `registries[].default` | No | Marks the default registry; at most one entry may set it. When exactly one registry is defined it is the default even without the flag. |
 | `registries[].management` | Yes | `external` or `managed`. |
 | `registries[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.registry`. |
 | `registries[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
@@ -247,8 +253,13 @@ Beyond the per-field rules above, the validator enforces:
 - `spec.proxyFor.bootwright`, `spec.proxyFor.containerClusterInstall`, and
   `spec.proxyFor.machineOSInstall` must each name a declared
   `spec.infraComponents.proxies[]` entry, or be empty or the literal `none`.
-  Empty inherits the `default: true` proxy; `none` opts the consumer out.
-- At most one `spec.infraComponents.proxies[]` entry may set `default: true`.
+  Empty inherits the default proxy; `none` opts the consumer out.
+- At most one `spec.infraComponents.proxies[]` entry may set `default: true`; a
+  fleet with exactly one proxy uses it as the default without the flag.
+- At most one `spec.infraComponents.artifactServers[]` entry may set
+  `default: true`; a fleet with exactly one artifact server uses it as the
+  default without the flag. A consumer whose `artifactServerEndpoint.serverRef`
+  is empty resolves to this default, and fails validation when none exists.
 - `spec.proxyFor.machineOSInstall` must not resolve — named directly or by
   inheriting a managed default — to a `managed` proxy (the node installs before
   any managed proxy exists); use an external proxy or `none`.

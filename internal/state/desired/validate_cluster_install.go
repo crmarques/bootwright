@@ -278,10 +278,10 @@ func validateArtifactServerEndpointRef(owner string, ref v1alpha1.ArtifactServer
 	}
 	serverRef := ref.ServerRef.Name
 	if serverRef == "" {
-		serverRef = env.Spec.Defaults.ArtifactServerRef.Name
+		serverRef = env.Spec.DefaultArtifactServerName()
 	}
 	if serverRef == "" {
-		errs = append(errs, owner+".serverRef is required or Environment.spec.defaults.artifactServerRef must be set")
+		errs = append(errs, owner+".serverRef is required, or one Environment.spec.infraComponents.artifactServers[] entry must be marked default")
 		return errs
 	}
 	entry, ok := environmentArtifactServerByName(env, serverRef)

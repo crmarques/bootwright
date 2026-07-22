@@ -82,10 +82,7 @@ spec:
     - name: ip
       address: 192.168.130.20
 `,
-	EnvArtifactServer: `  defaults:
-    artifactServerRef: default
-
-  infraComponents:
+	EnvArtifactServer: `  infraComponents:
     artifactServers:
       - name: default
         management: managed

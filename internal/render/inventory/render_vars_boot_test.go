@@ -684,7 +684,6 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactServerEndpoint(t *testing.
 		ListenerRef: v1alpha1.LocalObjectReference{Name: "https"},
 		AddressRef:  v1alpha1.LocalObjectReference{Name: "cluster-lan"},
 	})
-	state.Environments[0].Spec.Defaults.ArtifactServerRef = v1alpha1.LocalObjectReference{Name: "default"}
 	state.ContainerClusters[0].Spec.Install.Agent.RedfishVirtualMedia.ArtifactServerEndpoint = v1alpha1.ArtifactServerEndpointRef{
 		EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
 	}

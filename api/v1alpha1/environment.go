@@ -36,10 +36,9 @@ type EnvironmentSafetySpec struct {
 }
 
 type EnvironmentDefaultsSpec struct {
-	Install           EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
-	ArtifactServerRef LocalObjectReference           `yaml:"artifactServerRef,omitempty" json:"artifactServerRef,omitempty"`
-	ClientsMirror     string                         `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
-	VirtctlMirror     string                         `yaml:"virtctlMirror,omitempty" json:"virtctlMirror,omitempty"`
+	Install       EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
+	ClientsMirror string                         `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
+	VirtctlMirror string                         `yaml:"virtctlMirror,omitempty" json:"virtctlMirror,omitempty"`
 }
 
 type EnvironmentInstallDefaultsSpec struct {
@@ -64,6 +63,21 @@ func (s EnvironmentSpec) DefaultProxyName() string {
 		if entry.Default {
 			return entry.Name
 		}
+	}
+	if len(s.InfraComponents.Proxies) == 1 {
+		return s.InfraComponents.Proxies[0].Name
+	}
+	return ""
+}
+
+func (s EnvironmentSpec) DefaultArtifactServerName() string {
+	for _, entry := range s.InfraComponents.ArtifactServers {
+		if entry.Default {
+			return entry.Name
+		}
+	}
+	if len(s.InfraComponents.ArtifactServers) == 1 {
+		return s.InfraComponents.ArtifactServers[0].Name
 	}
 	return ""
 }
@@ -130,6 +144,7 @@ type EnvironmentNTPComponent struct {
 
 type EnvironmentArtifactServerComponent struct {
 	Name         string                              `yaml:"name" json:"name"`
+	Default      bool                                `yaml:"default,omitempty" json:"default,omitempty"`
 	Management   string                              `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference                `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	Endpoints    []EnvironmentArtifactServerEndpoint `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`

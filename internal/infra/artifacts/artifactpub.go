@@ -29,10 +29,14 @@ func EffectiveEndpointRef(state v1alpha1.State, ref v1alpha1.ArtifactServerEndpo
 		return ref
 	}
 	env := stateview.Environment(state)
-	if env == nil || env.Spec.Defaults.ArtifactServerRef.Name == "" {
+	if env == nil {
 		return ref
 	}
-	ref.ServerRef = env.Spec.Defaults.ArtifactServerRef
+	name := env.Spec.DefaultArtifactServerName()
+	if name == "" {
+		return ref
+	}
+	ref.ServerRef.Name = name
 	return ref
 }
 

@@ -18,3 +18,4 @@ spec:
   proxyFor:
     bootwright: default
     containerClusterInstall: default
+    machineOSInstall: none

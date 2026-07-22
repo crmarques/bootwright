@@ -5,8 +5,6 @@ environments:
         name: 3-nodes-ocp-baremetal
       spec:
         baseDomain: bootwright.test
-        defaults:
-            artifactServerRef: default
         secretStorage:
             mode: source
         proxyFor:

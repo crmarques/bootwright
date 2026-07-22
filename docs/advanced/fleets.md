@@ -86,13 +86,18 @@ spec:
         componentRef: artifact-server
 ```
 
-The fleet may declare the artifact server **once** as an environment default,
-while each cluster still declares the endpoint it consumes:
+The fleet may mark one artifact server the **default**, while each cluster still
+declares the endpoint it consumes (a single-server fleet is the default without
+the flag):
 
 ```yaml
 spec:
-  defaults:
-    artifactServerRef: default
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        management: managed
+        componentRef: artifact-server
 ```
 
 ```yaml

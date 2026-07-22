@@ -75,11 +75,6 @@ func validateEnvironmentSafety(env v1alpha1.Environment) []string {
 
 func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
 	var errs []string
-	if ref := env.Spec.Defaults.ArtifactServerRef.Name; ref != "" {
-		if _, ok := environmentArtifactServerByName(&env, ref); !ok {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.artifactServerRef %q does not resolve to spec.infraComponents.artifactServers[].name", env.Metadata.Name, ref))
-		}
-	}
 	if mirror := strings.TrimSpace(env.Spec.Defaults.ClientsMirror); mirror != "" && !isHTTPURL(mirror) {
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.clientsMirror %q must be an http(s) URL", env.Metadata.Name, env.Spec.Defaults.ClientsMirror))
 	}

@@ -115,8 +115,8 @@ still fails for the missing `version`/`image`, and an `okd` cluster rejects
 | `install.mode` | No | `connected` | `connected` or `disconnected`. |
 | `install.platform` | No | Derived (see [Platform](#platform)) | Installer platform render mode. |
 | `install.endpoints` | No | — | Closed map keyed by `api`, `api-int`, and `ingress`; see [Endpoints](#endpoints). |
-| `install.agent.redfishVirtualMedia.artifactServerEndpoint` | Required for bare-metal nodes | `serverRef` may use `Environment.spec.defaults.artifactServerRef` | Artifact server endpoint the Redfish BMC fetches the agent ISO from. |
-| `install.agent.bootArtifacts.artifactServerEndpoint` | Required for disconnected installs | `serverRef` may use `Environment.spec.defaults.artifactServerRef` | Artifact server endpoint that publishes disconnected agent boot artifacts. |
+| `install.agent.redfishVirtualMedia.artifactServerEndpoint` | Required for bare-metal nodes | `serverRef` may inherit the default `artifactServers[]` entry | Artifact server endpoint the Redfish BMC fetches the agent ISO from. |
+| `install.agent.bootArtifacts.artifactServerEndpoint` | Required for disconnected installs | `serverRef` may inherit the default `artifactServers[]` entry | Artifact server endpoint that publishes disconnected agent boot artifacts. |
 | `install.pullSecretRef` | Required for OpenShift | Environment default, else `openshift-pull-secret` | Pull secret name. |
 | `install.nodeSSH` | No | Generated `<cluster-name>-cluster-admin-ssh-key` | Node SSH material; see [Node SSH](#node-ssh). |
 | `install.additionalTrustBundleRefs[]` | No | — | Cluster-scoped install CA bundle secret names. |
@@ -293,7 +293,7 @@ selector shape is:
 
 ```yaml
 artifactServerEndpoint:
-  serverRef: default   # optional when Environment.spec.defaults.artifactServerRef is set
+  serverRef: default   # optional when a default artifactServers[] entry exists
   endpointRef: bmc
 ```
 
@@ -301,7 +301,7 @@ artifactServerEndpoint:
 | --- | --- | --- | --- |
 | `install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef` | Required for bare-metal nodes | — | Endpoint the Redfish BMC fetches the agent ISO from. |
 | `install.agent.bootArtifacts.artifactServerEndpoint.endpointRef` | Required for disconnected installs | — | Endpoint that publishes agent boot artifacts and becomes `bootArtifactsBaseURL`. |
-| `artifactServerEndpoint.serverRef` | No | `Environment.spec.defaults.artifactServerRef` | Names an `Environment.spec.infraComponents.artifactServers[].name`. |
+| `artifactServerEndpoint.serverRef` | No | Default `artifactServers[]` entry | Names an `Environment.spec.infraComponents.artifactServers[].name`. Empty inherits the entry marked `default: true`, or the sole entry. |
 
 `endpointRef` is never defaulted globally. A new consumer adds its own
 `artifactServerEndpoint` field instead of adding a slot to `InfraComponent` or

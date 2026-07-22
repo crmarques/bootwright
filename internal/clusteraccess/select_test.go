@@ -164,7 +164,6 @@ func cliStateWithAllSharedMachineServices() v1alpha1.State {
 		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 	}}
-	state.Environments[0].Spec.Defaults.ArtifactServerRef = v1alpha1.LocalObjectReference{Name: "default"}
 	for i := range state.ContainerClusters {
 		state.ContainerClusters[i].Spec.Install.Agent.BootArtifacts = v1alpha1.ArtifactServerEndpointConsumer{
 			ArtifactServerEndpoint: v1alpha1.ArtifactServerEndpointRef{

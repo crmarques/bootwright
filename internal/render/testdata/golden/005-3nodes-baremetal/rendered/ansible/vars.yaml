@@ -355,6 +355,7 @@ bootwright_environment:
     proxyFor:
         bootwright: default
         containerClusterInstall: default
+        machineOSInstall: default
 bootwright_infra_component_services:
     - applyRole: bootwright.core.infra_component_artifact_server_http
       bindAddress: 0.0.0.0

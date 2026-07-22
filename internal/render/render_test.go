@@ -323,7 +323,6 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 	}}
-	state.Environments[0].Spec.Defaults.ArtifactServerRef = v1alpha1.LocalObjectReference{Name: "default"}
 	state.ContainerClusters[0].Spec.Install.Agent.BootArtifacts = v1alpha1.ArtifactServerEndpointConsumer{
 		ArtifactServerEndpoint: v1alpha1.ArtifactServerEndpointRef{
 			EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
@@ -416,7 +415,6 @@ func TestAgentConfigUsesExternalArtifactServerEndpointForDisconnectedBootArtifac
 			URL:  "https://artifacts.example.test:9443/install",
 		}},
 	}}
-	state.Environments[0].Spec.Defaults.ArtifactServerRef = v1alpha1.LocalObjectReference{Name: "default"}
 	state.ContainerClusters[0].Spec.Install.Agent.BootArtifacts = v1alpha1.ArtifactServerEndpointConsumer{
 		ArtifactServerEndpoint: v1alpha1.ArtifactServerEndpointRef{
 			EndpointRef: v1alpha1.LocalObjectReference{Name: "install"},

@@ -208,9 +208,6 @@ func bareMetalStorageManagedOSState() v1alpha1.State {
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 					}},
 				},
-				Defaults: v1alpha1.EnvironmentDefaultsSpec{
-					ArtifactServerRef: v1alpha1.LocalObjectReference{Name: "default"},
-				},
 			},
 		}},
 		Machines: []v1alpha1.Machine{

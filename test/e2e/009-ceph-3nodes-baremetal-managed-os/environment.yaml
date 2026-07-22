@@ -14,6 +14,3 @@ spec:
       - name: default
         management: managed
         componentRef: artifact-server
-
-  defaults:
-    artifactServerRef: default

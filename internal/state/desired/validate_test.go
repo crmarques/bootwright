@@ -482,37 +482,39 @@ spec:
 	}
 }
 
-func TestEnvironmentArtifactServerRefDefaultValidatesDeclaration(t *testing.T) {
-	cases := []struct {
-		name          string
-		defaults      string
-		wantSubstring string
-	}{
-		{
-			name: "dangling-server-ref",
-			defaults: `  defaults:
-    artifactServerRef: missing
-`,
-			wantSubstring: `Environment/env spec.defaults.artifactServerRef "missing" does not resolve to spec.infraComponents.artifactServers[].name`,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			files := newBaselineFiles()
-			files["environment.yaml"] = strings.Replace(files["environment.yaml"],
-				"  defaults:\n    artifactServerRef: default\n",
-				tc.defaults, 1)
+func TestEnvironmentArtifactServerRejectsMultipleDefaults(t *testing.T) {
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
+		"      - name: default\n        management: managed\n        componentRef: artifact-server\n",
+		"      - name: default\n        default: true\n        management: managed\n        componentRef: artifact-server\n      - name: mirror\n        default: true\n        management: managed\n        componentRef: artifact-server\n",
+		1)
 
-			dir := t.TempDir()
-			writeFiles(t, dir, files)
-			_, err := LoadNormalizeValidate([]string{dir})
-			if err == nil {
-				t.Fatal("LoadNormalizeValidate: expected artifactServerRef error")
-			}
-			if !strings.Contains(err.Error(), tc.wantSubstring) {
-				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
-			}
-		})
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("LoadNormalizeValidate: expected multiple-default error")
+	}
+	if want := "spec.infraComponents.artifactServers must not mark more than one entry default"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestEnvironmentDefaultsArtifactServerRefRemoved(t *testing.T) {
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
+		"  infraComponents:\n",
+		"  defaults:\n    artifactServerRef: default\n  infraComponents:\n",
+		1)
+
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("LoadNormalizeValidate: expected unknown-field error for removed defaults.artifactServerRef")
+	}
+	if want := "field artifactServerRef not found"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
 	}
 }
 
@@ -643,8 +645,8 @@ spec:
 		{
 			name: "environment-default-clusteradminssh-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  defaults:\n    artifactServerRef: default\n",
-				"  defaults:\n    artifactServerRef: default\n    install:\n      clusterAdminSSH:\n        keyPairRef: sno-cluster-admin-ssh-key\n", 1)},
+				"  infraComponents:\n",
+				"  defaults:\n    install:\n      clusterAdminSSH:\n        keyPairRef: sno-cluster-admin-ssh-key\n  infraComponents:\n", 1)},
 			wantSubstring: "field clusterAdminSSH not found",
 		},
 		{
@@ -700,7 +702,7 @@ spec:
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)},
-			wantSubstring: `spec.defaults.artifactServerRef "default" does not resolve`,
+			wantSubstring: ".serverRef is required, or one Environment.spec.infraComponents.artifactServers[] entry must be marked default",
 		},
 		{
 			name: "baremetal-redfish-artifact-server-endpoint-required",
@@ -1119,7 +1121,7 @@ spec:
 		{
 			name: "environment-artifact-access-consumer-slots",
 			mutate: func(files map[string]string) {
-				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  defaults:\n    artifactServerRef: default\n", "  defaults:\n    artifactAccess:\n      serverRef: default\n      redfishVirtualMedia:\n        endpointRef: bmc\n      machineBoot:\n        endpointRef: bmc\n      containerClusterInstall:\n        endpointRef: bmc\n      osInstall:\n        endpointRef: bmc\n", 1)
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", "  defaults:\n    artifactAccess:\n      serverRef: default\n      redfishVirtualMedia:\n        endpointRef: bmc\n      machineBoot:\n        endpointRef: bmc\n      containerClusterInstall:\n        endpointRef: bmc\n      osInstall:\n        endpointRef: bmc\n  infraComponents:\n", 1)
 			},
 			wantSubstring: "field artifactAccess not found",
 		},
@@ -2453,7 +2455,6 @@ func TestEnvironmentStorageClusterSelectionOmitsContainerRoots(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  infraComponents:\n", "  storageClusters:\n    - imported-ceph\n\n  infraComponents:\n", 1)
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)
-	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  defaults:\n    artifactServerRef: default\n", "", 1)
 	delete(files, "infra-component.yaml")
 	files["storage.yaml"] = `apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
@@ -4253,8 +4254,6 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  defaults:
-    artifactServerRef: default
   infraComponents:
     artifactServers:
       - name: default
@@ -4270,8 +4269,6 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  defaults:
-    artifactServerRef: default
   infraComponents:
     artifactServers:
       - name: default

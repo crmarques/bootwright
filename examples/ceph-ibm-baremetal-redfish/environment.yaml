@@ -45,6 +45,3 @@ spec:
 
   proxyFor:
     bootwright: default
-
-  defaults:
-    artifactServerRef: default

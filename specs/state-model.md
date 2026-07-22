@@ -65,8 +65,9 @@ Rules:
   fails validation naming the object and the allowed set.
 - `defaults.install.pullSecretRef` and `defaults.install.nodeSSH` fill omitted
   cluster install values only.
-- `defaults.artifactServerRef`, when set, is the fleet-wide default artifact
-  server selector. It supplies only `serverRef` for consumer-owned
+- The `infraComponents.artifactServers[]` entry marked `default: true` (or the
+  sole entry when only one is defined) is the fleet-wide default artifact server
+  selector. It supplies only `serverRef` for consumer-owned
   `artifactServerEndpoint` fields; every consumer still authors its own
   `endpointRef`.
 - `defaults.clientsMirror`, when set, must be an `http(s)` URL. It overrides the

@@ -54,9 +54,6 @@ func machineInstallPackageSourceState(source *v1alpha1.MachineInstallPackageSour
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				Defaults: v1alpha1.EnvironmentDefaultsSpec{
-					ArtifactServerRef: v1alpha1.LocalObjectReference{Name: "default"},
-				},
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					ArtifactServers: []v1alpha1.EnvironmentArtifactServerComponent{{
 						Name:         "default",
