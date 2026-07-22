@@ -102,7 +102,7 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 	state := storageValidationState()
 	state.Environments = []v1alpha1.Environment{{
 		Metadata: v1alpha1.Metadata{Name: "env"},
-		Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+		Spec:     v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"}},
 	}}
 	for i := range state.Machines {
 		if state.Machines[i].Metadata.Name == "ceph-arbiter" {
@@ -392,7 +392,8 @@ kind: Environment
 metadata:
   name: env
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 `
 	const machine = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -476,7 +477,8 @@ kind: Environment
 metadata:
   name: env
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 `
 	const machine = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -1347,7 +1349,8 @@ kind: Environment
 metadata:
   name: env
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 `,
 		"gateway.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: StorageObjectGateway

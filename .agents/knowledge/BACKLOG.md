@@ -223,27 +223,3 @@ learned; this file records what it still owes.
   part of the managed name-resolution component apply), then tighten the
   preflight WARN.
 - Related: ADR 0017; internal/preflight/name_resolution.go
-
-## B-019 — Environment domain model (domains) not implemented
-- Status: open
-- Area: api / dns / normalize / render
-- Origin: ADR 0018 (Environment Domain Model)
-- Problem: the code carries a single `Environment.spec.baseDomain` string; ADR
-  0018 replaces it with a `spec.domains` object (base/machines/clusters/
-  containerClusters/storageClusters) so machines, container clusters, and
-  storage clusters can resolve in different zones. Thirteen Go sites read
-  `env.Spec.BaseDomain` and must select the class-specific domain instead:
-  machine `fqdn` injection (normalize.go), node-FQDN composition for container
-  vs storage hosts (normalize.go), install-config `baseDomain`
-  (render/installer/installer.go, secrets.go, converge/workflow/install_state.go),
-  dnsmasq cluster records (render/inventory/dns_records.go), the ansible
-  `baseDomain` var (render/inventory/vars.go), `no_proxy` fan-out
-  (infra/proxy/effective.go — `.base` umbrella + per-cluster-type), OCP
-  validation (validate_ocp.go), the required-field check (validate_environment.go),
-  and cluster-access output (clusteraccess/cluster.go).
-- Exit: add `EnvironmentSpec.Domains` with the ADR 0018 defaulting chain
-  (machines→base, clusters→base, containerClusters→clusters,
-  storageClusters→clusters), route each consumer to its class domain, migrate
-  `baseDomain: x` → `domains: {base: x}`, update examples + state-model + docs
-  to drop the transitional framing.
-- Related: ADR 0018; ADR 0017 (fqdn/node identity, refined here)

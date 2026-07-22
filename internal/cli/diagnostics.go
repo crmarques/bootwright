@@ -74,7 +74,7 @@ var (
 )
 
 var ocpInstallFieldRemediation = map[string]string{
-	"baseDomain":             "set Environment.spec.baseDomain instead",
+	"baseDomain":             "set Environment.spec.domains.base instead",
 	"imageDigestSources":     "set Environment.spec.registries.imageDigestSources instead",
 	"installConfigOverrides": "remove spec.install.installConfigOverrides; rendered installer files are generated output",
 	"agentConfigOverrides":   "remove spec.install.agentConfigOverrides; rendered installer files are generated output",

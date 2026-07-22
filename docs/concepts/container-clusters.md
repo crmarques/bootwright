@@ -355,7 +355,7 @@ offending line.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `nodes[].name` | Yes | — | The cluster's name for the node, independent of the machine name; unique within the cluster. A bare label composes to `<name>.<cluster>.<baseDomain>` — under the planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)) the container-cluster zone `domains.containerClusters`; a dotted value is used verbatim as an explicit FQDN. The composed FQDN is the OpenShift node name and must equal the host's real OS hostname. It is also the node the day-2 node-config step targets when applying labels/taints. |
+| `nodes[].name` | Yes | — | The cluster's name for the node, independent of the machine name; unique within the cluster. A bare label composes to `<name>.<cluster>.<domains.containerClusters>` (the container-cluster zone; see [Environment → Domain model](environment.md#domain-model)); a dotted value is used verbatim as an explicit FQDN. The composed FQDN is the OpenShift node name and must equal the host's real OS hostname. It is also the node the day-2 node-config step targets when applying labels/taints. |
 | `nodes[].role` | Yes | — | `master`, `worker`, or `infra`. |
 | `nodes[].machineRef` | Yes | — | `Machine` that backs this node; no default is derived. |
 | `nodes[].labels` | No | — | Extra node labels Bootwright applies day-2. |

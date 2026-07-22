@@ -3,4 +3,5 @@ kind: Environment
 metadata:
   name: ceph-external-rhsm
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test

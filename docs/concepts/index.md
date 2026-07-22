@@ -336,7 +336,8 @@ kind: Environment
 metadata:
   name: example
 spec:
-  baseDomain: example.com
+  domains:
+    base: example.com
 ```
 
 | Field | Required | Default | Description |

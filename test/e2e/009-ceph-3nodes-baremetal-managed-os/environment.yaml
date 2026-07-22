@@ -3,7 +3,8 @@ kind: Environment
 metadata:
   name: ceph-3nodes-baremetal-managed-os
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 
   infraComponents:
     nameResolution:

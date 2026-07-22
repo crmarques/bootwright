@@ -113,7 +113,7 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	}
 	out := map[string]any{
 		"name":       env.Metadata.Name,
-		"baseDomain": env.Spec.BaseDomain,
+		"baseDomain": env.Spec.Domains.ContainerClustersDomain(),
 	}
 	if len(env.Spec.ContainerClusters) > 0 {
 		out["containerClusters"] = stringSliceAny(env.Spec.ContainerClusters)

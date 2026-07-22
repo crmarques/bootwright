@@ -83,3 +83,36 @@ func TestProxyNameFor(t *testing.T) {
 		t.Errorf("omitted slot inherits the sole proxy: ProxyNameFor(bootwright) = %q, want %q", got, "corp")
 	}
 }
+
+func TestEnvironmentDomainsDefaulting(t *testing.T) {
+	base := EnvironmentDomainsSpec{Base: "example.net"}
+	for name, got := range map[string]string{
+		"machines":          base.MachinesDomain(),
+		"clusters":          base.ClustersDomain(),
+		"containerClusters": base.ContainerClustersDomain(),
+		"storageClusters":   base.StorageClustersDomain(),
+	} {
+		if got != "example.net" {
+			t.Errorf("base-only %s domain = %q, want example.net", name, got)
+		}
+	}
+
+	split := EnvironmentDomainsSpec{Base: "example.net", Machines: "corp.example.net", Clusters: "cloud.example.net"}
+	if got := split.MachinesDomain(); got != "corp.example.net" {
+		t.Errorf("MachinesDomain() = %q, want corp.example.net", got)
+	}
+	if got := split.ContainerClustersDomain(); got != "cloud.example.net" {
+		t.Errorf("ContainerClustersDomain() falls back to clusters: got %q, want cloud.example.net", got)
+	}
+	if got := split.StorageClustersDomain(); got != "cloud.example.net" {
+		t.Errorf("StorageClustersDomain() falls back to clusters: got %q, want cloud.example.net", got)
+	}
+
+	full := EnvironmentDomainsSpec{Base: "example.net", Clusters: "cloud.example.net", ContainerClusters: "ocp.cloud.example.net", StorageClusters: "ceph.cloud.example.net"}
+	if got := full.ContainerClustersDomain(); got != "ocp.cloud.example.net" {
+		t.Errorf("ContainerClustersDomain() = %q, want ocp.cloud.example.net", got)
+	}
+	if got := full.StorageClustersDomain(); got != "ceph.cloud.example.net" {
+		t.Errorf("StorageClustersDomain() = %q, want ceph.cloud.example.net", got)
+	}
+}

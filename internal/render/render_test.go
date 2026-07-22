@@ -196,7 +196,7 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 				ProxyFor: v1alpha1.EnvironmentProxyForSpec{
 					ContainerClusterInstall: "managed",
 				},
@@ -612,7 +612,7 @@ func TestAgentConfigRendersProviderRootDeviceHints(t *testing.T) {
 func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+			Spec: v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"}},
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "vsphere-net"},

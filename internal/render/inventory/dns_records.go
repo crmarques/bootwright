@@ -134,7 +134,7 @@ func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterIns
 	if env == nil {
 		return nil
 	}
-	baseDomain := env.Spec.BaseDomain
+	baseDomain := env.Spec.Domains.ContainerClustersDomain()
 	if baseDomain == "" {
 		return nil
 	}
@@ -212,7 +212,7 @@ func nameResolutionRefsContain(refs []v1alpha1.LocalObjectReference, entryName s
 
 func clusterBaseDomain(state v1alpha1.State) string {
 	if env := stateview.Environment(state); env != nil {
-		return env.Spec.BaseDomain
+		return env.Spec.Domains.ContainerClustersDomain()
 	}
 	return ""
 }

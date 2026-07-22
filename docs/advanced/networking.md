@@ -310,7 +310,7 @@ A managed name-resolution (dnsmasq) component publishes, for every machine it
 serves, a `host-record` for the machine's
 [`fqdn` name](../concepts/machines.md#the-dnsentry-address)
 (`<machineName>.<machine domain>` unless overridden — the machine domain is
-`baseDomain` today, `domains.machines` under [ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md))
+`domains.machines`, which defaults to `domains.base`)
 targeting the machine's
 `access.ssh.addressRef` IP, and a `cname` from each cluster node FQDN to the
 bound machine's `fqdn`. The `fqdn` host-record is published even when an

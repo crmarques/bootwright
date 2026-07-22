@@ -3,7 +3,8 @@ kind: Environment
 metadata:
   name: sno-libvirt-redfish-corporate-tls
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 
   infraComponents:
     nameResolution:

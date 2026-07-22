@@ -152,7 +152,8 @@ kind: Environment
 metadata:
   name: lab
 spec:
-  baseDomain: example.test
+  domains:
+    base: example.test
 `,
 		"secrets.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Secret

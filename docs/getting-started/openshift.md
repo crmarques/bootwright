@@ -62,7 +62,7 @@ order; each owns exactly one slice of the truth.
 ### Environment (`environment.yaml`)
 
 Fleet-wide defaults and the catalog that ties the tree together. For this lab it
-sets `spec.baseDomain` (the DNS domain your cluster lives under) and selects the
+sets `spec.domains.base` (the DNS domain your cluster lives under) and selects the
 managed shared services by reference under `spec.infraComponents` (name
 resolution and NTP here).
 
@@ -145,7 +145,7 @@ Open the scaffold and adjust these for your host. The defaults form a working
 
 | File | Field | Set it to |
 | --- | --- | --- |
-| `environment.yaml` | `spec.baseDomain` | A DNS base domain you control or route in the lab (default `example.test`). |
+| `environment.yaml` | `spec.domains.base` | A DNS base domain you control or route in the lab (default `example.test`). |
 | `secrets.yaml` | `Secret/bastion-host-ssh` `spec.source.file.privateKey` | Path to the SSH key that reaches the bastion (default `~/.ssh/bootwright-ssh-key`); create it first — see [Installation](installation.md#the-bastion-ssh-key). |
 | `infra/machines/bastion.yaml` | `Machine/bastion` `spec.addresses` (`ssh`) | The address bootwright uses to SSH to the bastion (default `192.168.10.11`). |
 | `clusters/container/my-sno-lab/cluster-machines.yaml` | `Machine/my-sno-lab-master-0` `spec.addresses` (`ip`) | The node's static IP on the machine network (default `192.168.130.20`). |

@@ -3,4 +3,5 @@ kind: Environment
 metadata:
   name: ceph-distribution-ibm
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test

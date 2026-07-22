@@ -151,5 +151,5 @@ func EnvironmentBaseDomain(env *v1alpha1.Environment) string {
 	if env == nil {
 		return ""
 	}
-	return env.Spec.BaseDomain
+	return env.Spec.Domains.ContainerClustersDomain()
 }

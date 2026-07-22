@@ -105,7 +105,7 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
@@ -134,7 +134,7 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 				Defaults: v1alpha1.EnvironmentDefaultsSpec{
 					Install: v1alpha1.EnvironmentInstallDefaultsSpec{
 						PullSecretRef: v1alpha1.SecretRef{Name: "custom-pull"},
@@ -512,7 +512,7 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			},
 		}},
 		Secrets: []v1alpha1.Secret{{

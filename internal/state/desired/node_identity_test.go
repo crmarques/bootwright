@@ -11,7 +11,7 @@ func TestNormalizeInjectsMachineFQDN(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
-			Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+			Spec:     v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"}},
 		}},
 		Machines: []v1alpha1.Machine{
 			{Metadata: v1alpha1.Metadata{Name: "plain"}},
@@ -115,7 +115,7 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
-			Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+			Spec:     v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"}},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
@@ -157,6 +157,50 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 	}
 }
 
+func TestNormalizeComposesPerClassDomains(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{
+				Base:              "example.net",
+				Machines:          "corp.example.net",
+				ContainerClusters: "ocp.cloud.example.net",
+				StorageClusters:   "ceph.cloud.example.net",
+			}},
+		}},
+		Machines: []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "srv01"}}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+				{Name: "node01", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
+			}},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+						{Name: "node01", MachineRef: v1alpha1.LocalObjectReference{Name: "s1"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+					}},
+				},
+			},
+		}},
+	}
+
+	Normalize(&state)
+
+	if got := v1alpha1.MachineFQDNAddress(state.Machines[0]); got != "srv01.corp.example.net" {
+		t.Fatalf("machine fqdn = %q, want srv01.corp.example.net (domains.machines)", got)
+	}
+	if got := state.ContainerClusters[0].Spec.Nodes[0].Name; got != "node01.cluster-a.ocp.cloud.example.net" {
+		t.Fatalf("container node = %q, want node01.cluster-a.ocp.cloud.example.net (domains.containerClusters)", got)
+	}
+	if got := state.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].Name; got != "node01.ceph.ceph.cloud.example.net" {
+		t.Fatalf("ceph node = %q, want node01.ceph.ceph.cloud.example.net (domains.storageClusters)", got)
+	}
+}
+
 func TestNormalizeKeepsBareNodeHostnamesWithoutBaseDomain(t *testing.T) {
 	state := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{
@@ -185,7 +229,8 @@ kind: Environment
 metadata:
   name: env
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 `
 	const machine = `apiVersion: bootwright.io/v1alpha1
 kind: Machine

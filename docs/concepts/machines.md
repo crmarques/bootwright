@@ -182,9 +182,8 @@ When the `Environment` declares a domain, every `Machine`'s
   address: <metadata.name>.<machine domain>
 ```
 
-The machine domain is the `Environment`'s machine zone: today the single
-`baseDomain`, and under the planned domain model (ADR 0018) the dedicated
-`domains.machines` key (which defaults to `domains.base`) — see
+The machine domain is the `Environment`'s machine zone, `domains.machines`
+(which defaults to `domains.base`) — see
 [Environment → Domain model](environment.md#domain-model).
 
 A declared entry named `fqdn` overrides the default verbatim — it must be a

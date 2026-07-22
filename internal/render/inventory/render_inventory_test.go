@@ -92,7 +92,7 @@ func TestMachineInventoryConnectsViaFQDNWithIPCarveOuts(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:         "lab-dns",

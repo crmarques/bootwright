@@ -17,7 +17,7 @@ func TestPortableInstallerSecretsEmitsJinjaTokens(t *testing.T) {
 	}
 	ocp := &state.ContainerClusters[0]
 	clusterName := ocp.Metadata.Name
-	baseDomain := state.Environments[0].Spec.BaseDomain
+	baseDomain := state.Environments[0].Spec.Domains.Base
 	state.Secrets = append(state.Secrets,
 		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "api-tls"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
 	)

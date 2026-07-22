@@ -16,7 +16,7 @@ type Environment struct {
 }
 
 type EnvironmentSpec struct {
-	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
+	Domains           EnvironmentDomainsSpec                   `yaml:"domains" json:"domains"`
 	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	Safety            EnvironmentSafetySpec                    `yaml:"safety,omitempty" json:"safety,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
@@ -33,6 +33,42 @@ type EnvironmentSpec struct {
 type EnvironmentSafetySpec struct {
 	DestroyProtection string   `yaml:"destroyProtection,omitempty" json:"destroyProtection,omitempty"`
 	ProtectedKinds    []string `yaml:"protectedKinds,omitempty" json:"protectedKinds,omitempty"`
+}
+
+type EnvironmentDomainsSpec struct {
+	Base              string `yaml:"base" json:"base"`
+	Machines          string `yaml:"machines,omitempty" json:"machines,omitempty"`
+	Clusters          string `yaml:"clusters,omitempty" json:"clusters,omitempty"`
+	ContainerClusters string `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	StorageClusters   string `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
+}
+
+func (d EnvironmentDomainsSpec) MachinesDomain() string {
+	if d.Machines != "" {
+		return d.Machines
+	}
+	return d.Base
+}
+
+func (d EnvironmentDomainsSpec) ClustersDomain() string {
+	if d.Clusters != "" {
+		return d.Clusters
+	}
+	return d.Base
+}
+
+func (d EnvironmentDomainsSpec) ContainerClustersDomain() string {
+	if d.ContainerClusters != "" {
+		return d.ContainerClusters
+	}
+	return d.ClustersDomain()
+}
+
+func (d EnvironmentDomainsSpec) StorageClustersDomain() string {
+	if d.StorageClusters != "" {
+		return d.StorageClusters
+	}
+	return d.ClustersDomain()
 }
 
 type EnvironmentDefaultsSpec struct {

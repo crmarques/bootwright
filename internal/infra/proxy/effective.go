@@ -107,8 +107,8 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInstall) (string, 
 
 func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 	out := []string{"localhost", "127.0.0.1", "::1", ".svc", ".cluster.local"}
-	if env.Spec.BaseDomain != "" {
-		out = append(out, "."+env.Spec.BaseDomain)
+	if env.Spec.Domains.Base != "" {
+		out = append(out, "."+env.Spec.Domains.Base)
 	}
 	for _, n := range state.NetworkConfigs {
 		for _, machineNetwork := range n.Spec.MachineNetwork {
@@ -134,8 +134,8 @@ func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 			}
 			out = append(out, ocp.Spec.Networking.ServiceNetwork...)
 		}
-		if env.Spec.BaseDomain != "" && ocp.Metadata.Name != "" {
-			out = append(out, "."+ocp.Metadata.Name+"."+env.Spec.BaseDomain)
+		if domain := env.Spec.Domains.ContainerClustersDomain(); domain != "" && ocp.Metadata.Name != "" {
+			out = append(out, "."+ocp.Metadata.Name+"."+domain)
 		}
 	}
 	if env.Spec.Registries != nil && env.Spec.Registries.Mirror != nil {

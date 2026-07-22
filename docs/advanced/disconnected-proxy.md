@@ -140,7 +140,8 @@ kind: Environment
 metadata:
   name: lab
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
   infraComponents:
     proxies:
       - name: default

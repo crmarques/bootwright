@@ -1606,7 +1606,7 @@ func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 	}
 
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
-	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  baseDomain: bootwright.test\n", "  baseDomain: bootwright.test\n  retiredField: true\n")
+	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "    base: bootwright.test\n", "    base: bootwright.test\n  retiredField: true\n")
 	stdout, stderr, code = runCLI(t, "context", "init", "--name", "test", "-f", replacement, "--yes")
 	if code == 0 {
 		t.Fatalf("context init --yes unexpectedly accepted invalid replacement:\n%s", stdout)
@@ -3048,7 +3048,7 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 func TestContextInitPassesWorkspacePathAndSyncsRegistryAroundSudo(t *testing.T) {
 	setTestHomeAndRoot(t)
 	source := t.TempDir()
-	if err := os.WriteFile(filepath.Join(source, "environment.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: lab\nspec:\n  baseDomain: example.test\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "environment.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: lab\nspec:\n  domains:\n    base: example.test\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	previous := localRootGate
@@ -3297,7 +3297,7 @@ func replaceInFile(t *testing.T, path, old, new string) {
 
 func addFixtureResourceSelection(t *testing.T, dir string) {
 	t.Helper()
-	replaceInFile(t, filepath.Join(dir, "environment.yaml"), "  baseDomain: bootwright.test\n\n", `  baseDomain: bootwright.test
+	replaceInFile(t, filepath.Join(dir, "environment.yaml"), "    base: bootwright.test\n\n", `    base: bootwright.test
 
   resources:
     - secrets.yaml
@@ -4684,10 +4684,10 @@ func initProtectedTestContext(t *testing.T, fixtureName string) workspace.Contex
 		t.Fatalf("read environment fixture: %v", err)
 	}
 	body := strings.Replace(string(data),
-		"  baseDomain:",
-		"  safety:\n    destroyProtection: "+v1alpha1.EnvironmentDestroyProtectionRequiredOverride+"\n  baseDomain:", 1)
+		"  domains:",
+		"  safety:\n    destroyProtection: "+v1alpha1.EnvironmentDestroyProtectionRequiredOverride+"\n  domains:", 1)
 	if body == string(data) {
-		t.Fatal("environment fixture did not contain spec.baseDomain")
+		t.Fatal("environment fixture did not contain spec.domains")
 	}
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write protected environment fixture: %v", err)

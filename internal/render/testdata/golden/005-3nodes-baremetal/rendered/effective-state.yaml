@@ -4,7 +4,8 @@ environments:
       metadata:
         name: 3-nodes-ocp-baremetal
       spec:
-        baseDomain: bootwright.test
+        domains:
+            base: bootwright.test
         secretStorage:
             mode: source
         proxyFor:

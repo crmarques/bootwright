@@ -253,7 +253,7 @@ func validateServingCertificateCoverage(state v1alpha1.State, ocp v1alpha1.Conta
 		env := stateview.Environment(state)
 		baseDomain := ""
 		if env != nil {
-			baseDomain = env.Spec.BaseDomain
+			baseDomain = env.Spec.Domains.ContainerClustersDomain()
 		}
 		probe := stateview.ClusterConsoleHostname(ocp.Metadata.Name, baseDomain)
 		pair := pairs[ingress.DefaultCertificateRef.Name]

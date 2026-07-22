@@ -33,8 +33,8 @@ func validateEnvironments(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate Environment %q", env.Metadata.Name))
 		}
 		seen[env.Metadata.Name] = true
-		if env.Spec.BaseDomain == "" {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
+		if env.Spec.Domains.Base == "" {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.domains.base is required", env.Metadata.Name))
 		}
 		errs = append(errs, validateEnvironmentSafety(env)...)
 		errs = append(errs, validateEnvironmentDefaults(env)...)

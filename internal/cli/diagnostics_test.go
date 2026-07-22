@@ -18,7 +18,7 @@ func TestDiagnosticsMapRemovedInstallField(t *testing.T) {
 	if got.Rule != "spec.install.baseDomain is not accepted on ContainerCluster install intent" {
 		t.Fatalf("rule = %q", got.Rule)
 	}
-	if got.Remediation != "set Environment.spec.baseDomain instead" {
+	if got.Remediation != "set Environment.spec.domains.base instead" {
 		t.Fatalf("remediation = %q", got.Remediation)
 	}
 }

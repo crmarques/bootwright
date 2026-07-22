@@ -151,7 +151,7 @@ func clusterConsoleURL(name, baseDomain string) string {
 
 func clusterAccessBaseDomain(state v1alpha1.State) string {
 	if env := stateview.Environment(state); env != nil {
-		return strings.TrimSpace(env.Spec.BaseDomain)
+		return strings.TrimSpace(env.Spec.Domains.ContainerClustersDomain())
 	}
 	return ""
 }

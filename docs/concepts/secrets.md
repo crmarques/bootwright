@@ -408,7 +408,8 @@ kind: Environment
 metadata:
   name: ceph-distribution-redhat
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
@@ -474,7 +475,8 @@ kind: Environment
 metadata:
   name: corp
 spec:
-  baseDomain: corp.example.com
+  domains:
+    base: corp.example.com
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement

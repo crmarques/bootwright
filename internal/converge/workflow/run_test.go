@@ -58,7 +58,7 @@ func minimalState() v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
-			Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+			Spec:     v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"}},
 		}},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "bastion"},

@@ -32,10 +32,8 @@ Rules:
   storage-cluster node FQDNs from `domains.storageClusters` (see the `Machine`
   and cluster host rules). `spec.domains` is a DNS object, distinct from the
   `spec.containerClusters[]` / `spec.storageClusters[]` selection lists below.
-  The single top-level `baseDomain` field is the predecessor of this object —
-  `domains.base` is its successor, and `baseDomain: x` is equivalent to
-  `domains: {base: x}` with every other key defaulted; the `domains` model is
-  the target the code migrates to (BACKLOG B-019).
+  A single-zone fleet sets only `domains: {base: x}`; every other key then
+  defaults to it.
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.

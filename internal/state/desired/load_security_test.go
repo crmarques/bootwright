@@ -28,7 +28,8 @@ kind: Environment
 metadata:
   name: lab
 spec:
-  baseDomain: example.test
+  domains:
+    base: example.test
   resources:
     - linked.yaml
 `

@@ -80,7 +80,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			},
 		}},
 		Secrets: []v1alpha1.Secret{
@@ -133,7 +133,7 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 			Metadata:   v1alpha1.Metadata{Name: "env"},
 			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			},
 		}},
 		Secrets: []v1alpha1.Secret{
@@ -420,7 +420,7 @@ func TestLoadInstallerSecretsOKDRendersFakePullSecret(t *testing.T) {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			},
 		}},
 		Secrets: []v1alpha1.Secret{

@@ -3,7 +3,8 @@ kind: Environment
 metadata:
   name: sno-emul-baremetal
 spec:
-  baseDomain: bootwright.test
+  domains:
+    base: bootwright.test
 
   infraComponents:
     artifactServers:

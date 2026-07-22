@@ -3,7 +3,8 @@ kind: Environment
 metadata:
   name: ceph-ibm-baremetal-redfish
 spec:
-  baseDomain: example.com
+  domains:
+    base: example.com
 
   safety:
     destroyProtection: requiredOverride

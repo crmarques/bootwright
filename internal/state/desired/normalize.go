@@ -169,7 +169,11 @@ func normalizeEntitlementSatellite(rhsm *v1alpha1.EntitlementRHSM) {
 
 func normalizeMachineFQDNs(state *v1alpha1.State) {
 	env := primaryEnvironment(state)
-	if env == nil || env.Spec.BaseDomain == "" {
+	if env == nil {
+		return
+	}
+	domain := env.Spec.Domains.MachinesDomain()
+	if domain == "" {
 		return
 	}
 	for i := range state.Machines {
@@ -179,7 +183,7 @@ func normalizeMachineFQDNs(state *v1alpha1.State) {
 		}
 		machine.Spec.Addresses = append(machine.Spec.Addresses, v1alpha1.MachineAddress{
 			Name:    v1alpha1.MachineAddressFQDN,
-			Address: machine.Metadata.Name + "." + env.Spec.BaseDomain,
+			Address: machine.Metadata.Name + "." + domain,
 		})
 	}
 }
@@ -344,15 +348,16 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 }
 
 func normalizeNodeNames(state *v1alpha1.State) {
-	baseDomain := ""
+	containerDomain, storageDomain := "", ""
 	if env := primaryEnvironment(state); env != nil {
-		baseDomain = env.Spec.BaseDomain
+		containerDomain = env.Spec.Domains.ContainerClustersDomain()
+		storageDomain = env.Spec.Domains.StorageClustersDomain()
 	}
 	for i := range state.ContainerClusters {
 		cluster := &state.ContainerClusters[i]
 		for j := range cluster.Spec.Nodes {
 			node := &cluster.Spec.Nodes[j]
-			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, baseDomain)
+			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, containerDomain)
 		}
 	}
 	for i := range state.StorageClusters {
@@ -362,7 +367,7 @@ func normalizeNodeNames(state *v1alpha1.State) {
 		}
 		for j := range cluster.Spec.Ceph.Topology.Nodes {
 			node := &cluster.Spec.Ceph.Topology.Nodes[j]
-			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, baseDomain)
+			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, storageDomain)
 		}
 		normalizeStorageStretch(cluster)
 	}

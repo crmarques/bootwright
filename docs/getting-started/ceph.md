@@ -90,7 +90,7 @@ Read them in dependency order; each owns exactly one slice of the truth.
 
 ### Environment (`environment.yaml`)
 
-The catalog that ties the tree together. It sets `spec.baseDomain`
+The catalog that ties the tree together. It sets `spec.domains.base`
 (`bootwright.test`), activates the cluster under `spec.storageClusters`, and
 selects the managed lab DNS
 under `spec.infraComponents.nameResolution`. It also sets
@@ -223,7 +223,7 @@ environment differs.
 
 | File | Field | Set it to |
 | --- | --- | --- |
-| `environment.yaml` | `spec.baseDomain` | A DNS base domain for the lab (default `bootwright.test`). |
+| `environment.yaml` | `spec.domains.base` | A DNS base domain for the lab (default `bootwright.test`). |
 | `infra/providers/libvirt.yaml` | `spec.libvirt.uri` | The libvirt URI, usually `qemu:///system`. |
 | `infra/providers/libvirt.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network (default `vbr-ceph-ibm`). |
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |

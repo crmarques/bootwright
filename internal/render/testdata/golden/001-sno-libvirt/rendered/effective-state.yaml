@@ -4,7 +4,8 @@ environments:
       metadata:
         name: sno-libvirt
       spec:
-        baseDomain: bootwright.test
+        domains:
+            base: bootwright.test
         secretStorage:
             mode: source
         proxyFor:

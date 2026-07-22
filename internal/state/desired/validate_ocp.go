@@ -393,7 +393,7 @@ func validateServingCertificateRefs(state v1alpha1.State, ocp v1alpha1.Container
 	var errs []string
 	baseDomain := ""
 	if env := primaryEnvironment(&state); env != nil {
-		baseDomain = env.Spec.BaseDomain
+		baseDomain = env.Spec.Domains.ContainerClustersDomain()
 	}
 	apiIntName := "api-int." + ocp.Metadata.Name + "." + baseDomain
 	if api := serving.APIServer; api != nil {

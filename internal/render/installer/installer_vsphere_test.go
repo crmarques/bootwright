@@ -58,7 +58,7 @@ func vsphereInstallerTestState() v1alpha1.State {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec: v1alpha1.EnvironmentSpec{
-				BaseDomain: "example.test",
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			},
 		}},
 		Secrets: []v1alpha1.Secret{

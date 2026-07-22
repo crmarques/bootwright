@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implementation pending — see BACKLOG B-019)
+Accepted (implemented)
 
 ## Context
 
@@ -91,6 +91,3 @@ each composition draws from generalizes from one `baseDomain` to the matching
   read `domains.containerClusters`, storage consumers `domains.storageClusters`,
   machine consumers `domains.machines`, and the generic fleet-wide `no_proxy`
   umbrella reads `domains.base`.
-- Until the implementation lands (B-019), the code still uses the single
-  `baseDomain` field; this ADR and the state-model rules describe the target
-  the code migrates to.

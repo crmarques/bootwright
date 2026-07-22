@@ -22,7 +22,8 @@ kind: Environment
 metadata:
   name: lab
 spec:
-  baseDomain: lab.example.com
+  domains:
+    base: lab.example.com
 ```
 
 In the tables below, **Required** marks fields the author must set.
@@ -34,7 +35,7 @@ means there is no default — an omitted optional field stays unset.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.baseDomain` | Yes | — | Fleet DNS base domain rendered into selected container clusters. Also seeds each machine's implicit `fqdn` address and the composed node FQDNs; see [Machines](machines.md#the-dnsentry-address). The planned per-class domain model (ADR 0018) replaces this single field with a `spec.domains` object — see [Domain model](#domain-model). |
+| `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-dnsentry-address) and [Domain model](#domain-model). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
 | `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |
@@ -55,14 +56,10 @@ means there is no default — an omitted optional field stays unset.
 
 ## Domain model
 
-Today the `Environment` carries one fleet DNS zone, `spec.baseDomain`, and
-every machine `fqdn` and cluster node FQDN composes under it.
-
-The planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md))
-replaces that single field with a `spec.domains` object that names a zone per
-identity class, so machines can live in a corporate zone while the clusters
-Bootwright builds live in a separate cloud zone (and container and storage
-clusters in distinct subzones):
+`spec.domains` ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md))
+names a DNS zone per identity class, so machines can live in a corporate zone
+while the clusters Bootwright builds live in a separate cloud zone (and
+container and storage clusters in distinct subzones):
 
 ```yaml
 spec:
@@ -84,7 +81,7 @@ spec:
 
 Defaulting chain: `machines` → `base`; `clusters` → `base`;
 `containerClusters` → `clusters`; `storageClusters` → `clusters`. An
-`Environment` that sets only `base` behaves exactly like a single `baseDomain`.
+`Environment` that sets only `base` resolves every identity under that one zone.
 
 Composition under the model:
 
@@ -247,7 +244,7 @@ is rejected.
 Beyond the per-field rules above, the validator enforces:
 
 - **Exactly one `Environment`** is required in the loaded state.
-- `spec.baseDomain` is required.
+- `spec.domains.base` is required.
 - `spec.defaults.clientsMirror` must be an `http(s)` URL when set.
 - `spec.defaults.virtctlMirror` must be an `http(s)` URL when set.
 - `spec.proxyFor.bootwright`, `spec.proxyFor.containerClusterInstall`, and

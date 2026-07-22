@@ -31,7 +31,7 @@ func TestResolveInstallerRendersTrustBundleAndServingCertificateManifests(t *tes
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	clusterName := state.ContainerClusters[0].Metadata.Name
-	baseDomain := state.Environments[0].Spec.BaseDomain
+	baseDomain := state.Environments[0].Spec.Domains.Base
 	state.Secrets = append(state.Secrets,
 		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "pull"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeDockerConfigJSON}},
 		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "ssh"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeSSHKeyPair}},
@@ -137,7 +137,7 @@ func TestPlaceholderInstallerRendersRedactedServingCertificateManifests(t *testi
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	clusterName := state.ContainerClusters[0].Metadata.Name
-	baseDomain := state.Environments[0].Spec.BaseDomain
+	baseDomain := state.Environments[0].Spec.Domains.Base
 	state.Secrets = append(state.Secrets,
 		v1alpha1.Secret{Metadata: v1alpha1.Metadata{Name: "api-tls"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
 	)

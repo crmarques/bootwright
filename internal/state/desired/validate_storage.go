@@ -248,7 +248,7 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 			}
 			seen[short] = node.Name
 			if len(node.Name) > 253 || !dnsSubdomain.MatchString(node.Name) {
-				errs = append(errs, fmt.Sprintf("%s.name %q is not a valid DNS name (<=253 chars, lowercase labels); the composed <node>.<cluster>.<baseDomain> would be too long, or the node name is malformed", owner, node.Name))
+				errs = append(errs, fmt.Sprintf("%s.name %q is not a valid DNS name (<=253 chars, lowercase labels); the composed <node>.<cluster>.<storageClustersDomain> would be too long, or the node name is malformed", owner, node.Name))
 			}
 		}
 		if node.MachineRef.Name == "" {

@@ -717,8 +717,8 @@ func clusterKubeconfigExists(clustersDir, clusterName string) bool {
 func clusterConnectionRecord(clustersDir, clusterName string, environments []v1alpha1.Environment, now time.Time) ClusterConnectionRecord {
 	baseDomain := ""
 	for _, env := range environments {
-		if env.Spec.BaseDomain != "" {
-			baseDomain = env.Spec.BaseDomain
+		if domain := env.Spec.Domains.ContainerClustersDomain(); domain != "" {
+			baseDomain = domain
 			break
 		}
 	}

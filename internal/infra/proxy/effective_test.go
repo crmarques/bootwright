@@ -12,7 +12,7 @@ func envWithExternalProxy() *v1alpha1.Environment {
 	return &v1alpha1.Environment{
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec: v1alpha1.EnvironmentSpec{
-			BaseDomain: "example.test",
+			Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
 			ProxyFor: v1alpha1.EnvironmentProxyForSpec{
 				Bootwright:              "default",
 				ContainerClusterInstall: "default",
@@ -40,8 +40,8 @@ func stateWithManagedProxy() v1alpha1.State {
 	env := v1alpha1.Environment{
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec: v1alpha1.EnvironmentSpec{
-			BaseDomain: "example.test",
-			ProxyFor:   v1alpha1.EnvironmentProxyForSpec{Bootwright: "managed", ContainerClusterInstall: "managed"},
+			Domains:  v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
+			ProxyFor: v1alpha1.EnvironmentProxyForSpec{Bootwright: "managed", ContainerClusterInstall: "managed"},
 			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 				Proxies: []v1alpha1.EnvironmentProxyComponent{{
 					Name:         "managed",

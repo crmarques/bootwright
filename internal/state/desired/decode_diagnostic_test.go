@@ -15,7 +15,7 @@ func TestLevenshtein(t *testing.T) {
 	}{
 		{"", "", 0},
 		{"abc", "abc", 0},
-		{"baseDomainn", "baseDomain", 1},
+		{"domainss", "domains", 1},
 		{"kitten", "sitting", 3},
 		{"role", "artifacts", 8},
 	}
@@ -27,9 +27,9 @@ func TestLevenshtein(t *testing.T) {
 }
 
 func TestNearestFieldName(t *testing.T) {
-	fields := []string{"baseDomain", "resources", "safety"}
-	if got := nearestFieldName("baseDomainn", fields); got != "baseDomain" {
-		t.Errorf("close typo: got %q want baseDomain", got)
+	fields := []string{"domains", "resources", "safety"}
+	if got := nearestFieldName("domainss", fields); got != "domains" {
+		t.Errorf("close typo: got %q want domains", got)
 	}
 	if got := nearestFieldName("completelyUnrelatedKey", fields); got != "" {
 		t.Errorf("distant key: got %q want empty", got)
@@ -38,7 +38,7 @@ func TestNearestFieldName(t *testing.T) {
 
 func TestRewriteKnownFieldErrorAppendsSuggestion(t *testing.T) {
 	var node yaml.Node
-	doc := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: env\nspec:\n  baseDomainn: example.com\n"
+	doc := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: env\nspec:\n  domainss: example.com\n"
 	if err := yaml.Unmarshal([]byte(doc), &node); err != nil {
 		t.Fatalf("unmarshal node: %v", err)
 	}
@@ -48,10 +48,10 @@ func TestRewriteKnownFieldErrorAppendsSuggestion(t *testing.T) {
 		t.Fatal("expected unknown-field rejection, got nil")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "field baseDomainn not found") {
+	if !strings.Contains(msg, "field domainss not found") {
 		t.Errorf("reject wording changed, breaking the pinned contract: %q", msg)
 	}
-	if !strings.Contains(msg, `did you mean "baseDomain"?`) {
+	if !strings.Contains(msg, `did you mean "domains"?`) {
 		t.Errorf("expected a did-you-mean suggestion, got %q", msg)
 	}
 }

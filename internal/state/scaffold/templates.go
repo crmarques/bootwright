@@ -5,7 +5,8 @@ kind: Environment
 metadata:
   name: {{.Cluster}}
 spec:
-  baseDomain: example.test              # change to a domain you own
+  domains:
+    base: example.test              # change to a domain you own
 
 {{.Substrate.EnvArtifactServer}}
 `
