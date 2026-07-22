@@ -98,8 +98,38 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster)
 	if machineOK {
 		entry["bootwright_os_provided"] = v1alpha1.MachineOSProvided(machine)
+		if access := storageNodeAccessVars(cluster, machine, paths); access != nil {
+			entry["bootwright_node_access"] = access
+			entry["ansible_user"] = access["user"]
+		}
 	}
 	return entry
+}
+
+func storageNodeAccessVars(cluster v1alpha1.StorageCluster, machine v1alpha1.Machine, paths PathOptions) map[string]any {
+	if !v1alpha1.StorageClusterManagesNodeAccount(cluster) || machine.Spec.Access.SSH == nil {
+		return nil
+	}
+	user := v1alpha1.StorageClusterCephadmSSHUser(cluster)
+	out := map[string]any{
+		"user":           user,
+		"installUser":    v1alpha1.MachineSSHUser(machine),
+		"rootLogin":      machine.Spec.Access.RootLogin,
+		"sudoersPath":    v1alpha1.NodeAccessSudoersPath(user),
+		"sshdDropInPath": v1alpha1.NodeAccessSSHDDropIn,
+		"markerPath":     v1alpha1.NodeAccessMarkerPath,
+		"address":        v1alpha1.MachineSSHAddress(machine),
+	}
+	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
+		out["installPrivateKeyPath"] = privatePath
+	}
+	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
+		out["installPublicKeyPath"] = publicPath
+	}
+	if knownHostsPath := machineKnownHostsPath(machine, paths); knownHostsPath != "" {
+		out["knownHostsPath"] = knownHostsPath
+	}
+	return out
 }
 
 func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
@@ -162,11 +192,8 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if len(cluster.Spec.Ceph.Topology.Nodes) == 0 {
 		return nil
 	}
-	if ref := cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name; ref != "" {
-		out := map[string]any{}
-		if user := cluster.Spec.Ceph.Cephadm.ClusterSSHUser; user != "" {
-			out["user"] = user
-		}
+	out := map[string]any{"user": v1alpha1.StorageClusterCephadmSSHUser(cluster)}
+	if ref := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name; ref != "" {
 		if privatePath := secret.ResolveSSHPrivateKeyPath(ref, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 			out["privateKeyPath"] = privatePath
 		}
@@ -180,11 +207,7 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	}
 	machine, ok := topology.NodeMachine(state, cluster, cluster.Spec.Ceph.Topology.Nodes[0].Name)
 	if !ok || machine.Spec.Access.SSH == nil {
-		return nil
-	}
-	out := map[string]any{}
-	if machine.Spec.Access.SSH.User != "" {
-		out["user"] = machine.Spec.Access.SSH.User
+		return out
 	}
 	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 		out["privateKeyPath"] = privatePath

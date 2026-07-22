@@ -38,6 +38,13 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	if err != nil {
 		return nil, err
 	}
+	nodeAccessDepsByCluster, err := planStorageNodeAccessActivities(graph, state, hashState, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster)
+	if err != nil {
+		return nil, err
+	}
+	for clusterName, ids := range nodeAccessDepsByCluster {
+		managedOSDepsByCluster[clusterName] = append(managedOSDepsByCluster[clusterName], ids...)
+	}
 	registrationDepsByCluster, err := planStorageRegistrationActivities(graph, state, hashState, target, phaseSet, includeStorage, machineServiceTaskIDs, managedOSDepsByCluster)
 	if err != nil {
 		return nil, err

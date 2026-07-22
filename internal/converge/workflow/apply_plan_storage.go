@@ -82,6 +82,63 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 	return managedOSDepsByCluster, nil
 }
 
+func planStorageNodeAccessActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
+	nodeAccessDepsByCluster := map[string][]string{}
+	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
+		return nodeAccessDepsByCluster, nil
+	}
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
+			continue
+		}
+		if !v1alpha1.StorageClusterManagesNodeAccount(cluster) {
+			continue
+		}
+		if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+			continue
+		}
+		limit := render.StorageClusterGroupName(cluster.Metadata.Name)
+		forks := storageClusterNodeCount(cluster)
+		if target.MachineScoped() {
+			hosts := storageRegistrationSelectedHosts(state, target, cluster)
+			if len(hosts) == 0 {
+				continue
+			}
+			limit = strings.Join(hosts, ":")
+			forks = len(hosts)
+		}
+		taskID := "nodeaccess." + cluster.Metadata.Name
+		nodeAccessDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+		deps := append([]string(nil), machineServiceTaskIDs...)
+		deps = append(deps, managedOSDepsByCluster[cluster.Metadata.Name]...)
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			ExplicitDependencies: deps,
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindStorageNodeAccess,
+					Label:        "storage node access " + cluster.Metadata.Name,
+					Cluster:      cluster.Metadata.Name,
+					ClusterKind:  ApplyClusterKindStorage,
+					Status:       TaskStatusPending,
+					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+				},
+				Playbook:           applyStorageNodeAccessPlaybook,
+				Limit:              limit,
+				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name},
+				State:              storageTaskState(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(hashState, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(hashState, cluster.Metadata.Name),
+				Forks:              forks,
+			},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return nodeAccessDepsByCluster, nil
+}
+
 func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster map[string][]string) (map[string][]string, error) {
 	registrationDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {

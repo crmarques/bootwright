@@ -204,7 +204,7 @@ func destroyKindIncluded(succeeded map[string]bool) func(string) bool {
 
 func destroyKindForApplyTaskKind(kind string) string {
 	switch kind {
-	case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
+	case workflow.ApplyTaskKindStorageNodeAccess, workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
 		return workflow.DestroyTaskKindStorageCluster
 	case workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindInstallWait,
 		workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindNodeConfigApply, workflow.ApplyTaskKindClusterAddon,
@@ -227,7 +227,7 @@ func isPartialStorageTask(task workflow.ApplyTask, partial map[string]bool) bool
 		return false
 	}
 	switch task.Entry.Kind {
-	case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
+	case workflow.ApplyTaskKindStorageNodeAccess, workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
 		return partial[task.Entry.Cluster]
 	}
 	return false

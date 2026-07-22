@@ -64,6 +64,18 @@ const (
 	MachineInstallSELinuxPermissive = "permissive"
 	MachineInstallSELinuxDisabled   = "disabled"
 
+	RootSSHUser = "root"
+
+	MachineRootLoginKeep   = "keep"
+	MachineRootLoginRevoke = "revoke"
+
+	StorageCephadmDefaultSSHUser = "cephadm"
+
+	NodeAccessSudoersDir    = "/etc/sudoers.d"
+	NodeAccessSudoersPrefix = "60-bootwright-"
+	NodeAccessSSHDDropIn    = "/etc/ssh/sshd_config.d/01-bootwright-access.conf"
+	NodeAccessMarkerPath    = "/etc/bootwright/access-marker.json"
+
 	InstallModeConnected    = "connected"
 	InstallModeDisconnected = "disconnected"
 

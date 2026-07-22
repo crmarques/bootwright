@@ -264,7 +264,33 @@ spec:
       clusterSSH:
         keyPairRef: ceph-cluster-ssh
 `,
-			want: "field clusterSSH not found",
+			want: "field keyPairRef not found",
+		},
+		{
+			name: "cluster-ssh-key-ref-retired",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata: { name: ceph }
+spec:
+  type: ceph
+  ceph:
+    cephadm:
+      clusterSSHKeyRef: ceph-cluster-ssh
+`,
+			want: "field clusterSSHKeyRef not found",
+		},
+		{
+			name: "cluster-ssh-user-retired",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata: { name: ceph }
+spec:
+  type: ceph
+  ceph:
+    cephadm:
+      clusterSSHUser: cephadm
+`,
+			want: "field clusterSSHUser not found",
 		},
 		{
 			name: "export-ssh-execution-retired",

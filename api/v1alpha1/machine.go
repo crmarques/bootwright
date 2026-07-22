@@ -140,7 +140,8 @@ type MachineAddress struct {
 }
 
 type MachineAccess struct {
-	SSH *MachineSSHSpec `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	SSH       *MachineSSHSpec `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	RootLogin string          `yaml:"rootLogin,omitempty" json:"rootLogin,omitempty"`
 }
 
 type MachineSSHSpec struct {
@@ -332,6 +333,21 @@ func MachineSSHAddress(machine Machine) string {
 func MachineFQDNAddress(machine Machine) string {
 	address, _ := MachineAddressByName(machine, MachineAddressFQDN)
 	return address
+}
+
+func MachineSSHUser(machine Machine) string {
+	if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
+		return machine.Spec.Access.SSH.User
+	}
+	return RootSSHUser
+}
+
+func MachineRootLoginValues() []string {
+	return []string{MachineRootLoginKeep, MachineRootLoginRevoke}
+}
+
+func MachineRevokesRootLogin(machine Machine) bool {
+	return machine.Spec.Access.RootLogin == MachineRootLoginRevoke
 }
 
 func MachineOSProvided(machine Machine) bool {

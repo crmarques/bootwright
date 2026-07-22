@@ -46,7 +46,7 @@ func Normalize(state *v1alpha1.State) {
 		normalizeClusterAddon(&state.ClusterAddons[i])
 	}
 	for i := range state.StorageClusters {
-		normalizeStorageCluster(&state.StorageClusters[i])
+		normalizeStorageCluster(&state.StorageClusters[i], *state)
 	}
 	normalizeNodeNames(state)
 	for i := range state.StoragePools {
@@ -205,6 +205,9 @@ func normalizeMachine(m *v1alpha1.Machine) {
 			}
 		}
 	}
+	if m.Spec.Access.SSH != nil && m.Spec.Access.RootLogin == "" {
+		m.Spec.Access.RootLogin = v1alpha1.MachineRootLoginKeep
+	}
 }
 
 func normalizeProvider(p *v1alpha1.InfraProvider) {
@@ -313,7 +316,7 @@ func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {
 	}
 }
 
-func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
+func normalizeStorageCluster(cluster *v1alpha1.StorageCluster, state v1alpha1.State) {
 	if cluster.Spec.Management == "" {
 		cluster.Spec.Management = v1alpha1.StorageClusterManagementManaged
 	}
@@ -342,8 +345,12 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if adm.Bootstrap.AddressRef.Name == "" {
 		adm.Bootstrap.AddressRef = adm.AddressRef
 	}
-	if adm.ClusterSSHKeyRef.Name != "" && adm.ClusterSSHUser == "" {
-		adm.ClusterSSHUser = "root"
+	if adm.ClusterSSH.User == "" {
+		if v1alpha1.StorageClusterRevokesRootLogin(*cluster, state) {
+			adm.ClusterSSH.User = v1alpha1.StorageCephadmDefaultSSHUser
+		} else {
+			adm.ClusterSSH.User = v1alpha1.RootSSHUser
+		}
 	}
 }
 

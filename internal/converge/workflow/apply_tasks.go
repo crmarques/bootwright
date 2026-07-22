@@ -18,6 +18,7 @@ const (
 	ApplyTaskKindMachineInfraFinalize   = "machineInfraFinalize"
 	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
 	ApplyTaskKindMachineRegistration    = "machineRegistration"
+	ApplyTaskKindStorageNodeAccess      = "storageNodeAccess"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindHostVirtctl            = "hostVirtctl"
@@ -44,6 +45,7 @@ const (
 	applyMachineInfraFinalize        = roles.PlaybookTaskMachineInfraFinalize
 	applyManagedMachineOSPlaybook    = roles.PlaybookTaskManagedMachineOSApply
 	applyMachineRegistrationPlaybook = roles.PlaybookTaskMachineRegistrationApply
+	applyStorageNodeAccessPlaybook   = roles.PlaybookTaskStorageNodeAccessApply
 	applyCreateISOPlaybook           = roles.PlaybookTaskContainerClusterCreateAgentISO
 	applyHostVirtctlPlaybook         = roles.PlaybookTaskHostVirtctlProvision
 	applyBootMachinePlaybook         = roles.PlaybookTaskContainerClusterBootAgentMachine

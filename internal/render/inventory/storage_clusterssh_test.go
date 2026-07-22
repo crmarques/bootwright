@@ -15,8 +15,10 @@ func TestStorageClusterSSHVarsFromClusterSSHKeyRef(t *testing.T) {
 			Type: v1alpha1.StorageClusterTypeCeph,
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Cephadm: v1alpha1.StorageCephadmSpec{
-					ClusterSSHKeyRef: v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"},
-					ClusterSSHUser:   "root",
+					ClusterSSH: v1alpha1.StorageCephadmSSHSpec{
+						User:   "root",
+						KeyRef: v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"},
+					},
 				},
 				Topology: v1alpha1.StorageCephTopology{
 					Nodes: []v1alpha1.StorageCephNode{{Name: "h1", MachineRef: v1alpha1.LocalObjectReference{Name: "h1"}}},

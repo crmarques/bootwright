@@ -22,6 +22,35 @@ func StorageClusterExternal(cluster StorageCluster) bool {
 	return !StorageClusterManaged(cluster)
 }
 
+func StorageClusterCephadmSSHUser(cluster StorageCluster) string {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Cephadm.ClusterSSH.User == "" {
+		return RootSSHUser
+	}
+	return cluster.Spec.Ceph.Cephadm.ClusterSSH.User
+}
+
+func StorageClusterManagesNodeAccount(cluster StorageCluster) bool {
+	return StorageClusterCephadmSSHUser(cluster) != RootSSHUser
+}
+
+func StorageClusterRevokesRootLogin(cluster StorageCluster, state State) bool {
+	if cluster.Spec.Ceph == nil {
+		return false
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		for _, machine := range state.Machines {
+			if machine.Metadata.Name == node.MachineRef.Name && MachineRevokesRootLogin(machine) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func NodeAccessSudoersPath(user string) string {
+	return NodeAccessSudoersDir + "/" + NodeAccessSudoersPrefix + user
+}
+
 func StorageCephDistributionSubscriptionBacked(distribution string) bool {
 	return distribution == StorageCephDistributionRedHat || distribution == StorageCephDistributionIBM
 }
@@ -135,10 +164,14 @@ type StorageCephIBMSpec struct {
 }
 
 type StorageCephadmSpec struct {
-	AddressRef       LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
-	ClusterSSHKeyRef LocalObjectReference    `yaml:"clusterSSHKeyRef,omitempty" json:"clusterSSHKeyRef,omitempty"`
-	ClusterSSHUser   string                  `yaml:"clusterSSHUser,omitempty" json:"clusterSSHUser,omitempty"`
-	Bootstrap        StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+	AddressRef LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+	ClusterSSH StorageCephadmSSHSpec   `yaml:"clusterSSH,omitempty" json:"clusterSSH,omitempty"`
+	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+}
+
+type StorageCephadmSSHSpec struct {
+	User   string               `yaml:"user,omitempty" json:"user,omitempty"`
+	KeyRef LocalObjectReference `yaml:"keyRef,omitempty" json:"keyRef,omitempty"`
 }
 
 type StorageCephadmBootstrap struct {

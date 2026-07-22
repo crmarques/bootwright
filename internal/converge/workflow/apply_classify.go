@@ -37,7 +37,7 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 	case ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindInstallWait, ApplyTaskKindClusterInstall:
 		k := ObjectKindContainerCluster + "/" + e.Cluster
 		return ObjectKindContainerCluster, k, k
-	case ApplyTaskKindStorageInfra, ApplyTaskKindStorageCluster:
+	case ApplyTaskKindStorageNodeAccess, ApplyTaskKindStorageInfra, ApplyTaskKindStorageCluster:
 		k := ObjectKindStorageCluster + "/" + e.Cluster
 		return ObjectKindStorageCluster, k, k
 	default:

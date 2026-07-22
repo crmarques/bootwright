@@ -45,6 +45,7 @@ func validateMachines(state v1alpha1.State) []string {
 		errs = append(errs, validateMachineAddresses(prefix, machine)...)
 		errs = append(errs, validateMachineAccess(prefix+".access", machine)...)
 	}
+	errs = append(errs, validateMachineRootLogin(state)...)
 	errs = append(errs, validateMachineImages(state)...)
 	errs = append(errs, validateMachineInstallProfiles(state)...)
 	errs = append(errs, validateUniqueMachineInstallIPs(state)...)
@@ -174,6 +175,43 @@ func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
 		return nil
 	}
 	return validateMachineSSH(prefix, machine)
+}
+
+func validateMachineRootLogin(state v1alpha1.State) []string {
+	var errs []string
+	replacing := map[string]string{}
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
+			continue
+		}
+		user := v1alpha1.StorageClusterCephadmSSHUser(cluster)
+		if user == v1alpha1.RootSSHUser {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			replacing[node.MachineRef.Name] = cluster.Metadata.Name
+		}
+	}
+	for _, machine := range state.Machines {
+		prefix := fmt.Sprintf("Machine/%s spec.access.rootLogin", machine.Metadata.Name)
+		switch machine.Spec.Access.RootLogin {
+		case v1alpha1.MachineRootLoginKeep, v1alpha1.MachineRootLoginRevoke, "":
+		default:
+			errs = append(errs, fmt.Sprintf("%s %q must be one of {%s}", prefix, machine.Spec.Access.RootLogin, strings.Join(v1alpha1.MachineRootLoginValues(), ", ")))
+			continue
+		}
+		if !v1alpha1.MachineRevokesRootLogin(machine) {
+			continue
+		}
+		if machine.Spec.Access.SSH == nil {
+			errs = append(errs, fmt.Sprintf("%s is %q but spec.access.ssh is not declared; Bootwright would have no identity to reach the machine with before or after the revoke", prefix, v1alpha1.MachineRootLoginRevoke))
+			continue
+		}
+		if _, ok := replacing[machine.Metadata.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s is %q but no managed Ceph StorageCluster lists this Machine in spec.ceph.topology.nodes with a non-root spec.ceph.cephadm.clusterSSH.user; revoking root SSH would leave no account to reach it. Add the Machine to such a cluster, or set %s back to %q", prefix, v1alpha1.MachineRootLoginRevoke, prefix, v1alpha1.MachineRootLoginKeep))
+		}
+	}
+	return errs
 }
 
 func validateMachineSSH(prefix string, machine v1alpha1.Machine) []string {

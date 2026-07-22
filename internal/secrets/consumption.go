@@ -58,7 +58,7 @@ func ConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		if cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name == name {
+		if cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name == name {
 			return true
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
