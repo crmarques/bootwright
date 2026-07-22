@@ -29,6 +29,7 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 			}
 			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Name, "ceph", "mon", "set_location", topology.CephDaemonName(node.Name), stretch.FailureDomain+"="+node.Site))
 		}
+		ops = append(ops, cephCrushHostLocationOperations(cluster, stretch)...)
 		stretchRule := operationWithIdempotency("topology", "create-crush-rule-"+stretch.RuleName, "stretch-crush-rule", stretch.RuleName)
 		stretchRule["structural"] = map[string]any{
 			"failureDomain":            stretch.FailureDomain,
@@ -38,6 +39,24 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 		if stretch.Tiebreaker.Node != "" {
 			ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", topology.CephDaemonName(topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node)), stretch.RuleName, stretch.FailureDomain))
 		}
+	}
+	return ops
+}
+
+func cephCrushHostLocationOperations(cluster v1alpha1.StorageCluster, stretch *v1alpha1.StorageCephStretch) []map[string]any {
+	mode, _, _ := topology.OSDReadinessExpectation(cluster)
+	if mode == "skip" {
+		return nil
+	}
+	tiebreaker := topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node)
+	var ops []map[string]any
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		if node.Site == "" || node.Name == tiebreaker || !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) {
+			continue
+		}
+		ops = append(ops, operationInPhase("topology", "set-crush-location-"+node.Name,
+			"ceph", "osd", "crush", "move", topology.CephDaemonName(node.Name),
+			"root=default", stretch.FailureDomain+"="+node.Site))
 	}
 	return ops
 }

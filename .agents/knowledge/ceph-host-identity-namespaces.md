@@ -34,9 +34,15 @@ orchestrator identity used in operator-facing messages, `crushNames` is what the
 CRUSH tree is matched on. Anything compared against *orchestrator* output
 (`ceph orch device ls`, `ceph orch ps`) keeps using the FQDN `cephHostname`.
 
-**Not covered:** a cephadm host spec `location` (stretch data sites) is applied
-by cephadm as `osd crush add-bucket <spec.hostname>`, i.e. under the FQDN, while
-the OSDs underneath land in the short bucket. Bootwright cannot restate that
-name — it is cephadm's own call — so a stretch estate with FQDN node names can
-end up with a parallel empty FQDN host bucket. Verify the CRUSH tree after the
-first stretch apply before relying on site placement.
+**Constraint:** A cephadm host spec `location` (stretch data sites) is applied by
+cephadm as `osd crush add-bucket <spec.hostname>`, and bootwright cannot restate
+that name — it is cephadm's own call. If cephadm buckets by the FQDN, the real
+short host bucket the OSDs create is left parented directly under `root=default`,
+outside the failure domain, and the stretch rule's
+`choose … type <failureDomain>` then finds only empty buckets: **PGs never map
+and pool I/O hangs**. So the host spec keeps its declarative `location` and a
+`set-crush-location-<node>` topology operation reconciles the real bucket with
+`ceph osd crush move <shortName> root=default <failureDomain>=<site>`. That move
+is correct under both cephadm behaviors — a no-op when cephadm already shortened
+the name, the actual repair when it did not — and an empty FQDN host bucket left
+inside the failure domain is inert (weight 0, never selected by straw2).

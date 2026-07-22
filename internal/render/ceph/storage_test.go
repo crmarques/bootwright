@@ -108,6 +108,14 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	assertOperationIdempotency(t, ops, "enable-stretch-mode", "stretch-mode", "enabled")
 	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "node-07", "stretch-rule", "datacenter"})
 	assertOperationCommand(t, ops, "set-mon-location-node-01.ceph-storage.bootwright.test", []string{"ceph", "mon", "set_location", "node-01", "datacenter=dc1"})
+	assertOperationCommand(t, ops, "set-crush-location-node-01.ceph-storage.bootwright.test", []string{"ceph", "osd", "crush", "move", "node-01", "root=default", "datacenter=dc1"})
+	assertOperationCommand(t, ops, "set-crush-location-node-06.ceph-storage.bootwright.test", []string{"ceph", "osd", "crush", "move", "node-06", "root=default", "datacenter=dc2"})
+	for _, item := range ops {
+		op := item.(map[string]any)
+		if op["name"] == "set-crush-location-node-07.ceph-storage.bootwright.test" {
+			t.Fatal("the mon-only stretch tiebreaker must not get a CRUSH host location")
+		}
+	}
 	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
 	assertOperationIdempotency(t, ops, "create-pool-odf-rbd", "ceph-pool", "odf-rbd")
 	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")

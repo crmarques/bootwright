@@ -90,6 +90,8 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 		`bw_run ceph orch apply -i "$HERE/cephadm/late-services.yaml"`,
 		"bw_guarded ceph-pool odf-rbd ceph osd pool create odf-rbd",
 		"bw_guarded cephfs odf-cephfs ceph fs new odf-cephfs odf-cephfs-metadata odf-cephfs-data",
+		"bw_run ceph mon set_location node-01 datacenter=dc1",
+		"bw_run ceph osd crush move node-01 root=default datacenter=dc1",
 		"bw_stretch_crush_rule stretch-rule datacenter 2",
 		"bw_guarded stretch-mode enabled ceph mon enable_stretch_mode",
 		"bw_guarded_quiet rgw-user bootwright-odf-rgw-admin",

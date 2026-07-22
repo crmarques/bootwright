@@ -14,6 +14,16 @@ bucket named after the site — outside `root=default`, where no CRUSH rule maps
 PGs and **all pool I/O hangs**. Data-site hosts pin `root=default` so their
 failure-domain buckets nest under the data root.
 
+**Constraint:** The host spec alone does not guarantee the placement, because
+cephadm buckets by `spec.hostname` while the OSDs create a bucket named after the
+*short* host. A `set-crush-location-<node>` operation
+(`ceph osd crush move <shortName> root=default <failureDomain>=<site>`) therefore
+reconciles every sited, non-tiebreaker OSD host before the stretch rule and
+`enable_stretch_mode` run. It is skipped when OSD readiness resolves to `skip`
+(unmanaged OSD services): bootwright does not move buckets it never created, and
+`crush move` on an absent bucket is ENOENT. See
+[ceph-host-identity-namespaces.md](ceph-host-identity-namespaces.md).
+
 **Constraint:** The stretch rule must place two replicas per data site:
 
 ```text

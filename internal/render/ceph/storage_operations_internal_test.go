@@ -468,6 +468,80 @@ func TestStretchModeMonOperationsUseCephShortNames(t *testing.T) {
 	}
 }
 
+func TestStretchModeMovesOSDHostBucketsIntoTheirFailureDomain(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					RuleName:      "stretch-rule",
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "node-07.ceph.example.net"},
+				},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "node-01.ceph.example.net", Site: "dc1", Roles: []string{"mon", "osd"}, Devices: []string{"/dev/sdb"}},
+					{Name: "node-02.ceph.example.net", Site: "dc2", Roles: []string{"osd"}, Devices: []string{"/dev/sdb"}},
+					{Name: "node-07.ceph.example.net", Site: "dc3", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	byName := map[string][]string{}
+	var names []string
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		names = append(names, name)
+		byName[name], _ = op["command"].([]string)
+	}
+	if got := byName["set-crush-location-node-01.ceph.example.net"]; !reflect.DeepEqual(got, []string{"ceph", "osd", "crush", "move", "node-01", "root=default", "datacenter=dc1"}) {
+		t.Fatalf("OSD host bucket must be moved into its site by ceph short name, got %v", got)
+	}
+	if _, ok := byName["set-crush-location-node-07.ceph.example.net"]; ok {
+		t.Fatal("a mon-only tiebreaker has no CRUSH host bucket and must not be moved")
+	}
+	moveIdx, ruleIdx, enableIdx := -1, -1, -1
+	for i, name := range names {
+		switch name {
+		case "set-crush-location-node-02.ceph.example.net":
+			moveIdx = i
+		case "create-crush-rule-stretch-rule":
+			ruleIdx = i
+		case "enable-stretch-mode":
+			enableIdx = i
+		}
+	}
+	if moveIdx == -1 || ruleIdx == -1 || enableIdx == -1 || moveIdx > ruleIdx || ruleIdx > enableIdx {
+		t.Fatalf("host buckets must reach their failure domain before the stretch rule and enable_stretch_mode, got order %v", names)
+	}
+}
+
+func TestStretchModeSkipsCrushLocationWhenOSDsAreUnmanaged(t *testing.T) {
+	unmanaged := true
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					RuleName:      "stretch-rule",
+				},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "node-01.ceph.example.net", Site: "dc1", Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephNodeOSD{Unmanaged: unmanaged}},
+				},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	for _, op := range ops {
+		if name, _ := op["name"].(string); strings.HasPrefix(name, "set-crush-location-") {
+			t.Fatalf("bootwright must not move CRUSH buckets it never created, got %v", name)
+		}
+	}
+}
+
 func TestStretchModeWithoutTiebreakerOmitsEnableStretchMode(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
