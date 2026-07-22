@@ -98,6 +98,9 @@ func cephManagementPort(port int) string {
 }
 
 func storageSeedSSHTarget(state v1alpha1.State, cluster v1alpha1.StorageCluster, node, address string) string {
+	if v1alpha1.StorageClusterManagesNodeAccount(cluster) {
+		return v1alpha1.StorageClusterCephadmSSHUser(cluster) + "@" + address
+	}
 	if machine, ok := topology.NodeMachine(state, cluster, node); ok && machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
 		return machine.Spec.Access.SSH.User + "@" + address
 	}

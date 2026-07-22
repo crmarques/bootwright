@@ -98,15 +98,36 @@ func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 	}
 	return sshTarget{
 		Address:       address,
-		User:          machineSSHUser(machine),
+		User:          machineLoginUser(state, machine),
 		KeyRef:        machine.Spec.Access.SSH.KeyRef,
 		KnownHostsRef: machine.Spec.Access.SSH.KnownHostsRef,
 	}, nil
 }
 
 func machineSSHUser(machine v1alpha1.Machine) string {
-	if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
-		return machine.Spec.Access.SSH.User
+	return v1alpha1.MachineSSHUser(machine)
+}
+
+func machineLoginUser(state v1alpha1.State, machine v1alpha1.Machine) string {
+	if user, ok := storageNodeLoginUser(state, machine.Metadata.Name); ok {
+		return user
 	}
-	return "root"
+	return v1alpha1.MachineSSHUser(machine)
+}
+
+func storageNodeLoginUser(state v1alpha1.State, machineName string) (string, bool) {
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
+			continue
+		}
+		if !v1alpha1.StorageClusterManagesNodeAccount(cluster) {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if node.MachineRef.Name == machineName {
+				return v1alpha1.StorageClusterCephadmSSHUser(cluster), true
+			}
+		}
+	}
+	return "", false
 }

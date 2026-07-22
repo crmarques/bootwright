@@ -296,9 +296,9 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 						sshKeyRef = machine.Spec.Access.SSH.KeyRef.Name
 						sshSeen = true
 					} else if machine.Spec.Access.SSH.User != sshUser {
-						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q (set spec.ceph.cephadm.clusterSSHKeyRef to allow per-node access keys)", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
+						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q (set spec.ceph.cephadm.clusterSSH.keyRef to allow per-node access keys)", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
 					} else if machine.Spec.Access.SSH.KeyRef.Name != sshKeyRef {
-						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.keyRef %q; all storage node Machines in one StorageCluster must use %q (set spec.ceph.cephadm.clusterSSHKeyRef to allow per-node access keys)", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
+						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.keyRef %q; all storage node Machines in one StorageCluster must use %q (set spec.ceph.cephadm.clusterSSH.keyRef to allow per-node access keys)", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
 					}
 				}
 				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef", cluster.Metadata.Name), cluster, node.Name, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)

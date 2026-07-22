@@ -62,6 +62,75 @@ IBM Storage Ceph license acceptance enables Call Home by default. An IBM
 or `disabled`; apply reconciles that choice after bootstrap. Bootwright must
 not leave vendor outbound telemetry enabled through an implicit default.
 
+## Node Login Identity and Privilege
+
+A machine has two login identities, owned by two different objects, and they
+must not be conflated (ADR 0019).
+
+`Machine.spec.access.ssh.user` is the **install-window identity** — the account
+Bootwright authenticates as to install, probe, and take ownership of the
+machine, normally `root`. It is load-bearing beyond connectivity: it feeds the
+managed-OS install-marker hash and it is the identity the pre-install readiness
+probe authenticates as, so a machine that no longer answers as that user reads
+as not-installed and is reinstalled. It must therefore stay the pre-existing
+identity for the life of the machine; hardening never rewrites it.
+
+`StorageCluster.spec.ceph.cephadm.clusterSSH.user` is the **post-install
+identity** — the account cephadm orchestrates every host as
+(`cephadm --ssh-user`, reconciled day-2 by `ceph cephadm set-user`) and the
+account Bootwright connects as once the node is provisioned. It is
+cluster-scoped because cephadm holds exactly one such value per cluster. It
+defaults to `cephadm` when any topology node's `Machine` sets
+`spec.access.rootLogin: revoke`, and to `root` otherwise. On a revoking node
+the two names must differ; validation rejects the collision.
+
+`Machine.spec.access.rootLogin` is the machine's OS posture: `keep` (default)
+or `revoke`. `revoke` writes `/etc/ssh/sshd_config.d/01-bootwright-access.conf`
+with `PermitRootLogin no`, validated by `sshd -t` before the reload, and is
+reversible — returning the field to `keep` removes the drop-in and
+re-authorizes root. It is accepted only on a machine a managed Ceph
+`StorageCluster` lists as a topology node under a non-root orchestration
+account; revoking a machine no such cluster claims would leave no account able
+to reach it and is refused.
+
+For a non-root orchestration account Bootwright provisions that account on
+every topology node with a locked password, no `wheel` membership, the machine
+access public key in its `authorized_keys`, and a per-user sudoers drop-in at
+`/etc/sudoers.d/60-bootwright-<user>` containing exactly
+`Defaults:<user> !requiretty` and `<user> ALL=(ALL) NOPASSWD: ALL`.
+
+The privilege grant is unrestricted by necessity and the security claim is
+correspondingly narrow. cephadm's manager `sudo`-wraps every remote command it
+issues when its SSH user is not `root`, and cephadm's own helper writes the
+same `NOPASSWD: ALL` rule, so a command-scoped policy cannot orchestrate a
+cluster. A keyed account with passwordless sudo is only marginally different in
+reachable privilege from keyed root SSH. What the posture buys is precise: no
+standing root SSH on the node, a named auditable principal in the audit and
+sudo logs instead of anonymous `root`, key-only authentication, and a
+credential that can be rotated or revoked without touching the root account. It
+is not privilege separation and must not be described as such.
+
+`clusterSSH.keyRef` is **required** when any topology node revokes root, and
+must resolve to a declared `sshKeyPair` `Secret`. Without it the cluster
+identity falls back to the first node's `Machine` access key, and
+`cephadm bootstrap --ssh-private-key` persists that controller-held machine
+administration key into the Ceph mon config-key store, where the cluster's
+manager can read it — a key that now opens a passwordless-sudo account.
+A dedicated generated key keeps the controller's credential in the
+controller's trust domain and limits what the cluster holds to an account the
+cluster already controls.
+
+Revocation is ordered verify-before-revoke: the orchestration account must be
+proved to answer `sudo -n true` on every topology node before
+`PermitRootLogin no` is written on any of them, and re-proved after the `sshd`
+reload. A node whose account does not answer stops the run with root still
+reachable.
+
+Node access state is recorded on the machine at
+`/etc/bootwright/access-marker.json` with mode `0644`. It is non-secret —
+account name, root-login posture, and the paths Bootwright owns — and carries
+no key material.
+
 ## Installer Trust
 
 Cluster install trust is rendered only from explicit references:
@@ -246,6 +315,10 @@ Generated output boundaries are part of the safety contract:
 - Managed machine OS install markers live on the installed machine at
   `/etc/bootwright/install-marker.json` by default. The marker contains
   Bootwright ownership metadata and a non-secret desired hash only.
+- Node access markers live on the machine at
+  `/etc/bootwright/access-marker.json` with mode `0644`. They record the
+  orchestration account name, the root-login posture, and the paths Bootwright
+  owns — non-secret, no key material.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested secret-inlined tool inputs under `<dir>` with restrictive
   file modes. The command must fail without `--sensitive`.

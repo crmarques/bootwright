@@ -302,7 +302,30 @@ Rules:
   name-resolution entry, and the machine hosting the managed name-resolution
   component its own network references.
 - `spec.access.ssh` owns bastion-to-machine SSH identity and known-host
-  material.
+  material. `access.ssh.user` is the machine's **install-window** identity —
+  the account Bootwright installs, probes, and takes ownership of the machine
+  as, normally `root`. It feeds the managed-OS install-marker hash and is the
+  identity the pre-install readiness probe authenticates as, so repointing it
+  on an installed machine makes that machine read as not-installed and
+  reinstalls it. It must stay the pre-existing identity for the machine's
+  lifetime; post-install hardening is expressed through `access.rootLogin` and
+  the owning cluster's orchestration account instead, never by rewriting this
+  field.
+- `spec.access.rootLogin` is the machine's OS root-login posture: `keep` (the
+  default) or `revoke`. `revoke` writes
+  `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with `PermitRootLogin no`,
+  validated with `sshd -t` before the reload; returning the field to `keep`
+  removes the drop-in and re-authorizes root, so the change is reversible.
+  It requires `spec.access.ssh` to be declared, and it is accepted only on a
+  machine that a managed Ceph `StorageCluster` lists in
+  `spec.ceph.topology.nodes` under a non-root
+  `spec.ceph.cephadm.clusterSSH.user`; otherwise the revoke would leave no
+  account able to reach the machine and is rejected. Revocation is ordered
+  verify-before-revoke: the orchestration account must answer `sudo -n true` on
+  every topology node before root is revoked on any of them, and is re-proved
+  after the `sshd` reload. Node access state is recorded on the machine at
+  `/etc/bootwright/access-marker.json` (mode `0644`, non-secret). See ADR 0019
+  and `security.md`.
 - `spec.capabilities[]` is a generic tag list such as `openshift-node`,
   `ceph-node`, `ceph-admin`, `container-runtime`, `artifact-server`,
   `load-balancer`, `proxy`, `name-resolution`, `ntp`, `registry`, `libvirt`.
@@ -698,8 +721,10 @@ Rules:
   `privateKeyRef`), the `core` user, and the node's effective primary install
   IP (falling back to its declared name). A public-only `nodeSSH` is valid
   for installation but cannot power these commands. Storage-cluster access
-  continues to use each node `Machine`'s `spec.access.ssh` identity,
-  connecting to the machine's `fqdn` address per the `Machine` rules. The
+  continues to use each node `Machine`'s `spec.access.ssh` key material and
+  connects to the machine's `fqdn` address per the `Machine` rules; the account
+  is the cluster's orchestration user
+  (`spec.ceph.cephadm.clusterSSH.user`) once the node is provisioned. The
   `--node` selector accepts the node name (FQDN or short label) or a
   `<role>-<ordinal>`; a machine name is rejected with guidance naming the
   node. Container-node
@@ -759,7 +784,8 @@ Rules:
 - Imported storage declares external details and does not run cephadm.
 - Managed storage nodes reference `Machine` objects with `ceph-node`
   capability.
-- Managed storage seed/admin operations use `Machine.spec.access.ssh`.
+- Managed storage seed/admin operations use `Machine.spec.access.ssh` key
+  material, as the account named by `spec.ceph.cephadm.clusterSSH.user`.
 - Storage convergence is additive-only across `spec.ceph.config`, `mgrModules[]`,
   `monitoring`, the `services[]` passthrough, and the `StoragePool`/
   `StorageFilesystem`/`StorageObjectGateway` kinds: `apply` creates and converges
@@ -829,17 +855,34 @@ Rules:
   module to that explicit outbound-communication intent.
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
-- `cephadm.clusterSSHKeyRef`, when set, names the `sshKeyPair` `Secret` that
+- `cephadm.clusterSSH` declares the cluster's own SSH orchestration identity —
+  the post-install account and key, as opposed to each `Machine`'s
+  `access.ssh`, which is the install-window identity Bootwright installs and
+  probes the machine with (ADR 0019). The block has two fields, `user` and
+  `keyRef`.
+- `cephadm.clusterSSH.user` is the OS user cephadm manages every host as
+  (`cephadm --ssh-user`, reconciled day-2 with `ceph cephadm get-user` /
+  `set-user`) and the account Bootwright itself connects as once a node is
+  provisioned. It must be a valid POSIX user name. It defaults to `cephadm`
+  when any topology node's `Machine` sets `spec.access.rootLogin: revoke`, and
+  to `root` otherwise; a `root` resolution is rejected when any node revokes
+  root. When it resolves to a non-root name, Bootwright provisions that account
+  on every topology node — locked password, no `wheel` membership, the machine
+  access public key authorized, and a per-user sudoers drop-in at
+  `/etc/sudoers.d/60-bootwright-<user>` carrying `Defaults:<user> !requiretty`
+  and `<user> ALL=(ALL) NOPASSWD: ALL`. On a node that revokes root the account
+  name must differ from that node's `access.ssh.user`.
+- `cephadm.clusterSSH.keyRef`, when set, names the `sshKeyPair` `Secret` that
   becomes cephadm's own cluster management identity — the key Bootwright
   authorizes on, and cephadm distributes to and uses to reach, every host. It is
-  independent of each `Machine`'s `access.ssh.keyRef` (how Bootwright connects to
-  run the install phase) and must resolve to a declared `sshKeyPair` `Secret`.
-  Omitted, the cluster SSH identity defaults to the first topology host's
-  `access.ssh` key, which requires every node to share that one access key.
-- `cephadm.clusterSSHUser` is the OS user cephadm manages every host as (`cephadm
-  --ssh-user`) and must exist on every topology host. It defaults to `root` when
-  `clusterSSHKeyRef` is set, and is ignored — the first host's `access.ssh` user
-  is used — when `clusterSSHKeyRef` is omitted.
+  independent of each `Machine`'s `access.ssh.keyRef` and must resolve to a
+  declared `sshKeyPair` `Secret`. Omitted, the cluster SSH identity defaults to
+  the first topology host's `access.ssh` key, which requires every node to share
+  that one access key. It is **required** when any topology node revokes root:
+  without it `cephadm bootstrap --ssh-private-key` would persist Bootwright's
+  controller-held machine access key into the Ceph mon config-key store, where
+  it would open a passwordless-sudo account (`security.md`, Node Login Identity
+  and Privilege).
 - `cephadm.bootstrap.node` names a storage topology host by its node name
   (the FQDN or its short label); a machine name is rejected with guidance
   naming the node. The rendered cephadm `--mon-ip` is always an address of

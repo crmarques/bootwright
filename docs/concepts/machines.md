@@ -168,9 +168,54 @@ needs no SSH address or key.
 | `addresses[].name` | Yes (per entry) | None | Local address name. |
 | `addresses[].address` | Yes (per entry) | None | IP address or DNS name. |
 | `access.ssh.addressRef` | Yes (when `access.ssh` is set) | None | Address name used for SSH; must resolve to `spec.addresses[]`. |
-| `access.ssh.user` | No | Workflow-dependent | SSH user. |
+| `access.ssh.user` | No | Workflow-dependent | SSH user for the **install window** — see [Root login posture](#root-login-posture) before changing it on an installed machine. |
 | `access.ssh.keyRef` | Yes (when `access.ssh` is set) | None | Secret containing the private SSH key material. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
+| `access.rootLogin` | No | `keep` | `keep` or `revoke`. `revoke` turns off root SSH on the installed node; legal only for a Ceph storage node whose cluster declares a non-root orchestration account. See [Root login posture](#root-login-posture). |
+
+#### Root login posture
+
+`access.ssh.user` is the machine's **install-window identity** — the account
+Bootwright authenticates as to install the OS, probe that the machine is
+already installed, and prove it owns it. Treat it as fixed for the life of the
+machine.
+
+!!! danger "Changing `access.ssh.user` on an installed machine reinstalls it"
+    The managed-OS readiness probe decides "this node is already installed" by
+    SSH-authenticating as `access.ssh.user`. Point it at a different account and
+    that authentication fails, the node reads as *not installed*, and the two
+    guards that would normally refuse to touch a foreign or drifted host are
+    skipped along with it — because both are conditioned on the node having
+    answered. The next `apply` reinstalls the machine, wiping it. The user also
+    feeds the install-marker hash, so even a node that still answers is seen as
+    drifted.
+
+Hardening the node is therefore a *different* field. `access.rootLogin: revoke`
+turns off root SSH after installation without touching the install-window
+identity:
+
+```yaml
+spec:
+  access:
+    ssh:
+      addressRef: ip
+      keyRef: lab-machine-key
+    rootLogin: revoke
+```
+
+Bootwright then writes `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with
+`PermitRootLogin no`, validating it with `sshd -t` before reloading `sshd`. It
+is reversible: set `rootLogin: keep` and re-apply to remove the drop-in and
+re-authorize root.
+
+Revoking root needs somewhere else to log in, so it is accepted only on a
+machine that a managed Ceph `StorageCluster` lists as a topology node under a
+non-root `spec.ceph.cephadm.clusterSSH.user`. That cluster field declares the
+replacement account, Bootwright provisions it on every node, and it is verified
+working on all of them before root is revoked on any. The full workflow — the
+YAML, the required dedicated cluster key, and an honest account of what the
+posture does and does not buy — is in
+[Storage → Revoking root SSH on Ceph nodes](storage.md#revoking-root-ssh-on-ceph-nodes).
 
 #### The `fqdn` address
 
