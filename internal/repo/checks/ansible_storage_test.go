@@ -1327,6 +1327,29 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("Ceph prerequisites must run on the current storage host, got delegate_to %v", got)
 	}
 
+	firewalldProbeIdx := findAnsibleTask(t, dependencyTasks, "Probe host firewalld availability")
+	firewalldProbe := dependencyTasks[firewalldProbeIdx]
+	assertIncludeRoleName(t, firewalldProbe, "bootwright.core.machine_base")
+	if got := fmt.Sprint(firewalldProbe["ansible.builtin.include_role"]); !strings.Contains(got, "firewalld_probe.yml") {
+		t.Fatalf("firewalld probe task must use machine_base firewalld_probe.yml, got %v", firewalldProbe)
+	}
+
+	vrrpIdx := findAnsibleTask(t, dependencyTasks, "Allow VRRP so cephadm keepalived ingress daemons can negotiate a virtual IP")
+	if firewalldProbeIdx >= vrrpIdx {
+		t.Fatalf("VRRP firewalld allowance must run after the firewalld probe (probe=%d vrrp=%d)", firewalldProbeIdx, vrrpIdx)
+	}
+	vrrp := dependencyTasks[vrrpIdx]
+	vrrpBody, ok := vrrp["ansible.posix.firewalld"].(map[string]any)
+	if !ok {
+		t.Fatalf("VRRP firewalld allowance must use ansible.posix.firewalld, got %v", vrrp)
+	}
+	if vrrpBody["protocol"] != "vrrp" || vrrpBody["state"] != "enabled" || vrrpBody["permanent"] != true || vrrpBody["immediate"] != true {
+		t.Fatalf("VRRP firewalld allowance must permanently+immediately enable the vrrp protocol, got %v", vrrpBody)
+	}
+	if got := fmt.Sprint(vrrp["when"]); !strings.Contains(got, "bootwright_firewalld_available") {
+		t.Fatalf("VRRP firewalld allowance must be gated on bootwright_firewalld_available, got when=%v", got)
+	}
+
 	startServicesIdx := findAnsibleTask(t, dependencyTasks, "Start storage node services")
 	waitSyncIdx := findAnsibleTask(t, dependencyTasks, "Wait for storage node time synchronization")
 	if startServicesIdx >= waitSyncIdx {
