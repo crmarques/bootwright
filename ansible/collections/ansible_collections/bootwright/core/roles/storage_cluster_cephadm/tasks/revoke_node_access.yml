@@ -1,0 +1,68 @@
+---
+- name: Restore root SSH login on the storage node
+  ansible.builtin.file:
+    path: "{{ bootwright_node_access.sshdDropInPath }}"
+    state: absent
+  register: bootwright_node_access_destroy_drop_in
+  when: bootwright_node_access is defined
+
+- name: Validate the storage node sshd configuration after restoring root SSH login
+  ansible.builtin.command:
+    argv:
+      - sshd
+      - -t
+  changed_when: false
+  when:
+    - bootwright_node_access is defined
+    - bootwright_node_access_destroy_drop_in.changed | default(false) | bool
+
+- name: Reload sshd on the storage node after restoring root SSH login
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded
+  when:
+    - bootwright_node_access is defined
+    - bootwright_node_access_destroy_drop_in.changed | default(false) | bool
+
+- name: Reauthorize the machine access key for the storage node install account
+  ansible.posix.authorized_key:
+    user: "{{ bootwright_node_access.installUser }}"
+    key: "{{ lookup('ansible.builtin.file', bootwright_node_access.installPublicKeyPath) }}"
+    state: present
+    manage_dir: true
+  when:
+    - bootwright_node_access is defined
+    - bootwright_node_access.installPublicKeyPath | default('') | length > 0
+
+- name: Deauthorize the machine access key for the storage node orchestration account
+  ansible.posix.authorized_key:
+    user: "{{ bootwright_node_access.user }}"
+    key: "{{ lookup('ansible.builtin.file', bootwright_node_access.installPublicKeyPath) }}"
+    state: absent
+    manage_dir: false
+  when:
+    - bootwright_node_access is defined
+    - bootwright_node_access.installPublicKeyPath | default('') | length > 0
+
+- name: Deauthorize the cephadm cluster key for the storage node orchestration account
+  ansible.posix.authorized_key:
+    user: "{{ bootwright_node_access.user }}"
+    key: "{{ lookup('ansible.builtin.file', bootwright_selected_storage_cluster.clusterSSH.publicKeyPath) }}"
+    state: absent
+    manage_dir: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - bootwright_node_access is defined
+    - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+
+- name: Remove the storage node access marker
+  ansible.builtin.file:
+    path: "{{ bootwright_node_access.markerPath }}"
+    state: absent
+  when: bootwright_node_access is defined
+
+- name: Remove the storage node orchestration sudoers grant
+  ansible.builtin.file:
+    path: "{{ bootwright_node_access.sudoersPath }}"
+    state: absent
+  when: bootwright_node_access is defined

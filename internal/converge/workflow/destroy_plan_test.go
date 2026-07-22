@@ -53,12 +53,23 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs := []string{"destroy.storage-clusters", "destroy.container-clusters"}
-	if len(tasks) != 2 || tasks[0].Entry.ID != wantIDs[0] || tasks[1].Entry.ID != wantIDs[1] {
+	wantIDs := []string{"destroy.storage-clusters", "destroy.container-clusters", "destroy.storage-node-access"}
+	if len(tasks) != len(wantIDs) {
 		t.Fatalf("clusters chain = %+v, want %v", tasks, wantIDs)
+	}
+	for i, id := range wantIDs {
+		if tasks[i].Entry.ID != id {
+			t.Fatalf("clusters chain = %+v, want %v", tasks, wantIDs)
+		}
 	}
 	if len(tasks[1].Entry.OrderingDependencies) != 1 || tasks[1].Entry.OrderingDependencies[0] != wantIDs[0] {
 		t.Fatalf("container destroy must be ordering-sequenced after storage destroy: %v", tasks[1].Entry.OrderingDependencies)
+	}
+	if len(tasks[2].Entry.OrderingDependencies) != 1 || tasks[2].Entry.OrderingDependencies[0] != wantIDs[1] {
+		t.Fatalf("storage node access revoke must be ordering-sequenced last: %v", tasks[2].Entry.OrderingDependencies)
+	}
+	if tasks[2].Entry.Kind != DestroyTaskKindStorageNodeAccess {
+		t.Fatalf("storage node access revoke must carry its own distinct kind, got %q", tasks[2].Entry.Kind)
 	}
 	if len(tasks[1].Entry.Dependencies) != 0 {
 		t.Fatalf("destroy steps must not carry hard deps (ordering only): %v", tasks[1].Entry.Dependencies)
@@ -79,6 +90,7 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		"destroy.machine-infra",
 		"destroy.infra-components",
 		"destroy.provider-services",
+		"destroy.storage-node-access",
 	}
 	if len(tasks) != len(wantIDs) {
 		t.Fatalf("planned %d tasks, want %d: %+v", len(tasks), len(wantIDs), tasks)
@@ -100,6 +112,9 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		} else if len(task.Entry.OrderingDependencies) != 1 || task.Entry.OrderingDependencies[0] != wantIDs[i-1] {
 			t.Fatalf("task[%d] ordering deps = %v, want [%s]", i, task.Entry.OrderingDependencies, wantIDs[i-1])
 		}
+	}
+	if last := tasks[len(tasks)-1]; last.Entry.Kind != DestroyTaskKindStorageNodeAccess {
+		t.Fatalf("storage node access revoke must run last in the full destroy chain, after Machine registration and every other step that still needs the storage hosts' rendered identity; got last kind %q", last.Entry.Kind)
 	}
 }
 
@@ -125,16 +140,22 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 		if task.Entry.Kind == DestroyTaskKindStorageCluster {
 			t.Fatalf("container-only selection must plan no storage teardown step; got %+v", task.Entry)
 		}
+		if task.Entry.Kind == DestroyTaskKindStorageNodeAccess {
+			t.Fatalf("container-only selection must plan no storage node access revoke step; got %+v", task.Entry)
+		}
 	}
 
 	narrowed, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{"ceph-selected"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var storageTask *ApplyTask
+	var storageTask, nodeAccessTask *ApplyTask
 	for i := range narrowed {
-		if narrowed[i].Entry.Kind == DestroyTaskKindStorageCluster {
+		switch narrowed[i].Entry.Kind {
+		case DestroyTaskKindStorageCluster:
 			storageTask = &narrowed[i]
+		case DestroyTaskKindStorageNodeAccess:
+			nodeAccessTask = &narrowed[i]
 		}
 	}
 	if storageTask == nil {
@@ -142,6 +163,12 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 	}
 	if len(storageTask.Entry.ResourceKeys) != 1 || storageTask.Entry.ResourceKeys[0] != "ceph-selected" {
 		t.Fatalf("storage step must cover only the selected root; got %v", storageTask.Entry.ResourceKeys)
+	}
+	if nodeAccessTask == nil {
+		t.Fatal("storage-narrowed selection must plan a storage node access revoke step")
+	}
+	if len(nodeAccessTask.Entry.ResourceKeys) != 1 || nodeAccessTask.Entry.ResourceKeys[0] != "ceph-selected" {
+		t.Fatalf("storage node access revoke step must cover only the selected root; got %v", nodeAccessTask.Entry.ResourceKeys)
 	}
 	for _, pair := range storageTask.ExtraVarPairs {
 		if strings.HasPrefix(pair, DestroyStorageScopeExtraVar+"=") {

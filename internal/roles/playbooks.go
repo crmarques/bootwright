@@ -32,4 +32,5 @@ const (
 	PlaybookTaskProviderServicesDestroy       = "bootwright.core.task_provider_services_destroy"
 	PlaybookTaskStorageClusterDestroy         = "bootwright.core.task_storage_cluster_destroy"
 	PlaybookTaskContainerClusterAgentDestroy  = "bootwright.core.task_container_cluster_agent_destroy"
+	PlaybookTaskStorageNodeAccessDestroy      = "bootwright.core.task_storage_node_access_destroy"
 )

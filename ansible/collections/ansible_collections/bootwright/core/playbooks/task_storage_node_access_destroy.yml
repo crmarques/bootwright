@@ -1,0 +1,58 @@
+---
+- name: Revoke storage node orchestration access
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  ignore_unreachable: true
+  vars:
+    bootwright_selected_storage_cluster: >-
+      {{
+        bootwright_storage_clusters
+        | default([])
+        | selectattr('name', 'equalto', bootwright_storage_cluster_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  pre_tasks:
+    - name: End hosts that are not managed storage nodes
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_cluster_name | default('') | length == 0
+
+    - name: End hosts whose storage cluster does not manage node accounts
+      ansible.builtin.meta: end_host
+      when: bootwright_selected_storage_cluster.clusterSSH.user | default('root') == 'root'
+
+    - name: End hosts outside the selected storage clusters
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_destroy_storage_scope is defined
+        - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
+
+    - name: End hosts outside the selected machines
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_destroy_machine_scope is defined
+        - bootwright_storage_node_name | default('') not in (bootwright_destroy_machine_scope | split(','))
+  tasks:
+    - name: Probe node reachability and escalation before revoking node access
+      block:
+        - name: Probe node reachability before revoking node access
+          ansible.builtin.ping:
+          register: bootwright_node_access_reachable_probe
+          ignore_unreachable: true
+          failed_when: false
+      rescue:
+        - name: Record an unusable node before revoking node access
+          ansible.builtin.set_fact:
+            bootwright_node_access_reachable_probe:
+              unreachable: true
+
+    - name: End nodes Bootwright cannot reach or escalate on
+      ansible.builtin.meta: end_host
+      when: bootwright_node_access_reachable_probe.unreachable | default(false) | bool
+
+    - name: Revoke storage node orchestration access
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_cluster_cephadm
+        tasks_from: revoke_node_access.yml

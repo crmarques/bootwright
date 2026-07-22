@@ -148,6 +148,28 @@ func TestFullDestroySweepsRecordsForUndeclaredObjects(t *testing.T) {
 	}
 }
 
+func TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess(t *testing.T) {
+	if got := destroyKindForApplyTaskKind(workflow.ApplyTaskKindStorageNodeAccess); got != workflow.DestroyTaskKindStorageNodeAccess {
+		t.Fatalf("storage node access apply kind maps to %q, want %q: the Storage clusters destroy step no longer revokes node access itself, so a converge record for the nodeaccess task must only be cleared once the dedicated Storage node access destroy step succeeds", got, workflow.DestroyTaskKindStorageNodeAccess)
+	}
+	for _, kind := range []string{workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster} {
+		if got := destroyKindForApplyTaskKind(kind); got != workflow.DestroyTaskKindStorageCluster {
+			t.Fatalf("apply kind %q maps to %q, want %q", kind, got, workflow.DestroyTaskKindStorageCluster)
+		}
+	}
+}
+
+func TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess(t *testing.T) {
+	include := destroyKindIncluded(map[string]bool{workflow.DestroyTaskKindMachineInfra: true})
+	if !include(workflow.DestroyTaskKindStorageNodeAccess) {
+		t.Fatal("a successful Machine infrastructure destroy wipes the machine, so it must also count as reverting storage node access")
+	}
+	includeStorageOnly := destroyKindIncluded(map[string]bool{workflow.DestroyTaskKindStorageCluster: true})
+	if includeStorageOnly(workflow.DestroyTaskKindStorageNodeAccess) {
+		t.Fatal("a successful Storage clusters destroy must not, by itself, imply storage node access was reverted -- that is now a separate destroy step that can fail independently")
+	}
+}
+
 func objectRecorded(objects []workflow.ObjectClassification, key string) bool {
 	for _, o := range objects {
 		if o.ObjectKey == key {

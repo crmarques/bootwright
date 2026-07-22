@@ -106,3 +106,31 @@ clusters share a provider service component with unscoped clusters
 (`stategraph.SharedDestroyConflicts`) — container names and state dirs are
 keyed per (provider, name), so destroying a shared instance breaks the
 unscoped consumers.
+
+**Storage node access revocation is the one ordering EXCEPTION:**
+`destroy.storage-node-access` ("Storage node access") must run LAST in both the
+"clusters" and "all" chains, never folded back into `clusterDestroySteps()`.
+Every step targeting `bootwright_storage_hosts` in the same invocation
+(`destroy.storage-clusters` and, in the "all" chain, `destroy.machine-registration`)
+connects using the SAME statically-rendered `ansible_user` for that node
+(`root` or the cluster's cephadm identity, from `MachineRevokesRootLogin`) — the
+inventory is rendered once per run and never reacts to what an earlier step in
+the same run already did on the live host. Before this step existed, its work
+(restore root SSH, deauthorize the cephadm key/sudoers/marker) ran inline at the
+end of "Storage clusters" (`wipe_and_cleanup.yml`), unconditionally for every
+`rootLogin: revoke` node regardless of whether a later step in the SAME run
+still needed to connect as cephadm. A successful "Storage clusters" pass
+therefore silently broke `destroy.machine-registration`'s connection to the
+same host moments later (surfaced as an become/sudo failure, not an SSH one,
+if the SSH control connection was still warm) — and, on any run that stopped
+before reaching the (then-inline) revoke step, a later independent retry of
+"Storage clusters" would find the identity already stripped from a prior
+successful run and fail outright with an SSH permission-denied error. It now
+carries its own `DestroyTaskKindStorageNodeAccess`, not
+`DestroyTaskKindStorageCluster`, so `destroyKindForApplyTaskKind` only clears
+the apply-side `nodeaccess.<cluster>` converge record once this dedicated step
+succeeds — a bare "Storage clusters" success no longer implies node access was
+reverted. Guarded by TestPlanDestroyTasksClustersChain,
+TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
+TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess,
+TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess.

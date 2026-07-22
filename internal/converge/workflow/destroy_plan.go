@@ -18,6 +18,7 @@ const (
 	DestroyTaskKindProviderServices    = "destroyProviderServices"
 	DestroyTaskKindStorageCluster      = "destroyStorageCluster"
 	DestroyTaskKindContainerCluster    = "destroyContainerCluster"
+	DestroyTaskKindStorageNodeAccess   = "destroyStorageNodeAccess"
 )
 
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
@@ -32,9 +33,9 @@ func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extr
 	case "infra":
 		return destroyChain(state, limit, extraVars, infraDestroySteps(), storageWorkNames), nil
 	case "clusters":
-		return destroyChain(state, limit, extraVars, clusterDestroySteps(), storageWorkNames), nil
+		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), storageNodeAccessDestroySteps()...), storageWorkNames), nil
 	case "all":
-		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), infraDestroySteps()...), storageWorkNames), nil
+		return destroyChain(state, limit, extraVars, append(append(clusterDestroySteps(), infraDestroySteps()...), storageNodeAccessDestroySteps()...), storageWorkNames), nil
 	default:
 		return nil, fmt.Errorf("granular destroy is only supported for the infra, clusters, and all stages, not %q", scopeName)
 	}
@@ -72,6 +73,12 @@ func clusterDestroySteps() []destroyStep {
 	}
 }
 
+func storageNodeAccessDestroySteps() []destroyStep {
+	return []destroyStep{
+		{id: "destroy.storage-node-access", kind: DestroyTaskKindStorageNodeAccess, label: "Storage node access", playbook: roles.PlaybookTaskStorageNodeAccessDestroy, limit: render.GroupStorageHosts},
+	}
+}
+
 type destroyStep struct {
 	id       string
 	kind     string
@@ -85,7 +92,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 	prev := ""
 	for _, step := range steps {
 		resourceKeys := destroyStepClusters(state, step.kind)
-		if step.kind == DestroyTaskKindStorageCluster && storageWorkNames != nil {
+		if (step.kind == DestroyTaskKindStorageCluster || step.kind == DestroyTaskKindStorageNodeAccess) && storageWorkNames != nil {
 			if len(storageWorkNames) == 0 {
 				continue
 			}
@@ -121,7 +128,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 func destroyStepClusters(state v1alpha1.State, kind string) []string {
 	var names []string
 	switch kind {
-	case DestroyTaskKindStorageCluster:
+	case DestroyTaskKindStorageCluster, DestroyTaskKindStorageNodeAccess:
 		for _, cluster := range state.StorageClusters {
 			names = append(names, cluster.Metadata.Name)
 		}

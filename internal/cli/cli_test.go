@@ -982,6 +982,7 @@ func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
 		"destroy.machine-infra",
 		"destroy.infra-components",
 		"destroy.provider-services",
+		"destroy.storage-node-access",
 	}
 	gotIDs := make([]string, 0, len(report.DestroyPlan.Tasks))
 	for _, task := range report.DestroyPlan.Tasks {

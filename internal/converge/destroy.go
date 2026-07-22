@@ -198,13 +198,16 @@ func destroyKindIncluded(succeeded map[string]bool) func(string) bool {
 	if expanded[workflow.DestroyTaskKindMachineInfra] {
 		expanded[workflow.DestroyTaskKindContainerCluster] = true
 		expanded[workflow.DestroyTaskKindStorageCluster] = true
+		expanded[workflow.DestroyTaskKindStorageNodeAccess] = true
 	}
 	return func(kind string) bool { return kind != "" && expanded[kind] }
 }
 
 func destroyKindForApplyTaskKind(kind string) string {
 	switch kind {
-	case workflow.ApplyTaskKindStorageNodeAccess, workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
+	case workflow.ApplyTaskKindStorageNodeAccess:
+		return workflow.DestroyTaskKindStorageNodeAccess
+	case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
 		return workflow.DestroyTaskKindStorageCluster
 	case workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindInstallWait,
 		workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindNodeConfigApply, workflow.ApplyTaskKindClusterAddon,

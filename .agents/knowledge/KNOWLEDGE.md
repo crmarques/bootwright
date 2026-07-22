@@ -58,6 +58,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 | Rendering & templates | hostname verification failed after SAN edit; artifacts-openssl.cnf.j2; bootwright_artifacts_tls_openssl_cnf is changed; ssl_ciphers verbatim injection; artifacts-nginx.conf.j2; DEFAULT:@SECLEVEL=0; tlsVersionsAscending; legacy iBMC InsertMedia TLS failure | [artifact-server-tls-render.md](artifact-server-tls-render.md) |
 | Apply / drift | REGISTRY_AUTH_HTPASSWD_PATH panic; crash-loop under restart_policy; net.ipv4.ip_nonlocal_bind; squid refuses to run as root UID 1000; Address not found; Cannot assign requested address; Cannot find device; dns enable='no'; bind-dynamic grabs :53; dhcp-option=option:ntp-server IPv4 only | [infra-component-service-gotchas.md](infra-component-service-gotchas.md) |
 | Apply / drift | too many colons; Port could not be cast to integer value; bracketRedfishHost; net.JoinHostPort; TestManagedProxyURLBracketsIPv6; urlencode leaves / unescaped; replace('/', '%2F'); userinfo percent-encoding | [url-authority-gotchas.md](url-authority-gotchas.md) |
+| Ceph storage / destroy | `Task failed: Incorrect sudo password` right after a successful "Storage clusters" destroy step; a later destroy retry then fails `Failed to connect to the host via ssh: cephadm@<host>: Permission denied (publickey,...)`; apply --converge-drifted afterwards performs no OS reinstall | [destroy-scoping-and-sweeps.md](destroy-scoping-and-sweeps.md) |
 
 ## Constraints & semantics by area
 
