@@ -182,7 +182,31 @@ Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
 | `placement` | No | every host carrying the service's role | See [Shared placement](#shared-placement). |
 | `port` | No | cephadm default | Service port. |
 | `retentionTime` | No | cephadm default | Retention time (Prometheus only; `retention_time`/`retention_size` exist only on cephadm's `PrometheusSpec`, and every other monitoring service rejects the keys). |
-| `retentionSize` | No | cephadm default | Retention size (Prometheus only). |
+| `retentionSize` | No | `10GB` | Retention size (Prometheus only). cephadm leaves the TSDB size-unbounded and caps it by time alone, so on a Ceph node the TSDB grows on the same filesystem as `/var/lib/ceph` for the whole retention window. Bootwright always renders a `retention_size` to bound it; raise it when you have the headroom. |
+
+### Node root-filesystem budget
+
+Everything cephadm keeps outside the OSD data disks — container images, the
+`/var/lib/ceph/<fsid>` data directory, the mon RocksDB store, the crash spool,
+the Prometheus TSDB, Grafana, Alertmanager and Loki — lands on the node's root
+filesystem. `bootwright preflight` sizes that filesystem per node from the roles
+the node declares:
+
+| Term | GiB | Applies to |
+| --- | --- | --- |
+| Base | 20 | Every storage node (container images, cephadm data dir, crash spool, journal) |
+| `mon` | +15 | Nodes carrying the `mon` role (the RocksDB store grows during peering and backfill, and only trims once all PGs are `active+clean`) |
+| `mgr` | +5 | Nodes carrying the `mgr` role |
+| `prometheus` | +`retentionSize` + 4 | Nodes where the Prometheus service is placed |
+| `grafana` | +2 | Nodes where Grafana is placed |
+| `alertmanager` | +1 | Nodes where Alertmanager is placed |
+| `loki` | +20 | Nodes where Loki is placed (cephadm sets no Loki retention) |
+
+Preflight **fails** below an absolute floor of 20 GiB free and **warns** below
+the computed budget. A node that installs under budget still comes up, but its
+root filesystem is expected to run short and Ceph's `CephNodeDiskspaceWarning`
+alert will fire on the trailing fill rate — see
+[Ceph disk-space alerts flap after install](../troubleshooting.md#ceph-disk-space-alerts-flap-after-install).
 | `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
 
 ### Passthrough services

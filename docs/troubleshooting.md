@@ -287,6 +287,75 @@ reclamation workflow.
     `ceph`/`cephadm` CLI (see
     [Ceph topologies](advanced/ceph-topologies.md)).
 
+## Ceph disk-space alerts flap after install
+
+Shortly after a managed Ceph install the dashboard starts emitting paired
+`CephNodeDiskspaceWarning` notifications — the same nodes go *active* and then
+*resolved* within a scrape or two:
+
+```
+CephNodeDiskspaceWarning (active)
+  Mountpoint / on node-02... will be full in less than 5 days
+CephNodeDiskspaceWarning (resolved)
+  Mountpoint / on node-02... will be full in less than 5 days
+```
+
+Two things combine to produce that pattern. Ceph ships the rule as
+
+```
+predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) < 0
+```
+
+with **no `for:` clause** — unlike the neighbouring `CephNodeRootFilesystemFull`,
+which holds `for: 5m`. A single evaluation where the projection dips below zero
+fires the alert, and the next evaluation resolves it, so every wobble in the
+trailing fill rate becomes an active/resolved pair. And the projection is a
+straight-line extrapolation of the last two days: right after an install the
+root filesystem is genuinely ramping (container image pulls, the mon RocksDB
+store growing through initial peering, the Prometheus TSDB filling toward its
+retention window, the journal growing to its cap), so the rule extrapolates a
+*bounded* ramp as if it ran forever.
+
+The alert only fires at all when the projected five-day consumption exceeds the
+free space — roughly `free < 5 × daily fill rate`. So the flapping is a real
+signal about headroom, not pure noise. Check the actual margin on every node:
+
+```bash
+# free space and the biggest consumers on the Ceph state filesystem
+ansible ceph -i <inventory> -b -m shell -a 'df -h / /var/lib/ceph; \
+  du -xsh /var/lib/ceph/* /var/lib/containers 2>/dev/null | sort -h | tail'
+
+# journal size against its cap
+ansible ceph -i <inventory> -b -m shell -a 'journalctl --disk-usage'
+
+# what Prometheus is actually holding
+ansible ceph -i <inventory> -b -m shell -a \
+  'du -xsh /var/lib/ceph/*/prometheus.*/ 2>/dev/null'
+```
+
+If the nodes are comfortably empty (tens of GiB free and falling by megabytes a
+day), the alerts are the post-install ramp and stop on their own once the
+cluster settles and the two-day window fills with steady-state samples.
+
+If free space is in the single-digit-to-low-double-digit GiB range, the
+filesystem is genuinely undersized for the roles the node carries — see the
+[node root-filesystem budget](concepts/storage.md#node-root-filesystem-budget).
+Remedies, in order of preference:
+
+- Give the node a larger root disk. `spec.machineOSInstall` kickstart
+  `storage.rootDisk` selects the disk the root partition grows into, so
+  reinstalling the machine against a larger disk is the durable fix.
+- Lower `spec.ceph.monitoring.prometheus.retentionSize` (Bootwright defaults it
+  to `10GB`) and re-apply.
+- Move the `prometheus`, `grafana`, `alertmanager` or `loki` placements onto
+  nodes with headroom, or off the `mon` nodes.
+- Cap the journal, which defaults to 10% of the filesystem (max 4 GiB):
+  `journalctl --vacuum-size=1G` now, and
+  `SystemMaxUse=1G` in `/etc/systemd/journald.conf.d/` to hold it there.
+
+`bootwright preflight` now fails below 20 GiB free and warns below the
+per-node budget, so a re-run reports which nodes are short.
+
 ## Recovering the Ceph dashboard password
 
 `cephadm bootstrap` generates a one-time random `admin` password for the Ceph
