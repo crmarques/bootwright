@@ -6,8 +6,8 @@ Work must happen in a temporary branch and worktree, never directly in the prima
 
 ## Load First
 
-- `/.agents/skills/implementation-validation/SKILL.md` — owns the `make
-  check-fast` → readiness → rebase loop this skill defers to.
+- `/.agents/skills/implementation-validation/SKILL.md` — owns the rebase-first →
+  `make check-fast` loop this skill defers to.
 - Any task-specific project skills for the requested change.
 
 ## Before Editing
@@ -50,8 +50,8 @@ the final validation for the combined result.
 ## Validate And Commit
 
 - Run focused commands during implementation. After the intended edit set, follow
-  `implementation-validation`: `make check-fast` (never `make check` unless the
-  user requests that gate) and the readiness/rebase loop.
+  `implementation-validation`: check for a `main` advance and rebase first, then
+  `make check-fast` (never `make check` unless the user requests that gate).
 - Commit task changes on the temporary branch once `make check-fast` passes, and
   commit any rebase fixes the same way (preauthorized — do not ask). Author commits
   as the human only — no agent co-author or attribution trailer (see AGENTS.md

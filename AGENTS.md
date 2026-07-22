@@ -83,9 +83,10 @@ brief:
   inspection until the user explicitly approves merge.
 - During investigation, run the smallest targeted command that answers the current
   question; do not run aggregate checks unless the user asks.
-- After the intended edit set, run `make check-fast` (not `make check` unless the
-  user requests that gate), then the readiness/rebase loop. Task commits on the
-  temporary branch are preauthorized; do not ask.
+- After the intended edit set, first check whether local `main` has advanced and
+  rebase onto it if so; only then run `make check-fast` (not `make check` unless
+  the user requests that gate), so a late rebase never forces a wasted rerun.
+  Task commits on the temporary branch are preauthorized; do not ask.
 - Leave `main` integration pending explicit merge approval. If `main` is dirty at
   integration time, report that it is not ready instead of touching unrelated
   changes. A response such as "go" authorizes the final rebase, merge, and cleanup.

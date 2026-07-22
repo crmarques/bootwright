@@ -11,14 +11,19 @@ changes, also run the checks from `definition-stewardship`.
 
 - During investigation or iterative fixes, run the smallest direct targeted
   command that answers the current question instead of an aggregate target.
-- After completing the intended edit set for any implementation request, run
-  `make check-fast` from the temporary worktree. Do not run `make check` by
-  yourself; run it only when the user explicitly requests that full gate.
-- After `make check-fast`, check whether the temporary branch is ready to merge
-  into current local `main`.
-- If local `main` has advanced or the temporary branch is not ready, rebase the
-  temporary branch onto current local `main`, perform needed fixes or
-  adjustments, rerun `make check-fast`, and repeat until the branch is ready or
+- After completing the intended edit set for any implementation request, check
+  whether local `main` has advanced since the temporary branch was created (or
+  last rebased). If it has, rebase the temporary branch onto current local
+  `main` and make any needed fixes or adjustments first — do this before
+  running `make check-fast`, not after, so a late-discovered rebase does not
+  waste a completed run.
+- Only once the branch is rebased onto current `main` (or was already up to
+  date), run `make check-fast` from the temporary worktree. Do not run `make
+  check` by yourself; run it only when the user explicitly requests that full
+  gate.
+- If local `main` advances again before merge (including while `make
+  check-fast` was running), repeat the rebase-first sequence — rebase and fix,
+  then rerun `make check-fast` — until the branch is both current and green, or
   a real blocker remains.
 - Current `make check-fast` syncs the embedded ansible bundle (needs
   `ansible-playbook`), runs the cheap local guardrails — CLI file-size, Go source
