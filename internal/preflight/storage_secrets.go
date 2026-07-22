@@ -14,12 +14,22 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
+		if ref := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name; ref != "" {
+			out = append(out, secretRefRequirement{
+				refName: ref,
+				label:   fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.clusterSSH.keyRef", cluster.Metadata.Name),
+				phases:  []string{"deps", "base"},
+				role:    secret.MaterialSSHPublic,
+				sshPair: true,
+				owner:   secretRefOwner{storageCluster: cluster.Metadata.Name},
+			})
+		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			machine, ok := topology.NodeMachine(state, cluster, node.Name)
 			if !ok {
 				continue
 			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Name, machine.Metadata.Name), []string{"deps", "base"}, machine, true, secretRefOwner{storageCluster: cluster.Metadata.Name})...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Name, machine.Metadata.Name), []string{"machines", "deps", "base"}, machine, true, secretRefOwner{storageCluster: cluster.Metadata.Name})...)
 		}
 	}
 	for _, export := range state.StorageExports {
