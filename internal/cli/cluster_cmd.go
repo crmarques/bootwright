@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -242,30 +243,35 @@ func printClusterInfo(stdout io.Writer, state v1alpha1.State, summaries []cluste
 		return
 	}
 	for _, summary := range summaries {
-		p.Section("Cluster " + summary.Name)
-		fields := []cliout.Field{
-			{Key: "API", Value: emptyAccessValue(summary.APIURL)},
-			{Key: "Console", Value: emptyAccessValue(summary.ConsoleURL)},
-		}
+		p.Section(summary.Name + ":")
+		fields := []cliout.Field{{Key: "Type", Value: containerClusterTypeDetail(summary)}}
 		if sd := substrateDescriptor(summary.Substrate, summary.HostCluster); sd != "" {
 			fields = append(fields, cliout.Field{Key: "Substrate", Value: sd})
 		}
 		fields = append(fields,
+			cliout.Field{Key: "API", Value: emptyAccessValue(summary.APIURL)},
+			cliout.Field{Key: "Console", Value: emptyAccessValue(summary.ConsoleURL)},
 			cliout.Field{Key: "Kubeconfig", Value: summary.KubeconfigPath},
 			cliout.Field{Key: "Kube context", Value: summary.KubeContextCommand},
 			cliout.Field{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
-			cliout.Field{Key: "Password file", Value: summary.KubeadminPasswordPath},
-			cliout.Field{Key: "Show password", Value: summary.KubeadminPasswordCommand},
 		)
 		if showSecrets {
 			fields = append(fields, cliout.Field{Key: "Kubeadmin password", Value: revealValue(summary.KubeadminPasswordPath, summary.KubeadminPassword)})
+		} else {
+			fields = append(fields, cliout.Field{Key: "Kubeadmin password file", Value: summary.KubeadminPasswordPath})
 		}
 		p.Fields(fields)
-		p.Status(accessArtifactStatus(summary.Kubeconfig), "kubeconfig", accessArtifactDetail(summary.Kubeconfig))
-		p.Status(accessArtifactStatus(summary.KubeadminPassword), "kubeadmin password", accessArtifactDetail(summary.KubeadminPassword))
 		printClusterNodeAccess(p, state, summary.Name)
 	}
 	printStorageAccessSections(p, storage, showSecrets)
+}
+
+func containerClusterTypeDetail(summary clusteraccess.ClusterSummary) string {
+	detail := summary.DistributionType
+	if extra := strings.TrimSpace(summary.InstallMode + " " + summary.InstallMethod); extra != "" {
+		detail += " (" + extra + ")"
+	}
+	return detail
 }
 
 func buildClusterInfoReport(context string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) clusterInfoReport {

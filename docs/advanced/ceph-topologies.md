@@ -407,8 +407,8 @@ the controller (`clusters/<storage-cluster>/secrets/dashboard-password`, mode
 !!! note "Dashboard password is captured at install only"
     The password is captured solely from the one-time `cephadm bootstrap`. It is
     never re-read or re-synced on later applies, and — like every secret —
-    `cluster info` shows its file path and a `sudo cat` command by default,
-    revealing the bytes only when you pass `--secrets`. The file persists after the cluster is destroyed; delete the
+    `cluster info` shows its file path by default, revealing the bytes only
+    when you pass `--secrets`. The file persists after the cluster is destroyed; delete the
     cluster's `secrets/` directory by hand if you want the credential gone. If
     the file is lost or the in-cluster password was changed, see
     [Recovering the Ceph dashboard password](../troubleshooting.md#recovering-the-ceph-dashboard-password).

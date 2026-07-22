@@ -1,27 +1,22 @@
 package cli
 
 import (
-	"strings"
-
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 )
 
 func printStorageAccessSections(p *cliout.Printer, summaries []clusteraccess.StorageSummary, showSecrets bool) {
 	for _, summary := range summaries {
-		p.Section("Storage cluster " + summary.Name)
-		p.Fields(storageAccessFields(summary))
-		if summary.DashboardPasswordPath != "" {
-			p.Status(accessArtifactStatus(summary.DashboardPassword), "dashboard password", accessArtifactDetail(summary.DashboardPassword))
-			if showSecrets {
-				p.Fields([]cliout.Field{{Key: "Dashboard password", Value: revealValue(summary.DashboardPasswordPath, summary.DashboardPassword)}})
-			}
+		p.Section(summary.Name + ":")
+		p.Fields(storageAccessLeadFields(summary))
+		if len(summary.MonitorEndpoints) > 0 {
+			p.FieldList("Monitors", summary.MonitorEndpoints)
 		}
-		p.Status(cliout.StatusInfo, "health", "run the health check to confirm Ceph reports HEALTH_OK")
+		p.Fields(storageAccessTrailFields(summary, showSecrets))
 	}
 }
 
-func storageAccessFields(summary clusteraccess.StorageSummary) []cliout.Field {
+func storageAccessLeadFields(summary clusteraccess.StorageSummary) []cliout.Field {
 	fields := []cliout.Field{{Key: "Type", Value: storageAccessTypeDetail(summary)}}
 	if summary.SeedHost != "" {
 		fields = append(fields, cliout.Field{Key: "Seed node", Value: summary.SeedHost})
@@ -29,9 +24,11 @@ func storageAccessFields(summary clusteraccess.StorageSummary) []cliout.Field {
 	if summary.SSHCommand != "" {
 		fields = append(fields, cliout.Field{Key: "SSH", Value: summary.SSHCommand})
 	}
-	if len(summary.MonitorEndpoints) > 0 {
-		fields = append(fields, cliout.Field{Key: "Monitors", Value: strings.Join(summary.MonitorEndpoints, ", ")})
-	}
+	return fields
+}
+
+func storageAccessTrailFields(summary clusteraccess.StorageSummary, showSecrets bool) []cliout.Field {
+	var fields []cliout.Field
 	if summary.HealthCommand != "" {
 		fields = append(fields, cliout.Field{Key: "Health check", Value: summary.HealthCommand})
 	}
@@ -42,11 +39,12 @@ func storageAccessFields(summary clusteraccess.StorageSummary) []cliout.Field {
 		fields = append(fields, cliout.Field{Key: "Dashboard", Value: summary.DashboardURL})
 	}
 	if summary.DashboardPasswordPath != "" {
-		fields = append(fields,
-			cliout.Field{Key: "Dashboard user", Value: summary.DashboardUser},
-			cliout.Field{Key: "Dashboard password file", Value: summary.DashboardPasswordPath},
-			cliout.Field{Key: "Show dashboard password", Value: summary.DashboardPasswordCommand},
-		)
+		fields = append(fields, cliout.Field{Key: "Dashboard user", Value: summary.DashboardUser})
+		if showSecrets {
+			fields = append(fields, cliout.Field{Key: "Dashboard password", Value: revealValue(summary.DashboardPasswordPath, summary.DashboardPassword)})
+		} else {
+			fields = append(fields, cliout.Field{Key: "Dashboard password file", Value: summary.DashboardPasswordPath})
+		}
 	}
 	return append(fields,
 		cliout.Field{Key: "ceph.conf", Value: storageAccessNodePath(summary.ConfigPath, summary.SeedHost)},

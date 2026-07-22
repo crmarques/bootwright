@@ -217,7 +217,7 @@ terminal state. Re-running `apply` later is safe — matching work is skipped.
 ## Access The Cluster
 
 Once apply finishes, list the local access details (URLs, kubeconfig path, the
-password-retrieval command, and the `cluster rsh` line for each node — no secret
+kubeadmin password file, and the `cluster rsh` line for each node — no secret
 bytes are printed unless you add `--secrets`):
 
 ```bash

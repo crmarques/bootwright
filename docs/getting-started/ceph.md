@@ -371,8 +371,8 @@ ingress VIP `192.168.140.80`).
 `cephadm bootstrap` generates a one-time random `admin` password. Bootwright
 captures it **during the install** and saves it on the controller at
 `clusters/ceph-ibm/secrets/dashboard-password` (mode 0600). `cluster info`
-prints that file path plus a `sudo cat` command — never the bytes unless you pass
-`--secrets`. View it, then log in as `admin`:
+prints that file path — never the bytes unless you pass `--secrets`, which
+prints the password itself instead. View it, then log in as `admin`:
 
 ```bash
 sudo cat /var/lib/bootwright/contexts/ceph-ibm-lab/clusters/ceph-ibm/secrets/dashboard-password

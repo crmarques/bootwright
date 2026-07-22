@@ -23,6 +23,7 @@ type Artifact struct {
 
 type ClusterSummary struct {
 	Name                     string   `json:"name"`
+	DistributionType         string   `json:"distributionType"`
 	InstallMode              string   `json:"installMode"`
 	InstallMethod            string   `json:"installMethod"`
 	Substrate                string   `json:"substrate,omitempty"`
@@ -90,6 +91,7 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 		sub := stateview.ContainerClusterSubstrate(state, cluster)
 		out = append(out, ClusterSummary{
 			Name:                     name,
+			DistributionType:         v1alpha1.DistributionType(cluster),
 			InstallMode:              v1alpha1.InstallMode(cluster),
 			InstallMethod:            cluster.Spec.Install.Method,
 			Substrate:                sub.Provider,

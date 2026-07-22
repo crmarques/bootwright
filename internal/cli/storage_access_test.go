@@ -25,14 +25,15 @@ func TestClusterAccessReportsStorageClusters(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Bootwright: cluster info",
-		"Storage cluster ceph-libvirt",
+		"ceph-libvirt:",
 		"Type: ceph (managed)",
 		"Seed node: node01",
 		"SSH: ssh root@",
+		"Monitors:",
+		"    - node01.ceph-libvirt.bootwright.test=",
 		"Health check: ssh root@",
 		"sudo cephadm shell -- ceph -s",
 		"Admin keyring: /etc/ceph/ceph.client.admin.keyring (on node01)",
-		"[INFO] health:",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("cluster info missing %q:\n%s", want, stdout)
@@ -46,7 +47,7 @@ func TestClusterAccessFiltersStorageClusterByName(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("cluster info --name exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Storage cluster ceph-libvirt") {
+	if !strings.Contains(stdout, "ceph-libvirt:") {
 		t.Fatalf("filtered output missing storage cluster:\n%s", stdout)
 	}
 
@@ -71,7 +72,7 @@ func TestPrintClusterAccessShowsStorageAfterSuccessfulApply(t *testing.T) {
 	printClusterAccess(&out, state, render.Result{}, ledger, t.TempDir())
 	got := out.String()
 	for _, want := range []string{
-		"Storage cluster ceph-libvirt",
+		"ceph-libvirt:",
 		"Health check: ssh root@",
 		"sudo cephadm shell -- ceph -s",
 	} {
@@ -98,8 +99,6 @@ func TestClusterAccessShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
 	for _, want := range []string{
 		"Dashboard user: admin",
 		"Dashboard password file: " + passwordPath,
-		"Show dashboard password: sudo cat " + passwordPath,
-		"[OK] dashboard password",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("cluster info missing %q:\n%s", want, stdout)

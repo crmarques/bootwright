@@ -87,10 +87,9 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 	}
 	for _, want := range []string{
 		"Bootwright: cluster info",
-		"Cluster sno-libvirt",
+		"sno-libvirt:",
 		"Kubeconfig: " + kubeconfigPath,
-		"Password file: " + passwordPath,
-		"Show password: sudo cat " + passwordPath,
+		"Kubeadmin password file: " + passwordPath,
 		"Node master-0: bootwright cluster rsh --name sno-libvirt --node master-0",
 	} {
 		if !strings.Contains(stdout, want) {
