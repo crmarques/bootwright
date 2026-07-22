@@ -409,7 +409,7 @@ bootwright_machines:
         - address: 192.168.140.5
           name: lab-lan
         - address: bastion.bootwright.test
-          name: dnsEntry
+          name: fqdn
       capabilities:
         - container-runtime
         - artifact-server
@@ -422,7 +422,7 @@ bootwright_machines:
         - address: 192.168.140.20
           name: ip
         - address: rack1-srv1.bootwright.test
-          name: dnsEntry
+          name: fqdn
       capabilities:
         - openshift-node
       name: rack1-srv1
@@ -430,7 +430,7 @@ bootwright_machines:
         - address: 192.168.140.21
           name: ip
         - address: rack1-srv2.bootwright.test
-          name: dnsEntry
+          name: fqdn
       capabilities:
         - openshift-node
       name: rack1-srv2
@@ -438,7 +438,7 @@ bootwright_machines:
         - address: 192.168.140.22
           name: ip
         - address: rack1-srv3.bootwright.test
-          name: dnsEntry
+          name: fqdn
       capabilities:
         - openshift-node
       name: rack1-srv3

@@ -44,7 +44,7 @@ machines:
               address: localhost
             - name: cluster-lan
               address: 192.168.132.1
-            - name: dnsEntry
+            - name: fqdn
               address: bastion.bootwright.test
         access:
             ssh:
@@ -76,7 +76,7 @@ machines:
         addresses:
             - name: ip
               address: 192.168.132.20
-            - name: dnsEntry
+            - name: fqdn
               address: master-0.bootwright.test
 networkConfigs:
     - apiVersion: bootwright.io/v1alpha1

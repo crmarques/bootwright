@@ -173,7 +173,12 @@ func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.Stor
 		return v1alpha1.StorageCephHost{}, false
 	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if node.Hostname == name || stateview.NodeShortName(node.Hostname) == name || node.MachineRef.Name == name {
+		if node.Hostname == name || stateview.NodeShortName(node.Hostname) == name {
+			return node, true
+		}
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.MachineRef.Name == name {
 			return node, true
 		}
 	}

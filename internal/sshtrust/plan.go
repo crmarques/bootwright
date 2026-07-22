@@ -122,13 +122,26 @@ func EvaluateHost(ctx context.Context, state v1alpha1.State, machine v1alpha1.Ma
 		report.Reason = "Machine OS is not provided"
 		return report, HostRecord{}, false, nil
 	}
-	keys, err := scan(ctx, report.Address, defaultHostTrustScanTimeout)
+	scanTarget := report.Address
+	keys, err := scan(ctx, scanTarget, defaultHostTrustScanTimeout)
 	if err != nil {
-		return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, report.Address, err)
+		fallback := v1alpha1.MachineSSHAddress(machine)
+		if fallback == "" || fallback == scanTarget {
+			return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, scanTarget, err)
+		}
+		scanTarget = fallback
+		keys, err = scan(ctx, scanTarget, defaultHostTrustScanTimeout)
+		if err != nil {
+			return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, report.Address, err)
+		}
 	}
 	key, ok := SelectPreferred(keys)
 	if !ok {
-		return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: no SSH host keys returned", machine.Metadata.Name, report.Address)
+		return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: no SSH host keys returned", machine.Metadata.Name, scanTarget)
+	}
+	hostList := report.Address
+	if ip := v1alpha1.MachineSSHAddress(machine); ip != "" && ip != report.Address {
+		hostList = report.Address + "," + ip
 	}
 	record := HostRecord{
 		Name:              machine.Metadata.Name,
@@ -136,7 +149,7 @@ func EvaluateHost(ctx context.Context, state v1alpha1.State, machine v1alpha1.Ma
 		KeyType:           key.KeyType,
 		PublicKey:         key.PublicKey,
 		FingerprintSHA256: key.FingerprintSHA256,
-		KnownHostsLine:    key.KnownHostsLine,
+		KnownHostsLine:    KnownHostsLine(hostList, key.KeyType, key.PublicKey),
 	}
 	report.KeyType = record.KeyType
 	report.FingerprintSHA256 = record.FingerprintSHA256

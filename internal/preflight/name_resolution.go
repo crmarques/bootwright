@@ -21,7 +21,7 @@ func DefaultLookupHost(name string) ([]string, error) {
 	return net.DefaultResolver.LookupHost(ctx, name)
 }
 
-func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps) []Check {
+func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps, scope map[string]bool) []Check {
 	if !anyPhaseInScope([]string{"fabric", "machines", "deps", "base", "add-ons"}, selected) {
 		return nil
 	}
@@ -30,6 +30,9 @@ func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps) []C
 	}
 	var checks []Check
 	for _, machine := range state.Machines {
+		if len(scope) > 0 && !scope[machine.Metadata.Name] {
+			continue
+		}
 		fqdn := v1alpha1.MachineFQDNAddress(machine)
 		if fqdn == "" || !stateview.MachineReferencesNameResolution(state, machine) {
 			continue
@@ -53,29 +56,46 @@ func resolutionCheck(deps Deps, name, lookup, expected string, managed bool, ext
 	addresses, err := deps.LookupHost(lookup)
 	if err != nil {
 		if managed {
-			return Check{
-				Group:       checkGroupNameResolution,
-				Name:        name,
-				Status:      StatusWarn,
-				Evidence:    lookup + " does not resolve yet",
-				Impact:      "Bootwright connects to this machine through its DNS name; the managed name-resolution component publishes this record once the infra stage converges",
-				Remediation: "bootwright apply converges the managed name-resolution component; if this persists after apply, check that the controller uses the managed resolver",
-			}
+			return warnResolutionCheck(name,
+				lookup+" does not resolve yet",
+				"Bootwright connects to this machine through its DNS name; the managed name-resolution component publishes this record once the infra stage converges",
+				"bootwright apply converges the managed name-resolution component; if this persists after apply, check that the controller uses the managed resolver")
 		}
 		return failCheck(checkGroupNameResolution, name,
 			lookup+" does not resolve",
 			"Bootwright connects to this machine through its DNS name; SSH and cluster provisioning fail until the record exists",
 			externalRemediation)
 	}
+	expectedIP := net.ParseIP(expected)
+	if expectedIP == nil {
+		return okCheck(checkGroupNameResolution, name, lookup+" -> "+strings.Join(addresses, ","))
+	}
 	for _, address := range addresses {
-		if address == expected {
+		if ip := net.ParseIP(address); ip != nil && ip.Equal(expectedIP) {
 			return okCheck(checkGroupNameResolution, name, lookup+" -> "+address)
 		}
+	}
+	if managed {
+		return warnResolutionCheck(name,
+			fmt.Sprintf("%s resolves to %s, want %s", lookup, strings.Join(addresses, ","), expected),
+			"The managed record is stale; connections use the old address until the resolver reconverges",
+			"bootwright apply reconverges the managed name-resolution record; if this persists after apply, check the name-resolution component")
 	}
 	return failCheck(checkGroupNameResolution, name,
 		fmt.Sprintf("%s resolves to %s, want %s", lookup, strings.Join(addresses, ","), expected),
 		"The DNS record points at a different host, so Bootwright would drive the wrong machine",
 		externalRemediation)
+}
+
+func warnResolutionCheck(name, evidence, impact, remediation string) Check {
+	return Check{
+		Group:       checkGroupNameResolution,
+		Name:        name,
+		Status:      StatusWarn,
+		Evidence:    evidence,
+		Impact:      impact,
+		Remediation: remediation,
+	}
 }
 
 func machineNameResolutionManaged(state v1alpha1.State, machine v1alpha1.Machine) bool {

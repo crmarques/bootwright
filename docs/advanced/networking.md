@@ -311,9 +311,13 @@ serves, a `host-record` for the machine's
 [`fqdn` name](../concepts/machines.md#the-dnsentry-address)
 (`<machineName>.<baseDomain>` unless overridden) targeting the machine's
 `access.ssh.addressRef` IP, and a `cname` from each cluster node FQDN to the
-bound machine's `fqdn`. When an operator-declared `fqdn` lives in a
-zone the managed resolver does not own, the node record degrades to a direct
-`host-record` on the same IP. The bare machine-label record (`<machineName>`
+bound machine's `fqdn`. The `fqdn` host-record is published even when an
+operator-declared `fqdn` lives in a foreign zone: the managed resolver
+answers authoritatively for the machines it serves, so the cname target is
+always locally known and environments resolve corporate machine names without
+reaching corporate DNS. Note that a multi-homed machine whose foreign-zone
+record points at a different interface resolves environment-locally to the
+`access.ssh.addressRef` IP. The bare machine-label record (`<machineName>`
 without the domain) is not published. Bootwright itself connects to
 name-resolution-wired machines through the `fqdn` name, so these records
 are load-bearing, not cosmetic.
@@ -324,7 +328,8 @@ machine create `A <fqdn> → <ip>`, and for each cluster node
 group **Name resolution** resolves each machine's `fqdn` and each node
 FQDN before apply and fails naming the exact record to create when one is
 missing or points at the wrong address; under managed resolution the same
-checks point at the apply command that converges the resolver instead.
+checks warn instead of failing — converging the resolver is exactly what
+apply does — and point at the apply command.
 
 ### Cluster records
 

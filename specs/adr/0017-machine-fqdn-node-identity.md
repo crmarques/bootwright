@@ -73,18 +73,23 @@ location, and DNS record name.
 The node FQDN resolves to the machine through its `fqdn`:
 
 - Managed name resolution (dnsmasq): Bootwright renders a `host-record` for
-  each machine's `fqdn` name targeting the `access.ssh.addressRef` IP,
-  and a `cname` from each node FQDN to the bound machine's `fqdn` when
-  that name is itself a managed record; when the operator overrode `fqdn`
-  into a zone the managed resolver does not own, the node record degrades to
-  a direct `host-record` on the same IP. The bare machine-label record is no
-  longer published.
+  each machine's `fqdn` name targeting the `access.ssh.addressRef` IP, and a
+  `cname` from each node FQDN to the bound machine's `fqdn`. The `fqdn`
+  host-record is published even when the operator overrode `fqdn` into a
+  foreign zone — the managed resolver answers authoritatively for the
+  machines it serves, which keeps the cname target locally known and lets an
+  environment resolve corporate machine names without reaching corporate DNS.
+  A multi-homed machine whose foreign-zone record legitimately points at a
+  different interface therefore resolves environment-locally to the
+  `access.ssh.addressRef` IP. The bare machine-label record is no longer
+  published.
 - Provided (external) name resolution: the operator owns the records. A
   preflight group "Name resolution" resolves each machine's `fqdn` and
   each node FQDN and fails with the exact record to create
   (`A <fqdn> → <ip>`, `CNAME <nodeFQDN> → <fqdn>`) when resolution is
   missing or points at the wrong address. For managed resolution the same
-  checks remediate with the apply command that converges the resolver.
+  checks warn instead — converging the resolver is what apply does — and
+  remediate with the apply command.
 
 ### Node-name-only cluster surfaces
 

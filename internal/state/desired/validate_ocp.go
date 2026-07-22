@@ -219,17 +219,18 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	master := 0
 	worker := 0
 	infra := 0
-	seenHostnames := map[string]bool{}
+	seenHostnames := map[string]string{}
 	for i, node := range ocp.Spec.Hosts {
 		prefix := fmt.Sprintf("ContainerCluster/%s spec.hosts[%d]", ocp.Metadata.Name, i)
+		short := stateview.NodeShortName(node.Hostname)
 		if node.Hostname == "" {
 			errs = append(errs, fmt.Sprintf("%s.hostname is required", prefix))
-		} else if seenHostnames[node.Hostname] {
-			errs = append(errs, fmt.Sprintf("%s.hostname %q is duplicated", prefix, node.Hostname))
+		} else if prev, ok := seenHostnames[short]; ok {
+			errs = append(errs, fmt.Sprintf("%s.hostname %q shares node short name %q with %q; node tokens and DNS labels key on the short name, so it must be unique within the cluster", prefix, node.Hostname, short, prev))
 		} else if !dnsSubdomain.MatchString(node.Hostname) {
 			errs = append(errs, fmt.Sprintf("%s.hostname %q must be a lowercase RFC1123 subdomain (lowercase alphanumerics, '-' and '.')", prefix, node.Hostname))
 		}
-		seenHostnames[node.Hostname] = true
+		seenHostnames[short] = node.Hostname
 		switch node.Role {
 		case v1alpha1.NodeRoleMaster:
 			master++

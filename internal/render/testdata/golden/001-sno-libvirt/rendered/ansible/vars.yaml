@@ -491,7 +491,7 @@ bootwright_machines:
         - address: 192.168.132.1
           name: cluster-lan
         - address: bastion.bootwright.test
-          name: dnsEntry
+          name: fqdn
       capabilities:
         - container-runtime
         - libvirt
@@ -508,7 +508,7 @@ bootwright_machines:
         - address: 192.168.132.20
           name: ip
         - address: master-0.bootwright.test
-          name: dnsEntry
+          name: fqdn
       capabilities:
         - openshift-node
       name: master-0

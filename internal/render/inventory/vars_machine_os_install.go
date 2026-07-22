@@ -101,9 +101,10 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	if machine.Spec.Access.SSH != nil {
 		ssh := map[string]any{
-			"address":        v1alpha1.MachineSSHAddress(machine),
-			"user":           sshUser,
-			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
+			"address":           v1alpha1.MachineSSHAddress(machine),
+			"connectionAddress": stateview.MachineConnectionAddress(state, machine),
+			"user":              sshUser,
+			"privateKeyPath":    secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
 		}
 		if knownHosts := machineKnownHostsPath(machine, paths); knownHosts != "" {
 			ssh["knownHostsPath"] = knownHosts

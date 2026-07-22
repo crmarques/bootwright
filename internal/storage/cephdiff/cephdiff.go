@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/cephstate"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
@@ -353,7 +354,7 @@ func desiredServices(state v1alpha1.State, cluster v1alpha1.StorageCluster) []en
 		if drivegroupHosts[name] {
 			continue
 		}
-		svc("osd.data-"+host.MachineRef.Name, []string{name})
+		svc("osd.data-"+stateview.NodeShortName(name), []string{name})
 	}
 	for _, fs := range state.StorageFilesystems {
 		if fs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {

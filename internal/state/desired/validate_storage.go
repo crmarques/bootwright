@@ -232,7 +232,7 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 		return []string{prefix + " is required"}
 	}
 	fleetCovered := storageFleetCoveredHosts(cluster)
-	seen := map[string]bool{}
+	seen := map[string]string{}
 	sshUser := ""
 	sshKeyRef := ""
 	sshSeen := false
@@ -242,12 +242,13 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 		if node.Hostname == "" {
 			errs = append(errs, owner+".hostname is required")
 		} else {
-			if seen[node.Hostname] {
-				errs = append(errs, fmt.Sprintf("%s.hostname %q is duplicated", owner, node.Hostname))
+			short := stateview.NodeShortName(node.Hostname)
+			if prev, ok := seen[short]; ok {
+				errs = append(errs, fmt.Sprintf("%s.hostname %q shares node short name %q with %q; node tokens, OSD service ids, and DNS labels key on the short name, so it must be unique within the cluster", owner, node.Hostname, short, prev))
 			}
-			seen[node.Hostname] = true
+			seen[short] = node.Hostname
 			if len(node.Hostname) > 253 || !dnsSubdomain.MatchString(node.Hostname) {
-				errs = append(errs, fmt.Sprintf("%s.hostname %q is not a valid DNS name (<=253 chars, lowercase labels); the default <machine>.<cluster>.<baseDomain> would be too long, or an explicit hostname is malformed", owner, node.Hostname))
+				errs = append(errs, fmt.Sprintf("%s.hostname %q is not a valid DNS name (<=253 chars, lowercase labels); the default <node>.<cluster>.<baseDomain> would be too long, or an explicit hostname is malformed", owner, node.Hostname))
 			}
 		}
 		if node.MachineRef.Name == "" {
@@ -750,6 +751,20 @@ func validateStorageServiceIDUniqueness(state v1alpha1.State) []string {
 	}
 	for _, nfs := range state.StorageNFSExports {
 		mark(nfs.Spec.StorageClusterRef.Name, "nfs", nfs.Spec.Ceph.ServiceID, fmt.Sprintf("StorageNFSExport/%s spec.ceph.serviceID", nfs.Metadata.Name))
+	}
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		for i, node := range cluster.Spec.Ceph.Topology.Hosts {
+			if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || (len(node.Devices) == 0 && node.OSD == nil) {
+				continue
+			}
+			mark(cluster.Metadata.Name, "osd", "data-"+stateview.NodeShortName(node.Hostname), fmt.Sprintf("StorageCluster/%s spec.ceph.topology.hosts[%d] per-host OSD service", cluster.Metadata.Name, i))
+		}
+		for i, dg := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+			mark(cluster.Metadata.Name, "osd", dg.ServiceID, fmt.Sprintf("StorageCluster/%s spec.ceph.topology.osdDrivegroups[%d].serviceID", cluster.Metadata.Name, i))
+		}
 	}
 	return errs
 }

@@ -44,7 +44,7 @@ machines:
               address: bastion.bootwright.test
             - name: lab-lan
               address: 192.168.140.5
-            - name: dnsEntry
+            - name: fqdn
               address: bastion.bootwright.test
         access:
             ssh:
@@ -95,7 +95,7 @@ machines:
         addresses:
             - name: ip
               address: 192.168.140.20
-            - name: dnsEntry
+            - name: fqdn
               address: rack1-srv1.bootwright.test
     - apiVersion: bootwright.io/v1alpha1
       kind: Machine
@@ -142,7 +142,7 @@ machines:
         addresses:
             - name: ip
               address: 192.168.140.21
-            - name: dnsEntry
+            - name: fqdn
               address: rack1-srv2.bootwright.test
     - apiVersion: bootwright.io/v1alpha1
       kind: Machine
@@ -189,7 +189,7 @@ machines:
         addresses:
             - name: ip
               address: 192.168.140.22
-            - name: dnsEntry
+            - name: fqdn
               address: rack1-srv3.bootwright.test
 networkConfigs:
     - apiVersion: bootwright.io/v1alpha1
