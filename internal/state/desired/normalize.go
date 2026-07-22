@@ -49,6 +49,7 @@ func Normalize(state *v1alpha1.State) {
 		normalizeStorageCluster(&state.StorageClusters[i], *state)
 	}
 	normalizeNodeNames(state)
+	normalizeStorageDNSAliases(state)
 	for i := range state.StoragePools {
 		normalizeStoragePool(&state.StoragePools[i])
 	}
@@ -388,6 +389,38 @@ func nodeFQDN(name, clusterName, baseDomain string) string {
 		return name
 	}
 	return stateview.ComposeFQDN(name, clusterName, baseDomain)
+}
+
+func normalizeStorageDNSAliases(state *v1alpha1.State) {
+	storageDomain := ""
+	if env := primaryEnvironment(state); env != nil {
+		storageDomain = env.Spec.Domains.StorageClustersDomain()
+	}
+	if storageDomain == "" {
+		return
+	}
+	for i := range state.StorageClusters {
+		cluster := &state.StorageClusters[i]
+		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Management == nil {
+			continue
+		}
+		mgmt := cluster.Spec.Ceph.Management
+		if mgmt.DNSName == "" {
+			mgmt.DNSName = stateview.ComposeFQDN("mgr", cluster.Metadata.Name, storageDomain)
+		}
+	}
+	clusters := indexStorageClusters(state.StorageClusters)
+	for i := range state.StorageObjectGateways {
+		gw := &state.StorageObjectGateways[i]
+		if gw.Spec.Public.DNSName != "" {
+			continue
+		}
+		cluster, ok := clusters[gw.Spec.StorageClusterRef.Name]
+		if !ok {
+			continue
+		}
+		gw.Spec.Public.DNSName = stateview.ComposeFQDN(gw.Metadata.Name, cluster.Metadata.Name, storageDomain)
+	}
 }
 
 func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {

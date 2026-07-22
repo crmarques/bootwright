@@ -934,7 +934,11 @@ Rules:
   only) `retentionTime`/`retentionSize` as `retention_time`/`retention_size`. An
   authored service must resolve to at least one host.
 - `spec.ceph.management`, when set, publishes the cephadm mgmt-gateway (the HA
-  front door to the Ceph dashboard/Grafana). `dnsName` and `ingress` are required;
+  front door to the Ceph dashboard/Grafana). `ingress` is required; `dnsName`
+  defaults to `mgr.<StorageCluster.metadata.name>.<domains.storageClusters>`
+  (ADR 0018) when omitted and the environment declares a domain, mirroring node
+  FQDN composition — an explicit value always wins, and the field stays
+  required (empty is rejected) when no domain is configured to compose from.
   `ingress` mirrors the RGW ingress VIP shape — `name`, `address`, `prefixLength`,
   optional `virtualInterfaceNetworks[]`, and a `placement` that defaults to every
   `ingress`-role host, narrowed by `sites`/`hosts` (under stretch it must cover
@@ -1146,9 +1150,16 @@ Rules:
   `StorageCluster`.
 - `spec.ceph.serviceID` is required; `spec.ceph.frontendPort` must be in
   `0`–`65535`.
-- `spec.public.dnsName` is required and is the storage-owned public S3 endpoint;
-  optional `spec.public.scheme` and `spec.public.port` refine it. The gateway
-  owns this fact, so a storage-only object store needs no `ContainerCluster`.
+- `spec.public.dnsName` is the storage-owned public S3 endpoint; optional
+  `spec.public.scheme` and `spec.public.port` refine it. The gateway owns this
+  fact, so a storage-only object store needs no `ContainerCluster`. When
+  omitted, it defaults to
+  `<StorageObjectGateway.metadata.name>.<StorageCluster.metadata.name>.<domains.storageClusters>`
+  (ADR 0018) when the environment declares a domain — the same composition
+  `spec.ceph.management.dnsName` defaults from, keyed by the gateway's own
+  name so multiple gateways on one cluster never collide. An explicit value
+  always wins, and the field stays required (empty is rejected) when no
+  domain is configured to compose from.
 - `spec.ceph.placement` defaults to every topology host with the `rgw` role;
   `sites`/`hosts` narrow the selection. On stretch-mode clusters the resolved
   placement must cover at least two per data site.
