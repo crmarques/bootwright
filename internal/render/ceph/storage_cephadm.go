@@ -137,6 +137,9 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			if len(endpoint.InterfaceNetworks) > 0 {
 				ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
 			}
+			if ingress.FirstVirtualRouterID > 0 {
+				ingressSpec["first_virtual_router_id"] = ingress.FirstVirtualRouterID
+			}
 			docs = append(docs, cephadmPlacementService("ingress", "rgw."+gw.Spec.Ceph.ServiceID+"."+ingress.Name, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), 0, ingressSpec))
 		}
 	}
@@ -158,6 +161,9 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			}
 			if len(endpoint.InterfaceNetworks) > 0 {
 				ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
+			}
+			if ingress.FirstVirtualRouterID > 0 {
+				ingressSpec["first_virtual_router_id"] = ingress.FirstVirtualRouterID
 			}
 			docs = append(docs, cephadmPlacementService("ingress", "nfs."+nfs.Spec.Ceph.ServiceID+"."+ingress.Name, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), 0, ingressSpec))
 		}

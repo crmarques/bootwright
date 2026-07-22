@@ -44,6 +44,7 @@ func validateStorageNFSExports(items []v1alpha1.StorageNFSExport, clusters map[s
 			if ingress.PrefixLength == 0 {
 				errs = append(errs, owner+".prefixLength is required")
 			}
+			errs = append(errs, validateStorageIngressVRRPID(owner, ingress.FirstVirtualRouterID)...)
 			errs = append(errs, validateStoragePlacementHosts(owner+".placement", ingress.Placement, cluster, ok, v1alpha1.StorageCephRoleIngress)...)
 		}
 		errs = append(errs, validateStorageNFSExportEntries(prefix, nfs, filesystems)...)

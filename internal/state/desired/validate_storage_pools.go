@@ -479,5 +479,7 @@ func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObje
 
 func validateStorageGatewayIngressEndpoint(prefix string, ingress v1alpha1.StorageObjectGatewayIngress, gw v1alpha1.StorageObjectGateway) []string {
 	_ = gw
-	return validateStorageIngressVIP(prefix, ingress.Address, ingress.PrefixLength)
+	errs := validateStorageIngressVIP(prefix, ingress.Address, ingress.PrefixLength)
+	errs = append(errs, validateStorageIngressVRRPID(prefix, ingress.FirstVirtualRouterID)...)
+	return errs
 }

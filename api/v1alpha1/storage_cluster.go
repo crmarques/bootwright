@@ -321,4 +321,5 @@ type StorageCephManagementIngress struct {
 	PrefixLength             int              `yaml:"prefixLength" json:"prefixLength"`
 	VirtualInterfaceNetworks []string         `yaml:"virtualInterfaceNetworks,omitempty" json:"virtualInterfaceNetworks,omitempty"`
 	Placement                StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
+	FirstVirtualRouterID     int              `yaml:"firstVirtualRouterID,omitempty" json:"firstVirtualRouterID,omitempty"`
 }

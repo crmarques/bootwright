@@ -112,6 +112,9 @@ func cephadmManagementSpecs(cluster v1alpha1.StorageCluster) []any {
 	if len(endpoint.InterfaceNetworks) > 0 {
 		ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
 	}
+	if mgmt.Ingress.FirstVirtualRouterID > 0 {
+		ingressSpec["first_virtual_router_id"] = mgmt.Ingress.FirstVirtualRouterID
+	}
 	docs = append(docs, cephadmPlacementService("ingress", "mgmt-gateway."+mgmt.Ingress.Name, hosts, 0, ingressSpec))
 	return docs
 }

@@ -940,7 +940,11 @@ Rules:
   FQDN composition — an explicit value always wins, and the field stays
   required (empty is rejected) when no domain is configured to compose from.
   `ingress` mirrors the RGW ingress VIP shape — `name`, `address`, `prefixLength`,
-  optional `virtualInterfaceNetworks[]`, and a `placement` that defaults to every
+  optional `virtualInterfaceNetworks[]`, optional `firstVirtualRouterID`
+  (`1`-`255`; cephadm's keepalived VRRP router ID, rendered verbatim as
+  `first_virtual_router_id` — cephadm defaults to `50` when omitted, so set a
+  distinct value whenever another ingress group, such as an RGW gateway's,
+  shares the same L2 network), and a `placement` that defaults to every
   `ingress`-role host, narrowed by `sites`/`hosts` (under stretch it must cover
   both data sites). `port` sets the gateway port (`0`–`65535`). `tls`, when set,
   supplies the gateway certificate through `certificateRef`+`keyRef`. `enableAuth`
@@ -1165,9 +1169,14 @@ Rules:
   placement must cover at least two per data site.
 - `spec.ceph.ingresses[]` require a unique `name`, a storage-owned `address` and
   `prefixLength` for the ingress VIP (optional `virtualInterfaceNetworks[]`,
-  rendered verbatim to the cephadm ingress `virtual_interface_networks`), and
+  rendered verbatim to the cephadm ingress `virtual_interface_networks`; optional
+  `firstVirtualRouterID`, `1`-`255`, rendered verbatim as `first_virtual_router_id`
+  — cephadm defaults to `50` when omitted, so give each ingress group on the same
+  L2 network, including `spec.ceph.management.ingress`, a distinct value), and
   a `placement` that defaults to every `ingress`-role host, narrowed by
-  `sites`/`hosts` (per-site VIPs author `placement.sites`).
+  `sites`/`hosts` (per-site VIPs author `placement.sites`; a stretched L2 network
+  across data sites may instead author a single ingress with unnarrowed
+  `placement`, spanning every `ingress`-role host cluster-wide).
 - Optional `spec.ceph.realm`/`zoneGroup`/`zone` bind the RGW to a named
   multisite realm (rendered as `rgw_realm`/`rgw_zonegroup`/`rgw_zone`); all three
   are set together, and Bootwright creates them and commits the period before the
