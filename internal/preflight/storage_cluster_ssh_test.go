@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -41,6 +42,33 @@ func TestClusterSSHKeyRefIsRequiredMaterial(t *testing.T) {
 		return
 	}
 	t.Fatal("spec.ceph.cephadm.clusterSSH.keyRef is not collected as required secret material; a missing generated key would fail deep inside the cephadm role instead of at the preflight gate")
+}
+
+func TestClusterSSHKeyRefFailsPreflightWhenNotGenerated(t *testing.T) {
+	state := clusterSSHKeyState("ceph-cephadm-ssh-key")
+	state.Secrets = []v1alpha1.Secret{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-cephadm-ssh-key"},
+		Spec: v1alpha1.SecretSpec{
+			Type:   v1alpha1.SecretTypeSSHKeyPair,
+			Source: v1alpha1.SecretSource{Generated: &v1alpha1.SecretGeneratedSource{}},
+		},
+	}}
+	deps := Deps{StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }}
+
+	var failures []Check
+	for _, c := range secretRefChecks(state, "/context/secrets", []Phase{{Name: "deps"}}, deps) {
+		if c.Status == StatusFail && strings.Contains(c.Name, "clusterSSH.keyRef") {
+			failures = append(failures, c)
+		}
+	}
+	if len(failures) != 2 {
+		t.Fatalf("want a FAIL for each half of the cluster key pair, got %d: %+v", len(failures), failures)
+	}
+	for _, c := range failures {
+		if !strings.Contains(c.Remediation, "bootwright secret generate") {
+			t.Fatalf("remediation = %q, want it to name bootwright secret generate", c.Remediation)
+		}
+	}
 }
 
 func TestClusterSSHKeyRefAbsentWhenUnset(t *testing.T) {
