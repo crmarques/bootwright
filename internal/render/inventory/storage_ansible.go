@@ -100,7 +100,9 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 		entry["bootwright_os_provided"] = v1alpha1.MachineOSProvided(machine)
 		if access := storageNodeAccessVars(cluster, machine, paths); access != nil {
 			entry["bootwright_node_access"] = access
-			entry["ansible_user"] = access["user"]
+			if v1alpha1.MachineRevokesRootLogin(machine) {
+				entry["ansible_user"] = access["user"]
+			}
 		}
 	}
 	return entry

@@ -78,7 +78,10 @@ identity for the life of the machine; hardening never rewrites it.
 `StorageCluster.spec.ceph.cephadm.clusterSSH.user` is the **post-install
 identity** — the account cephadm orchestrates every host as
 (`cephadm --ssh-user`, reconciled day-2 by `ceph cephadm set-user`) and the
-account Bootwright connects as once the node is provisioned. It is
+account Bootwright itself connects as, but only once that node's `Machine`
+revokes root login — while root is kept it stays the install-window identity,
+because a flow that does not provision the account first (destroy, a scoped
+apply) must not connect as an account that may not exist yet. It is
 cluster-scoped because cephadm holds exactly one such value per cluster. It
 defaults to `cephadm` when any topology node's `Machine` sets
 `spec.access.rootLogin: revoke`, and to `root` otherwise. On a revoking node

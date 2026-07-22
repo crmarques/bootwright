@@ -51,13 +51,20 @@
           ansible.builtin.set_fact:
             bootwright_proxy_env: {}
   tasks:
-    - name: Probe node reachability before deregistration
-      ansible.builtin.ping:
-      register: bootwright_registration_reachable_probe
-      ignore_unreachable: true
-      failed_when: false
+    - name: Probe node reachability and escalation before deregistration
+      block:
+        - name: Probe node reachability before deregistration
+          ansible.builtin.ping:
+          register: bootwright_registration_reachable_probe
+          ignore_unreachable: true
+          failed_when: false
+      rescue:
+        - name: Record an unusable node before deregistration
+          ansible.builtin.set_fact:
+            bootwright_registration_reachable_probe:
+              unreachable: true
 
-    - name: End unreachable nodes
+    - name: End nodes Bootwright cannot reach or escalate on
       ansible.builtin.meta: end_host
       when: bootwright_registration_reachable_probe.unreachable | default(false) | bool
 

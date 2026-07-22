@@ -76,6 +76,18 @@ func TestStorageNodeEntryConnectsAsProvisionedAccount(t *testing.T) {
 	}
 }
 
+func TestStorageNodeEntryKeepsInstallIdentityUntilRootIsRevoked(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginKeep)
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SecretsDir: "/ctx/secrets"}, locality.Policy{})
+	if entry["ansible_user"] != "root" {
+		t.Fatalf("ansible_user = %v, want the install identity while root login is kept; switching before the account is provisioned breaks every flow that does not run the node access task first (destroy, scoped applies)", entry["ansible_user"])
+	}
+	if _, ok := entry["bootwright_node_access"]; !ok {
+		t.Fatal("bootwright_node_access must still be emitted so the role can provision the cephadm account")
+	}
+}
+
 func TestStorageNodeEntryKeepsMachineUserWhenRootKept(t *testing.T) {
 	state, cluster := nodeAccessState("root", v1alpha1.MachineRootLoginKeep)
 	node := cluster.Spec.Ceph.Topology.Nodes[0]
