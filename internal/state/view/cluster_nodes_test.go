@@ -9,8 +9,8 @@ import (
 func TestClusterNodesContainerOrdinals(t *testing.T) {
 	state := v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "ha"},
-		Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
-			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-0"}, Role: v1alpha1.NodeRoleMaster, Hostname: "cp-0.ha.test"},
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-0"}, Role: v1alpha1.NodeRoleMaster, Name: "cp-0.ha.test"},
 			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-1"}, Role: v1alpha1.NodeRoleMaster},
 			{MachineRef: v1alpha1.LocalObjectReference{Name: "w-0"}, Role: v1alpha1.NodeRoleWorker},
 		}},
@@ -31,8 +31,8 @@ func TestClusterNodesStorageRoles(t *testing.T) {
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-				{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon", "mgr"}, Hostname: "ceph-0.ceph.test"},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+				{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon", "mgr"}, Name: "ceph-0.ceph.test"},
 				{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{"osd"}},
 			}},
 		}},

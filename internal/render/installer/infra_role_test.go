@@ -22,7 +22,7 @@ func TestInstallerNodeRoleCoercesInfraToWorker(t *testing.T) {
 func TestComputeReplicaCountSumsWorkerAndInfra(t *testing.T) {
 	ocp := v1alpha1.ContainerCluster{
 		Spec: v1alpha1.ContainerClusterSpec{
-			Hosts: []v1alpha1.OCPHostSpec{
+			Nodes: []v1alpha1.OCPNodeSpec{
 				{Role: v1alpha1.NodeRoleMaster},
 				{Role: v1alpha1.NodeRoleMaster},
 				{Role: v1alpha1.NodeRoleMaster},

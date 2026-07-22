@@ -20,8 +20,8 @@ spec:
         source:
           type: external
 
-  hosts:
+  nodes:
 
-  - hostname: master-0
+  - name: master-0
     role: master
     machineRef: sno-libvirt-master-0

@@ -20,8 +20,8 @@ func TestInstallStructuralHashRoleProjection(t *testing.T) {
 	mk := func(role string) v1alpha1.State {
 		return v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
-			Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{
-				Hostname:   "n1",
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+				Name:       "n1",
 				Role:       role,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "m1"},
 			}}},
@@ -46,7 +46,7 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 			StorageClusters: []v1alpha1.StorageCluster{{
 				Metadata: v1alpha1.Metadata{Name: "ceph"},
 				Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-					Cephadm:    v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Host: "seed-a"}},
+					Cephadm:    v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "seed-a"}},
 					MgrModules: []string{"dashboard"},
 					Config:     map[string]map[string]string{"global": {"mon_max_pg_per_osd": "300"}},
 				}},
@@ -64,7 +64,7 @@ func TestStorageStructuralHashReconfigureProjection(t *testing.T) {
 	}
 
 	id := base()
-	id.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.Host = "seed-b"
+	id.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.Node = "seed-b"
 	if got := structuralJSON(t, storageClusterStructuralHashVars(id, "ceph")); got == want {
 		t.Fatalf("changing the Ceph bootstrap seed host must move the structural hash")
 	}

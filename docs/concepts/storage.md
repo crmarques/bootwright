@@ -17,7 +17,7 @@ same `StorageCluster` kind:
   operator-supplied cluster through a [`StorageExport`](#storageexport) and skips
   the cephadm storage task entirely.
 
-A `StorageCluster` references machines **by node**: each topology host names a
+A `StorageCluster` references machines **by node**: each topology node names a
 [`Machine`](machines.md) with the `ceph-node` capability. A storage export can
 then feed an [add-on](add-ons.md) input — for example an OpenShift Data
 Foundation external-mode attachment that names a `StorageExport` for one
@@ -49,10 +49,11 @@ spec:
     release: "20.2.2"
     cephadm:
       bootstrap:
-        host: node01
+        node: node-01
     topology:
-      hosts:
-        - machineRef: ceph-0
+      nodes:
+        - name: node-01
+          machineRef: ceph-0
           roles:
             - mon
 ```
@@ -80,7 +81,7 @@ spec:
 !!! note "Cross-field rules"
     - `spec.ceph` is **required when** the cluster is managed and **must be
       empty** for external clusters.
-    - A `Machine` is node-bound by at most one cluster (and at most one host
+    - A `Machine` is node-bound by at most one cluster (and at most one node
       entry) across every `ContainerCluster` and `StorageCluster`.
 
 ### Ceph
@@ -96,10 +97,10 @@ spec:
 | `ceph.osSubscriptionRef` | No | — | Names a `redhat-rhel` `Entitlement` supplying the RHEL subscription for provided-OS Ceph nodes (managed-OS nodes name it on their `MachineInstallProfile.spec.subscription` instead). Must resolve to a `redhat-rhel` entitlement. Chiefly paired with `distribution: ibm`, whose product entitlement does not itself entitle RHEL. See [Secrets](secrets.md#entitlements). |
 | `ceph.ibm.callHome` | When `ibm` | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. License acceptance enables Call Home by default, so omission is rejected. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
-| `ceph.cephadm.clusterSSHKeyRef` | No | the first topology host's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
-| `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first host's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
-| `ceph.cephadm.bootstrap.host` | Yes | — | Topology host that cephadm bootstraps on, named by its node hostname (FQDN or short label). A machine name is rejected with guidance naming the node. |
-| `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the host machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
+| `ceph.cephadm.clusterSSHKeyRef` | No | the first topology node's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
+| `ceph.cephadm.clusterSSHUser` | No | `root` when `clusterSSHKeyRef` is set; otherwise the first node's `access.ssh.user` | OS user cephadm manages every host as (`--ssh-user`); must exist on every host. |
+| `ceph.cephadm.bootstrap.node` | Yes | — | Topology node that cephadm bootstraps on, named by its node name (FQDN or short label). A machine name is rejected with guidance naming the node. |
+| `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the node machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.cephadm.bootstrap.singleHostDefaults` | No | `false` | Renders cephadm's `--single-host-defaults` at bootstrap (relaxed defaults for a one-node cluster). Valid only for a **single-host, non-stretch** topology and requires at least two declared OSDs. It owns `osd_pool_default_size`, `osd_pool_default_min_size`, and `osd_crush_chooseleaf_type` at bootstrap, so those keys are rejected in `ceph.config[global]`. Referenced by the [`StoragePool`](#storagepool) cross-field rules. |
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
@@ -109,7 +110,7 @@ spec:
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |
 | `ceph.management` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it. See [The management gateway and HA dashboard](../advanced/ceph-topologies.md#the-management-gateway-and-ha-dashboard). |
 | `ceph.services[]` | No | — | Raw cephadm service-spec passthrough for unmodeled service types; see [Passthrough services](#passthrough-services). |
-| `ceph.topology` | Yes | — | Hosts, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
+| `ceph.topology` | Yes | — | Nodes, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
 
 !!! warning "Release/image fields are install-time intent, not a day-2 upgrade"
     `ceph.release` and `ceph.image` select what cephadm bootstraps. Changing them
@@ -206,14 +207,14 @@ For cephadm service types Bootwright does not model first-class (for example
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `topology.hosts` | Yes | — | At least one host. |
-| `topology.hosts[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability and declared SSH access. |
-| `topology.hosts[].hostname` | No | `node<NN>.<cluster>.<baseDomain>` (`node01`, `node02`, … in `hosts` list order; the bare `node<NN>` label when no domain is set) | Node hostname — the cluster's name for this node, independent of the machine name. A bare label composes to `<label>.<cluster>.<baseDomain>` — under the planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)) the storage-cluster zone `domains.storageClusters`; a dotted value is an explicit FQDN used verbatim. The composed FQDN is the cephadm host-spec hostname, rendered verbatim, and must equal the host's actual OS hostname. |
-| `topology.hosts[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
-| `topology.hosts[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
-| `topology.hosts[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
-| `topology.hosts[].devices[]` | No | — | Literal OSD device paths; shorthand for `osd.dataDevices.paths`. Requires the `osd` role. Mutually exclusive with `osd`. |
-| `topology.hosts[].osd` | No | — | Drivegroup-shaped OSD device selection; see [OSD device selection](#osd-device-selection). Requires the `osd` role. Mutually exclusive with `devices`. |
+| `topology.nodes` | Yes | — | At least one node. |
+| `topology.nodes[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability and declared SSH access. |
+| `topology.nodes[].name` | Yes | — | The cluster's name for this node — independent of the machine name and unique within the cluster. A bare label composes to `<name>.<cluster>.<baseDomain>` — under the planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)) the storage-cluster zone `domains.storageClusters`; a dotted value is an explicit FQDN used verbatim. The composed FQDN is the cephadm host-spec hostname, rendered verbatim, and must equal the host's actual OS hostname. |
+| `topology.nodes[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
+| `topology.nodes[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
+| `topology.nodes[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
+| `topology.nodes[].devices[]` | No | — | Literal OSD device paths; shorthand for `osd.dataDevices.paths`. Requires the `osd` role. Mutually exclusive with `osd`. |
+| `topology.nodes[].osd` | No | — | Drivegroup-shaped OSD device selection; see [OSD device selection](#osd-device-selection). Requires the `osd` role. Mutually exclusive with `devices`. |
 | `topology.osdDrivegroups[]` | No | — | Fleet OSD specs spanning many hosts; see [Fleet OSD drivegroups](#fleet-osd-drivegroups). |
 
 !!! note "Cross-field rules"
@@ -231,7 +232,7 @@ For cephadm service types Bootwright does not model first-class (for example
 
 For homogeneous racks, `topology.osdDrivegroups[]` renders **one** cephadm OSD
 service spanning many hosts (the dominant declarative cephadm idiom) instead of
-one spec per host. Per-host `hosts[].osd` remains the override for heterogeneous
+one spec per host. Per-host `nodes[].osd` remains the override for heterogeneous
 nodes.
 
 | Field | Required | Default | Description |
@@ -304,15 +305,15 @@ cephadm drivegroup device filter:
 #### Stretch mode
 
 Authoring the `stretch` block is the enablement signal — its presence turns on
-stretch mode. Only `failureDomain` and the tiebreaker host are facts the
+stretch mode. Only `failureDomain` and the tiebreaker node are facts the
 operator alone knows; normalize derives the rest from the topology.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `topology.stretch.failureDomain` | Yes (when stretch is enabled) | — | CRUSH failure domain mapping sites to real buckets. |
 | `topology.stretch.dataSites[]` | No | the topology's non-tiebreaker sites | Must resolve to exactly the two mon-bearing data sites. Author only when extra OSD-only sites would be wrongly derived. |
-| `topology.stretch.tiebreaker.host` | Yes (when stretch is enabled) | — | Mon-only host with no OSD devices, in the tiebreaker site; named by its node hostname (FQDN or short label), never the machine name. |
-| `topology.stretch.tiebreaker.site` | No | the tiebreaker host's site | Must be distinct from `dataSites`. |
+| `topology.stretch.tiebreaker.node` | Yes (when stretch is enabled) | — | Mon-only node with no OSD devices, in the tiebreaker site; named by its node name (FQDN or short label), never the machine name. |
+| `topology.stretch.tiebreaker.site` | No | the tiebreaker node's site | Must be distinct from `dataSites`. |
 | `topology.stretch.ruleName` | No | `stretch-rule` | Stretch CRUSH rule inherited by policy-less stretch pools. |
 
 !!! note "Fixed stretch replication"
@@ -342,7 +343,7 @@ Reusable placement and replicated-pool defaults for pools that select it via
     the referenced policy owns the pool's replication.
 
     For `failureDomain: host`, the effective replica size cannot exceed the
-    number of topology hosts carrying the `osd` role. Effective `minSize`
+    number of topology nodes carrying the `osd` role. Effective `minSize`
     cannot exceed `size`.
 
 ## StoragePool
@@ -536,11 +537,11 @@ services, passthrough services, MDS, RGW, NFS, and ingress.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `placement.hosts[]` | No | — | Explicit node hostnames (FQDN or short label; machine names are rejected); narrows below site granularity. |
+| `placement.hosts[]` | No | — | Explicit node names (FQDN or short label; machine names are rejected); narrows below site granularity. |
 | `placement.sites[]` | No | — | Topology sites; narrows to hosts in the named sites. |
 | `placement.countPerHost` | No | — | Renders to the cephadm `count_per_host` (non-negative). |
 
-When `placement` is omitted, a service defaults to every topology host carrying
+When `placement` is omitted, a service defaults to every topology node carrying
 that service's role. Passthrough services are the exception: their placement
 must set `hosts` or `sites`.
 

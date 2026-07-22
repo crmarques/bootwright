@@ -161,7 +161,7 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 		return nil
 	}
 	var errs []string
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
 			continue
@@ -170,7 +170,7 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 		if !ok {
 			continue
 		}
-		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.hosts[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Hostname, profile.Metadata.Name)
+		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Name, profile.Metadata.Name)
 		if strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
 			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
 			continue
@@ -191,7 +191,7 @@ func validateStorageCephFIPS(cluster v1alpha1.StorageCluster, machines map[strin
 		return []string{prefix + " requires distribution redhat or ibm"}
 	}
 	var errs []string
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
 			continue

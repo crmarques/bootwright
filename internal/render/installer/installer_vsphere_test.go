@@ -36,7 +36,7 @@ func vsphereInstallerTestState() v1alpha1.State {
 		},
 	}
 	machines := make([]v1alpha1.Machine, 0, 3)
-	hosts := make([]v1alpha1.OCPHostSpec, 0, 3)
+	hosts := make([]v1alpha1.OCPNodeSpec, 0, 3)
 	for _, name := range []string{"master-0", "master-1", "master-2"} {
 		machines = append(machines, v1alpha1.Machine{
 			Metadata: v1alpha1.Metadata{Name: name},
@@ -48,8 +48,8 @@ func vsphereInstallerTestState() v1alpha1.State {
 				},
 			},
 		})
-		hosts = append(hosts, v1alpha1.OCPHostSpec{
-			Hostname:   name,
+		hosts = append(hosts, v1alpha1.OCPNodeSpec{
+			Name:       name,
 			Role:       v1alpha1.NodeRoleMaster,
 			MachineRef: v1alpha1.LocalObjectReference{Name: name},
 		})
@@ -82,7 +82,7 @@ func vsphereInstallerTestState() v1alpha1.State {
 					PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
 					NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 				},
-				Hosts: hosts,
+				Nodes: hosts,
 			},
 		}},
 	}

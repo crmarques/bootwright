@@ -1,7 +1,6 @@
 package desiredstate
 
 import (
-	"fmt"
 	"net"
 	"sort"
 	"strings"
@@ -49,7 +48,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageClusters {
 		normalizeStorageCluster(&state.StorageClusters[i])
 	}
-	normalizeNodeHostnames(state)
+	normalizeNodeNames(state)
 	for i := range state.StoragePools {
 		normalizeStoragePool(&state.StoragePools[i])
 	}
@@ -344,16 +343,16 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	}
 }
 
-func normalizeNodeHostnames(state *v1alpha1.State) {
+func normalizeNodeNames(state *v1alpha1.State) {
 	baseDomain := ""
 	if env := primaryEnvironment(state); env != nil {
 		baseDomain = env.Spec.BaseDomain
 	}
 	for i := range state.ContainerClusters {
 		cluster := &state.ContainerClusters[i]
-		for j := range cluster.Spec.Hosts {
-			host := &cluster.Spec.Hosts[j]
-			host.Hostname = nodeHostname(host.Hostname, j, cluster.Metadata.Name, baseDomain)
+		for j := range cluster.Spec.Nodes {
+			node := &cluster.Spec.Nodes[j]
+			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, baseDomain)
 		}
 	}
 	for i := range state.StorageClusters {
@@ -361,18 +360,17 @@ func normalizeNodeHostnames(state *v1alpha1.State) {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for j := range cluster.Spec.Ceph.Topology.Hosts {
-			host := &cluster.Spec.Ceph.Topology.Hosts[j]
-			host.Hostname = nodeHostname(host.Hostname, j, cluster.Metadata.Name, baseDomain)
+		for j := range cluster.Spec.Ceph.Topology.Nodes {
+			node := &cluster.Spec.Ceph.Topology.Nodes[j]
+			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, baseDomain)
 		}
 		normalizeStorageStretch(cluster)
 	}
 }
 
-func nodeHostname(declared string, index int, clusterName, baseDomain string) string {
-	name := declared
+func nodeFQDN(name, clusterName, baseDomain string) string {
 	if name == "" {
-		name = fmt.Sprintf("node%02d", index+1)
+		return ""
 	}
 	if strings.Contains(name, ".") || baseDomain == "" {
 		return name
@@ -388,22 +386,22 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	if stretch.RuleName == "" {
 		stretch.RuleName = "stretch-rule"
 	}
-	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Host != "" {
-		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-			if host.Hostname == stretch.Tiebreaker.Host || stateview.NodeShortName(host.Hostname) == stretch.Tiebreaker.Host {
-				stretch.Tiebreaker.Site = host.Site
+	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Node != "" {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if node.Name == stretch.Tiebreaker.Node || stateview.NodeShortName(node.Name) == stretch.Tiebreaker.Node {
+				stretch.Tiebreaker.Site = node.Site
 				break
 			}
 		}
 	}
 	if len(stretch.DataSites) == 0 {
 		seen := map[string]bool{}
-		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-			if host.Site == "" || host.Site == stretch.Tiebreaker.Site || seen[host.Site] {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if node.Site == "" || node.Site == stretch.Tiebreaker.Site || seen[node.Site] {
 				continue
 			}
-			seen[host.Site] = true
-			stretch.DataSites = append(stretch.DataSites, host.Site)
+			seen[node.Site] = true
+			stretch.DataSites = append(stretch.DataSites, node.Site)
 		}
 		sort.Strings(stretch.DataSites)
 	}
@@ -566,10 +564,10 @@ type clusterProviderBinding struct {
 }
 
 func clusterNodeProviderBinding(state v1alpha1.State, cluster v1alpha1.ContainerCluster) clusterProviderBinding {
-	binding := clusterProviderBinding{complete: len(cluster.Spec.Hosts) > 0}
+	binding := clusterProviderBinding{complete: len(cluster.Spec.Nodes) > 0}
 	types := map[string]bool{}
 	providers := map[string]bool{}
-	for _, node := range cluster.Spec.Hosts {
+	for _, node := range cluster.Spec.Nodes {
 		machine, ok := stateview.Machine(state, node.MachineRef.Name)
 		if !ok {
 			binding.complete = false

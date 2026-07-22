@@ -14,8 +14,8 @@ func TestCephFSStandbySubvolumeAndMDSServiceSpecRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mds"},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mds"},
 			}}},
 		}},
 	}
@@ -380,11 +380,11 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 				Stretch: &v1alpha1.StorageCephStretch{
 					FailureDomain: "datacenter",
 					RuleName:      "stretch-rule",
-					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"},
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "arbiter"},
 				},
-				Hosts: []v1alpha1.StorageCephHost{
-					{Hostname: "a", Site: "dc1", Roles: []string{"mon"}},
-					{Hostname: "arbiter", Site: "dc3", Roles: []string{"mon"}},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "a", Site: "dc1", Roles: []string{"mon"}},
+					{Name: "arbiter", Site: "dc3", Roles: []string{"mon"}},
 				},
 			},
 		}},
@@ -445,9 +445,9 @@ func TestStretchModeWithoutTiebreakerOmitsEnableStretchMode(t *testing.T) {
 					FailureDomain: "datacenter",
 					RuleName:      "stretch-rule",
 				},
-				Hosts: []v1alpha1.StorageCephHost{
-					{Hostname: "a", Site: "dc1", Roles: []string{"mon"}},
-					{Hostname: "b", Site: "dc2", Roles: []string{"mon"}},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "a", Site: "dc1", Roles: []string{"mon"}},
+					{Name: "b", Site: "dc2", Roles: []string{"mon"}},
 				},
 			},
 		}},
@@ -475,13 +475,13 @@ func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname:   "ceph-0",
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name:       "ceph-0",
 				MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 				Site:       "lab",
 				Roles:      []string{"mon", "osd"},
 				Labels:     []string{"_admin", "mon"},
-				OSD: &v1alpha1.StorageCephHostOSD{
+				OSD: &v1alpha1.StorageCephNodeOSD{
 					DataDevices:      &v1alpha1.StorageCephDeviceSelection{Rotational: &rotational, Limit: 4},
 					DBDevices:        &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/nvme0n1"}},
 					Encrypted:        true,
@@ -528,12 +528,12 @@ func TestDrivegroupOSDExtendedFieldsRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname:   "ceph-0",
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name:       "ceph-0",
 				MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 				Site:       "lab",
 				Roles:      []string{"osd"},
-				OSD: &v1alpha1.StorageCephHostOSD{
+				OSD: &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{
 						Model: "MZ7LH3T8", Vendor: "ATA", Size: "1T:4T",
 					},
@@ -598,9 +598,9 @@ func TestOSDServiceOverridesRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"osd"},
-				OSD: &v1alpha1.StorageCephHostOSD{
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"osd"},
+				OSD: &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 					ServiceOverrides: &v1alpha1.StorageCephServiceOverrides{
 						Networks:           []string{"10.1.0.0/24"},
@@ -639,13 +639,13 @@ func TestFleetOSDDrivegroupRendersSingleSpanningSpec(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Topology: v1alpha1.StorageCephTopology{
-				Hosts: []v1alpha1.StorageCephHost{
-					{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"osd"}},
-					{Hostname: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{"osd"}},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"osd"}},
+					{Name: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{"osd"}},
 				},
 				OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
 					ServiceID: "rack1",
-					OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Model: "MZ7"}, Unmanaged: true},
+					OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Model: "MZ7"}, Unmanaged: true},
 				}},
 			},
 		}},
@@ -678,18 +678,18 @@ func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
 				{
-					Hostname:   "ceph-0",
+					Name:       "ceph-0",
 					MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 					Site:       "lab",
 					Roles:      []string{"mon", "osd"},
-					OSD: &v1alpha1.StorageCephHostOSD{
+					OSD: &v1alpha1.StorageCephNodeOSD{
 						DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 					},
 				},
 				{
-					Hostname:   "ceph-1",
+					Name:       "ceph-1",
 					MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"},
 					Site:       "lab",
 					Roles:      []string{"mon", "osd"},
@@ -730,8 +730,8 @@ func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
 				Loki:     &v1alpha1.StorageCephMonitoringService{Placement: v1alpha1.StoragePlacement{Hosts: []string{"ceph-0"}}, RetentionTime: "30d"},
 				Promtail: &v1alpha1.StorageCephMonitoringService{},
 			},
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-				{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon"}},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+				{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon"}},
 			}},
 		}},
 	}
@@ -769,8 +769,8 @@ func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
 					TLS:     tls,
 					Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
 				},
-				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-					Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
+				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+					Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
 				}}},
 			}},
 		}
@@ -802,8 +802,8 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
 			}}},
 		}},
 	}
@@ -885,8 +885,8 @@ func TestRGWRealmZoneAndConfigRender(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"rgw"},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"rgw"},
 			}}},
 		}},
 	}
@@ -945,8 +945,8 @@ func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"rgw"},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"rgw"},
 			}}},
 		}},
 	}
@@ -1012,13 +1012,13 @@ func TestStretchTiebreakerOmitsCRUSHLocation(t *testing.T) {
 			Topology: v1alpha1.StorageCephTopology{
 				Stretch: &v1alpha1.StorageCephStretch{
 					FailureDomain: "datacenter",
-					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"},
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "arbiter"},
 					RuleName:      "stretch-rule",
 				},
-				Hosts: []v1alpha1.StorageCephHost{
-					{Hostname: "ceph-dc1-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}, Site: "dc1", Roles: []string{"mon", "osd"}},
-					{Hostname: "ceph-dc2-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc2-0"}, Site: "dc2", Roles: []string{"mon", "osd"}},
-					{Hostname: "arbiter", MachineRef: v1alpha1.LocalObjectReference{Name: "arbiter"}, Site: "dc3", Roles: []string{"mon"}},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "ceph-dc1-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}, Site: "dc1", Roles: []string{"mon", "osd"}},
+					{Name: "ceph-dc2-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc2-0"}, Site: "dc2", Roles: []string{"mon", "osd"}},
+					{Name: "arbiter", MachineRef: v1alpha1.LocalObjectReference{Name: "arbiter"}, Site: "dc3", Roles: []string{"mon"}},
 				},
 			},
 		}},
@@ -1064,8 +1064,8 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Management: mgmt,
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-				Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
 			}}},
 		}},
 	}
@@ -1144,9 +1144,9 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 				Placement:   v1alpha1.StoragePlacement{Sites: []string{"lab"}},
 				Spec:        map[string]any{"port": 9464},
 			}},
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-				{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Site: "lab", Roles: []string{"mon", "prometheus", "grafana"}},
-				{Hostname: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Site: "remote", Roles: []string{"mon"}},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+				{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Site: "lab", Roles: []string{"mon", "prometheus", "grafana"}},
+				{Name: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Site: "remote", Roles: []string{"mon"}},
 			}},
 		}},
 	}

@@ -88,7 +88,7 @@ The `{name: ...}` object form is rejected with a shared error. The main flows
 are:
 
 ```text
-ContainerCluster.spec.hosts[].machineRef
+ContainerCluster.spec.nodes[].machineRef
   -> Machine
   -> InfraProvider through Machine.spec.substrate.providerRef
 

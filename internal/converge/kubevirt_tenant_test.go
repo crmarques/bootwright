@@ -16,7 +16,7 @@ func kubeVirtTenantState() v1alpha1.State {
 			{
 				Metadata: v1alpha1.Metadata{Name: "nested"},
 				Spec: v1alpha1.ContainerClusterSpec{
-					Hosts: []v1alpha1.OCPHostSpec{{Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "nested-m0"}}},
+					Nodes: []v1alpha1.OCPNodeSpec{{Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "nested-m0"}}},
 				},
 			},
 		},

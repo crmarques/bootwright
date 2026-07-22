@@ -10,14 +10,14 @@ import (
 func TestStorageOSDReadinessVarsRendersDynamicHosts(t *testing.T) {
 	dynamic := v1alpha1.StorageCluster{}
 	dynamic.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-		Hosts: []v1alpha1.StorageCephHost{
-			{Hostname: "a", Roles: []string{v1alpha1.StorageCephRoleOSD}, OSD: &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
-			{Hostname: "b", Roles: []string{v1alpha1.StorageCephRoleOSD}},
+		Nodes: []v1alpha1.StorageCephNode{
+			{Name: "a", Roles: []string{v1alpha1.StorageCephRoleOSD}, OSD: &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
+			{Name: "b", Roles: []string{v1alpha1.StorageCephRoleOSD}},
 		},
 		OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
 			ServiceID: "fleet",
 			Placement: v1alpha1.StoragePlacement{Hosts: []string{"b"}},
-			OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Rotational: new(bool)}},
+			OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Rotational: new(bool)}},
 		}},
 	}}
 
@@ -30,10 +30,10 @@ func TestStorageOSDReadinessVarsRendersDynamicHosts(t *testing.T) {
 	}
 
 	static := v1alpha1.StorageCluster{}
-	static.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-		Hostname: "a",
-		Roles:    []string{v1alpha1.StorageCephRoleOSD},
-		Devices:  []string{"/dev/sdb", "/dev/sdc"},
+	static.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+		Name:    "a",
+		Roles:   []string{v1alpha1.StorageCephRoleOSD},
+		Devices: []string{"/dev/sdb", "/dev/sdc"},
 	}}}}
 	got = storageOSDReadinessVars(static)
 	if got["mode"] != "exact" || got["expectedCount"] != 2 {
@@ -50,10 +50,10 @@ func TestStorageOSDReadinessVarsRequiresTwoForDynamicSingleHost(t *testing.T) {
 		Cephadm: v1alpha1.StorageCephadmSpec{
 			Bootstrap: v1alpha1.StorageCephadmBootstrap{SingleHostDefaults: true},
 		},
-		Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-			Hostname: "a",
-			Roles:    []string{v1alpha1.StorageCephRoleOSD},
-			OSD: &v1alpha1.StorageCephHostOSD{
+		Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+			Name:  "a",
+			Roles: []string{v1alpha1.StorageCephRoleOSD},
+			OSD: &v1alpha1.StorageCephNodeOSD{
 				DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 			},
 		}}},

@@ -8,9 +8,9 @@ import (
 	"github.com/crmarques/bootwright/internal/render/ceph"
 )
 
-func osdHost(hostname string, roles []string, devices []string, osd *v1alpha1.StorageCephHostOSD) v1alpha1.StorageCephHost {
-	return v1alpha1.StorageCephHost{
-		Hostname:   hostname,
+func osdHost(hostname string, roles []string, devices []string, osd *v1alpha1.StorageCephNodeOSD) v1alpha1.StorageCephNode {
+	return v1alpha1.StorageCephNode{
+		Name:       hostname,
 		MachineRef: v1alpha1.LocalObjectReference{Name: hostname},
 		Roles:      roles,
 		Devices:    devices,
@@ -24,23 +24,23 @@ func TestOSDGateDevicePathsCoversShorthandDrivegroupAndFleet(t *testing.T) {
 	}
 	cluster := v1alpha1.StorageCluster{}
 	cluster.Metadata.Name = "ceph"
-	drivegroupHost := osdHost("dg-host", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+	drivegroupHost := osdHost("dg-host", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{
 		DataDevices: sel("/dev/sdb", "/dev/sdc"),
 		DBDevices:   sel("/dev/nvme0n1"),
 	})
 	fleetHost := osdHost("fleet-host", []string{"osd"}, nil, nil)
 	shorthandHost := osdHost("sh-host", []string{"osd"}, []string{"/dev/sdd"}, nil)
 	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-		Hosts: []v1alpha1.StorageCephHost{drivegroupHost, fleetHost, shorthandHost},
+		Nodes: []v1alpha1.StorageCephNode{drivegroupHost, fleetHost, shorthandHost},
 		OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
 			ServiceID: "fleet",
 			Placement: v1alpha1.StoragePlacement{Hosts: []string{"fleet-host"}},
-			OSD:       v1alpha1.StorageCephHostOSD{DataDevices: sel("/dev/sde")},
+			OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: sel("/dev/sde")},
 		}},
 	}}
 
 	cases := []struct {
-		node v1alpha1.StorageCephHost
+		node v1alpha1.StorageCephNode
 		want []string
 	}{
 		{drivegroupHost, []string{"/dev/sdb", "/dev/sdc", "/dev/nvme0n1"}},
@@ -50,7 +50,7 @@ func TestOSDGateDevicePathsCoversShorthandDrivegroupAndFleet(t *testing.T) {
 	for _, tc := range cases {
 		got := ceph.OSDGateDevicePaths(cluster, tc.node)
 		if !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("OSDGateDevicePaths(%s) = %v, want %v", tc.node.Hostname, got, tc.want)
+			t.Errorf("OSDGateDevicePaths(%s) = %v, want %v", tc.node.Name, got, tc.want)
 		}
 	}
 }
@@ -58,11 +58,11 @@ func TestOSDGateDevicePathsCoversShorthandDrivegroupAndFleet(t *testing.T) {
 func TestOSDGateDevicePathsOmitsFilterOnlySelection(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{}
 	cluster.Metadata.Name = "ceph"
-	filterHost := osdHost("filter-host", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+	filterHost := osdHost("filter-host", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{
 		DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 	})
 	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-		Hosts: []v1alpha1.StorageCephHost{filterHost},
+		Nodes: []v1alpha1.StorageCephNode{filterHost},
 	}}
 	if got := ceph.OSDGateDevicePaths(cluster, filterHost); got != nil {
 		t.Errorf("OSDGateDevicePaths(filter host) = %v, want nil (filter/all not statically enumerable)", got)
@@ -73,14 +73,14 @@ func TestOSDReadinessExpectation(t *testing.T) {
 	sel := func(paths ...string) *v1alpha1.StorageCephDeviceSelection {
 		return &v1alpha1.StorageCephDeviceSelection{Paths: paths}
 	}
-	newCluster := func(hosts []v1alpha1.StorageCephHost, dgs []v1alpha1.StorageCephOSDDrivegroup) v1alpha1.StorageCluster {
+	newCluster := func(hosts []v1alpha1.StorageCephNode, dgs []v1alpha1.StorageCephOSDDrivegroup) v1alpha1.StorageCluster {
 		c := v1alpha1.StorageCluster{}
 		c.Metadata.Name = "ceph"
-		c.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Hosts: hosts, OSDDrivegroups: dgs}}
+		c.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Nodes: hosts, OSDDrivegroups: dgs}}
 		return c
 	}
-	singleHostCluster := func(host v1alpha1.StorageCephHost) v1alpha1.StorageCluster {
-		cluster := newCluster([]v1alpha1.StorageCephHost{host}, nil)
+	singleHostCluster := func(host v1alpha1.StorageCephNode) v1alpha1.StorageCluster {
+		cluster := newCluster([]v1alpha1.StorageCephNode{host}, nil)
 		cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults = true
 		return cluster
 	}
@@ -93,13 +93,13 @@ func TestOSDReadinessExpectation(t *testing.T) {
 	}{
 		{
 			name:      "shorthand exact",
-			cluster:   newCluster([]v1alpha1.StorageCephHost{osdHost("a", []string{"osd"}, []string{"/dev/sdb", "/dev/sdc"}, nil)}, nil),
+			cluster:   newCluster([]v1alpha1.StorageCephNode{osdHost("a", []string{"osd"}, []string{"/dev/sdb", "/dev/sdc"}, nil)}, nil),
 			wantMode:  "exact",
 			wantCount: 2,
 		},
 		{
 			name: "explicit paths with osdsPerDevice",
-			cluster: newCluster([]v1alpha1.StorageCephHost{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+			cluster: newCluster([]v1alpha1.StorageCephNode{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{
 				DataDevices: sel("/dev/sdb"), OSDsPerDevice: 3,
 			})}, nil),
 			wantMode:  "exact",
@@ -107,7 +107,7 @@ func TestOSDReadinessExpectation(t *testing.T) {
 		},
 		{
 			name: "filter selection is atLeastOne",
-			cluster: newCluster([]v1alpha1.StorageCephHost{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+			cluster: newCluster([]v1alpha1.StorageCephNode{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{
 				DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 			})}, nil),
 			wantMode:         "atLeastOne",
@@ -122,7 +122,7 @@ func TestOSDReadinessExpectation(t *testing.T) {
 		},
 		{
 			name: "single-host dynamic selection requires two in OSDs",
-			cluster: singleHostCluster(osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+			cluster: singleHostCluster(osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{
 				DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 			})),
 			wantMode:         "atLeastOne",
@@ -131,7 +131,7 @@ func TestOSDReadinessExpectation(t *testing.T) {
 		},
 		{
 			name: "unmanaged only is skip",
-			cluster: newCluster([]v1alpha1.StorageCephHost{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{
+			cluster: newCluster([]v1alpha1.StorageCephNode{osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{
 				DataDevices: sel("/dev/sdb"), Unmanaged: true,
 			})}, nil),
 			wantMode:  "skip",
@@ -139,15 +139,15 @@ func TestOSDReadinessExpectation(t *testing.T) {
 		},
 		{
 			name:      "no osd host is skip",
-			cluster:   newCluster([]v1alpha1.StorageCephHost{osdHost("a", []string{"mon"}, nil, nil)}, nil),
+			cluster:   newCluster([]v1alpha1.StorageCephNode{osdHost("a", []string{"mon"}, nil, nil)}, nil),
 			wantMode:  "skip",
 			wantCount: 0,
 		},
 		{
 			name: "fleet drivegroup counts per host",
 			cluster: newCluster(
-				[]v1alpha1.StorageCephHost{osdHost("a", []string{"osd"}, nil, nil), osdHost("b", []string{"osd"}, nil, nil)},
-				[]v1alpha1.StorageCephOSDDrivegroup{{ServiceID: "f", OSD: v1alpha1.StorageCephHostOSD{DataDevices: sel("/dev/sdb", "/dev/sdc")}}},
+				[]v1alpha1.StorageCephNode{osdHost("a", []string{"osd"}, nil, nil), osdHost("b", []string{"osd"}, nil, nil)},
+				[]v1alpha1.StorageCephOSDDrivegroup{{ServiceID: "f", OSD: v1alpha1.StorageCephNodeOSD{DataDevices: sel("/dev/sdb", "/dev/sdc")}}},
 			),
 			wantMode:  "exact",
 			wantCount: 4,
@@ -155,14 +155,14 @@ func TestOSDReadinessExpectation(t *testing.T) {
 		{
 			name: "dynamic hosts include node and fleet placements once",
 			cluster: newCluster(
-				[]v1alpha1.StorageCephHost{
-					osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}),
+				[]v1alpha1.StorageCephNode{
+					osdHost("a", []string{"osd"}, nil, &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}),
 					osdHost("b", []string{"osd"}, nil, nil),
 					osdHost("c", []string{"mon"}, nil, nil),
 				},
 				[]v1alpha1.StorageCephOSDDrivegroup{{
 					ServiceID: "dynamic",
-					OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Rotational: new(bool)}},
+					OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Rotational: new(bool)}},
 				}},
 			),
 			wantMode:         "atLeastOne",

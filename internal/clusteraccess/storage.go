@@ -62,7 +62,7 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		Name:             cluster.Metadata.Name,
 		Type:             cluster.Spec.Type,
 		Management:       management,
-		SeedHost:         cluster.Spec.Ceph.Cephadm.Bootstrap.Host,
+		SeedHost:         cluster.Spec.Ceph.Cephadm.Bootstrap.Node,
 		MonitorEndpoints: topology.MonitorEndpoints(state, cluster),
 		ConfigPath:       topology.CephAdminConfigPath,
 		KeyringPath:      topology.CephAdminKeyringPath,

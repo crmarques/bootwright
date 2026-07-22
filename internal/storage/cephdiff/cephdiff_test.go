@@ -9,22 +9,22 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/cephstate"
 )
 
-func osdCluster(hosts []v1alpha1.StorageCephHost) v1alpha1.StorageCluster {
+func osdCluster(hosts []v1alpha1.StorageCephNode) v1alpha1.StorageCluster {
 	return v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph-prod"},
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
-				Topology: v1alpha1.StorageCephTopology{Hosts: hosts},
+				Topology: v1alpha1.StorageCephTopology{Nodes: hosts},
 			},
 		},
 	}
 }
 
 func TestOSDDevicesFacet(t *testing.T) {
-	cluster := osdCluster([]v1alpha1.StorageCephHost{
-		{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb", "/dev/sdc"}},
-		{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
-		{Hostname: "srv3", MachineRef: v1alpha1.LocalObjectReference{Name: "srv3"}, Roles: []string{"mon"}},
+	cluster := osdCluster([]v1alpha1.StorageCephNode{
+		{Name: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb", "/dev/sdc"}},
+		{Name: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
+		{Name: "srv3", MachineRef: v1alpha1.LocalObjectReference{Name: "srv3"}, Roles: []string{"mon"}},
 	})
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
 	disc := discovery(t, true, map[string]string{
@@ -59,9 +59,9 @@ func TestOSDDevicesFacet(t *testing.T) {
 }
 
 func TestOSDDevicesFacetInSyncAndStablePaths(t *testing.T) {
-	cluster := osdCluster([]v1alpha1.StorageCephHost{
-		{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb"}},
-		{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, Devices: []string{"/dev/disk/by-id/wwn-0xABC"}},
+	cluster := osdCluster([]v1alpha1.StorageCephNode{
+		{Name: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb"}},
+		{Name: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, Devices: []string{"/dev/disk/by-id/wwn-0xABC"}},
 	})
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
 	disc := discovery(t, true, map[string]string{
@@ -85,9 +85,9 @@ func managedCluster() v1alpha1.StorageCluster {
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{
-						{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"mon", "mgr", "osd"}},
-						{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"mon", "osd"}},
+					Nodes: []v1alpha1.StorageCephNode{
+						{Name: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"mon", "mgr", "osd"}},
+						{Name: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"mon", "osd"}},
 					},
 				},
 			},
@@ -342,8 +342,8 @@ func TestServicesPassthroughRendered(t *testing.T) {
 }
 
 func TestDesiredHostsNaming(t *testing.T) {
-	cluster := osdCluster([]v1alpha1.StorageCephHost{
-		{Hostname: "named-host", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}, Roles: []string{"mon"}},
+	cluster := osdCluster([]v1alpha1.StorageCephNode{
+		{Name: "named-host", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}, Roles: []string{"mon"}},
 		{MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}, Roles: []string{"mon"}},
 	})
 	hosts := desiredHosts(cluster)

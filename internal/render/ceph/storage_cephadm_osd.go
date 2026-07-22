@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-func OSDGateDevicePaths(cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost) []string {
+func OSDGateDevicePaths(cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode) []string {
 	return topology.OSDHostAllStaticDevices(cluster, node)
 }
 
@@ -16,7 +16,7 @@ func OSDReadinessExpectation(cluster v1alpha1.StorageCluster) (mode string, coun
 
 func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 	var docs []any
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || (len(node.Devices) == 0 && node.OSD == nil) {
 			continue
 		}
@@ -30,7 +30,7 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 				},
 			}
 		}
-		doc := cephadmPlacementService("osd", "data-"+stateview.NodeShortName(node.Hostname), []string{node.Hostname}, 0, spec)
+		doc := cephadmPlacementService("osd", "data-"+stateview.NodeShortName(node.Name), []string{node.Name}, 0, spec)
 		applyCephOSDServiceFields(doc, node.OSD)
 		docs = append(docs, doc)
 	}
@@ -47,7 +47,7 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 	return docs
 }
 
-func applyCephOSDServiceFields(doc map[string]any, osd *v1alpha1.StorageCephHostOSD) {
+func applyCephOSDServiceFields(doc map[string]any, osd *v1alpha1.StorageCephNodeOSD) {
 	if osd == nil {
 		return
 	}
@@ -61,7 +61,7 @@ func applyCephOSDServiceFields(doc map[string]any, osd *v1alpha1.StorageCephHost
 	}
 }
 
-func cephadmOSDSpec(osd *v1alpha1.StorageCephHostOSD) map[string]any {
+func cephadmOSDSpec(osd *v1alpha1.StorageCephNodeOSD) map[string]any {
 	spec := map[string]any{}
 	if osd.DataDevices != nil {
 		spec["data_devices"] = cephadmDeviceSelection(osd.DataDevices)

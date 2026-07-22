@@ -20,7 +20,7 @@ spec:
     cephadm:
       addressRef: ssh
       bootstrap:
-        host: node01
+        node: node-01
 
     networks:
       publicCIDRs:
@@ -38,12 +38,13 @@ spec:
           - 10.20.30.0/24
         placement:
           hosts:
-            - node01
-            - node02
+            - node-01
+            - node-02
 
     topology:
-      hosts:
-        - machineRef: ceph-1
+      nodes:
+        - name: node-01
+          machineRef: ceph-1
           site: dc1
           roles:
             - mon
@@ -56,7 +57,8 @@ spec:
             - /dev/sdb
             - /dev/sdc
             - /dev/sdd
-        - machineRef: ceph-2
+        - name: node-02
+          machineRef: ceph-2
           site: dc1
           roles:
             - mon
@@ -69,7 +71,8 @@ spec:
             - /dev/sdb
             - /dev/sdc
             - /dev/sdd
-        - machineRef: ceph-3
+        - name: node-03
+          machineRef: ceph-3
           site: dc1
           roles:
             - mon

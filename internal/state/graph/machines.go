@@ -16,7 +16,7 @@ func MachineWorkObjects(state v1alpha1.State, names []string) (provision, hosts 
 
 func MachineOwningClusterRoots(state v1alpha1.State, machines map[string]bool) (container, storage []string) {
 	for _, cluster := range state.ContainerClusters {
-		for _, node := range cluster.Spec.Hosts {
+		for _, node := range cluster.Spec.Nodes {
 			if machines[node.MachineRef.Name] {
 				container = append(container, cluster.Metadata.Name)
 				break
@@ -27,7 +27,7 @@ func MachineOwningClusterRoots(state v1alpha1.State, machines map[string]bool) (
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			if machines[node.MachineRef.Name] {
 				storage = append(storage, cluster.Metadata.Name)
 				break

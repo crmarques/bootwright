@@ -6,9 +6,9 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func reclaimOSDHost(name string, roles, devices []string, osd *v1alpha1.StorageCephHostOSD) v1alpha1.StorageCephHost {
-	return v1alpha1.StorageCephHost{
-		Hostname:   name,
+func reclaimOSDHost(name string, roles, devices []string, osd *v1alpha1.StorageCephNodeOSD) v1alpha1.StorageCephNode {
+	return v1alpha1.StorageCephNode{
+		Name:       name,
 		MachineRef: v1alpha1.LocalObjectReference{Name: name},
 		Roles:      roles,
 		Devices:    devices,
@@ -18,8 +18,8 @@ func reclaimOSDHost(name string, roles, devices []string, osd *v1alpha1.StorageC
 
 func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 	truePtr := true
-	sel := func(s v1alpha1.StorageCephDeviceSelection) *v1alpha1.StorageCephHostOSD {
-		return &v1alpha1.StorageCephHostOSD{DataDevices: &s}
+	sel := func(s v1alpha1.StorageCephDeviceSelection) *v1alpha1.StorageCephNodeOSD {
+		return &v1alpha1.StorageCephNodeOSD{DataDevices: &s}
 	}
 	allHost := reclaimOSDHost("all-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{All: true}))
 	rotationalHost := reclaimOSDHost("rot-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{Rotational: &truePtr}))
@@ -33,16 +33,16 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{}
 	cluster.Metadata.Name = "ceph"
 	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-		Hosts: []v1alpha1.StorageCephHost{allHost, rotationalHost, modelHost, sizeHost, pathHost, shorthandHost, nonOSDHost, drivegroupHost},
+		Nodes: []v1alpha1.StorageCephNode{allHost, rotationalHost, modelHost, sizeHost, pathHost, shorthandHost, nonOSDHost, drivegroupHost},
 		OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
 			ServiceID: "fleet",
 			Placement: v1alpha1.StoragePlacement{Hosts: []string{"dg-host"}},
-			OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
+			OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
 		}},
 	}}
 
 	cases := []struct {
-		host v1alpha1.StorageCephHost
+		host v1alpha1.StorageCephNode
 		want bool
 	}{
 		{allHost, true},
@@ -56,7 +56,7 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 	}
 	for _, tc := range cases {
 		if got := OSDHostUsesAllDevices(cluster, tc.host); got != tc.want {
-			t.Errorf("OSDHostUsesAllDevices(%s) = %v, want %v", tc.host.Hostname, got, tc.want)
+			t.Errorf("OSDHostUsesAllDevices(%s) = %v, want %v", tc.host.Name, got, tc.want)
 		}
 	}
 	if !ClusterHasAllDevicesOSDHost(cluster) {
@@ -66,7 +66,7 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 	narrowing := v1alpha1.StorageCluster{}
 	narrowing.Metadata.Name = "narrow"
 	narrowing.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-		Hosts: []v1alpha1.StorageCephHost{rotationalHost, modelHost, pathHost, shorthandHost},
+		Nodes: []v1alpha1.StorageCephNode{rotationalHost, modelHost, pathHost, shorthandHost},
 	}}
 	if ClusterHasAllDevicesOSDHost(narrowing) {
 		t.Error("ClusterHasAllDevicesOSDHost(narrowing/static only) = true, want false")

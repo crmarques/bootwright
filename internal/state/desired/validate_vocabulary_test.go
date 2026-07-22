@@ -9,9 +9,9 @@ import (
 
 func TestDiagnosticsSpeakAuthoredFieldVocabulary(t *testing.T) {
 	denylist := map[string]string{
-		"spec.nodes":        "ContainerCluster hosts live under spec.hosts",
-		"topology.nodes":    "StorageCluster hosts live under spec.ceph.topology.hosts",
-		"tiebreaker.node":   "the stretch tiebreaker field is tiebreaker.host",
+		"spec.hosts":        "ContainerCluster nodes live under spec.nodes",
+		"topology.hosts":    "StorageCluster nodes live under spec.ceph.topology.nodes",
+		"tiebreaker.host":   "the stretch tiebreaker field is tiebreaker.node",
 		"networkRefspace":   "the kubevirt network namespace is networkRef.namespace",
 		".ip is required":   "bind and resolver entries spell the field address",
 		".ip %q":            "bind and resolver entries spell the field address",

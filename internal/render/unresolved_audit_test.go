@@ -93,8 +93,8 @@ func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{{
-							Hostname:   "ceph-0",
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:       "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 							Site:       "dc1",
 							Roles:      []string{v1alpha1.StorageCephRoleMON},
@@ -105,7 +105,7 @@ func TestRenderFailsBeforeWriteOnUnresolvableOSInstallImage(t *testing.T) {
 		}},
 	}
 
-	want := `StorageCluster/ceph spec.ceph.topology.hosts[0].machineRef "ceph-0" MachineImage "rhel-iso" spec.bootMedia "nfs://server/export/rhel.iso" does not resolve to installable media:`
+	want := `StorageCluster/ceph spec.ceph.topology.nodes[0].machineRef "ceph-0" MachineImage "rhel-iso" spec.bootMedia "nfs://server/export/rhel.iso" does not resolve to installable media:`
 	renderedDir := t.TempDir()
 	if _, err := render.All(renderedDir, t.TempDir(), t.TempDir(), state); err == nil {
 		t.Fatal("render.All succeeded, want unresolvable OS-install image error")

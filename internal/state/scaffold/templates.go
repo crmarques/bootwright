@@ -89,8 +89,8 @@ spec:
     serviceNetwork:
       - 172.30.0.0/16
 
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master                      # master | worker
       machineRef: {{.Cluster}}-master-0
 `

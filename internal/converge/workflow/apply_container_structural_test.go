@@ -14,8 +14,8 @@ func TestContainerClusterDay2EditsAreReconcilable(t *testing.T) {
 			ContainerClusters: []v1alpha1.ContainerCluster{{
 				Metadata: v1alpha1.Metadata{Name: "demo"},
 				Spec: v1alpha1.ContainerClusterSpec{
-					Hosts: []v1alpha1.OCPHostSpec{{
-						Hostname:   "n1",
+					Nodes: []v1alpha1.OCPNodeSpec{{
+						Name:       "n1",
 						Role:       role,
 						MachineRef: v1alpha1.LocalObjectReference{Name: "m1"},
 						Labels:     map[string]string{"k": labelVal},

@@ -54,7 +54,7 @@ func TestBareMetalFirstInstallClustersWarnsISOCreatedResume(t *testing.T) {
 			{Metadata: v1alpha1.Metadata{Name: "bm-0"}, Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "bm"}}}},
 		},
 		ContainerClusters: []v1alpha1.ContainerCluster{
-			{Metadata: v1alpha1.Metadata{Name: "resume-bm"}, Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "bm-0"}}}}},
+			{Metadata: v1alpha1.Metadata{Name: "resume-bm"}, Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "bm-0"}}}}},
 		},
 	}
 

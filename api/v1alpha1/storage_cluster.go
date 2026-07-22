@@ -51,7 +51,7 @@ func StorageClusterOSSubscriptionEntitlement(cluster StorageCluster, state State
 	}
 	name := cluster.Spec.Ceph.OSSubscriptionRef.Name
 	if name == "" {
-		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, host := range cluster.Spec.Ceph.Topology.Nodes {
 			ref := machineOSSubscriptionRef(state, host.MachineRef.Name)
 			if ref == "" {
 				continue
@@ -142,7 +142,7 @@ type StorageCephadmSpec struct {
 }
 
 type StorageCephadmBootstrap struct {
-	Host               string               `yaml:"host" json:"host"`
+	Node               string               `yaml:"node" json:"node"`
 	AddressRef         LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
 	SingleHostDefaults bool                 `yaml:"singleHostDefaults,omitempty" json:"singleHostDefaults,omitempty"`
 }
@@ -179,14 +179,14 @@ type StorageCephNetworks struct {
 
 type StorageCephTopology struct {
 	Stretch        *StorageCephStretch        `yaml:"stretch,omitempty" json:"stretch,omitempty"`
-	Hosts          []StorageCephHost          `yaml:"hosts" json:"hosts"`
+	Nodes          []StorageCephNode          `yaml:"nodes" json:"nodes"`
 	OSDDrivegroups []StorageCephOSDDrivegroup `yaml:"osdDrivegroups,omitempty" json:"osdDrivegroups,omitempty"`
 }
 
 type StorageCephOSDDrivegroup struct {
 	ServiceID string             `yaml:"serviceID" json:"serviceID"`
 	Placement StoragePlacement   `yaml:"placement,omitempty" json:"placement,omitempty"`
-	OSD       StorageCephHostOSD `yaml:"osd" json:"osd"`
+	OSD       StorageCephNodeOSD `yaml:"osd" json:"osd"`
 }
 
 type StorageCephStretch struct {
@@ -198,20 +198,20 @@ type StorageCephStretch struct {
 
 type StorageCephTiebreaker struct {
 	Site string `yaml:"site,omitempty" json:"site,omitempty"`
-	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+	Node string `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-type StorageCephHost struct {
-	Hostname   string               `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+type StorageCephNode struct {
+	Name       string               `yaml:"name" json:"name"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	Site       string               `yaml:"site,omitempty" json:"site,omitempty"`
 	Roles      []string             `yaml:"roles" json:"roles"`
 	Labels     []string             `yaml:"labels,omitempty" json:"labels,omitempty"`
 	Devices    []string             `yaml:"devices,omitempty" json:"devices,omitempty"`
-	OSD        *StorageCephHostOSD  `yaml:"osd,omitempty" json:"osd,omitempty"`
+	OSD        *StorageCephNodeOSD  `yaml:"osd,omitempty" json:"osd,omitempty"`
 }
 
-type StorageCephHostOSD struct {
+type StorageCephNodeOSD struct {
 	DataDevices          *StorageCephDeviceSelection  `yaml:"dataDevices,omitempty" json:"dataDevices,omitempty"`
 	DBDevices            *StorageCephDeviceSelection  `yaml:"dbDevices,omitempty" json:"dbDevices,omitempty"`
 	WALDevices           *StorageCephDeviceSelection  `yaml:"walDevices,omitempty" json:"walDevices,omitempty"`

@@ -66,8 +66,8 @@ func TestValidateStorageCephVendorRuntimeOSMatrix(t *testing.T) {
 			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 				Distribution: distribution,
 				Release:      release,
-				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-					Hostname: "node", MachineRef: v1alpha1.LocalObjectReference{Name: "node"},
+				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+					Name: "node", MachineRef: v1alpha1.LocalObjectReference{Name: "node"},
 				}}},
 			}},
 		}
@@ -202,10 +202,10 @@ func TestStorageValidationAcceptsCanonicalVendorMirrorRepository(t *testing.T) {
 func TestValidateStorageReplicatedHostCapacity(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
-		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-			{Hostname: "a", Roles: []string{v1alpha1.StorageCephRoleOSD}},
-			{Hostname: "b", Roles: []string{v1alpha1.StorageCephRoleOSD}},
-			{Hostname: "c", Roles: []string{v1alpha1.StorageCephRoleMON}},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+			{Name: "a", Roles: []string{v1alpha1.StorageCephRoleOSD}},
+			{Name: "b", Roles: []string{v1alpha1.StorageCephRoleOSD}},
+			{Name: "c", Roles: []string{v1alpha1.StorageCephRoleMON}},
 		}}}},
 	}
 	errs := validateStorageReplicatedHostCapacity("StoragePlacementPolicy/replicated spec.ceph.replicated", v1alpha1.StorageCephPoolReplicas{Size: 3, MinSize: 2}, "host", cluster)
@@ -253,7 +253,7 @@ func TestValidateStorageMonitoringRejectsUnsupportedRetention(t *testing.T) {
 				RetentionTime: "30d",
 			},
 		},
-		Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{Hostname: "node"}}},
+		Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "node"}}},
 	}}}
 	errs := validateStorageCephMonitoring("StorageCluster/ceph spec.ceph.monitoring", cluster)
 	if joined := strings.Join(errs, "; "); !strings.Contains(joined, "loki.retentionTime applies to prometheus only") {

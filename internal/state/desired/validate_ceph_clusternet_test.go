@@ -21,8 +21,8 @@ func cephClusternetCase(ifaceAddrs []v1alpha1.MachineInterfaceAddress, addresses
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Networks: v1alpha1.StorageCephNetworks{ClusterCIDRs: clusterCIDRs},
-				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-					{Hostname: "srv", MachineRef: v1alpha1.LocalObjectReference{Name: "srv"}, Roles: roles},
+				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+					{Name: "srv", MachineRef: v1alpha1.LocalObjectReference{Name: "srv"}, Roles: roles},
 				}},
 			},
 		},

@@ -32,13 +32,13 @@ spec:
   compute:
     - replicas: 0
 
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: rack1-srv1
-    - hostname: master-1
+    - name: master-1
       role: master
       machineRef: rack1-srv2
-    - hostname: master-2
+    - name: master-2
       role: master
       machineRef: rack1-srv3

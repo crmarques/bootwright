@@ -50,7 +50,7 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 
 func storageStretchTiebreakerAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
-	if stretch == nil || stretch.Tiebreaker.Host != "" {
+	if stretch == nil || stretch.Tiebreaker.Node != "" {
 		return nil
 	}
 	return []StorageAdvisory{{
@@ -59,7 +59,7 @@ func storageStretchTiebreakerAdvisories(object string, cluster v1alpha1.StorageC
 		Object:      object,
 		Finding:     "stretch mode is declared with no tiebreaker/arbiter mon",
 		Impact:      "a two-site stretch cluster without a tiebreaker mon in a third site loses monitor quorum if either data site fails, and apply cannot enable stretch mode, so the pools place two replicas per site but without automatic degraded-mode failover",
-		Remediation: "add a mon-only arbiter host in a third site and set spec.ceph.topology.stretch.tiebreaker.host before relying on this cluster",
+		Remediation: "add a mon-only arbiter node in a third site and set spec.ceph.topology.stretch.tiebreaker.node before relying on this cluster",
 	}}
 }
 

@@ -76,13 +76,13 @@ func appendHostSequence(doc *yaml.Node, hostRef string, hostPath, values []strin
 	if mapping.Kind == yaml.DocumentNode && len(mapping.Content) > 0 {
 		mapping = mapping.Content[0]
 	}
-	hosts := mappingSequenceAtPath(mapping, []string{"spec", "ceph", "topology", "hosts"})
+	hosts := mappingSequenceAtPath(mapping, []string{"spec", "ceph", "topology", "nodes"})
 	if hosts == nil {
-		return fmt.Errorf("no spec.ceph.topology.hosts sequence")
+		return fmt.Errorf("no spec.ceph.topology.nodes sequence")
 	}
 	host := findHostElement(hosts, hostRef)
 	if host == nil {
-		return fmt.Errorf("no hosts[] element matching %q", hostRef)
+		return fmt.Errorf("no nodes[] element matching %q", hostRef)
 	}
 	seq, err := ensureSequenceAtPath(host, hostPath)
 	if err != nil {
@@ -124,7 +124,7 @@ func findHostElement(hosts *yaml.Node, ref string) *yaml.Node {
 		if host.Kind != yaml.MappingNode {
 			continue
 		}
-		if hostname := mappingValue(host, "hostname"); hostname != nil && hostname.Value == ref {
+		if hostname := mappingValue(host, "name"); hostname != nil && hostname.Value == ref {
 			return host
 		}
 		if machineRef := mappingValue(host, "machineRef"); machineRef != nil {

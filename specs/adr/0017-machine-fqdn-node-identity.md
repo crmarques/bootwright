@@ -7,7 +7,7 @@ Accepted
 ## Context
 
 A Machine's `metadata.name` doubles today as the seed of every cluster-visible
-node identity: when a cluster host omits `hostname`, normalization composes
+node identity: when a cluster host omits `name`, normalization composes
 `<machineName>.<cluster>.<baseDomain>` and that string becomes the agent
 installer hostname, the kickstart OS hostname, the cephadm host identity, and
 the dnsmasq record set. The machine name is additionally published as a bare
@@ -58,13 +58,13 @@ all (no resolver is declared that could answer).
 
 ### Independent node names
 
-A cluster host's `hostname` field names the node, not the machine. A bare
-label composes to `<hostname>.<cluster>.<baseDomain>`; a dotted value is an
-explicit FQDN used verbatim. When `hostname` is omitted the node defaults to
-`node<NN>` (`node01`, `node02`, … in `hosts` list order, zero-padded to two
-digits), so the default node FQDN is `node<NN>.<cluster>.<baseDomain>` and
-never embeds the machine name. Node hostnames must be unique within a
-cluster. The composed FQDN remains the single cluster-visible identity: agent
+A cluster node's `name` field names the node, not the machine. A bare
+label composes to `<name>.<cluster>.<baseDomain>`; a dotted value is an
+explicit FQDN used verbatim. The node name is required and declared
+explicitly (`topology.nodes[].name` for storage, `spec.nodes[].name` for
+OpenShift); it is never inferred from the machine name or list position, so
+the node FQDN never embeds the machine name. Node names must be unique within
+a cluster. The composed FQDN remains the single cluster-visible identity: agent
 installer hostname, kickstart OS hostname, cephadm host identity, CRUSH/mon
 location, and DNS record name.
 
@@ -94,8 +94,8 @@ The node FQDN resolves to the machine through its `fqdn`:
 ### Node-name-only cluster surfaces
 
 Cluster-facing surfaces stop accepting machine names: cephadm
-`bootstrap.host`, OSD drivegroup host selectors, and the stretch tiebreaker
-reference node hostnames only (validation rejects machine-name tokens);
+`bootstrap.node`, OSD drivegroup host selectors, and the stretch tiebreaker
+reference node names only (validation rejects machine-name tokens);
 storage topology host resolution drops its machine-name alias arms; the OSD
 per-host service id derives from the node short name; CLI `--node` selectors,
 completion, and roster hints present node names (role-ordinal aliases stay).
@@ -112,12 +112,12 @@ cephadm host matching breaks, so that combination is a validation error.
 
 ## Consequences
 
-- Existing states that relied on machine-name-derived node FQDNs get renamed
-  node identities (`node01.<cluster>.<baseDomain>` instead of
-  `<machine>.<cluster>.<baseDomain>`) unless they pin `hostname` explicitly.
-  This is greenfield-oriented: deployed clusters keep their names by adding
-  explicit `hostname` entries before upgrading, or accept a managed-OS
-  reconverge (install-marker hashes include the kickstart hostname).
+- Existing states that relied on machine-name-derived node FQDNs must declare
+  each node's `name` explicitly: the node name is now required, with no
+  machine-name-derived or positional default. This is greenfield-oriented:
+  deployed clusters keep their names by adding explicit `name` entries before
+  upgrading, or accept a managed-OS reconverge (install-marker hashes include
+  the kickstart hostname).
 - Connection strings move from IPs to names for name-resolution-wired
   machines; SSH trust records key per address, so first contact after upgrade
   re-establishes trust against the `fqdn` name.

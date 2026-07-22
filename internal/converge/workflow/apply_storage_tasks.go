@@ -56,7 +56,7 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		if ceph == nil {
 			continue
 		}
-		ceph.Topology.Hosts = nil
+		ceph.Topology.Nodes = nil
 		ceph.Topology.OSDDrivegroups = nil
 		ceph.Management = nil
 		ceph.Services = nil
@@ -84,9 +84,9 @@ func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alp
 	clone.InfraComponents = nil
 	for i := range clone.StorageClusters {
 		if ceph := clone.StorageClusters[i].Spec.Ceph; ceph != nil {
-			for j := range ceph.Topology.Hosts {
-				ceph.Topology.Hosts[j].Devices = nil
-				ceph.Topology.Hosts[j].OSD = nil
+			for j := range ceph.Topology.Nodes {
+				ceph.Topology.Nodes[j].Devices = nil
+				ceph.Topology.Nodes[j].OSD = nil
 			}
 			ceph.Topology.OSDDrivegroups = nil
 		}
@@ -104,7 +104,7 @@ func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	}
 	seen := map[string]bool{}
 	var names []string
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 			continue
 		}
@@ -122,7 +122,7 @@ func storageClusterHasProvidedOSNode(state v1alpha1.State, cluster v1alpha1.Stor
 	if cluster.Spec.Ceph == nil {
 		return false
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.MachineRef.Name == "" {
 			continue
 		}
@@ -137,7 +137,7 @@ func storageClusterNodeCount(cluster v1alpha1.StorageCluster) int {
 	if cluster.Spec.Ceph == nil {
 		return 1
 	}
-	if count := len(cluster.Spec.Ceph.Topology.Hosts); count > 0 {
+	if count := len(cluster.Spec.Ceph.Topology.Nodes); count > 0 {
 		return count
 	}
 	return 1

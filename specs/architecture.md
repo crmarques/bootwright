@@ -101,7 +101,7 @@ boundaries drive rendering:
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
   selected machines, machine `NetworkConfig` references, endpoints, and
   platform render mode.
-- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.hosts`,
+- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
   referenced `Machine` objects, `NetworkConfig` templates, and provider or
   generated substrate MAC inventory.
 - Machine and endpoint provider variables resolve substrate network
@@ -124,7 +124,7 @@ boundaries drive rendering:
   manifest paths. They do not mutate installer input.
 - Rendering is a second enforcement line behind validation for name
   resolution: every render entry point fails before writing anything when an
-  endpoint load-balancer bind or a managed Ceph topology host address does not
+  endpoint load-balancer bind or a managed Ceph topology node address does not
   resolve, instead of degrading to output with empty values.
 
 Convergence is resumable by default. Each mutating workflow task runs under its

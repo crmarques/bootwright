@@ -17,10 +17,10 @@ func infraValidationCluster() (v1alpha1.ContainerCluster, map[string]v1alpha1.Ma
 	ocp := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "hub"},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Hosts: []v1alpha1.OCPHostSpec{
-				{Hostname: "m1", Role: v1alpha1.NodeRoleMaster, MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
-				{Hostname: "w1", Role: v1alpha1.NodeRoleWorker, MachineRef: v1alpha1.LocalObjectReference{Name: "w1"}},
-				{Hostname: "i1", Role: v1alpha1.NodeRoleInfra, MachineRef: v1alpha1.LocalObjectReference{Name: "i1"}},
+			Nodes: []v1alpha1.OCPNodeSpec{
+				{Name: "m1", Role: v1alpha1.NodeRoleMaster, MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
+				{Name: "w1", Role: v1alpha1.NodeRoleWorker, MachineRef: v1alpha1.LocalObjectReference{Name: "w1"}},
+				{Name: "i1", Role: v1alpha1.NodeRoleInfra, MachineRef: v1alpha1.LocalObjectReference{Name: "i1"}},
 			},
 		},
 	}
@@ -49,7 +49,7 @@ func TestValidateNodesComputeReplicasIncludeInfra(t *testing.T) {
 
 func TestValidateNodesRejectsUnknownRole(t *testing.T) {
 	ocp, machines := infraValidationCluster()
-	ocp.Spec.Hosts[2].Role = "edge"
+	ocp.Spec.Nodes[2].Role = "edge"
 	if errs := validateNodes(ocp, machines); !containsSubstring(errs, "must be master, worker, or infra") {
 		t.Fatalf("expected role error, got: %v", errs)
 	}
@@ -57,7 +57,7 @@ func TestValidateNodesRejectsUnknownRole(t *testing.T) {
 
 func TestValidateNodesRejectsBadTaintEffect(t *testing.T) {
 	ocp, machines := infraValidationCluster()
-	ocp.Spec.Hosts[2].Taints = []v1alpha1.OCPNodeTaint{{Key: "dedicated", Effect: "Nope"}}
+	ocp.Spec.Nodes[2].Taints = []v1alpha1.OCPNodeTaint{{Key: "dedicated", Effect: "Nope"}}
 	if errs := validateNodes(ocp, machines); !containsSubstring(errs, "must be one of") {
 		t.Fatalf("expected taint effect error, got: %v", errs)
 	}
@@ -65,13 +65,13 @@ func TestValidateNodesRejectsBadTaintEffect(t *testing.T) {
 
 func TestValidateNodesRejectsNonRFC1123Hostname(t *testing.T) {
 	ocp, machines := infraValidationCluster()
-	ocp.Spec.Hosts[0].Hostname = "Master_0"
+	ocp.Spec.Nodes[0].Name = "Master_0"
 	if errs := validateNodes(ocp, machines); !containsSubstring(errs, "must be a lowercase RFC1123 subdomain") {
 		t.Fatalf("expected RFC1123 hostname error, got: %v", errs)
 	}
 
 	ocp, machines = infraValidationCluster()
-	ocp.Spec.Hosts[0].Hostname = "master-0.hub.example.com"
+	ocp.Spec.Nodes[0].Name = "master-0.hub.example.com"
 	if errs := validateNodes(ocp, machines); len(errs) != 0 {
 		t.Fatalf("valid lowercase RFC1123 hostname must pass, got: %v", errs)
 	}

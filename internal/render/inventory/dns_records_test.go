@@ -82,7 +82,8 @@ func storageDNSRecordsState(baseDomain string) v1alpha1.State {
 			Spec: v1alpha1.StorageClusterSpec{
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{{
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:       "node01",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"},
 							Roles:      []string{v1alpha1.StorageCephRoleMON},
 						}},
@@ -282,8 +283,8 @@ func dnsRecordsState() v1alpha1.State {
 					v1alpha1.EndpointAPIInt:  {Address: "192.168.130.10"},
 					v1alpha1.EndpointIngress: {Address: "192.168.130.11"},
 				}},
-				Hosts: []v1alpha1.OCPHostSpec{{
-					Hostname:   "master-a",
+				Nodes: []v1alpha1.OCPNodeSpec{{
+					Name:       "master-a",
 					MachineRef: v1alpha1.LocalObjectReference{Name: "master-a"},
 				}},
 			},

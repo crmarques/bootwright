@@ -40,18 +40,18 @@ func hostTrustScopePlanningState() v1alpha1.State {
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						Bootstrap:  v1alpha1.StorageCephadmBootstrap{Host: "ceph-seed"},
+						Bootstrap:  v1alpha1.StorageCephadmBootstrap{Node: "ceph-seed"},
 					},
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{
+						Nodes: []v1alpha1.StorageCephNode{
 							{
-								Hostname:   "ceph-seed",
+								Name:       "ceph-seed",
 								MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-seed"},
 								Site:       "dc1",
 								Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
 							},
 							{
-								Hostname:   "ceph-arb",
+								Name:       "ceph-arb",
 								MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-arb"},
 								Site:       "dc3",
 								Roles:      []string{v1alpha1.StorageCephRoleMON},

@@ -292,7 +292,7 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 		}
 		out = append(out, nameResolutionConsumers(state, cluster.Metadata.Name, cluster.Metadata.Name, storageNetworkNameResolutionRefs(state, cluster))...)
 		out = append(out, storageArtifactServerConsumers(state, cluster)...)
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			machineObj, ok := stateview.Machine(state, node.MachineRef.Name)
 			if !ok || !v1alpha1.MachineInstallsOS(machineObj) {
 				continue
@@ -518,7 +518,7 @@ func storageNetworkNameResolutionRefs(state v1alpha1.State, cluster v1alpha1.Sto
 	if cluster.Spec.Ceph == nil {
 		return out
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		machine, ok := stateview.Machine(state, node.MachineRef.Name)
 		if !ok {
 			continue

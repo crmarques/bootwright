@@ -239,8 +239,8 @@ containerClusters:
                   hostPrefix: 23
             serviceNetwork:
                 - 172.30.0.0/16
-        hosts:
-            - hostname: master-0.sno-libvirt.bootwright.test
+        nodes:
+            - name: master-0.sno-libvirt.bootwright.test
               role: master
               machineRef: master-0
 secrets:

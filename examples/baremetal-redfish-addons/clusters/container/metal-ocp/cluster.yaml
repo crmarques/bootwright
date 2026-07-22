@@ -24,8 +24,8 @@ spec:
     nodeSSH:
       keyPairRef: metal-ocp-cluster-admin-ssh-key
 
-  hosts:
+  nodes:
 
-  - hostname: master-0
+  - name: master-0
     role: master
     machineRef: metal-master-0

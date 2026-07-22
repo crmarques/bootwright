@@ -27,16 +27,16 @@ spec:
   networking:
     networkType: OVNKubernetes
 
-  hosts:
+  nodes:
 
-  - hostname: master-0
+  - name: master-0
     role: master
     machineRef: dc1-metal-master-0
 
-  - hostname: master-1
+  - name: master-1
     role: master
     machineRef: dc1-metal-master-1
 
-  - hostname: master-2
+  - name: master-2
     role: master
     machineRef: dc1-metal-master-2

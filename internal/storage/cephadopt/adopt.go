@@ -235,7 +235,7 @@ func osdDevicesField(object cephdiff.ObjectDiff) (cephdiff.FieldDiff, bool) {
 	return cephdiff.FieldDiff{}, false
 }
 
-func hostDeviceSequencePath(host v1alpha1.StorageCephHost) (path []string, canAppend bool) {
+func hostDeviceSequencePath(host v1alpha1.StorageCephNode) (path []string, canAppend bool) {
 	if len(host.Devices) > 0 {
 		return []string{"devices"}, true
 	}

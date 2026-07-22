@@ -55,7 +55,7 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	seen := map[string]bool{}
 	var machines []v1alpha1.InstallMachine
 	var bindings []v1alpha1.MachineNetworkBinding
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 			continue
 		}

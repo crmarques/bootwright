@@ -8,15 +8,15 @@ import (
 )
 
 func reclaimTestState() v1alpha1.State {
-	host := func(devs ...string) v1alpha1.StorageCephHost {
-		return v1alpha1.StorageCephHost{Devices: devs}
+	host := func(devs ...string) v1alpha1.StorageCephNode {
+		return v1alpha1.StorageCephNode{Devices: devs}
 	}
-	cluster := func(name string, hosts ...v1alpha1.StorageCephHost) v1alpha1.StorageCluster {
+	cluster := func(name string, hosts ...v1alpha1.StorageCephNode) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
 			Metadata: v1alpha1.Metadata{Name: name},
 			Spec: v1alpha1.StorageClusterSpec{
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Topology: v1alpha1.StorageCephTopology{Hosts: hosts},
+					Topology: v1alpha1.StorageCephTopology{Nodes: hosts},
 				},
 			},
 		}

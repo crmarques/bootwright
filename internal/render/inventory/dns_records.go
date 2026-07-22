@@ -192,7 +192,7 @@ func storageClusterUsesNameResolution(state v1alpha1.State, clusterName, entryNa
 		if sc.Metadata.Name != clusterName || sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range sc.Spec.Ceph.Topology.Hosts {
+		for _, node := range sc.Spec.Ceph.Topology.Nodes {
 			if machine, ok := stateview.Machine(state, node.MachineRef.Name); ok && machineUsesNameResolution(state, machine, entryName) {
 				return true
 			}

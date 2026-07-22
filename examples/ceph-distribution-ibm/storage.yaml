@@ -14,9 +14,10 @@ spec:
     osSubscriptionRef: rhel
     cephadm:
       bootstrap:
-        host: node01
+        node: node-01
     topology:
-      hosts:
-        - machineRef: ceph-0
+      nodes:
+        - name: node-01
+          machineRef: ceph-0
           roles:
             - mon

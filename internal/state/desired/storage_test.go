@@ -35,7 +35,7 @@ func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.
 					Type: v1alpha1.StorageClusterTypeCeph,
 					Ceph: &v1alpha1.StorageClusterCephSpec{
 						Topology: v1alpha1.StorageCephTopology{
-							Hosts: []v1alpha1.StorageCephHost{
+							Nodes: []v1alpha1.StorageCephNode{
 								storageValidationCephNode("ceph-0", "", []string{"mon"}),
 							},
 						},
@@ -109,16 +109,16 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 			state.Machines[i].Spec.OS.Provided = v1alpha1.BoolPtr(false)
 		}
 	}
-	arbiter := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6]
+	arbiter := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6]
 	arbiter.Roles = []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR}
 
 	Normalize(&state)
 
-	if got := state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Hostname; got != "ceph-arbiter.ceph.example.test" {
+	if got := state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Name; got != "ceph-arbiter.ceph.example.test" {
 		t.Fatalf("precondition: normalize did not FQDN-qualify the arbiter hostname, got %q", got)
 	}
 	got := strings.Join(validateStorage(state), "; ")
-	if !strings.Contains(got, `tiebreaker.host "ceph-arbiter" must be mon-only`) {
+	if !strings.Contains(got, `tiebreaker.node "ceph-arbiter" must be mon-only`) {
 		t.Fatalf("stretch tiebreaker mon-only check did not fire after FQDN normalization; errors = %q", got)
 	}
 }
@@ -127,7 +127,7 @@ func TestStorageStretchValidationAcceptsDeferredTiebreaker(t *testing.T) {
 	state := storageValidationState()
 	state.Machines = state.Machines[:6]
 	cluster := &state.StorageClusters[0].Spec.Ceph.Topology
-	cluster.Hosts = cluster.Hosts[:6]
+	cluster.Nodes = cluster.Nodes[:6]
 	cluster.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{}
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("an arbiter-less stretch cluster must validate with no hard errors, got %v", errs)
@@ -137,10 +137,10 @@ func TestStorageStretchValidationAcceptsDeferredTiebreaker(t *testing.T) {
 func TestStorageStretchValidationRejectsPartialTiebreaker(t *testing.T) {
 	state := storageValidationState()
 	cluster := &state.StorageClusters[0].Spec.Ceph.Topology
-	cluster.Hosts = cluster.Hosts[:6]
+	cluster.Nodes = cluster.Nodes[:6]
 	cluster.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{Site: "dc3"}
 	got := strings.Join(validateStorage(state), "; ")
-	if !strings.Contains(got, "tiebreaker.host is required") {
+	if !strings.Contains(got, "tiebreaker.node is required") {
 		t.Fatalf("a partially authored tiebreaker must still fail; errors = %q", got)
 	}
 }
@@ -421,13 +421,14 @@ spec:
   ceph:
     cephadm:
       bootstrap:
-        host: node01
+        node: node01
     monitoring:
       prometheus:
         retentionTime: 15d
     topology:
-      hosts:
-        - machineRef: ceph-0
+      nodes:
+        - name: node01
+          machineRef: ceph-0
           site: lab
           roles: [ROLES]
 `
@@ -469,7 +470,7 @@ spec:
 	}
 }
 
-func TestStorageCephHostSiteRequiredOnlyWhereItHasEffect(t *testing.T) {
+func TestStorageCephNodeSiteRequiredOnlyWhereItHasEffect(t *testing.T) {
 	const environment = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
@@ -504,11 +505,12 @@ spec:
   ceph:
     cephadm:
       bootstrap:
-        host: node01
+        node: node01
 MONITORING
     topology:
-      hosts:
-        - machineRef: ceph-0
+      nodes:
+        - name: node01
+          machineRef: ceph-0
           roles: [mon, prometheus]
 `
 	cases := []struct {
@@ -523,7 +525,7 @@ MONITORING
 		{
 			name:       "site-required-under-site-narrowed-placement",
 			monitoring: "    monitoring:\n      prometheus:\n        placement:\n          sites: [lab]\n",
-			want:       "spec.ceph.topology.hosts[0].site is required when spec.ceph.monitoring.prometheus.placement narrows by sites",
+			want:       "spec.ceph.topology.nodes[0].site is required when spec.ceph.monitoring.prometheus.placement narrows by sites",
 		},
 	}
 	for _, tc := range cases {
@@ -561,23 +563,23 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 		{
 			name: "tiebreaker-not-mon-only",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Roles = append(state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Roles, v1alpha1.StorageCephRoleMGR)
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Roles = append(state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Roles, v1alpha1.StorageCephRoleMGR)
 			},
-			want: `tiebreaker.host "ceph-arbiter" must be mon-only`,
+			want: `tiebreaker.node "ceph-arbiter" must be mon-only`,
 		},
 		{
 			name: "bad-data-site-mon-count",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[1].Roles = []string{v1alpha1.StorageCephRoleOSD}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[1].Roles = []string{v1alpha1.StorageCephRoleOSD}
 			},
 			want: `requires exactly two mon nodes in data site "dc1"`,
 		},
 		{
 			name: "stretch-host-missing-site",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Site = ""
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Site = ""
 			},
-			want: "spec.ceph.topology.hosts[2].site is required when spec.ceph.topology.stretch is set",
+			want: "spec.ceph.topology.nodes[2].site is required when spec.ceph.topology.stretch is set",
 		},
 		{
 			name: "erasure-coded-pool",
@@ -715,7 +717,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	}
 }
 
-func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
+func TestStorageCephNodeOSDDeviceSelectionExplicit(t *testing.T) {
 	cases := []struct {
 		name string
 		edit func(*v1alpha1.State)
@@ -724,23 +726,23 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "osd-role-without-device-selection",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = nil
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Devices = nil
 			},
-			want: `spec.ceph.topology.hosts[2] carries the "osd" role but selects no devices; author devices, osd.dataDevices, or cover it with a fleet osdDrivegroup`,
+			want: `spec.ceph.topology.nodes[2] carries the "osd" role but selects no devices; author devices, osd.dataDevices, or cover it with a fleet osdDrivegroup`,
 		},
 		{
 			name: "devices-without-osd-role",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Devices = []string{"/dev/vdb"}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Devices = []string{"/dev/vdb"}
 			},
-			want: `spec.ceph.topology.hosts[6].devices requires the "osd" role`,
+			want: `spec.ceph.topology.nodes[6].devices requires the "osd" role`,
 		},
 		{
 			name: "explicit-all-devices-passes",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 				}
 			},
@@ -748,9 +750,9 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "model-vendor-selection-passes",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{Model: "MZ7", Vendor: "ATA"},
 					FilterLogic: "OR",
 				}
@@ -759,9 +761,9 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "filter-logic-rejects-non-and-or",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 					FilterLogic: "and",
 				}
@@ -771,9 +773,9 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "tpm2-requires-encrypted",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 					TPM2:        true,
 				}
@@ -783,9 +785,9 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "data-allocate-fraction-out-of-range",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices:          &v1alpha1.StorageCephDeviceSelection{All: true},
 					DataAllocateFraction: 1.5,
 				}
@@ -795,9 +797,9 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "pathspecs-and-paths-mutually-exclusive",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{
 						Paths:     []string{"/dev/sdb"},
 						PathSpecs: []v1alpha1.StorageCephDevicePath{{Path: "/dev/sdc"}},
@@ -809,9 +811,9 @@ func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
 		{
 			name: "size-range-rejects-dash-separator",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{Size: "10G-40G"},
 				}
 			},
@@ -846,39 +848,39 @@ func TestStorageCephDevicePathValidation(t *testing.T) {
 		{
 			name: "empty-shorthand-path",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{""}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Devices = []string{""}
 			},
-			want: `spec.ceph.topology.hosts[2].devices[0] must not be empty`,
+			want: `spec.ceph.topology.nodes[2].devices[0] must not be empty`,
 		},
 		{
 			name: "relative-shorthand-path",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{"sdb"}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Devices = []string{"sdb"}
 			},
 			want: `must be an absolute /dev path`,
 		},
 		{
 			name: "duplicate-shorthand-path",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{"/dev/sdb", "/dev/sdb"}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Devices = []string{"/dev/sdb", "/dev/sdb"}
 			},
 			want: `is listed more than once`,
 		},
 		{
 			name: "duplicate-datadevices-path",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				host.OSD = &v1alpha1.StorageCephHostOSD{
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
 					DataDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/sdb", "/dev/sdb"}},
 				}
 			},
-			want: `spec.ceph.topology.hosts[2].osd.dataDevices.paths[1] "/dev/sdb" is listed more than once`,
+			want: `spec.ceph.topology.nodes[2].osd.dataDevices.paths[1] "/dev/sdb" is listed more than once`,
 		},
 		{
 			name: "by-id-path-passes",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = []string{"/dev/disk/by-id/wwn-0x5000c500a"}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Devices = []string{"/dev/disk/by-id/wwn-0x5000c500a"}
 			},
 		},
 	}
@@ -988,10 +990,10 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 				Cephadm: v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{SingleHostDefaults: true}},
-				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-					Hostname: "ceph-0",
-					Roles:    []string{v1alpha1.StorageCephRoleOSD},
-					Devices:  []string{"/dev/sdb", "/dev/sdc"},
+				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+					Name:    "ceph-0",
+					Roles:   []string{v1alpha1.StorageCephRoleOSD},
+					Devices: []string{"/dev/sdb", "/dev/sdc"},
 				}}},
 			}},
 		}
@@ -1000,7 +1002,7 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 		t.Fatalf("single-host cluster should pass, got %v", errs)
 	}
 	multi := base()
-	multi.Spec.Ceph.Topology.Hosts = append(multi.Spec.Ceph.Topology.Hosts, v1alpha1.StorageCephHost{Hostname: "ceph-1"})
+	multi.Spec.Ceph.Topology.Nodes = append(multi.Spec.Ceph.Topology.Nodes, v1alpha1.StorageCephNode{Name: "ceph-1"})
 	if got := strings.Join(validateStorageCephSingleHostDefaults("p", multi), "; "); !strings.Contains(got, "single-host topology") {
 		t.Fatalf("multi-host should be rejected, got %q", got)
 	}
@@ -1010,13 +1012,13 @@ func TestValidateSingleHostDefaults(t *testing.T) {
 		t.Fatalf("config conflict should be rejected, got %q", got)
 	}
 	oneOSD := base()
-	oneOSD.Spec.Ceph.Topology.Hosts[0].Devices = []string{"/dev/sdb"}
+	oneOSD.Spec.Ceph.Topology.Nodes[0].Devices = []string{"/dev/sdb"}
 	if got := strings.Join(validateStorageCephSingleHostDefaults("p", oneOSD), "; "); !strings.Contains(got, "requires at least 2 OSDs") {
 		t.Fatalf("one static OSD should be rejected, got %q", got)
 	}
 	dynamic := base()
-	dynamic.Spec.Ceph.Topology.Hosts[0].Devices = nil
-	dynamic.Spec.Ceph.Topology.Hosts[0].OSD = &v1alpha1.StorageCephHostOSD{
+	dynamic.Spec.Ceph.Topology.Nodes[0].Devices = nil
+	dynamic.Spec.Ceph.Topology.Nodes[0].OSD = &v1alpha1.StorageCephNodeOSD{
 		DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
 	}
 	if errs := validateStorageCephSingleHostDefaults("p", dynamic); len(errs) != 0 {
@@ -1036,7 +1038,7 @@ func TestStorageValidationRejectsSingleHostWithOneStaticOSD(t *testing.T) {
 	state.ClusterAddonBindings = nil
 	cluster := &state.StorageClusters[0]
 	cluster.Spec.Ceph.Topology.Stretch = nil
-	cluster.Spec.Ceph.Topology.Hosts = []v1alpha1.StorageCephHost{
+	cluster.Spec.Ceph.Topology.Nodes = []v1alpha1.StorageCephNode{
 		storageValidationCephNode("ceph-dc1-0", "", []string{"mon", "mgr", "osd"}),
 	}
 	cluster.Spec.Ceph.Cephadm.Bootstrap.SingleHostDefaults = true
@@ -1046,7 +1048,7 @@ func TestStorageValidationRejectsSingleHostWithOneStaticOSD(t *testing.T) {
 		t.Fatalf("validateStorage errors = %q, want the single-host static OSD minimum", got)
 	}
 
-	cluster.Spec.Ceph.Topology.Hosts[0].Devices = []string{"/dev/vdb", "/dev/vdc"}
+	cluster.Spec.Ceph.Topology.Nodes[0].Devices = []string{"/dev/vdb", "/dev/vdc"}
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("two-OSD single-host topology should validate, got %v", errs)
 	}
@@ -1063,7 +1065,7 @@ func TestStorageManagementAuthGate(t *testing.T) {
 	clusterWith := func(mgmt *v1alpha1.StorageCephManagement) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Management: mgmt,
-			Topology:   v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
+			Topology:   v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
 		}}}
 	}
 	baseIngress := v1alpha1.StorageCephManagementIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24}
@@ -1158,7 +1160,7 @@ func TestStorageFleetOSDDrivegroupOverlap(t *testing.T) {
 		return v1alpha1.StorageCephOSDDrivegroup{
 			ServiceID: id,
 			Placement: v1alpha1.StoragePlacement{Hosts: hosts},
-			OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
+			OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
 		}
 	}
 	cases := []struct {
@@ -1169,25 +1171,25 @@ func TestStorageFleetOSDDrivegroupOverlap(t *testing.T) {
 		{
 			name: "fleet-covers-osd-role-host-passes",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Hostname)}
+				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Name)}
 			},
 		},
 		{
 			name: "per-host-and-fleet-overlap-rejected",
 			edit: func(state *v1alpha1.State) {
-				host := state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
-				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Hostname)}
+				host := state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
+				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Name)}
 			},
 			want: "covered by a fleet osdDrivegroup; a host is owned by one OSD spec",
 		},
 		{
 			name: "duplicate-fleet-service-id-rejected",
 			edit: func(state *v1alpha1.State) {
-				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
 				host.Devices = nil
-				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Hostname), dg("fleet")}
+				state.StorageClusters[0].Spec.Ceph.Topology.OSDDrivegroups = []v1alpha1.StorageCephOSDDrivegroup{dg("fleet", host.Name), dg("fleet")}
 			},
 			want: `.serviceID "fleet" is duplicated`,
 		},
@@ -1257,13 +1259,13 @@ func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageFilesystems[0].Spec.CephFS.MDS.Placement.Hosts = []string{"ceph-typo"}
 			},
-			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" does not match any node hostname in StorageCluster/ceph spec.ceph.topology.hosts`,
+			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" does not match any node name in StorageCluster/ceph spec.ceph.topology.nodes`,
 		},
 		{
 			name: "no-mds-role-anywhere",
 			edit: func(state *v1alpha1.State) {
 				state.StorageFilesystems[0].Spec.CephFS.MDS.Placement = v1alpha1.StoragePlacement{}
-				hosts := state.StorageClusters[0].Spec.Ceph.Topology.Hosts
+				hosts := state.StorageClusters[0].Spec.Ceph.Topology.Nodes
 				for i := range hosts {
 					var roles []string
 					for _, role := range hosts[i].Roles {
@@ -1274,7 +1276,7 @@ func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
 					hosts[i].Roles = roles
 				}
 			},
-			want: `spec.cephfs.mds.placement resolves to no hosts: no StorageCluster/ceph spec.ceph.topology.hosts[] entry carries role "mds" within the selection`,
+			want: `spec.cephfs.mds.placement resolves to no hosts: no StorageCluster/ceph spec.ceph.topology.nodes[] entry carries role "mds" within the selection`,
 		},
 	}
 	for _, tc := range cases {
@@ -1406,9 +1408,9 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 		{
 			name: "missing-machine-ref",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[0].MachineRef = v1alpha1.LocalObjectReference{}
+				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].MachineRef = v1alpha1.LocalObjectReference{}
 			},
-			want: "spec.ceph.topology.hosts[0].machineRef is required",
+			want: "spec.ceph.topology.nodes[0].machineRef is required",
 		},
 		{
 			name: "missing-machine-ssh",
@@ -1596,7 +1598,7 @@ func storageValidationState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							Host: "ceph-dc1-0",
+							Node: "ceph-dc1-0",
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
@@ -1605,11 +1607,11 @@ func storageValidationState() v1alpha1.State {
 							DataSites:     []string{"dc1", "dc2"},
 							Tiebreaker: v1alpha1.StorageCephTiebreaker{
 								Site: "dc3",
-								Host: "ceph-arbiter",
+								Node: "ceph-arbiter",
 							},
 							RuleName: "stretch-replicated",
 						},
-						Hosts: []v1alpha1.StorageCephHost{
+						Nodes: []v1alpha1.StorageCephNode{
 							storageValidationCephNode("ceph-dc1-0", "dc1", []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}),
 							storageValidationCephNode("ceph-dc1-1", "dc1", []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}),
 							storageValidationCephNode("ceph-dc1-2", "dc1", []string{"osd", "mds", "rgw", "ingress"}),
@@ -1717,9 +1719,9 @@ func storageValidationHost(name string) v1alpha1.Machine {
 	}
 }
 
-func storageValidationCephNode(name, site string, roles []string) v1alpha1.StorageCephHost {
-	node := v1alpha1.StorageCephHost{
-		Hostname: name,
+func storageValidationCephNode(name, site string, roles []string) v1alpha1.StorageCephNode {
+	node := v1alpha1.StorageCephNode{
+		Name: name,
 		MachineRef: v1alpha1.LocalObjectReference{
 			Name: name,
 		},

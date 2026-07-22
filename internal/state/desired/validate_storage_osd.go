@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost, fleetCovered bool) []string {
+func validateStorageCephNodeOSD(owner string, node v1alpha1.StorageCephNode, fleetCovered bool) []string {
 	var errs []string
 	if len(node.Devices) > 0 && node.OSD != nil {
 		errs = append(errs, fmt.Sprintf("%s sets both devices and osd; devices is the shorthand for osd.dataDevices.paths — use one", owner))
@@ -68,7 +68,7 @@ func validateStorageCephOSDDrivegroups(prefix string, cluster v1alpha1.StorageCl
 	return errs
 }
 
-func validateStorageCephOSDSpec(owner string, osd *v1alpha1.StorageCephHostOSD) []string {
+func validateStorageCephOSDSpec(owner string, osd *v1alpha1.StorageCephNodeOSD) []string {
 	var errs []string
 	if osd.DataDevices == nil {
 		errs = append(errs, owner+".dataDevices is required")

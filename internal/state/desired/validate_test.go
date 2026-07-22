@@ -819,8 +819,8 @@ spec:
 		{
 			name: "containermachine-infranoderef-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"hosts:\n    - hostname: master-0",
-				"hosts:\n    - hostname: master-x\n      role: master\n      infraNodeRef: { clusterInstall: other, name: master-x }\n    - hostname: master-0", 1)},
+				"nodes:\n    - name: master-0",
+				"nodes:\n    - name: master-x\n      role: master\n      infraNodeRef: { clusterInstall: other, name: master-x }\n    - name: master-0", 1)},
 			wantSubstring: "field infraNodeRef not found",
 		},
 		{
@@ -834,13 +834,13 @@ spec:
 			name: "missing-machine-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"machineRef: srv1", "machineRef: missing", 1)},
-			wantSubstring: `spec.hosts[0].machineRef "missing" does not match any Machine`,
+			wantSubstring: `spec.nodes[0].machineRef "missing" does not match any Machine`,
 		},
 		{
 			name: "omitted-machine-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"\n      machineRef: srv1", "", 1)},
-			wantSubstring: "spec.hosts[0].machineRef is required",
+			wantSubstring: "spec.nodes[0].machineRef is required",
 		},
 		{
 			name: "openshift-pull-secret-required",
@@ -3263,8 +3263,8 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 	containerCluster := func(name string, machineRefs ...string) v1alpha1.ContainerCluster {
 		cluster := v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: name}}
 		for i, ref := range machineRefs {
-			cluster.Spec.Hosts = append(cluster.Spec.Hosts, v1alpha1.OCPHostSpec{
-				Hostname:   fmt.Sprintf("%s-node-%d", name, i),
+			cluster.Spec.Nodes = append(cluster.Spec.Nodes, v1alpha1.OCPNodeSpec{
+				Name:       fmt.Sprintf("%s-node-%d", name, i),
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: ref},
 			})
@@ -3280,8 +3280,8 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 			},
 		}
 		for i, ref := range machineRefs {
-			cluster.Spec.Ceph.Topology.Hosts = append(cluster.Spec.Ceph.Topology.Hosts, v1alpha1.StorageCephHost{
-				Hostname:   fmt.Sprintf("%s-host-%d", name, i),
+			cluster.Spec.Ceph.Topology.Nodes = append(cluster.Spec.Ceph.Topology.Nodes, v1alpha1.StorageCephNode{
+				Name:       fmt.Sprintf("%s-host-%d", name, i),
 				MachineRef: v1alpha1.LocalObjectReference{Name: ref},
 				Site:       "lab",
 				Roles:      []string{"mon"},
@@ -3312,7 +3312,7 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 					containerCluster("dc2", "dc2-master-0", "master-1"),
 				},
 			},
-			want: []string{`ContainerCluster/dc2 spec.hosts[1].machineRef "master-1" is already node-bound by ContainerCluster/dc1 spec.hosts[1]; a Machine may be node-bound by at most one cluster`},
+			want: []string{`ContainerCluster/dc2 spec.nodes[1].machineRef "master-1" is already node-bound by ContainerCluster/dc1 spec.nodes[1]; a Machine may be node-bound by at most one cluster`},
 		},
 		{
 			name: "container-and-storage-cluster-sharing-a-machine",
@@ -3320,21 +3320,21 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1", "shared-0")},
 				StorageClusters:   []v1alpha1.StorageCluster{storageCluster("ceph", "ceph-0", "shared-0")},
 			},
-			want: []string{`StorageCluster/ceph spec.ceph.topology.hosts[1].machineRef "shared-0" is already node-bound by ContainerCluster/dc1 spec.hosts[0]; a Machine may be node-bound by at most one cluster`},
+			want: []string{`StorageCluster/ceph spec.ceph.topology.nodes[1].machineRef "shared-0" is already node-bound by ContainerCluster/dc1 spec.nodes[0]; a Machine may be node-bound by at most one cluster`},
 		},
 		{
 			name: "one-cluster-binding-a-machine-twice",
 			state: v1alpha1.State{
 				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1", "master-0", "master-0")},
 			},
-			want: []string{`ContainerCluster/dc1 spec.hosts[1].machineRef "master-0" is already node-bound by spec.hosts[0] in the same cluster`},
+			want: []string{`ContainerCluster/dc1 spec.nodes[1].machineRef "master-0" is already node-bound by spec.nodes[0] in the same cluster`},
 		},
 		{
 			name: "one-storage-cluster-binding-a-machine-twice",
 			state: v1alpha1.State{
 				StorageClusters: []v1alpha1.StorageCluster{storageCluster("ceph", "ceph-0", "ceph-0")},
 			},
-			want: []string{`StorageCluster/ceph spec.ceph.topology.hosts[1].machineRef "ceph-0" is already node-bound by spec.ceph.topology.hosts[0] in the same cluster`},
+			want: []string{`StorageCluster/ceph spec.ceph.topology.nodes[1].machineRef "ceph-0" is already node-bound by spec.ceph.topology.nodes[0] in the same cluster`},
 		},
 	}
 	for _, tc := range cases {
@@ -3494,7 +3494,7 @@ func TestMachineNodeBindingExclusivityAcrossClusters(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected two clusters node-binding one machine to fail")
 	}
-	want := `ContainerCluster/sno-b spec.hosts[0].machineRef "srv1" is already node-bound by ContainerCluster/sno spec.hosts[0]; a Machine may be node-bound by at most one cluster`
+	want := `ContainerCluster/sno-b spec.nodes[0].machineRef "srv1" is already node-bound by ContainerCluster/sno spec.nodes[0]; a Machine may be node-bound by at most one cluster`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -3597,8 +3597,8 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: child-master-0
 `
@@ -3797,8 +3797,8 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: ` + infra + `-master-0
 `
@@ -3925,8 +3925,8 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: vsphere-master-0
 `,
@@ -3944,7 +3944,7 @@ func TestValidateStorageCephFIPSGate(t *testing.T) {
 					Distribution: distribution,
 					Security:     v1alpha1.StorageCephSecurity{FIPS: v1alpha1.StorageCephFIPS{Enabled: fips}},
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}}},
+						Nodes: []v1alpha1.StorageCephNode{{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}}},
 					},
 				},
 			},
@@ -4477,8 +4477,8 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: srv1
 `

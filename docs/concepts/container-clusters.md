@@ -1,6 +1,6 @@
 ---
 title: Container clusters
-description: ContainerCluster install intent — distribution, platform render mode, endpoints, networking, machine pools, and host bindings.
+description: ContainerCluster install intent — distribution, platform render mode, endpoints, networking, machine pools, and node bindings.
 ---
 
 # Container clusters
@@ -9,7 +9,7 @@ A `ContainerCluster` owns OpenShift or OKD **install intent** and nothing else.
 It declares the distribution and release, the install method and mode, the
 installer platform render mode, cluster endpoints, artifact access, cluster
 networking, machine-pool replica counts, and the node-to-machine bindings the
-agent install consumes. It selects machines through `spec.hosts[].machineRef`;
+agent install consumes. It selects machines through `spec.nodes[].machineRef`;
 substrate ownership stays on [`Machine`](machines.md) and
 [`InfraProvider`](infrastructure.md).
 
@@ -48,8 +48,8 @@ spec:
         address: 192.168.132.20
         source:
           type: external
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: sno-libvirt-master-0
 ```
@@ -61,10 +61,10 @@ spec:
 | `spec.distribution` | No | `type: openshift` | OpenShift or OKD release selection. Optional in shape only: an omitted block defaults `type: openshift`, which then requires `release.version` or `release.image`, so an absent or empty `distribution` fails validation. See [Distribution](#distribution). |
 | `spec.install` | No | — | Install method, mode, platform, endpoints, artifact access, trust, serving certificates, and node SSH. |
 | `spec.security` | No | — | Cluster security posture. Today: FIPS mode. See [Security](#security). |
-| `spec.controlPlane.replicas` | No | — | Control-plane replica count; when set, must equal the master host count. |
-| `spec.compute[].replicas` | No | — | Worker replica count per pool; their sum must equal the worker+infra host count when any compute pool is declared (infra hosts install as workers). |
+| `spec.controlPlane.replicas` | No | — | Control-plane replica count; when set, must equal the master node count. |
+| `spec.compute[].replicas` | No | — | Worker replica count per pool; their sum must equal the worker+infra node count when any compute pool is declared (infra nodes install as workers). |
 | `spec.networking` | No | Defaulted networks (see [Networking](#networking)) | Cluster and service networks and the OpenShift network type. |
-| `spec.hosts[]` | Yes | — | Node-to-machine bindings for the agent install. |
+| `spec.nodes[]` | Yes | — | Node-to-machine bindings for the agent install. |
 
 ## Distribution
 
@@ -340,42 +340,42 @@ offending line.
 | `controlPlane.replicas` | No | — | Control-plane replica count. |
 | `compute[].replicas` | No | — | Worker replica count for this pool. |
 
-!!! note "Replica counts cross-check the host roles"
+!!! note "Replica counts cross-check the node roles"
     `controlPlane.replicas`, when set (non-zero), must equal the number of
-    `master` hosts in `spec.hosts[]`; omitting it or setting `0` skips the
+    `master` nodes in `spec.nodes[]`; omitting it or setting `0` skips the
     check. The sum of `compute[].replicas` must equal the number of `worker`
-    plus `infra` hosts when any compute pool is declared (infra hosts install in
-    the worker pool). These fields restate the host roster rather than scaling
+    plus `infra` nodes when any compute pool is declared (infra nodes install in
+    the worker pool). These fields restate the node roster rather than scaling
     it independently.
 
-## Hosts
+## Nodes
 
-`spec.hosts[]` binds each cluster node to a backing `Machine`. At least one
-`master` host is required.
+`spec.nodes[]` binds each cluster node to a backing `Machine`. At least one
+`master` node is required.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `hosts[].hostname` | No | `node<NN>` (`node01`, `node02`, … in `hosts` list order) | Node hostname inside the cluster, independent of the machine name; unique within the cluster (by short label). A bare label composes to `<label>.<cluster>.<baseDomain>` — under the planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)) the container-cluster zone `domains.containerClusters`; a dotted value is an explicit FQDN used verbatim. Also the node name the day-2 node-config step targets when applying labels/taints. |
-| `hosts[].role` | Yes | — | `master`, `worker`, or `infra`. |
-| `hosts[].machineRef` | Yes | — | `Machine` that backs this node; no default is derived. |
-| `hosts[].labels` | No | — | Extra node labels Bootwright applies day-2. |
-| `hosts[].taints` | No | — | Extra node taints (`key`, optional `value`, `effect` ∈ {`NoSchedule`, `PreferNoSchedule`, `NoExecute`}) applied day-2. |
+| `nodes[].name` | Yes | — | The cluster's name for the node, independent of the machine name; unique within the cluster. A bare label composes to `<name>.<cluster>.<baseDomain>` — under the planned domain model ([ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)) the container-cluster zone `domains.containerClusters`; a dotted value is used verbatim as an explicit FQDN. The composed FQDN is the OpenShift node name and must equal the host's real OS hostname. It is also the node the day-2 node-config step targets when applying labels/taints. |
+| `nodes[].role` | Yes | — | `master`, `worker`, or `infra`. |
+| `nodes[].machineRef` | Yes | — | `Machine` that backs this node; no default is derived. |
+| `nodes[].labels` | No | — | Extra node labels Bootwright applies day-2. |
+| `nodes[].taints` | No | — | Extra node taints (`key`, optional `value`, `effect` ∈ {`NoSchedule`, `PreferNoSchedule`, `NoExecute`}) applied day-2. |
 
 !!! note "Infra nodes are an authoring role"
-    OpenShift has no install-time `infra` pool, so an `infra` host installs as a
+    OpenShift has no install-time `infra` pool, so an `infra` node installs as a
     `worker` (it counts toward `compute[].replicas`) and Bootwright promotes it
     day-2 against the running cluster: it adds the
     `node-role.kubernetes.io/infra` label, a `node-role.kubernetes.io/infra:NoSchedule`
-    taint, and the `infra` `MachineConfigPool`, plus any `hosts[].labels`/`taints`
+    taint, and the `infra` `MachineConfigPool`, plus any `nodes[].labels`/`taints`
     you author. Moving ingress, monitoring and other operands onto infra (the
     matching tolerations/nodeSelectors) is left to you. Authored `labels`/`taints`
-    on a plain `master`/`worker` host are applied day-2 too, without the infra
+    on a plain `master`/`worker` node are applied day-2 too, without the infra
     label/MCP.
 
-!!! note "Where host binding rules are enforced"
+!!! note "Where node binding rules are enforced"
     A referenced `Machine` must carry the `openshift-node` capability and may be
     node-bound by at most one cluster — across every `ContainerCluster` and
-    `StorageCluster` — and at most one host entry. Those rules are enforced
+    `StorageCluster` — and at most one node entry. Those rules are enforced
     here. A node `Machine` is installed by Bootwright, so it is declared with
     `os.provided: false` on the `Machine` itself; that constraint is enforced by
     [Machine](machines.md) validation, not by `ContainerCluster`.

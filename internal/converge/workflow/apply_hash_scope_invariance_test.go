@@ -12,7 +12,7 @@ func attachedManagedOSState() v1alpha1.State {
 	state.ContainerClusters = []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Hosts: []v1alpha1.OCPHostSpec{{
+			Nodes: []v1alpha1.OCPNodeSpec{{
 				MachineRef: v1alpha1.LocalObjectReference{Name: "ocp-node"},
 			}},
 		},

@@ -54,7 +54,7 @@ const (
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 	MachineInstallPackageEnvMinimal   = "minimal"
-	MachineAddressFQDN            = "fqdn"
+	MachineAddressFQDN                = "fqdn"
 
 	MachineInstallDefaultLanguage = "en_US.UTF-8"
 	MachineInstallDefaultKeyboard = "us"

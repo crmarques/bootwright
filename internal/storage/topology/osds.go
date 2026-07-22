@@ -43,14 +43,14 @@ func osdSelectionUsesAllDevices(selection *v1alpha1.StorageCephDeviceSelection) 
 	return selection != nil && selection.All
 }
 
-func OSDHostUsesAllDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) bool {
+func OSDHostUsesAllDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) bool {
 	if cluster.Spec.Ceph == nil || !NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
 		return false
 	}
 	if host.OSD != nil && osdSelectionUsesAllDevices(host.OSD.DataDevices) {
 		return true
 	}
-	name := host.Hostname
+	name := host.Name
 	if name == "" {
 		name = CanonicalHostname(cluster, host.MachineRef.Name)
 	}
@@ -72,7 +72,7 @@ func ClusterHasAllDevicesOSDHost(cluster v1alpha1.StorageCluster) bool {
 	if cluster.Spec.Ceph == nil {
 		return false
 	}
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
 		if OSDHostUsesAllDevices(cluster, host) {
 			return true
 		}
@@ -99,7 +99,7 @@ func inspectOSDReadiness(cluster v1alpha1.StorageCluster) osdReadinessInspection
 			inspection.dynamicHosts = append(inspection.dynamicHosts, host)
 		}
 	}
-	consider := func(osd *v1alpha1.StorageCephHostOSD, hosts []string) {
+	consider := func(osd *v1alpha1.StorageCephNodeOSD, hosts []string) {
 		if osd == nil {
 			return
 		}
@@ -120,7 +120,7 @@ func inspectOSDReadiness(cluster v1alpha1.StorageCluster) osdReadinessInspection
 		}
 		inspection.count += len(hosts) * len(dataDeviceStaticPaths(osd)) * perDevice
 	}
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
 		if !NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
 			continue
 		}
@@ -129,7 +129,7 @@ func inspectOSDReadiness(cluster v1alpha1.StorageCluster) osdReadinessInspection
 			inspection.count += len(host.Devices)
 			continue
 		}
-		consider(host.OSD, []string{host.Hostname})
+		consider(host.OSD, []string{host.Name})
 	}
 	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
 		drivegroup := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]

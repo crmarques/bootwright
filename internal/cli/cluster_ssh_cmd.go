@@ -110,9 +110,9 @@ func clusterNodeSSHTarget(state v1alpha1.State, clusterName, machineName string)
 	}
 	address := render.ContainerNodePrimaryAddress(state, cluster, machineName)
 	if address == "" {
-		for _, host := range cluster.Spec.Hosts {
+		for _, host := range cluster.Spec.Nodes {
 			if host.MachineRef.Name == machineName {
-				address = host.Hostname
+				address = host.Name
 				break
 			}
 		}

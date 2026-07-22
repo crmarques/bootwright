@@ -119,10 +119,10 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
-			Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
-				{Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
-				{Hostname: "master-0", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}},
-				{Hostname: "pinned.corp.example.com", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m3"}},
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+				{Name: "node01", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
+				{Name: "master-0", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}},
+				{Name: "pinned.corp.example.com", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m3"}},
 			}},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
@@ -130,9 +130,9 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-						{MachineRef: v1alpha1.LocalObjectReference{Name: "s1"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
-						{MachineRef: v1alpha1.LocalObjectReference{Name: "s2"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+						{Name: "node01", MachineRef: v1alpha1.LocalObjectReference{Name: "s1"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+						{Name: "node02", MachineRef: v1alpha1.LocalObjectReference{Name: "s2"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
 					}},
 				},
 			},
@@ -141,19 +141,19 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 
 	Normalize(&state)
 
-	hosts := state.ContainerClusters[0].Spec.Hosts
-	if got := hosts[0].Hostname; got != "node01.cluster-a.example.test" {
+	hosts := state.ContainerClusters[0].Spec.Nodes
+	if got := hosts[0].Name; got != "node01.cluster-a.example.test" {
 		t.Fatalf("omitted hostname = %q, want node01.cluster-a.example.test", got)
 	}
-	if got := hosts[1].Hostname; got != "master-0.cluster-a.example.test" {
+	if got := hosts[1].Name; got != "master-0.cluster-a.example.test" {
 		t.Fatalf("bare-label hostname = %q, want master-0.cluster-a.example.test", got)
 	}
-	if got := hosts[2].Hostname; got != "pinned.corp.example.com" {
+	if got := hosts[2].Name; got != "pinned.corp.example.com" {
 		t.Fatalf("dotted hostname = %q, want pinned.corp.example.com verbatim", got)
 	}
-	ceph := state.StorageClusters[0].Spec.Ceph.Topology.Hosts
-	if ceph[0].Hostname != "node01.ceph.example.test" || ceph[1].Hostname != "node02.ceph.example.test" {
-		t.Fatalf("ceph node hostnames = %q, %q, want node01.ceph.example.test, node02.ceph.example.test", ceph[0].Hostname, ceph[1].Hostname)
+	ceph := state.StorageClusters[0].Spec.Ceph.Topology.Nodes
+	if ceph[0].Name != "node01.ceph.example.test" || ceph[1].Name != "node02.ceph.example.test" {
+		t.Fatalf("ceph node names = %q, %q, want node01.ceph.example.test, node02.ceph.example.test", ceph[0].Name, ceph[1].Name)
 	}
 }
 
@@ -161,20 +161,20 @@ func TestNormalizeKeepsBareNodeHostnamesWithoutBaseDomain(t *testing.T) {
 	state := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
-			Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
-				{Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
-				{Hostname: "master-0", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}},
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+				{Name: "node01", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
+				{Name: "master-0", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}},
 			}},
 		}},
 	}
 
 	Normalize(&state)
 
-	hosts := state.ContainerClusters[0].Spec.Hosts
-	if got := hosts[0].Hostname; got != "node01" {
+	hosts := state.ContainerClusters[0].Spec.Nodes
+	if got := hosts[0].Name; got != "node01" {
 		t.Fatalf("omitted hostname = %q, want bare node01 without a baseDomain", got)
 	}
-	if got := hosts[1].Hostname; got != "master-0" {
+	if got := hosts[1].Name; got != "master-0" {
 		t.Fatalf("bare-label hostname = %q, want master-0 kept bare without a baseDomain", got)
 	}
 }
@@ -214,10 +214,11 @@ spec:
   ceph:
     cephadm:
       bootstrap:
-        host: ceph-0
+        node: ceph-0
     topology:
-      hosts:
-        - machineRef: ceph-0
+      nodes:
+        - name: node01
+          machineRef: ceph-0
           roles: [mon]
 `
 	dir := t.TempDir()
@@ -229,9 +230,9 @@ spec:
 	})
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected machine-name bootstrap.host to be rejected, got nil")
+		t.Fatal("expected machine-name bootstrap.node to be rejected, got nil")
 	}
-	want := `spec.ceph.cephadm.bootstrap.host "ceph-0" does not match any node hostname in spec.ceph.topology.hosts; it names the bound Machine, but clusters reference nodes — use the node's hostname`
+	want := `spec.ceph.cephadm.bootstrap.node "ceph-0" does not match any node name in spec.ceph.topology.nodes; it names the bound Machine, but clusters reference nodes — use the node's name`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -239,9 +240,9 @@ spec:
 
 func TestStorageStretchTiebreakerRejectsMachineName(t *testing.T) {
 	state := storageValidationState()
-	state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Hostname = "arbiter"
+	state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Name = "arbiter"
 	got := strings.Join(validateStorage(state), "; ")
-	want := `tiebreaker.host "ceph-arbiter" must name a spec.ceph.topology.hosts[] entry by node hostname; it names the bound Machine, but clusters reference nodes — use the node's hostname`
+	want := `tiebreaker.node "ceph-arbiter" must name a spec.ceph.topology.nodes[] entry by node name; it names the bound Machine, but clusters reference nodes — use the node's name`
 	if !strings.Contains(got, want) {
 		t.Fatalf("validateStorage errors = %q, want substring %q", got, want)
 	}
@@ -272,8 +273,8 @@ func TestValidateClusterBoundHostnameSourceMachineName(t *testing.T) {
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-						Hostname:   "node01",
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+						Name:       "node01",
 						MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 						Roles:      []string{v1alpha1.StorageCephRoleMON},
 					}}},

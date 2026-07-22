@@ -51,7 +51,7 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	if len(bootstrapDocs) != 7 {
 		t.Fatalf("bootstrap docs got %d, want 7", len(bootstrapDocs))
 	}
-	host := docByField(t, bootstrapDocs, "hostname", "node01.ceph-storage.bootwright.test")
+	host := docByField(t, bootstrapDocs, "hostname", "node-01.ceph-storage.bootwright.test")
 	if got := host["service_type"]; got != "host" {
 		t.Fatalf("bootstrap service_type = %v, want host", got)
 	}
@@ -67,11 +67,11 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	lateServices := readYAMLDocs(t, asset.LateServicesSpecPath)
 	mon := serviceDoc(t, coreServices, "mon", "")
 	monHosts := stringSlice(t, mon["placement"].(map[string]any)["hosts"])
-	wantMons := []string{"node01.ceph-storage.bootwright.test", "node02.ceph-storage.bootwright.test", "node04.ceph-storage.bootwright.test", "node05.ceph-storage.bootwright.test", "node07.ceph-storage.bootwright.test"}
+	wantMons := []string{"node-01.ceph-storage.bootwright.test", "node-02.ceph-storage.bootwright.test", "node-04.ceph-storage.bootwright.test", "node-05.ceph-storage.bootwright.test", "node-07.ceph-storage.bootwright.test"}
 	if !reflect.DeepEqual(monHosts, wantMons) {
 		t.Fatalf("mon hosts = %v, want %v", monHosts, wantMons)
 	}
-	allServiceHosts := []string{"node01.ceph-storage.bootwright.test", "node02.ceph-storage.bootwright.test", "node03.ceph-storage.bootwright.test", "node04.ceph-storage.bootwright.test", "node05.ceph-storage.bootwright.test", "node06.ceph-storage.bootwright.test"}
+	allServiceHosts := []string{"node-01.ceph-storage.bootwright.test", "node-02.ceph-storage.bootwright.test", "node-03.ceph-storage.bootwright.test", "node-04.ceph-storage.bootwright.test", "node-05.ceph-storage.bootwright.test", "node-06.ceph-storage.bootwright.test"}
 	mds := serviceDoc(t, lateServices, "mds", "odf-cephfs")
 	if got := stringSlice(t, mds["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, allServiceHosts) {
 		t.Fatalf("mds hosts = %v, want %v", got, allServiceHosts)
@@ -81,7 +81,7 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 		t.Fatalf("rgw hosts = %v, want %v", got, allServiceHosts)
 	}
 	ingress := serviceDoc(t, lateServices, "ingress", "rgw.odf.dc1")
-	if got := stringSlice(t, ingress["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, []string{"node01.ceph-storage.bootwright.test", "node02.ceph-storage.bootwright.test", "node03.ceph-storage.bootwright.test"}) {
+	if got := stringSlice(t, ingress["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, []string{"node-01.ceph-storage.bootwright.test", "node-02.ceph-storage.bootwright.test", "node-03.ceph-storage.bootwright.test"}) {
 		t.Fatalf("ingress dc1 hosts = %v", got)
 	}
 	spec := ingress["spec"].(map[string]any)
@@ -91,7 +91,7 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	if got := spec["virtual_ip"]; got != "192.168.141.80/24" {
 		t.Fatalf("ingress virtual_ip = %v, want 192.168.141.80/24", got)
 	}
-	osd := serviceDoc(t, coreServices, "osd", "data-node01")
+	osd := serviceDoc(t, coreServices, "osd", "data-node-01")
 	osdSpec := osd["spec"].(map[string]any)
 	dataDevices := osdSpec["data_devices"].(map[string]any)
 	if got := stringSlice(t, dataDevices["paths"]); !reflect.DeepEqual(got, []string{"/dev/sdb"}) {
@@ -106,7 +106,7 @@ func TestStorageExampleRendersCephInputs(t *testing.T) {
 	assertOperationCommand(t, ops, "set-public-network", []string{"ceph", "config", "set", "global", "public_network", "192.168.141.0/24,192.168.142.0/24,192.168.143.0/24"})
 	assertOperationCommand(t, ops, "set-cluster-network", []string{"ceph", "config", "set", "global", "cluster_network", "172.21.141.0/24,172.21.142.0/24"})
 	assertOperationIdempotency(t, ops, "enable-stretch-mode", "stretch-mode", "enabled")
-	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "node07.ceph-storage.bootwright.test", "stretch-rule", "datacenter"})
+	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "node-07.ceph-storage.bootwright.test", "stretch-rule", "datacenter"})
 	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
 	assertOperationIdempotency(t, ops, "create-pool-odf-rbd", "ceph-pool", "odf-rbd")
 	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")
@@ -487,9 +487,9 @@ func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
 			Type: v1alpha1.StorageClusterTypeCeph,
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{
-						{Hostname: "ceph-1.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
-						{Hostname: "ceph-2.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-2"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
+					Nodes: []v1alpha1.StorageCephNode{
+						{Name: "ceph-1.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
+						{Name: "ceph-2.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-2"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
 					},
 				},
 				Management: &v1alpha1.StorageCephManagement{

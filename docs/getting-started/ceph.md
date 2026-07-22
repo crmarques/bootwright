@@ -18,13 +18,14 @@ mechanics this guide reuses.
 
 | Machine | Node | Profile | Ceph roles | OSDs | Purpose |
 | --- | --- | --- | --- | --- | --- |
-| `ceph-1` | `node01` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-2` | `node02` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-3` | `node03` | `ceph-mon` | mon | 0 | monitor-only tie-breaker (quorum) |
+| `ceph-1` | `node-01` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
+| `ceph-2` | `node-02` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
+| `ceph-3` | `node-03` | `ceph-mon` | mon | 0 | monitor-only tie-breaker (quorum) |
 
 The machines keep their `Machine` names (`ceph-1`…`ceph-3`); the cluster names
-its nodes independently, defaulting to `node01`–`node03` in `topology.hosts`
-order, and every cluster-facing reference (bootstrap host, placements) uses
+its nodes independently — each node name is declared explicitly as
+`topology.nodes[].name` (`node-01`–`node-03`) and must be unique within the
+cluster — and every cluster-facing reference (bootstrap node, placements) uses
 those node names.
 
 !!! note "Tie-breaker, not Ceph stretch mode"
@@ -196,10 +197,10 @@ The Ceph install intent. `StorageCluster` `ceph-ibm` is `type: ceph`,
 `management: managed` (bootwright installs and owns it via cephadm). Its `spec.ceph`
 block sets `distribution: ibm`, `release: "9.9.1"`, `ibm.callHome: disabled`,
 `entitlementRef: ibm-storage-ceph`,
-FIPS (`security.fips.enabled: true`), the cephadm SSH address and bootstrap host
-(`node01`), the public/cluster networks, the HA dashboard
+FIPS (`security.fips.enabled: true`), the cephadm SSH address and bootstrap node
+(`node-01`), the public/cluster networks, the HA dashboard
 (`management` → mgmt-gateway with a `keepalive_only` ingress VIP on `.81`), and
-the `topology.hosts` that assign roles and OSD devices per node.
+the `topology.nodes` that assign roles and OSD devices per node.
 
 The surrounding objects fill in the pools and services:
 
@@ -208,7 +209,7 @@ The surrounding objects fill in the pools and services:
 - `StoragePool` `rbd`, `cephfs-data`, `cephfs-metadata`, `rgw`: one pool each, by
   `ceph.role`.
 - `StorageFilesystem` `cephfs`: the CephFS filesystem over the two CephFS pools,
-  with one active MDS and a standby across `node01`/`node02`.
+  with one active MDS and a standby across `node-01`/`node-02`.
 - `StorageObjectGateway` `rgw`: the RGW service on both full nodes, its public S3
   endpoint (`rgw.ceph.bootwright.test`), and a cephadm ingress floating a single
   VIP (`192.168.140.80`).
@@ -339,7 +340,7 @@ installs RHEL 9.8 on each via the Anaconda kickstart, and — once the OS is in
 place — registers every node with RHSM (the `registration.ceph-ibm` machines
 task). **clusters** then, on every node, enables the RHEL and IBM Storage Ceph
 repos, accepts the IBM license, logs in to `cp.icr.io`, installs cephadm,
-bootstraps the cluster from `node01`, adds `node02` and the `node03` tie-breaker
+bootstraps the cluster from `node-01`, adds `node-02` and the `node-03` tie-breaker
 monitor, and creates the OSDs, pools, CephFS filesystem, and the RGW service with
 its ingress VIP.
 Re-running `apply --yes` is idempotent; for a focused storage rerun use
@@ -357,7 +358,7 @@ bootwright cluster info --name ceph-ibm
 `cluster info` reports the seed node, the SSH and health-check commands, the
 dashboard URL, and the dashboard password file. Run the health check it prints;
 `HEALTH_OK` from `ceph -s` confirms the cluster is reachable and healthy. Expect
-3 mons (`node01`, `node02`, `node03`), 2 mgr, 6 OSDs, 1 CephFS, an RGW service,
+3 mons (`node-01`, `node-02`, `node-03`), 2 mgr, 6 OSDs, 1 CephFS, an RGW service,
 and the mgmt-gateway plus ingress services.
 
 The Ceph Dashboard is served HA through the native mgmt-gateway at

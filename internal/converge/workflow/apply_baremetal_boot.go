@@ -33,7 +33,7 @@ func clusterHasBareMetalBoot(state v1alpha1.State, clusterName string) bool {
 		if cluster.Metadata.Name != clusterName {
 			continue
 		}
-		for _, host := range cluster.Spec.Hosts {
+		for _, host := range cluster.Spec.Nodes {
 			switch applyMachineProviderType(state, host.MachineRef.Name) {
 			case v1alpha1.ProvisionerKubeVirt, v1alpha1.ProvisionerVSphere:
 				continue

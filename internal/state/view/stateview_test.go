@@ -47,9 +47,9 @@ func TestProviderCapabilityLookups(t *testing.T) {
 func TestClusterInstallRelationships(t *testing.T) {
 	cluster := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "cluster"},
-		Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
-			{Hostname: "master-0", MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"}},
-			{Hostname: "master-1", MachineRef: v1alpha1.LocalObjectReference{Name: "master-1"}},
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+			{Name: "master-0", MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"}},
+			{Name: "master-1", MachineRef: v1alpha1.LocalObjectReference{Name: "master-1"}},
 		}},
 	}
 	state := v1alpha1.State{
@@ -65,7 +65,7 @@ func TestClusterInstallRelationships(t *testing.T) {
 	}
 
 	nodes := ClusterNodesForInstall(state, infra)
-	if len(nodes) != 2 || nodes["master-0"].Hostname != "master-0" || nodes["master-1"].Hostname != "master-1" {
+	if len(nodes) != 2 || nodes["master-0"].Name != "master-0" || nodes["master-1"].Name != "master-1" {
 		t.Fatalf("ClusterNodesForInstall = %+v", nodes)
 	}
 }
@@ -193,7 +193,7 @@ func TestStorageClusterArtifactInstallCarriesMachinesOnly(t *testing.T) {
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{
+					Nodes: []v1alpha1.StorageCephNode{
 						{MachineRef: v1alpha1.LocalObjectReference{Name: "srv-0"}},
 					},
 				},

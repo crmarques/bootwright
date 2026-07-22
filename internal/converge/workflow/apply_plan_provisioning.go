@@ -70,7 +70,7 @@ func clusterMachineNames(state v1alpha1.State, cluster string) []string {
 		if sc.Metadata.Name != cluster || sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+		for _, host := range sc.Spec.Ceph.Topology.Nodes {
 			if host.MachineRef.Name != "" {
 				out = append(out, host.MachineRef.Name)
 			}
@@ -322,7 +322,7 @@ func machineOwningClusters(state v1alpha1.State, machine string) []string {
 		}
 	}
 	for _, cluster := range state.ContainerClusters {
-		for _, node := range cluster.Spec.Hosts {
+		for _, node := range cluster.Spec.Nodes {
 			if node.MachineRef.Name == machine {
 				add(cluster.Metadata.Name)
 			}
@@ -332,7 +332,7 @@ func machineOwningClusters(state v1alpha1.State, machine string) []string {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			if node.MachineRef.Name == machine {
 				add(cluster.Metadata.Name)
 			}

@@ -22,8 +22,8 @@ func TestCephScaleOutIsStructurallyReconcilable(t *testing.T) {
 	t.Run("add an OSD host is reconcilable", func(t *testing.T) {
 		s := bareMetalManagedOSState()
 		s.StorageClusters[0].Spec.Ceph.Networks = v1alpha1.StorageCephNetworks{PublicCIDRs: []string{"10.10.10.0/24"}}
-		s.StorageClusters[0].Spec.Ceph.Topology.Hosts = append(s.StorageClusters[0].Spec.Ceph.Topology.Hosts,
-			v1alpha1.StorageCephHost{Hostname: "ceph-3", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-3"}, Site: "dc1", Roles: []string{v1alpha1.StorageCephRoleOSD}})
+		s.StorageClusters[0].Spec.Ceph.Topology.Nodes = append(s.StorageClusters[0].Spec.Ceph.Topology.Nodes,
+			v1alpha1.StorageCephNode{Name: "ceph-3", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-3"}, Site: "dc1", Roles: []string{v1alpha1.StorageCephRoleOSD}})
 		if proj(s) != want {
 			t.Fatal("adding an OSD host must not move the structural hash (reconciled via ceph orch)")
 		}
@@ -32,7 +32,7 @@ func TestCephScaleOutIsStructurallyReconcilable(t *testing.T) {
 	t.Run("rebalance mon/mgr roles is reconcilable", func(t *testing.T) {
 		s := bareMetalManagedOSState()
 		s.StorageClusters[0].Spec.Ceph.Networks = v1alpha1.StorageCephNetworks{PublicCIDRs: []string{"10.10.10.0/24"}}
-		s.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Roles = []string{v1alpha1.StorageCephRoleOSD}
+		s.StorageClusters[0].Spec.Ceph.Topology.Nodes[2].Roles = []string{v1alpha1.StorageCephRoleOSD}
 		if proj(s) != want {
 			t.Fatal("editing host roles (daemon rebalance) must not move the structural hash")
 		}

@@ -78,7 +78,7 @@ spec:
     serviceNetwork:
       - 172.30.0.0/16
 
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: master-0

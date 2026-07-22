@@ -50,7 +50,7 @@ func StateHasNodeConfigWork(state v1alpha1.State) bool {
 }
 
 func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
-	for _, host := range ocp.Spec.Hosts {
+	for _, host := range ocp.Spec.Nodes {
 		if host.Role == v1alpha1.NodeRoleInfra || len(host.Labels) > 0 || len(host.Taints) > 0 {
 			return true
 		}
@@ -61,7 +61,7 @@ func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 func nodeConfigManifests(ocp v1alpha1.ContainerCluster) ([]byte, error) {
 	var docs []any
 	hasInfra := false
-	for _, host := range ocp.Spec.Hosts {
+	for _, host := range ocp.Spec.Nodes {
 		infra := host.Role == v1alpha1.NodeRoleInfra
 		if infra {
 			hasInfra = true
@@ -80,7 +80,7 @@ func nodeConfigManifests(ocp v1alpha1.ContainerCluster) ([]byte, error) {
 		if len(labels) == 0 && len(taints) == 0 {
 			continue
 		}
-		docs = append(docs, nodePatchManifest(host.Hostname, labels, taints))
+		docs = append(docs, nodePatchManifest(host.Name, labels, taints))
 	}
 	if hasInfra {
 		docs = append(docs, infraMachineConfigPoolManifest())

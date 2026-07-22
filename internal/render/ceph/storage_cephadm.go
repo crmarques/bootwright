@@ -42,9 +42,9 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 	stretch := cluster.Spec.Ceph.Topology.Stretch
 	tiebreaker := ""
 	if stretch != nil {
-		tiebreaker = topology.CanonicalHostname(cluster, stretch.Tiebreaker.Host)
+		tiebreaker = topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node)
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		labels := append([]string(nil), node.Roles...)
 		for _, label := range node.Labels {
 			if !slices.Contains(labels, label) {
@@ -53,16 +53,16 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 		}
 		host := map[string]any{
 			"service_type": "host",
-			"hostname":     node.Hostname,
+			"hostname":     node.Name,
 			"labels":       labels,
 		}
-		if stretch != nil && node.Site != "" && node.Hostname != tiebreaker {
+		if stretch != nil && node.Site != "" && node.Name != tiebreaker {
 			host["location"] = map[string]any{
 				"root":                          "default",
 				topology.FailureDomain(cluster): node.Site,
 			}
 		}
-		if addr := topology.NodeAddress(state, cluster, node.Hostname); addr != "" {
+		if addr := topology.NodeAddress(state, cluster, node.Name); addr != "" {
 			host["addr"] = addr
 		}
 		docs = append(docs, host)

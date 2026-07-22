@@ -11,7 +11,7 @@
       }}
   changed_when: false
 
-- name: Assert storage node hostname matches the declared topology
+- name: Assert storage node name matches the declared topology
   ansible.builtin.assert:
     that:
       - >-
@@ -23,7 +23,7 @@
       {{ ansible_facts['nodename'] }} but the name cephadm will register is
       {{ item.cephHostname }}; cephadm registers hosts under their real OS
       hostname, so set the machine's hostname (or, for a provided OS, author
-      spec.ceph.topology.hosts[].hostname) to match {{ item.cephHostname }}.
+      spec.ceph.topology.nodes[].name) to match {{ item.cephHostname }}.
   loop: "{{ bootwright_host_storage_nodes }}"
   loop_control:
     label: "{{ item.hostname }}"

@@ -178,7 +178,7 @@ func TestNormalizeClusterNetworkFamilyDefaults(t *testing.T) {
 			ContainerClusters: []v1alpha1.ContainerCluster{{
 				Metadata: v1alpha1.Metadata{Name: "cl"},
 				Spec: v1alpha1.ContainerClusterSpec{
-					Hosts: []v1alpha1.OCPHostSpec{{Hostname: "m0", MachineRef: v1alpha1.LocalObjectReference{Name: "m0"}}},
+					Nodes: []v1alpha1.OCPNodeSpec{{Name: "m0", MachineRef: v1alpha1.LocalObjectReference{Name: "m0"}}},
 				},
 			}},
 		}

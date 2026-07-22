@@ -23,7 +23,7 @@ func ContainerClusterSubstrate(state v1alpha1.State, cluster v1alpha1.ContainerC
 	seen := map[string]bool{}
 	var types []string
 	host := ""
-	for _, node := range cluster.Spec.Hosts {
+	for _, node := range cluster.Spec.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok {
 			continue

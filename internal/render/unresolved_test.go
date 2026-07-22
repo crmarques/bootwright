@@ -69,11 +69,11 @@ func TestRenderFailsOnUnresolvedStorageNodeAddress(t *testing.T) {
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
-						Bootstrap: v1alpha1.StorageCephadmBootstrap{Host: "ceph-0"},
+						Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "ceph-0"},
 					},
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{{
-							Hostname:   "ceph-0",
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:       "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 							Site:       "dc1",
 							Roles:      []string{v1alpha1.StorageCephRoleMON},
@@ -88,11 +88,11 @@ func TestRenderFailsOnUnresolvedStorageNodeAddress(t *testing.T) {
 	if err == nil {
 		t.Fatal("render.All succeeded, want unresolved storage node address error")
 	}
-	wantHost := `StorageCluster/ceph spec.ceph.topology.hosts[0].machineRef "ceph-0" does not resolve to a machine address for host "ceph-0"`
+	wantHost := `StorageCluster/ceph spec.ceph.topology.nodes[0].machineRef "ceph-0" does not resolve to a machine address for node "ceph-0"`
 	if !strings.Contains(err.Error(), wantHost) {
 		t.Fatalf("render.All error = %q, want it to contain %q", err, wantHost)
 	}
-	wantBootstrap := `StorageCluster/ceph spec.ceph.cephadm.bootstrap.host "ceph-0" does not resolve to a machine address`
+	wantBootstrap := `StorageCluster/ceph spec.ceph.cephadm.bootstrap.node "ceph-0" does not resolve to a machine address`
 	if !strings.Contains(err.Error(), wantBootstrap) {
 		t.Fatalf("render.All error = %q, want it to contain %q", err, wantBootstrap)
 	}

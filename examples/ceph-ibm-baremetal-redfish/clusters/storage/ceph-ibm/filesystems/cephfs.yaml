@@ -14,5 +14,5 @@ spec:
       activeCount: 1
       placement:
         hosts:
-          - node01
-          - node02
+          - node-01
+          - node-02

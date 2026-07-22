@@ -25,8 +25,8 @@ spec:
         artifactServerEndpoint:
           endpointRef: cluster
 
-  hosts:
+  nodes:
 
-  - hostname: master-0
+  - name: master-0
     role: master
     machineRef: sno-disconnected-master-0

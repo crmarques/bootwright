@@ -15,7 +15,7 @@ func TestMachinesWithoutProvisioningWorkFlagsOrphan(t *testing.T) {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "c1"},
 			Spec: v1alpha1.ContainerClusterSpec{
-				Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "node-a"}}},
+				Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "node-a"}}},
 			},
 		}},
 	}
@@ -38,7 +38,7 @@ func TestMachineWorkObjectsIncludesProviderHost(t *testing.T) {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "c1"},
 			Spec: v1alpha1.ContainerClusterSpec{
-				Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "node-a"}}},
+				Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "node-a"}}},
 			},
 		}},
 	}

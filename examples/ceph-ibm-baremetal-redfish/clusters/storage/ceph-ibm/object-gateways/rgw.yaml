@@ -17,8 +17,8 @@ spec:
     zone: ceph-ibm-1
     placement:
       hosts:
-        - node01
-        - node02
+        - node-01
+        - node-02
       countPerHost: 1
     frontendPort: 8080
     ingresses:
@@ -29,5 +29,5 @@ spec:
           - 10.20.30.0/24
         placement:
           hosts:
-            - node01
-            - node02
+            - node-01
+            - node-02

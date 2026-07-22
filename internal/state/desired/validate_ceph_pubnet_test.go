@@ -25,10 +25,10 @@ func cephPubnetCase(monIP string, prefixLength int, publicCIDRs []string) (v1alp
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
-				Cephadm:  v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Host: "srv"}},
+				Cephadm:  v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "srv"}},
 				Networks: v1alpha1.StorageCephNetworks{PublicCIDRs: publicCIDRs},
-				Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-					{Hostname: "srv", MachineRef: v1alpha1.LocalObjectReference{Name: "srv"}},
+				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+					{Name: "srv", MachineRef: v1alpha1.LocalObjectReference{Name: "srv"}},
 				}},
 			},
 		},

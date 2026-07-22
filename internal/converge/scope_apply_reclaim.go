@@ -28,7 +28,7 @@ func DeclaredOwnedOSDDevices(state v1alpha1.State, owned []string) []string {
 		if !ownedSet[sc.Metadata.Name] || sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+		for _, host := range sc.Spec.Ceph.Topology.Nodes {
 			for _, dev := range host.Devices {
 				if trimmed := strings.TrimSpace(dev); trimmed != "" {
 					declared[trimmed] = true

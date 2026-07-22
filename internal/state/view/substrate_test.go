@@ -20,8 +20,8 @@ func TestContainerClusterSubstrate(t *testing.T) {
 			{Metadata: v1alpha1.Metadata{Name: "m-kv"}, Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "kv"}}}},
 		},
 	}
-	metal := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "m-metal"}}}}}
-	child := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "m-kv"}}}}}
+	metal := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "m-metal"}}}}}
+	child := v1alpha1.ContainerCluster{Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "m-kv"}}}}}
 
 	if got := ContainerClusterSubstrate(state, metal); got.Provider != v1alpha1.ProvisionerBareMetal || got.Host != "" {
 		t.Fatalf("metal substrate = %+v, want baremetal/no-host", got)

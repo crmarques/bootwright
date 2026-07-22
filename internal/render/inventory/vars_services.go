@@ -33,7 +33,7 @@ func loadBalancerComponentVars(state v1alpha1.State, component v1alpha1.InfraCom
 	return out
 }
 
-func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInstall, componentName, clusterName string, machines []v1alpha1.InstallMachine, nodes map[string]v1alpha1.OCPHostSpec) []any {
+func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInstall, componentName, clusterName string, machines []v1alpha1.InstallMachine, nodes map[string]v1alpha1.OCPNodeSpec) []any {
 	out := []any{}
 	ocp, ok := stateview.ContainerCluster(state, clusterName)
 	if !ok {
@@ -120,7 +120,7 @@ func cidrPrefix(cidr string) int {
 	return n
 }
 
-func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPHostSpec) string {
+func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPNodeSpec) string {
 	for _, node := range nodes {
 		ref := node.MachineRef.Name
 		if ref == machineName {

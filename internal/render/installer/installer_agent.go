@@ -8,16 +8,16 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func SortedNodes(nodes []v1alpha1.OCPHostSpec) []v1alpha1.OCPHostSpec {
-	out := append([]v1alpha1.OCPHostSpec(nil), nodes...)
+func SortedNodes(nodes []v1alpha1.OCPNodeSpec) []v1alpha1.OCPNodeSpec {
+	out := append([]v1alpha1.OCPNodeSpec(nil), nodes...)
 	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Hostname < out[j].Hostname
+		return out[i].Name < out[j].Name
 	})
 	return out
 }
 
 func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) ([]any, string) {
-	nodes := SortedNodes(ocp.Spec.Hosts)
+	nodes := SortedNodes(ocp.Spec.Nodes)
 	hosts := make([]any, 0, len(nodes))
 	rendezvous := ""
 	for _, node := range nodes {
@@ -26,7 +26,7 @@ func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.C
 			continue
 		}
 		host := map[string]any{
-			"hostname":   node.Hostname,
+			"hostname":   node.Name,
 			"role":       installerNodeRole(node.Role),
 			"interfaces": agentHostInterfaces(state, machine, ocp.Metadata.Name),
 		}

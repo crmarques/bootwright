@@ -67,10 +67,10 @@ func TestValidateOSDDevicesExcludeRootDiskPathSpecsAndFleet(t *testing.T) {
 	pathSpec := func(path string) *v1alpha1.StorageCephDeviceSelection {
 		return &v1alpha1.StorageCephDeviceSelection{PathSpecs: []v1alpha1.StorageCephDevicePath{{Path: path}}}
 	}
-	if errs := validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", nil, &v1alpha1.StorageCephHostOSD{DataDevices: pathSpec("/dev/sda")})); len(errs) != 1 {
+	if errs := validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", nil, &v1alpha1.StorageCephNodeOSD{DataDevices: pathSpec("/dev/sda")})); len(errs) != 1 {
 		t.Fatalf("root disk in osd.dataDevices.pathSpecs must refuse, got %v", errs)
 	}
-	if errs := validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", nil, &v1alpha1.StorageCephHostOSD{DBDevices: pathSpec("/dev/sda")})); len(errs) != 1 {
+	if errs := validateOSDDevicesExcludeRootDisk(osdNodeState("/dev/sda", nil, &v1alpha1.StorageCephNodeOSD{DBDevices: pathSpec("/dev/sda")})); len(errs) != 1 {
 		t.Fatalf("root disk in osd.dbDevices.pathSpecs must refuse, got %v", errs)
 	}
 	if errs := validateOSDDevicesExcludeRootDisk(osdFleetDrivegroupState("/dev/sda", "/dev/sda")); len(errs) != 1 {
@@ -90,13 +90,13 @@ func osdFleetDrivegroupState(root, fleetDevice string) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 				Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{
-						{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
+					Nodes: []v1alpha1.StorageCephNode{
+						{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
 					},
 					OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
 						ServiceID: "fleet",
 						Placement: v1alpha1.StoragePlacement{Hosts: []string{"ceph-0"}},
-						OSD:       v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{fleetDevice}}},
+						OSD:       v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{fleetDevice}}},
 					}},
 				},
 			}},

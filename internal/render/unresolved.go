@@ -56,18 +56,18 @@ func unresolvedStorageNodeAddresses(state v1alpha1.State) []string {
 	var events []string
 	for _, cluster := range inventory.ManagedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
-		for i, host := range ceph.Topology.Hosts {
-			if topology.NodeAddress(state, cluster, host.Hostname) == "" {
+		for i, host := range ceph.Topology.Nodes {
+			if topology.NodeAddress(state, cluster, host.Name) == "" {
 				events = append(events, fmt.Sprintf(
-					"StorageCluster/%s spec.ceph.topology.hosts[%d].machineRef %q does not resolve to a machine address for host %q",
-					cluster.Metadata.Name, i, host.MachineRef.Name, host.Hostname))
+					"StorageCluster/%s spec.ceph.topology.nodes[%d].machineRef %q does not resolve to a machine address for node %q",
+					cluster.Metadata.Name, i, host.MachineRef.Name, host.Name))
 			}
 		}
 		bootstrap := ceph.Cephadm.Bootstrap
-		if bootstrap.Host != "" && topology.NodeAddressByRef(state, cluster, bootstrap.Host, bootstrap.AddressRef.Name) == "" {
+		if bootstrap.Node != "" && topology.NodeAddressByRef(state, cluster, bootstrap.Node, bootstrap.AddressRef.Name) == "" {
 			events = append(events, fmt.Sprintf(
-				"StorageCluster/%s spec.ceph.cephadm.bootstrap.host %q does not resolve to a machine address",
-				cluster.Metadata.Name, bootstrap.Host))
+				"StorageCluster/%s spec.ceph.cephadm.bootstrap.node %q does not resolve to a machine address",
+				cluster.Metadata.Name, bootstrap.Node))
 		}
 	}
 	return events
@@ -77,7 +77,7 @@ func unresolvedMachineOSInstallImages(state v1alpha1.State) []string {
 	var events []string
 	for _, cluster := range inventory.ManagedStorageClusters(state) {
 		seen := map[string]bool{}
-		for i, host := range cluster.Spec.Ceph.Topology.Hosts {
+		for i, host := range cluster.Spec.Ceph.Topology.Nodes {
 			name := host.MachineRef.Name
 			if name == "" || seen[name] {
 				continue
@@ -100,7 +100,7 @@ func unresolvedMachineOSInstallImages(state v1alpha1.State) []string {
 			}
 			if _, err := media.Resolve(image.Spec.BootMedia); err != nil {
 				events = append(events, fmt.Sprintf(
-					"StorageCluster/%s spec.ceph.topology.hosts[%d].machineRef %q MachineImage %q spec.bootMedia %q does not resolve to installable media: %v",
+					"StorageCluster/%s spec.ceph.topology.nodes[%d].machineRef %q MachineImage %q spec.bootMedia %q does not resolve to installable media: %v",
 					cluster.Metadata.Name, i, name, image.Metadata.Name, image.Spec.BootMedia, err))
 			}
 		}

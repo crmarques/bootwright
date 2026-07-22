@@ -220,10 +220,10 @@ func distributionVars(ocp v1alpha1.ContainerCluster) map[string]any {
 }
 
 func nodesVars(ocp v1alpha1.ContainerCluster) map[string]any {
-	nodes := installer.SortedNodes(ocp.Spec.Hosts)
+	nodes := installer.SortedNodes(ocp.Spec.Nodes)
 	out := map[string]any{}
 	for _, node := range nodes {
-		name := node.Hostname
+		name := node.Name
 		entry := map[string]any{"role": installer.InstallerNodeRole(node.Role)}
 		if node.MachineRef.Name != "" {
 			entry["machineRef"] = map[string]any{

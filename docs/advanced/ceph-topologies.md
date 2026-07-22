@@ -69,7 +69,7 @@ ceph:
   entitlementRef: rhcs           # names a redhat-ceph Entitlement
   cephadm:
     bootstrap:
-      host: node01               # topology host cephadm bootstraps on (node hostname)
+      node: node-01              # topology node cephadm bootstraps on (node name)
 ```
 
 The `ceph-distribution-oss`, `ceph-distribution-redhat`, and
@@ -90,27 +90,25 @@ to end, including the entitlement and license-acceptance workflow.
 
 ## The bootstrap seed host
 
-`spec.ceph.cephadm.bootstrap.host` names the topology host cephadm bootstraps on
+`spec.ceph.cephadm.bootstrap.node` names the topology node cephadm bootstraps on
 (the seed node). The rendered `cephadm bootstrap --mon-ip` is always an address
 of that host: the address named by `cephadm.bootstrap.addressRef`, falling back
 to `cephadm.addressRef`, and finally the host machine's SSH address.
 
-`bootstrap.host` names a node by its hostname — the FQDN or its short label
-(`node01`); both resolve, and Bootwright canonicalizes them to the registered
+`bootstrap.node` names a node by its name — the FQDN or its short label
+(`node-01`); both resolve, and Bootwright canonicalizes them to the registered
 hostname cephadm expects. A `Machine` name is rejected with guidance naming
-the node. The same is true of the other authored host references —
-`placement.hosts[]` and `topology.stretch.tiebreaker.host`.
+the node. The same is true of the other authored node references —
+`placement.hosts[]` and `topology.stretch.tiebreaker.node`.
 
 ## Host identity and FQDN node naming
 
-cephadm registers every `spec.ceph.topology.hosts[]` entry under its
-`hostname` — the node's name, independent of the bound machine's name. Omitted,
-it defaults to `node<NN>` (`node01`, `node02`, … in `hosts` list order), so the
-default identity is the fully-qualified
-`node<NN>.<storageClusterName>.<baseDomain>` (e.g.
-`node03.ceph-ibm.bootwright.test`). An authored bare label composes the same
-way (`<label>.<cluster>.<baseDomain>`); a dotted value is an explicit FQDN
-taken verbatim. The name is rendered verbatim into the cephadm host spec, is
+cephadm registers every `spec.ceph.topology.nodes[]` entry under its
+`name` — the cluster's name for the node, independent of the bound machine's
+name and **required** on every entry. A bare label composes to the
+fully-qualified `<name>.<cluster>.<baseDomain>` (e.g.
+`node-03.ceph-ibm.bootwright.test`); a dotted value is an explicit FQDN taken
+verbatim. The composed FQDN is rendered verbatim into the cephadm host spec, is
 the name the mgr dashboard uses to reach monitoring services (Prometheus,
 Grafana, Alertmanager), and must equal the host's real OS hostname **and
 resolve** cluster-wide:
@@ -120,10 +118,10 @@ resolve** cluster-wide:
   `nameResolution` component the node's `NetworkConfig` references publishes a
   record for it.
 - For `os.provided: true` machines, the operator guarantees it. If a machine's
-  real hostname differs, author `hostname:` explicitly — it is taken verbatim.
+  real hostname differs, author `name:` explicitly — it is taken verbatim.
   A mismatch passes `validate` (which never reaches the host) but fails
   `bootwright preflight`, which compares each storage node's real hostname
-  against the declared topology hostname before cephadm ever sees the host spec.
+  against the declared node FQDN before cephadm ever sees the host spec.
 
 The machine's own DNS name is separate: every `Machine` carries a `fqdn`
 address (`<machineName>.<baseDomain>` by default) that Bootwright connects to
@@ -151,7 +149,7 @@ model.
 
 ## OSD device selection
 
-Every `spec.ceph.topology.hosts[]` entry carrying the `osd` role must say which
+Every `spec.ceph.topology.nodes[]` entry carrying the `osd` role must say which
 disks it contributes: either the lean `devices:` list of literal paths or the
 drivegroup-shaped `osd:` selection. `bootwright validate` rejects an osd-role
 host that authors neither, and rejects either form on a host without the `osd`
@@ -160,12 +158,14 @@ role. There is no implicit all-devices default — handing every available
 `osd: {dataDevices: {all: true}}`:
 
 ```yaml
-hosts:
+nodes:
 - machineRef: ceph-0
+  name: node-01
   roles: [mon, mgr, osd]
   devices:            # literal paths ...
   - /dev/vdb
 - machineRef: ceph-1
+  name: node-02
   roles: [osd]
   osd:                # ... or a drivegroup-shaped selection
     dataDevices:
@@ -181,8 +181,9 @@ A production drivegroup typically selects data disks by stable `model`/`vendor`
 shared NVMe, one slot per OSD:
 
 ```yaml
-hosts:
+nodes:
 - machineRef: ceph-0
+  name: node-01
   roles: [osd]
   osd:
     dataDevices:
@@ -260,7 +261,7 @@ a reinstall; see [managed-OS reinstall](operations.md#managed-os-reinstall-and-o
 ## Stretch mode
 
 `spec.ceph.topology.stretch` is enabled by presence and models a two-site
-cluster with a tiebreaker monitor. Each `spec.ceph.topology.hosts[].site` is the
+cluster with a tiebreaker monitor. Each `spec.ceph.topology.nodes[].site` is the
 host's failure-domain bucket: outside stretch mode the failure domain is `host`
 and `site` renders nothing; under stretch it becomes the host's cephadm CRUSH
 location, and `placement.sites` (on monitoring, passthrough services, and the
@@ -281,17 +282,20 @@ ceph:
   topology:
     stretch:
       tiebreaker:
-        host: node03              # the tiebreaker monitor node
-    hosts:
+        node: node-03             # the tiebreaker monitor node
+    nodes:
     - machineRef: ceph-dc1-0
+      name: node-01
       site: dc1
       roles: [mon, mgr, osd]
       devices: [/dev/vdb]
     - machineRef: ceph-dc2-0
+      name: node-02
       site: dc2
       roles: [mon, mgr, osd]
       devices: [/dev/vdb]
-    - machineRef: ceph-arbiter    # third host in the list -> node03
+    - machineRef: ceph-arbiter    # tiebreaker node -> node-03
+      name: node-03
       site: dc3
       roles: [mon]
 ```
@@ -414,12 +418,12 @@ the controller (`clusters/<storage-cluster>/secrets/dashboard-password`, mode
 Two desired-state changes carry data-movement risk on an already-bootstrapped
 cluster:
 
-- **Adopting the `node<NN>` naming default** renames the Ceph host identity of
-  every host that left `hostname` unauthored (previously derived from the
-  machine name). On a live cluster that makes the rendered topology name a host
-  cephadm has never seen — cephadm would re-add it and move data. The default
-  is safe for greenfield bootstraps; on an already-bootstrapped cluster pin
-  `hostname:` to the original name on each host before the next apply.
+- **Renaming a node's Ceph identity** — `topology.nodes[].name` is required and
+  declared explicitly on every node. Setting it to a value cephadm has never
+  registered makes the rendered topology name a host cephadm has never seen —
+  cephadm would re-add it and move data. On an already-bootstrapped cluster set
+  each `topology.nodes[].name` to the identity cephadm already registered
+  before the next apply.
 - **Authoring `stretch`** re-rules and resizes every policy-less pool, as
   described above. Confirm the validate notice naming the inheriting pools, and
   plan for the rebalance.

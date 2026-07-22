@@ -12,15 +12,16 @@ spec:
     release: squid
     cephadm:
       bootstrap:
-        host: node01
+        node: node01
     networks:
       publicCIDRs:
         - 192.168.142.0/24
       clusterCIDRs:
         - 192.168.142.0/24
     topology:
-      hosts:
-        - machineRef: ceph-0
+      nodes:
+        - name: node01
+          machineRef: ceph-0
           site: lab
           roles:
             - mon
@@ -32,7 +33,8 @@ spec:
           devices:
             - /dev/sdb
             - /dev/sdc
-        - machineRef: ceph-1
+        - name: node02
+          machineRef: ceph-1
           site: lab
           roles:
             - mon
@@ -44,7 +46,8 @@ spec:
           devices:
             - /dev/sdb
             - /dev/sdc
-        - machineRef: ceph-2
+        - name: node03
+          machineRef: ceph-2
           site: lab
           roles:
             - mon

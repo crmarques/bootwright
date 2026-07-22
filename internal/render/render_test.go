@@ -239,8 +239,8 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 					PullSecretRef: v1alpha1.SecretRef{Name: "pull-secret"},
 					NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh-key"}},
 				},
-				Hosts: []v1alpha1.OCPHostSpec{{
-					Hostname:   "master-0",
+				Nodes: []v1alpha1.OCPNodeSpec{{
+					Name:       "master-0",
 					Role:       v1alpha1.NodeRoleMaster,
 					MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 				}},
@@ -674,16 +674,16 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 					v1alpha1.EndpointIngress: {Address: "192.168.133.11"},
 				},
 			},
-			Hosts: []v1alpha1.OCPHostSpec{{
-				Hostname:   "master-0",
+			Nodes: []v1alpha1.OCPNodeSpec{{
+				Name:       "master-0",
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}, {
-				Hostname:   "master-1",
+				Name:       "master-1",
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-1"},
 			}, {
-				Hostname:   "master-2",
+				Name:       "master-2",
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-2"},
 			}},

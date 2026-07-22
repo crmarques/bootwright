@@ -447,7 +447,7 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 		t.Fatalf("storage node selection must map the rendered hosts attribute, got %s", expr)
 	}
 
-	task := tasks[findAnsibleTask(t, tasks, "Assert storage node hostname matches the declared topology")]
+	task := tasks[findAnsibleTask(t, tasks, "Assert storage node name matches the declared topology")]
 	body, ok := task["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("storage hostname verification must be an assert, got %v", task)

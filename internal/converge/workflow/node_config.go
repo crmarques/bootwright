@@ -64,9 +64,9 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 
 func nodeConfigNodeNames(ocp v1alpha1.ContainerCluster) []string {
 	var names []string
-	for _, host := range ocp.Spec.Hosts {
+	for _, host := range ocp.Spec.Nodes {
 		if host.Role == v1alpha1.NodeRoleInfra || len(host.Labels) > 0 || len(host.Taints) > 0 {
-			names = append(names, host.Hostname)
+			names = append(names, host.Name)
 		}
 	}
 	return names

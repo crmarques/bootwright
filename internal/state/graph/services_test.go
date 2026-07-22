@@ -108,7 +108,7 @@ func TestMachineServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
 	}
 	state.Machines = append(state.Machines, libvirtHostMachine("libvirt-host-b", "10.0.0.7"))
 	state.InfraProviders = append(state.InfraProviders, libvirtProvider("libvirt-provider-b", "libvirt-host-b"))
-	state.ContainerClusters[1].Spec.Hosts[0].MachineRef.Name = "cluster-b-master-0"
+	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "cluster-b-master-0"
 
 	var machineRefs []string
 	for _, service := range ResolveMachineServices(state).Services {
@@ -240,8 +240,8 @@ func bareMetalStorageManagedOSState() v1alpha1.State {
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{{
-							Hostname:   "ceph-0",
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:       "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 							Roles:      []string{"mon"},
 						}},
@@ -576,8 +576,8 @@ func containerCluster(name, machineName string) v1alpha1.ContainerCluster {
 					},
 				},
 			},
-			Hosts: []v1alpha1.OCPHostSpec{{
-				Hostname:   "master-0",
+			Nodes: []v1alpha1.OCPNodeSpec{{
+				Name:       "master-0",
 				Role:       "master",
 				MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
 			}},

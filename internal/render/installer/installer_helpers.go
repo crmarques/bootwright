@@ -216,7 +216,7 @@ func installerNodeRole(role string) string {
 
 func nodeRoleCount(ocp v1alpha1.ContainerCluster, role string) int {
 	count := 0
-	for _, node := range ocp.Spec.Hosts {
+	for _, node := range ocp.Spec.Nodes {
 		if node.Role == role {
 			count++
 		}

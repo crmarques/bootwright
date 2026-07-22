@@ -15,7 +15,7 @@ import (
 func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
 	seedNode := ""
 	if cluster.Spec.Ceph != nil {
-		seedNode = cluster.Spec.Ceph.Cephadm.Bootstrap.Host
+		seedNode = cluster.Spec.Ceph.Cephadm.Bootstrap.Node
 		if node, ok := topology.CephNodeByName(cluster, seedNode); ok && node.MachineRef.Name != "" {
 			seedNode = node.MachineRef.Name
 		}
@@ -44,7 +44,7 @@ func ManagedStorageClusters(state v1alpha1.State) []v1alpha1.StorageCluster {
 func storageReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, cluster := range ManagedStorageClusters(state) {
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			out[storageInventoryHostName(cluster, node.MachineRef.Name)] = true
 		}
 	}
@@ -55,7 +55,7 @@ func storageClusterHostSets(state v1alpha1.State) map[string]map[string]bool {
 	out := map[string]map[string]bool{}
 	for _, cluster := range ManagedStorageClusters(state) {
 		set := map[string]bool{}
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			set[storageInventoryHostName(cluster, node.MachineRef.Name)] = true
 		}
 		out[StorageClusterGroupName(cluster.Metadata.Name)] = set
@@ -76,7 +76,7 @@ func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 	}
 }
 
-func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
+func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	nodeName := node.MachineRef.Name
 	entry := map[string]any{}
 	machine, machineOK := topology.NodeMachine(state, cluster, nodeName)
@@ -112,8 +112,8 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
 			"hosts":               storageHostsVars(state, cluster),
 			"bootstrap": map[string]any{
-				"host":               topology.CanonicalHostname(cluster, ceph.Cephadm.Bootstrap.Host),
-				"monIP":              topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
+				"host":               topology.CanonicalHostname(cluster, ceph.Cephadm.Bootstrap.Node),
+				"monIP":              topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Node, ceph.Cephadm.Bootstrap.AddressRef.Name),
 				"singleHostDefaults": ceph.Cephadm.Bootstrap.SingleHostDefaults,
 			},
 			"ceph": map[string]any{
@@ -152,7 +152,7 @@ func storageCephProvider(state v1alpha1.State, cluster v1alpha1.StorageCluster, 
 }
 
 func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
-	if len(cluster.Spec.Ceph.Topology.Hosts) == 0 {
+	if len(cluster.Spec.Ceph.Topology.Nodes) == 0 {
 		return nil
 	}
 	if ref := cluster.Spec.Ceph.Cephadm.ClusterSSHKeyRef.Name; ref != "" {
@@ -171,7 +171,7 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		}
 		return out
 	}
-	machine, ok := topology.NodeMachine(state, cluster, cluster.Spec.Ceph.Topology.Hosts[0].Hostname)
+	machine, ok := topology.NodeMachine(state, cluster, cluster.Spec.Ceph.Topology.Nodes[0].Name)
 	if !ok || machine.Spec.Access.SSH == nil {
 		return nil
 	}
@@ -246,10 +246,10 @@ func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Enviro
 
 func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var out []any
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		host := map[string]any{
 			"hostname":      node.MachineRef.Name,
-			"cephHostname":  node.Hostname,
+			"cephHostname":  node.Name,
 			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
 			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
 			"devices":       cephrender.OSDGateDevicePaths(cluster, node),

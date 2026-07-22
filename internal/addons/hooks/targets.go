@@ -95,7 +95,7 @@ func classifyCluster(state v1alpha1.State, name string, containers, storage *clu
 
 func classifyMachineOwners(state v1alpha1.State, machine string, containers, storage *clusterSet) {
 	for _, cluster := range state.ContainerClusters {
-		for _, node := range cluster.Spec.Hosts {
+		for _, node := range cluster.Spec.Nodes {
 			if node.MachineRef.Name == machine {
 				containers.add(cluster.Metadata.Name)
 			}
@@ -105,7 +105,7 @@ func classifyMachineOwners(state v1alpha1.State, machine string, containers, sto
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			if node.MachineRef.Name == machine {
 				storage.add(cluster.Metadata.Name)
 			}

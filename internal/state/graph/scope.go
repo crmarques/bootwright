@@ -259,7 +259,7 @@ func storageAttachmentContainerClusters(state v1alpha1.State) map[string]bool {
 }
 
 func addContainerClusterMachines(out map[string]bool, cluster v1alpha1.ContainerCluster) {
-	for _, node := range cluster.Spec.Hosts {
+	for _, node := range cluster.Spec.Nodes {
 		if node.MachineRef.Name != "" {
 			out[node.MachineRef.Name] = true
 		}
@@ -270,7 +270,7 @@ func addStorageClusterMachines(out map[string]bool, cluster v1alpha1.StorageClus
 	if cluster.Spec.Ceph == nil {
 		return
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.MachineRef.Name != "" {
 			out[node.MachineRef.Name] = true
 		}

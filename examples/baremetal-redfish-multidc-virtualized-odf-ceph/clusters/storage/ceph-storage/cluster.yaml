@@ -11,7 +11,7 @@ spec:
     entitlementRef: rhcs
     cephadm:
       bootstrap:
-        host: node01
+        node: node-01
     networks:
       publicCIDRs:
       - 192.168.141.0/24
@@ -24,9 +24,10 @@ spec:
       stretch:
         failureDomain: datacenter
         tiebreaker:
-          host: node07
-      hosts:
-      - machineRef: ceph-dc1-0
+          node: node-07
+      nodes:
+      - name: node-01
+        machineRef: ceph-dc1-0
         site: dc1
         roles:
         - mon
@@ -37,7 +38,8 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-      - machineRef: ceph-dc1-1
+      - name: node-02
+        machineRef: ceph-dc1-1
         site: dc1
         roles:
         - mon
@@ -48,7 +50,8 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-      - machineRef: ceph-dc1-2
+      - name: node-03
+        machineRef: ceph-dc1-2
         site: dc1
         roles:
         - osd
@@ -57,7 +60,8 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-      - machineRef: ceph-dc2-0
+      - name: node-04
+        machineRef: ceph-dc2-0
         site: dc2
         roles:
         - mon
@@ -68,7 +72,8 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-      - machineRef: ceph-dc2-1
+      - name: node-05
+        machineRef: ceph-dc2-1
         site: dc2
         roles:
         - mon
@@ -79,7 +84,8 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-      - machineRef: ceph-dc2-2
+      - name: node-06
+        machineRef: ceph-dc2-2
         site: dc2
         roles:
         - osd
@@ -88,7 +94,8 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-      - machineRef: ceph-arbiter
+      - name: node-07
+        machineRef: ceph-arbiter
         site: dc3
         roles:
         - mon

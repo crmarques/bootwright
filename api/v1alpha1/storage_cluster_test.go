@@ -25,7 +25,7 @@ func ossClusterWithProfileSubscription(management string) (StorageCluster, State
 			Type: "ceph",
 			Ceph: &StorageClusterCephSpec{
 				Distribution: StorageCephDistributionOSS,
-				Topology:     StorageCephTopology{Hosts: []StorageCephHost{{MachineRef: LocalObjectReference{Name: "node-01"}}}},
+				Topology:     StorageCephTopology{Nodes: []StorageCephNode{{MachineRef: LocalObjectReference{Name: "node-01"}}}},
 			},
 		},
 	}

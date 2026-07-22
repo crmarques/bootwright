@@ -92,7 +92,7 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	}
 	args = append(args,
 		"bootstrap",
-		"--mon-ip", topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
+		"--mon-ip", topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Node, ceph.Cephadm.Bootstrap.AddressRef.Name),
 		"--allow-fqdn-hostname",
 		"--dashboard-password-noupdate",
 	)

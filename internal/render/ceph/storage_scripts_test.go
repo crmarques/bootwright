@@ -181,12 +181,12 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							Host:       "ceph-0",
+							Node:       "ceph-0",
 							AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						},
 					},
-					Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
-						Hostname: "ceph-0",
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+						Name: "ceph-0",
 						MachineRef: v1alpha1.LocalObjectReference{
 							Name: "ceph-0",
 						},

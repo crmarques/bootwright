@@ -105,7 +105,7 @@ func storagePoolCapacityState(hostCount int, singleHost bool) v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							Host:               "ceph-0",
+							Node:               "ceph-0",
 							SingleHostDefaults: singleHost,
 						},
 					},
@@ -124,8 +124,8 @@ func storagePoolCapacityState(hostCount int, singleHost bool) v1alpha1.State {
 		if singleHost {
 			host.Devices = append(host.Devices, "/dev/vdc")
 		}
-		state.StorageClusters[0].Spec.Ceph.Topology.Hosts = append(
-			state.StorageClusters[0].Spec.Ceph.Topology.Hosts,
+		state.StorageClusters[0].Spec.Ceph.Topology.Nodes = append(
+			state.StorageClusters[0].Spec.Ceph.Topology.Nodes,
 			host,
 		)
 	}

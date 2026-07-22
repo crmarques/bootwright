@@ -615,8 +615,8 @@ spec:
           endpointRef: bmc
     nodeSSH:
       keyPairRef: ocp-3node-cluster-admin-ssh-key
-  hosts:
-    - hostname: master-0
+  nodes:
+    - name: master-0
       role: master
       machineRef: ocp-master-0
 ```
@@ -628,13 +628,13 @@ Rules:
 - `spec.install.platform.type` accepts `baremetal`, `vsphere`, `none`, or
   `external`.
 - An omitted `spec.install.platform` derives from the single `InfraProvider`
-  type behind `spec.hosts[].machineRef` →
+  type behind `spec.nodes[].machineRef` →
   `Machine.spec.substrate.providerRef`: `libvirt` and `baremetal` providers
   derive `type: baremetal` with `baremetal.provisioningNetwork: disabled`;
   `vsphere` providers derive `type: vsphere`; `kubevirt` providers derive
   `type: none`. `render effective` materializes the derived platform. When the bound machines span multiple provider types
   and the platform is omitted, validation rejects the cluster naming the
-  conflicting providers. When a `spec.hosts[].machineRef` does not resolve to a
+  conflicting providers. When a `spec.nodes[].machineRef` does not resolve to a
   `Machine`, the derived-platform requirement is suppressed — the dangling
   `machineRef` is the root cause and is reported at the host, so validation does
   not additionally demand an authored `spec.install.platform.type`. An authored
@@ -657,22 +657,22 @@ Rules:
   - `source.componentRef` and `source.bindAddressRef` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
-- `spec.hosts[].machineRef` is required and references a `Machine` with
+- `spec.nodes[].machineRef` is required and references a `Machine` with
   `openshift-node` capability and `os.provided: false`. No default is derived
-  from the `hostname`: hostnames are cluster-local while `Machine` names are
+  from the `name`: node names are cluster-local while `Machine` names are
   global, so an implicit same-name binding could silently capture a foreign
   `Machine`.
-- `spec.hosts[].hostname` names the node, independent of the machine name.
-  Omitted, it defaults to `node<NN>` (`node01`, `node02`, … in `hosts` list
-  order, zero-padded to two digits). A bare label composes to
-  `<hostname>.<cluster>.<domains.containerClusters>` (the container-cluster
+- `spec.nodes[].name` names the node, independent of the machine name, and is
+  required: it is declared explicitly per node, with no default inferred from
+  list position. A bare label composes to
+  `<name>.<cluster>.<domains.containerClusters>` (the container-cluster
   zone; `domains.containerClusters` defaults to `domains.clusters`, which
   defaults to `domains.base`); a dotted value is an explicit FQDN used
   verbatim. The composed FQDN is the cluster-visible node identity, and its
   DNS record resolves through the bound machine's `fqdn` (managed
   resolution renders a `cname`; provided resolution requires the operator's
   record, checked by the "Name resolution" preflight group).
-- Each node hostname must be unique inside the cluster.
+- Each node name must be unique inside the cluster.
 - A `Machine` is node-bound by at most one cluster (and at most one host
   entry): `machineRef` entries must be disjoint across every
   `ContainerCluster` and `StorageCluster`.
@@ -697,11 +697,11 @@ Rules:
 - `cluster rsh` and `cluster exec` reach a `ContainerCluster` node with the
   private material selected by `install.nodeSSH` (`keyPairRef`, otherwise
   `privateKeyRef`), the `core` user, and the node's effective primary install
-  IP (falling back to its declared hostname). A public-only `nodeSSH` is valid
+  IP (falling back to its declared name). A public-only `nodeSSH` is valid
   for installation but cannot power these commands. Storage-cluster access
   continues to use each node `Machine`'s `spec.access.ssh` identity,
   connecting to the machine's `fqdn` address per the `Machine` rules. The
-  `--node` selector accepts the node hostname (FQDN or short label) or a
+  `--node` selector accepts the node name (FQDN or short label) or a
   `<role>-<ordinal>`; a machine name is rejected with guidance naming the
   node. Container-node
   first use requires an interactive OpenSSH confirmation. A verified changed
@@ -731,12 +731,12 @@ Rules:
 - `spec.install.servingCertificates`, when set, supplies cluster serving
   certificates: `apiServer.namedCertificates[]` (each with `names[]` and a
   `secretRef`) and `ingress.defaultCertificateRef`.
-- `spec.hosts[].role` accepts `master`, `worker`, or `infra`; a cluster
+- `spec.nodes[].role` accepts `master`, `worker`, or `infra`; a cluster
   requires at least one `master` node. `infra` is an authoring-only role:
   OpenShift has no install-time infra role, so an infra host installs as a
   worker and is promoted day-2 with the `node-role.kubernetes.io/infra`
   label, a `NoSchedule` taint, and the infra MachineConfigPool.
-- `spec.hosts[].labels` (a string map, non-empty keys) and `spec.hosts[].taints[]`
+- `spec.nodes[].labels` (a string map, non-empty keys) and `spec.nodes[].taints[]`
   (each `key` required, optional `value`, `effect` one of `NoSchedule`,
   `PreferNoSchedule`, or `NoExecute`) are day-2-owned node intent applied after
   install — reconcilable-in-place drift, not install-config/agent-config identity.
@@ -841,7 +841,7 @@ Rules:
   --ssh-user`) and must exist on every topology host. It defaults to `root` when
   `clusterSSHKeyRef` is set, and is ignored — the first host's `access.ssh` user
   is used — when `clusterSSHKeyRef` is omitted.
-- `cephadm.bootstrap.host` names a storage topology host by its node hostname
+- `cephadm.bootstrap.node` names a storage topology host by its node name
   (the FQDN or its short label); a machine name is rejected with guidance
   naming the node. The rendered cephadm `--mon-ip` is always an address of
   this host: the address named by `bootstrap.addressRef`, defaulting to
@@ -858,8 +858,8 @@ Rules:
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
-- `spec.ceph.cephadm.bootstrap.host` must match a
-  `spec.ceph.topology.hosts[]` entry's node hostname.
+- `spec.ceph.cephadm.bootstrap.node` must match a
+  `spec.ceph.topology.nodes[]` entry's node name.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
   They render to the Ceph `public_network`/`cluster_network` configuration
   (seeded at bootstrap, reconciled by `ceph config set` on later applies).
@@ -876,7 +876,7 @@ Rules:
 - Ceph placement blocks — on `spec.ceph.monitoring` services, the `services[]`
   passthrough, the management ingress, CephFS `mds`, RGW, and ingress — share one
   grammar: `hosts[]` and `sites[]` narrow the resolved host set (`hosts[]`
-  entries name topology hosts by node hostname — FQDN or short label, never
+  entries name topology hosts by node name — FQDN or short label, never
   the machine name — and `sites[]` entries name topology sites), and
   `countPerHost` (non-negative) sets how many daemons cephadm co-locates per
   resolved host.
@@ -917,7 +917,7 @@ Rules:
   [`StorageNFSExport`](#storagenfsexport) kind and `loki`/`promtail` by
   `spec.ceph.monitoring`, so they must be declared there, not through this
   passthrough.
-- `spec.ceph.topology.hosts[]` require a `machineRef` to a `ceph-node`
+- `spec.ceph.topology.nodes[]` require a `machineRef` to a `ceph-node`
   `Machine` and at least one `roles[]` value from `mon`, `mgr`,
   `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`, `alertmanager`.
   `site` is required exactly where it has effect — when
@@ -949,10 +949,10 @@ Rules:
   hosts instead of one spec per host. A host is owned by exactly one OSD spec —
   validation rejects a host claimed by both a fleet and a per-host
   `osd`/`devices`, or by two fleets.
-  `hostname` names the node, independent of the machine name, and is the
-  rendered cephadm host-spec hostname. Omitted, it defaults to `node<NN>`
-  (`node01`, `node02`, … in `hosts` list order, zero-padded to two digits); a
-  bare label composes to `<hostname>.<cluster>.<domains.storageClusters>` (the
+  `name` names the node, independent of the machine name, and is the
+  rendered cephadm host-spec hostname. It is required and declared explicitly
+  per node — there is no default inferred from list position; a
+  bare label composes to `<name>.<cluster>.<domains.storageClusters>` (the
   storage-cluster zone; `domains.storageClusters` defaults to
   `domains.clusters`, which defaults to `domains.base`; kept bare when the
   `Environment` declares no domain); a dotted value is an explicit FQDN
@@ -962,8 +962,8 @@ Rules:
   sets the OS hostname to the same node FQDN), operator-guaranteed for
   `os.provided` machines; a mismatch passes `validate` but fails the storage
   node preflight, which asserts each node's real hostname against the declared
-  topology hostname. The per-host OSD service id derives from the node short
-  name (`data-<nodeShortName>`). Hostnames must be
+  topology node name. The per-host OSD service id derives from the node short
+  name (`data-<nodeShortName>`). Node names must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
@@ -975,7 +975,7 @@ Rules:
 - `spec.ceph.topology.stretch` enables stretch mode by presence (no `enabled`
   flag):
   - **Required:** `failureDomain` (CRUSH failure domain for the stretch rule)
-    and `tiebreaker.host` (a topology host named by node hostname — FQDN or
+    and `tiebreaker.node` (a topology host named by node name — FQDN or
     short label; machine names are rejected).
   - **Normalized:** `dataSites` from the topology's non-tiebreaker sites,
     `tiebreaker.site` from the tiebreaker host's `site`, `ruleName` to
@@ -1466,7 +1466,7 @@ Rules:
 
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
   selected machines, selected providers, endpoints, and platform render mode.
-- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.hosts`,
+- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
   each referenced `Machine`, selected `NetworkConfig` templates, per-machine
   network overrides, and substrate MAC inventory.
 - Machine boot variables are rendered from `Machine` substrate facts,
@@ -1501,8 +1501,8 @@ Rules:
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
 - A `Machine` is node-bound by at most one cluster across `ContainerCluster`
-  `spec.hosts[].machineRef` and `StorageCluster`
-  `spec.ceph.topology.hosts[].machineRef`, and by at most one host entry
+  `spec.nodes[].machineRef` and `StorageCluster`
+  `spec.ceph.topology.nodes[].machineRef`, and by at most one host entry
   within that cluster.
 - `ContainerCluster` and `StorageCluster` names share one cluster selection
   namespace: `--clusters` and the `Environment` cluster lists resolve bare

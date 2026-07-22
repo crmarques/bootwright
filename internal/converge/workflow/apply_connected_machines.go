@@ -58,7 +58,7 @@ func inventoryHostMachineNames(state v1alpha1.State) map[string]string {
 		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			if node.MachineRef.Name == "" {
 				continue
 			}

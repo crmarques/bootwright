@@ -107,7 +107,7 @@ func (e *addonHookExecutor) containerClusterMachines(name string) ([]hookTargetM
 		return nil, fmt.Errorf("container cluster %q not found", name)
 	}
 	var out []hookTargetMachine
-	for _, node := range cluster.Spec.Hosts {
+	for _, node := range cluster.Spec.Nodes {
 		machine, ok := stateview.Machine(e.state, node.MachineRef.Name)
 		if !ok {
 			continue
@@ -122,21 +122,21 @@ func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMac
 	if !ok || cluster.Spec.Ceph == nil {
 		return nil, fmt.Errorf("storage cluster %q not found or not a Ceph cluster", name)
 	}
-	bootstrap := cluster.Spec.Ceph.Cephadm.Bootstrap.Host
-	ordered := append([]v1alpha1.StorageCephHost(nil), cluster.Spec.Ceph.Topology.Hosts...)
+	bootstrap := cluster.Spec.Ceph.Cephadm.Bootstrap.Node
+	ordered := append([]v1alpha1.StorageCephNode(nil), cluster.Spec.Ceph.Topology.Nodes...)
 	for i := range ordered {
-		if ordered[i].Hostname == bootstrap {
+		if ordered[i].Name == bootstrap {
 			ordered[0], ordered[i] = ordered[i], ordered[0]
 			break
 		}
 	}
 	var out []hookTargetMachine
 	for _, node := range ordered {
-		machine, ok := topology.NodeMachine(e.state, cluster, node.Hostname)
+		machine, ok := topology.NodeMachine(e.state, cluster, node.Name)
 		if !ok {
 			continue
 		}
-		out = append(out, hookTargetMachine{label: "StorageCluster/" + name + " node/" + node.Hostname, machine: machine})
+		out = append(out, hookTargetMachine{label: "StorageCluster/" + name + " node/" + node.Name, machine: machine})
 	}
 	return out, nil
 }

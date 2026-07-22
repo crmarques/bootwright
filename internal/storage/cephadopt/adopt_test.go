@@ -45,7 +45,7 @@ spec:
       global:
         mon_max_pg_per_osd: "250"
     topology:
-      hosts: []
+      nodes: []
 `
 	if err := os.WriteFile(clusterPath, []byte(clusterYAML), 0o600); err != nil {
 		t.Fatal(err)
@@ -139,15 +139,15 @@ metadata:
 spec:
   ceph:
     topology:
-      hosts:
-        - hostname: srv1
+      nodes:
+        - name: srv1
           machineRef:
             name: srv1
           roles: [osd]
           devices:
             - /dev/sdb # authored device comment
             - /dev/sdc
-        - hostname: srv2
+        - name: srv2
           machineRef:
             name: srv2
           roles: [osd]
@@ -163,9 +163,9 @@ spec:
 		Metadata:   v1alpha1.Metadata{Name: "ceph-prod"},
 		SourcePath: clusterPath,
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
-				{Hostname: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb", "/dev/sdc"}},
-				{Hostname: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephHostOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+				{Name: "srv1", MachineRef: v1alpha1.LocalObjectReference{Name: "srv1"}, Roles: []string{"osd"}, Devices: []string{"/dev/sdb", "/dev/sdc"}},
+				{Name: "srv2", MachineRef: v1alpha1.LocalObjectReference{Name: "srv2"}, Roles: []string{"osd"}, OSD: &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}},
 			}},
 		}},
 	}

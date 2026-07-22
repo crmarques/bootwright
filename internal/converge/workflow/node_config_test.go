@@ -30,25 +30,25 @@ func (f *fakeNodeRunner) Run(_ context.Context, _ string, args []string, _ []byt
 	return nil, fmt.Errorf("nodes %q not found", name)
 }
 
-func ocpWithHosts(hosts ...v1alpha1.OCPHostSpec) v1alpha1.ContainerCluster {
+func ocpWithHosts(hosts ...v1alpha1.OCPNodeSpec) v1alpha1.ContainerCluster {
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "hub"},
-		Spec:     v1alpha1.ContainerClusterSpec{Hosts: hosts},
+		Spec:     v1alpha1.ContainerClusterSpec{Nodes: hosts},
 	}
 }
 
 func TestClusterNeedsNodeConfig(t *testing.T) {
 	plain := ocpWithHosts(
-		v1alpha1.OCPHostSpec{Hostname: "m1", Role: v1alpha1.NodeRoleMaster},
-		v1alpha1.OCPHostSpec{Hostname: "w1", Role: v1alpha1.NodeRoleWorker},
+		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
+		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker},
 	)
 	if clusterNeedsNodeConfig(plain) {
 		t.Fatal("a master/worker-only cluster needs no day-2 node config")
 	}
-	if !clusterNeedsNodeConfig(ocpWithHosts(v1alpha1.OCPHostSpec{Hostname: "i1", Role: v1alpha1.NodeRoleInfra})) {
+	if !clusterNeedsNodeConfig(ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "i1", Role: v1alpha1.NodeRoleInfra})) {
 		t.Fatal("an infra cluster needs node config")
 	}
-	labelled := ocpWithHosts(v1alpha1.OCPHostSpec{Hostname: "w1", Role: v1alpha1.NodeRoleWorker, Labels: map[string]string{"team": "x"}})
+	labelled := ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker, Labels: map[string]string{"team": "x"}})
 	if !clusterNeedsNodeConfig(labelled) {
 		t.Fatal("a labelled worker needs node config")
 	}
@@ -56,8 +56,8 @@ func TestClusterNeedsNodeConfig(t *testing.T) {
 
 func TestNodeConfigManifestsInfra(t *testing.T) {
 	ocp := ocpWithHosts(
-		v1alpha1.OCPHostSpec{Hostname: "master-01", Role: v1alpha1.NodeRoleMaster},
-		v1alpha1.OCPHostSpec{Hostname: "infra-01", Role: v1alpha1.NodeRoleInfra},
+		v1alpha1.OCPNodeSpec{Name: "master-01", Role: v1alpha1.NodeRoleMaster},
+		v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra},
 	)
 	out, err := nodeConfigManifests(ocp)
 	if err != nil {
@@ -78,8 +78,8 @@ func TestNodeConfigManifestsInfra(t *testing.T) {
 }
 
 func TestNodeConfigManifestsLabelledWorkerNoMCP(t *testing.T) {
-	ocp := ocpWithHosts(v1alpha1.OCPHostSpec{
-		Hostname: "w1", Role: v1alpha1.NodeRoleWorker,
+	ocp := ocpWithHosts(v1alpha1.OCPNodeSpec{
+		Name: "w1", Role: v1alpha1.NodeRoleWorker,
 		Labels: map[string]string{"team": "data"},
 	})
 	out, err := nodeConfigManifests(ocp)
@@ -97,9 +97,9 @@ func TestNodeConfigManifestsLabelledWorkerNoMCP(t *testing.T) {
 
 func TestNodeConfigNodeNames(t *testing.T) {
 	ocp := ocpWithHosts(
-		v1alpha1.OCPHostSpec{Hostname: "m1", Role: v1alpha1.NodeRoleMaster},
-		v1alpha1.OCPHostSpec{Hostname: "infra-01", Role: v1alpha1.NodeRoleInfra},
-		v1alpha1.OCPHostSpec{Hostname: "w1", Role: v1alpha1.NodeRoleWorker, Labels: map[string]string{"team": "data"}},
+		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
+		v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra},
+		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker, Labels: map[string]string{"team": "data"}},
 	)
 	names := nodeConfigNodeNames(ocp)
 	if len(names) != 2 || names[0] != "infra-01" || names[1] != "w1" {
@@ -137,8 +137,8 @@ func TestWaitNodesRegisteredLateJoinRetries(t *testing.T) {
 
 func TestNodeConfigManifestsEmptyWhenNothingToDo(t *testing.T) {
 	ocp := ocpWithHosts(
-		v1alpha1.OCPHostSpec{Hostname: "m1", Role: v1alpha1.NodeRoleMaster},
-		v1alpha1.OCPHostSpec{Hostname: "w1", Role: v1alpha1.NodeRoleWorker},
+		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
+		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker},
 	)
 	out, err := nodeConfigManifests(ocp)
 	if err != nil {

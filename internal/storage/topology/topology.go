@@ -17,12 +17,12 @@ func FailureDomain(cluster v1alpha1.StorageCluster) string {
 
 func MonitorEndpoints(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
 	var endpoints []string
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if !NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 			continue
 		}
-		if ip := NodeAddress(state, cluster, node.Hostname); ip != "" {
-			endpoints = append(endpoints, fmt.Sprintf("%s=%s:6789", node.Hostname, ip))
+		if ip := NodeAddress(state, cluster, node.Name); ip != "" {
+			endpoints = append(endpoints, fmt.Sprintf("%s=%s:6789", node.Name, ip))
 		}
 	}
 	sort.Strings(endpoints)
@@ -55,27 +55,27 @@ func NodeMachine(state v1alpha1.State, cluster v1alpha1.StorageCluster, node str
 
 func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
 	var hosts []string
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if NodeHasRole(node, role) {
-			hosts = append(hosts, node.Hostname)
+			hosts = append(hosts, node.Name)
 		}
 	}
 	sort.Strings(hosts)
 	return hosts
 }
 
-func HostByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-		if host.Hostname == name || stateview.NodeShortName(host.Hostname) == name {
+func HostByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
+		if host.Name == name || stateview.NodeShortName(host.Name) == name {
 			return host, true
 		}
 	}
-	return v1alpha1.StorageCephHost{}, false
+	return v1alpha1.StorageCephNode{}, false
 }
 
 func CanonicalHostname(cluster v1alpha1.StorageCluster, token string) string {
-	if host, ok := HostByName(cluster, token); ok && host.Hostname != "" {
-		return host.Hostname
+	if host, ok := HostByName(cluster, token); ok && host.Name != "" {
+		return host.Name
 	}
 	return token
 }
@@ -90,8 +90,8 @@ func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.Storag
 	case role != "":
 		base = CephHostsWithRole(cluster, role)
 	default:
-		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-			base = append(base, host.Hostname)
+		for _, host := range cluster.Spec.Ceph.Topology.Nodes {
+			base = append(base, host.Name)
 		}
 		sort.Strings(base)
 	}
@@ -111,7 +111,7 @@ func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.Storag
 	return out
 }
 
-func NodeHasRole(node v1alpha1.StorageCephHost, role string) bool {
+func NodeHasRole(node v1alpha1.StorageCephNode, role string) bool {
 	for _, item := range node.Roles {
 		if item == role {
 			return true
@@ -168,24 +168,24 @@ func EndpointPort(endpoint v1alpha1.Endpoint, defaultPort int) int {
 	return defaultPort
 }
 
-func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
+func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
 	if cluster.Spec.Ceph == nil {
-		return v1alpha1.StorageCephHost{}, false
+		return v1alpha1.StorageCephNode{}, false
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if node.Hostname == name || stateview.NodeShortName(node.Hostname) == name {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		if node.Name == name || stateview.NodeShortName(node.Name) == name {
 			return node, true
 		}
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.MachineRef.Name == name {
 			return node, true
 		}
 	}
-	return v1alpha1.StorageCephHost{}, false
+	return v1alpha1.StorageCephNode{}, false
 }
 
-func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) []string {
+func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) []string {
 	if cluster.Spec.Ceph == nil {
 		return nil
 	}
@@ -202,7 +202,7 @@ func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCe
 	}
 	add(host.Devices)
 	add(dataDeviceStaticPaths(host.OSD))
-	name := host.Hostname
+	name := host.Name
 	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
 		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
 		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
@@ -215,7 +215,7 @@ func OSDHostDataDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCe
 	return out
 }
 
-func dataDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
+func dataDeviceStaticPaths(osd *v1alpha1.StorageCephNodeOSD) []string {
 	if osd == nil || osd.DataDevices == nil {
 		return nil
 	}
@@ -229,7 +229,7 @@ func dataDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
 	return paths
 }
 
-func OSDHostAllStaticDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephHost) []string {
+func OSDHostAllStaticDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) []string {
 	if cluster.Spec.Ceph == nil {
 		return nil
 	}
@@ -246,7 +246,7 @@ func OSDHostAllStaticDevices(cluster v1alpha1.StorageCluster, host v1alpha1.Stor
 	}
 	add(host.Devices)
 	add(allDeviceStaticPaths(host.OSD))
-	name := host.Hostname
+	name := host.Name
 	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
 		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
 		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
@@ -259,7 +259,7 @@ func OSDHostAllStaticDevices(cluster v1alpha1.StorageCluster, host v1alpha1.Stor
 	return out
 }
 
-func allDeviceStaticPaths(osd *v1alpha1.StorageCephHostOSD) []string {
+func allDeviceStaticPaths(osd *v1alpha1.StorageCephNodeOSD) []string {
 	if osd == nil {
 		return nil
 	}

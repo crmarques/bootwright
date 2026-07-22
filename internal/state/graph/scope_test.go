@@ -50,7 +50,7 @@ func dataFoundationAttachmentState() v1alpha1.State {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ocp"},
 			Spec: v1alpha1.ContainerClusterSpec{
-				Hosts: []v1alpha1.OCPHostSpec{{
+				Nodes: []v1alpha1.OCPNodeSpec{{
 					MachineRef: v1alpha1.LocalObjectReference{Name: "ocp-0"},
 				}},
 			},
@@ -62,9 +62,9 @@ func dataFoundationAttachmentState() v1alpha1.State {
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{
-							{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
-							{Hostname: "ceph-arb", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-arb"}},
+						Nodes: []v1alpha1.StorageCephNode{
+							{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
+							{Name: "ceph-arb", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-arb"}},
 						},
 					},
 				},

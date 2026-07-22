@@ -166,7 +166,7 @@ func validateStorageReplicatedHostCapacity(prefix string, replicas v1alpha1.Stor
 
 func storageCephOSDHostCount(cluster v1alpha1.StorageCluster) int {
 	count := 0
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
 		if topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
 			count++
 		}

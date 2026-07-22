@@ -25,13 +25,13 @@ func ClusterNodes(state v1alpha1.State, clusterName string) ([]ClusterNode, bool
 			continue
 		}
 		roleCounts := map[string]int{}
-		nodes := make([]ClusterNode, 0, len(ocp.Spec.Hosts))
-		for _, host := range ocp.Spec.Hosts {
+		nodes := make([]ClusterNode, 0, len(ocp.Spec.Nodes))
+		for _, host := range ocp.Spec.Nodes {
 			nodes = append(nodes, ClusterNode{
 				MachineName: host.MachineRef.Name,
-				NodeName:    NodeShortName(host.Hostname),
+				NodeName:    NodeShortName(host.Name),
 				Role:        host.Role,
-				Hostname:    host.Hostname,
+				Hostname:    host.Name,
 				Ordinal:     roleCounts[host.Role],
 				Kind:        MachineClusterKindContainer,
 			})
@@ -46,14 +46,14 @@ func ClusterNodes(state v1alpha1.State, clusterName string) ([]ClusterNode, bool
 		if sc.Spec.Ceph == nil {
 			return nil, true
 		}
-		nodes := make([]ClusterNode, 0, len(sc.Spec.Ceph.Topology.Hosts))
-		for i, host := range sc.Spec.Ceph.Topology.Hosts {
+		nodes := make([]ClusterNode, 0, len(sc.Spec.Ceph.Topology.Nodes))
+		for i, host := range sc.Spec.Ceph.Topology.Nodes {
 			nodes = append(nodes, ClusterNode{
 				MachineName: host.MachineRef.Name,
-				NodeName:    NodeShortName(host.Hostname),
+				NodeName:    NodeShortName(host.Name),
 				Role:        strings.Join(host.Roles, ","),
 				Roles:       host.Roles,
-				Hostname:    host.Hostname,
+				Hostname:    host.Name,
 				Ordinal:     i,
 				Kind:        MachineClusterKindStorage,
 			})

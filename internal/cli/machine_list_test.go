@@ -63,13 +63,13 @@ func machineListTestState() v1alpha1.State {
 		},
 		ContainerClusters: []v1alpha1.ContainerCluster{
 			{Metadata: v1alpha1.Metadata{Name: "managed-01"}, Spec: v1alpha1.ContainerClusterSpec{
-				Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "ocp-0"}, Role: v1alpha1.NodeRoleMaster}},
+				Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "ocp-0"}, Role: v1alpha1.NodeRoleMaster}},
 			}},
 		},
 		StorageClusters: []v1alpha1.StorageCluster{
 			{Metadata: v1alpha1.Metadata{Name: "ceph-dc1"}, Spec: v1alpha1.StorageClusterSpec{
 				Ceph: &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon", "osd"}}},
+					Nodes: []v1alpha1.StorageCephNode{{MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"mon", "osd"}}},
 				}},
 			}},
 		},

@@ -21,7 +21,7 @@ func NodeShortName(hostname string) string {
 }
 
 func IsSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
-	return len(ocp.Spec.Hosts) == 1 && ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
+	return len(ocp.Spec.Nodes) == 1 && ocp.Spec.Nodes[0].Role == v1alpha1.NodeRoleMaster
 }
 
 func NodeHostname(state v1alpha1.State, machineName string) (string, bool) {
@@ -29,9 +29,9 @@ func NodeHostname(state v1alpha1.State, machineName string) (string, bool) {
 		return "", false
 	}
 	for _, ocp := range state.ContainerClusters {
-		for _, node := range ocp.Spec.Hosts {
+		for _, node := range ocp.Spec.Nodes {
 			if node.MachineRef.Name == machineName {
-				return node.Hostname, node.Hostname != ""
+				return node.Name, node.Name != ""
 			}
 		}
 	}
@@ -39,9 +39,9 @@ func NodeHostname(state v1alpha1.State, machineName string) (string, bool) {
 		if sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range sc.Spec.Ceph.Topology.Hosts {
+		for _, node := range sc.Spec.Ceph.Topology.Nodes {
 			if node.MachineRef.Name == machineName {
-				return node.Hostname, node.Hostname != ""
+				return node.Name, node.Name != ""
 			}
 		}
 	}
@@ -64,7 +64,7 @@ func MachineCluster(state v1alpha1.State, machineName string) (MachineClusterBin
 		return MachineClusterBinding{}, false
 	}
 	for _, ocp := range state.ContainerClusters {
-		for _, node := range ocp.Spec.Hosts {
+		for _, node := range ocp.Spec.Nodes {
 			if node.MachineRef.Name == machineName {
 				return MachineClusterBinding{Cluster: ocp.Metadata.Name, Kind: MachineClusterKindContainer, Role: node.Role}, true
 			}
@@ -74,7 +74,7 @@ func MachineCluster(state v1alpha1.State, machineName string) (MachineClusterBin
 		if sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range sc.Spec.Ceph.Topology.Hosts {
+		for _, node := range sc.Spec.Ceph.Topology.Nodes {
 			if node.MachineRef.Name == machineName {
 				return MachineClusterBinding{Cluster: sc.Metadata.Name, Kind: MachineClusterKindStorage, Role: strings.Join(node.Roles, ",")}, true
 			}

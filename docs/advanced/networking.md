@@ -287,7 +287,7 @@ spec:
         virtualInterfaceNetworks:
           - 192.168.141.0/24
         placement:
-          hosts: [node01, node02, node03]   # node hostnames, not machine names
+          hosts: [node-01, node-02, node-03]   # node names, not machine names
 ```
 
 See [Ceph storage topologies](ceph-topologies.md#rgw-and-ingress) for how RGW

@@ -429,8 +429,8 @@ func platformDerivationState(providerTypes ...string) v1alpha1.State {
 					OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 				},
 			})
-			cluster.Spec.Hosts = append(cluster.Spec.Hosts, v1alpha1.OCPHostSpec{
-				Hostname:   fmt.Sprintf("master-%d-%d", i, n),
+			cluster.Spec.Nodes = append(cluster.Spec.Nodes, v1alpha1.OCPNodeSpec{
+				Name:       fmt.Sprintf("master-%d-%d", i, n),
 				Role:       "master",
 				MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
 			})
@@ -501,7 +501,7 @@ func TestNormalizeLeavesAmbiguousInstallPlatformForValidation(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("validation errors = %v, want exactly one conflict diagnostic", errs)
 	}
-	want := `ContainerCluster/cluster-a spec.install.platform cannot be derived: spec.hosts bind machines across multiple provider types (InfraProvider/provider-0 (libvirt), InfraProvider/provider-1 (baremetal)); set spec.install.platform.type explicitly`
+	want := `ContainerCluster/cluster-a spec.install.platform cannot be derived: spec.nodes bind machines across multiple provider types (InfraProvider/provider-0 (libvirt), InfraProvider/provider-1 (baremetal)); set spec.install.platform.type explicitly`
 	if errs[0] != want {
 		t.Fatalf("conflict diagnostic = %q, want %q", errs[0], want)
 	}

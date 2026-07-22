@@ -24,8 +24,8 @@ spec:
         artifactServerEndpoint:
           endpointRef: bmc
 
-  hosts:
+  nodes:
 
-  - hostname: master-0
+  - name: master-0
     role: master
     machineRef: rack1-srv1

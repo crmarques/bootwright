@@ -346,8 +346,8 @@ func validateMachineNodeBindings(state v1alpha1.State) []string {
 	}
 	for _, ocp := range state.ContainerClusters {
 		cluster := fmt.Sprintf("ContainerCluster/%s", ocp.Metadata.Name)
-		for i, node := range ocp.Spec.Hosts {
-			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.hosts[%d]", i))
+		for i, node := range ocp.Spec.Nodes {
+			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.nodes[%d]", i))
 		}
 	}
 	for _, sc := range state.StorageClusters {
@@ -355,8 +355,8 @@ func validateMachineNodeBindings(state v1alpha1.State) []string {
 			continue
 		}
 		cluster := fmt.Sprintf("StorageCluster/%s", sc.Metadata.Name)
-		for i, node := range sc.Spec.Ceph.Topology.Hosts {
-			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.ceph.topology.hosts[%d]", i))
+		for i, node := range sc.Spec.Ceph.Topology.Nodes {
+			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.ceph.topology.nodes[%d]", i))
 		}
 	}
 	return errs
@@ -401,7 +401,7 @@ func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 	deps := map[string][]string{}
 	var errs []string
 	for _, ocp := range state.ContainerClusters {
-		for _, node := range ocp.Spec.Hosts {
+		for _, node := range ocp.Spec.Nodes {
 			machine, ok := machines[node.MachineRef.Name]
 			if !ok {
 				continue

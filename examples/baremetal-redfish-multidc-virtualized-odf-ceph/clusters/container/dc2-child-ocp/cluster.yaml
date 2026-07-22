@@ -28,28 +28,28 @@ spec:
     serviceNetwork:
     - 172.33.0.0/16
 
-  hosts:
+  nodes:
 
-  - hostname: master-0
+  - name: master-0
     role: master
     machineRef: dc2-child-ocp-infra-master-0
 
-  - hostname: master-1
+  - name: master-1
     role: master
     machineRef: dc2-child-ocp-infra-master-1
 
-  - hostname: master-2
+  - name: master-2
     role: master
     machineRef: dc2-child-ocp-infra-master-2
 
-  - hostname: worker-0
+  - name: worker-0
     role: worker
     machineRef: dc2-child-ocp-infra-worker-0
 
-  - hostname: worker-1
+  - name: worker-1
     role: worker
     machineRef: dc2-child-ocp-infra-worker-1
 
-  - hostname: worker-2
+  - name: worker-2
     role: worker
     machineRef: dc2-child-ocp-infra-worker-2

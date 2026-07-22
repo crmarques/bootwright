@@ -1426,12 +1426,12 @@ func storageAttachmentPlanningState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							Host: "ceph-0",
+							Node: "ceph-0",
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
-						Hosts: []v1alpha1.StorageCephHost{{
-							Hostname:   "ceph-0",
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:       "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 							Site:       "dc1",
 							Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
@@ -1512,8 +1512,8 @@ func dataFoundationBindingInput(export string) v1alpha1.ClusterAddonBindingInput
 func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 	clusters := []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "child-ocp"},
-		Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{
-			Hostname:   "master-0",
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+			Name:       "master-0",
 			MachineRef: v1alpha1.LocalObjectReference{Name: "child-master-0"},
 		}}},
 	}}
@@ -1595,8 +1595,8 @@ func kubeVirtCephPlanningState(includeParent bool) v1alpha1.State {
 			Type: v1alpha1.StorageClusterTypeCeph,
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{{
-						Hostname:   "ceph-0",
+					Nodes: []v1alpha1.StorageCephNode{{
+						Name:       "ceph-0",
 						MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 						Site:       "dc1",
 						Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},

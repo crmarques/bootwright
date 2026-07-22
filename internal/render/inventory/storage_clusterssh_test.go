@@ -19,7 +19,7 @@ func TestStorageClusterSSHVarsFromClusterSSHKeyRef(t *testing.T) {
 					ClusterSSHUser:   "root",
 				},
 				Topology: v1alpha1.StorageCephTopology{
-					Hosts: []v1alpha1.StorageCephHost{{Hostname: "h1", MachineRef: v1alpha1.LocalObjectReference{Name: "h1"}}},
+					Nodes: []v1alpha1.StorageCephNode{{Name: "h1", MachineRef: v1alpha1.LocalObjectReference{Name: "h1"}}},
 				},
 			},
 		},

@@ -43,10 +43,11 @@ packages without it.
 `spec.ceph.ibm.callHome: disabled` makes the IBM Call Home outbound-communication
 choice explicit and keeps it disabled after bootstrap.
 
-## Node hostnames
+## Node names
 
 These are **provided-OS** nodes (`spec.os.provided: true`), so Bootwright cannot
-set an FQDN on them: `spec.ceph.topology.hosts[].hostname` defaults to the
-**bare machine name** (here `ceph-0`), which cephadm renders verbatim and must
-equal the node's real hostname. Name your host to match, or author
-`spec.ceph.topology.hosts[].hostname` explicitly.
+manage their OS hostname. `spec.ceph.topology.nodes[].name` is **required**;
+Bootwright composes it into the node FQDN (`<name>.<cluster>.<baseDomain>`) that
+cephadm renders verbatim, so it must resolve to and match the node's real
+hostname. Give each node a `name` that matches its host (or set the host's
+hostname to match).

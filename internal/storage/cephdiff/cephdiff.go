@@ -216,8 +216,8 @@ func unionKeys(a, b map[string]entry) []string {
 
 func desiredHosts(cluster v1alpha1.StorageCluster) []entry {
 	var out []entry
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-		name := host.Hostname
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
+		name := host.Name
 		if name == "" {
 			name = topology.CanonicalHostname(cluster, host.MachineRef.Name)
 		}
@@ -273,11 +273,11 @@ func desiredOSDDevices(cluster v1alpha1.StorageCluster, disc cephstate.Discovery
 	realByHost, _ := disc.OSDDevicesByHost()
 	var entries []entry
 	var unpinned []OSDDeviceAdvisory
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
 		if !topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
 			continue
 		}
-		name := host.Hostname
+		name := host.Name
 		if name == "" {
 			name = topology.CanonicalHostname(cluster, host.MachineRef.Name)
 		}
@@ -343,11 +343,11 @@ func desiredServices(state v1alpha1.State, cluster v1alpha1.StorageCluster) []en
 			drivegroupHosts[h] = true
 		}
 	}
-	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+	for _, host := range cluster.Spec.Ceph.Topology.Nodes {
 		if !topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
 			continue
 		}
-		name := host.Hostname
+		name := host.Name
 		if name == "" {
 			name = topology.CanonicalHostname(cluster, host.MachineRef.Name)
 		}

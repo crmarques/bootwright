@@ -18,7 +18,7 @@ func TestOCPStructuralHashIgnoresFabricEdits(t *testing.T) {
 	withFabric := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ocp"},
-			Spec:     v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "n0"}}}},
+			Spec:     v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "n0"}}}},
 		}},
 		InfraProviders:  []v1alpha1.InfraProvider{{Metadata: v1alpha1.Metadata{Name: "bm"}, Spec: v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerBareMetal}}},
 		InfraComponents: []v1alpha1.InfraComponent{{Metadata: v1alpha1.Metadata{Name: "artifacts"}}},
@@ -34,7 +34,7 @@ func TestOCPStructuralHashIgnoresFabricEdits(t *testing.T) {
 	hostAdded := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ocp"},
-			Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
 				{MachineRef: v1alpha1.LocalObjectReference{Name: "n0"}},
 				{MachineRef: v1alpha1.LocalObjectReference{Name: "n1"}},
 			}},

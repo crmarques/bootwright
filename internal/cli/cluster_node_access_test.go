@@ -54,7 +54,7 @@ func TestResolveClusterNodeAmbiguousHostname(t *testing.T) {
 func TestClusterNodeMachineSNOAutoConnect(t *testing.T) {
 	state := v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "sno"},
-		Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
 			{MachineRef: v1alpha1.LocalObjectReference{Name: "sno-0"}, Role: v1alpha1.NodeRoleMaster},
 		}},
 	}}}
@@ -67,7 +67,7 @@ func TestClusterNodeMachineSNOAutoConnect(t *testing.T) {
 func TestClusterNodeMachineMultiNodeRequiresSelector(t *testing.T) {
 	state := v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "ha"},
-		Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
 			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-0"}, Role: v1alpha1.NodeRoleMaster},
 			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-1"}, Role: v1alpha1.NodeRoleMaster},
 		}},

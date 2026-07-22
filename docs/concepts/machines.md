@@ -274,7 +274,7 @@ $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`
-for a one-off command); the node selector accepts the node hostname (FQDN or
+for a one-off command); the node selector accepts the node name (FQDN or
 its short label) or a `<role>-<ordinal>` such as `master-0` — a Machine name is
 rejected with a hint naming the node. Container-cluster access
 uses `install.nodeSSH`, the `core` user, and the node's primary install IP, so

@@ -34,7 +34,7 @@ this section covers the operational contract that this page owns.
     opposite intents.
 
 !!! tip "Growing a Ceph cluster's OSDs is a plain `apply`, not `--converge-drifted`"
-    Adding an OSD device to a `spec.ceph.topology` host reconciles **in place**:
+    Adding an OSD device to a `spec.ceph.topology` node reconciles **in place**:
     a bare `apply` classifies an OSD-device-only change as reconcilable (not
     destructive) drift, so `ceph orch apply` adds the new OSD without a
     wipe-and-rebuild. `--converge-drifted` is only for a change to cluster identity
@@ -295,7 +295,7 @@ What a deletion means depends on the kind:
 | You delete… | What happens | Supported removal |
 | --- | --- | --- |
 | A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `diff` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file — destroy is ownership-record driven and can reach a resource already gone from desired state. |
-| A `ContainerCluster.spec.hosts[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--converge-drifted` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
+| A `ContainerCluster.spec.nodes[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--converge-drifted` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
 | A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
 | A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |
 

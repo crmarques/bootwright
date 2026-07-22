@@ -15,7 +15,7 @@ func validateOSDDevicesExcludeRootDisk(state v1alpha1.State) []string {
 		if sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+		for _, host := range sc.Spec.Ceph.Topology.Nodes {
 			if host.MachineRef.Name == "" {
 				continue
 			}
@@ -29,7 +29,7 @@ func validateOSDDevicesExcludeRootDisk(state v1alpha1.State) []string {
 			}
 			for _, dev := range topology.OSDHostAllStaticDevices(sc, host) {
 				if strings.TrimSpace(dev) == root {
-					errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) lists its OS root disk %q as an OSD device; creating the OSD would wipe the installed operating system. Remove %q from the OSD device selection, or point rootDeviceHints at a different disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, root, root))
+					errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) lists its OS root disk %q as an OSD device; creating the OSD would wipe the installed operating system. Remove %q from the OSD device selection, or point rootDeviceHints at a different disk", sc.Metadata.Name, host.Name, host.MachineRef.Name, root, root))
 					break
 				}
 			}
@@ -44,7 +44,7 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 		if sc.Spec.Ceph == nil {
 			continue
 		}
-		for _, host := range sc.Spec.Ceph.Topology.Hosts {
+		for _, host := range sc.Spec.Ceph.Topology.Nodes {
 			if !topology.NodeHasRole(host, v1alpha1.StorageCephRoleOSD) || host.MachineRef.Name == "" {
 				continue
 			}
@@ -56,7 +56,7 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 			if hints != nil && strings.TrimSpace(hints.DeviceName) != "" {
 				continue
 			}
-			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) carries the %q role (OSD data disks) but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Hostname, host.MachineRef.Name, v1alpha1.StorageCephRoleOSD))
+			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) carries the %q role (OSD data disks) but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Name, host.MachineRef.Name, v1alpha1.StorageCephRoleOSD))
 		}
 	}
 	return errs

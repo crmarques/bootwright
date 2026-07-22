@@ -41,7 +41,7 @@ Current placement:
   `Machine.spec.network.config`
 - cluster release belongs in `ContainerCluster.spec.distribution`, and install
   mode belongs in `ContainerCluster.spec.install.mode`
-- node bindings belong in `ContainerCluster.spec.hosts[]`
+- node bindings belong in `ContainerCluster.spec.nodes[]`
 
 ## Validation diagnostics
 
@@ -68,19 +68,19 @@ the most actionable field. Fix the named field in the authored YAML, then rerun
 
 ## Reference failures
 
-Every `ContainerCluster.spec.hosts[]` entry must reference one selected
+Every `ContainerCluster.spec.nodes[]` entry must reference one selected
 `Machine` through `machineRef`:
 
 ```yaml
-  hosts:
-  - hostname: master-0
+  nodes:
+  - name: master-0
     role: master
     machineRef: prod-3node-master-0
 ```
 
-!!! warning "Use `hosts:`, not `nodes:`"
-    The list key is `hosts:`. A `nodes:` paste fails strict decode — the schema
-    field is `ContainerCluster.spec.hosts[]`.
+!!! warning "Use `nodes:`, not `hosts:`"
+    The list key is `nodes:`. A `hosts:` paste fails strict decode — the schema
+    field is `ContainerCluster.spec.nodes[]`.
 
 The referenced `Machine` must be selected by the `Environment`, carry the
 `openshift-node` capability, and set `spec.os.provided: false`.

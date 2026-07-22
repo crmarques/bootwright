@@ -9,8 +9,8 @@ spec:
     serviceID: ceph-ibm
     placement:
       hosts:
-        - node01
-        - node02
+        - node-01
+        - node-02
     ingresses:
       - name: nfs
         address: 10.20.30.82
@@ -19,8 +19,8 @@ spec:
           - 10.20.30.0/24
         placement:
           hosts:
-            - node01
-            - node02
+            - node-01
+            - node-02
 
   exports:
     - pseudo: /shared

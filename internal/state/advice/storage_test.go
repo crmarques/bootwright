@@ -10,9 +10,9 @@ import (
 )
 
 func adviceCephCluster(name, distribution, image string, roleSets ...[]string) v1alpha1.StorageCluster {
-	hosts := make([]v1alpha1.StorageCephHost, 0, len(roleSets))
+	hosts := make([]v1alpha1.StorageCephNode, 0, len(roleSets))
 	for i, roles := range roleSets {
-		hosts = append(hosts, v1alpha1.StorageCephHost{Hostname: fmt.Sprintf("h%d", i), Roles: roles})
+		hosts = append(hosts, v1alpha1.StorageCephNode{Name: fmt.Sprintf("h%d", i), Roles: roles})
 	}
 	return v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
@@ -21,7 +21,7 @@ func adviceCephCluster(name, distribution, image string, roleSets ...[]string) v
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Distribution: distribution,
 				Image:        image,
-				Topology:     v1alpha1.StorageCephTopology{Hosts: hosts},
+				Topology:     v1alpha1.StorageCephTopology{Nodes: hosts},
 			},
 		},
 	}
@@ -174,7 +174,7 @@ func TestStorageAdvisoriesWarnStretchWithoutTiebreaker(t *testing.T) {
 	if got[0].Severity != SeverityWarn {
 		t.Fatalf("the tiebreaker advisory must be WARN, got %q", got[0].Severity)
 	}
-	cluster.Spec.Ceph.Topology.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"}
+	cluster.Spec.Ceph.Topology.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "arbiter"}
 	if got := findingsWith(StorageAdvisories(adviceState(cluster)), "no tiebreaker/arbiter mon"); len(got) != 0 {
 		t.Fatalf("a stretch cluster with a tiebreaker must raise no tiebreaker advisory, got %+v", got)
 	}

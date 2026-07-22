@@ -19,7 +19,7 @@ func TestManagedMachineOSStructuralHashIgnoresNonOSEdits(t *testing.T) {
 
 	t.Run("OSD device add is not a reinstall", func(t *testing.T) {
 		s := bareMetalManagedOSState()
-		s.StorageClusters[0].Spec.Ceph.Topology.Hosts[0].Devices = []string{"/dev/sdb"}
+		s.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].Devices = []string{"/dev/sdb"}
 		if proj(s) != want {
 			t.Fatal("an OSD-device add must not move the managed-OS structural hash")
 		}
