@@ -33,9 +33,12 @@ call, since it has no single-native-command form.
 enabling: `ceph mon set election_strategy connectivity` precedes
 `ceph mon enable_stretch_mode`. Both reconcile in place.
 
-**Constraint:** The tiebreaker is authored as a machine name, but
-`enable_stretch_mode` wants the **mon name**, which is the registered
-(fully-qualified) hostname — the machine token must be canonicalized first.
+**Constraint:** The tiebreaker is authored as a node token, but
+`enable_stretch_mode` wants the **mon name**, which is the host's *short* name,
+not the orchestrator FQDN — canonicalize the token to a node name, then take the
+ceph daemon name. `ceph mon set_location` and the tiebreaker-joined-the-monmap
+poll (matched against `ceph mon dump` names) take the same short name. See
+[ceph-host-identity-namespaces.md](ceph-host-identity-namespaces.md).
 
 **When it bites:** The OSD-readiness wait only anchors mon hosts that carry
 OSDs. A stretch cluster's tiebreaker/arbiter has no OSDs, so its mon can still

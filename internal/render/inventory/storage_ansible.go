@@ -69,10 +69,17 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 
 func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 	mode, count, dynamicHosts := cephrender.OSDReadinessExpectation(cluster)
+	hosts := make([]any, 0, len(dynamicHosts))
+	for _, host := range dynamicHosts {
+		hosts = append(hosts, map[string]any{
+			"name":       host,
+			"crushNames": topology.CrushHostNames(host),
+		})
+	}
 	return map[string]any{
 		"mode":          mode,
 		"expectedCount": count,
-		"dynamicHosts":  dynamicHosts,
+		"dynamicHosts":  hosts,
 	}
 }
 

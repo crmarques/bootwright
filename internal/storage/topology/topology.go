@@ -80,6 +80,21 @@ func CanonicalHostname(cluster v1alpha1.StorageCluster, token string) string {
 	return token
 }
 
+func CephDaemonName(hostname string) string {
+	return stateview.NodeShortName(hostname)
+}
+
+func CrushHostNames(hostname string) []string {
+	if hostname == "" {
+		return []string{}
+	}
+	short := stateview.NodeShortName(hostname)
+	if short == hostname {
+		return []string{hostname}
+	}
+	return []string{short, hostname}
+}
+
 func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.StoragePlacement, role string) []string {
 	var base []string
 	switch {

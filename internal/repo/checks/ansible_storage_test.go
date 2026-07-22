@@ -103,6 +103,10 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(resolve["bootwright_ceph_osd_dynamic_hosts"]), "dynamicHosts") {
 		t.Fatalf("OSD readiness must resolve rendered dynamic hostnames, got %v", tasks[resolveIdx])
 	}
+	crushNames := fmt.Sprint(resolve["bootwright_ceph_osd_dynamic_crush_names"])
+	if !strings.Contains(crushNames, "crushNames") || !strings.Contains(crushNames, "flatten") {
+		t.Fatalf("OSD readiness must resolve CRUSH bucket names separately from the orchestrator hostnames: ceph shortens the hostname for the CRUSH map, got %v", crushNames)
+	}
 
 	globalUntil := fmt.Sprint(tasks[globalWaitIdx]["until"])
 	for _, want := range []string{"num_in_osds", "bootwright_ceph_osd_readiness_mode == 'exact'", "bootwright_ceph_osd_expected_count", "bootwright_ceph_osd_stat.attempts", "bootwright_ceph_osd_readiness_retries"} {
@@ -146,7 +150,7 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 		t.Fatalf("dynamic-host OSD readiness must poll the cluster-wide CRUSH tree once, not loop per host, got loop=%v", perHost["loop"])
 	}
 	until := fmt.Sprint(perHost["until"])
-	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'in', bootwright_ceph_osd_dynamic_hosts", "map('intersect'", "map('length')", "select('gt', 0)", "bootwright_ceph_osd_dynamic_hosts | length", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_retries"} {
+	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'in', bootwright_ceph_osd_dynamic_crush_names", "map('intersect'", "map('length')", "select('gt', 0)", "bootwright_ceph_osd_dynamic_hosts | length", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_retries"} {
 		if !strings.Contains(until, want) {
 			t.Fatalf("collapsed dynamic-host OSD readiness condition missing %q: %v", want, until)
 		}
@@ -166,7 +170,7 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 		t.Fatalf("dynamic-host OSD readiness must evaluate the collapsed poll into a fact before diagnostics, got %v", tasks[perHostEvaluateIdx])
 	}
 	dynamicReady := fmt.Sprint(perHostEval["bootwright_ceph_osd_dynamic_ready"])
-	for _, want := range []string{"bootwright_ceph_osd_host_tree.rc", "name', 'in', bootwright_ceph_osd_dynamic_hosts", "map('intersect'", "bootwright_ceph_osd_dynamic_hosts | length"} {
+	for _, want := range []string{"bootwright_ceph_osd_host_tree.rc", "name', 'in', bootwright_ceph_osd_dynamic_crush_names", "map('intersect'", "bootwright_ceph_osd_dynamic_hosts | length"} {
 		if !strings.Contains(dynamicReady, want) {
 			t.Fatalf("dynamic-host readiness evaluation missing %q, got %v", want, dynamicReady)
 		}
@@ -181,7 +185,7 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 		t.Fatalf("dynamic-host OSD readiness must end with an actionable per-host assertion, got %v", tasks[dynamicAssertIdx])
 	}
 	dynamicThat := fmt.Sprint(dynamicAssert["that"])
-	for _, want := range []string{"bootwright_ceph_osd_host_tree.rc", "bootwright_ceph_osd_host_tree.stdout", "bootwright_ceph_osd_dynamic_host", "type', 'equalto', 'osd", "type', 'equalto', 'host", "intersect"} {
+	for _, want := range []string{"bootwright_ceph_osd_host_tree.rc", "bootwright_ceph_osd_host_tree.stdout", "bootwright_ceph_osd_dynamic_host.crushNames", "type', 'equalto', 'osd", "type', 'equalto', 'host", "intersect"} {
 		if !strings.Contains(dynamicThat, want) {
 			t.Fatalf("dynamic-host OSD assertion missing %q, got %v", want, dynamicThat)
 		}

@@ -25,8 +25,12 @@ func TestStorageOSDReadinessVarsRendersDynamicHosts(t *testing.T) {
 	if got["mode"] != "atLeastOne" || got["expectedCount"] != 2 {
 		t.Fatalf("dynamic readiness vars = %v", got)
 	}
-	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, []string{"a", "b"}) {
-		t.Fatalf("dynamic readiness hosts = %v, want [a b]", hosts)
+	want := []any{
+		map[string]any{"name": "a", "crushNames": []string{"a"}},
+		map[string]any{"name": "b", "crushNames": []string{"b"}},
+	}
+	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, want) {
+		t.Fatalf("dynamic readiness hosts = %v, want %v", hosts, want)
 	}
 
 	static := v1alpha1.StorageCluster{}
@@ -39,8 +43,28 @@ func TestStorageOSDReadinessVarsRendersDynamicHosts(t *testing.T) {
 	if got["mode"] != "exact" || got["expectedCount"] != 2 {
 		t.Fatalf("static readiness vars = %v", got)
 	}
-	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, []string{}) {
+	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, []any{}) {
 		t.Fatalf("static readiness hosts = %v, want empty", hosts)
+	}
+}
+
+func TestStorageOSDReadinessVarsCarriesCrushShortNames(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{}
+	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
+		Nodes: []v1alpha1.StorageCephNode{{
+			Name:  "node-01.ceph-prd.example.net",
+			Roles: []string{v1alpha1.StorageCephRoleOSD},
+			OSD:   &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
+		}},
+	}}
+
+	got := storageOSDReadinessVars(cluster)
+	want := []any{map[string]any{
+		"name":       "node-01.ceph-prd.example.net",
+		"crushNames": []string{"node-01", "node-01.ceph-prd.example.net"},
+	}}
+	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, want) {
+		t.Fatalf("dynamic readiness hosts = %v, want %v", hosts, want)
 	}
 }
 
@@ -63,7 +87,8 @@ func TestStorageOSDReadinessVarsRequiresTwoForDynamicSingleHost(t *testing.T) {
 	if got["mode"] != "atLeastOne" || got["expectedCount"] != 2 {
 		t.Fatalf("single-host dynamic readiness vars = %v", got)
 	}
-	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, []string{"a"}) {
-		t.Fatalf("single-host dynamic readiness hosts = %v, want [a]", hosts)
+	want := []any{map[string]any{"name": "a", "crushNames": []string{"a"}}}
+	if hosts := got["dynamicHosts"]; !reflect.DeepEqual(hosts, want) {
+		t.Fatalf("single-host dynamic readiness hosts = %v, want %v", hosts, want)
 	}
 }

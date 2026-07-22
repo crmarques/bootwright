@@ -27,7 +27,7 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 			if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 				continue
 			}
-			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Name, "ceph", "mon", "set_location", node.Name, stretch.FailureDomain+"="+node.Site))
+			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Name, "ceph", "mon", "set_location", topology.CephDaemonName(node.Name), stretch.FailureDomain+"="+node.Site))
 		}
 		stretchRule := operationWithIdempotency("topology", "create-crush-rule-"+stretch.RuleName, "stretch-crush-rule", stretch.RuleName)
 		stretchRule["structural"] = map[string]any{
@@ -36,7 +36,7 @@ func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 		}
 		ops = append(ops, stretchRule)
 		if stretch.Tiebreaker.Node != "" {
-			ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node), stretch.RuleName, stretch.FailureDomain))
+			ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", topology.CephDaemonName(topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node)), stretch.RuleName, stretch.FailureDomain))
 		}
 	}
 	return ops

@@ -80,8 +80,11 @@ dynamic host must have at least one OSD with positive CRUSH reweight), or
 `skip` (no managed OSD service creates OSDs). The exact path gates on
 `num_in_osds`, not `num_up_osds`, while the dynamic path requires the static
 count plus at least one OSD per dynamic host and checks those host buckets in
-`ceph osd tree`; a transiently-down but still-in OSD on a benign re-apply is not
-a false fail. `singleHostDefaults` raises either expectation to at least two in
+`ceph osd tree` — matched on the rendered `crushNames` (ceph shortens the
+hostname for CRUSH; see
+[ceph-host-identity-namespaces.md](ceph-host-identity-namespaces.md)), not on
+the orchestrator FQDN; a transiently-down but still-in OSD on a benign re-apply
+is not a false fail. `singleHostDefaults` raises either expectation to at least two in
 OSDs because cephadm's single-host pool size is two; a statically countable
 selection below two is rejected before apply, while a dynamic or unmanaged
 selection must prove the minimum at runtime. The check runs before topology

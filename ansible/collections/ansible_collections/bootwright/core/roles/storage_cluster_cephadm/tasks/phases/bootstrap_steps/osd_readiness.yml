@@ -7,6 +7,9 @@
       {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).expectedCount | default(0) | int }}
     bootwright_ceph_osd_dynamic_hosts: >-
       {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).dynamicHosts | default([]) | list }}
+    bootwright_ceph_osd_dynamic_crush_names: >-
+      {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).dynamicHosts | default([])
+         | map(attribute='crushNames') | flatten | list }}
 
 - name: Report skipped OSD readiness check
   ansible.builtin.debug:
@@ -91,7 +94,7 @@
           (bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
           | default([])
           | selectattr('type', 'equalto', 'host')
-          | selectattr('name', 'in', bootwright_ceph_osd_dynamic_hosts)
+          | selectattr('name', 'in', bootwright_ceph_osd_dynamic_crush_names)
           | map(attribute='children')
           | map('intersect',
                 ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
@@ -123,7 +126,7 @@
           (bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
           | default([])
           | selectattr('type', 'equalto', 'host')
-          | selectattr('name', 'in', bootwright_ceph_osd_dynamic_hosts)
+          | selectattr('name', 'in', bootwright_ceph_osd_dynamic_crush_names)
           | map(attribute='children')
           | map('intersect',
                 ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
@@ -312,7 +315,7 @@
                 ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
                  | default([])
                  | selectattr('type', 'equalto', 'host')
-                 | selectattr('name', 'equalto', bootwright_ceph_osd_dynamic_host)
+                 | selectattr('name', 'in', bootwright_ceph_osd_dynamic_host.crushNames)
                  | map(attribute='children')
                  | list
                  | flatten)
@@ -323,7 +326,8 @@
     fail_msg: >-
       Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not create an
       in OSD placed under dynamic-selection host
-      {{ bootwright_ceph_osd_dynamic_host }} in the CRUSH map after
+      {{ bootwright_ceph_osd_dynamic_host.name }} (CRUSH bucket
+      {{ bootwright_ceph_osd_dynamic_host.crushNames | join(' or ') }}) in the CRUSH map after
       {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts.
       Cluster-wide, {{ bootwright_ceph_osd_total_count }} OSD daemon(s) exist
       ({{ bootwright_ceph_osd_stray_count }} stray / not yet in the CRUSH map,
@@ -354,7 +358,7 @@
   loop: "{{ bootwright_ceph_osd_dynamic_hosts }}"
   loop_control:
     loop_var: bootwright_ceph_osd_dynamic_host
-    label: "{{ bootwright_ceph_osd_dynamic_host }}"
+    label: "{{ bootwright_ceph_osd_dynamic_host.name }}"
   when:
     - bootwright_ceph_osd_dynamic_hosts | length > 0
     - bootwright_ceph_osd_ready | default(false) | bool

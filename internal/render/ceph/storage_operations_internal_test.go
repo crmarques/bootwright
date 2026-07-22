@@ -436,6 +436,38 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 	}
 }
 
+func TestStretchModeMonOperationsUseCephShortNames(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{
+					FailureDomain: "datacenter",
+					RuleName:      "stretch-rule",
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "node-07.ceph.example.net"},
+				},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "node-01.ceph.example.net", Site: "dc1", Roles: []string{"mon"}},
+					{Name: "node-07.ceph.example.net", Site: "dc3", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	ops := CephOperations(state, cluster)["operations"].([]map[string]any)
+	byName := map[string][]string{}
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		byName[name], _ = op["command"].([]string)
+	}
+	if got := byName["set-mon-location-node-01.ceph.example.net"]; !reflect.DeepEqual(got, []string{"ceph", "mon", "set_location", "node-01", "datacenter=dc1"}) {
+		t.Fatalf("set_location must address the mon by its ceph short name, got %v", got)
+	}
+	if got := byName["enable-stretch-mode"]; !reflect.DeepEqual(got, []string{"ceph", "mon", "enable_stretch_mode", "node-07", "stretch-rule", "datacenter"}) {
+		t.Fatalf("enable_stretch_mode must address the tiebreaker mon by its ceph short name, got %v", got)
+	}
+}
+
 func TestStretchModeWithoutTiebreakerOmitsEnableStretchMode(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
