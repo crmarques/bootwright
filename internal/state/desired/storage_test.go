@@ -1522,12 +1522,39 @@ func TestExternalStorageValidationAcceptsImportedDataFoundation(t *testing.T) {
 	}
 }
 
+func TestExternalStorageValidationRejectsPlaybookHookAgainstExternalCluster(t *testing.T) {
+	state := externalStorageValidationState()
+	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
+		Name:      "attach-external-storage",
+		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
+		Playbook:  "playbooks/export-external-details.yaml",
+		Target: v1alpha1.ClusterAddonHookTarget{
+			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
+		},
+	}}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "spec.management=external") || !strings.Contains(got, "export-external-details.yaml") {
+		t.Fatalf("validateStorage errors = %q, want an external-Ceph playbook-hook rejection naming the playbook", got)
+	}
+}
+
 func TestExternalStorageValidationRequiresExternalDetailsSource(t *testing.T) {
 	state := externalStorageValidationState()
 	state.StorageExports[0].Spec.ExternalDetails = nil
 	got := strings.Join(validateStorage(state), "; ")
 	if !strings.Contains(got, "spec.externalDetails is required when storageClusterRef points to external Ceph") {
 		t.Fatalf("validateStorage errors = %q, want externalDetails requirement", got)
+	}
+}
+
+func TestManagedStorageExportRejectsExternalDetails(t *testing.T) {
+	state := storageValidationState()
+	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+		FromSecretRef: v1alpha1.SecretRef{Name: "stale-export-details"},
+	}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "must be empty when storageClusterRef points to StorageCluster/ceph with managed Ceph") {
+		t.Fatalf("validateStorage errors = %q, want a managed-Ceph externalDetails rejection", got)
 	}
 }
 

@@ -78,6 +78,9 @@ func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster
 		}
 		return nil
 	}
+	if !storageClusterExternal(cluster) {
+		return []string{fmt.Sprintf("%s must be empty when storageClusterRef points to StorageCluster/%s with managed Ceph; the consuming add-on's exporter hook produces the details instead", prefix, cluster.Metadata.Name)}
+	}
 	if details.FromSecretRef.Name == "" {
 		return []string{prefix + ".fromSecretRef is required when externalDetails is set"}
 	}
@@ -86,6 +89,7 @@ func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster
 
 func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport) []string {
 	var errs []string
+	clusters := indexStorageClusters(state.StorageClusters)
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		prefix := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s]", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name)
 		if !addonProvides(effect.Extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
@@ -104,6 +108,20 @@ func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[st
 			errs = append(errs, fmt.Sprintf("%s.value %q must reference a %s StorageExport", prefix, exportRef.Name, v1alpha1.StorageExportTypeDataFoundation))
 			continue
 		}
+		if cluster, ok := clusters[export.Spec.StorageClusterRef.Name]; ok && storageClusterExternal(cluster) {
+			errs = append(errs, validateHookPlaybookAgainstExternalStorage(prefix, effect, export, cluster)...)
+		}
+	}
+	return errs
+}
+
+func validateHookPlaybookAgainstExternalStorage(prefix string, effect addoninputs.EffectBinding, export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster) []string {
+	var errs []string
+	for _, hook := range effect.Extension.Spec.Hooks {
+		if hook.Playbook == "" || hook.Target.FromInput == nil || hook.Target.FromInput.Input != effect.Input.Name {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("%s hook %q runs playbook %q against Ceph nodes, but StorageExport/%s targets StorageCluster/%s which is spec.management=external (no Bootwright-managed Ceph nodes to run it against); bind a ClusterAddon whose hooks are manifest-only and consume externalDetails.fromSecretRef instead", prefix, hook.Name, hook.Playbook, export.Metadata.Name, cluster.Metadata.Name))
 	}
 	return errs
 }
