@@ -48,16 +48,29 @@ that don't run mgr — the service readiness gate
 service reaches full count.
 
 **Trap:** `ceph mgr fail` does not fix this. It only tells the mons to hand
-"active" to an already-running standby — it never restarts any mgr daemon
-process, so none of the 4 (or however many) mgr containers ever re-read the
-new `mgr/dashboard/ssl=false` config or release the port; the failure
-reproduces identically after `mgr fail`. The daemons must actually be
-recreated: `ceph orch restart mgr`, which cephadm executes as an async
-rolling restart (the command returns immediately having only scheduled it).
-`management_services.yml` snapshots every mgr daemon's `container_id` before
-issuing the restart, then polls `ceph orch ps --daemon-type mgr` until none
-of the current container IDs appear in that snapshot (i.e. every daemon has
-actually been recreated) before applying the mgmt-gateway spec.
+"active" to an already-running standby — it never restarts the standby mgr
+processes, so their dashboards never re-read `mgr/dashboard/ssl=false` or
+release the port; the failure reproduces identically after `mgr fail`.
+
+**Trap, worse:** `ceph orch restart mgr` is not a restart either. cephadm
+only *schedules* per-daemon restart actions for its serve loop
+(`_schedule_daemon_action`), and on ceph-prd-01 (Ceph 20.2.2, 2026-07-23)
+those scheduled actions sat unexecuted for 20+ minutes: every mgr kept its
+original container while the play's bounded container-id wait quietly hit
+its retry cap and fell through, the mgmt-gateway spec was applied against
+mgr hosts still holding 8443, and the failure only surfaced 15 minutes
+later as a misattributed service-readiness timeout (`mgmt-gateway 2/6`
+with daemons present only on the two mgr-less hosts).
+`management_services.yml` therefore restarts the `ceph-<fsid>@mgr.*`
+systemd units directly on every cluster host (delegated per inventory
+host; hosts without a mgr no-op via the unit glob), snapshots every mgr
+`container_id` before, polls `ceph orch ps --daemon-type mgr` after, and
+**asserts** full container turnover instead of proceeding on timeout. It
+also probes `ceph mgr services` on every run: an `https://` or wrong-port
+dashboard URL forces the restart path even when the config values are
+already correct, so a run that died between the config flip and the
+restart self-heals on the next apply. The mgmt-gateway spec apply retries
+until rc==0 while the restarted active mgr's orchestrator warms back up.
 
 **Trap, second order:** disabling `mgr/dashboard/ssl` makes the dashboard
 fall back from its HTTPS port (`ssl_server_port`, default `8443`) to its

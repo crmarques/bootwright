@@ -133,6 +133,61 @@
       }}
   when: bootwright_ceph_management.hosts is defined
 
+- name: Check which endpoint the Ceph dashboard currently serves
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - services
+      - --format
+      - json
+  register: bootwright_ceph_mgr_services_current
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Record the dashboard endpoint the managers currently serve
+  ansible.builtin.set_fact:
+    bootwright_ceph_dashboard_live_url: >-
+      {{
+        (bootwright_ceph_mgr_services_current.stdout | default('') | trim | default('{}', true) | from_json).dashboard
+        | default('')
+      }}
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Decide whether manager daemons still hold the management gateway port
+  ansible.builtin.set_fact:
+    bootwright_ceph_mgr_restart_required: >-
+      {{
+        (bootwright_ceph_dashboard_reconfigured | default(false) | bool)
+        or (
+          (bootwright_ceph_dashboard_live_url | default('') | length > 0)
+          and not (
+            (bootwright_ceph_dashboard_live_url is match('http://'))
+            and (bootwright_ceph_dashboard_live_url
+                 is search(':' ~ (bootwright_ceph_dashboard_http_port | default(8081) | string)))
+          )
+        )
+      }}
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Capture the Ceph fsid that scopes the manager systemd units
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - fsid
+  register: bootwright_ceph_mgr_restart_fsid
+  changed_when: false
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
+
 - name: Capture Ceph manager daemon identities before restart
   ansible.builtin.command:
     argv:
@@ -148,20 +203,22 @@
       - json
   register: bootwright_ceph_mgr_before_restart
   changed_when: false
-  when: bootwright_ceph_dashboard_reconfigured | default(false) | bool
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
 
-- name: Restart every Ceph manager daemon to release the dashboard's ports
+- name: Restart the Ceph manager systemd units so every dashboard releases its ports
   ansible.builtin.command:
     argv:
-      - cephadm
-      - shell
-      - --
-      - ceph
-      - orch
+      - systemctl
       - restart
-      - mgr
+      - "ceph-{{ bootwright_ceph_mgr_restart_fsid.stdout | default('') | trim }}@mgr.*"
   changed_when: true
-  when: bootwright_ceph_dashboard_reconfigured | default(false) | bool
+  delegate_to: "{{ item }}"
+  loop: "{{ bootwright_selected_storage_cluster.hosts | default([]) | map(attribute='inventoryHost') | list }}"
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
 
 - name: Wait for every Ceph manager daemon to finish restarting
   ansible.builtin.command:
@@ -212,7 +269,67 @@
     or
     ((bootwright_ceph_mgr_after_restart.attempts | default(1) | int)
      >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
-  when: bootwright_ceph_dashboard_reconfigured | default(false) | bool
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
+
+- name: Evaluate whether every Ceph manager daemon restarted
+  ansible.builtin.set_fact:
+    bootwright_ceph_mgr_restart_complete: >-
+      {{
+        (bootwright_ceph_mgr_after_restart.rc | default(1) | int) == 0
+        and (
+          (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
+          | map(attribute='container_id', default='')
+          | list
+          | length
+        ) == (
+          (bootwright_ceph_mgr_before_restart.stdout | default('') | trim | default('[]', true) | from_json)
+          | map(attribute='container_id', default='')
+          | list
+          | length
+        )
+        and (
+          (
+            (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
+            | map(attribute='container_id', default='')
+            | list
+          )
+          | intersect(
+              (bootwright_ceph_mgr_before_restart.stdout | default('') | trim | default('[]', true) | from_json)
+              | map(attribute='container_id', default='')
+              | list
+            )
+          | length
+        ) == 0
+      }}
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
+
+- name: Assert every Ceph manager daemon restarted onto the new dashboard settings
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_mgr_restart_complete | default(false) | bool
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} still runs manager
+      daemons that predate the dashboard SSL/port change, so their dashboards keep the
+      management gateway port bound and cephadm silently fails to place mgmt-gateway
+      daemons on the mgr hosts (CEPHADM_DAEMON_PLACE_FAIL; the service readiness gate
+      would later report mgmt-gateway stuck below its declared count). Manager
+      containers before restart:
+      {{ (bootwright_ceph_mgr_before_restart.stdout | default('') | trim | default('[]', true) | from_json)
+      | map(attribute='container_id', default='') | list }},
+      after:
+      {{ (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
+      | map(attribute='container_id', default='') | list }}.
+      Restart the ceph-<fsid>@mgr.* systemd units on the manager hosts, confirm
+      `ceph mgr services` reports the dashboard on
+      http://<mgr>:{{ bootwright_ceph_dashboard_http_port | default(8081) }}/, and
+      re-run this apply.
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
 
 - name: Apply management service spec
   ansible.builtin.command:
@@ -229,4 +346,7 @@
       - /mnt/management-services.yaml
   register: bootwright_ceph_management_apply
   changed_when: true
+  retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
+  until: bootwright_ceph_management_apply.rc == 0
   when: bootwright_ceph_management.hosts is defined
