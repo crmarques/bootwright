@@ -70,6 +70,26 @@ func TestValidateHookTargetModes(t *testing.T) {
 	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "exactly one of")
 }
 
+func TestValidateHookStaticTargetRejectsSSHLessMachine(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "h",
+		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
+		Playbook:  "playbooks/p.yml",
+		Target: v1alpha1.ClusterAddonHookTarget{
+			Static: &v1alpha1.ClusterAddonHookStaticTarget{Machines: []string{"bastion"}},
+		},
+	})
+	state := v1alpha1.State{Machines: []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "bastion"}}}}
+	hookErrsContain(t, validateClusterAddonHooks(state, addon), `"bastion" has no spec.access.ssh`)
+
+	state.Machines[0].Spec.Access.SSH = &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "bastion"}}
+	if errs := validateClusterAddonHooks(state, addon); len(errs) != 0 {
+		t.Fatalf("validateClusterAddonHooks returned errors for an SSH-configured machine: %v", errs)
+	}
+}
+
 func TestValidateHookStorageExportTargetRequiresAttachmentEffect(t *testing.T) {
 	dir := t.TempDir()
 	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")

@@ -128,8 +128,13 @@ func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1a
 			errs = append(errs, fmt.Sprintf("%s.target.static.clusters[%d] %q does not match any ContainerCluster or StorageCluster", prefix, i, name))
 		}
 		for i, name := range target.Static.Machines {
-			if _, ok := machines[name]; !ok {
+			machine, ok := machines[name]
+			if !ok {
 				errs = append(errs, fmt.Sprintf("%s.target.static.machines[%d] %q does not match any Machine", prefix, i, name))
+				continue
+			}
+			if machine.Spec.Access.SSH == nil {
+				errs = append(errs, fmt.Sprintf("%s.target.static.machines[%d] %q has no spec.access.ssh, so the hook has no way to reach it; target a Machine that configures SSH access", prefix, i, name))
 			}
 		}
 		if len(target.Static.Clusters) == 0 && len(target.Static.Machines) == 0 {
