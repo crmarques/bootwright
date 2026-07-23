@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 const cephFixture = "006-ceph-3nodes-libvirt-managed-os"
@@ -69,7 +69,7 @@ func TestPrintClusterAccessShowsStorageAfterSuccessfulApply(t *testing.T) {
 	ledger.Finish(workflow.RunStatusOK, now)
 
 	var out bytes.Buffer
-	printClusterAccess(&out, state, render.Result{}, ledger, t.TempDir())
+	printClusterAccess(&out, state, render.Result{}, ledger, "test", t.TempDir())
 	got := out.String()
 	for _, want := range []string{
 		"ceph-libvirt:",
@@ -85,10 +85,8 @@ func TestPrintClusterAccessShowsStorageAfterSuccessfulApply(t *testing.T) {
 func TestClusterAccessShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
 	ctx := initTestContext(t, cephFixture)
 	passwordPath := filepath.Join(ctx.ClustersDir, "ceph-libvirt", "secrets", "dashboard-password")
-	if err := os.MkdirAll(filepath.Dir(passwordPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(passwordPath, []byte("do-not-print-this-dashboard-password\n"), 0o600); err != nil {
+	store := secret.NewContextStore(ctx.Name, workflow.ClusterSecretsDir(ctx.ClustersDir, "ceph-libvirt"))
+	if err := store.Write(secret.MaterialKey{Name: "dashboard-password", Role: secret.MaterialPrimary}, []byte("do-not-print-this-dashboard-password\n")); err != nil {
 		t.Fatal(err)
 	}
 

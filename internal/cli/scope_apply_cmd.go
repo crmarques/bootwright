@@ -383,7 +383,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 		}
 		if plan.TargetsClusters {
-			printClusterAccess(stdout, plan.State, renderResult, ledger, clustersDir)
+			printClusterAccess(stdout, plan.State, renderResult, ledger, ctx.Name, clustersDir)
 		}
 		return nil
 	}

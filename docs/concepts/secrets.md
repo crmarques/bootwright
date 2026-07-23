@@ -318,13 +318,22 @@ store. `bootwright secret show` reads only context-local secret files (never
 `source.file` material) and decrypts only the requested material.
 
 !!! note "Install secrets and access"
-    After a successful cluster install, the kubeadmin password is stored at
-    `clusters/<cluster>/secrets/kubeadmin-password`; `bootwright cluster info`
-    prints the API and console URLs, kubeconfig path, and the password file
-    path, without printing bytes unless you pass `--secrets` — which prints
-    the password itself instead of the file path. A managed Ceph cluster's
-    dashboard `admin` password is captured at install under
-    `clusters/<storage-cluster>/secrets/dashboard-password` the same way.
+    After a successful cluster install, the kubeadmin password, kubeconfig, and
+    (for a managed Ceph cluster) the dashboard `admin` password are captured
+    under `clusters/<cluster>/secrets/{kubeadmin-password,kubeconfig}` and
+    `clusters/<storage-cluster>/secrets/dashboard-password`. These are
+    encrypted at rest the same way as context secrets — each cluster gets its
+    own AES-256-GCM envelope keyring under `secrets/.bootwright/` — so the
+    files on disk are never plaintext; `bootwright apply` encrypts them in
+    place immediately after the capturing task succeeds. `bootwright cluster
+    info` prints the API and console URLs, kubeconfig path, and the password
+    file path, without printing bytes unless you pass `--secrets` — which
+    decrypts and prints the password itself instead of the file path. Because
+    the files are encrypted, `sudo cat` no longer reveals them; use `bootwright
+    cluster info --secrets` for the kubeadmin/dashboard passwords and
+    `bootwright cluster kubeconfig --name <cluster>` to retrieve a usable
+    kubeconfig (it decrypts and streams the bytes to stdout, so you can
+    redirect them to a private file you own).
 
 Effective install/agent configs and `openshift/` manifests with resolved secrets
 are runtime outputs under

@@ -42,18 +42,21 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 	if err := os.WriteFile(manifestPath, manifests, 0o600); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
-	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
 	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
-	checker := extensionoc.CommandRunner{LogPath: logPath}
-	if err := waitNodesRegistered(ctx, checker, kubeconfig, task.Entry.Cluster, nodeConfigNodeNames(ocp), nodeRegistrationAttempts, nodeRegistrationInterval); err != nil {
-		return applyTaskResult{id: task.Entry.ID, err: err}
-	}
-	runner := extensionoc.CommandRunner{
-		LogPath: logPath,
-		Stdout:  stdout,
-		Stderr:  stderr,
-	}
-	if _, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", manifestPath, "--server-side", "--field-manager", "bootwright"}, nil); err != nil {
+	err = withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
+		checker := extensionoc.CommandRunner{LogPath: logPath}
+		if err := waitNodesRegistered(ctx, checker, kubeconfig, task.Entry.Cluster, nodeConfigNodeNames(ocp), nodeRegistrationAttempts, nodeRegistrationInterval); err != nil {
+			return err
+		}
+		runner := extensionoc.CommandRunner{
+			LogPath: logPath,
+			Stdout:  stdout,
+			Stderr:  stderr,
+		}
+		_, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", manifestPath, "--server-side", "--field-manager", "bootwright"}, nil)
+		return err
+	})
+	if err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	if err := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, time.Now()); err != nil {

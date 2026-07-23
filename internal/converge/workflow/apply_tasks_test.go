@@ -24,10 +24,14 @@ type fakeClusterAvailabilityChecker struct {
 	available bool
 	err       error
 	paths     []string
+	contents  [][]byte
 }
 
 func (f *fakeClusterAvailabilityChecker) Available(_ context.Context, kubeconfigPath string) (bool, error) {
 	f.paths = append(f.paths, kubeconfigPath)
+	if data, err := os.ReadFile(kubeconfigPath); err == nil {
+		f.contents = append(f.contents, data)
+	}
 	return f.available, f.err
 }
 
@@ -669,8 +673,11 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 			t.Fatalf("task %s status = %s, want skipped", task.ID, task.Status)
 		}
 	}
-	if len(checker.paths) != 1 || checker.paths[0] != kubeconfig {
-		t.Fatalf("availability paths = %v, want %s", checker.paths, kubeconfig)
+	if len(checker.contents) != 1 {
+		t.Fatalf("availability calls = %d, want 1", len(checker.contents))
+	}
+	if string(checker.contents[0]) != "apiVersion: v1\n" {
+		t.Fatalf("materialized kubeconfig content = %q, want the captured kubeconfig bytes", string(checker.contents[0]))
 	}
 }
 

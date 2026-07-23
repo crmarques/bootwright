@@ -99,7 +99,7 @@ do not commit it.`,
 			return failErr(2, err)
 		}
 		clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
-		data, err := clusteraccess.Kubeconfig(state, clustersDir, clusterName)
+		data, err := clusteraccess.Kubeconfig(state, cf.ctx.Name, clustersDir, clusterName)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -187,9 +187,9 @@ file paths and a 'sudo cat' hint are shown.`,
 		summaries := clusteraccess.FilterClusterSummaries(clusteraccess.ClusterSummariesFromAssets(state, render.InstallerAssets(clustersDir, state)), clusterName)
 		storage := clusteraccess.FilterStorageSummaries(clusteraccess.StorageSummaries(state, clustersDir), clusterName)
 		if outputFormat == outputJSON {
-			return cliout.JSON(stdout, buildClusterInfoReport(cf.ctx.Name, summaries, storage, showSecrets))
+			return cliout.JSON(stdout, buildClusterInfoReport(cf.ctx.Name, clustersDir, summaries, storage, showSecrets))
 		}
-		printClusterInfo(stdout, state, summaries, storage, showSecrets)
+		printClusterInfo(stdout, state, cf.ctx.Name, clustersDir, summaries, storage, showSecrets)
 		return nil
 	}
 	return cmd
@@ -235,7 +235,7 @@ func printClusterList(stdout io.Writer, summaries []clusteraccess.ClusterSummary
 	}
 }
 
-func printClusterInfo(stdout io.Writer, state v1alpha1.State, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) {
+func printClusterInfo(stdout io.Writer, state v1alpha1.State, contextName, clustersDir string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) {
 	p := cliout.New(stdout)
 	p.Command("cluster info")
 	if len(summaries) == 0 && len(storage) == 0 {
@@ -256,14 +256,14 @@ func printClusterInfo(stdout io.Writer, state v1alpha1.State, summaries []cluste
 			cliout.Field{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
 		)
 		if showSecrets {
-			fields = append(fields, cliout.Field{Key: "Kubeadmin password", Value: revealValue(summary.KubeadminPasswordPath, summary.KubeadminPassword)})
+			fields = append(fields, cliout.Field{Key: "Kubeadmin password", Value: revealValue(contextName, clustersDir, summary.Name, "kubeadmin-password", summary.KubeadminPassword)})
 		} else {
 			fields = append(fields, cliout.Field{Key: "Kubeadmin password file", Value: summary.KubeadminPasswordPath})
 		}
 		p.Fields(fields)
 		printClusterNodeAccess(p, state, summary.Name)
 	}
-	printStorageAccessSections(p, storage, showSecrets)
+	printStorageAccessSections(p, contextName, clustersDir, storage, showSecrets)
 }
 
 func containerClusterTypeDetail(summary clusteraccess.ClusterSummary) string {
@@ -274,12 +274,12 @@ func containerClusterTypeDetail(summary clusteraccess.ClusterSummary) string {
 	return detail
 }
 
-func buildClusterInfoReport(context string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) clusterInfoReport {
+func buildClusterInfoReport(context, clustersDir string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary, showSecrets bool) clusterInfoReport {
 	report := clusterInfoReport{Context: context}
 	for _, summary := range summaries {
 		entry := clusterInfoResult{ClusterSummary: summary}
 		if showSecrets && summary.KubeadminPassword.Present {
-			if value, err := clusteraccess.RevealSecretFile(summary.KubeadminPasswordPath); err == nil {
+			if value, err := clusteraccess.RevealClusterSecret(context, clustersDir, summary.Name, "kubeadmin-password"); err == nil {
 				entry.KubeadminPasswordValue = value
 			}
 		}
@@ -288,7 +288,7 @@ func buildClusterInfoReport(context string, summaries []clusteraccess.ClusterSum
 	for _, summary := range storage {
 		entry := storageInfoResult{StorageSummary: summary}
 		if showSecrets && summary.DashboardPassword.Present {
-			if value, err := clusteraccess.RevealSecretFile(summary.DashboardPasswordPath); err == nil {
+			if value, err := clusteraccess.RevealClusterSecret(context, clustersDir, summary.Name, "dashboard-password"); err == nil {
 				entry.DashboardPasswordValue = value
 			}
 		}

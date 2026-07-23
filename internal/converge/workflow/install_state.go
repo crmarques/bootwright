@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/secrets"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
@@ -128,18 +129,33 @@ func ClusterConnectionPath(clustersDir, cluster string) string {
 	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterConnectionFileName)
 }
 
-func RemoveClusterInstallState(clustersDir, cluster string) error {
+func RemoveClusterInstallState(clustersDir, contextName, cluster string) error {
 	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
 		return nil
 	}
 	for _, path := range []string{
 		ClusterInstallRecordPath(clustersDir, cluster),
 		ClusterConnectionPath(clustersDir, cluster),
-		clusterKubeconfigPath(clustersDir, cluster),
-		filepath.Join(ClusterSecretsDir(clustersDir, cluster), "kubeadmin-password"),
 	} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove cluster install state %s: %w", path, err)
+		}
+	}
+	return removeCapturedClusterSecrets(clustersDir, contextName, cluster, "kubeconfig", "kubeadmin-password")
+}
+
+func RemoveStorageClusterCapturedSecrets(clustersDir, contextName, cluster string) error {
+	return removeCapturedClusterSecrets(clustersDir, contextName, cluster, "dashboard-password")
+}
+
+func removeCapturedClusterSecrets(clustersDir, contextName, cluster string, names ...string) error {
+	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
+		return nil
+	}
+	store := secret.NewContextStore(effectiveContextName(contextName), ClusterSecretsDir(clustersDir, cluster))
+	for _, name := range names {
+		if err := store.Delete(secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}); err != nil {
+			return fmt.Errorf("remove %s for cluster %s: %w", name, cluster, err)
 		}
 	}
 	return nil
@@ -257,7 +273,12 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 				}
 				return out, installedMatching, fmt.Errorf("ContainerCluster/%s recorded install inputs differ from current desired inputs but its reinstall was not acknowledged when this apply was confirmed; re-run bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes to acknowledge the reinstall", name, name)
 			}
-			available, availErr := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
+			var available bool
+			availErr := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(kubeconfigPath string) error {
+				var err error
+				available, err = checker.Available(ctx, kubeconfigPath)
+				return err
+			})
 			if availErr == nil && available {
 				out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --converge-drifted rebuilds only drifted objects, not a healthy in-sync cluster", now)
 				installedMatching = append(installedMatching, name)
@@ -274,16 +295,20 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
 			return out, installedMatching, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes after resetting target machines", name, name, name)
 		}
-		kubeconfigPath := clusterKubeconfigPath(clustersDir, name)
 		if !found {
-			if err := guardUnrecordedCluster(ctx, name, kubeconfigPath, checker); err != nil {
+			if err := guardUnrecordedCluster(ctx, contextName, clustersDir, name, checker); err != nil {
 				return out, installedMatching, err
 			}
 			continue
 		}
 		switch record.Status {
 		case ClusterInstallStatusInstalled:
-			available, err := checker.Available(ctx, kubeconfigPath)
+			var available bool
+			err := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(kubeconfigPath string) error {
+				var availErr error
+				available, availErr = checker.Available(ctx, kubeconfigPath)
+				return availErr
+			})
 			if err != nil {
 				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w; if the cluster is unreachable, rebuild it with bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes (or bootwright destroy --stage clusters --clusters %s --yes first)", name, err, name, name)
 			}
@@ -379,7 +404,12 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --converge-drifted reinstalls the cluster and wipes its node disks)", name)})
 			continue
 		}
-		available, availErr := checker.Available(ctx, clusterKubeconfigPath(clustersDir, name))
+		var available bool
+		availErr := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(kubeconfigPath string) error {
+			var err error
+			available, err = checker.Available(ctx, kubeconfigPath)
+			return err
+		})
 		switch {
 		case availErr != nil:
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but availability could not be verified: %v — if this cluster should not be rebuilt, restore API reachability and re-run, or exclude it with --clusters)", name, availErr)})
@@ -452,14 +482,20 @@ func clusterTaskKindPlanned(tasks []ApplyTask, cluster, kind string) bool {
 	return false
 }
 
-func guardUnrecordedCluster(ctx context.Context, name, kubeconfigPath string, checker ClusterAvailabilityChecker) error {
+func guardUnrecordedCluster(ctx context.Context, contextName, clustersDir, name string, checker ClusterAvailabilityChecker) error {
+	kubeconfigPath := clusterKubeconfigPath(clustersDir, name)
 	if _, err := os.Stat(kubeconfigPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
 		return fmt.Errorf("stat kubeconfig %s: %w", kubeconfigPath, err)
 	}
-	available, err := checker.Available(ctx, kubeconfigPath)
+	var available bool
+	err := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(materializedPath string) error {
+		var availErr error
+		available, availErr = checker.Available(ctx, materializedPath)
+		return availErr
+	})
 	if err != nil {
 		return fmt.Errorf("ContainerCluster/%s has existing kubeconfig but availability could not be verified: %w", name, err)
 	}
@@ -712,6 +748,26 @@ func clusterKubeconfigPath(clustersDir, clusterName string) string {
 func clusterKubeconfigExists(clustersDir, clusterName string) bool {
 	_, err := os.Stat(clusterKubeconfigPath(clustersDir, clusterName))
 	return err == nil
+}
+
+func withMaterializedClusterKubeconfig(contextName, clustersDir, cluster string, fn func(kubeconfigPath string) error) error {
+	runtimeDir := ClusterRuntimeDir(clustersDir, cluster)
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		return fmt.Errorf("create cluster runtime dir for %s: %w", cluster, err)
+	}
+	scratchDir, err := os.MkdirTemp(runtimeDir, "kubeconfig-*")
+	if err != nil {
+		return fmt.Errorf("create kubeconfig scratch dir for cluster %s: %w", cluster, err)
+	}
+	defer os.RemoveAll(scratchDir)
+	store := secret.NewContextStore(effectiveContextName(contextName), ClusterSecretsDir(clustersDir, cluster))
+	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
+		return fmt.Errorf("encrypt kubeconfig for cluster %s: %w", cluster, err)
+	}
+	if err := store.MaterializeSelected(scratchDir, []string{"kubeconfig"}); err != nil {
+		return fmt.Errorf("materialize kubeconfig for cluster %s: %w", cluster, err)
+	}
+	return fn(filepath.Join(scratchDir, "kubeconfig"))
 }
 
 func clusterConnectionRecord(clustersDir, clusterName string, environments []v1alpha1.Environment, now time.Time) ClusterConnectionRecord {

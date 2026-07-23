@@ -99,7 +99,7 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 	if summary.DashboardPasswordPath != wantPath {
 		t.Fatalf("dashboard password path = %q, want %q", summary.DashboardPasswordPath, wantPath)
 	}
-	if summary.DashboardPasswordCommand != "sudo cat "+wantPath {
+	if summary.DashboardPasswordCommand != "bootwright cluster info --name ceph-libvirt --secrets" {
 		t.Fatalf("dashboard password command = %q", summary.DashboardPasswordCommand)
 	}
 	if summary.DashboardPassword.Present {

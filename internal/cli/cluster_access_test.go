@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
@@ -49,7 +50,7 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 		t.Fatalf("password path = %q, want %q", summary.KubeadminPasswordPath, passwordPath)
 	}
 	var out bytes.Buffer
-	printClusterAccess(&out, state, result, ledger, clustersDir)
+	printClusterAccess(&out, state, result, ledger, "test", clustersDir)
 	got := out.String()
 	for _, want := range []string{
 		"Cluster access",
@@ -59,7 +60,7 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 		"Console: https://console-openshift-console.apps.sno-libvirt.bootwright.test",
 		"Kubeadmin user: kubeadmin",
 		"Password file: " + passwordPath,
-		"Show password: sudo cat " + passwordPath,
+		"Show password: bootwright cluster info --name sno-libvirt --secrets",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("cluster access output missing %q:\n%s", want, got)
@@ -126,8 +127,8 @@ func TestClusterInfoSecretsRevealsKubeadminPassword(t *testing.T) {
 	if err := os.WriteFile(kubeconfigPath, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	passwordPath := filepath.Join(ctx.ClustersDir, "sno-libvirt", "secrets", "kubeadmin-password")
-	if err := os.WriteFile(passwordPath, []byte("reveal-this-password\n"), 0o600); err != nil {
+	store := secret.NewContextStore(ctx.Name, workflow.ClusterSecretsDir(ctx.ClustersDir, "sno-libvirt"))
+	if err := store.Write(secret.MaterialKey{Name: "kubeadmin-password", Role: secret.MaterialPrimary}, []byte("reveal-this-password\n")); err != nil {
 		t.Fatal(err)
 	}
 

@@ -72,16 +72,27 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 		return nil, err
 	}
 
-	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
-	extraVars, err := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, kubeconfig, e.resolveHookRefs(), e.inputs)
+	var outputs map[string]string
+	err = withMaterializedClusterKubeconfig(e.opts.ContextName, e.opts.ClustersDir, e.plan.Cluster, func(kubeconfig string) error {
+		extraVars, err := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, kubeconfig, e.resolveHookRefs(), e.inputs)
+		if err != nil {
+			return err
+		}
+		timeout := hookTimeout(hook)
+		if err := e.runHookAnsible(ctx, hook, inventoryPath, varsPath, hookRoot, targets, extraVars, timeout); err != nil {
+			return err
+		}
+		captured, err := e.captureHookOutputs(hook, outputsDir)
+		if err != nil {
+			return err
+		}
+		outputs = captured
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	timeout := hookTimeout(hook)
-	if err := e.runHookAnsible(ctx, hook, inventoryPath, varsPath, hookRoot, targets, extraVars, timeout); err != nil {
-		return nil, err
-	}
-	return e.captureHookOutputs(hook, outputsDir)
+	return outputs, nil
 }
 
 func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.ClusterAddonHook, inventoryPath, varsPath, hookRoot string, targets []hookSSHTarget, extraVars []string, timeout time.Duration) error {

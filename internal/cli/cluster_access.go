@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, ledger workflow.RunLedger, clustersDir string) {
+func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, ledger workflow.RunLedger, contextName, clustersDir string) {
 	container := clusteraccess.ClusterSummariesForApply(state, result, ledger)
 	storage := clusteraccess.StorageSummariesForApply(state, ledger, clustersDir)
 	if len(container) == 0 && len(storage) == 0 {
@@ -18,7 +18,7 @@ func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Re
 	}
 	p := cliout.NewContinuation(stdout)
 	printClusterAccessSections(p, container)
-	printStorageAccessSections(p, storage, false)
+	printStorageAccessSections(p, contextName, clustersDir, storage, false)
 }
 
 func printClusterAccessSections(p *cliout.Printer, summaries []clusteraccess.ClusterSummary) {

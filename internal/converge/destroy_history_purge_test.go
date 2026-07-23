@@ -176,7 +176,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryRemovesClusterRuntimeDir(t 
 	})
 	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install")
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, AllScope, st, nil, nil, nil, true); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, true); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -202,7 +202,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStor
 	})
 	touchTaskDir(t, runsDir, "run-b", "storage.ceph-b.cluster")
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, ClustersScope, st, nil, []string{"ceph-a"}, nil, true); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, true); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 

@@ -332,13 +332,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), purgeHistory)
+				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), purgeHistory)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, nil, purgeHistory)
+			printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, nil, purgeHistory)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
@@ -347,7 +347,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly && !plan.NoRemoteWork {
-				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, nil, nil, purgeHistory)
+				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, nil, nil, purgeHistory)
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)

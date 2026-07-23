@@ -2,7 +2,6 @@ package clusteraccess
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -102,7 +102,7 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 			ConsoleURL:               clusterConsoleURL(name, baseDomain),
 			KubeadminUsername:        "kubeadmin",
 			KubeadminPasswordPath:    passwordPath,
-			KubeadminPasswordCommand: "sudo cat " + shellquote.Quote([]string{passwordPath}),
+			KubeadminPasswordCommand: "bootwright cluster info --name " + name + " --secrets",
 			Kubeconfig:               kubeconfig,
 			KubeadminPassword:        password,
 			Ready:                    kubeconfig.Present && password.Present,
@@ -111,8 +111,12 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 	return out
 }
 
-func RevealSecretFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+func RevealClusterSecret(contextName, clustersDir, cluster, name string) (string, error) {
+	store := secret.NewContextStore(contextName, workflow.ClusterSecretsDir(clustersDir, cluster))
+	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
+		return "", err
+	}
+	data, err := store.Read(secret.MaterialKey{Name: name, Role: secret.MaterialPrimary})
 	if err != nil {
 		return "", err
 	}

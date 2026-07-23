@@ -2,10 +2,11 @@
 
 **clusteraccess summaries are paths-only:** `internal/clusteraccess` never
 returns secret bytes in summaries — every summary reports only paths and
-presence (`FileStatus` stats a file without reading it). `RevealSecretFile` is
-the single deliberate exception that reads a captured credential file
-(`kubeadmin-password`, `dashboard-password`), and callers must gate it behind
-an explicit `--secrets` opt-in.
+presence (`FileStatus` stats a file without reading it). `RevealClusterSecret`
+is the single deliberate exception that decrypts a captured credential
+(`kubeadmin-password`, `dashboard-password`) from its per-cluster encrypted
+secret store (see ADR 0020), and callers must gate it behind an explicit
+`--secrets` opt-in.
 
 **Global pull-secret merge:** `mergedPullSecretReplacement`
 (`internal/converge/workflow/apply_addon_effects.go`) preserves the live

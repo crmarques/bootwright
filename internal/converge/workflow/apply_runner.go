@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
@@ -98,6 +99,11 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if result.Skipped {
 		return applyTaskResult{id: task.Entry.ID, skipped: true, err: nil}
 	}
+	if task.Entry.Kind == ApplyTaskKindStorageCluster || task.Entry.Kind == ApplyTaskKindInstallWait {
+		if err := encryptCapturedClusterSecrets(opts, task); err != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+		}
+	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster {
 		clusterName := strings.TrimPrefix(task.Entry.ID, "storage.")
 		if recordErr := MarkStorageSubObjectsConvergeSafety(runsDir, opts.ContextName, runID, task.State, clusterName, ConvergeSafetyStatusReconciled, now); recordErr != nil {
@@ -116,6 +122,21 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		}
 	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+}
+
+func encryptCapturedClusterSecrets(opts RunOptions, task ApplyTask) error {
+	clusterName := task.Entry.Cluster
+	if clusterName == "" && task.Entry.Kind == ApplyTaskKindStorageCluster {
+		clusterName = strings.TrimPrefix(task.Entry.ID, "storage.")
+	}
+	if clusterName == "" {
+		return nil
+	}
+	store := secret.NewContextStore(effectiveContextName(opts.ContextName), ClusterSecretsDir(opts.ClustersDir, clusterName))
+	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
+		return fmt.Errorf("encrypt captured secrets for cluster %s: %w", clusterName, err)
+	}
+	return nil
 }
 
 func restoreClusterInstallRecordOnSkip(clustersDir, cluster string, prior ClusterInstallRecord, priorFound bool) error {

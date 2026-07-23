@@ -39,7 +39,7 @@ func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 		t.Fatalf("precondition: install record should exist, found=%v err=%v", found, err)
 	}
 
-	if err := RemoveClusterInstallState(clustersDir, cluster); err != nil {
+	if err := RemoveClusterInstallState(clustersDir, "test", cluster); err != nil {
 		t.Fatalf("RemoveClusterInstallState: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 		}
 	}
 
-	if err := RemoveClusterInstallState(clustersDir, cluster); err != nil {
+	if err := RemoveClusterInstallState(clustersDir, "test", cluster); err != nil {
 		t.Fatalf("removing absent state must be a no-op, got %v", err)
 	}
 }

@@ -140,7 +140,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 | How plaintext secret copies on disk are kept short-lived: post-lease sweep reclaims SIGKILL orphans, store materialization is all-or-nothing, MkdirAll needs explicit Chmod, and preflight rejects only over-broad modes. | [plaintext-secret-lifecycle.md](plaintext-secret-lifecycle.md) |
 | The NUL-wrapped placeholder sentinel switches resolution to {{ secret }} tokens (render-only, short-circuits before source paths leak); portable bundles are leak-scanned; manifest Secrets must handle both placeholder dialects in stringData. | [portable-secret-placeholders.md](portable-secret-placeholders.md) |
 | secret.Index is the single seam from Secret declarations to per-role paths; materialize verifies-or-renews generated material via the same request derivation preflight uses; SEC1 note for ECDSA SSH keys. | [secret-index-resolution.md](secret-index-resolution.md) |
-| clusteraccess summaries report paths/presence only with RevealSecretFile gated behind --secrets; the global pull-secret merge is conflict-safe via resourceVersion, idempotent on existing credentials, and console-silent. | [secret-output-discipline.md](secret-output-discipline.md) |
+| clusteraccess summaries report paths/presence only with RevealClusterSecret gated behind --secrets; the global pull-secret merge is conflict-safe via resourceVersion, idempotent on existing credentials, and console-silent. | [secret-output-discipline.md](secret-output-discipline.md) |
 
 ### Add-ons & OLM
 

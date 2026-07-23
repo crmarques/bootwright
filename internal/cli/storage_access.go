@@ -5,14 +5,14 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 )
 
-func printStorageAccessSections(p *cliout.Printer, summaries []clusteraccess.StorageSummary, showSecrets bool) {
+func printStorageAccessSections(p *cliout.Printer, contextName, clustersDir string, summaries []clusteraccess.StorageSummary, showSecrets bool) {
 	for _, summary := range summaries {
 		p.Section(summary.Name + ":")
 		p.Fields(storageAccessLeadFields(summary))
 		if len(summary.MonitorEndpoints) > 0 {
 			p.FieldList("Monitors", summary.MonitorEndpoints)
 		}
-		p.Fields(storageAccessTrailFields(summary, showSecrets))
+		p.Fields(storageAccessTrailFields(contextName, clustersDir, summary, showSecrets))
 	}
 }
 
@@ -27,7 +27,7 @@ func storageAccessLeadFields(summary clusteraccess.StorageSummary) []cliout.Fiel
 	return fields
 }
 
-func storageAccessTrailFields(summary clusteraccess.StorageSummary, showSecrets bool) []cliout.Field {
+func storageAccessTrailFields(contextName, clustersDir string, summary clusteraccess.StorageSummary, showSecrets bool) []cliout.Field {
 	var fields []cliout.Field
 	if summary.HealthCommand != "" {
 		fields = append(fields, cliout.Field{Key: "Health check", Value: summary.HealthCommand})
@@ -41,7 +41,7 @@ func storageAccessTrailFields(summary clusteraccess.StorageSummary, showSecrets 
 	if summary.DashboardPasswordPath != "" {
 		fields = append(fields, cliout.Field{Key: "Dashboard user", Value: summary.DashboardUser})
 		if showSecrets {
-			fields = append(fields, cliout.Field{Key: "Dashboard password", Value: revealValue(summary.DashboardPasswordPath, summary.DashboardPassword)})
+			fields = append(fields, cliout.Field{Key: "Dashboard password", Value: revealValue(contextName, clustersDir, summary.Name, "dashboard-password", summary.DashboardPassword)})
 		} else {
 			fields = append(fields, cliout.Field{Key: "Dashboard password file", Value: summary.DashboardPasswordPath})
 		}

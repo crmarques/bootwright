@@ -128,13 +128,13 @@ func printClusterNodeAccess(p *cliout.Printer, state v1alpha1.State, clusterName
 	p.Fields(fields)
 }
 
-func revealValue(path string, artifact clusteraccess.Artifact) string {
+func revealValue(contextName, clustersDir, cluster, name string, artifact clusteraccess.Artifact) string {
 	if !artifact.Present {
 		return "(missing)"
 	}
-	value, err := clusteraccess.RevealSecretFile(path)
+	value, err := clusteraccess.RevealClusterSecret(contextName, clustersDir, cluster, name)
 	if err != nil {
-		return "(unreadable; try: sudo cat " + path + ")"
+		return "(unreadable: " + err.Error() + ")"
 	}
 	return value
 }

@@ -62,17 +62,17 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 	if err != nil {
 		return fmt.Errorf("read secret %q for pull-secret merge: %w", secretName, err)
 	}
-	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
-	runner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true, Stdout: e.stdout, Stderr: e.stderr}
-	changed, err := mergeGlobalPullSecretCredential(ctx, runner, kubeconfig, effect.Registry, effect.Username, string(password))
-	if err != nil {
-		return err
-	}
-	if !changed {
-		fmt.Fprintf(e.stdout, "global pull secret already carries %s credentials; merge skipped\n", effect.Registry)
+	return withMaterializedClusterKubeconfig(e.opts.ContextName, e.opts.ClustersDir, e.plan.Cluster, func(kubeconfig string) error {
+		runner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true, Stdout: e.stdout, Stderr: e.stderr}
+		changed, err := mergeGlobalPullSecretCredential(ctx, runner, kubeconfig, effect.Registry, effect.Username, string(password))
+		if err != nil {
+			return err
+		}
+		if !changed {
+			fmt.Fprintf(e.stdout, "global pull secret already carries %s credentials; merge skipped\n", effect.Registry)
+		}
 		return nil
-	}
-	return nil
+	})
 }
 
 const pullSecretMergeAttempts = 3

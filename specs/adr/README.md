@@ -29,3 +29,4 @@ files.
 | [0017](0017-machine-fqdn-node-identity.md) | Machine fqdn Address and Independent Node Identity | Accepted |
 | [0018](0018-environment-domain-model.md) | Environment Domain Model | Accepted |
 | [0019](0019-node-root-posture-and-orchestration-identity.md) | Node Root Posture and Ceph Orchestration Identity | Accepted |
+| [0020](0020-cluster-captured-secrets-encrypted-at-rest.md) | Cluster-Captured Secrets Are Encrypted at Rest | Accepted |

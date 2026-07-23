@@ -97,7 +97,7 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 				live.InSync = false
 				continue
 			}
-			container := probeContainerCluster(ctx, state, clustersDir, cf.ctx.RunsDir, root.Name)
+			container := probeContainerCluster(ctx, state, cf.ctx.Name, clustersDir, cf.ctx.RunsDir, root.Name)
 			if !container.Installed || !container.Reachable || !container.Available {
 				live.InSync = false
 			}
@@ -161,8 +161,8 @@ func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, s
 	return discos, ""
 }
 
-func probeContainerCluster(ctx context.Context, state v1alpha1.State, clustersDir, runsDir, name string) liveContainerDiff {
-	data, err := clusteraccess.Kubeconfig(state, clustersDir, name)
+func probeContainerCluster(ctx context.Context, state v1alpha1.State, contextName, clustersDir, runsDir, name string) liveContainerDiff {
+	data, err := clusteraccess.Kubeconfig(state, contextName, clustersDir, name)
 	if err != nil {
 		return liveContainerDiff{Cluster: name, Note: "not installed (no kubeconfig)"}
 	}
