@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/host/safefs"
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -193,7 +194,9 @@ func buildSSHInvocation(target sshTarget, keyPath, configPath, knownHostsPath, s
 		address = target.User + "@" + address
 	}
 	args = append(args, address)
-	args = append(args, extraArgs...)
+	for _, extraArg := range extraArgs {
+		args = append(args, shellquote.QuoteWord(extraArg))
+	}
 	return sshInvocation{Path: sshPath, Args: args, Env: filteredSSHEnvironment(os.Environ()), MaterialFiles: files}
 }
 

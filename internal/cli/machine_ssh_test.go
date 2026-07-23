@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -110,6 +111,34 @@ func TestBuildMachineSSHInvocationUserOverride(t *testing.T) {
 	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
 	if inv.Args[len(inv.Args)-1] != "core@10.0.0.10" {
 		t.Fatalf("target = %q, want core@10.0.0.10", inv.Args[len(inv.Args)-1])
+	}
+}
+
+func TestBuildSSHInvocationQuotesExtraArgsForRemoteReassembly(t *testing.T) {
+	state := machineSSHTestState()
+	target, err := machineSSHTarget(state, "ceph-0")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	extraArgs := []string{"sudo", "podman", "ps", "--format", "{{.Names}} {{.Ports}}"}
+	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", extraArgs, "/usr/bin/ssh", nil)
+
+	tail := inv.Args[len(inv.Args)-len(extraArgs):]
+	remoteCommand := strings.Join(tail, " ")
+	script := `sudo() { podman "$@"; }; podman() { printf '%s\n' "$@"; }; ` + remoteCommand
+	out, err := exec.Command("/bin/sh", "-c", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("sh -c %q: %v\n%s", script, err, out)
+	}
+	got := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	want := extraArgs[1:]
+	if len(got) != len(want) {
+		t.Fatalf("remote argv = %q, want %q (remote command was %q)", got, want, remoteCommand)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("remote argv[%d] = %q, want %q (remote command was %q)", i, got[i], want[i], remoteCommand)
+		}
 	}
 }
 
