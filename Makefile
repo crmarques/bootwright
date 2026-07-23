@@ -52,6 +52,7 @@ GO_TEST_CHECK_FLAGS ?= -vet=off
 GO_TEST_RACE_FLAGS ?= -vet=off -race -timeout 1800s
 BOOTWRIGHT_COLLECTIONS_DIR = $(abspath $(ANSIBLE_SRC_DIR)/collections)
 BOOTWRIGHT_COLLECTION_ROOT = $(ANSIBLE_SRC_DIR)/collections/ansible_collections/bootwright/core
+BOOTWRIGHT_FILTER_TEST_ROOT = $(BOOTWRIGHT_COLLECTION_ROOT)/tests/unit/plugins/filter
 ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=$(ANSIBLE_LOCAL_TEMP_DIR) ANSIBLE_REMOTE_TEMP=$(ANSIBLE_REMOTE_TEMP_DIR) ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.check_become \
@@ -229,8 +230,8 @@ go-mod-tidy-check:
 
 python-test:
 	@set -e; \
-	trap 'find $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter scripts -type d -name __pycache__ -prune -exec rm -rf {} +' EXIT; \
-	cd $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter && python3 -m unittest discover -v; \
+	trap 'find $(BOOTWRIGHT_FILTER_TEST_ROOT) scripts -type d -name __pycache__ -prune -exec rm -rf {} +' EXIT; \
+	cd $(BOOTWRIGHT_FILTER_TEST_ROOT) && python3 -m unittest discover -v; \
 	cd - >/dev/null; \
 	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
 

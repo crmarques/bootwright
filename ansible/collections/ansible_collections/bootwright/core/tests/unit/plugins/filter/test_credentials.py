@@ -1,18 +1,3 @@
-"""Tests for the bootwright_parse_credential Ansible filter.
-
-Uses stdlib unittest (no pytest dependency) so the suite runs anywhere
-Python 3 is available — including a stock CI runner without an
-Ansible venv. Pytest discovers and runs unittest classes too, so a
-developer with pytest installed locally can run pytest in this directory.
-
-The filter lives next to this test in the collection filter plugin directory
-and is loaded by Ansible through the `bootwright.core` collection.
-Each test exercises one branch of the filter's input validation so a
-regression in either decoding or the username:password split surfaces
-here rather than at apply time, where the failure would only show up
-mid-playbook with a `no_log` task.
-"""
-
 from __future__ import annotations
 
 import base64
@@ -33,12 +18,12 @@ if "ansible.errors" not in sys.modules:
     errors_module.AnsibleFilterError = _AnsibleFilterError
     sys.modules["ansible.errors"] = errors_module
 
-_HERE = pathlib.Path(__file__).resolve().parent
+_FILTER_DIR = pathlib.Path(__file__).resolve().parents[4] / "plugins" / "filter"
 _spec = importlib.util.spec_from_file_location(
     "_bootwright_credentials_filter",
-    _HERE / "credentials.py",
+    _FILTER_DIR / "credentials.py",
 )
-assert _spec and _spec.loader, "could not locate credentials.py next to test file"
+assert _spec and _spec.loader, "could not locate credentials.py"
 _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 
@@ -47,7 +32,6 @@ bootwright_proxy_userinfo = _module.bootwright_proxy_userinfo
 AnsibleFilterError = sys.modules["ansible.errors"].AnsibleFilterError
 
 def _slurp(payload: str | bytes) -> dict:
-    """Build a fake ansible.builtin.slurp result dict."""
     if isinstance(payload, str):
         payload = payload.encode("utf-8")
     return {"content": base64.b64encode(payload).decode("ascii"), "source": "/fake/path"}

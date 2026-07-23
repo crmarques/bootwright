@@ -5,12 +5,12 @@ import pathlib
 import unittest
 
 
-_HERE = pathlib.Path(__file__).resolve().parent
+_FILTER_DIR = pathlib.Path(__file__).resolve().parents[4] / "plugins" / "filter"
 _spec = importlib.util.spec_from_file_location(
     "_bootwright_network_filter",
-    _HERE / "network.py",
+    _FILTER_DIR / "network.py",
 )
-assert _spec and _spec.loader, "could not locate network.py next to test file"
+assert _spec and _spec.loader, "could not locate network.py"
 _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 

@@ -5,12 +5,12 @@ import pathlib
 import unittest
 
 
-_HERE = pathlib.Path(__file__).resolve().parent
+_FILTER_DIR = pathlib.Path(__file__).resolve().parents[4] / "plugins" / "filter"
 _spec = importlib.util.spec_from_file_location(
     "_bootwright_redfish_filter",
-    _HERE / "redfish.py",
+    _FILTER_DIR / "redfish.py",
 )
-assert _spec and _spec.loader, "could not locate redfish.py next to test file"
+assert _spec and _spec.loader, "could not locate redfish.py"
 _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 
