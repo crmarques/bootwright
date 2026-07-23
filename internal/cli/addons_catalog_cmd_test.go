@@ -20,6 +20,8 @@ func TestAddonsCLIListAddDelete(t *testing.T) {
 			Name           string   `json:"name"`
 			DefaultVersion string   `json:"defaultVersion"`
 			Versions       []string `json:"versions"`
+			Channel        string   `json:"channel"`
+			Notes          string   `json:"notes"`
 			Registered     string   `json:"registered"`
 		} `json:"addOns"`
 	}
@@ -27,8 +29,13 @@ func TestAddonsCLIListAddDelete(t *testing.T) {
 		t.Fatalf("decode list JSON: %v (%q)", err, stdout)
 	}
 	names := map[string]string{}
+	notes := map[string]string{}
 	for _, row := range report.AddOns {
 		names[row.Name] = row.Registered
+		notes[row.Name] = row.Notes
+		if row.Channel == "" {
+			t.Fatalf("catalog list entry %q missing channel: %q", row.Name, stdout)
+		}
 	}
 	if _, ok := names["openshift-data-foundation"]; !ok {
 		t.Fatalf("catalog list missing openshift-data-foundation: %q", stdout)
@@ -38,6 +45,9 @@ func TestAddonsCLIListAddDelete(t *testing.T) {
 	}
 	if names["openshift-data-foundation"] != "" {
 		t.Fatalf("nothing should be registered yet: %q", stdout)
+	}
+	if !strings.Contains(notes["fusion-data-foundation"], "IBM entitlement") {
+		t.Fatalf("fusion-data-foundation notes = %q, want the IBM entitlement guidance surfaced from catalog.yaml", notes["fusion-data-foundation"])
 	}
 
 	stdout, stderr, code = runCLI(t, "add-ons", "add", "--name", "openshift-data-foundation:4.21")

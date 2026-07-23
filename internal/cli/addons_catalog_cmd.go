@@ -22,8 +22,19 @@ type addonsListEntry struct {
 	Description    string   `json:"description,omitempty"`
 	DefaultVersion string   `json:"defaultVersion"`
 	Versions       []string `json:"versions"`
+	Channel        string   `json:"channel,omitempty"`
+	Notes          string   `json:"notes,omitempty"`
 	Registered     string   `json:"registered,omitempty"`
 	Modified       bool     `json:"modified,omitempty"`
+}
+
+func entryVersionDetail(entry nativecatalog.Entry, version string) (channel, notes string) {
+	for _, item := range entry.Versions {
+		if item.Version == version {
+			return item.Channel, item.Notes
+		}
+	}
+	return "", ""
 }
 
 func newAddonsCatalogCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
@@ -80,10 +91,13 @@ func newAddonsListCmd(stdout io.Writer) *cobra.Command {
 			for _, version := range entry.Versions {
 				row.Versions = append(row.Versions, version.Version)
 			}
+			detailVersion := entry.DefaultVersion
 			if item, ok := registered[entry.Name]; ok {
 				row.Registered = item.Marker.Version
 				row.Modified = item.Modified
+				detailVersion = item.Marker.Version
 			}
+			row.Channel, row.Notes = entryVersionDetail(entry, detailVersion)
 			report.AddOns = append(report.AddOns, row)
 		}
 		if outputFormat == outputJSON {
@@ -102,6 +116,9 @@ func newAddonsListCmd(stdout io.Writer) *cobra.Command {
 				if row.Modified {
 					evidence += " (locally modified)"
 				}
+			}
+			if row.Notes != "" {
+				evidence += " -- " + row.Notes
 			}
 			checks = append(checks, output.Check{
 				Group:    "Native add-on catalog",
