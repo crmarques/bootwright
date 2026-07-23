@@ -18,7 +18,7 @@ import (
 )
 
 type HookRunner interface {
-	Run(ctx context.Context, lifecycle string) error
+	Run(ctx context.Context, lifecycle string) ([]string, error)
 }
 
 type HookError struct {
@@ -72,9 +72,9 @@ func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
 	return fallback
 }
 
-func (c RunConfig) runHooks(ctx context.Context, lifecycle string) error {
+func (c RunConfig) runHooks(ctx context.Context, lifecycle string) ([]string, error) {
 	if c.Hooks == nil {
-		return nil
+		return nil, nil
 	}
 	return c.Hooks.Run(ctx, lifecycle)
 }
@@ -229,7 +229,9 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		}
 		return TaskResult{}, err
 	}
-	if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostReady); err != nil {
+	postReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostReady)
+	record.ObservedResources = append(record.ObservedResources, postReadyObserved...)
+	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
 		var hookErr *HookError
 		if errors.As(err, &hookErr) {
@@ -274,7 +276,9 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 	if err := cfg.runEffects(ctx); err != nil {
 		return observed, "", err
 	}
-	if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPreApply); err != nil {
+	preApplyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPreApply)
+	observed = append(observed, preApplyObserved...)
+	if err != nil {
 		return observed, "", err
 	}
 	switch plan.Extension.Spec.Type {
@@ -309,7 +313,9 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, subscriptionOLM.Namespace.Name, subscriptionOLM.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
 			return observed, "", err
 		}
-		if err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady); err != nil {
+		postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady)
+		observed = append(observed, postOperatorReadyObserved...)
+		if err != nil {
 			return observed, "", err
 		}
 		if len(custom) > 0 {
@@ -323,7 +329,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		for _, manifest := range plan.Extension.Spec.ManifestSet.Manifests {
 			id := "Manifest/" + manifest.Path
 			path := extensionrender.ManifestPath(plan.Extension, manifest)
-			if _, err := runner.Run(ctx, kubeconfig, applyArgs(plan.Policy, path), nil); err != nil {
+			if _, err := runner.Run(ctx, kubeconfig, ApplyArgs(plan.Policy, path), nil); err != nil {
 				return observed, id, err
 			}
 			observed = append(observed, id)
@@ -337,7 +343,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 func applyResources(ctx context.Context, runner OCRunner, kubeconfig string, policy addons.ClusterAddonPolicy, resources []extensionrender.ManifestResource, observed []string) ([]string, string, error) {
 	for _, resource := range resources {
 		id := extensionrender.ObservedResourceID(resource.Kind, resource.Namespace, resource.Name)
-		if _, err := runner.Run(ctx, kubeconfig, applyArgs(policy, "-"), resource.Content); err != nil {
+		if _, err := runner.Run(ctx, kubeconfig, ApplyArgs(policy, "-"), resource.Content); err != nil {
 			return observed, id, err
 		}
 		observed = append(observed, id)
@@ -462,7 +468,7 @@ func applyFailureSummary(failedID string) string {
 	return fmt.Sprintf("oc apply failed at %s; see the apply log for details", failedID)
 }
 
-func applyArgs(policy addons.ClusterAddonPolicy, file string) []string {
+func ApplyArgs(policy addons.ClusterAddonPolicy, file string) []string {
 	args := []string{"apply", "-f", file}
 	if policy.UseServerSideApply() {
 		args = append(args, "--server-side")

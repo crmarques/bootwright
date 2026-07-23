@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/addons/hooks"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
+	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"go.yaml.in/yaml/v3"
@@ -40,10 +42,11 @@ type extensionPlanView struct {
 	Name    string
 	Cluster string
 	Addon   v1alpha1.ClusterAddon
+	Policy  addons.ClusterAddonPolicy
 }
 
 func newAddonHookExecutor(stdout, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) *addonHookExecutor {
-	plan := extensionPlanView{Name: task.Extension.Name, Cluster: task.Extension.Cluster, Addon: task.Extension.Extension}
+	plan := extensionPlanView{Name: task.Extension.Name, Cluster: task.Extension.Cluster, Addon: task.Extension.Extension, Policy: task.Extension.Policy}
 	binding, inputs := addonBindingInputs(task.State, task.Extension.Binding, plan.Name)
 	return &addonHookExecutor{
 		stdout:        stdout,
@@ -61,9 +64,11 @@ func newAddonHookExecutor(stdout, stderr io.Writer, runsDir, runID string, opts 
 	}
 }
 
-func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) error {
+func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) ([]string, error) {
+	var observed []string
 	for _, hook := range hooks.At(e.plan.Addon, lifecycle) {
-		err := e.runHook(ctx, hook)
+		hookObserved, err := e.runHook(ctx, hook)
+		observed = append(observed, hookObserved...)
 		if err == nil {
 			continue
 		}
@@ -80,15 +85,15 @@ func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) error {
 			fmt.Fprintf(e.stderr, "hook %s (%s) failed, continuing: %s\n", hook.Name, lifecycle, detail)
 			continue
 		}
-		return &extensionoc.HookError{Hook: hook.Name, Lifecycle: lifecycle, Detail: detail}
+		return observed, &extensionoc.HookError{Hook: hook.Name, Lifecycle: lifecycle, Detail: detail}
 	}
-	return nil
+	return observed, nil
 }
 
-func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAddonHook) error {
+func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAddonHook) ([]string, error) {
 	digest := e.hookDigest(hook)
 	if v1alpha1.ClusterAddonHookRun(hook) == v1alpha1.ProvisioningPlaybookRunOnChange && e.hookConverged(hook.Name, digest) {
-		return nil
+		return nil, nil
 	}
 	hookRoot := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "hooks", hook.Name)
 	defer os.RemoveAll(hookRoot)
@@ -96,17 +101,18 @@ func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAd
 	if hook.Playbook != "" {
 		captured, err := e.runHookPlaybook(ctx, hook, hookRoot)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		outputs = captured
 	}
-	if err := e.applyHookManifests(ctx, hook, outputs); err != nil {
-		return err
+	observed, err := e.applyHookManifests(ctx, hook, outputs)
+	if err != nil {
+		return observed, err
 	}
 	if err := e.reclaimSecretHookOutputs(hook); err != nil {
-		return err
+		return observed, err
 	}
-	return extensionrecords.SetHook(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, extensionrecords.HookRecord{
+	return observed, extensionrecords.SetHook(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, extensionrecords.HookRecord{
 		Lifecycle: hook.Lifecycle,
 		Status:    extensionrecords.RecordStatusReady,
 		Digest:    digest,
@@ -146,34 +152,44 @@ func (e *addonHookExecutor) hookConverged(name, digest string) bool {
 	return ok && hook.Status == extensionrecords.RecordStatusReady && hook.Digest == digest
 }
 
-func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha1.ClusterAddonHook, outputs map[string]string) error {
+func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha1.ClusterAddonHook, outputs map[string]string) ([]string, error) {
 	if len(hook.Manifests) == 0 {
-		return nil
+		return nil, nil
 	}
 	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
-	runner := extensionoc.CommandRunner{LogPath: e.logPath, Stdout: e.stdout, Stderr: e.stderr}
+	runner := extensionoc.CommandRunner{LogPath: e.logPath, Stdout: e.stdout, Stderr: e.stderr, RedactLog: true}
 	renderDir := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "hooks", hook.Name, "manifests")
+	var observed []string
 	for i, manifest := range hook.Manifests {
 		object, err := e.renderHookManifest(hook, manifest, outputs)
 		if err != nil {
-			return err
+			return observed, err
 		}
 		data, err := yaml.Marshal(object)
 		if err != nil {
-			return fmt.Errorf("marshal hook manifest %s: %w", manifest.Path, err)
+			return observed, fmt.Errorf("marshal hook manifest %s: %w", manifest.Path, err)
 		}
 		path := filepath.Join(renderDir, fmt.Sprintf("%02d-%s", i, filepath.Base(manifest.Path)))
 		if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
-			return err
+			return observed, err
 		}
-		if _, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", path, "--server-side", "--field-manager", "bootwright"}, nil); err != nil {
-			return err
+		if _, err := runner.Run(ctx, kubeconfig, extensionoc.ApplyArgs(e.plan.Policy, path), nil); err != nil {
+			return observed, err
 		}
+		observed = append(observed, hookManifestResourceID(object))
 		if manifest.ReclaimRendered {
 			_ = os.Remove(path)
 		}
 	}
-	return nil
+	return observed, nil
+}
+
+func hookManifestResourceID(object map[string]any) string {
+	metadata, _ := object["metadata"].(map[string]any)
+	kind, _ := object["kind"].(string)
+	name, _ := metadata["name"].(string)
+	namespace, _ := metadata["namespace"].(string)
+	return extensionrender.ObservedResourceID(kind, namespace, name)
 }
 
 func (e *addonHookExecutor) renderHookManifest(hook v1alpha1.ClusterAddonHook, manifest v1alpha1.ClusterAddonHookManifest, outputs map[string]string) (map[string]any, error) {

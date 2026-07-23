@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
+	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 )
 
 type recordingHookRunner struct {
@@ -18,12 +20,12 @@ type recordingHookRunner struct {
 	calls  []string
 }
 
-func (h *recordingHookRunner) Run(_ context.Context, lifecycle string) error {
+func (h *recordingHookRunner) Run(_ context.Context, lifecycle string) ([]string, error) {
 	h.calls = append(h.calls, lifecycle)
 	if h.runner != nil {
 		h.runner.events = append(h.runner.events, "hook:"+lifecycle)
 	}
-	return nil
+	return nil, nil
 }
 
 func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
@@ -117,6 +119,82 @@ func TestApplyHookErrorRecordsHookSummary(t *testing.T) {
 
 type failingHookRunner struct{}
 
-func (failingHookRunner) Run(context.Context, string) error {
-	return &HookError{Hook: "prep", Lifecycle: v1alpha1.ClusterAddonHookPreApply, Detail: "boom"}
+func (failingHookRunner) Run(context.Context, string) ([]string, error) {
+	return nil, &HookError{Hook: "prep", Lifecycle: v1alpha1.ClusterAddonHookPreApply, Detail: "boom"}
 }
+
+type observingHookRunner struct {
+	observed map[string][]string
+}
+
+func (h observingHookRunner) Run(_ context.Context, lifecycle string) ([]string, error) {
+	return h.observed[lifecycle], nil
+}
+
+func TestApplyRecordsHookObservedResources(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	extension := v1alpha1.ClusterAddon{
+		Metadata: v1alpha1.Metadata{Name: "odf"},
+		Spec: v1alpha1.ClusterAddonSpec{
+			Type:        v1alpha1.ClusterAddonTypeManifestSet,
+			ManifestSet: &v1alpha1.ClusterAddonManifestSet{},
+			Hooks:       []v1alpha1.ClusterAddonHook{{Name: "attach", Lifecycle: v1alpha1.ClusterAddonHookPreApply}},
+		},
+	}
+	plan := extensionplan.ExtensionPlan{Name: "odf", Cluster: "metal-ocp", Extension: extension, Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"}}
+	hookRunner := observingHookRunner{observed: map[string][]string{
+		v1alpha1.ClusterAddonHookPreApply: {"Secret/openshift-storage/rook-ceph-external-cluster-details"},
+	}}
+	if _, err := Apply(context.Background(), &sequencingRunner{}, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run", StartedAt: time.Now(),
+		Hooks: hookRunner,
+	}, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	record, found, err := extensionrecords.LoadRecord(dir, "metal-ocp", "odf")
+	if err != nil || !found {
+		t.Fatalf("LoadRecord: found=%v err=%v", found, err)
+	}
+	want := []string{"Secret/openshift-storage/rook-ceph-external-cluster-details"}
+	if !reflect.DeepEqual(record.ObservedResources, want) {
+		t.Fatalf("ObservedResources = %v, want %v (hook-applied resources must be recorded like OLM-rendered ones)", record.ObservedResources, want)
+	}
+}
+
+func TestApplyArgsReflectsPolicy(t *testing.T) {
+	cases := []struct {
+		name   string
+		policy addons.ClusterAddonPolicy
+		want   []string
+	}{
+		{
+			name:   "default policy uses server-side apply and the field manager",
+			policy: addons.DefaultPolicy(),
+			want:   []string{"apply", "-f", "/tmp/x.yaml", "--server-side", "--field-manager", "bootwright"},
+		},
+		{
+			name:   "server-side apply disabled drops the flag but keeps the field manager",
+			policy: addons.ClusterAddonPolicy{ServerSideApply: boolPtr(false), FieldManager: "bootwright"},
+			want:   []string{"apply", "-f", "/tmp/x.yaml", "--field-manager", "bootwright"},
+		},
+		{
+			name:   "empty field manager omits the flag",
+			policy: addons.ClusterAddonPolicy{ServerSideApply: boolPtr(true)},
+			want:   []string{"apply", "-f", "/tmp/x.yaml", "--server-side"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ApplyArgs(tc.policy, "/tmp/x.yaml")
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("ApplyArgs = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func boolPtr(v bool) *bool { return &v }

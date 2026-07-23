@@ -86,3 +86,35 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 		t.Fatalf("resolveRefObject must not embed objectGateway when objectGatewayRef is unset: %v", withoutRGW)
 	}
 }
+
+func TestHookManifestResourceIDExtractsKindNamespaceName(t *testing.T) {
+	cases := []struct {
+		name   string
+		object map[string]any
+		want   string
+	}{
+		{
+			name: "namespaced resource",
+			object: map[string]any{
+				"kind":     "Secret",
+				"metadata": map[string]any{"name": "rook-ceph-external-cluster-details", "namespace": "openshift-storage"},
+			},
+			want: "Secret/openshift-storage/rook-ceph-external-cluster-details",
+		},
+		{
+			name: "cluster-scoped resource",
+			object: map[string]any{
+				"kind":     "StorageCluster",
+				"metadata": map[string]any{"name": "ocs-external-storagecluster"},
+			},
+			want: "StorageCluster/ocs-external-storagecluster",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hookManifestResourceID(tc.object); got != tc.want {
+				t.Fatalf("hookManifestResourceID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
