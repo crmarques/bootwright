@@ -679,18 +679,21 @@ OpenShift Data Foundation external mode. The export name is what an
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.type` | Yes | — | Currently `dataFoundation`. |
+| `spec.type` | Yes, unless `dataFoundation` is set | `dataFoundation` when `spec.dataFoundation` is set | Currently `dataFoundation`. |
 | `spec.storageClusterRef` | Yes | — | Imported or managed `StorageCluster`. |
 | `spec.dataFoundation` | When `storageClusterRef` is managed Ceph | — | References managed storage services to export; see [Data Foundation](#data-foundation). |
 | `spec.externalDetails` | When `storageClusterRef` is external Ceph | — | Operator-supplied external-cluster details; see [External details](#external-details). |
 
 !!! note "Cross-field rules"
     - For a **managed** `storageClusterRef`, `dataFoundation` is required and
-      `externalDetails` may be omitted: the consuming add-on then produces the
+      `externalDetails` must be empty: the consuming add-on produces the
       external-cluster details itself — its hook runs the exporter on a Ceph
       node of the export's cluster and captures the payload as a hook output.
     - For an **external** `storageClusterRef`, `externalDetails` is required and
       `dataFoundation` must be empty.
+    - `spec.type` may be omitted only when `dataFoundation` is set (it then
+      normalizes to `dataFoundation`); an external export must always author it
+      explicitly.
 
 A managed export wiring the RBD pool and CephFS filesystem (the consuming
 add-on's exporter hook reads these refs):

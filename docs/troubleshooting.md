@@ -260,6 +260,41 @@ Watch progress with `bootwright status --watch`; the per-task logs under
 `/var/lib/bootwright/contexts/<context>/runs/` show which host or endpoint the
 install is waiting on.
 
+## Add-on (ClusterAddon) apply failures
+
+A `ClusterAddon` apply (an OLM operator install, its hooks, or a manifest-only
+attachment) can fail at several distinct gates; `bootwright status` names which
+one and the exact detail last observed, and the full command/tool output for
+that task is in its log under
+`/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/tasks/`.
+
+- **`CatalogSource/... did not reach connectionState READY`** — the add-on
+  ships its own `spec.olm.catalogSource` (for example `fusion-data-foundation`)
+  and the registry pod never reported `READY`. Usually the catalog image
+  cannot be pulled: confirm the image reference and tag exist, and that the
+  cluster's pull secret (or the add-on's `globalPullSecretMerge` input, e.g.
+  `ibm-entitlement`) actually carries credentials for that registry.
+- **`Subscription/... operator CSV did not reach Succeeded`** — the catalog
+  resolved but the operator's ClusterServiceVersion never installed. Check the
+  Subscription's `installPlanApproval` (a `Manual` plan needs approving) and
+  the operator namespace's events/pod status for image pull or RBAC errors.
+- **`hook "<name>" (<lifecycle>) failed`** — a `spec.hooks` playbook or
+  manifest apply failed. The task log contains the full Ansible or `oc apply`
+  output; a hook whose `target.fromInput` resolves to a Ceph `StorageExport`
+  needs the referenced `StorageCluster` reachable over SSH (or, for external
+  Ceph, needs `externalDetails.fromSecretRef` rather than a playbook — `bootwright
+  validate` rejects the mismatched combination up front). A hook target machine
+  with no `spec.access.ssh` is rejected the same way, before any apply runs.
+- **`hook %s target machine %s has no resolvable SSH access`** — the hook's
+  resolved target machine has no reachable SSH address; point the hook at a
+  machine that configures `spec.access.ssh`, or use a `boundCluster`/
+  `static.clusters` target instead of a bare machine.
+
+The per-add-on apply record (status, phase, and the same last-observed detail)
+also lives on disk at
+`/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/addons/<addon>.json`,
+independent of the run history, if you need to inspect it outside of `status`.
+
 ## Resources no longer in desired state (orphans)
 
 `apply` is additive: it creates and converges what desired state declares and
@@ -285,7 +320,12 @@ reclamation workflow.
     from a still-declared `StorageCluster` is not listed — the live pool or
     service simply keeps running. Remove it on the cluster with the
     `ceph`/`cephadm` CLI (see
-    [Ceph topologies](advanced/ceph-topologies.md)).
+    [Ceph topologies](advanced/ceph-topologies.md)). Removing a `ClusterAddon`
+    from a `ClusterAddonBinding` (or deleting the binding) is the same kind of
+    gap: the add-on's installed operator, custom resources, and hook-applied
+    manifests are not tracked as orphans and are not torn down by `apply` or
+    `diff` — remove them on the cluster directly (`oc delete`), or destroy the
+    whole `ContainerCluster` to reclaim everything at once.
 
 ## Ceph disk-space alerts flap after install
 
