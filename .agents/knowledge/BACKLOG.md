@@ -223,3 +223,174 @@ learned; this file records what it still owes.
   part of the managed name-resolution component apply), then tighten the
   preflight WARN.
 - Related: ADR 0017; internal/preflight/name_resolution.go
+
+## B-019 — No teardown path for a removed ClusterAddon binding
+- Status: open
+- Area: addons / lifecycle
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: removing a `ClusterAddonBinding` entry (or the whole binding) from
+  desired state is a silent no-op on `apply` — the add-on's OLM install
+  (CatalogSource/Namespace/OperatorGroup/Subscription/CSV), any
+  `customResources`, and hook-applied manifests (e.g. the Data Foundation
+  `rook-ceph-external-cluster-details` Secret, `ocs-external-storagecluster`
+  StorageCluster CR) all remain live and Bootwright-unmanaged.
+  `internal/addons/oc/execute.go` has no delete verb at all, and
+  `Record.ObservedResources` is written but never read back to compute a diff
+  against the current desired set.
+- Exit: implement (or consciously decline) an uninstall/reconcile path that
+  tears down previously-applied add-on resources when a binding or
+  addonConfig entry is removed, mirroring how a `ContainerCluster` destroy
+  already retires add-on state as a side effect of removing the whole cluster.
+- Related: internal/addons/oc/execute.go, internal/addons/records/records.go,
+  internal/converge/workflow/apply_plan.go
+
+## B-020 — Hook firstReachable retry cannot distinguish "unreachable" from "task failed"
+- Status: open
+- Area: addons / hooks
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: a `ClusterAddonHook` target with the default `limit: firstReachable`
+  retries the next candidate machine on ANY error from the playbook run, not
+  only a connection failure — `internal/converge/ansible` only surfaces a bare
+  process-exit error, with no parsing of Ansible's per-host unreachable/failed
+  stats. A hook whose task fails for a real reason (bad input, a genuine
+  Ceph/API error) gets silently retried against a second (and third) machine
+  before finally failing, risking partial side effects and an N-times
+  timeout. The shipped Data Foundation exporter hook (multi-node Ceph
+  clusters) is exposed to this.
+- Exit: thread Ansible's per-host stats/callback result (or at least a
+  distinct "unreachable" signal) through `internal/converge/ansible.Runner` so
+  the hook-retry loop stops after the first REACHABLE machine's task fails,
+  retrying only on genuine unreachability.
+- Related: internal/converge/workflow/apply_addon_hooks_run.go,
+  internal/converge/ansible/runner.go
+
+## B-021 — Environment.spec.resources can permanently deadlock once add-ons/_store is populated
+- Status: open
+- Area: state / validation
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: `Environment.spec.resources` narrows the loaded file set, but
+  `validateSelectedResourceReferences` scans the full unfiltered discovered
+  file tree (including `add-ons/_store/<name>` snapshots baked in by `context
+  init`/`update`) and rejects any reference the filter excluded. A context
+  whose `spec.resources` lists specific sub-paths (rather than the whole
+  `add-ons` directory) becomes permanently unable to validate/apply once a
+  store-resolved add-on is bound and snapshotted, with an undocumented,
+  non-obvious workaround (list the whole parent directory instead of
+  sub-paths).
+- Exit: decide the right behavior — either auto-include
+  `add-ons/_store/**` snapshots in the reference-inventory scan regardless of
+  `spec.resources`, or document the workaround explicitly and add a
+  validation hint that names it.
+- Related: internal/state/desired/resources.go, internal/state/desired/load.go,
+  internal/workspace/input.go
+
+## B-022 — readiness.timeout is reused as a full budget by up to three sequential add-on gates
+- Status: open
+- Area: addons / oc
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: `spec.readiness.timeout` is documented as one "overall" timeout but
+  `waitCatalogSourceReady`, `waitCSVSucceeded`, and `WaitReady` each
+  independently apply the same configured value as their own full budget — a
+  single apply of `fusion-data-foundation` (which ships a catalogSource) can
+  legitimately take up to 3x the configured timeout (135m for a 45m setting)
+  before finally failing.
+- Exit: either track elapsed wall-clock time across the whole Apply+Wait
+  sequence and pass the remaining budget into each subsequent gate, or split
+  the field into distinct per-gate timeouts with accurate docs. Land together
+  with B-023's poll-loop refactor since both touch the same three functions.
+- Related: internal/addons/oc/execute.go (waitCatalogSourceReady,
+  waitCSVSucceeded, WaitReady)
+
+## B-023 — Three near-identical poll-loop implementations in internal/addons/oc/execute.go
+- Status: open
+- Area: addons / oc
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: `waitCSVSucceeded`, `waitCatalogSourceReady`, and `WaitReady` each
+  reimplement the identical parse-timeout / derive-child-context / ticker /
+  cancellation-vs-timeout skeleton, differing only in the ready-check callback
+  and returned gate-error type. A fix to the cancellation/timeout distinction
+  in one must be manually repeated in the other two. This is also the natural
+  place to add periodic console progress output during a multi-minute wait
+  (currently silent by design, since the workflow layer intentionally uses a
+  quiet read-runner for these polls) — doing that three times separately would
+  triple the duplication instead of shrinking it.
+- Exit: extract a shared `pollUntilReady(ctx, timeout, pollInterval, check,
+  onTimeout)` helper; add a rate-limited progress callback as part of the same
+  refactor rather than bolting it onto three copies.
+- Related: internal/addons/oc/execute.go, internal/converge/workflow/extensions.go
+
+## B-024 — fusion-data-foundation has no end-to-end example or test coverage
+- Status: open
+- Area: addons / examples / tests
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: every shipped example and workflow/render-level test binds only
+  `openshift-data-foundation`; `fusion-data-foundation`'s distinguishing
+  content (its shipped catalogSource, the `ibm-entitlement`
+  globalPullSecretMerge input) is proven to load and normalize
+  (internal/state/desired/load_store_addons_test.go) but never proven to plan
+  or render correctly through the real task-graph/OLM-resource pipeline.
+- Exit: add an example (or extend an existing one) that binds
+  fusion-data-foundation, and extend the plan/render test coverage to cover it
+  alongside openshift-data-foundation.
+- Related: internal/converge/workflow/apply_tasks_test.go,
+  internal/addons/render/render_test.go, examples/
+
+## B-025 — No observed-CSV-version record for Automatic-approval OLM add-ons
+- Status: open
+- Area: addons / supply-chain
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: both Data Foundation catalog entries default `installPlanApproval`
+  to `Automatic` against an actively-polled catalogSource, and the addon
+  Record tracks only a channel-based DesiredHash, never the resolved CSV
+  name/version actually installed — an unattended operator upgrade within the
+  subscribed channel is invisible to `status`/`diff`.
+- Exit: record the resolved CSV name/version into the addon Record on
+  successful apply and surface it via `status`/`diff`; separately decide
+  whether either catalog entry should default to `installPlanApproval:
+  Manual`.
+- Related: internal/addons/records/records.go, internal/addons/oc/execute.go
+
+## B-026 — Fetched Data Foundation exporter script has no audit trail
+- Status: open
+- Area: addons / security
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: the exporter hook (`run: always`, root-privileged, executes against
+  the live Ceph cluster on every apply) fetches its script at runtime from the
+  operator-published `rook-ceph-external-cluster-script-config` ConfigMap;
+  neither the hook digest nor the HookRecord captures any checksum/identity of
+  the fetched script, so there is no record of exactly which code ran on a
+  given apply.
+- Exit: persist the fetched script's SHA-256 (or the ConfigMap's
+  resourceVersion) into the HookRecord on every run, for audit purposes;
+  optionally support an add-on-declared expected checksum later.
+- Related: add-ons/openshift-data-foundation/4.21/playbooks/export-external-details.yaml,
+  internal/addons/records/records.go
+
+## B-027 — No shipped example demonstrates register-then-bind for the native add-on catalog
+- Status: open
+- Area: addons / examples
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: `bootwright add-ons add` plus binding by `addonRef` against the
+  machine-local store is the documented recommended onboarding path, but every
+  Data Foundation-bound example instead hand-copies the catalog add-on
+  directory in as an authored `ClusterAddon`, so the resolver's store fallback
+  (internal/state/desired/load_store_addons.go) is unit-tested but never
+  exercised at the example/e2e level.
+- Exit: add (or convert) one example to use `add-ons add` plus a bare
+  `addonRef` binding instead of a copied `ClusterAddon` directory.
+- Related: internal/state/desired/load_store_addons.go, docs/concepts/add-ons.md
+
+## B-028 — fusion-data-foundation catalogSource image pin unverified against the live IBM registry
+- Status: open
+- Area: addons / supply-chain
+- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
+- Problem: `add-ons/fusion-data-foundation/4.21/add-on.yaml` pins its OLM
+  catalogSource by mutable tag (`icr.io/cpopen/isf-data-foundation-catalog:v4.21`,
+  no digest); the 4.18→4.21 bump (commit 9cc6b017) was a mechanical
+  rename/substitution with no recorded verification that v4.21/stable-4.21 is
+  IBM's actual current release. This needs live-registry access to confirm,
+  which was not available during this review.
+- Exit: verify the image/channel against the live icr.io registry (or IBM's
+  release notes) and, ideally, pin by digest; record the verification date in
+  `.agents/knowledge/`.
+- Related: add-ons/fusion-data-foundation/4.21/add-on.yaml, add-ons/catalog.yaml
