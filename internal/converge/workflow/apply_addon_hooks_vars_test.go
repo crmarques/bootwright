@@ -12,7 +12,10 @@ import (
 func TestHookExtraVarPairsCarryScopedRuntimeVars(t *testing.T) {
 	hook := v1alpha1.ClusterAddonHook{Name: "attach", Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady}
 	inputs := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "ceph-export"}}
-	pairs := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", map[string]any{"external-storage": map[string]any{"kind": "StorageExport"}}, inputs)
+	pairs, err := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", map[string]any{"external-storage": map[string]any{"kind": "StorageExport"}}, inputs)
+	if err != nil {
+		t.Fatalf("hookExtraVarPairs: %v", err)
+	}
 	for _, want := range []string{
 		"bootwright_hook_name=attach",
 		"bootwright_hook_lifecycle=postOperatorReady",
@@ -29,6 +32,21 @@ func TestHookExtraVarPairsCarryScopedRuntimeVars(t *testing.T) {
 	joined := strings.Join(pairs, "\n")
 	if !strings.Contains(joined, "bootwright_hook_refs") || !strings.Contains(joined, "bootwright_hook_inputs") {
 		t.Fatalf("hookExtraVarPairs missing refs/inputs JSON vars: %v", pairs)
+	}
+}
+
+func TestHookExtraVarPairsPropagatesMarshalError(t *testing.T) {
+	hook := v1alpha1.ClusterAddonHook{
+		Name:      "attach",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		ExtraVars: map[string]any{"bad": make(chan int)},
+	}
+	_, err := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", nil, nil)
+	if err == nil {
+		t.Fatal("hookExtraVarPairs did not report an unmarshalable extraVars value")
+	}
+	if !strings.Contains(err.Error(), "attach") {
+		t.Fatalf("hookExtraVarPairs error %q does not name the failing hook", err)
 	}
 }
 

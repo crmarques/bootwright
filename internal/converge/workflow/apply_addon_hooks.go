@@ -258,7 +258,7 @@ func addonBindingInputs(state v1alpha1.State, bindingName, addonName string) (v1
 	return v1alpha1.ClusterAddonBinding{}, nil
 }
 
-func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outputsDir, secretsDir, kubeconfig string, refs map[string]any, inputs []v1alpha1.ClusterAddonBindingInput) []string {
+func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outputsDir, secretsDir, kubeconfig string, refs map[string]any, inputs []v1alpha1.ClusterAddonBindingInput) ([]string, error) {
 	pairs := []string{
 		"bootwright_hook_name=" + hook.Name,
 		"bootwright_hook_lifecycle=" + hook.Lifecycle,
@@ -268,14 +268,24 @@ func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outpu
 		"bootwright_hook_secrets_dir=" + secretsDir,
 		"bootwright_kubeconfig=" + kubeconfig,
 	}
-	pairs = append(pairs, jsonVarPair("bootwright_hook_refs", refs))
-	pairs = append(pairs, jsonVarPair("bootwright_hook_inputs", bindingInputValues(inputs)))
-	if len(hook.ExtraVars) > 0 {
-		if data, err := json.Marshal(hook.ExtraVars); err == nil {
-			pairs = append(pairs, string(data))
-		}
+	refsPair, err := jsonVarPair("bootwright_hook_refs", refs)
+	if err != nil {
+		return nil, fmt.Errorf("hook %s: %w", hook.Name, err)
 	}
-	return pairs
+	pairs = append(pairs, refsPair)
+	inputsPair, err := jsonVarPair("bootwright_hook_inputs", bindingInputValues(inputs))
+	if err != nil {
+		return nil, fmt.Errorf("hook %s: %w", hook.Name, err)
+	}
+	pairs = append(pairs, inputsPair)
+	if len(hook.ExtraVars) > 0 {
+		data, err := json.Marshal(hook.ExtraVars)
+		if err != nil {
+			return nil, fmt.Errorf("hook %s extraVars: %w", hook.Name, err)
+		}
+		pairs = append(pairs, string(data))
+	}
+	return pairs, nil
 }
 
 func bindingInputValues(inputs []v1alpha1.ClusterAddonBindingInput) map[string]any {
@@ -286,12 +296,12 @@ func bindingInputValues(inputs []v1alpha1.ClusterAddonBindingInput) map[string]a
 	return out
 }
 
-func jsonVarPair(name string, value any) string {
+func jsonVarPair(name string, value any) (string, error) {
 	data, err := json.Marshal(map[string]any{name: value})
 	if err != nil {
-		return name + "={}"
+		return "", fmt.Errorf("marshal %s: %w", name, err)
 	}
-	return string(data)
+	return string(data), nil
 }
 
 func hookSecretNames(hook v1alpha1.ClusterAddonHook) []string {
