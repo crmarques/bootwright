@@ -1758,6 +1758,23 @@ Rules:
   remains — and continues, leaving the cluster partially destroyed. It requires
   `--force`. Storage teardown still fails closed when a cluster's Ceph seed
   host is unreachable, so ownership stays proven before any device wipe.
+- `destroy --purge-history` deletes retained per-component history once a
+  cluster's or machine's teardown actually succeeds: the `ContainerCluster`
+  installer working directory and install/connection records under
+  `clusters/<name>/` (kubeconfig and kubeadmin-password included), and its
+  per-run task and flow logs under `runs/history/<run-id>/`. Scope tracks
+  `--clusters`/`--machines` exactly (the whole context on an unscoped destroy)
+  and never a component outside it. A cluster left partially destroyed by
+  `--skip-unreachable` keeps its history so the operator can still diagnose and
+  retry. A run whose tasks span both a purged and a still-live component keeps
+  its ledger and shared run log — only the purged component's task directories
+  and per-cluster log are removed — so history for the surviving component is
+  never lost. It never removes the destroy-authorization substrate-release
+  record (`runs/substrate-release/`, needed so a later `apply` can reinstall
+  the released substrate) or unrelated context state (the ownership store, the
+  input-history rollback snapshots). Rejected with the artifact-server literal
+  (`--stage infra --clusters artifact-server`), which has no per-component
+  history to remove.
 - `apply` reconciles by default: it creates missing objects, skips objects
   whose recorded desired state matches the current desired state, converges
   drift that is reconcilable in place, and fails closed on structural

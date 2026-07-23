@@ -36,6 +36,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		override        bool
 		forceUnowned    bool
 		skipUnreachable bool
+		purgeHistory    bool
 		verbose         bool
 		stage           string
 		machinesScope   string
@@ -67,6 +68,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&override, "force", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --force. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
+	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
 		flags.executable = workspace.ResolveAnsiblePlaybook()
@@ -123,6 +125,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, err)
 		}
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
+		if purgeHistory && artifactServerOnly {
+			return failErr(2, errors.New("--purge-history has no per-component history to remove for the artifact-server service; drop --purge-history"))
+		}
 		var sel clusteraccess.Selection
 		if !artifactServerOnly {
 			sel, err = resolveScopeSelection(state, runScope.Name, flags.clusterScope, machinesScope)
@@ -267,6 +272,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if storagePlanned {
 				cliout.NewContinuation(stdout).Warning("data loss", "destroying storage cluster(s) "+strings.Join(storageScopeNames, ", ")+": cephadm rm-cluster --zap-osds destroys ALL OSD DATA and declared devices are wiped (wipefs + sgdisk --zap-all). This is irreversible.")
 			}
+			if purgeHistory {
+				cliout.NewContinuation(stdout).Warning("purge history", "on success this also deletes the destroyed component(s)' installer working directory, install records, kubeconfig, and per-run task/flow logs under runs/ — this history is not recoverable")
+			}
 			if !confirm(stdin, stdout, destroyConfirmPrompt(storagePlanned)) {
 				return failErr(1, errors.New("destroy aborted"))
 			}
@@ -324,13 +332,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger))
+				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), purgeHistory)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, nil)
+			printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, resetPartial, nil, purgeHistory)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			renderResult = result
 		default:
@@ -339,7 +347,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly && !plan.NoRemoteWork {
-				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, nil, nil)
+				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, runScope, plan, nil, nil, purgeHistory)
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)

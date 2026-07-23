@@ -49,7 +49,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 		t.Fatalf("precondition: expected storage drift, got %v", err)
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, InfraScope, after, nil, nil, nil)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, InfraScope, after, nil, nil, nil, false)
 
 	objects, err = workflow.ClassifyApplyObjects(afterTasks, runsDir)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 		}
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, ClustersScope, st, nil, []string{"ceph-a"}, nil)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, ClustersScope, st, nil, []string{"ceph-a"}, nil, false)
 
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestFullDestroySweepsRecordsForUndeclaredObjects(t *testing.T) {
 		t.Fatal("precondition: records must exist")
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, AllScope, st, nil, nil, nil)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, AllScope, st, nil, nil, nil, false)
 
 	if workflow.HasConvergeSafetyRecords(runsDir) {
 		t.Fatal("a full-estate destroy must leave no converge safety records, including for objects deleted from the desired state before the destroy")

@@ -951,6 +951,47 @@ func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
 	}
 }
 
+func TestDestroyHelpDocumentsPurgeHistory(t *testing.T) {
+	help, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(help, "--purge-history") {
+		t.Fatalf("destroy help must document --purge-history:\n%s", help)
+	}
+}
+
+func TestDestroyPurgeHistoryRejectsArtifactServerScope(t *testing.T) {
+	initTestContext(t, "002-sno-emul-baremetal")
+	_, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--clusters", "artifact-server",
+		"--purge-history",
+		"--dry-run",
+		"--ask-become-pass=false",
+	)
+	if code != 2 {
+		t.Fatalf("destroy --purge-history --clusters artifact-server exited %d, want 2; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "--purge-history") {
+		t.Fatalf("destroy --purge-history --clusters artifact-server stderr = %q, want a --purge-history explanation", stderr)
+	}
+}
+
+func TestDestroyPurgeHistoryAcceptedWithClusterScopeDryRun(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	_, stderr, code := runCLI(t,
+		"destroy",
+		"--purge-history",
+		"--dry-run",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --purge-history --dry-run exited %d, stderr=%q", code, stderr)
+	}
+}
+
 func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,

@@ -17,7 +17,10 @@ see [Operations and Recovery](advanced/operations.md).
     state directory at `/var/lib/bootwright/contexts/<context>/runs/`. When a
     task fails, that is the first place to look — the terminal shows a summary,
     but the detailed tool output (Ansible, `openshift-install`, `cephadm`) is
-    kept in those root-managed logs rather than streamed.
+    kept in those root-managed logs rather than streamed. `destroy --purge-history`
+    deletes a torn-down component's share of these logs (see
+    [Operations and Recovery](advanced/operations.md#leaving-no-trace-of-a-destroyed-component)),
+    so skip it while a failure is still under investigation.
 
 !!! warning "Edits need `context update`"
     Once you have run `context init`, the context holds a **copy** of your input

@@ -160,6 +160,36 @@ and leaves the rest of the infrastructure standing:
 bootwright destroy --stage infra --clusters artifact-server
 ```
 
+### Leaving no trace of a destroyed component
+
+By default `destroy` clears the runtime records it needs to for correctness —
+converge-safety records, install/connection records, kubeconfig — but leaves
+the rest of a destroyed component's history on disk: its installer working
+directory (`install-config.yaml`/`agent-config.yaml`, rendered manifests, the
+`openshift-install` log) and its per-run task and flow logs under
+`runs/history/`. Add `--purge-history` to also delete that once a component's
+teardown actually succeeds:
+
+```text
+bootwright destroy --clusters ocp-3node --purge-history --yes
+bootwright destroy --machines ceph-osd-1 --purge-history --force
+```
+
+`--purge-history` is scoped identically to `--clusters`/`--machines` — the
+whole context on an unscoped `destroy` — and never reaches a component outside
+that scope. A cluster left partially destroyed by `--skip-unreachable` keeps
+its history so you can still diagnose and retry; a run that also covers a
+still-live component keeps its shared ledger and run log, pruning only the
+purged component's own task directories and log. It leaves the destroy
+authorization trail (the substrate-release record that lets a later `apply`
+reinstall the same name) and unrelated context state (the ownership store,
+input-history rollback snapshots) untouched, and has nothing to remove for the
+artifact-server literal.
+
+!!! warning "Not recoverable"
+    Purged history is gone for good — there is no undo. Skip `--purge-history`
+    if you might need the installer inputs or run logs for a post-mortem.
+
 ## Destroy protection and the authorization boundary
 
 Set `Environment.spec.safety.destroyProtection: requiredOverride` to guard a

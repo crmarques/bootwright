@@ -107,6 +107,51 @@ clusters share a provider service component with unscoped clusters
 keyed per (provider, name), so destroying a shared instance breaks the
 unscoped consumers.
 
+**`--purge-history` piggybacks on the reset functions' own success scope,
+never a parallel recomputation:** `ResetConvergeRecordsAfterDestroy` and
+`ResetMachineConvergeRecordsAfterDestroy` take a trailing `purgeHistory bool`.
+When true, the SAME loops that already compute "which cluster/machine names
+this destroy actually tore down" (`workflow.ContainerInstallClusterNames(tasks)`
+under `include(DestroyTaskKindContainerCluster)`, `destroyStorageResetNames`
+under `include(DestroyTaskKindStorageCluster)` minus the partial set,
+`workflow.MachineSubstrateClusters(tasks)` under `include(DestroyTaskKindMachineInfra)`,
+and `machineProvision`'s keys for a `--machines` destroy) additionally purge
+history for exactly those names — never a second, independently-derived name
+set that could drift from the one already gating record reset. Two
+new primitives in `destroy_history_purge.go` do the actual removal:
+`purgeClusterRuntimeDir` (`os.RemoveAll(clustersDir/<cluster>)`, replacing the
+narrower `RemoveClusterInstallState` four-file removal — ContainerCluster
+only, StorageCluster has no `clusters/<name>/` tree) and
+`purgeRunHistoryForComponents`, which walks every `runs/history/<run-id>/`,
+loads its archived `ledger.json`, and matches each `TaskLedgerEntry` by
+`Cluster` or `Node`. A run whose entire task set matches gets `RemoveAll`'d
+outright (ledger, shared run log, input snapshot included); a run that mixes
+purged and still-live components keeps its ledger and shared run log and only
+prunes the matched tasks' `tasks/<id>/` directories and
+`workflow.ApplyClusterLogPath` per-cluster log — so a still-declared sibling
+cluster's history in the same run is never touched.
+
+**Deliberately excluded from `--purge-history`, by design not oversight:**
+`runs/substrate-release/` (the positive re-authorization token a later `apply`
+needs to reinstall a released name — ADR 0007; purging it would make a
+legitimate reinstall read as an unexplained rename collision instead of a
+clean install), `runs/safety/` convergence-safety records (already lifecycle-
+managed by the unconditional part of `ResetConvergeRecordsAfterDestroy`; see
+`converge-hash-drift-model.md` for what losing one does to `apply
+--reclaim-devices`), the context's `ownership/` store (Ansible-side authorization
+evidence, cleaned per-record by each destroy role already, deliberately kept
+on a corrupted/unreadable record so destroy fails closed rather than silently
+under-destroying), and `input-history/` (the unrelated `context
+update`/`diff --adopt` rollback mechanism documented in
+`context-input-ownership.md` — capped at 20 whole-tree snapshots, not
+component-scoped, and not part of a destroyed component's runtime history).
+A partially-destroyed cluster (`--skip-unreachable`) keeps its history for the
+same reason its convergence records survive: the next destroy retry, or a
+human troubleshooting the skip, needs it. Ordering matters: the purge call
+sits inside `printDestroyRecordReset`, AFTER `RecordPartialStorageDestroy`
+already read `storage-destroy-result.json` out of the run's task-artifacts
+directory — purging earlier would race that read.
+
 **Storage node access revocation is the one ordering EXCEPTION:**
 `destroy.storage-node-access` ("Storage node access") must run LAST in both the
 "clusters" and "all" chains, never folded back into `clusterDestroySteps()`.
