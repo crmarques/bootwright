@@ -32,3 +32,20 @@ contributes only the VIP/failover: `backend_service: mgmt-gateway` and no
 HAProxy frontend is rendered (the gateway, not HAProxy, reverse-proxies the
 dashboard and monitoring UIs). `enable_auth` renders only when authored so an
 unset spec keeps cephadm's default (off).
+
+**Root cause:** cephadm's classic mgr dashboard module keeps its own HTTPS
+listener (`mgr/dashboard/ssl_server_port`, default `8443`) bound on every mon
+host via the mgr container's host-network port mapping. Ceph does not disable
+that listener automatically when a `mgmt-gateway` spec is applied — upstream
+docs require the operator to flip `mgr/dashboard/ssl` off and fail the active
+mgr as a manual prerequisite. If that never happens, the mgmt-gateway nginx
+daemon (also host-port `8443` by default) fails to bind on every host that
+also runs a mgr daemon, while it starts fine on ingress hosts that don't run
+mgr — the service readiness gate
+([ceph-service-rollout-gate.md](ceph-service-rollout-gate.md)) then reports
+`mgmt-gateway (running/mon-count)` stuck partway forever while every other
+service reaches full count. `management_services.yml` now disables
+`mgr/dashboard/ssl` and runs `ceph mgr fail` before applying the mgmt-gateway
+spec, gated so it only fires (and only fails over the mgr) the first time the
+setting isn't already `false` — later reconciles are a no-op and don't
+disrupt a healthy mgr.

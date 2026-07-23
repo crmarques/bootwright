@@ -55,6 +55,52 @@
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_management.hosts is defined
 
+- name: Check current Ceph dashboard SSL setting
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - get
+      - mgr
+      - mgr/dashboard/ssl
+  register: bootwright_ceph_dashboard_ssl_current
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Disable Ceph dashboard SSL so it stops occupying the mgmt-gateway port
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - set
+      - mgr
+      - mgr/dashboard/ssl
+      - "false"
+  register: bootwright_ceph_dashboard_ssl_disable
+  changed_when: true
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_dashboard_ssl_current.stdout | default('') | trim) != 'false'
+
+- name: Restart the active Ceph manager to release the dashboard's HTTPS port
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - fail
+  changed_when: true
+  when: bootwright_ceph_dashboard_ssl_disable is changed
+
 - name: Apply management service spec
   ansible.builtin.command:
     argv:
