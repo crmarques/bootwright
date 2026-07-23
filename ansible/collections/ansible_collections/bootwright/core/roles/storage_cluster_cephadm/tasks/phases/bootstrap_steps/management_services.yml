@@ -89,6 +89,50 @@
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_dashboard_ssl_current.stdout | default('') | trim) != 'false'
 
+- name: Check current Ceph dashboard HTTP port setting
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - get
+      - mgr
+      - mgr/dashboard/server_port
+  register: bootwright_ceph_dashboard_port_current
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Move the Ceph dashboard off its default HTTP port to avoid colliding with RGW or other daemons
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - set
+      - mgr
+      - mgr/dashboard/server_port
+      - "{{ bootwright_ceph_dashboard_http_port | default(8081) | int }}"
+  register: bootwright_ceph_dashboard_port_set
+  changed_when: true
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_dashboard_port_current.stdout | default('') | trim)
+        != (bootwright_ceph_dashboard_http_port | default(8081) | string)
+
+- name: Record whether the Ceph dashboard's SSL/port settings changed
+  ansible.builtin.set_fact:
+    bootwright_ceph_dashboard_reconfigured: >-
+      {{
+        (bootwright_ceph_dashboard_ssl_disable is changed)
+        or (bootwright_ceph_dashboard_port_set is changed)
+      }}
+  when: bootwright_ceph_management.hosts is defined
+
 - name: Capture Ceph manager daemon identities before restart
   ansible.builtin.command:
     argv:
@@ -104,9 +148,9 @@
       - json
   register: bootwright_ceph_mgr_before_restart
   changed_when: false
-  when: bootwright_ceph_dashboard_ssl_disable is changed
+  when: bootwright_ceph_dashboard_reconfigured | default(false) | bool
 
-- name: Restart every Ceph manager daemon to release the dashboard's HTTPS port
+- name: Restart every Ceph manager daemon to release the dashboard's ports
   ansible.builtin.command:
     argv:
       - cephadm
@@ -117,7 +161,7 @@
       - restart
       - mgr
   changed_when: true
-  when: bootwright_ceph_dashboard_ssl_disable is changed
+  when: bootwright_ceph_dashboard_reconfigured | default(false) | bool
 
 - name: Wait for every Ceph manager daemon to finish restarting
   ansible.builtin.command:
@@ -168,7 +212,7 @@
     or
     ((bootwright_ceph_mgr_after_restart.attempts | default(1) | int)
      >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
-  when: bootwright_ceph_dashboard_ssl_disable is changed
+  when: bootwright_ceph_dashboard_reconfigured | default(false) | bool
 
 - name: Apply management service spec
   ansible.builtin.command:

@@ -57,7 +57,22 @@ rolling restart (the command returns immediately having only scheduled it).
 `management_services.yml` snapshots every mgr daemon's `container_id` before
 issuing the restart, then polls `ceph orch ps --daemon-type mgr` until none
 of the current container IDs appear in that snapshot (i.e. every daemon has
-actually been recreated) before applying the mgmt-gateway spec. The whole
-block is gated so it only fires the first time `mgr/dashboard/ssl` isn't
-already `false` — later reconciles are a no-op and don't disrupt a healthy
-mgr.
+actually been recreated) before applying the mgmt-gateway spec.
+
+**Trap, second order:** disabling `mgr/dashboard/ssl` makes the dashboard
+fall back from its HTTPS port (`ssl_server_port`, default `8443`) to its
+plain-HTTP port (`server_port`, default `8080`) — and `8080` is also the
+conventional cephadm RGW frontend port (`rgw_frontend_port`) that
+`StorageObjectGateway` renders. On any host that colocates `mgr` with `rgw`,
+the dashboard module then fails to bind and shows up as its own separate
+health error — `MGR_MODULE_ERROR: Module 'dashboard' has failed: Port 8080
+not free on <mgr public IP>` — distinct from the `CEPHADM_DAEMON_PLACE_FAIL`
+above and only surfacing on the subset of mgr hosts that also run rgw.
+`management_services.yml` therefore also pins `mgr/dashboard/server_port` to
+`bootwright_ceph_dashboard_http_port` (default `8081`, tunable) whenever it
+isn't already that value, folds that into the same "did anything change"
+check as the SSL flip, and restarts mgr once for both changes together. The
+dashboard's HTTP endpoint is never exposed externally once mgmt-gateway
+fronts it (nginx reverse-proxies to it over the container network), so the
+exact port number has no external meaning — it only has to avoid whatever
+else is already bound on that host.
