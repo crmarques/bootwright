@@ -246,9 +246,15 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 				if extension.Status != string(extensionrecords.RecordStatusReady) {
 					status = cliout.StatusWarn
 				}
+				if extension.Status == string(extensionrecords.RecordStatusFailed) {
+					status = cliout.StatusFail
+				}
 				detail = extension.Status
 				if extension.Phase != "" {
 					detail += " phase=" + extension.Phase
+				}
+				if extension.Status == string(extensionrecords.RecordStatusFailed) && extension.LastObserved != "" {
+					detail += ": " + extension.LastObserved
 				}
 			}
 			p.Status(status, "add-on "+extension.Name, detail)

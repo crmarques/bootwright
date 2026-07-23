@@ -105,11 +105,12 @@ type Cluster struct {
 }
 
 type Extension struct {
-	Name        string `json:"name"`
-	Status      string `json:"status,omitempty"`
-	Phase       string `json:"phase,omitempty"`
-	DesiredHash string `json:"desiredHash,omitempty"`
-	UpdatedAt   string `json:"updatedAt,omitempty"`
+	Name         string `json:"name"`
+	Status       string `json:"status,omitempty"`
+	Phase        string `json:"phase,omitempty"`
+	DesiredHash  string `json:"desiredHash,omitempty"`
+	UpdatedAt    string `json:"updatedAt,omitempty"`
+	LastObserved string `json:"lastObserved,omitempty"`
 }
 
 func BuildShared(state v1alpha1.State) []Shared {
@@ -195,6 +196,7 @@ func BuildAddons(state v1alpha1.State, clustersDir string) map[string][]Extensio
 				entry.Status = string(record.Status)
 				entry.Phase = string(record.Phase)
 				entry.DesiredHash = record.DesiredHash
+				entry.LastObserved = record.LastObserved
 				if !record.UpdatedAt.IsZero() {
 					entry.UpdatedAt = record.UpdatedAt.Format(time.RFC3339)
 				}
