@@ -221,3 +221,30 @@ func TestInstalledAddonsMarksSymlinkContentModified(t *testing.T) {
 		t.Fatalf("InstalledAddons = %+v, want modified symlink add-on", installed)
 	}
 }
+
+func TestInstalledAddonsPropagatesUnreadableFileError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses file permission bits")
+	}
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	dir := InstalledDir("locked")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, MarkerName), []byte("name=locked\nversion=1\ncontentDigest=sha256:clean\n"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	payload := filepath.Join(dir, "payload.yaml")
+	if err := os.WriteFile(payload, []byte("data"), 0o600); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+	if err := os.Chmod(payload, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(payload, 0o600) })
+
+	if _, err := InstalledAddons(); err == nil {
+		t.Fatal("InstalledAddons did not report the unreadable file as an error; a transient read failure must not be silently reported as content drift")
+	}
+}

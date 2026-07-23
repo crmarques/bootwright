@@ -164,17 +164,23 @@ func InstalledAddons() ([]Installed, error) {
 		if err != nil || !found {
 			continue
 		}
+		digest, err := installedDigest(dir)
+		if err != nil && !errors.Is(err, errNonRegularStoreFile) {
+			return nil, fmt.Errorf("compute installed digest for %s: %w", entry.Name(), err)
+		}
 		out = append(out, Installed{
 			Marker:   marker,
 			Dir:      dir,
-			Modified: installedDigest(dir) != marker.ContentDigest,
+			Modified: err != nil || digest != marker.ContentDigest,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Marker.Name < out[j].Marker.Name })
 	return out, nil
 }
 
-func installedDigest(dir string) string {
+var errNonRegularStoreFile = errors.New("not a regular file")
+
+func installedDigest(dir string) (string, error) {
 	var files []File
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -184,7 +190,7 @@ func installedDigest(dir string) string {
 			return nil
 		}
 		if d.Type() != 0 {
-			return fmt.Errorf("%s is not a regular file", path)
+			return fmt.Errorf("%s is not a regular file: %w", path, errNonRegularStoreFile)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -198,10 +204,10 @@ func installedDigest(dir string) string {
 		return nil
 	})
 	if err != nil {
-		return ""
+		return "", err
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	return Digest(files)
+	return Digest(files), nil
 }
 
 func Remove(name string) error {
