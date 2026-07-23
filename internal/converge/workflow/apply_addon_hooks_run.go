@@ -238,9 +238,20 @@ func (e *addonHookExecutor) inputValue(input string) string {
 func (e *addonHookExecutor) resolveRefObject(refKind, name string) map[string]any {
 	switch refKind {
 	case hooks.RefKindStorageExport:
-		if object, ok := stateview.ExportByName(e.state, name); ok {
-			return objectToMap(object)
+		export, ok := stateview.ExportByName(e.state, name)
+		if !ok {
+			return nil
 		}
+		object := objectToMap(export)
+		if df := export.Spec.DataFoundation; df != nil && df.ObjectGatewayRef.Name != "" {
+			for _, gw := range e.state.StorageObjectGateways {
+				if gw.Metadata.Name == df.ObjectGatewayRef.Name {
+					object["objectGateway"] = objectToMap(gw)
+					break
+				}
+			}
+		}
+		return object
 	case hooks.RefKindStorageCluster:
 		if object, ok := stateview.ClusterByName(e.state, name); ok {
 			return objectToMap(object)

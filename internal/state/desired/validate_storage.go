@@ -36,6 +36,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters)...)
 	errs = append(errs, validateStorageNFSExports(state.StorageNFSExports, clusters, filesystems)...)
 	errs = append(errs, validateStorageServiceIDUniqueness(state)...)
+	errs = append(errs, validateStorageIngressVRRPCollisions(state)...)
 	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, machines)...)
 	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
@@ -451,7 +452,7 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 	errs = append(errs, validateStorageIngressVRRPID(prefix+".ingress", ingress.FirstVirtualRouterID)...)
 	errs = append(errs, validateStoragePlacementHosts(prefix+".ingress.placement", ingress.Placement, cluster, true, v1alpha1.StorageCephRoleIngress)...)
 	if storageClusterStretchEnabled(cluster) {
-		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress)...)
+		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress, nil)...)
 	}
 	if mgmt.TLS != nil {
 		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
@@ -562,10 +563,14 @@ func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlac
 	return errs
 }
 
-func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1alpha1.StorageCluster, role string) []string {
+func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1alpha1.StorageCluster, role string, targetSites []string) []string {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
 	if stretch == nil {
 		return nil
+	}
+	dataSites := stretch.DataSites
+	if len(targetSites) > 0 {
+		dataSites = targetSites
 	}
 	counts := map[string]int{}
 	for _, host := range hosts {
@@ -575,44 +580,12 @@ func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1a
 		}
 	}
 	var errs []string
-	for _, site := range stretch.DataSites {
+	for _, site := range dataSites {
 		if counts[site] < 2 {
 			errs = append(errs, fmt.Sprintf("%s must include at least two %s-capable hosts in data site %q for stretch-mode availability", prefix, role, site))
 		}
 	}
 	return errs
-}
-
-func validateStorageIngressVIP(owner, address string, prefixLength int) []string {
-	var errs []string
-	ip := net.ParseIP(address)
-	switch {
-	case address == "":
-		errs = append(errs, owner+".address is required")
-	case ip == nil:
-		errs = append(errs, fmt.Sprintf("%s.address %q is not a valid IP", owner, address))
-	}
-	maxPrefix := 128
-	if ip != nil && ip.To4() != nil {
-		maxPrefix = 32
-	}
-	switch {
-	case prefixLength == 0:
-		errs = append(errs, owner+".prefixLength is required")
-	case prefixLength < 1 || prefixLength > maxPrefix:
-		errs = append(errs, fmt.Sprintf("%s.prefixLength %d out of range (1-%d)", owner, prefixLength, maxPrefix))
-	}
-	return errs
-}
-
-func validateStorageIngressVRRPID(owner string, firstVirtualRouterID int) []string {
-	if firstVirtualRouterID == 0 {
-		return nil
-	}
-	if firstVirtualRouterID < 1 || firstVirtualRouterID > 255 {
-		return []string{fmt.Sprintf("%s.firstVirtualRouterID %d out of range (1-255)", owner, firstVirtualRouterID)}
-	}
-	return nil
 }
 
 func validateStorageCephBootstrapPublicNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {

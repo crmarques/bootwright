@@ -123,6 +123,122 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 	}
 }
 
+func TestStorageStretchAcceptsPerSiteObjectGatewayPair(t *testing.T) {
+	state := storageValidationState()
+	state.StorageObjectGateways = []v1alpha1.StorageObjectGateway{
+		{
+			Metadata: v1alpha1.Metadata{Name: "rgw-dc1"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc1.example.test", Scheme: "https", Port: 443},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf.dc1",
+					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc1"}},
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{
+						Name: "dc1", Address: "192.168.141.80", PrefixLength: 24,
+						Placement: v1alpha1.StoragePlacement{Sites: []string{"dc1"}},
+					}},
+				},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "rgw-dc2"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc2.example.test", Scheme: "https", Port: 443},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf.dc2",
+					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc2"}},
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{
+						Name: "dc2", Address: "192.168.142.80", PrefixLength: 24,
+						Placement: v1alpha1.StoragePlacement{Sites: []string{"dc2"}},
+					}},
+				},
+			},
+		},
+	}
+	state.StorageExports[0].Spec.DataFoundation.ObjectGatewayRef = v1alpha1.LocalObjectReference{Name: "rgw-dc1"}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("two per-site StorageObjectGateway objects, each scoped to its own data site, must validate cleanly under stretch mode: %v", errs)
+	}
+}
+
+func TestStorageStretchRejectsUnnarrowedPlacementMissingASite(t *testing.T) {
+	state := storageValidationState()
+	state.StorageObjectGateways[0].Spec.Ceph.Placement = v1alpha1.StoragePlacement{
+		Hosts: []string{"ceph-dc1-0", "ceph-dc1-1"},
+	}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, `data site "dc2"`) {
+		t.Fatalf("an unnarrowed gateway placement that only reaches one site must still fail full-coverage validation; errors = %q", got)
+	}
+}
+
+func TestStorageIngressVRRPCollisionOnSharedL2Rejected(t *testing.T) {
+	state := storageValidationState()
+	state.StorageObjectGateways[0].Spec.Ceph.Ingresses = []v1alpha1.StorageObjectGatewayIngress{{
+		Name: "ha", Address: "192.168.140.80", PrefixLength: 24,
+		VirtualInterfaceNetworks: []string{"192.168.140.0/24"},
+		FirstVirtualRouterID:     51,
+	}}
+	state.StorageClusters[0].Spec.Ceph.Management = &v1alpha1.StorageCephManagement{
+		DNSName: "mgr.ceph.example.test",
+		Ingress: v1alpha1.StorageCephManagementIngress{
+			Name: "mgmt", Address: "192.168.140.81", PrefixLength: 24,
+			VirtualInterfaceNetworks: []string{"192.168.140.0/24"},
+			FirstVirtualRouterID:     51,
+		},
+	}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "both set firstVirtualRouterID 51 on overlapping virtualInterfaceNetworks") {
+		t.Fatalf("two ingress groups sharing both a VRRP router ID and an L2 network must be rejected; errors = %q", got)
+	}
+}
+
+func TestStorageIngressVRRPSameIDDisjointNetworksAccepted(t *testing.T) {
+	state := storageValidationState()
+	state.StorageObjectGateways = []v1alpha1.StorageObjectGateway{
+		{
+			Metadata: v1alpha1.Metadata{Name: "rgw-dc1"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc1.example.test", Scheme: "https", Port: 443},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf.dc1",
+					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc1"}},
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{
+						Name: "dc1", Address: "192.168.141.80", PrefixLength: 24,
+						VirtualInterfaceNetworks: []string{"192.168.141.0/24"},
+						FirstVirtualRouterID:     51,
+						Placement:                v1alpha1.StoragePlacement{Sites: []string{"dc1"}},
+					}},
+				},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "rgw-dc2"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc2.example.test", Scheme: "https", Port: 443},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf.dc2",
+					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc2"}},
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{
+						Name: "dc2", Address: "192.168.142.80", PrefixLength: 24,
+						VirtualInterfaceNetworks: []string{"192.168.142.0/24"},
+						FirstVirtualRouterID:     51,
+						Placement:                v1alpha1.StoragePlacement{Sites: []string{"dc2"}},
+					}},
+				},
+			},
+		},
+	}
+	state.StorageExports[0].Spec.DataFoundation.ObjectGatewayRef = v1alpha1.LocalObjectReference{Name: "rgw-dc1"}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("reusing a VRRP router ID across two disjoint, site-local subnets must not be rejected: %v", errs)
+	}
+}
+
 func TestStorageStretchValidationAcceptsDeferredTiebreaker(t *testing.T) {
 	state := storageValidationState()
 	state.Machines = state.Machines[:6]

@@ -310,7 +310,7 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 		}
 		errs = append(errs, validateStoragePlacementHosts(prefix+".cephfs.mds.placement", fs.Spec.CephFS.MDS.Placement, cluster, ok, v1alpha1.StorageCephRoleMDS)...)
 		if ok && storageClusterStretchEnabled(cluster) {
-			errs = append(errs, validatePlacementCoversDataSites(prefix+".cephfs.mds.placement", topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS), cluster, v1alpha1.StorageCephRoleMDS)...)
+			errs = append(errs, validatePlacementCoversDataSites(prefix+".cephfs.mds.placement", topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS), cluster, v1alpha1.StorageCephRoleMDS, nil)...)
 		}
 		if fs.Spec.CephFS.MDS.StandbyCountWanted < 0 {
 			errs = append(errs, prefix+".cephfs.mds.standbyCountWanted must be non-negative")
@@ -412,10 +412,12 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 		errs = append(errs, validateStorageGatewayPublicEndpoint(prefix+".public", gw)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
-			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", topology.ResolvePlacement(cluster, gw.Spec.Ceph.Placement, v1alpha1.StorageCephRoleRGW), cluster, v1alpha1.StorageCephRoleRGW)...)
+			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", topology.ResolvePlacement(cluster, gw.Spec.Ceph.Placement, v1alpha1.StorageCephRoleRGW), cluster, v1alpha1.StorageCephRoleRGW, gw.Spec.Ceph.Placement.Sites)...)
 		}
 		ingressNames := map[string]bool{}
 		var ingressHosts []string
+		ingressTargetSites := map[string]bool{}
+		everyIngressNarrowed := len(gw.Spec.Ceph.Ingresses) > 0
 		for i, ingress := range gw.Spec.Ceph.Ingresses {
 			owner := fmt.Sprintf("%s.ceph.ingresses[%d]", prefix, i)
 			if ingress.Name == "" {
@@ -427,9 +429,21 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 			errs = append(errs, validateStorageGatewayIngressEndpoint(owner, ingress, gw)...)
 			errs = append(errs, validateStoragePlacementHosts(owner+".placement", ingress.Placement, cluster, ok, v1alpha1.StorageCephRoleIngress)...)
 			ingressHosts = append(ingressHosts, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress)...)
+			if len(ingress.Placement.Sites) == 0 {
+				everyIngressNarrowed = false
+			}
+			for _, site := range ingress.Placement.Sites {
+				ingressTargetSites[site] = true
+			}
 		}
 		if ok && storageClusterStretchEnabled(cluster) && len(gw.Spec.Ceph.Ingresses) > 0 {
-			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.ingresses", ingressHosts, cluster, v1alpha1.StorageCephRoleIngress)...)
+			var targetSites []string
+			if everyIngressNarrowed {
+				for site := range ingressTargetSites {
+					targetSites = append(targetSites, site)
+				}
+			}
+			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.ingresses", ingressHosts, cluster, v1alpha1.StorageCephRoleIngress, targetSites)...)
 		}
 	}
 	return errs

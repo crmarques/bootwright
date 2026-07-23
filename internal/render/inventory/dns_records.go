@@ -90,11 +90,15 @@ func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord 
 		if dnsName == "" || len(gw.Spec.Ceph.Ingresses) == 0 {
 			continue
 		}
-		vip := gw.Spec.Ceph.Ingresses[0].Address
-		if vip == "" || !storageClusterUsesNameResolution(state, gw.Spec.StorageClusterRef.Name, entryName) {
+		if !storageClusterUsesNameResolution(state, gw.Spec.StorageClusterRef.Name, entryName) {
 			continue
 		}
-		records = append(records, dnsmasqRecord{name: dnsName, address: vip})
+		for _, ingress := range gw.Spec.Ceph.Ingresses {
+			if ingress.Address == "" {
+				continue
+			}
+			records = append(records, dnsmasqRecord{name: dnsName, address: ingress.Address})
+		}
 	}
 	return records
 }

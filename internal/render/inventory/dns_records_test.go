@@ -157,6 +157,33 @@ func TestNameResolutionRecordsFallBackToMachineLabelWithoutBaseDomain(t *testing
 	}
 }
 
+func TestNameResolutionRecordsPublishEveryGatewayIngressUnderOneDNSName(t *testing.T) {
+	state := storageDNSRecordsState("example.test")
+	state.StorageObjectGateways[0].Spec.Ceph.Ingresses = []v1alpha1.StorageObjectGatewayIngress{
+		{Name: "dc1", Address: "192.168.141.80"},
+		{Name: "dc2", Address: "192.168.142.80"},
+	}
+	desiredstate.Normalize(&state)
+
+	entry := state.Environments[0].Spec.InfraComponents.NameResolution[0]
+	component := state.InfraComponents[0]
+	vars := nameResolutionComponentVars(state, entry, component)
+
+	got := recordPairs(vars["hostRecords"])
+	for _, want := range []string{"rgw.example.test=192.168.141.80", "rgw.example.test=192.168.142.80"} {
+		found := false
+		for _, pair := range got {
+			if pair == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("hostRecords = %v, missing %q — a gateway sharing one public.dnsName across multiple ingresses must publish every VIP, not just the first", got, want)
+		}
+	}
+}
+
 func TestClusterControllerNameResolversFromManagedDnsmasq(t *testing.T) {
 	state := dnsRecordsState()
 	state.InfraComponents[0].Spec.NameResolution.BindAddress = "192.168.130.1"
