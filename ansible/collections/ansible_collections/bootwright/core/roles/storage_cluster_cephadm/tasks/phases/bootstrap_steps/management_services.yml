@@ -89,16 +89,85 @@
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_dashboard_ssl_current.stdout | default('') | trim) != 'false'
 
-- name: Restart the active Ceph manager to release the dashboard's HTTPS port
+- name: Capture Ceph manager daemon identities before restart
   ansible.builtin.command:
     argv:
       - cephadm
       - shell
       - --
       - ceph
+      - orch
+      - ps
+      - --daemon-type
       - mgr
-      - fail
+      - --format
+      - json
+  register: bootwright_ceph_mgr_before_restart
+  changed_when: false
+  when: bootwright_ceph_dashboard_ssl_disable is changed
+
+- name: Restart every Ceph manager daemon to release the dashboard's HTTPS port
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - restart
+      - mgr
   changed_when: true
+  when: bootwright_ceph_dashboard_ssl_disable is changed
+
+- name: Wait for every Ceph manager daemon to finish restarting
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ps
+      - --daemon-type
+      - mgr
+      - --format
+      - json
+  register: bootwright_ceph_mgr_after_restart
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_ceph_mgr_after_restart.rc == 0
+      and (
+        (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
+        | map(attribute='container_id', default='')
+        | list
+        | length
+      ) == (
+        (bootwright_ceph_mgr_before_restart.stdout | default('') | trim | default('[]', true) | from_json)
+        | map(attribute='container_id', default='')
+        | list
+        | length
+      )
+      and (
+        (
+          (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
+          | map(attribute='container_id', default='')
+          | list
+        )
+        | intersect(
+            (bootwright_ceph_mgr_before_restart.stdout | default('') | trim | default('[]', true) | from_json)
+            | map(attribute='container_id', default='')
+            | list
+          )
+        | length
+      ) == 0
+    )
+    or
+    ((bootwright_ceph_mgr_after_restart.attempts | default(1) | int)
+     >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
   when: bootwright_ceph_dashboard_ssl_disable is changed
 
 - name: Apply management service spec

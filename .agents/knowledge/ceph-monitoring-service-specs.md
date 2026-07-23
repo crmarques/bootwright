@@ -37,15 +37,27 @@ unset spec keeps cephadm's default (off).
 listener (`mgr/dashboard/ssl_server_port`, default `8443`) bound on every mon
 host via the mgr container's host-network port mapping. Ceph does not disable
 that listener automatically when a `mgmt-gateway` spec is applied — upstream
-docs require the operator to flip `mgr/dashboard/ssl` off and fail the active
-mgr as a manual prerequisite. If that never happens, the mgmt-gateway nginx
-daemon (also host-port `8443` by default) fails to bind on every host that
-also runs a mgr daemon, while it starts fine on ingress hosts that don't run
-mgr — the service readiness gate
+docs require the operator to flip `mgr/dashboard/ssl` off as a manual
+prerequisite. If that never happens, the mgmt-gateway nginx daemon (also
+host-port `8443` by default) fails to bind on every host that also runs a mgr
+daemon (`CEPHADM_DAEMON_PLACE_FAIL: ... Cannot bind to IP 0.0.0.0 port 8443:
+[Errno 98] Address already in use`), while it starts fine on ingress hosts
+that don't run mgr — the service readiness gate
 ([ceph-service-rollout-gate.md](ceph-service-rollout-gate.md)) then reports
 `mgmt-gateway (running/mon-count)` stuck partway forever while every other
-service reaches full count. `management_services.yml` now disables
-`mgr/dashboard/ssl` and runs `ceph mgr fail` before applying the mgmt-gateway
-spec, gated so it only fires (and only fails over the mgr) the first time the
-setting isn't already `false` — later reconciles are a no-op and don't
-disrupt a healthy mgr.
+service reaches full count.
+
+**Trap:** `ceph mgr fail` does not fix this. It only tells the mons to hand
+"active" to an already-running standby — it never restarts any mgr daemon
+process, so none of the 4 (or however many) mgr containers ever re-read the
+new `mgr/dashboard/ssl=false` config or release the port; the failure
+reproduces identically after `mgr fail`. The daemons must actually be
+recreated: `ceph orch restart mgr`, which cephadm executes as an async
+rolling restart (the command returns immediately having only scheduled it).
+`management_services.yml` snapshots every mgr daemon's `container_id` before
+issuing the restart, then polls `ceph orch ps --daemon-type mgr` until none
+of the current container IDs appear in that snapshot (i.e. every daemon has
+actually been recreated) before applying the mgmt-gateway spec. The whole
+block is gated so it only fires the first time `mgr/dashboard/ssl` isn't
+already `false` — later reconciles are a no-op and don't disrupt a healthy
+mgr.
