@@ -42,10 +42,22 @@ Work must happen in a temporary branch and worktree, never directly in the prima
 
 ## Parallel Workers
 
-When splitting work across workers, give each a disjoint write scope and its own
-`work/<scope-slug>-<base8>-<timestamp>` branch and matching worktree. The
-coordinating agent reviews, combines worker output, resolves conflicts, and runs
-the final validation for the combined result.
+Before executing a task list that fulfills the request, check whether it splits
+into independent, disjoint-scope pieces (different files/packages/specs, no
+shared edit surface, no ordering dependency). If so, default to parallelizing
+rather than working the list serially — the goal is wall-clock time to
+completion, not just eventual correctness.
+
+- Give each independent piece its own `work/<scope-slug>-<base8>-<timestamp>`
+  branch and matching worktree, and work them concurrently.
+- The coordinating agent reviews, combines worker output, resolves conflicts,
+  and runs the final validation once for the combined result — do not run
+  `make check-fast` per worker branch when a single combined run will do.
+- Do not over-split: more branches means more rebase/merge/conflict-resolution
+  overhead at integration. If the pieces touch overlapping files, are too small
+  to justify a separate branch, or coordination would cost more wall-clock time
+  than finishing the same work serially, keep them on one branch (or fold small
+  pieces together) instead of forcing parallelism.
 
 ## Validate And Commit
 
