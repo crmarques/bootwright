@@ -33,6 +33,25 @@ without the OS ever changing. Every downstream "did this run (re)install?"
 gate keys off `install_required`, never off not-already-ready, so a forced
 rebuild behaves exactly like a fresh install.
 
+**A destroy-released substrate forces rebuild even when the marker still
+matches:** `machine_substrate_baremetal/tasks/destroy.yml` never wipes operator
+hardware in place — it only clears Bootwright's local records and documents
+that "the OS disk is reclaimed by the next apply reinstall." Until 2026-07-23,
+`bootwright_managed_os_force_rebuild` additionally required
+`not bootwright_os_pre_marker_matches`, so a bare-metal host destroyed and
+re-applied with an UNCHANGED desired spec kept answering SSH with its old,
+still-matching marker and the reinstall was silently skipped — `destroy` then
+`apply` was not equivalent to a from-scratch apply. Membership in
+`bootwright_substrate_reset_clusters` (a prior destroy's release record, see
+[substrate-ownership-markers.md](substrate-ownership-markers.md)) is now
+sufficient on its own to force the rebuild, independent of whether the on-host
+marker happens to match; a destroy's own record of "this substrate was torn
+down" outranks the still-live host's self-reported hash. No change was needed
+in `marker.yml` or
+`wait.yml` — both already key off `install_required`, and kickstart's `%post`
+(not the ansible task) is what stamps a freshly reinstalled host's marker, so
+the rebuilt host is stamped correctly either way.
+
 **Stamp gating:** the marker/ownership is stamped only for a host Bootwright
 legitimately owns — freshly installed this run (was not reachable before), or
 already owned (matching, or override-rebuilt). The stamp is gated explicitly so

@@ -170,13 +170,12 @@
     - (bootwright_apply_mode | default('continue')) == 'override'
     - bootwright_current_cluster.name not in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
 
-- name: Resolve whether an owned drifted managed OS must be rebuilt
+- name: Resolve whether an owned managed OS must be rebuilt because its substrate was released
   ansible.builtin.set_fact:
     bootwright_managed_os_force_rebuild: >-
       {{
         (bootwright_managed_os_already_ready | bool)
         and (bootwright_os_pre_marker_owned | default(false) | bool)
-        and (not (bootwright_os_pre_marker_matches | default(false) | bool))
         and (bootwright_current_cluster.name in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list))
       }}
   changed_when: false
