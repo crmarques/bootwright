@@ -41,6 +41,7 @@ spec:
         fromInput:
           input: external-storage
       run: always
+      timeout: 20m
       outputs:
         - name: externalDetails
           file: external-cluster-details.json
