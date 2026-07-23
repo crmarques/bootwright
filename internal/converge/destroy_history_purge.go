@@ -21,12 +21,6 @@ func purgeClusterRuntimeDir(clustersDir, cluster string) error {
 	return nil
 }
 
-// purgeRunHistoryForComponents removes retained per-run history (task logs and
-// per-cluster flow logs) for the given cluster and machine names. A run whose
-// entire task set falls inside the purge scope has its run directory (ledger,
-// shared run log, input snapshot) removed outright; a run that mixes purged
-// and still-live components keeps its ledger and shared run log so the
-// surviving components' history stays intact.
 func purgeRunHistoryForComponents(runsDir string, clusterNames, machineNames []string) error {
 	if strings.TrimSpace(runsDir) == "" || (len(clusterNames) == 0 && len(machineNames) == 0) {
 		return nil
