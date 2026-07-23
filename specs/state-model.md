@@ -942,11 +942,14 @@ Rules:
   `ingress` mirrors the RGW ingress VIP shape — `name`, `address`, `prefixLength`,
   optional `virtualInterfaceNetworks[]`, optional `firstVirtualRouterID`
   (`1`-`255`; cephadm's keepalived VRRP router ID, rendered verbatim as
-  `first_virtual_router_id` — cephadm defaults to `50` when omitted, so set a
-  distinct value whenever another ingress group, such as an RGW gateway's,
-  shares the same L2 network), and a `placement` that defaults to every
-  `ingress`-role host, narrowed by `sites`/`hosts` (under stretch it must cover
-  both data sites). `port` sets the gateway port (`0`–`65535`). `tls`, when set,
+  `first_virtual_router_id` — cephadm defaults to `50` when omitted; sharing an
+  ID with another ingress group, such as an RGW gateway's, on an overlapping
+  `virtualInterfaceNetworks` is rejected, see StorageObjectGateway below), and a
+  `placement` that defaults to every `ingress`-role host, narrowed by
+  `sites`/`hosts` (under stretch it must cover both data sites regardless of
+  narrowing — unlike StorageObjectGateway, there is only ever one management
+  ingress, so there is no sibling to cover the other site). `port` sets the
+  gateway port (`0`–`65535`). `tls`, when set,
   supplies the gateway certificate through `certificateRef`+`keyRef`. `enableAuth`
   and `oauth2Proxy` are coupled: `enableAuth: true` requires an `oauth2Proxy`
   block (`providerDisplayName`, `clientId`, `oidcIssuerUrl`, and `clientSecretRef`
@@ -1166,21 +1169,44 @@ Rules:
   domain is configured to compose from.
 - `spec.ceph.placement` defaults to every topology host with the `rgw` role;
   `sites`/`hosts` narrow the selection. On stretch-mode clusters the resolved
-  placement must cover at least two per data site.
+  placement must cover at least two hosts per data site — unless `sites`
+  explicitly narrows it to a subset of the cluster's data sites, in which case
+  only those named sites need the two-host minimum. This is what makes a
+  per-site RGW pattern expressible: author one `StorageObjectGateway` per data
+  site, each with `spec.ceph.placement.sites: [<site>]` and its own
+  `serviceID`, so each site's RGW daemons — and, paired with a same-site
+  ingress below, that site's HAProxy backends — never span the other site.
+  Sibling gateways are not required to jointly cover every data site; an
+  operator may deliberately serve only one site.
 - `spec.ceph.ingresses[]` require a unique `name`, a storage-owned `address` and
   `prefixLength` for the ingress VIP (optional `virtualInterfaceNetworks[]`,
   rendered verbatim to the cephadm ingress `virtual_interface_networks`; optional
   `firstVirtualRouterID`, `1`-`255`, rendered verbatim as `first_virtual_router_id`
-  — cephadm defaults to `50` when omitted, so give each ingress group on the same
-  L2 network, including `spec.ceph.management.ingress`, a distinct value), and
-  a `placement` that defaults to every `ingress`-role host, narrowed by
-  `sites`/`hosts` (per-site VIPs author `placement.sites`; a stretched L2 network
-  across data sites may instead author a single ingress with unnarrowed
-  `placement`, spanning every `ingress`-role host cluster-wide).
+  — cephadm defaults to `50` when omitted), and a `placement` that defaults to
+  every `ingress`-role host, narrowed by `sites`/`hosts` (per-site VIPs author
+  `placement.sites`; a stretched L2 network across data sites may instead
+  author a single ingress with unnarrowed `placement`, spanning every
+  `ingress`-role host cluster-wide). On stretch-mode clusters, a gateway's
+  ingresses are held to the same site-coverage rule as `spec.ceph.placement`
+  above, evaluated over their combined resolved hosts: fully unnarrowed
+  ingresses must reach two hosts in every data site, while ingresses that are
+  all explicitly site-scoped need only cover the sites they name. Two ingress
+  groups anywhere on the same `StorageCluster` — RGW, NFS
+  (`StorageNFSExport.spec.ceph.ingresses[]`), or
+  `spec.ceph.management.ingress` — that declare the same `firstVirtualRouterID`
+  **and** an overlapping `virtualInterfaceNetworks` entry are rejected: two
+  keepalived VRRP instances with the same router ID on the same L2 segment
+  conflict. Groups on disjoint networks (the per-site-subnet pattern) may
+  reuse an ID freely; the check only fires on a declared, overlapping network.
 - Optional `spec.ceph.realm`/`zoneGroup`/`zone` bind the RGW to a named
   multisite realm (rendered as `rgw_realm`/`rgw_zonegroup`/`rgw_zone`); all three
   are set together, and Bootwright creates them and commits the period before the
-  service applies. Optional `spec.ceph.config` is a per-RGW
+  service applies. Multiple `StorageObjectGateway` objects on one `StorageCluster`
+  may declare the identical realm/zoneGroup/zone (or all leave it unset, landing
+  in Ceph's one implicit default zone) — this is the supported way to run several
+  independently-placed RGW services against one shared zone, and is not RGW
+  multisite: Bootwright never configures cross-realm/cross-zone replication.
+  Optional `spec.ceph.config` is a per-RGW
   `ceph config set client.rgw.<serviceID>` map (one owner: a key must not also
   appear in the cluster config map, and `rgw_frontend_port` is reserved).
 
@@ -1218,7 +1244,11 @@ Rules:
 - For managed `StorageCluster`s, `spec.dataFoundation` is required;
   `dataFoundation.rbdPoolRef` and `filesystemRef` are required and must reference
   resources on the same `StorageCluster`; `objectGatewayRef` is optional and
-  same-cluster.
+  same-cluster. When set, the `openshift-data-foundation`/`fusion-data-foundation`
+  add-ons' external-cluster-details exporter hook passes the referenced
+  `StorageObjectGateway`'s `spec.public.dnsName:port` as `--rgw-endpoint`, so
+  ODF external mode also provisions S3/object storage; omitted, the export
+  covers RBD and CephFS only.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
 - `spec.externalDetails`, when set, requires `fromSecretRef` (its only arm),

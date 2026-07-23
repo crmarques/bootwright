@@ -611,12 +611,25 @@ state leaves the live service running (additive-only).
 | `spec.ceph.ingresses[].address` | Yes (per entry) | — | VIP address. |
 | `spec.ceph.ingresses[].prefixLength` | Yes (per entry) | — | VIP prefix length. |
 | `spec.ceph.ingresses[].virtualInterfaceNetworks[]` | No | — | Renders verbatim to the cephadm ingress `virtual_interface_networks`. |
+| `spec.ceph.ingresses[].firstVirtualRouterID` | No | cephadm default (`50`) | Keepalived VRRP router ID (1–255), rendered verbatim as `first_virtual_router_id`. |
 | `spec.ceph.ingresses[].placement` | No | every host carrying the `ingress` role | Ingress placement; see [Shared placement](#shared-placement). |
 
 !!! note "Storage owns the endpoint"
     RGW public endpoints and ingress VIPs are owned by the storage gateway, not
     by `ContainerCluster`. Downstream consumers reference the gateway. See
     [Networking](../advanced/networking.md).
+
+!!! note "Per-site gateways on a stretch cluster"
+    On a stretch-mode `StorageCluster`, a gateway's `spec.ceph.placement` and its
+    ingresses' combined placement must each cover at least two role-capable hosts
+    per data site — unless narrowed by `sites`, in which case only the named
+    sites need that coverage. Author one `StorageObjectGateway` per data site,
+    each with `placement.sites` and its ingress `placement.sites` narrowed to
+    that site, to keep RGW daemons, the ingress VRRP group, and HAProxy backends
+    entirely site-local. `firstVirtualRouterID` collisions are rejected only
+    between ingress groups (RGW, NFS, or the management ingress) that also
+    declare an overlapping `virtualInterfaceNetworks` entry — distinct, disjoint
+    per-site subnets may reuse the same ID.
 
 ## StorageNFSExport
 
@@ -715,7 +728,7 @@ spec:
 | --- | --- | --- | --- |
 | `dataFoundation.rbdPoolRef` | Yes | — | RBD `StoragePool` (same cluster). |
 | `dataFoundation.filesystemRef` | Yes | — | CephFS `StorageFilesystem` (same cluster). |
-| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). |
+| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter hook passes that gateway's `public.dnsName:port` as `--rgw-endpoint`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
 
 ### External details
 

@@ -345,6 +345,18 @@ subnet can host the VIP. The endpoint and ingress fields are detailed under
 [Networking](networking.md#storage-rgw-endpoints); the gateway object itself is
 in the [storage reference](../concepts/storage.md#storageobjectgateway).
 
+For a stretch cluster, the site-local pattern is one `StorageObjectGateway` per
+data site, each with `spec.ceph.placement.sites` and its ingress `placement.sites`
+narrowed to that site, its own VIP, its own `firstVirtualRouterID`, and its own
+`public.dnsName` — every RGW daemon, ingress VRRP group, and HAProxy backend set
+then stays inside one data center, and each ODF cluster is pointed at the one
+gateway local to it. Siblings may share a `realm`/`zoneGroup`/`zone` (or all
+leave it unset) without that being RGW multisite — Bootwright never configures
+cross-zone replication. A single cluster-wide gateway with one unnarrowed
+ingress (or several site-scoped ingresses under one gateway) is also accepted
+for a simpler, non-stretch-local topology, such as an L2 network extended
+across both data centers; that shape does not give per-site backend locality.
+
 ## Pools, filesystems, and placement
 
 `StoragePool` owns one Ceph pool (`replicated` or `erasure`),
@@ -366,6 +378,13 @@ cluster. The `baremetal-redfish-imported-ceph-odf` and
 `baremetal-redfish-multidc-virtualized-odf-ceph` [reference examples](examples.md)
 wire export-to-ODF for imported and managed Ceph respectively. The export object
 model is in the [storage reference](../concepts/storage.md#storageexport).
+
+`spec.dataFoundation.objectGatewayRef` names the `StorageObjectGateway` ODF's
+object storage should use; set it and the exporter hook passes that gateway's
+public endpoint as `--rgw-endpoint`, so external mode also gets S3 alongside
+RBD and CephFS. Leave it unset for a block/file-only export. Each ODF cluster
+should get its own `StorageExport` naming its own site-local gateway, so
+distinct OCP clusters never share one S3 endpoint.
 
 ## Convergence is additive-only
 
