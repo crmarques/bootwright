@@ -34,6 +34,25 @@ func TestParseToken(t *testing.T) {
 	}
 }
 
+func TestStrayTokenScalars(t *testing.T) {
+	raw := []byte(`apiVersion: v1
+kind: Secret
+metadata:
+  name: "prefix-{{ output foo }}-suffix"
+  namespace: openshift-storage
+stringData:
+  clean: "{{ output foo }}"
+  literal: plain-text
+`)
+	stray, err := StrayTokenScalars(raw)
+	if err != nil {
+		t.Fatalf("StrayTokenScalars: %v", err)
+	}
+	if len(stray) != 1 || stray[0] != "prefix-{{ output foo }}-suffix" {
+		t.Fatalf("StrayTokenScalars = %v, want exactly the embedded-token scalar flagged", stray)
+	}
+}
+
 func TestRenderManifestWholeScalarReplacement(t *testing.T) {
 	raw := []byte(`apiVersion: v1
 kind: Secret

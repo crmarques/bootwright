@@ -228,6 +228,11 @@ func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAdd
 			errs = append(errs, fmt.Sprintf("%s.path %q is not a valid manifest: %v", owner, manifest.Path, err))
 			continue
 		}
+		if stray, err := hooks.StrayTokenScalars(raw); err == nil {
+			for _, value := range stray {
+				errs = append(errs, fmt.Sprintf("%s.path %q has a scalar %q that looks like a token but is not the entire value; a token must be the whole scalar (e.g. \"{{ output foo }}\", not embedded in other text) or it is applied as literal text", owner, manifest.Path, value))
+			}
+		}
 		for _, token := range tokens {
 			if tokenConsumesOutput(token) {
 				consumesOutput = true

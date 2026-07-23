@@ -23,6 +23,7 @@ type Token struct {
 }
 
 var tokenRe = regexp.MustCompile(`^\{\{\s*([a-zA-Z]+)(?:\s+([^\s{}]+))?\s*\}\}$`)
+var strayTokenRe = regexp.MustCompile(`\{\{[^{}]*\}\}`)
 
 func ParseToken(value string) (Token, bool) {
 	match := tokenRe.FindStringSubmatch(strings.TrimSpace(value))
@@ -41,6 +42,23 @@ func ExtractTokens(raw []byte) ([]Token, error) {
 	walkScalars(doc, func(value string) {
 		if token, ok := ParseToken(value); ok {
 			out = append(out, token)
+		}
+	})
+	return out, nil
+}
+
+func StrayTokenScalars(raw []byte) ([]string, error) {
+	var doc any
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("parse manifest: %w", err)
+	}
+	var out []string
+	walkScalars(doc, func(value string) {
+		if _, ok := ParseToken(value); ok {
+			return
+		}
+		if strayTokenRe.MatchString(value) {
+			out = append(out, value)
 		}
 	})
 	return out, nil

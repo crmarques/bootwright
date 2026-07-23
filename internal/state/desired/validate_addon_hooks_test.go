@@ -175,6 +175,21 @@ func TestValidateHookManifestOnlyValid(t *testing.T) {
 	}
 }
 
+func TestValidateHookManifestRejectsEmbeddedToken(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  x: \"prefix-{{ output details }}-suffix\"\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonHook{
+		Name:      "attach",
+		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
+		Outputs:   []v1alpha1.ClusterAddonHookOutput{{Name: "details", File: "d.json"}},
+		Playbook:  "playbooks/p.yml",
+		Target:    v1alpha1.ClusterAddonHookTarget{BoundCluster: &v1alpha1.ClusterAddonHookBoundTarget{}},
+		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/s.yaml"}},
+	})
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	hookErrsContain(t, validateClusterAddonHooks(v1alpha1.State{}, addon), "looks like a token but is not the entire value")
+}
+
 func TestValidateManifestOnlyHookRejectsOutputsAndTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeHookFile(t, dir, "manifests/s.yaml", "kind: Secret\ndata:\n  c: \"{{ cluster }}\"\n")
