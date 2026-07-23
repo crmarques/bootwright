@@ -950,7 +950,8 @@ Rules:
   narrowing — unlike StorageObjectGateway, there is only ever one management
   ingress, so there is no sibling to cover the other site). `port` sets the
   gateway port (`0`–`65535`). `tls`, when set,
-  supplies the gateway certificate through `certificateRef`+`keyRef`. `enableAuth`
+  supplies the gateway certificate through `certificateRef`+`keyRef`, each of
+  which must name a `tlsCertificate` Secret. `enableAuth`
   and `oauth2Proxy` are coupled: `enableAuth: true` requires an `oauth2Proxy`
   block (`providerDisplayName`, `clientId`, `oidcIssuerUrl`, and `clientSecretRef`
   required; optional `redirectUrl`, `httpsAddress`, `allowlistDomains[]`,
@@ -1198,6 +1199,13 @@ Rules:
   keepalived VRRP instances with the same router ID on the same L2 segment
   conflict. Groups on disjoint networks (the per-site-subnet pattern) may
   reuse an ID freely; the check only fires on a declared, overlapping network.
+  Each ingress's optional `tls` supplies the HAProxy frontend certificate
+  through `certificateRef`+`keyRef`, each of which must name a
+  `tlsCertificate` Secret — unlike `spec.ceph.management.tls` (two separate
+  cephadm fields), the cephadm ingress spec takes one combined `ssl_cert`
+  field, so Bootwright concatenates the certificate and key PEM content at
+  apply time. Without `tls`, cephadm serves its own self-signed certificate
+  on the ingress VIP, the same fallback `spec.ceph.management.tls` has.
 - Optional `spec.ceph.realm`/`zoneGroup`/`zone` bind the RGW to a named
   multisite realm (rendered as `rgw_realm`/`rgw_zonegroup`/`rgw_zone`); all three
   are set together, and Bootwright creates them and commits the period before the

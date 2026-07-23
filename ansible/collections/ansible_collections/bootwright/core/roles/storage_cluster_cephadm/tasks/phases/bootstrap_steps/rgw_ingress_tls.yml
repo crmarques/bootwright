@@ -1,0 +1,56 @@
+---
+- name: Write RGW ingress TLS certificate specs
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ceph_remote_work_dir }}/rgw-ingress-tls-{{ item.serviceID | regex_replace('[^A-Za-z0-9_.-]', '-') }}.yaml"
+    content: >-
+      {{
+        [
+          {
+            'service_type': 'ingress',
+            'service_id': item.serviceID,
+            'placement': {'hosts': item.hosts},
+            'spec': (
+              {
+                'backend_service': item.backendService,
+                'virtual_ip': item.virtualIP,
+                'frontend_port': item.frontendPort,
+                'monitor_port': item.monitorPort,
+                'ssl_cert': (
+                  (lookup('ansible.builtin.file', item.certificatePath) | trim)
+                  ~ "\n"
+                  ~ (lookup('ansible.builtin.file', item.keyPath) | trim)
+                  ~ "\n"
+                )
+              }
+              | combine({'virtual_interface_networks': item.virtualInterfaceNetworks} if (item.virtualInterfaceNetworks | default([]) | length > 0) else {})
+              | combine({'first_virtual_router_id': item.firstVirtualRouterID} if (item.firstVirtualRouterID | default(0) | int > 0) else {})
+            )
+          }
+        ] | to_nice_yaml
+      }}
+    mode: "0600"
+  loop: "{{ bootwright_ceph_rgw_ingress_tls | default([]) }}"
+  loop_control:
+    label: "{{ item.serviceID }}"
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when: bootwright_ceph_rgw_ingress_tls | default([]) | length > 0
+
+- name: Apply RGW ingress TLS certificate specs
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --mount
+      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+      - --
+      - ceph
+      - orch
+      - apply
+      - -i
+      - "/mnt/rgw-ingress-tls-{{ item.serviceID | regex_replace('[^A-Za-z0-9_.-]', '-') }}.yaml"
+  loop: "{{ bootwright_ceph_rgw_ingress_tls | default([]) }}"
+  loop_control:
+    label: "{{ item.serviceID }}"
+  register: bootwright_ceph_rgw_ingress_tls_apply
+  changed_when: true
+  when: bootwright_ceph_rgw_ingress_tls | default([]) | length > 0

@@ -75,6 +75,9 @@
     - name: Apply Ceph late service specs
       ansible.builtin.include_tasks: bootstrap_steps/late_service_specs.yml
 
+    - name: Apply secret-bearing RGW ingress TLS certificates
+      ansible.builtin.include_tasks: bootstrap_steps/rgw_ingress_tls.yml
+
     - name: Apply secret-bearing management services
       ansible.builtin.include_tasks: bootstrap_steps/management_services.yml
 

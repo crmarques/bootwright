@@ -1241,6 +1241,63 @@ func TestStorageManagementAuthGate(t *testing.T) {
 	}
 }
 
+func TestStorageGatewayIngressTLSValidation(t *testing.T) {
+	baseState := v1alpha1.State{Secrets: []v1alpha1.Secret{
+		{Metadata: v1alpha1.Metadata{Name: "cert"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+		{Metadata: v1alpha1.Metadata{Name: "key"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+		{Metadata: v1alpha1.Metadata{Name: "wrong-type"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeToken}},
+	}}
+	stateWith := func(tls *v1alpha1.StorageObjectGatewayIngressTLS) v1alpha1.State {
+		s := baseState
+		s.StorageObjectGateways = []v1alpha1.StorageObjectGateway{{
+			Metadata: v1alpha1.Metadata{Name: "rgw"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf",
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{
+						Name: "ha", Address: "10.0.0.9", PrefixLength: 24, TLS: tls,
+					}},
+				},
+			},
+		}}
+		return s
+	}
+
+	cases := []struct {
+		name string
+		tls  *v1alpha1.StorageObjectGatewayIngressTLS
+		want string
+	}{
+		{name: "no-tls", tls: nil},
+		{name: "valid", tls: &v1alpha1.StorageObjectGatewayIngressTLS{
+			CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"},
+			KeyRef:         v1alpha1.LocalObjectReference{Name: "key"},
+		}},
+		{name: "missing-ref", tls: &v1alpha1.StorageObjectGatewayIngressTLS{
+			CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"},
+			KeyRef:         v1alpha1.LocalObjectReference{Name: "key"},
+		}, want: `"missing" is not a declared Secret`},
+		{name: "wrong-type", tls: &v1alpha1.StorageObjectGatewayIngressTLS{
+			CertificateRef: v1alpha1.LocalObjectReference{Name: "wrong-type"},
+			KeyRef:         v1alpha1.LocalObjectReference{Name: "key"},
+		}, want: `"wrong-type" is a token Secret but a tlsCertificate Secret is required`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(validateStorageGatewayIngressTLS(stateWith(tc.tls)), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("unexpected errors: %s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStorageGatewayRealmAndConfigValidation(t *testing.T) {
 	gwWith := func(c v1alpha1.StorageObjectGatewayCephSpec) v1alpha1.StorageObjectGateway {
 		return v1alpha1.StorageObjectGateway{Metadata: v1alpha1.Metadata{Name: "s3"}, Spec: v1alpha1.StorageObjectGatewaySpec{Ceph: c}}

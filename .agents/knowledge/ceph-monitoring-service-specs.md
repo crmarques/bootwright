@@ -76,3 +76,23 @@ dashboard's HTTP endpoint is never exposed externally once mgmt-gateway
 fronts it (nginx reverse-proxies to it over the container network), so the
 exact port number has no external meaning — it only has to avoid whatever
 else is already bound on that host.
+
+**Constraint:** cephadm's ingress spec (RGW/NFS HAProxy+keepalived) takes TLS
+material through a single `ssl_cert` field — one PEM blob containing both the
+certificate chain and the private key concatenated, with source `inline`.
+This is a different shape from the management gateway's two separate
+`ssl_certificate`/`ssl_certificate_key` fields; don't assume they match.
+`StorageObjectGatewayIngress.tls` (`certificateRef`+`keyRef`, both a
+`tlsCertificate` Secret) mirrors the two-ref user-facing shape everywhere
+else in the schema for consistency, and `rgw_ingress_tls.yml` concatenates
+the two files' content (`cert + "\n" + key + "\n"`) into `ssl_cert` at apply
+time. Like `management_services.yml`, the Go-rendered `late-services.yaml`
+(shared with the native `apply.sh` path) never carries the cert bytes — it
+still emits the plain cert-less ingress doc unconditionally (see
+[ceph-service-rollout-gate.md](ceph-service-rollout-gate.md) for why
+secret-bearing specs are always a separate ansible-side reapply rather than
+baked into a rendered/state-tracked asset file); `rgw_ingress_tls.yml` reapplies
+the complete spec immediately afterward for every ingress that declares
+`tls`, which cephadm's declarative `ceph orch apply` treats as a normal spec
+update — no explicit restart/wait is needed the way the mgr dashboard flip
+needed one, since `ceph orch apply` isn't a live-config toggle here.

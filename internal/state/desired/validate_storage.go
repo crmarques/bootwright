@@ -37,6 +37,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStorageNFSExports(state.StorageNFSExports, clusters, filesystems)...)
 	errs = append(errs, validateStorageServiceIDUniqueness(state)...)
 	errs = append(errs, validateStorageIngressVRRPCollisions(state)...)
+	errs = append(errs, validateStorageGatewayIngressTLS(state)...)
 	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, machines)...)
 	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
@@ -170,6 +171,20 @@ func validateStorageSecretRef(owner, ref string, state v1alpha1.State) []string 
 	}
 	if _, ok := stateview.Secret(state, ref); !ok {
 		return []string{fmt.Sprintf("%s %q is not a declared Secret", owner, ref)}
+	}
+	return nil
+}
+
+func validateStorageTLSSecretRef(owner, ref string, state v1alpha1.State) []string {
+	if ref == "" {
+		return []string{owner + " is required"}
+	}
+	s, ok := stateview.Secret(state, ref)
+	if !ok {
+		return []string{fmt.Sprintf("%s %q is not a declared Secret", owner, ref)}
+	}
+	if s.Spec.Type != v1alpha1.SecretTypeTLSCertificate {
+		return []string{fmt.Sprintf("%s %q is a %s Secret but a %s Secret is required", owner, ref, s.Spec.Type, v1alpha1.SecretTypeTLSCertificate)}
 	}
 	return nil
 }
@@ -455,8 +470,8 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress, nil)...)
 	}
 	if mgmt.TLS != nil {
-		errs = append(errs, validateStorageSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
-		errs = append(errs, validateStorageSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, state)...)
+		errs = append(errs, validateStorageTLSSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
+		errs = append(errs, validateStorageTLSSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, state)...)
 	}
 	authOn := mgmt.EnableAuth != nil && *mgmt.EnableAuth
 	switch {

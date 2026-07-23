@@ -99,6 +99,21 @@ func validateStorageIngressVRRPCollisions(state v1alpha1.State) []string {
 	return errs
 }
 
+func validateStorageGatewayIngressTLS(state v1alpha1.State) []string {
+	var errs []string
+	for _, gw := range state.StorageObjectGateways {
+		for i, ingress := range gw.Spec.Ceph.Ingresses {
+			if ingress.TLS == nil {
+				continue
+			}
+			owner := fmt.Sprintf("StorageObjectGateway/%s spec.ceph.ingresses[%d].tls", gw.Metadata.Name, i)
+			errs = append(errs, validateStorageTLSSecretRef(owner+".certificateRef", ingress.TLS.CertificateRef.Name, state)...)
+			errs = append(errs, validateStorageTLSSecretRef(owner+".keyRef", ingress.TLS.KeyRef.Name, state)...)
+		}
+	}
+	return errs
+}
+
 func storageOverlappingNetwork(a, b []string) string {
 	canonicalA := storageCanonicalNetworks(a)
 	for _, network := range b {

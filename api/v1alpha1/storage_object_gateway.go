@@ -32,10 +32,16 @@ type StorageObjectGatewayCephSpec struct {
 }
 
 type StorageObjectGatewayIngress struct {
-	Name                     string           `yaml:"name" json:"name"`
-	Address                  string           `yaml:"address" json:"address"`
-	PrefixLength             int              `yaml:"prefixLength" json:"prefixLength"`
-	VirtualInterfaceNetworks []string         `yaml:"virtualInterfaceNetworks,omitempty" json:"virtualInterfaceNetworks,omitempty"`
-	Placement                StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
-	FirstVirtualRouterID     int              `yaml:"firstVirtualRouterID,omitempty" json:"firstVirtualRouterID,omitempty"`
+	Name                     string                          `yaml:"name" json:"name"`
+	Address                  string                          `yaml:"address" json:"address"`
+	PrefixLength             int                             `yaml:"prefixLength" json:"prefixLength"`
+	VirtualInterfaceNetworks []string                        `yaml:"virtualInterfaceNetworks,omitempty" json:"virtualInterfaceNetworks,omitempty"`
+	Placement                StoragePlacement                `yaml:"placement,omitempty" json:"placement,omitempty"`
+	FirstVirtualRouterID     int                             `yaml:"firstVirtualRouterID,omitempty" json:"firstVirtualRouterID,omitempty"`
+	TLS                      *StorageObjectGatewayIngressTLS `yaml:"tls,omitempty" json:"tls,omitempty"`
+}
+
+type StorageObjectGatewayIngressTLS struct {
+	CertificateRef LocalObjectReference `yaml:"certificateRef" json:"certificateRef"`
+	KeyRef         LocalObjectReference `yaml:"keyRef" json:"keyRef"`
 }

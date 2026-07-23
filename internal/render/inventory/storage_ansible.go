@@ -173,6 +173,9 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		if management := storageManagementVars(cluster, env, paths); management != nil {
 			entry["management"] = management
 		}
+		if rgwIngressTLS := storageRGWIngressTLSVars(state, cluster, paths); len(rgwIngressTLS) > 0 {
+			entry["rgwIngressTLS"] = rgwIngressTLS
+		}
 		out = append(out, entry)
 	}
 	return out
@@ -272,6 +275,47 @@ func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Enviro
 			oauth["cookieSecretPath"] = secret.ResolvePath(o.CookieSecretRef.Name, paths.SecretIndex, paths.SecretsDir)
 		}
 		out["oauth2Proxy"] = oauth
+	}
+	return out
+}
+
+func storageRGWIngressTLSVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, paths PathOptions) []any {
+	var out []any
+	for _, gw := range state.StorageObjectGateways {
+		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		publicEndpoint, _ := topology.GatewayPublicEndpoint(gw)
+		for _, ingress := range gw.Spec.Ceph.Ingresses {
+			if ingress.TLS == nil {
+				continue
+			}
+			endpoint, ok := topology.GatewayIngressEndpoint(ingress)
+			if !ok {
+				continue
+			}
+			hosts := topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress)
+			if len(hosts) == 0 {
+				continue
+			}
+			item := map[string]any{
+				"serviceID":       "rgw." + gw.Spec.Ceph.ServiceID + "." + ingress.Name,
+				"backendService":  "rgw." + gw.Spec.Ceph.ServiceID,
+				"hosts":           hosts,
+				"virtualIP":       topology.CephadmVirtualIP(endpoint),
+				"frontendPort":    topology.EndpointPort(publicEndpoint, 443),
+				"monitorPort":     1967,
+				"certificatePath": secret.ResolvePath(ingress.TLS.CertificateRef.Name, paths.SecretIndex, paths.SecretsDir),
+				"keyPath":         secret.ResolveTLSKeyPath(ingress.TLS.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
+			}
+			if len(endpoint.InterfaceNetworks) > 0 {
+				item["virtualInterfaceNetworks"] = endpoint.InterfaceNetworks
+			}
+			if ingress.FirstVirtualRouterID > 0 {
+				item["firstVirtualRouterID"] = ingress.FirstVirtualRouterID
+			}
+			out = append(out, item)
+		}
 	}
 	return out
 }
