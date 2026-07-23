@@ -38,18 +38,10 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			return failf(1, "context %q is stored in shared root state; rerun with --purge to delete it", name)
 		}
 		if purge && shouldRunContextRootChild() {
-			ctx, ctxErr := workspace.NewContext(name)
-			if ctxErr != nil {
-				return failErr(2, ctxErr)
+			childArgs := []string{"context", "delete", "--name", name, "--purge"}
+			if yes {
+				childArgs = append(childArgs, "--yes")
 			}
-			detail, refusal := contextPurgeGuard(ctx, force)
-			if refusal != nil {
-				return failErr(1, refusal)
-			}
-			if !yes && !confirm(stdin, stdout, contextDeletePrompt(name, ctx.BaseDir, detail)) {
-				return failErr(1, errors.New("context delete aborted"))
-			}
-			childArgs := []string{"context", "delete", "--name", name, "--purge", "--yes"}
 			if force {
 				childArgs = append(childArgs, "--force")
 			}

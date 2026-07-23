@@ -3199,6 +3199,47 @@ func TestContextDeletePurgeSyncsRegistryAroundSudo(t *testing.T) {
 	}
 }
 
+func TestContextDeletePurgeElevatesBeforeReadingContextDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission-denied stat check requires non-root test process")
+	}
+	setTestHomeAndRoot(t)
+	ctx, err := workspace.NewContext("prd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.EnsureBaseDir(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(ctx.BaseDir, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(ctx.BaseDir, 0o700)
+
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+	called := false
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			called = true
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestLocalRootGateHelperProcess", "--")
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_ROOT_GATE_HELPER=1")
+			return cmd
+		},
+	}
+
+	stdout, stderr, code := runCLI(t, "context", "delete", "--name", "prd", "--purge", "--yes")
+	if code != 0 {
+		t.Fatalf("context delete --purge with an unreadable context dir exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if !called {
+		t.Fatal("expected sudo elevation to be attempted before reading the context directory")
+	}
+}
+
 func TestContextRegistrySyncRootHelperProcess(t *testing.T) {
 	if os.Getenv("BOOTWRIGHT_CONTEXT_REGISTRY_SYNC_HELPER") != "1" {
 		return
