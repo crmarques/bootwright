@@ -38,3 +38,18 @@ func TestSignalContextStopReleasesWithoutSignal(t *testing.T) {
 		t.Fatal("context was not cancelled after stop")
 	}
 }
+
+func TestSignalContextIgnoresHangup(t *testing.T) {
+	ctx, stop := signalContext(context.Background())
+	defer stop()
+
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatalf("send SIGHUP to self: %v", err)
+	}
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("SIGHUP cancelled the run; a closed terminal must not abort apply")
+	case <-time.After(300 * time.Millisecond):
+	}
+}

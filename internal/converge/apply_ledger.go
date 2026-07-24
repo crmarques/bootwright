@@ -8,8 +8,24 @@ import (
 )
 
 type StaleApplyCancellation struct {
-	RunID  string
-	Detail string
+	RunID    string
+	Detail   string
+	InFlight []string
+}
+
+func inFlightTaskLabels(ledger workflow.RunLedger) []string {
+	var labels []string
+	for _, task := range ledger.Tasks {
+		if task.Status != workflow.TaskStatusRunning {
+			continue
+		}
+		label := task.Label
+		if label == "" {
+			label = task.ID
+		}
+		labels = append(labels, label)
+	}
+	return labels
 }
 
 func CheckCurrentApplyActive(runsDir string) error {
@@ -47,11 +63,12 @@ func ReconcileCurrentApplyBeforeMutation(runsDir string) (*StaleApplyCancellatio
 	case workflow.RunActivityActive:
 		return nil, fmt.Errorf("apply run %s is still running; inspect it with bootwright status --watch", ledger.RunID)
 	case workflow.RunActivityStale:
+		inflight := inFlightTaskLabels(ledger)
 		cancelled, err := workflow.CancelRunLedger(runsDir, ledger, activity.Detail, now)
 		if err != nil {
 			return nil, err
 		}
-		return &StaleApplyCancellation{RunID: cancelled.RunID, Detail: activity.Detail}, nil
+		return &StaleApplyCancellation{RunID: cancelled.RunID, Detail: activity.Detail, InFlight: inflight}, nil
 	}
 	return nil, nil
 }

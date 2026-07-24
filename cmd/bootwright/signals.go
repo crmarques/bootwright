@@ -9,6 +9,7 @@ import (
 
 func signalContext(parent context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithCancel(parent)
+	signal.Ignore(syscall.SIGHUP)
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
