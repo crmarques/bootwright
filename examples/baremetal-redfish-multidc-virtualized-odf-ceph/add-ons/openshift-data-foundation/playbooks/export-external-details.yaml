@@ -21,7 +21,7 @@
       - "{{ bootwright_bound_cluster }}"
   tasks:
     - name: Extend the exporter args with the declared RGW endpoint
-      when: bootwright_gateway
+      when: bootwright_gateway is not none
       ansible.builtin.set_fact:
         bootwright_exporter_args: >-
           {{ bootwright_exporter_args + ['--rgw-endpoint', bootwright_gateway.spec.public.dnsName ~ ':' ~ (bootwright_gateway.spec.public.port | default(443))] }}

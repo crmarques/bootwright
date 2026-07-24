@@ -23,6 +23,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 | Ansible / runtime | `Could not install packages due to an OSError`; `[Errno 2] No such file or directory`; `install ansible-core` | [ansible-managed-venv-rebuild.md](ansible-managed-venv-rebuild.md) |
 | Ansible / callback | `Callback dispatch 'v2_runner_on_skipped' failed for plugin 'default'`; `Build proxy environment facts` | [ansible-callback-skipped-pin.md](ansible-callback-skipped-pin.md) |
 | Ansible / lint | `Skipping filter plugins in bootwright.core.test_*`; `has no attribute 'FilterModule'` | [ansible-filter-test-placement.md](ansible-filter-test-placement.md) |
+| Ansible / conditionals | `Conditional result (True) was derived from value of type 'dict'`; `Conditionals must have a boolean result`; `<CLI option '-e'>` | [ansible-strict-boolean-conditionals.md](ansible-strict-boolean-conditionals.md) |
 | Ansible / transfer | `Fetch generated agent ISO to local cluster runtime state`; large file fetch appears stuck; `.openshift_install.log` idle after ISO generation | [ansible-fetch-become-large-file.md](ansible-fetch-become-large-file.md) |
 | Ansible / packages | `Failed to download metadata for repo`; `Cannot download repomd.xml`; `There are no enabled repositories`; `All mirrors were tried` | [ansible-dnf-unavailable-repo.md](ansible-dnf-unavailable-repo.md) |
 | Provider / BMC | Apply hangs at BMC wait tasks; port already in use after provider rename | [stale-bmc-port-wait-hang.md](stale-bmc-port-wait-hang.md) |

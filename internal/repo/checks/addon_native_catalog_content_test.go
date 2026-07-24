@@ -172,6 +172,20 @@ func TestNativeCatalogODFFDFHookContentParity(t *testing.T) {
 	}
 }
 
+func TestNativeCatalogDataFoundationGatewayConditionalIsBoolean(t *testing.T) {
+	root := repoRoot(t)
+	for _, addon := range []string{"openshift-data-foundation", "fusion-data-foundation"} {
+		path := filepath.Join(root, "add-ons", addon, "4.21", "playbooks", "export-external-details.yaml")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !strings.Contains(string(data), "when: bootwright_gateway is not none") {
+			t.Errorf("%s must test gateway presence with a boolean expression", path)
+		}
+	}
+}
+
 var addonAnnotationLine = regexp.MustCompile(`bootwright\.io/addon:\s*(\S+)`)
 
 func TestNativeCatalogManifestAddonAnnotationMatchesOwnName(t *testing.T) {
