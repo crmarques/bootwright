@@ -1,0 +1,31 @@
+---
+- name: Repair the managed storage node connection trust alias
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      kh={{ bootwright_node_access.knownHostsPath | quote }}
+      addr={{ bootwright_node_access.address | quote }}
+      conn={{ bootwright_node_access.connectionAddress | quote }}
+      command -v flock >/dev/null 2>&1 || exit 1
+      (
+        flock 9 || exit 1
+        if ssh-keygen -F "$conn" -f "$kh" >/dev/null 2>&1; then
+          exit 0
+        fi
+        lines=$(ssh-keygen -F "$addr" -f "$kh" | grep -v '^#') || exit 1
+        [ -n "$lines" ] || exit 1
+        printf '%s\n' "$lines" | sed "s/^[^ ]*/$conn/" >> "$kh"
+        ssh-keygen -F "$conn" -f "$kh" >/dev/null 2>&1 || exit 1
+        printf '%s\n' changed
+      ) 9>"$kh.lock"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_connection_alias
+  changed_when: "'changed' in (bootwright_node_access_connection_alias.stdout_lines | default([]))"
+  failed_when: false
+  when:
+    - bootwright_node_access.knownHostsManaged | default(false) | bool
+    - bootwright_node_access.knownHostsPath | default('') | length > 0
+    - bootwright_node_access.connectionAddress | default('') | length > 0
+    - bootwright_node_access.connectionAddress != bootwright_node_access.address

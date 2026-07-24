@@ -35,39 +35,14 @@
         - bootwright_destroy_machine_scope is defined
         - bootwright_storage_node_name | default('') not in (bootwright_destroy_machine_scope | split(','))
   tasks:
-    - name: Resolve storage node access context before revoking node access
+    - name: Select storage node teardown connection
       ansible.builtin.include_role:
         name: bootwright.core.storage_node_access
-        tasks_from: context.yml
-
-    - name: Probe storage node access identities before revoking node access
-      ansible.builtin.include_role:
-        name: bootwright.core.storage_node_access
-        tasks_from: probe.yml
-      vars:
-        bootwright_node_access_probe_fail_when_unreachable: false
+        tasks_from: select_connection.yml
 
     - name: End nodes with no reachable storage node identity
       ansible.builtin.meta: end_host
-      when:
-        - (bootwright_node_access_target_probe.rc | default(1) | int) != 0
-        - (bootwright_node_access_install_probe.rc | default(1) | int) != 0
-
-    - name: Select the reachable storage node connection
-      ansible.builtin.set_fact:
-        ansible_host: "{{ bootwright_node_access.address }}"
-        ansible_user: >-
-          {{
-            bootwright_node_access.user
-            if (bootwright_node_access_ready | bool)
-            else bootwright_node_access.installUser
-          }}
-      delegate_to: localhost
-      become: false
-      changed_when: false
-
-    - name: Reset the storage node connection after identity selection
-      ansible.builtin.meta: reset_connection
+      when: not (bootwright_node_access_connection_available | bool)
 
     - name: Probe node reachability and escalation before revoking node access
       block:

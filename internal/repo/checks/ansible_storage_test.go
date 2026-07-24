@@ -13,31 +13,68 @@ func TestStorageNodeAccessDestroySelectsAReachableIdentity(t *testing.T) {
 		t.Fatalf("%s has %d plays, want 1", path, len(plays))
 	}
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
-	contextIdx := findAnsibleTask(t, tasks, "Resolve storage node access context before revoking node access")
-	identitiesIdx := findAnsibleTask(t, tasks, "Probe storage node access identities before revoking node access")
+	selectIdx := findAnsibleTask(t, tasks, "Select storage node teardown connection")
 	endIdx := findAnsibleTask(t, tasks, "End nodes with no reachable storage node identity")
-	selectIdx := findAnsibleTask(t, tasks, "Select the reachable storage node connection")
-	resetIdx := findAnsibleTask(t, tasks, "Reset the storage node connection after identity selection")
 	pingIdx := findAnsibleTask(t, tasks, "Probe node reachability and escalation before revoking node access")
 	revokeIdx := findAnsibleTask(t, tasks, "Revoke storage node orchestration access")
-	if !(contextIdx < identitiesIdx && identitiesIdx < endIdx && endIdx < selectIdx && selectIdx < resetIdx && resetIdx < pingIdx && pingIdx < revokeIdx) {
-		t.Fatalf("node-access destroy must probe both identities, select the reachable endpoint, verify escalation, then revoke (context=%d identities=%d end=%d select=%d reset=%d ping=%d revoke=%d)", contextIdx, identitiesIdx, endIdx, selectIdx, resetIdx, pingIdx, revokeIdx)
+	if !(selectIdx < endIdx && endIdx < pingIdx && pingIdx < revokeIdx) {
+		t.Fatalf("node-access destroy must select a reachable identity, verify escalation, then revoke (select=%d end=%d ping=%d revoke=%d)", selectIdx, endIdx, pingIdx, revokeIdx)
 	}
-	probeVars, ok := tasks[identitiesIdx]["vars"].(map[string]any)
-	if !ok || probeVars["bootwright_node_access_probe_fail_when_unreachable"] != false {
-		t.Fatalf("destroy identity probe must let the play end unreachable nodes without hiding invalid access context, got vars=%v", tasks[identitiesIdx]["vars"])
+	include, ok := tasks[selectIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || include["name"] != "bootwright.core.storage_node_access" || include["tasks_from"] != "select_connection.yml" {
+		t.Fatalf("node-access destroy must use the shared teardown connection selector, got %v", tasks[selectIdx])
 	}
-	connection, ok := tasks[selectIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if got := fmt.Sprint(tasks[endIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Fatalf("node-access destroy must end hosts when neither identity answers, got when=%v", tasks[endIdx]["when"])
+	}
+}
+
+func TestStorageNodeTeardownConnectionSelectorRepairsCanonicalTrust(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/select_connection.yml"
+	tasks := readAnsibleTasks(t, path)
+	contextIdx := findAnsibleTask(t, tasks, "Resolve storage node access context for teardown")
+	repairIdx := findAnsibleTask(t, tasks, "Repair managed storage node connection trust for teardown")
+	endpointIdx := findAnsibleTask(t, tasks, "Resolve canonical storage node access endpoints for teardown")
+	probeIdx := findAnsibleTask(t, tasks, "Probe storage node access identities for teardown")
+	availableIdx := findAnsibleTask(t, tasks, "Record whether a storage node identity is reachable for teardown")
+	userIdx := findAnsibleTask(t, tasks, "Select the reachable storage node identity for teardown")
+	resetIdx := findAnsibleTask(t, tasks, "Reset the storage node connection after teardown identity selection")
+	if !(contextIdx < repairIdx && repairIdx < endpointIdx && endpointIdx < probeIdx && probeIdx < availableIdx && availableIdx < userIdx && userIdx < resetIdx) {
+		t.Fatalf("teardown connection selector must repair trust, probe both identities, select a user, then reset the connection")
+	}
+	endpoints, ok := tasks[endpointIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
-		t.Fatalf("reachable connection selection must be a set_fact, got %v", tasks[selectIdx])
+		t.Fatalf("canonical endpoint selection must be a set_fact, got %v", tasks[endpointIdx])
 	}
-	if got := fmt.Sprint(connection["ansible_host"]); !strings.Contains(got, "bootwright_node_access.address") {
-		t.Fatalf("node-access destroy must connect to the raw address verified by the identity probe, got ansible_host=%v", connection["ansible_host"])
+	for _, name := range []string{"bootwright_node_access_target_endpoint", "bootwright_node_access_install_endpoint"} {
+		if got := fmt.Sprint(endpoints[name]); !strings.Contains(got, "bootwright_node_access.connectionAddress") {
+			t.Fatalf("%s must use the canonical connection address, got %v", name, got)
+		}
+	}
+	connection, ok := tasks[userIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("reachable identity selection must be a set_fact, got %v", tasks[userIdx])
+	}
+	if _, changesHost := connection["ansible_host"]; changesHost {
+		t.Fatalf("teardown selection must preserve the rendered canonical ansible_host, got %v", connection)
 	}
 	user := fmt.Sprint(connection["ansible_user"])
 	for _, want := range []string{"bootwright_node_access_ready", "bootwright_node_access.user", "bootwright_node_access.installUser"} {
 		if !strings.Contains(user, want) {
-			t.Fatalf("node-access destroy selected user missing %q: %s", want, user)
+			t.Fatalf("teardown selected user missing %q: %s", want, user)
+		}
+	}
+
+	repairPath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/repair_connection_alias.yml"
+	repair := readRepoFile(t, repairPath)
+	for _, want := range []string{"flock", "ssh-keygen -F", "bootwright_node_access.address", "bootwright_node_access.connectionAddress", "knownHostsManaged"} {
+		if !strings.Contains(repair, want) {
+			t.Fatalf("%s must contain %q", repairPath, want)
+		}
+	}
+	for _, forbidden := range []string{"ssh-keyscan", "StrictHostKeyChecking=accept-new", "ecdsa", "ed25519", "rsa"} {
+		if strings.Contains(strings.ToLower(repair), strings.ToLower(forbidden)) {
+			t.Fatalf("%s must remain crypto-policy-neutral and must not acquire new trust with %q", repairPath, forbidden)
 		}
 	}
 }
@@ -816,8 +853,24 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 		t.Fatalf("storage destroy play must template ignore_unreachable from bootwright_destroy_skip_unreachable so it is off by default, got %v", plays[0]["ignore_unreachable"])
 	}
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	selectIdx := findAnsibleTask(t, tasks, "Select storage node teardown connection")
+	probeIdx := findAnsibleTask(t, tasks, "Probe storage host reachability before teardown")
+	recordIdx := findAnsibleTask(t, tasks, "Record storage host unreachable when no node identity answers")
+	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --skip-unreachable")
 	seedIdx := findAnsibleTask(t, tasks, "Require the Ceph seed host to be reachable before any device wipe")
 	wipeIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
+	if !(selectIdx < probeIdx && probeIdx < recordIdx && recordIdx < reachableIdx && reachableIdx < seedIdx) {
+		t.Fatalf("storage destroy must select a recoverable identity and classify its failure before the fail-closed reachability gate")
+	}
+	if got := fmt.Sprint(tasks[selectIdx]["when"]); !strings.Contains(got, "bootwright_node_access is defined") {
+		t.Fatalf("storage destroy must invoke the selector only for managed node accounts, got when=%v", tasks[selectIdx]["when"])
+	}
+	if got := fmt.Sprint(tasks[probeIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Fatalf("storage destroy must not run a second SSH probe when neither node identity answers, got when=%v", tasks[probeIdx]["when"])
+	}
+	if got := fmt.Sprint(tasks[recordIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Fatalf("storage destroy must classify an unavailable managed identity as unreachable, got when=%v", tasks[recordIdx]["when"])
+	}
 	if seedIdx >= wipeIdx {
 		t.Fatalf("seed-reachability assert (idx %d) must run before the destroy include_role wipe (idx %d)", seedIdx, wipeIdx)
 	}
@@ -829,6 +882,29 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 	removeIdx := findAnsibleTask(t, destroyTasks, "Remove storage cluster ownership record")
 	if got := fmt.Sprint(destroyTasks[removeIdx]["when"]); !strings.Contains(got, "bootwright_storage_cluster_partial") {
 		t.Fatalf("storage cluster ownership-record removal must be gated on not-partial so a partial teardown keeps the record, got when=%v", destroyTasks[removeIdx]["when"])
+	}
+}
+
+func TestMachineRegistrationDeregisterSelectsStorageTeardownConnection(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_registration_deregister.yml"
+	plays := readAnsiblePlays(t, path)
+	if len(plays) != 1 {
+		t.Fatalf("%s has %d plays, want 1", path, len(plays))
+	}
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	selectIdx := findAnsibleTask(t, tasks, "Select storage node teardown connection")
+	probeIdx := findAnsibleTask(t, tasks, "Probe node reachability and escalation before deregistration")
+	recordIdx := findAnsibleTask(t, tasks, "Record an unreachable node when no storage identity answers")
+	endIdx := findAnsibleTask(t, tasks, "End nodes Bootwright cannot reach or escalate on")
+	deregisterIdx := findAnsibleTask(t, tasks, "Deregister machine from RHSM")
+	if !(selectIdx < probeIdx && probeIdx < recordIdx && recordIdx < endIdx && endIdx < deregisterIdx) {
+		t.Fatalf("machine deregistration must select a recoverable identity and classify its failure before remote work")
+	}
+	if got := fmt.Sprint(tasks[selectIdx]["when"]); !strings.Contains(got, "bootwright_node_access is defined") {
+		t.Fatalf("machine deregistration must invoke the selector only for managed node accounts, got when=%v", tasks[selectIdx]["when"])
+	}
+	if got := fmt.Sprint(tasks[probeIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Fatalf("machine deregistration must skip its remote probe when neither identity answers, got when=%v", tasks[probeIdx]["when"])
 	}
 }
 

@@ -98,7 +98,7 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster)
 	if machineOK {
 		entry["bootwright_os_provided"] = v1alpha1.MachineOSProvided(machine)
-		if access := storageNodeAccessVars(cluster, machine, paths); access != nil {
+		if access := storageNodeAccessVars(state, cluster, machine, paths); access != nil {
 			entry["bootwright_node_access"] = access
 			if v1alpha1.MachineRevokesRootLogin(machine) {
 				entry["ansible_user"] = access["user"]
@@ -108,19 +108,21 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	return entry
 }
 
-func storageNodeAccessVars(cluster v1alpha1.StorageCluster, machine v1alpha1.Machine, paths PathOptions) map[string]any {
+func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, machine v1alpha1.Machine, paths PathOptions) map[string]any {
 	if !v1alpha1.StorageClusterManagesNodeAccount(cluster) || machine.Spec.Access.SSH == nil {
 		return nil
 	}
 	user := v1alpha1.StorageClusterCephadmSSHUser(cluster)
 	out := map[string]any{
-		"user":           user,
-		"installUser":    v1alpha1.MachineSSHUser(machine),
-		"rootLogin":      machine.Spec.Access.RootLogin,
-		"sudoersPath":    v1alpha1.NodeAccessSudoersPath(user),
-		"sshdDropInPath": v1alpha1.NodeAccessSSHDDropIn,
-		"markerPath":     v1alpha1.NodeAccessMarkerPath,
-		"address":        v1alpha1.MachineSSHAddress(machine),
+		"user":              user,
+		"installUser":       v1alpha1.MachineSSHUser(machine),
+		"rootLogin":         machine.Spec.Access.RootLogin,
+		"sudoersPath":       v1alpha1.NodeAccessSudoersPath(user),
+		"sshdDropInPath":    v1alpha1.NodeAccessSSHDDropIn,
+		"markerPath":        v1alpha1.NodeAccessMarkerPath,
+		"address":           v1alpha1.MachineSSHAddress(machine),
+		"connectionAddress": stateview.MachineConnectionAddress(state, machine),
+		"knownHostsManaged": machine.Spec.Access.SSH.KnownHostsRef.Name == "",
 	}
 	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 		out["installPrivateKeyPath"] = privatePath

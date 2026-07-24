@@ -1,0 +1,49 @@
+---
+- name: Resolve storage node access context for teardown
+  ansible.builtin.include_tasks: context.yml
+
+- name: Repair managed storage node connection trust for teardown
+  ansible.builtin.include_tasks: repair_connection_alias.yml
+
+- name: Resolve canonical storage node access endpoints for teardown
+  ansible.builtin.set_fact:
+    bootwright_node_access_target_endpoint: >-
+      {{ bootwright_node_access.user }}@{{ bootwright_node_access.connectionAddress }}
+    bootwright_node_access_install_endpoint: >-
+      {{ bootwright_node_access.installUser }}@{{ bootwright_node_access.connectionAddress }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Probe storage node access identities for teardown
+  ansible.builtin.include_tasks: probe.yml
+  vars:
+    bootwright_node_access_probe_fail_when_unreachable: false
+
+- name: Record whether a storage node identity is reachable for teardown
+  ansible.builtin.set_fact:
+    bootwright_node_access_connection_available: >-
+      {{
+        (bootwright_node_access_target_probe.rc | default(1) | int) == 0
+        or (bootwright_node_access_install_probe.rc | default(1) | int) == 0
+      }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Select the reachable storage node identity for teardown
+  ansible.builtin.set_fact:
+    ansible_user: >-
+      {{
+        bootwright_node_access.user
+        if (bootwright_node_access_ready | bool)
+        else bootwright_node_access.installUser
+      }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when: bootwright_node_access_connection_available | bool
+
+- name: Reset the storage node connection after teardown identity selection
+  ansible.builtin.meta: reset_connection
+  when: bootwright_node_access_connection_available | bool

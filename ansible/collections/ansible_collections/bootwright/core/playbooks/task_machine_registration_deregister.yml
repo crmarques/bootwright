@@ -51,7 +51,17 @@
           ansible.builtin.set_fact:
             bootwright_proxy_env: {}
   tasks:
+    - name: Select storage node teardown connection
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_node_access
+        tasks_from: select_connection.yml
+      when: bootwright_node_access is defined
+
     - name: Probe node reachability and escalation before deregistration
+      when:
+        - >-
+          bootwright_node_access is not defined
+          or (bootwright_node_access_connection_available | default(false) | bool)
       block:
         - name: Probe node reachability before deregistration
           ansible.builtin.ping:
@@ -63,6 +73,14 @@
           ansible.builtin.set_fact:
             bootwright_registration_reachable_probe:
               unreachable: true
+
+    - name: Record an unreachable node when no storage identity answers
+      ansible.builtin.set_fact:
+        bootwright_registration_reachable_probe:
+          unreachable: true
+      when:
+        - bootwright_node_access is defined
+        - not (bootwright_node_access_connection_available | default(false) | bool)
 
     - name: End nodes Bootwright cannot reach or escalate on
       ansible.builtin.meta: end_host

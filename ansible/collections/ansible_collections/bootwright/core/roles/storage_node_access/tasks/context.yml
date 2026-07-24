@@ -6,6 +6,7 @@
       - bootwright_node_access.installUser | default('') | length > 0
       - bootwright_node_access.user != bootwright_node_access.installUser
       - bootwright_node_access.address | default('') | length > 0
+      - bootwright_node_access.connectionAddress | default('') | length > 0
       - bootwright_node_access.sudoersPath | default('') | length > 0
       - bootwright_node_access.sshdDropInPath | default('') | length > 0
       - bootwright_node_access.markerPath | default('') | length > 0

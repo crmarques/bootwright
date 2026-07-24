@@ -180,12 +180,19 @@ TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
 TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess,
 TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess.
 
-The dedicated revoke play cannot begin with the statically rendered Ansible
-identity. A retry may legitimately find the cephadm identity already removed
-while the install-window identity was restored by an earlier partial pass.
-The play first runs the node-access role's controller-local probes against the
-raw machine SSH address, chooses whichever of the cephadm or install identities
-answers, rewrites `ansible_host` and `ansible_user` to that proven pair, resets
-the connection, and only then runs the remote escalation probe and idempotent
-revoke tasks. This also avoids requiring the FQDN alias during cleanup when the
-same trust store's raw-address pin is intact.
+Every teardown play that can target a managed Ceph node account
+(`task_storage_cluster_destroy.yml`,
+`task_machine_registration_deregister.yml`, and the dedicated
+`task_storage_node_access_destroy.yml`) begins with the node-access role's
+shared controller-local connection selector. A retry may legitimately find the
+cephadm identity already removed while the install-window identity was restored
+by an earlier partial pass. The selector chooses whichever identity answers,
+rewrites only `ansible_user`, resets the connection, and leaves the rendered
+canonical `ansible_host` intact. For Bootwright-managed SSH trust, the selector
+first repairs a missing canonical-FQDN alias by copying the already-trusted raw
+address entry under a `flock`; it never scans a new key or names a host-key
+algorithm, so FIPS and non-FIPS crypto policy remain owned by the installed SSH
+client. Existing canonical entries and explicit `knownHostsRef` content are
+never rewritten. If neither identity answers, storage destroy feeds that result
+through its normal fail-closed/`--skip-unreachable` classification, while the
+best-effort deregistration and final revoke plays end that host.

@@ -26,6 +26,18 @@ with `register:` + `failed_when: false`) carries its own task-level
 (`.unreachable: true`) and kept in the play instead of aborting it — even in
 the fail-closed default mode.
 
+**Managed storage identities are selected before the remote probe.** A storage
+node may be between the cephadm and install-window identities after a partial
+destroy. The shared `storage_node_access/select_connection.yml` controller-side
+selector probes both identities before a teardown play opens its normal Ansible
+connection. When Bootwright owns the trust file, it can also reconstruct a
+missing canonical-FQDN alias from the existing raw-address entry under a file
+lock; this reuses established trust and does not run a host-key scan or select
+an algorithm. The selector preserves canonical `ansible_host`, changes only
+`ansible_user`, and reports a boolean availability fact. Storage destroy maps a
+false result to the same `.unreachable: true` shape used by the ordinary ping,
+so the assert and `--skip-unreachable` behavior remain one classification path.
+
 **Semantics: controller-side tasks still run for unreachable hosts.**
 `assert`, `set_fact`, and `delegate_to: localhost` tasks evaluate on a host
 whose connection probes failed. That is what makes the fail-closed gate work:

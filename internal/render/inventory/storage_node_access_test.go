@@ -71,8 +71,51 @@ func TestStorageNodeEntryConnectsAsProvisionedAccount(t *testing.T) {
 	if access["rootLogin"] != v1alpha1.MachineRootLoginRevoke {
 		t.Fatalf("rootLogin = %v, want the machine posture carried to the role", access["rootLogin"])
 	}
+	if access["connectionAddress"] != "10.20.0.11" {
+		t.Fatalf("connectionAddress = %v, want the canonical Machine SSH connection address", access["connectionAddress"])
+	}
+	if access["knownHostsManaged"] != true {
+		t.Fatalf("knownHostsManaged = %v, want true when Machine SSH trust has no explicit Secret", access["knownHostsManaged"])
+	}
 	if access["sudoersPath"] != "/etc/sudoers.d/60-bootwright-cephadm" {
 		t.Fatalf("sudoersPath = %v, want a per-user drop-in", access["sudoersPath"])
+	}
+}
+
+func TestStorageNodeEntryDoesNotManageExplicitSSHTrust(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginRevoke)
+	state.Machines[0].Spec.Access.SSH.KnownHostsRef = v1alpha1.SecretRef{Name: "ceph-known-hosts"}
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SecretsDir: "/ctx/secrets"}, locality.Policy{})
+	access, ok := entry["bootwright_node_access"].(map[string]any)
+	if !ok {
+		t.Fatal("bootwright_node_access is absent")
+	}
+	if access["knownHostsManaged"] != false {
+		t.Fatalf("knownHostsManaged = %v, want false for an explicit knownHostsRef", access["knownHostsManaged"])
+	}
+}
+
+func TestStorageNodeEntryRendersCanonicalFQDNForTeardown(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginRevoke)
+	state.Machines[0].Spec.Addresses = append(state.Machines[0].Spec.Addresses, v1alpha1.MachineAddress{
+		Name:    v1alpha1.MachineAddressFQDN,
+		Address: "ceph-1.example.test",
+	})
+	state.Machines[0].Spec.Network.Config.Spec = &v1alpha1.NetworkConfigSpec{
+		NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "external-dns"}},
+	}
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SecretsDir: "/ctx/secrets"}, locality.Policy{})
+	access, ok := entry["bootwright_node_access"].(map[string]any)
+	if !ok {
+		t.Fatal("bootwright_node_access is absent")
+	}
+	if access["address"] != "10.20.0.11" {
+		t.Fatalf("address = %v, want the raw SSH address retained as the trusted alias source", access["address"])
+	}
+	if access["connectionAddress"] != "ceph-1.example.test" {
+		t.Fatalf("connectionAddress = %v, want the canonical FQDN used by Ansible", access["connectionAddress"])
 	}
 }
 
