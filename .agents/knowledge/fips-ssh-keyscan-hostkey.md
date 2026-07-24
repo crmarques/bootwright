@@ -18,4 +18,11 @@ actually used — the same key the verify step re-encounters under
 `StrictHostKeyChecking`. A reinstalled node's stale pin is dropped first
 (`ssh-keygen -R`) so the fresh key is re-learned; the accept-new
 connection's auth outcome is ignored because auth verification is the later
-verify step's job. Do not FIPS-configure the node to work around this.
+verify step's job.
+
+The capture must not force a host-key type. Non-FIPS policy may negotiate
+Ed25519, while FIPS or stricter site policy may exclude Ed25519, ECDSA, or
+both and select a remaining RSA/SHA-2 key. The system OpenSSH client and its
+active crypto policy own that choice; Bootwright records exactly the key they
+negotiate and strictly reuses it. Do not FIPS-configure the node to work around
+this.

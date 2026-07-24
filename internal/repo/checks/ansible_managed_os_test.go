@@ -85,9 +85,16 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	if strings.Contains(cmd, "ssh-keyscan") {
 		t.Fatalf("%s must NOT use ssh-keyscan (it ignores the FIPS crypto policy): %s", scan["name"], cmd)
 	}
+	for _, forbidden := range []string{"HostKeyAlgorithms", "ssh-ed25519", "ecdsa-sha2", "ssh-rsa"} {
+		if strings.Contains(cmd, forbidden) {
+			t.Fatalf("%s must let the system-policy-aware SSH client negotiate the host-key algorithm, found %q: %s", scan["name"], forbidden, cmd)
+		}
+	}
 	for _, want := range []string{
+		"flock 9",
+		"mktemp",
 		"StrictHostKeyChecking=accept-new",
-		"UserKnownHostsFile=",
+		"UserKnownHostsFile=\"$tmp\"",
 		"ssh-keygen -R",
 		"ssh-keygen -F",
 	} {
@@ -104,6 +111,20 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 		t.Fatalf("%s file task = %v", restrict["name"], fileTask)
 	}
 
+	waitTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/wait.yml")
+	verify := waitTasks[findAnsibleTask(t, waitTasks, "Verify managed OS SSH authentication")]
+	verifyShell, ok := verify["ansible.builtin.shell"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must be a shell task using strict SSH verification, got %v", verify["name"], verify)
+	}
+	verifyCmd := fmt.Sprint(verifyShell["cmd"])
+	if strings.Contains(verifyCmd, "ssh-keyscan") || strings.Contains(verifyCmd, "StrictHostKeyChecking=accept-new") {
+		t.Fatalf("%s must consume the host key recorded by the FIPS-aware scan without re-pinning it: %s", verify["name"], verifyCmd)
+	}
+	if !strings.Contains(verifyCmd, "StrictHostKeyChecking=yes") {
+		t.Fatalf("%s must verify the recorded host key strictly: %s", verify["name"], verifyCmd)
+	}
+
 	probeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml")
 	pre := probeTasks[findAnsibleTask(t, probeTasks, "Record managed OS SSH host key before install when reachable")]
 	assertIncludeTasksFile(t, pre, "ssh_trust.yml")
@@ -115,7 +136,6 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 		t.Fatalf("%s keyscan required = %s, want false", pre["name"], got)
 	}
 
-	waitTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/wait.yml")
 	post := waitTasks[findAnsibleTask(t, waitTasks, "Record managed OS SSH host key")]
 	assertIncludeTasksFile(t, post, "ssh_trust.yml")
 	postVars, ok := post["vars"].(map[string]any)

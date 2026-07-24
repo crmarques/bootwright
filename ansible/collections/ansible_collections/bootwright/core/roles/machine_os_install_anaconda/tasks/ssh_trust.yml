@@ -18,26 +18,40 @@
       addr={{ bootwright_component.osInstall.ssh.address | quote }}
       conn={{ bootwright_component.osInstall.ssh.connectionAddress | default(bootwright_component.osInstall.ssh.address) | quote }}
       replace={{ (bootwright_os_ssh_keyscan_replace | default(false) | bool) | ternary('true', 'false') }}
+      command -v flock >/dev/null 2>&1 || { echo 'flock (util-linux) is required on the provider host' >&2; exit 1; }
+      tmp=""
+      trap 'if [ -n "$tmp" ]; then rm -f "$tmp"; fi' EXIT
+      scanned=false
       if [ "$replace" = "true" ] || ! ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1; then
-        ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
-        rm -f "$kh.old"
+        tmp=$(mktemp "${kh}.scan.XXXXXX") || exit 1
         ssh \
           -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
           -o StrictHostKeyChecking=accept-new \
-          -o UserKnownHostsFile="$kh" \
+          -o UserKnownHostsFile="$tmp" \
           -o BatchMode=yes \
           -o ConnectTimeout=15 \
           -o GSSAPIAuthentication=no \
           {{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
           true >/dev/null 2>&1 || true
-        ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1 || exit 1
+        ssh-keygen -F "$addr" -f "$tmp" >/dev/null 2>&1 || exit 1
+        scanned=true
       fi
-      if [ "$conn" != "$addr" ]; then
+      (
+        flock 9 || exit 1
+        if [ "$scanned" = "true" ]; then
+          ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
+          rm -f "$kh.old"
+          ssh-keygen -F "$addr" -f "$tmp" | grep -v '^#' >> "$kh"
+          ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1 || exit 1
+        fi
+        if [ "$conn" = "$addr" ]; then
+          exit 0
+        fi
         ssh-keygen -R "$conn" -f "$kh" >/dev/null 2>&1 || true
         rm -f "$kh.old"
         ssh-keygen -F "$addr" -f "$kh" | grep -v '^#' | sed "s/^[^ ]*/$conn/" >> "$kh"
         ssh-keygen -F "$conn" -f "$kh" >/dev/null 2>&1
-      fi
+      ) 9>"$kh.lock"
   delegate_to: localhost
   register: bootwright_os_ssh_keyscan
   retries: "{{ bootwright_os_ssh_keyscan_retries | default(1) }}"

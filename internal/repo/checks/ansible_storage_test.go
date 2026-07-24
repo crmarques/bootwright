@@ -6,6 +6,42 @@ import (
 	"testing"
 )
 
+func TestStorageNodeAccessDestroySelectsAReachableIdentity(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_node_access_destroy.yml"
+	plays := readAnsiblePlays(t, path)
+	if len(plays) != 1 {
+		t.Fatalf("%s has %d plays, want 1", path, len(plays))
+	}
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	contextIdx := findAnsibleTask(t, tasks, "Resolve storage node access context before revoking node access")
+	identitiesIdx := findAnsibleTask(t, tasks, "Probe storage node access identities before revoking node access")
+	endIdx := findAnsibleTask(t, tasks, "End nodes with no reachable storage node identity")
+	selectIdx := findAnsibleTask(t, tasks, "Select the reachable storage node connection")
+	resetIdx := findAnsibleTask(t, tasks, "Reset the storage node connection after identity selection")
+	pingIdx := findAnsibleTask(t, tasks, "Probe node reachability and escalation before revoking node access")
+	revokeIdx := findAnsibleTask(t, tasks, "Revoke storage node orchestration access")
+	if !(contextIdx < identitiesIdx && identitiesIdx < endIdx && endIdx < selectIdx && selectIdx < resetIdx && resetIdx < pingIdx && pingIdx < revokeIdx) {
+		t.Fatalf("node-access destroy must probe both identities, select the reachable endpoint, verify escalation, then revoke (context=%d identities=%d end=%d select=%d reset=%d ping=%d revoke=%d)", contextIdx, identitiesIdx, endIdx, selectIdx, resetIdx, pingIdx, revokeIdx)
+	}
+	probeVars, ok := tasks[identitiesIdx]["vars"].(map[string]any)
+	if !ok || probeVars["bootwright_node_access_probe_fail_when_unreachable"] != false {
+		t.Fatalf("destroy identity probe must let the play end unreachable nodes without hiding invalid access context, got vars=%v", tasks[identitiesIdx]["vars"])
+	}
+	connection, ok := tasks[selectIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("reachable connection selection must be a set_fact, got %v", tasks[selectIdx])
+	}
+	if got := fmt.Sprint(connection["ansible_host"]); !strings.Contains(got, "bootwright_node_access.address") {
+		t.Fatalf("node-access destroy must connect to the raw address verified by the identity probe, got ansible_host=%v", connection["ansible_host"])
+	}
+	user := fmt.Sprint(connection["ansible_user"])
+	for _, want := range []string{"bootwright_node_access_ready", "bootwright_node_access.user", "bootwright_node_access.installUser"} {
+		if !strings.Contains(user, want) {
+			t.Fatalf("node-access destroy selected user missing %q: %s", want, user)
+		}
+	}
+}
+
 func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 	paths := []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_storage_health.yml",

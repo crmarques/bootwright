@@ -179,3 +179,13 @@ reverted. Guarded by TestPlanDestroyTasksClustersChain,
 TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
 TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess,
 TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess.
+
+The dedicated revoke play cannot begin with the statically rendered Ansible
+identity. A retry may legitimately find the cephadm identity already removed
+while the install-window identity was restored by an earlier partial pass.
+The play first runs the node-access role's controller-local probes against the
+raw machine SSH address, chooses whichever of the cephadm or install identities
+answers, rewrites `ansible_host` and `ansible_user` to that proven pair, resets
+the connection, and only then runs the remote escalation probe and idempotent
+revoke tasks. This also avoids requiring the FQDN alias during cleanup when the
+same trust store's raw-address pin is intact.

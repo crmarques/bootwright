@@ -37,6 +37,7 @@
   when:
     - (bootwright_node_access_target_probe.rc | default(1) | int) != 0
     - (bootwright_node_access_install_probe.rc | default(1) | int) != 0
+    - bootwright_node_access_probe_fail_when_unreachable | default(true) | bool
 
 - name: Select the storage node access identity
   ansible.builtin.set_fact:

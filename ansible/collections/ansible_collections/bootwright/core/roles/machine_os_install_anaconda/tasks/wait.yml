@@ -83,19 +83,6 @@
       set -uo pipefail
       kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
       addr={{ bootwright_component.osInstall.ssh.address | quote }}
-      if {{ (bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool) | ternary('true', 'false') }}; then
-        command -v flock >/dev/null 2>&1 || { echo 'flock (util-linux) is required on the provider host' >&2; exit 1; }
-        command -v ssh-keyscan >/dev/null 2>&1 || { echo 'ssh-keyscan (openssh-clients) is required on the provider host' >&2; exit 1; }
-        (
-          flock 9 || exit 1
-          scan=$(ssh-keyscan -T 30 -t ed25519,ecdsa,rsa "$addr" 2>/dev/null | grep -v '^#') || true
-          if [ -n "$scan" ]; then
-            ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
-            rm -f "$kh.old"
-            printf '%s\n' "$scan" >> "$kh"
-          fi
-        ) 9>"$kh.lock"
-      fi
       exec ssh \
         -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
         -o BatchMode=yes \
