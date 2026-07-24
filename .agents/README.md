@@ -37,6 +37,7 @@ current specs and code before judging.
 | `code-flow-review.md` | Tracing real input end-to-end to final output for bugs, intent drift, and Go↔Ansible contract mismatches |
 | `provisioning-logic-review.md` | Reviewing the provisioning graph — closure, dependency ordering, locks, parallelism, and resumability |
 | `idempotency-safety-audit.md` | Auditing idempotency and destructive-operation safety against a provisioning scenario |
+| `apply-destroy-safety-contract.md` | Reviewing `apply`/`destroy` command and flag semantics for spec/docs/code coherence across self-generated lifecycle scenarios, then hardening the contract with actionable errors and durable guardrails |
 | `security-audit.md` | Running a dedicated deep security pass — secrets, privilege, TLS/trust, and supply chain |
 | `state-lifecycle-scenario-review.md` | Pressure-testing lifecycle transitions (apply/destroy/recreate) across many ownership and state scenarios |
 
