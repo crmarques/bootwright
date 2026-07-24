@@ -221,3 +221,45 @@ func (r *conflictPullSecretRunner) Run(_ context.Context, _ string, args []strin
 		return nil, errors.New("unexpected oc command")
 	}
 }
+
+func TestPullSecretCredentialTrimsTrailingNewline(t *testing.T) {
+	got, err := pullSecretCredential("ibm-entitlement-key", "cp.icr.io", "cp", []byte("ENTITLEMENT\n"))
+	if err != nil {
+		t.Fatalf("pullSecretCredential: %v", err)
+	}
+	if got != "ENTITLEMENT" {
+		t.Fatalf("credential = %q, want trimmed ENTITLEMENT", got)
+	}
+	merged, _, err := mergedDockerConfigAuth(dockerConfig(t, map[string]map[string]string{}), "cp.icr.io", "cp", got)
+	if err != nil {
+		t.Fatalf("mergedDockerConfigAuth: %v", err)
+	}
+	want := base64.StdEncoding.EncodeToString([]byte("cp:ENTITLEMENT"))
+	if decodeAuths(t, merged)["cp.icr.io"]["auth"] != want {
+		t.Fatal("a trailing newline in the stored key must not corrupt the cp.icr.io auth entry")
+	}
+}
+
+func TestPullSecretCredentialRejectsCorruptValues(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"empty", "   \n", "is empty"},
+		{"interior newline", "AB\nCD", "whitespace inside"},
+		{"interior space", "AB CD", "whitespace inside"},
+		{"username prefix", "cp:ENTITLEMENT", "prepended automatically"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := pullSecretCredential("ibm-entitlement-key", "cp.icr.io", "cp", []byte(tc.raw))
+			if err == nil {
+				t.Fatalf("expected error for %s", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want contains %q", err, tc.want)
+			}
+		})
+	}
+}

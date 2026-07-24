@@ -62,9 +62,13 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 	if err != nil {
 		return fmt.Errorf("read secret %q for pull-secret merge: %w", secretName, err)
 	}
+	credential, err := pullSecretCredential(secretName, effect.Registry, effect.Username, password)
+	if err != nil {
+		return err
+	}
 	return withMaterializedClusterKubeconfig(e.opts.ContextName, e.opts.ClustersDir, e.plan.Cluster, func(kubeconfig string) error {
 		runner := extensionoc.CommandRunner{LogPath: e.logPath, RedactLog: true, Stdout: e.stdout, Stderr: e.stderr}
-		changed, err := mergeGlobalPullSecretCredential(ctx, runner, kubeconfig, effect.Registry, effect.Username, string(password))
+		changed, err := mergeGlobalPullSecretCredential(ctx, runner, kubeconfig, effect.Registry, effect.Username, credential)
 		if err != nil {
 			return err
 		}
@@ -73,6 +77,20 @@ func (e *addonEffectExecutor) mergeGlobalPullSecret(ctx context.Context, input v
 		}
 		return nil
 	})
+}
+
+func pullSecretCredential(secretName, registry, username string, raw []byte) (string, error) {
+	credential := strings.TrimSpace(string(raw))
+	if credential == "" {
+		return "", fmt.Errorf("secret %q bound to the %s pull-secret merge is empty; store the registry credential there (for cp.icr.io, the IBM entitlement key)", secretName, registry)
+	}
+	if strings.ContainsAny(credential, " \t\r\n") {
+		return "", fmt.Errorf("secret %q bound to the %s pull-secret merge has whitespace inside the credential; it must be the credential alone on one line (a stray newline or space corrupts the registry auth and yields HTTP 400 on the token request)", secretName, registry)
+	}
+	if username != "" && strings.HasPrefix(credential, username+":") {
+		return "", fmt.Errorf("secret %q bound to the %s pull-secret merge starts with %q; bind the raw credential here (the %q username is prepended automatically), not a %q-prefixed value", secretName, registry, username+":", username, username)
+	}
+	return credential, nil
 }
 
 const pullSecretMergeAttempts = 3
