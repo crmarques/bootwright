@@ -10,5 +10,7 @@ spec:
     topology: Localnet
     localnet:
       role: Secondary
+      ipam:
+        mode: Disabled
       physicalNetworkName: dc2-child
       mtu: 1500

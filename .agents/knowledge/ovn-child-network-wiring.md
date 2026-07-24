@@ -5,11 +5,12 @@ add-on in `examples/baremetal-redfish-multidc-virtualized-odf-ceph`
 (`dc1-child-cudn.yaml`/`dc2-child-cudn.yaml`, `dc1-child-nncp.yaml`/
 `dc2-child-nncp.yaml`).
 
-**No subnets, no ipam on the CUDN:** the ClusterUserDefinedNetwork
-deliberately declares no `subnets` and no `ipam` — child node IPs are
+**No subnets, explicitly disabled IPAM on the CUDN:** child node IPs are
 static, assigned by bootwright through NMState/agent-config
-(`infra/networkconfigs/dc1-child-net.yaml`). OVN carries L2 only; enabling
-IPAM on the CUDN would override those static IPs.
+(`infra/networkconfigs/dc1-child-net.yaml`). The ClusterUserDefinedNetwork
+therefore omits `subnets` and sets `spec.network.localnet.ipam.mode: Disabled`.
+Omitting `ipam` defaults its mode to `Enabled` and makes `subnets` required;
+enabling IPAM would override the static IP ownership.
 
 **Bridge-mapping name must match:** the NNCP's `ovn.bridge-mappings`
 localnet name MUST equal the CUDN
