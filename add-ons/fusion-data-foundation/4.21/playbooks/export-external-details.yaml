@@ -90,7 +90,23 @@
         argv: "{{ bootwright_exporter_argv }}"
       register: bootwright_external_details
       changed_when: true
+      failed_when: false
       no_log: true
+
+    - name: Confirm the external cluster details exporter succeeded
+      ansible.builtin.assert:
+        that:
+          - bootwright_external_details.rc == 0
+          - bootwright_external_details.stdout | default('') | length > 0
+        fail_msg: >-
+          The Data Foundation external-cluster exporter exited
+          {{ bootwright_external_details.rc | default('unknown') }} on
+          {{ bootwright_bound_cluster }}. Its stdout is withheld (it carries
+          cluster credentials); stderr was:
+          {{ bootwright_external_details.stderr | default('') | trim }}.
+          Verify the Ceph cluster is reachable and that rbd pool
+          {{ bootwright_df.rbdPoolRef }} and CephFS {{ bootwright_df.filesystemRef }}
+          exist.
 
     - name: Remove the staged exporter script
       when: bootwright_exporter_script | length == 0
