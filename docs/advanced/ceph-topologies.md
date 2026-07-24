@@ -126,7 +126,7 @@ resolve** cluster-wide:
 The machine's own DNS name is separate: every `Machine` carries a `fqdn`
 address (`<machineName>.<baseDomain>` by default) that Bootwright connects to
 and that the node FQDN resolves through — see
-[Machines](../concepts/machines.md#the-dnsentry-address). A cluster-bound
+[Machines](../concepts/machines.md#the-fqdn-address). A cluster-bound
 node's OS hostname must equal its node FQDN, so
 `hostname.source: machineName` on a `MachineInstallProfile` is valid only for
 machines not bound to any cluster.

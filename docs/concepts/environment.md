@@ -35,7 +35,7 @@ means there is no default — an omitted optional field stays unset.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-dnsentry-address) and [Domain model](#domain-model). |
+| `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-fqdn-address) and [Domain model](#domain-model). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
 | `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |

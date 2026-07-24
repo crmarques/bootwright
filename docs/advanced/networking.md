@@ -314,7 +314,7 @@ NMState.
 
 A managed name-resolution (dnsmasq) component publishes, for every machine it
 serves, a `host-record` for the machine's
-[`fqdn` name](../concepts/machines.md#the-dnsentry-address)
+[`fqdn` name](../concepts/machines.md#the-fqdn-address)
 (`<machineName>.<machine domain>` unless overridden — the machine domain is
 `domains.machines`, which defaults to `domains.base`)
 targeting the machine's

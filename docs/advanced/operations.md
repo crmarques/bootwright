@@ -478,7 +478,7 @@ declared `StorageCluster`; verify that fact independently before using it.
 Recovery does not trust whichever fsid a live cluster reports or relax
 OSD-device ownership, mounted-device, system-disk, or probe-failure checks. It
 implies neither `--force` nor `--yes`. The normative contract is in the
-[CLI specification](../../specs/state-model.md#cli-contract).
+[CLI specification](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract).
 
 ## Tearing down with a node powered off
 

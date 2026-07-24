@@ -301,7 +301,7 @@ To provision or tear down individual machines rather than whole clusters, pass
 
 `bootwright machine rsh --name <machine>` opens an interactive SSH shell on a
 `Machine` using the identity Bootwright already knows for it — the machine's
-[`fqdn` connection address](#the-dnsentry-address) (falling back to the
+[`fqdn` connection address](#the-fqdn-address) (falling back to the
 `access.ssh` IP for the carve-outs described there), user (default `root`),
 private key, and the context host-key trust store recorded by
 `bootwright machine trust`. `machine exec` runs
