@@ -110,7 +110,7 @@ func argsNeedLocalRoot(args []string) bool {
 		switch args[1] {
 		case "list", "info", "kubeconfig":
 			return true
-		case "rsh", "exec":
+		case "rsh", "exec", "oc", "kubectl":
 			return argsHaveNameValue(args[2:])
 		default:
 			return false

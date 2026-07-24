@@ -28,15 +28,14 @@ func printClusterAccessSections(p *cliout.Printer, summaries []clusteraccess.Clu
 	p.Section("Cluster access")
 	for _, summary := range summaries {
 		p.List([]cliout.Item{{Label: "cluster " + summary.Name}})
-		p.Fields([]cliout.Field{
+		fields := []cliout.Field{
 			{Key: "API", Value: summary.APIURL},
 			{Key: "Console", Value: summary.ConsoleURL},
-			{Key: "Kubeconfig", Value: summary.KubeconfigPath},
-			{Key: "Kube context", Value: summary.KubeContextCommand},
 			{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
-			{Key: "Password file", Value: summary.KubeadminPasswordPath},
 			{Key: "Show password", Value: summary.KubeadminPasswordCommand},
-		})
+		}
+		fields = append(fields, containerAccessCommandFields(summary.Name)...)
+		p.Fields(fields)
 		p.Status(accessArtifactStatus(summary.Kubeconfig), "kubeconfig", accessArtifactDetail(summary.Kubeconfig))
 		p.Status(accessArtifactStatus(summary.KubeadminPassword), "kubeadmin password", accessArtifactDetail(summary.KubeadminPassword))
 	}

@@ -216,17 +216,28 @@ terminal state. Re-running `apply` later is safe — matching work is skipped.
 
 ## Access The Cluster
 
-Once apply finishes, list the local access details (URLs, kubeconfig path, the
-kubeadmin password file, and the `cluster rsh` line for each node — no secret
-bytes are printed unless you add `--secrets`):
+Once apply finishes, list the local access details (URLs, the kubeadmin user,
+and the `cluster oc`/`cluster kubectl`/`cluster kubeconfig` and `cluster rsh`
+commands for each node — no secret bytes are printed unless you add
+`--secrets`):
 
 ```bash
 bootwright cluster info
 ```
 
-To use the cluster, save the generated admin kubeconfig to a file you own. The
-command streams it to stdout so you can redirect it without copying the
-root-owned source by hand:
+The quickest way to talk to the cluster is to run `oc` or `kubectl` through
+Bootwright. It decrypts the admin kubeconfig to a private, caller-owned
+temporary file for the duration of the command, so the client runs as you and
+shell pipelines work as usual:
+
+```bash
+bootwright cluster oc --name my-sno-lab get nodes
+bootwright cluster kubectl --name my-sno-lab get pods -A -o json | jq '.items | length'
+```
+
+To keep a reusable kubeconfig instead, save the generated admin kubeconfig to a
+file you own. The command streams it to stdout so you can redirect it without
+copying the root-owned source by hand:
 
 ```bash
 bootwright cluster kubeconfig --name my-sno-lab > ~/.kube/my-sno-lab

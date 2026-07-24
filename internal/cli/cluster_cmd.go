@@ -63,6 +63,8 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 		newClusterInfoCmd(stdout),
 		newClusterRshCmd(),
 		newClusterExecCmd(),
+		newClusterOcCmd(),
+		newClusterKubectlCmd(),
 		newClusterKubeconfigCmd(stdout),
 	)
 	requireSubcommand(cmd)
@@ -147,13 +149,15 @@ func newClusterInfoCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "info",
 		Short: "Print local access details for installed clusters",
-		Long: `Print how to reach each installed cluster: API/console URLs and the kubeconfig
-and kubeadmin details for container clusters, plus the seed node, SSH, and
-dashboard details for Ceph storage clusters. Each cluster also lists its nodes
-with the 'cluster rsh' command to open a shell on them.
+		Long: `Print how to reach each installed cluster: API/console URLs, the kubeadmin user,
+and the 'cluster oc', 'cluster kubectl', and 'cluster kubeconfig' commands for
+container clusters, plus the seed node, SSH, and dashboard details for Ceph
+storage clusters. Each cluster also lists its nodes with the 'cluster rsh'
+command to open a shell on them.
 
-Secret values are never printed unless --secrets is passed; without it only their
-file paths and a 'sudo cat' hint are shown.`,
+The kubeconfig and passwords are encrypted at rest, so no reusable file path is
+printed. Secret values are never printed unless --secrets is passed; without it
+the command that reveals them ('cluster info --secrets') is shown instead.`,
 		Args: cobra.NoArgs,
 		Example: `  # Access details for every managed cluster in the current context
   bootwright cluster info
@@ -163,7 +167,11 @@ file paths and a 'sudo cat' hint are shown.`,
   bootwright cluster info --name ceph-libvirt
 
   # Also reveal the kubeadmin / dashboard passwords inline
-  bootwright cluster info --name managed-01 --secrets`,
+  bootwright cluster info --name managed-01 --secrets
+
+  # Then talk to the cluster directly
+  bootwright cluster oc --name managed-01 get nodes
+  bootwright cluster kubectl --name managed-01 get pods -A`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name to inspect (default: all)")
 	cmd.Flags().BoolVar(&showSecrets, "secrets", false, "also print secret values (kubeadmin and Ceph dashboard passwords), not just their paths")
@@ -251,15 +259,14 @@ func printClusterInfo(stdout io.Writer, state v1alpha1.State, contextName, clust
 		fields = append(fields,
 			cliout.Field{Key: "API", Value: emptyAccessValue(summary.APIURL)},
 			cliout.Field{Key: "Console", Value: emptyAccessValue(summary.ConsoleURL)},
-			cliout.Field{Key: "Kubeconfig", Value: summary.KubeconfigPath},
-			cliout.Field{Key: "Kube context", Value: summary.KubeContextCommand},
 			cliout.Field{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
 		)
 		if showSecrets {
 			fields = append(fields, cliout.Field{Key: "Kubeadmin password", Value: revealValue(contextName, clustersDir, summary.Name, "kubeadmin-password", summary.KubeadminPassword)})
 		} else {
-			fields = append(fields, cliout.Field{Key: "Kubeadmin password file", Value: summary.KubeadminPasswordPath})
+			fields = append(fields, cliout.Field{Key: "Show password", Value: summary.KubeadminPasswordCommand})
 		}
+		fields = append(fields, containerAccessCommandFields(summary.Name)...)
 		p.Fields(fields)
 		printClusterNodeAccess(p, state, summary.Name)
 	}
@@ -374,4 +381,12 @@ func emptyAccessValue(value string) string {
 		return "(unknown)"
 	}
 	return value
+}
+
+func containerAccessCommandFields(name string) []cliout.Field {
+	return []cliout.Field{
+		{Key: "oc", Value: "bootwright cluster oc --name " + name + " get nodes"},
+		{Key: "kubectl", Value: "bootwright cluster kubectl --name " + name + " get nodes"},
+		{Key: "Kubeconfig", Value: "bootwright cluster kubeconfig --name " + name},
+	}
 }

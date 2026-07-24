@@ -96,7 +96,7 @@ func TestClusterAccessShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Dashboard user: admin",
-		"Dashboard password file: " + passwordPath,
+		"Show password: bootwright cluster info --name ceph-libvirt --secrets",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("cluster info missing %q:\n%s", want, stdout)
@@ -104,6 +104,9 @@ func TestClusterAccessShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
 	}
 	if strings.Contains(stdout, "do-not-print-this-dashboard-password") {
 		t.Fatalf("cluster info leaked dashboard password bytes without --secrets:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Dashboard password file") || strings.Contains(stdout, passwordPath) {
+		t.Fatalf("cluster info still exposes the encrypted dashboard password file path:\n%s", stdout)
 	}
 
 	secretsOut, _, secretsCode := runCLI(t, "cluster", "info", "--name", "ceph-libvirt", "--secrets")

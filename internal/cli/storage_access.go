@@ -43,7 +43,7 @@ func storageAccessTrailFields(contextName, clustersDir string, summary clusterac
 		if showSecrets {
 			fields = append(fields, cliout.Field{Key: "Dashboard password", Value: revealValue(contextName, clustersDir, summary.Name, "dashboard-password", summary.DashboardPassword)})
 		} else {
-			fields = append(fields, cliout.Field{Key: "Dashboard password file", Value: summary.DashboardPasswordPath})
+			fields = append(fields, cliout.Field{Key: "Show password", Value: summary.DashboardPasswordCommand})
 		}
 	}
 	return append(fields,

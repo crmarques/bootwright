@@ -54,17 +54,20 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"Cluster access",
-		"Kubeconfig: " + kubeconfigPath,
-		"Kube context: KUBECONFIG=" + kubeconfigPath,
 		"API: https://api.sno-libvirt.bootwright.test:6443",
 		"Console: https://console-openshift-console.apps.sno-libvirt.bootwright.test",
 		"Kubeadmin user: kubeadmin",
-		"Password file: " + passwordPath,
 		"Show password: bootwright cluster info --name sno-libvirt --secrets",
+		"oc: bootwright cluster oc --name sno-libvirt get nodes",
+		"kubectl: bootwright cluster kubectl --name sno-libvirt get nodes",
+		"Kubeconfig: bootwright cluster kubeconfig --name sno-libvirt",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("cluster access output missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "Kube context") || strings.Contains(got, "Password file") {
+		t.Fatalf("cluster access output still presents an encrypted secret file as an access method:\n%s", got)
 	}
 }
 
@@ -89,8 +92,10 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 	for _, want := range []string{
 		"Bootwright: cluster info",
 		"sno-libvirt:",
-		"Kubeconfig: " + kubeconfigPath,
-		"Kubeadmin password file: " + passwordPath,
+		"Show password: bootwright cluster info --name sno-libvirt --secrets",
+		"oc: bootwright cluster oc --name sno-libvirt get nodes",
+		"kubectl: bootwright cluster kubectl --name sno-libvirt get nodes",
+		"Kubeconfig: bootwright cluster kubeconfig --name sno-libvirt",
 		"Node master-0: bootwright cluster rsh --name sno-libvirt --node master-0",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -99,6 +104,9 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 	}
 	if strings.Contains(stdout, "do-not-print-this-password") {
 		t.Fatalf("cluster info leaked password bytes without --secrets:\n%s", stdout)
+	}
+	if strings.Contains(stdout, kubeconfigPath) || strings.Contains(stdout, passwordPath) {
+		t.Fatalf("cluster info still exposes an encrypted secret file path:\n%s", stdout)
 	}
 }
 

@@ -325,15 +325,19 @@ store. `bootwright secret show` reads only context-local secret files (never
     encrypted at rest the same way as context secrets — each cluster gets its
     own AES-256-GCM envelope keyring under `secrets/.bootwright/` — so the
     files on disk are never plaintext; `bootwright apply` encrypts them in
-    place immediately after the capturing task succeeds. `bootwright cluster
-    info` prints the API and console URLs, kubeconfig path, and the password
-    file path, without printing bytes unless you pass `--secrets` — which
-    decrypts and prints the password itself instead of the file path. Because
-    the files are encrypted, `sudo cat` no longer reveals them; use `bootwright
-    cluster info --secrets` for the kubeadmin/dashboard passwords and
-    `bootwright cluster kubeconfig --name <cluster>` to retrieve a usable
-    kubeconfig (it decrypts and streams the bytes to stdout, so you can
-    redirect them to a private file you own).
+    place immediately after the capturing task succeeds. Because those files
+    are encrypted, `sudo cat` no longer reveals them and `bootwright cluster
+    info` never prints a reusable file path. Without `--secrets` it prints the
+    API and console URLs, the kubeadmin user, and the `bootwright cluster
+    info --secrets` command that reveals the kubeadmin/dashboard passwords;
+    with `--secrets` it decrypts and prints the passwords themselves. To use a
+    container cluster, run `bootwright cluster oc --name <cluster> <command>`
+    or `bootwright cluster kubectl --name <cluster> <command>` — Bootwright
+    decrypts the admin kubeconfig to a private, caller-owned temporary file for
+    the duration of the command, so `oc`/`kubectl` run as you against the
+    cluster and support shell pipelines. `bootwright cluster kubeconfig --name
+    <cluster>` streams a usable kubeconfig to stdout so you can redirect it to
+    a private file you own.
 
 Effective install/agent configs and `openshift/` manifests with resolved secrets
 are runtime outputs under

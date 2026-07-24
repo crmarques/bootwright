@@ -96,6 +96,20 @@ func registerAccessClusterNameCompletion(cmd *cobra.Command) {
 	})
 }
 
+func registerContainerClusterNameCompletion(cmd *cobra.Command) {
+	_ = cmd.RegisterFlagCompletionFunc("name", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		state, err := loadDesiredStateLocalOnly(addCommonFlags())
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(state.ContainerClusters))
+		for _, c := range state.ContainerClusters {
+			names = append(names, c.Metadata.Name)
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+}
+
 func registerClusterNodeCompletion(cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc("node", func(c *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		clusterName := c.Flags().Lookup("name").Value.String()
