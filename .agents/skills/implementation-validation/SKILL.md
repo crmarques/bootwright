@@ -11,16 +11,19 @@ changes, also run the checks from `definition-stewardship`.
 
 - During investigation or iterative fixes, run the smallest direct targeted
   command that answers the current question instead of an aggregate target.
-- After completing the intended edit set for any implementation request, check
-  whether local `main` has advanced since the temporary branch was created (or
-  last rebased). If it has, rebase the temporary branch onto current local
-  `main` and make any needed fixes or adjustments first — do this before
-  running `make check-fast`, not after, so a late-discovered rebase does not
-  waste a completed run.
-- Only once the branch is rebased onto current `main` (or was already up to
-  date), run `make check-fast` from the temporary worktree. Do not run `make
-  check` by yourself; run it only when the user explicitly requests that full
-  gate.
+- Immediately before executing every `make check-fast` or user-requested `make
+  check`, check whether local `main` has advanced since the temporary branch
+  was created or last rebased. If it has, rebase the temporary branch onto
+  current local `main` and make any needed fixes or adjustments first. Perform
+  this check for every aggregate validation run, even when a previous run
+  already found the branch current.
+- Run `make check-fast` from the temporary worktree once the branch is current.
+  Do not run `make check` by yourself; run it only when the user explicitly
+  requests that full gate.
+- Immediately before every task commit on the temporary branch, check again
+  whether local `main` advanced and rebase first if needed. If that rebase
+  changes the effective tree after validation, rerun the required validation
+  sequence before committing.
 - If local `main` advances again before merge (including while `make
   check-fast` was running), repeat the rebase-first sequence — rebase and fix,
   then rerun `make check-fast` — until the branch is both current and green, or

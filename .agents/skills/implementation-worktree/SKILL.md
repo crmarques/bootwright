@@ -61,12 +61,15 @@ completion, not just eventual correctness.
 
 ## Validate And Commit
 
-- Run focused commands during implementation. After the intended edit set, follow
-  `implementation-validation`: check for a `main` advance and rebase first, then
-  `make check-fast` (never `make check` unless the user requests that gate).
-- Commit task changes on the temporary branch once `make check-fast` passes, and
-  commit any rebase fixes the same way (preauthorized — do not ask). Author commits
-  as the human only — no agent co-author or attribution trailer (see AGENTS.md
+- Run focused commands during implementation. After the intended edit set,
+  follow `implementation-validation`: immediately before every `make
+  check-fast` or user-requested `make check`, check for a `main` advance and
+  rebase first when needed.
+- Once `make check-fast` passes, repeat the `main` advance check immediately
+  before committing task changes. Rebase first when needed; when that changes
+  the effective tree, rerun validation before committing. Task commits and
+  commits of rebase fixes are preauthorized — do not ask. Author commits as the
+  human only — no agent co-author or attribution trailer (see AGENTS.md
   "Handoff Format").
 - Do not push, merge, or fast-forward `main`. Leave changes committed on the
   temporary branch for review/testing; `main` integration stays pending explicit
