@@ -16,6 +16,9 @@ func TestEncryptCapturedClusterSecretsStorageClusterEncryptsInPlace(t *testing.T
 	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
 		t.Fatalf("mkdir secrets dir: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(secretsDir, "addons", "storage"), 0o700); err != nil {
+		t.Fatalf("mkdir add-on secrets: %v", err)
+	}
 	path := filepath.Join(secretsDir, "dashboard-password")
 	if err := os.WriteFile(path, []byte("hunter2\n"), 0o600); err != nil {
 		t.Fatalf("seed plaintext dashboard-password: %v", err)
@@ -59,6 +62,9 @@ func TestEncryptCapturedClusterSecretsInstallWaitEncryptsKubeconfigAndPassword(t
 	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
 		t.Fatalf("mkdir secrets dir: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(secretsDir, "addons", "storage"), 0o700); err != nil {
+		t.Fatalf("mkdir add-on secrets: %v", err)
+	}
 	seed := map[string]string{
 		"kubeconfig":         "apiVersion: v1\n",
 		"kubeadmin-password": "hunter2\n",
@@ -94,6 +100,9 @@ func TestWithMaterializedClusterKubeconfigDecryptsAndCleansUp(t *testing.T) {
 	store := secretstore.NewContextStore("test", secretsDir)
 	if err := store.Write(secretstore.MaterialKey{Name: "kubeconfig", Role: secretstore.MaterialPrimary}, []byte("apiVersion: v1\n")); err != nil {
 		t.Fatalf("seed encrypted kubeconfig: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(secretsDir, "addons", "storage"), 0o700); err != nil {
+		t.Fatalf("mkdir add-on secrets: %v", err)
 	}
 
 	var seenPath string

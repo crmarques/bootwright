@@ -761,7 +761,7 @@ func withMaterializedClusterKubeconfig(contextName, clustersDir, cluster string,
 	}
 	defer os.RemoveAll(scratchDir)
 	store := secret.NewContextStore(effectiveContextName(contextName), ClusterSecretsDir(clustersDir, cluster))
-	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
+	if _, err := store.MigratePlaintextMaterial(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}); err != nil {
 		return fmt.Errorf("encrypt kubeconfig for cluster %s: %w", cluster, err)
 	}
 	if err := store.MaterializeSelected(scratchDir, []string{"kubeconfig"}); err != nil {

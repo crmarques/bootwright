@@ -22,10 +22,11 @@ func Kubeconfig(state v1alpha1.State, contextName, clustersDir, clusterName stri
 		return nil, fmt.Errorf("kubeconfig for %q not found at %s; install the cluster first", clusterName, summary.KubeconfigPath)
 	}
 	store := secret.NewContextStore(contextName, workflow.ClusterSecretsDir(clustersDir, clusterName))
-	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
+	key := secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}
+	if _, err := store.MigratePlaintextMaterial(key); err != nil {
 		return nil, fmt.Errorf("encrypt kubeconfig for %s: %w", clusterName, err)
 	}
-	data, err := store.Read(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary})
+	data, err := store.Read(key)
 	if err != nil {
 		return nil, fmt.Errorf("read kubeconfig for %s: %w", clusterName, err)
 	}

@@ -45,12 +45,15 @@ at exactly the path these files occupied before this change.
 Ansible roles are unchanged: `dashboard_secret.yml` and `wait_install.yml`
 still write plaintext to that same path. Immediately after the capturing
 apply task (`storageCluster` or `installWait`) succeeds, Go calls
-`ContextStore.MigratePlaintext` on the per-cluster store, converting whatever
-plaintext was just written into a ciphertext envelope in place, before the
-task's result is returned. `MigratePlaintext` is idempotent — a no-op once the
-file is already encrypted — so this runs after every succeeding task, not just
-the one that captured the credential, and self-heals any pre-existing
-plaintext file left by a cluster installed before this change.
+`ContextStore.MigratePlaintextMaterial` for the captured credential names on
+the per-cluster store, converting each plaintext file just written into a
+ciphertext envelope in place before the task's result is returned. The
+targeted method is required because the same secrets root also contains the
+hierarchical `addons/` output area, which is not context-store material.
+Migration is idempotent — a no-op once a named file is already encrypted — so
+this runs after every succeeding task, not just the one that captured the
+credential, and self-heals any pre-existing plaintext file left by a cluster
+installed before this change.
 
 `kubeconfig` is additionally consumed programmatically. Every such call site —
 add-on apply/wait, node-config apply, the pull-secret merge effect, Ansible
@@ -83,5 +86,6 @@ cleanup gap.
 - A cluster installed by a pre-ADR-0020 Bootwright still has plaintext
   material at these paths; the next access through any of the paths above
   (an apply task succeeding, a `withMaterializedClusterKubeconfig` call, or a
-  `RevealClusterSecret`/`Kubeconfig` read) transparently encrypts it in place
-  before use. There is no separate migration command to run.
+  `RevealClusterSecret`/`Kubeconfig` read) targets that credential and
+  transparently encrypts it in place before use. There is no separate migration
+  command to run.

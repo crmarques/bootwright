@@ -229,6 +229,35 @@ func TestContextStoreMigratesPlaintextAndRejectsUnmappableFiles(t *testing.T) {
 	}
 }
 
+func TestContextStoreMigratesSelectedMaterialBesideDirectory(t *testing.T) {
+	store := NewContextStore("lab", t.TempDir())
+	if err := os.MkdirAll(filepath.Join(store.secretsDir, "addons", "demo"), 0o700); err != nil {
+		t.Fatalf("mkdir add-on secrets: %v", err)
+	}
+	path := filepath.Join(store.secretsDir, "kubeconfig")
+	if err := os.WriteFile(path, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	key := MaterialKey{Name: "kubeconfig", Role: MaterialPrimary}
+	status, err := store.MigratePlaintextMaterial(key)
+	if err != nil {
+		t.Fatalf("MigratePlaintextMaterial: %v", err)
+	}
+	if status.State != MaterialStateEncrypted {
+		t.Fatalf("state = %s, want encrypted", status.State)
+	}
+	data, err := store.Read(key)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if string(data) != "apiVersion: v1\n" {
+		t.Fatalf("Read = %q", data)
+	}
+	if info, err := os.Stat(filepath.Join(store.secretsDir, "addons")); err != nil || !info.IsDir() {
+		t.Fatalf("add-ons directory changed during selected migration: info=%v err=%v", info, err)
+	}
+}
+
 func TestContextStoreRotatesKeysAndKeepsMaterialReadable(t *testing.T) {
 	store := NewContextStore("lab", t.TempDir())
 	firstKey := MaterialKey{Name: "one", Role: MaterialPrimary}

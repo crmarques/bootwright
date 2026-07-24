@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -21,9 +22,26 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	}
 	failure := conciseApplyTaskFailure(result.err.Error())
 	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	taskErr := fmt.Errorf("%s failed: %s (log: %s)", task.Entry.Label, failure, logPath)
+	if logErr := ensureApplyTaskFailureLog(logPath, failure); logErr != nil {
+		taskErr = fmt.Errorf("%w; additionally failed to write task log %s: %v", taskErr, logPath, logErr)
+	}
 	result.failure = failure
-	result.err = fmt.Errorf("%s failed: %s (log: %s)", task.Entry.Label, failure, logPath)
+	result.err = taskErr
 	return result
+}
+
+func ensureApplyTaskFailureLog(path, failure string) error {
+	info, err := os.Stat(path)
+	switch {
+	case err == nil && info.Mode().IsRegular() && info.Size() > 0:
+		return nil
+	case err == nil && !info.Mode().IsRegular():
+		return fmt.Errorf("%s is not a regular file", path)
+	case err != nil && !errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	return safefs.WriteFileEnsuringDir(path, []byte("failure: "+failure+"\n"), 0o600)
 }
 
 func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
@@ -133,8 +151,14 @@ func encryptCapturedClusterSecrets(opts RunOptions, task ApplyTask) error {
 		return nil
 	}
 	store := secret.NewContextStore(effectiveContextName(opts.ContextName), ClusterSecretsDir(opts.ClustersDir, clusterName))
-	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
-		return fmt.Errorf("encrypt captured secrets for cluster %s: %w", clusterName, err)
+	names := []string{"kubeconfig", "kubeadmin-password"}
+	if task.Entry.Kind == ApplyTaskKindStorageCluster {
+		names = []string{"dashboard-password"}
+	}
+	for _, name := range names {
+		if _, err := store.MigratePlaintextMaterial(secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}); err != nil {
+			return fmt.Errorf("encrypt captured secret %s for cluster %s: %w", name, clusterName, err)
+		}
 	}
 	return nil
 }

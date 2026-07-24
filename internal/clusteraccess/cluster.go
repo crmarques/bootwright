@@ -113,10 +113,11 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 
 func RevealClusterSecret(contextName, clustersDir, cluster, name string) (string, error) {
 	store := secret.NewContextStore(contextName, workflow.ClusterSecretsDir(clustersDir, cluster))
-	if _, err := store.MigratePlaintext(func(string) secret.MaterialRole { return secret.MaterialPrimary }); err != nil {
+	key := secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}
+	if _, err := store.MigratePlaintextMaterial(key); err != nil {
 		return "", err
 	}
-	data, err := store.Read(secret.MaterialKey{Name: name, Role: secret.MaterialPrimary})
+	data, err := store.Read(key)
 	if err != nil {
 		return "", err
 	}

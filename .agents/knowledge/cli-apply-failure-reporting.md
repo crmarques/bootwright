@@ -30,3 +30,10 @@ as "rerun with --converge-drifted to rebuild it" survives next to the leading
 description. The implementation is rune-based so a multibyte character
 is never split. (`internal/converge/workflow/apply_failures.go` applies
 the same middle-ellipsis rule to over-long apply failure reasons.)
+
+**Semantics: advertised task logs exist for pre-run failures.** The scheduler
+records a task log path before invoking the executor, but setup can fail before
+Ansible or `oc` opens that path. `runOneApplyTask` writes the concise failure
+into an absent or empty owner-only task log before returning, while preserving
+any non-empty external-process log. A failure summary must therefore never
+point at a log that was skipped solely because setup failed first.

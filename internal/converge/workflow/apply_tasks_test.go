@@ -27,6 +27,28 @@ type fakeClusterAvailabilityChecker struct {
 	contents  [][]byte
 }
 
+func TestRunOneApplyTaskWritesLogForPreRunnerFailure(t *testing.T) {
+	runsDir := t.TempDir()
+	task := ApplyTask{Entry: TaskLedgerEntry{
+		ID:    "addon.demo.invalid",
+		Label: "Install add-on invalid",
+		Kind:  ApplyTaskKindClusterAddon,
+	}}
+
+	result := runOneApplyTask(context.Background(), io.Discard, io.Discard, runsDir, "apply-test", RunOptions{}, task, nil)
+	if result.err == nil {
+		t.Fatal("runOneApplyTask succeeded without an add-on plan")
+	}
+	logPath := TaskLogPath(runsDir, "apply-test", task.Entry.ID)
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read task log: %v", err)
+	}
+	if !strings.Contains(string(data), "failure: add-on task addon.demo.invalid has no add-on plan") {
+		t.Fatalf("task log = %q", data)
+	}
+}
+
 func (f *fakeClusterAvailabilityChecker) Available(_ context.Context, kubeconfigPath string) (bool, error) {
 	f.paths = append(f.paths, kubeconfigPath)
 	if data, err := os.ReadFile(kubeconfigPath); err == nil {

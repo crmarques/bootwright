@@ -150,32 +150,47 @@ func (s *ContextStore) MigratePlaintext(roleForName func(string) MaterialRole) (
 				key.Role = MaterialPrimary
 			}
 		}
-		path := filepath.Join(s.secretsDir, entry.Name())
-		if err := ensureRegularOwnedFile(path, s.ownerUID, 0o600); err != nil {
-			return migrated, err
-		}
-		current, err := s.Inspect(key)
+		current, err := s.migratePlaintextMaterial(key)
 		if err != nil {
 			return migrated, err
 		}
-		if current.State == MaterialStateEncrypted {
-			migrated = append(migrated, current)
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return migrated, fmt.Errorf("read plaintext secret %s: %w", path, err)
-		}
-		if err := s.write(key, data, true); err != nil {
-			return migrated, err
-		}
-		status, err := s.Inspect(key)
-		if err != nil {
-			return migrated, err
-		}
-		migrated = append(migrated, status)
+		migrated = append(migrated, current)
 	}
 	return migrated, nil
+}
+
+func (s *ContextStore) MigratePlaintextMaterial(key MaterialKey) (MaterialStatus, error) {
+	if _, err := s.ensureInitialized(); err != nil {
+		return MaterialStatus{}, err
+	}
+	return s.migratePlaintextMaterial(key)
+}
+
+func (s *ContextStore) migratePlaintextMaterial(key MaterialKey) (MaterialStatus, error) {
+	if err := validateMaterialKey(key); err != nil {
+		return MaterialStatus{}, err
+	}
+	current, err := s.Inspect(key)
+	if err != nil {
+		return MaterialStatus{}, err
+	}
+	if current.State == MaterialStateMissing {
+		return current, nil
+	}
+	if err := ensureRegularOwnedFile(current.Path, s.ownerUID, 0o600); err != nil {
+		return MaterialStatus{}, err
+	}
+	if current.State == MaterialStateEncrypted {
+		return current, nil
+	}
+	data, err := os.ReadFile(current.Path)
+	if err != nil {
+		return MaterialStatus{}, fmt.Errorf("read plaintext secret %s: %w", current.Path, err)
+	}
+	if err := s.write(key, data, true); err != nil {
+		return MaterialStatus{}, err
+	}
+	return s.Inspect(key)
 }
 
 func (s *ContextStore) Rotate() error {

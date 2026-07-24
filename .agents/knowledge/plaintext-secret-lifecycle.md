@@ -23,6 +23,15 @@ state also aborts materialization. Pinned by the `store_test` case that
 corrupts the second (sorted) material so decrypt fails mid-loop after the
 first was already written.
 
+**Cluster stores are not flat:** A per-cluster `ContextStore` shares
+`clusters/<cluster>/secrets/` with the hierarchical `addons/` secret-output
+area. Cluster-captured credential access and post-install capture therefore use
+`MigratePlaintextMaterial` for the known `kubeconfig`,
+`kubeadmin-password`, or `dashboard-password` key. Broad
+`MigratePlaintext` is reserved for the flat context secret store: running it
+against a cluster root interprets `addons/` as a primary material named
+`addons` and fails with "is not a regular file" before an add-on runner starts.
+
 **MkdirAll does not fix modes:** `ensureLocalDir`
 (`internal/render/filesystem.go`) must explicitly `Chmod` after `MkdirAll`:
 `MkdirAll` is a no-op on an existing directory and leaves its mode untouched,
