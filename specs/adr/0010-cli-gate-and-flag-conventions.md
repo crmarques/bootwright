@@ -91,6 +91,12 @@ touch root-owned state:
   Ceph wipe-and-rebuild), and its help text must name that scope.
   Failure summaries preserve the exact remedy command (middle-ellipsis
   shortening keeps the `--converge-drifted` tail).
+- A destroy-time Ceph marker recovery carries the identity being confirmed in
+  `--recover-ceph-ownership <StorageCluster>=<fsid>` rather than a boolean
+  bypass. The value must match the selected declared cluster, its controller
+  owner record and seed, and the seed's on-disk Ceph fsid before Bootwright
+  re-stamps the marker. The ordinary destroy confirmation remains the one
+  data-loss acknowledgment.
 - Destructive selection stays unambiguous by reservation: the cluster
   name `artifact-server` is reserved so `destroy --stage infra
   --clusters artifact-server` can only mean the generated artifact

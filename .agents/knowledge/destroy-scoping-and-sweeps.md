@@ -8,7 +8,10 @@ the selected cluster roots; `bootwright_destroy_force_unowned=true` relaxes only
 the per-VM ownership-marker refusals; `bootwright_destroy_skip_unreachable=true`
 lets node-targeting plays skip powered-off hosts — but storage teardown STILL
 fails closed when a cluster's Ceph seed is unreachable, so ownership stays
-proven before any OSD wipe.
+proven before any OSD wipe. The JSON map
+`bootwright_ceph_destroy_confirmed_fsids={<cluster>:<fsid>}` carries explicit
+Ceph marker-recovery identity and is accepted only after Go validates the
+selected managed cluster and its context owner record for the declared seed.
 
 **One composition point:** `converge.ApplyDestroyScopeExtraVars` composes every
 destroy-scoping gate (mirroring how `PlanScopedApply` stamps
@@ -17,6 +20,8 @@ destroy-scoping gate (mirroring how `PlanScopedApply` stamps
 faithful. Executor-coupling extra-vars are named constants in the converge
 bounded-context root, never raw literals in a cobra command (`verbose.go`
 follows the same idiom for `bootwright_no_log`). Ordering matters:
+`ApplyDestroyCephOwnershipRecoveryExtraVar` appends the validated recovery map
+immediately after the scope composition, then
 `converge.ApplyVerboseExtraVar` must be stamped AFTER
 `PlanScopedApply`/`ApplyDestroyScopeExtraVars` compose `ExtraVarPairs`, or the
 gate silently drops from either the dry-run JSON preview or the real run.

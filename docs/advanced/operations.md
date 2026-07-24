@@ -447,6 +447,35 @@ bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
     Because it removes a VM Bootwright cannot positively confirm it owns,
     confirm the target VM is yours before using it.
 
+## Recovering a lost Ceph cluster ownership marker
+
+A managed Ceph destroy refuses when `/etc/ceph/.bootwright-owned` is missing or
+its fsid differs from `/etc/ceph/ceph.conf`. If the context still holds the
+`StorageCluster` owner record and you independently verified the cluster's
+on-disk fsid, let Bootwright validate and restore the marker before teardown:
+
+```text
+bootwright destroy \
+  --clusters ceph-storage \
+  --recover-ceph-ownership ceph-storage=2088ddee-875b-11f1-9b98-303ea72d7724 \
+  --yes
+```
+
+The flag is an explicit `<StorageCluster>=<fsid>` mapping; repeat entries with
+commas when a destroy covers several storage clusters. Bootwright accepts only
+selected managed clusters, requires each cluster's controller owner record for
+the declared seed, and compares the supplied UUID with the fsid in that seed's
+`/etc/ceph/ceph.conf`. It then writes the normal owner-only marker and re-reads
+it through the existing destroy gate.
+
+The recovery does not create a lost controller record, trust whichever fsid a
+live cluster reports, or relax OSD-device ownership, mounted-device, system-disk,
+or probe-failure checks. It implies neither `--force` nor `--yes`. Restore a
+missing controller ownership record from backup; if that evidence cannot be
+restored, verify and remove the Ceph cluster manually instead of adopting it.
+The normative contract is in the
+[CLI specification](../../specs/state-model.md#cli-contract).
+
 ## Tearing down with a node powered off
 
 The node-targeting teardown plays (managed Ceph storage and OpenShift agent

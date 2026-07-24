@@ -800,13 +800,46 @@ func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
 func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 
+	confIdx := findAnsibleTask(t, tasks, "Resolve existing Ceph configuration fsid on seed host")
+	resolveRecoveryIdx := findAnsibleTask(t, tasks, "Resolve confirmed Ceph ownership recovery fsid on seed host")
+	validateRecoveryIdx := findAnsibleTask(t, tasks, "Refuse Ceph ownership recovery without matching evidence")
+	recoverIdx := findAnsibleTask(t, tasks, "Recover Bootwright Ceph ownership marker on seed host")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker on seed host")
 	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright Ceph cluster on seed host")
 	rmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
-	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < rmIdx && rmIdx < wipeIdx) {
-		t.Fatalf("ceph destroy must verify ownership before removing the cluster and wiping (read=%d decide=%d refuse=%d rm=%d wipe=%d)", readIdx, decideIdx, refuseIdx, rmIdx, wipeIdx)
+	if !(confIdx < resolveRecoveryIdx && resolveRecoveryIdx < validateRecoveryIdx && validateRecoveryIdx < recoverIdx && recoverIdx < readIdx && readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < rmIdx && rmIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must validate recovery, re-read ownership, and verify it before removing the cluster and wiping (conf=%d resolveRecovery=%d validateRecovery=%d recover=%d read=%d decide=%d refuse=%d rm=%d wipe=%d)", confIdx, resolveRecoveryIdx, validateRecoveryIdx, recoverIdx, readIdx, decideIdx, refuseIdx, rmIdx, wipeIdx)
+	}
+
+	recoveryAssert, ok := tasks[validateRecoveryIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph ownership recovery gate must be an assert, got %v", tasks[validateRecoveryIdx])
+	}
+	recoveryThat := fmt.Sprint(recoveryAssert["that"])
+	for _, want := range []string{
+		"bootwright_ceph_destroy_record.stat.exists",
+		"bootwright_ceph_destroy_conf_fsid",
+		"bootwright_ceph_destroy_confirmed_fsid",
+		"bootwright_selected_storage_cluster.seedHost",
+	} {
+		if !strings.Contains(recoveryThat, want) {
+			t.Fatalf("ceph ownership recovery gate must require %s, got %v", want, recoveryAssert["that"])
+		}
+	}
+	recoveryCopy, ok := tasks[recoverIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph ownership recovery must use copy, got %v", tasks[recoverIdx])
+	}
+	if recoveryCopy["mode"] != "0600" {
+		t.Fatalf("ceph ownership recovery marker mode = %v, want 0600", recoveryCopy["mode"])
+	}
+	recoveryContent := fmt.Sprint(recoveryCopy["content"])
+	for _, want := range []string{"manager", "bootwright", "cluster", "bootwright_ceph_destroy_confirmed_fsid"} {
+		if !strings.Contains(recoveryContent, want) {
+			t.Fatalf("ceph ownership recovery marker must contain %s, got %v", want, recoveryCopy["content"])
+		}
 	}
 
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)

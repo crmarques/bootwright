@@ -206,6 +206,9 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   # (e.g. machine or cluster names changed after the last apply)
   bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
 
+  # Recover a verified Ceph ownership marker and destroy that storage cluster
+  bootwright destroy --clusters ceph-storage --recover-ceph-ownership ceph-storage=2088ddee-875b-11f1-9b98-303ea72d7724 --yes
+
   # Remove only the generated artifact publication service
   bootwright destroy --stage infra --clusters artifact-server --yes
 

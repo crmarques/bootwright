@@ -82,7 +82,11 @@ storage role wipes only clusters named in
 `bootwright_ceph_rebuild_authorized_clusters`, so an absent or stale value can
 only under-authorize. Relaxations are narrow and explicit: `--include-unowned`
 lifts only per-VM marker refusals on destroy; nothing relaxes device
-data-safety checks.
+data-safety checks. A lost Ceph cluster marker is recovered only through an
+operator-supplied `<StorageCluster>=<fsid>` confirmation: the controller must
+still hold the cluster's owner record for its declared seed and the supplied
+fsid must exactly match that seed's on-disk Ceph configuration before the
+marker is re-stamped and the normal ownership gate runs again.
 
 ### Destroy is the only remover, and it fails closed
 

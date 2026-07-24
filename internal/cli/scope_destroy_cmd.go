@@ -36,6 +36,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		override        bool
 		forceUnowned    bool
 		skipUnreachable bool
+		cephRecovery    string
 		purgeHistory    bool
 		verbose         bool
 		stage           string
@@ -68,6 +69,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&override, "force", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --force. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
+	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "re-stamp a missing or mismatched Ceph ownership marker before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster, its Bootwright owner record for the declared seed, and an exact /etc/ceph/ceph.conf fsid match. Does not bypass OSD-device safety checks or imply --force or --yes")
 	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
@@ -112,6 +114,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if forceUnowned && !converge.ScopeTearsMachineLayer(runScope) {
 			return failErr(2, errors.New("--include-unowned relaxes machine-substrate ownership refusals, which run only in the infra stage; re-run with --stage infra (optionally with --clusters) or as a full destroy"))
 		}
+		confirmedCephFSIDs, err := converge.ParseDestroyCephOwnershipRecovery(cephRecovery)
+		if err != nil {
+			return failErr(2, err)
+		}
+		if len(confirmedCephFSIDs) > 0 && !converge.ScopeTearsClusterLayer(runScope) {
+			return failErr(2, errors.New("--recover-ceph-ownership runs only with the clusters stage or a full destroy"))
+		}
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
@@ -145,6 +154,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				details = append(details, warning.Error())
 			}
 			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --force to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
+		}
+		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
+			return failErr(1, err)
 		}
 		if runScope.Name == "infra" && sel.Active && !sel.MachineSelection {
 			conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
@@ -222,6 +234,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			resolvedClusterRoots = sel.AllRoots
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, sel.MachineScopeNames(), forceUnowned, skipUnreachable)
+		if err := converge.ApplyDestroyCephOwnershipRecoveryExtraVar(&plan, confirmedCephFSIDs); err != nil {
+			return failErr(1, err)
+		}
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		safetyScope := workflow.DestroySafetyScope{}
 		if !artifactServerOnly {
@@ -256,6 +271,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		if storageConsumerOverrideNotice != "" {
 			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
+		}
+		if len(confirmedCephFSIDs) > 0 {
+			cliout.NewContinuation(stdout).Warning("ceph ownership recovery", "before teardown, Bootwright will re-stamp the Ceph ownership marker only where the selected cluster's controller owner record and declared seed exist and /etc/ceph/ceph.conf exactly matches the supplied fsid")
 		}
 		printSkippedOwnershipRecords(stdout, ownershipSkipped)
 		if artifactServerOnly {
@@ -360,40 +378,4 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		return nil
 	}
 	return cmd
-}
-
-func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []converge.InfraComponentServiceRef {
-	var out []converge.InfraComponentServiceRef
-	for _, service := range stategraph.ResolveMachineServices(state).Services {
-		if !service.IsInfraComponentService() {
-			continue
-		}
-		if artifactServerOnly && service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {
-			continue
-		}
-		out = append(out, converge.InfraComponentServiceRef{Name: service.Identity.Name, Kind: service.Identity.Kind})
-	}
-	return out
-}
-
-func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.PartialStorageDestroy, err error) {
-	if len(partial.Recorded) > 0 {
-		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
-			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped and local Ceph state remains. Re-run destroy once the nodes are back up, or wipe them manually, before reusing the hardware; bootwright status flags them.",
-			strings.Join(partial.Recorded, ", ")))
-	}
-	if len(partial.Unrecorded) > 0 {
-		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
-			"storage cluster(s) %s had unreachable node(s) but no Bootwright ownership record — treated as never provisioned, so nothing was wiped and no durable partial-destroy marker exists. If these clusters ever held data, verify the nodes manually before reusing the hardware.",
-			strings.Join(partial.Unrecorded, ", ")))
-	}
-	if err != nil {
-		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error()+"; their converge records are kept so the next apply/destroy fails closed")
-	}
-}
-
-func printConvergeRecordResetProblems(stdout io.Writer, problems []error) {
-	for _, problem := range problems {
-		cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; run records may still claim this resource is converged — remove the reported record or re-run destroy before the next apply")
-	}
 }

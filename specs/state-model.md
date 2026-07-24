@@ -1765,6 +1765,20 @@ Rules:
   authorized by it), does not relax the Ceph cluster or OSD-device ownership
   gates, never relaxes the device data-safety checks (a mounted, in-use, or
   unprobeable device still fails closed), and does not imply `--yes`.
+- `destroy --recover-ceph-ownership
+  <StorageCluster>=<fsid>[,...]` is the narrow recovery path for a managed Ceph
+  seed whose `/etc/ceph/.bootwright-owned` marker is missing or mismatched.
+  Every named cluster must be a selected, declared, managed `StorageCluster`;
+  the context must still hold its Bootwright owner record for the declared seed;
+  and the supplied UUID must exactly equal the fsid parsed from that seed's
+  `/etc/ceph/ceph.conf`. Only after all three checks does Bootwright re-stamp the
+  marker and re-run the normal ownership decision before `cephadm rm-cluster`.
+  The flag never creates or bypasses a controller ownership record, never
+  infers authorization from the live `ceph fsid` response, does not relax the
+  OSD-device ownership or data-safety gates, is accepted only when the clusters
+  stage runs, and implies neither `--force` nor `--yes`. A context that lost the
+  controller record must restore it from backup or tear the cluster down
+  manually.
 - `destroy --skip-unreachable` tolerates powered-off or unreachable nodes during
   teardown: it skips them — their devices are NOT wiped and their local state
   remains — and continues, leaving the cluster partially destroyed. It requires
