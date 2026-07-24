@@ -43,6 +43,30 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			role:    secret.MaterialPrimary,
 		})
 	}
+	for _, gateway := range state.StorageObjectGateways {
+		for i, ingress := range gateway.Spec.Ceph.Ingresses {
+			if ingress.TLS == nil {
+				continue
+			}
+			owner := secretRefOwner{storageCluster: gateway.Spec.StorageClusterRef.Name}
+			out = append(out,
+				secretRefRequirement{
+					refName: ingress.TLS.CertificateRef.Name,
+					label:   fmt.Sprintf("StorageObjectGateway/%s spec.ceph.ingresses[%d].tls.certificateRef tls.crt", gateway.Metadata.Name, i),
+					phases:  []string{"base"},
+					role:    secret.MaterialPrimary,
+					owner:   owner,
+				},
+				secretRefRequirement{
+					refName: ingress.TLS.KeyRef.Name,
+					label:   fmt.Sprintf("StorageObjectGateway/%s spec.ceph.ingresses[%d].tls.keyRef tls.key", gateway.Metadata.Name, i),
+					phases:  []string{"base"},
+					role:    secret.MaterialTLSKey,
+					owner:   owner,
+				},
+			)
+		}
+	}
 	return out
 }
 

@@ -109,3 +109,14 @@ the complete spec immediately afterward for every ingress that declares
 `tls`, which cephadm's declarative `ceph orch apply` treats as a normal spec
 update — no explicit restart/wait is needed the way the mgr dashboard flip
 needed one, since `ceph orch apply` isn't a live-config toggle here.
+
+**Root cause:** the first RGW ingress TLS implementation validated that
+`certificateRef` and `keyRef` named `tlsCertificate` objects but omitted their
+material roles from storage preflight. A missing context/generated certificate
+therefore survived into the base phase, where the controller-side Ansible file
+lookup failed against the task's short-lived `artifacts/runtime/secrets` path
+after earlier Ceph mutations had already run. Storage preflight must require the
+certificate ref's primary material and the key ref's `tls-key` material for the
+owning storage cluster in the base phase; generated-material checks must resolve
+the requested role so a missing key reports `<name>.key`, not the certificate
+path.

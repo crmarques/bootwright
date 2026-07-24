@@ -75,7 +75,7 @@ func secretRequirementCheck(req secretRefRequirement, idx secret.Index, secretsD
 		return generatedSSHKeyPairChecks(req, idx, secretsDir, deps)
 	}
 	if req.source == secretRefSourceGenerated {
-		path := filepath.Join(secretsDir, req.refName)
+		path := secret.ResolveMaterialPath(req.refName, idx, secretsDir, req.role)
 		return []Check{generatedSecretCheck(req.refName, path, req.label, req.generatedKind, deps)}
 	}
 	path := secret.ResolveMaterialPath(req.refName, idx, secretsDir, req.role)
