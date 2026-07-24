@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"net"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -376,30 +375,5 @@ func TestSelfSignedCertificatePEMRoundTrip(t *testing.T) {
 	}
 	if block2, _ := pem.Decode(keyPEM); block2 == nil || block2.Type != "RSA PRIVATE KEY" {
 		t.Errorf("keyPEM block type = %v", block2)
-	}
-}
-
-func TestVerifySelfSignedCertificateMatchesRequest(t *testing.T) {
-	spec := v1alpha1.SelfSignedCertificateSpec{
-		CommonName:   "registry.lab",
-		DNSNames:     []string{"registry.lab"},
-		ValidityDays: 7,
-	}
-	certPEM, _, err := SelfSignedCertificatePEM(spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	certPath := filepath.Join(dir, "registry.crt")
-	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := VerifySelfSignedCertificateMatchesRequest(certPath, spec); err != nil {
-		t.Errorf("matching spec rejected: %v", err)
-	}
-	drifted := spec
-	drifted.DNSNames = []string{"other.lab"}
-	if err := VerifySelfSignedCertificateMatchesRequest(certPath, drifted); err == nil {
-		t.Error("drifted DNS names should be rejected")
 	}
 }

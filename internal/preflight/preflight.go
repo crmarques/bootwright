@@ -160,7 +160,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 		checks = append(checks, secretRefChecksScoped(state, secretsDir, selected, deps, secretScope)...)
 		checks = append(checks, nameResolutionChecks(state, selected, deps, hostTrustScope)...)
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps, hostTrustScope)...)
-		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
+		checks = append(checks, generatedSelfSignedDriftChecks(state, contextName, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, secretsDir, deps, secretScope)...)
 		checks = append(checks, vsphereVCenterChecks(state, selected, contextName, secretsDir, deps)...)
 	}

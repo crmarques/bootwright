@@ -8,7 +8,6 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/callerio"
 	"github.com/crmarques/bootwright/internal/host/execution"
-	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/secrets"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
@@ -315,7 +314,7 @@ func tlsSecretFileChecks(req secretRefRequirement, idx secret.Index, secretsDir 
 	}
 }
 
-func generatedSelfSignedDriftChecks(state v1alpha1.State, secretsDir string) []Check {
+func generatedSelfSignedDriftChecks(state v1alpha1.State, contextName, secretsDir string) []Check {
 	requests, err := secret.GeneratedSelfSignedRequests(state)
 	if err != nil {
 		return []Check{{
@@ -328,10 +327,12 @@ func generatedSelfSignedDriftChecks(state v1alpha1.State, secretsDir string) []C
 		}}
 	}
 	var checks []Check
+	store := secret.NewContextStore(contextName, secretsDir)
 	for _, req := range requests {
 		certPath := filepath.Join(secretsDir, req.Name)
 		keyPath := certPath + ".key"
-		certExists, err := safefs.RegularFileExists(certPath)
+		materialKey := secret.MaterialKey{Name: req.Name, Role: secret.MaterialPrimary}
+		status, err := store.Inspect(materialKey)
 		if err != nil {
 			checks = append(checks, Check{
 				Group:       checkGroupSecretMaterial,
@@ -343,11 +344,15 @@ func generatedSelfSignedDriftChecks(state v1alpha1.State, secretsDir string) []C
 			})
 			continue
 		}
-		if !certExists {
+		if status.State == secret.MaterialStateMissing {
 			continue
 		}
 		name := "generated self-signed certificate " + req.Name
-		if err := secret.VerifySelfSignedCertificateMatchesRequest(certPath, req.Certificate); err != nil {
+		data, err := store.Read(materialKey)
+		if err == nil {
+			err = secret.VerifySelfSignedCertificateBytesMatchRequest(data, req.Certificate)
+		}
+		if err != nil {
 			checks = append(checks, Check{
 				Group:       checkGroupSecretMaterial,
 				Name:        name,

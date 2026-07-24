@@ -31,6 +31,14 @@ checks (see `self-signed-cert-drift.md`) consume the same request list that
 materialization applies, so the two can never disagree about what a declared
 generated certificate should look like.
 
+**Encrypted drift inspection:** Generated certificate files are AES-GCM
+envelopes, not plaintext PEM. A preflight drift check that reads the resolved
+path with `os.ReadFile` parses the envelope JSON as a certificate and reports
+`certificate is not PEM-encoded` even immediately after a successful
+`secret generate --renew`. Generated-certificate drift inspection must read
+the primary material through the context store, then pass the decrypted bytes
+to `VerifySelfSignedCertificateBytesMatchRequest`.
+
 **ECDSA SSH public-key encoding:** in `ecdsaSSHKeyPairPEM`
 (`internal/secrets/ssh_key.go`), `ecdh.PublicKey.Bytes()` returns the SEC1
 uncompressed point encoding (`0x04 || X || Y`), byte-identical to the
