@@ -30,9 +30,11 @@ type addonHookExecutor struct {
 	runID          string
 	taskID         string
 	logPath        string
+	kubeconfig     string
 	opts           RunOptions
 	state          v1alpha1.State
 	plan           extensionPlanView
+	ocRunner       extensionoc.OCRunner
 	runnerFactory  ApplyTaskRunnerFactory
 	binding        v1alpha1.ClusterAddonBinding
 	inputs         []v1alpha1.ClusterAddonBindingInput
@@ -45,19 +47,22 @@ type extensionPlanView struct {
 	Policy  addons.ClusterAddonPolicy
 }
 
-func newAddonHookExecutor(stdout, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) *addonHookExecutor {
+func newAddonHookExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) *addonHookExecutor {
 	plan := extensionPlanView{Name: task.Extension.Name, Cluster: task.Extension.Cluster, Addon: task.Extension.Extension, Policy: task.Extension.Policy}
 	binding, inputs := addonBindingInputs(task.State, task.Extension.Binding, plan.Name)
+	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
 	return &addonHookExecutor{
 		stdout:        stdout,
 		stderr:        stderr,
 		runsDir:       runsDir,
 		runID:         runID,
 		taskID:        task.Entry.ID,
-		logPath:       TaskLogPath(runsDir, runID, task.Entry.ID),
+		logPath:       logPath,
+		kubeconfig:    kubeconfig,
 		opts:          opts,
 		state:         task.State,
 		plan:          plan,
+		ocRunner:      extensionoc.CommandRunner{LogPath: logPath, Stdout: stdout, Stderr: stderr, RedactLog: true},
 		runnerFactory: runnerFactory,
 		binding:       binding,
 		inputs:        inputs,
@@ -156,8 +161,6 @@ func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha
 	if len(hook.Manifests) == 0 {
 		return nil, nil
 	}
-	kubeconfig := clusterKubeconfigPath(e.opts.ClustersDir, e.plan.Cluster)
-	runner := extensionoc.CommandRunner{LogPath: e.logPath, Stdout: e.stdout, Stderr: e.stderr, RedactLog: true}
 	renderDir := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "hooks", hook.Name, "manifests")
 	var observed []string
 	for i, manifest := range hook.Manifests {
@@ -173,7 +176,7 @@ func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha
 		if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 			return observed, err
 		}
-		if _, err := runner.Run(ctx, kubeconfig, extensionoc.ApplyArgs(e.plan.Policy, path), nil); err != nil {
+		if _, err := e.ocRunner.Run(ctx, e.kubeconfig, extensionoc.ApplyArgs(e.plan.Policy, path), nil); err != nil {
 			return observed, err
 		}
 		observed = append(observed, hookManifestResourceID(object))

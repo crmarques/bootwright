@@ -28,6 +28,17 @@ deliberately mirrors the old Data Foundation attachment-details records.
 Manifests with `reclaimRendered` have their rendered plaintext removed after
 the `oc apply`.
 
+**Kubeconfig lifetime:** The add-on task materializes the bound cluster's
+encrypted kubeconfig once into its owner-only runtime scratch directory and
+keeps that path alive across the entire apply, wait, effect, playbook-hook, and
+manifest-hook lifecycle. Hook playbooks receive the same scratch path as
+`bootwright_kubeconfig`, and hook-manifest `oc` calls use it directly. The
+durable `clusters/<cluster>/secrets/kubeconfig` path contains an encrypted
+envelope after install-secret capture; passing that path to `oc` produces its
+generic missing/incomplete-configuration error rather than a decryption error.
+Do not rematerialize independently inside a hook or use the durable path as a
+tool input.
+
 **exportDetails resolution:** `resolveExportDetailsToken` loads the
 operator-supplied external-cluster-details payload from a StorageExport's
 `externalDetails.fromSecretRef` secret. Exports WITHOUT operator-supplied

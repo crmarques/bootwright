@@ -73,22 +73,15 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	}
 
 	var outputs map[string]string
-	err = withMaterializedClusterKubeconfig(e.opts.ContextName, e.opts.ClustersDir, e.plan.Cluster, func(kubeconfig string) error {
-		extraVars, err := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, kubeconfig, e.resolveHookRefs(), e.inputs)
-		if err != nil {
-			return err
-		}
-		timeout := hookTimeout(hook)
-		if err := e.runHookAnsible(ctx, hook, inventoryPath, varsPath, hookRoot, targets, extraVars, timeout); err != nil {
-			return err
-		}
-		captured, err := e.captureHookOutputs(hook, outputsDir)
-		if err != nil {
-			return err
-		}
-		outputs = captured
-		return nil
-	})
+	extraVars, err := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, e.kubeconfig, e.resolveHookRefs(), e.inputs)
+	if err != nil {
+		return nil, err
+	}
+	timeout := hookTimeout(hook)
+	if err := e.runHookAnsible(ctx, hook, inventoryPath, varsPath, hookRoot, targets, extraVars, timeout); err != nil {
+		return nil, err
+	}
+	outputs, err = e.captureHookOutputs(hook, outputsDir)
 	if err != nil {
 		return nil, err
 	}
