@@ -196,3 +196,12 @@ client. Existing canonical entries and explicit `knownHostsRef` content are
 never rewritten. If neither identity answers, storage destroy feeds that result
 through its normal fail-closed/`--skip-unreachable` classification, while the
 best-effort deregistration and final revoke plays end that host.
+
+The final revoke treats an already-absent orchestration account as a completed
+cleanup state. `ansible.posix.authorized_key` resolves the target user's home
+through `getpwnam()` even for `state: absent`, so invoking it for a missing
+`cephadm` account fails instead of becoming a no-op. The revoke role probes the
+account first and gates both orchestration-account key removals on a successful
+passwd lookup; it still restores the install identity and root-login posture and
+removes the marker and sudoers grant. This preserves retry safety after an
+operator or an earlier partial teardown already removed the account.

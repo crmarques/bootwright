@@ -29,6 +29,29 @@ func TestStorageNodeAccessDestroySelectsAReachableIdentity(t *testing.T) {
 	}
 }
 
+func TestStorageNodeAccessDestroyToleratesMissingOrchestrationAccount(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/revoke_node_access.yml"
+	tasks := readAnsibleTasks(t, path)
+	probeIdx := findAnsibleTask(t, tasks, "Probe the storage node orchestration account before deauthorizing keys")
+	machineKeyIdx := findAnsibleTask(t, tasks, "Deauthorize the machine access key for the storage node orchestration account")
+	clusterKeyIdx := findAnsibleTask(t, tasks, "Deauthorize the cephadm cluster key for the storage node orchestration account")
+	if !(probeIdx < machineKeyIdx && probeIdx < clusterKeyIdx) {
+		t.Fatalf("node-access destroy must probe the orchestration account before removing its keys")
+	}
+	probe, ok := tasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || fmt.Sprint(probe["argv"]) != "[getent passwd {{ bootwright_node_access.user }}]" {
+		t.Fatalf("node-access destroy must probe the declared orchestration account, got %v", tasks[probeIdx])
+	}
+	if tasks[probeIdx]["changed_when"] != false || tasks[probeIdx]["failed_when"] != false {
+		t.Fatalf("missing orchestration account probe must be a read-only tolerated absence, got %v", tasks[probeIdx])
+	}
+	for _, idx := range []int{machineKeyIdx, clusterKeyIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_node_access_destroy_account_probe.rc") || !strings.Contains(got, "== 0") {
+			t.Fatalf("orchestration key removal must require a present account, got when=%v", tasks[idx]["when"])
+		}
+	}
+}
+
 func TestStorageNodeTeardownConnectionSelectorRepairsCanonicalTrust(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/select_connection.yml"
 	tasks := readAnsibleTasks(t, path)

@@ -34,6 +34,17 @@
     - bootwright_node_access is defined
     - bootwright_node_access.installPublicKeyPath | default('') | length > 0
 
+- name: Probe the storage node orchestration account before deauthorizing keys
+  ansible.builtin.command:
+    argv:
+      - getent
+      - passwd
+      - "{{ bootwright_node_access.user }}"
+  register: bootwright_node_access_destroy_account_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_node_access is defined
+
 - name: Deauthorize the machine access key for the storage node orchestration account
   ansible.posix.authorized_key:
     user: "{{ bootwright_node_access.user }}"
@@ -43,6 +54,7 @@
   when:
     - bootwright_node_access is defined
     - bootwright_node_access.installPublicKeyPath | default('') | length > 0
+    - (bootwright_node_access_destroy_account_probe.rc | default(1) | int) == 0
 
 - name: Deauthorize the cephadm cluster key for the storage node orchestration account
   ansible.posix.authorized_key:
@@ -54,6 +66,7 @@
   when:
     - bootwright_node_access is defined
     - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+    - (bootwright_node_access_destroy_account_probe.rc | default(1) | int) == 0
 
 - name: Remove the storage node access marker
   ansible.builtin.file:
