@@ -216,7 +216,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.MachineHosts, workflow.ConcurrencyLimits{}, ctx.RunsDir)
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

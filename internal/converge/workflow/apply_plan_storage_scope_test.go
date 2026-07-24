@@ -17,7 +17,7 @@ func machineScopedApplyTarget(state v1alpha1.State, machines ...string) ApplyTar
 		Name:             "infra",
 		PhaseNames:       []string{ApplyPhaseFabric, ApplyPhaseMachines},
 		MachineProvision: provision,
-		MachineHosts:     hosts,
+		FabricHosts:      hosts,
 	}
 }
 

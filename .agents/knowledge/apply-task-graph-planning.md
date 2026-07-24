@@ -11,6 +11,17 @@ graph — `ActivityGraph.Lower` prefers an available capability over an in-graph
 provider, so adding one a planned phase provides SILENTLY DROPS the ordering
 dependency between the tasks.
 
+**Scoped fabric-host closure:** cluster-scoped render state can retain an
+unconsumed `InfraComponent` object while dropping its placement `Machine`; the
+component remains available for render references but is not provisioning work.
+Provider and infra-component activities therefore gate on the selection's
+`WorkMachines` closure for `--clusters` as well as `--machines`. The apply
+target's fabric-host set is tri-state: nil means unscoped/all hosts, while a
+non-nil set admits only named work hosts. Without that gate, graph lowering
+fails with `infra-component.<host> requires unavailable capability
+machine.os-ready:<host>` or, when the dropped machine is OS-ready in the full
+state, a scoped run mutates an unrelated service.
+
 **Conditional ISO dependency:** boot/wait tasks depend on the agent-ISO task
 only when the deps phase is in scope. A base-only run (`apply --stage base`)
 omits the dependency and reuses the ISO a prior deps run published — otherwise

@@ -78,7 +78,7 @@ type ApplyTarget struct {
 	StorageClusterNames []string
 	ClusterKind         string
 	MachineProvision    map[string]bool
-	MachineHosts        map[string]bool
+	FabricHosts         map[string]bool
 }
 
 func (t ApplyTarget) MachineScoped() bool { return len(t.MachineProvision) > 0 }
@@ -88,7 +88,7 @@ func (t ApplyTarget) MachineIncluded(machine string) bool {
 }
 
 func (t ApplyTarget) FabricHostIncluded(host string) bool {
-	return !t.MachineScoped() || t.MachineHosts[host]
+	return t.FabricHosts == nil || t.FabricHosts[host]
 }
 
 type ApplyTask struct {
