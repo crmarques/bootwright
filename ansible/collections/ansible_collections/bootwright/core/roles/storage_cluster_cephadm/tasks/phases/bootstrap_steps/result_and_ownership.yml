@@ -36,6 +36,9 @@
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
     tasks_from: resource.yml
+    apply:
+      delegate_to: localhost
+      become: false
   vars:
     bootwright_ownership_kind: storage-cluster
     bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"

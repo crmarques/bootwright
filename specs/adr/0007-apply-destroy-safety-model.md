@@ -83,10 +83,13 @@ storage role wipes only clusters named in
 only under-authorize. Relaxations are narrow and explicit: `--include-unowned`
 lifts only per-VM marker refusals on destroy; nothing relaxes device
 data-safety checks. A lost Ceph cluster marker is recovered only through an
-operator-supplied `<StorageCluster>=<fsid>` confirmation: the controller must
-still hold the cluster's owner record for its declared seed and the supplied
-fsid must exactly match that seed's on-disk Ceph configuration before the
-marker is re-stamped and the normal ownership gate runs again.
+operator-supplied `<StorageCluster>=<fsid>` confirmation. It is an explicit
+ownership attestation for that exact identity: the supplied fsid must match the
+declared seed's on-disk Ceph configuration, and any existing controller record
+must agree with that cluster and seed. A reachable live fsid must also agree,
+as a contradiction check rather than an authorization source. Only then may
+Bootwright reconstruct a missing controller record and host marker before the
+normal ownership gate runs again; contradictory evidence is never overwritten.
 
 ### Destroy is the only remover, and it fails closed
 

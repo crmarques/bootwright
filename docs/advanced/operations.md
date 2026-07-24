@@ -447,12 +447,13 @@ bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
     Because it removes a VM Bootwright cannot positively confirm it owns,
     confirm the target VM is yours before using it.
 
-## Recovering a lost Ceph cluster ownership marker
+## Recovering lost Ceph cluster ownership evidence
 
-A managed Ceph destroy refuses when `/etc/ceph/.bootwright-owned` is missing or
-its fsid differs from `/etc/ceph/ceph.conf`. If the context still holds the
-`StorageCluster` owner record and you independently verified the cluster's
-on-disk fsid, let Bootwright validate and restore the marker before teardown:
+A managed Ceph destroy refuses when its controller ownership record is missing,
+when `/etc/ceph/.bootwright-owned` is missing, or when the marker fsid differs
+from `/etc/ceph/ceph.conf`. After independently verifying the cluster and its
+on-disk fsid, let Bootwright validate and restore both ownership proofs before
+teardown:
 
 ```text
 bootwright destroy \
@@ -463,17 +464,20 @@ bootwright destroy \
 
 The flag is an explicit `<StorageCluster>=<fsid>` mapping; repeat entries with
 commas when a destroy covers several storage clusters. Bootwright accepts only
-selected managed clusters, requires each cluster's controller owner record for
-the declared seed, and compares the supplied UUID with the fsid in that seed's
-`/etc/ceph/ceph.conf`. It then writes the normal owner-only marker and re-reads
-it through the existing destroy gate.
+selected managed clusters and compares the supplied UUID with the fsid in the
+declared seed's `/etc/ceph/ceph.conf`. Any existing controller owner record must
+agree with that cluster and seed. After the remote match, Bootwright reconstructs
+a missing controller record, writes the normal owner-only host marker, and
+re-reads both through the existing destroy gate. Contradictory controller
+evidence is refused rather than overwritten. If the cluster is reachable, its
+live fsid must also match the on-disk fsid; Bootwright uses that only as a
+contradiction check, never as authorization.
 
-The recovery does not create a lost controller record, trust whichever fsid a
-live cluster reports, or relax OSD-device ownership, mounted-device, system-disk,
-or probe-failure checks. It implies neither `--force` nor `--yes`. Restore a
-missing controller ownership record from backup; if that evidence cannot be
-restored, verify and remove the Ceph cluster manually instead of adopting it.
-The normative contract is in the
+The mapping explicitly attests that this exact on-disk cluster belongs to the
+declared `StorageCluster`; verify that fact independently before using it.
+Recovery does not trust whichever fsid a live cluster reports or relax
+OSD-device ownership, mounted-device, system-disk, or probe-failure checks. It
+implies neither `--force` nor `--yes`. The normative contract is in the
 [CLI specification](../../specs/state-model.md#cli-contract).
 
 ## Tearing down with a node powered off

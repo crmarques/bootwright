@@ -1,22 +1,32 @@
 # Ceph cluster ownership: the 3-factor gate, apply modes, and destroy scoping
 
-**Semantics:** Ownership of a cephadm cluster is 3-factor: the on-disk
+**Semantics:** Normal ownership of a cephadm cluster is 3-factor: the on-disk
 `/etc/ceph/ceph.conf` carries an fsid AND a Bootwright storage-cluster
-ownership record exists for this seed AND this host is the declared
-`seedHost`; the host-local marker must be present and its fsid must agree with
-the conf fsid. The record is the load-bearing proof Bootwright created the
-cluster (a foreign or co-resident cluster has none); the marker fsid is an
-independent consistency check. A seed with no ceph.conf at all has nothing to
-protect and is treated as owned.
+ownership record exists on the controller for this seed AND this host is the
+declared `seedHost`; the host-local marker must be present and its fsid must
+agree with the conf fsid. The record and marker are independent consistency
+checks. A seed with no ceph.conf at all has nothing to protect and is treated
+as owned only when the live fsid probe also finds no cluster.
 
 **Semantics:** `destroy --recover-ceph-ownership
-<StorageCluster>=<fsid>[,...]` repairs only the host-local marker. Go first
-requires a selected declared managed cluster and its context owner record for
-the declared seed. On the seed, Ansible independently requires the same record
-path and an exact supplied-fsid match against `/etc/ceph/ceph.conf`, writes the
-normal `0600` marker, then re-reads it through the unchanged destroy ownership
-decision. It never creates a missing controller record, uses live `ceph fsid`
-as authorization, or relaxes OSD device gates.
+<StorageCluster>=<fsid>[,...]` repairs both controller and host evidence. Go
+requires a selected declared managed cluster and refuses an existing context
+record that contradicts its declared seed; absence is recoverable. On the seed,
+Ansible requires an exact supplied-fsid match against `/etc/ceph/ceph.conf`,
+then writes the controller record on delegated localhost and the normal `0600`
+host marker before re-reading both through the unchanged destroy ownership
+decision. The supplied mapping is explicit operator attestation for that exact
+identity. A reachable live `ceph fsid` must equal the configuration fsid; it is
+used only to reject contradictory identity, never as authorization. Recovery
+never overwrites contradictory evidence or relaxes OSD device gates.
+
+**Root cause:** Storage-cluster resource-record includes originally inherited
+the seed host's connection. They therefore wrote, read, and removed the
+controller path on the remote seed instead of delegated localhost, leaving Go's
+context ownership store empty even after successful apply. Storage-cluster
+resource record writes, reads, and removal are controller-local; package
+records remain host-local because they describe packages installed on each
+storage node.
 
 **Semantics:** The fsid is always read from the on-disk conf, never live
 `ceph fsid`, so a DOWN owned cluster stays classifiable, re-stampable, and
@@ -46,10 +56,8 @@ before the post-bootstrap marker still leaves the controller-side record.
 Reachable markerless clusters fail closed on normal apply; destroy recovery
 requires the operator-confirmed fsid path above. An unreachable incomplete
 bootstrap remains eligible for the separately authorized
-`apply --converge-drifted` rebuild. Without the controller record, neither
-recovery path adopts the cluster; restore the record or tear the cluster down
-manually. Successful apply refreshes the fsid marker and enriched ownership
-record.
+`apply --converge-drifted` rebuild. Successful apply refreshes the fsid marker
+and enriched ownership record.
 
 **Semantics:** `--converge-drifted` does not always wipe. The controller classifies a
 cluster whose only drift is an OSD-device add as reconcilable in place and

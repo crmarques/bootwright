@@ -69,7 +69,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&override, "force", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --force. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
-	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "re-stamp a missing or mismatched Ceph ownership marker before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster, its Bootwright owner record for the declared seed, and an exact /etc/ceph/ceph.conf fsid match. Does not bypass OSD-device safety checks or imply --force or --yes")
+	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks or imply --force or --yes")
 	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
@@ -273,7 +273,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
 		}
 		if len(confirmedCephFSIDs) > 0 {
-			cliout.NewContinuation(stdout).Warning("ceph ownership recovery", "before teardown, Bootwright will re-stamp the Ceph ownership marker only where the selected cluster's controller owner record and declared seed exist and /etc/ceph/ceph.conf exactly matches the supplied fsid")
+			cliout.NewContinuation(stdout).Warning("ceph ownership recovery", "before teardown, Bootwright will reconstruct the selected cluster's controller record and host marker only where /etc/ceph/ceph.conf on the declared seed exactly matches the supplied fsid; contradictory controller ownership evidence is refused")
 		}
 		printSkippedOwnershipRecords(stdout, ownershipSkipped)
 		if artifactServerOnly {

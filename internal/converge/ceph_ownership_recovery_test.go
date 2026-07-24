@@ -38,7 +38,7 @@ func TestParseDestroyCephOwnershipRecovery(t *testing.T) {
 	}
 }
 
-func TestValidateDestroyCephOwnershipRecoveryRequiresSelectedOwnerRecordOnSeed(t *testing.T) {
+func TestValidateDestroyCephOwnershipRecoveryAllowsMissingRecordAndRejectsConflict(t *testing.T) {
 	cluster := cephRecoveryTestCluster()
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
 	seedHost := render.StorageSeedHostName(cluster)
@@ -60,11 +60,11 @@ func TestValidateDestroyCephOwnershipRecoveryRequiresSelectedOwnerRecordOnSeed(t
 	if err := ValidateDestroyCephOwnershipRecovery(state, []string{}, []ownership.ResourceRecord{record}, confirmed); err == nil || !strings.Contains(err.Error(), "not a selected managed Ceph cluster") {
 		t.Fatalf("out-of-scope recovery error = %v", err)
 	}
-	if err := ValidateDestroyCephOwnershipRecovery(state, nil, nil, confirmed); err == nil || !strings.Contains(err.Error(), "no Bootwright owner record") {
-		t.Fatalf("missing-record recovery error = %v", err)
+	if err := ValidateDestroyCephOwnershipRecovery(state, nil, nil, confirmed); err != nil {
+		t.Fatalf("missing-record recovery refused: %v", err)
 	}
 	record.Attributes["seedHost"] = "storage__ceph-a__other"
-	if err := ValidateDestroyCephOwnershipRecovery(state, nil, []ownership.ResourceRecord{record}, confirmed); err == nil || !strings.Contains(err.Error(), "no Bootwright owner record") {
+	if err := ValidateDestroyCephOwnershipRecovery(state, nil, []ownership.ResourceRecord{record}, confirmed); err == nil || !strings.Contains(err.Error(), "ownership evidence conflicts") {
 		t.Fatalf("wrong-seed recovery error = %v", err)
 	}
 }

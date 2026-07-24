@@ -11,7 +11,9 @@ fails closed when a cluster's Ceph seed is unreachable, so ownership stays
 proven before any OSD wipe. The JSON map
 `bootwright_ceph_destroy_confirmed_fsids={<cluster>:<fsid>}` carries explicit
 Ceph marker-recovery identity and is accepted only after Go validates the
-selected managed cluster and its context owner record for the declared seed.
+selected managed cluster and rejects any context owner record that contradicts
+the declared seed. A missing record is reconstructed only after Ansible matches
+the supplied fsid to the declared seed's on-disk Ceph configuration.
 
 **One composition point:** `converge.ApplyDestroyScopeExtraVars` composes every
 destroy-scoping gate (mirroring how `PlanScopedApply` stamps

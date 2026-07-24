@@ -63,8 +63,8 @@ func ValidateDestroyCephOwnershipRecovery(state v1alpha1.State, storageWorkNames
 			return fmt.Errorf("--recover-ceph-ownership names StorageCluster %q, which is not a selected managed Ceph cluster", name)
 		}
 		seedHost := render.StorageSeedHostName(cluster)
-		if !hasCephOwnershipRecoveryRecord(records, name, seedHost) {
-			return fmt.Errorf("--recover-ceph-ownership cannot authorize StorageCluster %q: no Bootwright owner record for declared seed host %q exists in this context; restore the ownership record or tear the cluster down manually", name, seedHost)
+		if conflict := conflictingCephOwnershipRecoveryRecord(records, name, seedHost); conflict != "" {
+			return fmt.Errorf("--recover-ceph-ownership cannot recover StorageCluster %q: existing controller ownership evidence conflicts with declared seed host %q (%s); resolve that contradiction before retrying", name, seedHost, conflict)
 		}
 	}
 	return nil
@@ -82,18 +82,19 @@ func ApplyDestroyCephOwnershipRecoveryExtraVar(plan *WorkflowPlan, confirmed map
 	return nil
 }
 
-func hasCephOwnershipRecoveryRecord(records []ownership.ResourceRecord, clusterName, seedHost string) bool {
+func conflictingCephOwnershipRecoveryRecord(records []ownership.ResourceRecord, clusterName, seedHost string) string {
 	for _, record := range records {
-		if record.Kind != string(ownership.KindStorageCluster) ||
-			record.Name != clusterName ||
-			record.Owner != ownership.Owner ||
-			record.IsReference() ||
-			record.Cluster != clusterName ||
-			record.Host != seedHost ||
-			record.Attributes["seedHost"] != seedHost {
+		if record.Kind != string(ownership.KindStorageCluster) || record.Name != clusterName {
 			continue
 		}
-		return true
+		if record.Owner == ownership.Owner &&
+			!record.IsReference() &&
+			record.Cluster == clusterName &&
+			record.Host == seedHost &&
+			record.Attributes["seedHost"] == seedHost {
+			continue
+		}
+		return fmt.Sprintf("owner=%q role=%q cluster=%q host=%q seedHost=%q", record.Owner, record.EffectiveRole(), record.Cluster, record.Host, record.Attributes["seedHost"])
 	}
-	return false
+	return ""
 }

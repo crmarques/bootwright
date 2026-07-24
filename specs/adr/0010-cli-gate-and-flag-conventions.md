@@ -93,10 +93,14 @@ touch root-owned state:
   shortening keeps the `--converge-drifted` tail).
 - A destroy-time Ceph marker recovery carries the identity being confirmed in
   `--recover-ceph-ownership <StorageCluster>=<fsid>` rather than a boolean
-  bypass. The value must match the selected declared cluster, its controller
-  owner record and seed, and the seed's on-disk Ceph fsid before Bootwright
-  re-stamps the marker. The ordinary destroy confirmation remains the one
-  data-loss acknowledgment.
+  bypass. The value must match the selected declared cluster and the seed's
+  on-disk Ceph fsid; any existing controller owner record must agree with that
+  cluster and seed. The mapping explicitly attests ownership of that exact
+  identity, so after the remote match Bootwright may reconstruct a missing
+  controller record and re-stamp the host marker, but it never overwrites
+  contradictory evidence; a reachable live fsid is checked for contradiction
+  but never supplies authorization. The ordinary destroy confirmation remains
+  the one data-loss acknowledgment.
 - Destructive selection stays unambiguous by reservation: the cluster
   name `artifact-server` is reserved so `destroy --stage infra
   --clusters artifact-server` can only mean the generated artifact

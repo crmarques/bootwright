@@ -1767,18 +1767,21 @@ Rules:
   unprobeable device still fails closed), and does not imply `--yes`.
 - `destroy --recover-ceph-ownership
   <StorageCluster>=<fsid>[,...]` is the narrow recovery path for a managed Ceph
-  seed whose `/etc/ceph/.bootwright-owned` marker is missing or mismatched.
+  seed whose controller ownership record or
+  `/etc/ceph/.bootwright-owned` marker is missing or mismatched.
   Every named cluster must be a selected, declared, managed `StorageCluster`;
-  the context must still hold its Bootwright owner record for the declared seed;
-  and the supplied UUID must exactly equal the fsid parsed from that seed's
-  `/etc/ceph/ceph.conf`. Only after all three checks does Bootwright re-stamp the
-  marker and re-run the normal ownership decision before `cephadm rm-cluster`.
-  The flag never creates or bypasses a controller ownership record, never
-  infers authorization from the live `ceph fsid` response, does not relax the
-  OSD-device ownership or data-safety gates, is accepted only when the clusters
-  stage runs, and implies neither `--force` nor `--yes`. A context that lost the
-  controller record must restore it from backup or tear the cluster down
-  manually.
+  any existing controller owner record must agree with the declared cluster and
+  seed; and the supplied UUID must exactly equal the fsid parsed from that
+  seed's `/etc/ceph/ceph.conf`. The mapping is the operator's explicit
+  ownership attestation for that exact cluster identity. Only after the remote
+  match does Bootwright reconstruct a missing controller record and re-stamp
+  the host marker, then re-read both through the normal ownership decision
+  before `cephadm rm-cluster`. A reachable live `ceph fsid` response must agree
+  with the on-disk fsid; it is a contradiction check, never the source of
+  authorization. Contradictory controller or live evidence is never
+  overwritten or acted on. The flag does not relax the OSD-device ownership or
+  data-safety gates, is accepted only when the clusters stage runs, and implies
+  neither `--force` nor `--yes`.
 - `destroy --skip-unreachable` tolerates powered-off or unreachable nodes during
   teardown: it skips them — their devices are NOT wiped and their local state
   remains — and continues, leaving the cluster partially destroyed. It requires

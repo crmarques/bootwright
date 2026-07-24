@@ -18,6 +18,8 @@
     path: "{{ bootwright_ownership_dir }}/resources/storage-cluster/{{ bootwright_selected_storage_cluster.name }}.json"
   register: bootwright_ceph_override_record
   changed_when: false
+  delegate_to: localhost
+  become: false
 
 - name: Resolve existing Ceph cluster fsid for override rebuild
   ansible.builtin.set_fact:

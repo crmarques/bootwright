@@ -48,6 +48,41 @@ func TestDestroyRecoverCephOwnershipValidatesAndEmitsConfirmedFSID(t *testing.T)
 		t.Fatalf("invalid-fsid recovery code=%d stderr=%q", code, stderr)
 	}
 
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--clusters", cluster,
+		"--recover-ceph-ownership", cluster+"="+fsid,
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("unrecorded recovery exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode unrecorded dry-run json: %v\n%s", err, stdout)
+	}
+	want := `{"` + converge.DestroyCephOwnershipRecoveryExtraVar + `":{"` + cluster + `":"` + fsid + `"}}`
+	if !slices.Contains(report.ExtraVars, want) {
+		t.Fatalf("unrecorded recovery extra var missing %q from %v", want, report.ExtraVars)
+	}
+
+	record := ownership.ResourceRecord{
+		Kind:    string(ownership.KindStorageCluster),
+		Name:    cluster,
+		Owner:   ownership.Owner,
+		Context: ctx.Name,
+		Host:    seedHost + "-wrong",
+		Cluster: cluster,
+		Attributes: map[string]string{
+			"seedHost": seedHost + "-wrong",
+		},
+	}
+	if err := ownership.SaveResource(ctx.OwnershipDir, record); err != nil {
+		t.Fatalf("save storage ownership record: %v", err)
+	}
+
 	_, stderr, code = runCLI(t,
 		"destroy",
 		"--clusters", cluster,
@@ -55,25 +90,17 @@ func TestDestroyRecoverCephOwnershipValidatesAndEmitsConfirmedFSID(t *testing.T)
 		"--dry-run",
 		"--ask-become-pass=false",
 	)
-	if code != 1 || !strings.Contains(stderr, "no Bootwright owner record") {
-		t.Fatalf("unrecorded recovery code=%d stderr=%q", code, stderr)
+	if code != 1 || !strings.Contains(stderr, "ownership evidence conflicts") {
+		t.Fatalf("conflicting recovery code=%d stderr=%q", code, stderr)
 	}
 
-	if err := ownership.SaveResource(ctx.OwnershipDir, ownership.ResourceRecord{
-		Kind:    string(ownership.KindStorageCluster),
-		Name:    cluster,
-		Owner:   ownership.Owner,
-		Context: ctx.Name,
-		Host:    seedHost,
-		Cluster: cluster,
-		Attributes: map[string]string{
-			"seedHost": seedHost,
-		},
-	}); err != nil {
-		t.Fatalf("save storage ownership record: %v", err)
+	record.Host = seedHost
+	record.Attributes["seedHost"] = seedHost
+	if err := ownership.SaveResource(ctx.OwnershipDir, record); err != nil {
+		t.Fatalf("replace storage ownership record: %v", err)
 	}
 
-	stdout, stderr, code := runCLI(t,
+	stdout, stderr, code = runCLI(t,
 		"destroy",
 		"--clusters", cluster,
 		"--recover-ceph-ownership", cluster+"="+fsid,
@@ -84,11 +111,10 @@ func TestDestroyRecoverCephOwnershipValidatesAndEmitsConfirmedFSID(t *testing.T)
 	if code != 0 {
 		t.Fatalf("recorded recovery exited %d, stderr=%q", code, stderr)
 	}
-	var report scopeDryRunReport
+	report = scopeDryRunReport{}
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode dry-run json: %v\n%s", err, stdout)
 	}
-	want := `{"` + converge.DestroyCephOwnershipRecoveryExtraVar + `":{"` + cluster + `":"` + fsid + `"}}`
 	if !slices.Contains(report.ExtraVars, want) {
 		t.Fatalf("recovery extra var missing %q from %v", want, report.ExtraVars)
 	}
