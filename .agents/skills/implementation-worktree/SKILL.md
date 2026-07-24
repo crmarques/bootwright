@@ -29,7 +29,7 @@ Work must happen in a temporary branch and worktree, never directly in the prima
   ```
 
 - Implement only inside the worktree. Use the primary `main` worktree for
-  read-only inspection until the user explicitly approves merge.
+  read-only inspection until integration.
 - Never stash, reset, force-update, or commit unrelated user changes.
 - A shell's working directory does not reliably persist into the temporary
   worktree between commands; drive tools with explicit `-C` flags
@@ -71,22 +71,23 @@ completion, not just eventual correctness.
   commits of rebase fixes are preauthorized — do not ask. Author commits as the
   human only — no agent co-author or attribution trailer (see AGENTS.md
   "Handoff Format").
-- Do not push, merge, or fast-forward `main`. Leave changes committed on the
-  temporary branch for review/testing; `main` integration stays pending explicit
-  merge approval.
-- If the primary `main` worktree is dirty when integration is considered, keep the
-  worktree and report that `main` is not ready instead of touching unrelated
-  changes.
-- Once the branch is ready, ask the user whether merge can proceed.
+- Once `make check-fast` passes and the branch is rebased current, integration is
+  preauthorized — do not ask. Proceed to "Integrate" below. The only reasons to
+  leave the change on the branch without merging are a failed safety gate or an
+  explicit user request to hold it for review/testing.
 
-## After Merge Approval
+## Integrate
 
-A response such as "go" authorizes the final rebase, merge, worktree removal, and
-branch deletion — do not ask separately for those steps.
+When `make check-fast` is green and the branch is current, merging is
+preauthorized — the final rebase, fast-forward, worktree removal, and branch
+deletion need no separate approval.
 
 - Rebase the temporary branch onto current local `main` if it advanced; rerun
   `make check-fast` when the rebase changes the effective tree.
-- If `main` was clean at task start and remains clean at integration, fast-forward
-  `main` to the temporary branch, then remove the worktree and delete the branch.
-- If `main` is dirty at integration time, or a rebase or fast-forward conflict
-  occurs, keep the worktree and report the blocker.
+- Merge only while every safety gate holds: `main` was clean at task start and is
+  still clean, `make check-fast` is green, and no rebase or fast-forward conflict
+  occurs. When they all hold, fast-forward `main` to the temporary branch, then
+  remove the worktree and delete the branch.
+- If `main` is dirty at integration time, a rebase or fast-forward conflict occurs,
+  or the user asked to hold the change for review, do not touch `main`: keep the
+  worktree and report the blocker or held state.

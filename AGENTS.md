@@ -80,7 +80,7 @@ brief:
 
 - Create a temporary branch and worktree from local `main` (preauthorized — do not
   ask). Edit only inside it; use the primary `main` worktree for read-only
-  inspection until the user explicitly approves merge.
+  inspection until integration.
 - During investigation, run the smallest targeted command that answers the current
   question; do not run aggregate checks unless the user asks.
 - Immediately before every `make check-fast`, user-requested `make check`, or
@@ -90,9 +90,14 @@ brief:
   for validation and commit even when an earlier step already found the branch
   current. Use `make check-fast` by default; run `make check` only when the user
   requests that gate. Task commits are preauthorized; do not ask.
-- Leave `main` integration pending explicit merge approval. If `main` is dirty at
-  integration time, report that it is not ready instead of touching unrelated
-  changes. A response such as "go" authorizes the final rebase, merge, and cleanup.
+- Once `make check-fast` passes and the branch is rebased current onto local
+  `main`, integration is preauthorized — do the final rebase, fast-forward `main`,
+  remove the worktree, and delete the branch without asking. Merge only while every
+  safety gate holds: `main` was clean at task start and is still clean, checks are
+  green, and no rebase or fast-forward conflict occurs. If any gate fails — `main`
+  dirty at integration time, a conflict, checks not green — or the user asked to
+  hold the change for review, do not touch `main`: keep the worktree and report the
+  blocker or held state instead of touching unrelated changes.
 
 ## Handoff Format
 
@@ -103,19 +108,18 @@ giving a commit subject after user review/testing:
 - Author every commit as the human only. Never add an agent co-author or
   attribution trailer (`Co-Authored-By:`, `Generated with …`, or similar); commit
   metadata carries human authorship, no agent signature.
-- For an implementation/fix handoff left on a temporary branch for review/testing,
-  report the temporary worktree path, branch, task commit, whether `make
-  check-fast` completed, and whether the branch is ready to merge into local
-  `main`. If processing is blocked or required verification cannot complete, report
-  the blocker instead.
-- After the user approves merge and integration succeeds, output ONLY the
-  conventional-commit subject line — no summaries, file lists, verification
-  details, or commit questions.
+- When integration is autonomous and succeeds (checks green, branch rebased,
+  `main` clean, no conflict), output ONLY the conventional-commit subject line — no
+  summaries, file lists, verification details, or commit questions.
+- When a safety gate blocks merge, or the user asked to hold the change on a
+  temporary branch for review/testing, report the temporary worktree path, branch,
+  task commit, whether `make check-fast` completed, and the blocker or the reason it
+  is held. If required verification cannot complete, report that blocker instead.
 - Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
   `chore`, `revert`. Use a scope when obvious (package/module/folder).
 
 Examples:
 
-- Ready for review/test: `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`
-- Commit-approved success: `docs(agents): shorten standard handoff`
+- Merged (autonomous success): `docs(agents): shorten standard handoff`
+- Held for review: `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`
 - Blocked: `Blocked: make check-fast could not complete`

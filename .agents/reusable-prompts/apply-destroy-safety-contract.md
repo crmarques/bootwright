@@ -97,8 +97,22 @@ vaguer than its power, or two flags overlap ambiguously — that is a finding.
 
 ## Step 2 — Generate The Scenarios
 
-Cover the lifecycle an operator lives through, then combine with flags and state.
-This seed list is the floor, not the ceiling — extend it:
+Ground every scenario in a representative **advanced** environment, not a toy
+single-cluster one — the safety contract must hold at the topology operators
+actually run, where scope closure, stretch arbitration, and nested substrates
+interact. Take as the baseline a two-data-center Environment with:
+
+- one **stretched Ceph** storage cluster arbitrated across both DCs,
+- two **bare-metal OpenShift** clusters in each DC (four in all), and
+- one **virtualized OpenShift** cluster nested inside each bare-metal OCP (four in
+  all, each riding on its host cluster's substrate).
+
+Derive scoped selections from this baseline — a single DC, one cluster, one
+machine, a nested guest cluster, or the stretched Ceph alone — so scope narrowing,
+cross-DC blast radius, and the ordering between a host cluster and the virtualized
+cluster running on it are exercised, never assumed. Then cover the lifecycle an
+operator lives through, combined with flags and state. This seed list is the floor,
+not the ceiling — extend it:
 
 - First apply, full success.
 - First apply that fails partway (before records written; after some side effects;
@@ -111,10 +125,17 @@ This seed list is the floor, not the ceiling — extend it:
 - Real/live state drifted or deleted out of band, then a new apply to reconcile.
 - Same-name reuse for a different identity; foreign or shared resource present;
   stale record with a gone or repurposed live object.
+- Scoped to one DC while the stretched Ceph spans both — apply/destroy of that DC's
+  clusters must not touch the cross-DC stretch peer, the arbiter, or the other DC's
+  mons and OSDs.
+- Destroy or rebuild a bare-metal host OCP while the virtualized OCP nested on it is
+  still live — the host-to-guest substrate dependency must gate, not silently
+  strand or wipe the guest.
 
 Cross each state with the relevant flag combinations from Step 1 — including the
-destructive-override and data-loss flags both present and absent — and with
-scoped vs. full selection.
+destructive-override and data-loss flags both present and absent — and with scoped
+vs. full selection (single DC, single cluster, nested guest, and stretched-Ceph-only
+scopes drawn from the baseline).
 
 ## Step 3 — Trace Each Scenario Against The Contract
 
@@ -140,8 +161,12 @@ install the smallest mechanisms that make future unsafe code *fail a check*, not
 merely violate a convention — efficiency over breadth:
 
 - **Test matrix.** A table-driven safety suite keyed on (command, flag combination,
-  starting state) asserting the expected verdict — no-op, fail-closed refusal, or
-  authorized mutation — for every case traced above. New flags and kinds extend the
+  starting state, selected scope) asserting the expected verdict — no-op,
+  fail-closed refusal, or authorized mutation — for every case traced above. Build
+  it on the advanced baseline from Step 2 (stretched Ceph across two DCs, two
+  bare-metal OCP per DC, one nested virtualized OCP each), not a single-cluster
+  fixture, so it exercises stretch arbitration, cross-DC scope closure, and
+  host-to-guest substrate ordering. New flags, kinds, and topologies extend the
   table; the suite is the regression net for the whole contract.
 - **Fail-closed default.** Every mutating operation classifies its authorization
   and defaults to refusal until explicitly authorized. Where a registry or
