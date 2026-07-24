@@ -48,6 +48,9 @@ func TestRecordPartialStorageDestroyStampsOwnershipRecord(t *testing.T) {
 	if len(partial.Recorded) != 1 || partial.Recorded[0] != "ceph-a" {
 		t.Fatalf("recorded partial clusters = %v, want [ceph-a]", partial.Recorded)
 	}
+	if len(partial.Clusters) != 1 || partial.Clusters[0] != "ceph-a" {
+		t.Fatalf("all partial clusters = %v, want [ceph-a]", partial.Clusters)
+	}
 	if len(partial.Unrecorded) != 0 {
 		t.Fatalf("unrecorded partial clusters = %v, want none", partial.Unrecorded)
 	}
@@ -104,6 +107,9 @@ func TestRecordPartialStorageDestroyUnrecordedClusterIsReportedSeparately(t *tes
 	}
 	if len(partial.Recorded) != 0 {
 		t.Fatalf("no ownership record exists, recorded = %v, want none", partial.Recorded)
+	}
+	if len(partial.Clusters) != 1 || partial.Clusters[0] != "ceph-a" {
+		t.Fatalf("all partial clusters = %v, want [ceph-a]", partial.Clusters)
 	}
 	if len(partial.Unrecorded) != 1 || partial.Unrecorded[0] != "ceph-a" {
 		t.Fatalf("unrecorded = %v, want [ceph-a]", partial.Unrecorded)

@@ -45,7 +45,12 @@ records (or merges) the released machine names into the cluster's record, a
 cluster-scoped destroy releases the whole cluster, and an apply consumes the
 release only for the machines it actually covered — a scoped apply shrinks the
 record to the still-released remainder. `--skip-unreachable` withholds the
-release, so skipped nodes keep failing closed until a full destroy finishes.
+release for a partially destroyed storage cluster, and for infra-only,
+machine-scoped, or non-storage teardown where no equivalent per-node completion
+proof exists. A managed storage cluster whose completion report proves that no
+topology node was skipped still receives its release, so merely enabling the
+flag does not strand a fully destroyed cluster. Skipped nodes keep failing
+closed until a full destroy finishes.
 The release is a fail-safe token like the
 others here — its absence can only withhold, never manufacture, authority to
 reinstall — closing the window where a re-run after a destroy would otherwise

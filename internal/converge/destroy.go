@@ -148,7 +148,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 		}
 		if ScopeTearsMachineLayer(runScope) && include(workflow.DestroyTaskKindMachineInfra) {
 			for _, name := range workflow.MachineSubstrateClusters(tasks) {
-				if !skipUnreachable {
+				if substrateReleaseConfirmed(name, runScope, state, storageWorkNames, partial, succeededDestroyKinds, skipUnreachable) {
 					if err := workflow.MarkSubstrateReleased(runsDir, name, time.Now()); err != nil {
 						problems = append(problems, fmt.Errorf("record substrate release for %s: %w", name, err))
 					}
@@ -186,6 +186,24 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 		}
 	}
 	return problems
+}
+
+func substrateReleaseConfirmed(cluster string, runScope Scope, state v1alpha1.State, storageWorkNames []string, partial map[string]bool, succeededDestroyKinds map[string]bool, skipUnreachable bool) bool {
+	if !skipUnreachable {
+		return true
+	}
+	if !workflow.DestroyScopeCoversStorage(runScope.Name) || partial[cluster] {
+		return false
+	}
+	if succeededDestroyKinds != nil && !succeededDestroyKinds[workflow.DestroyTaskKindStorageCluster] {
+		return false
+	}
+	for _, name := range destroyStorageResetNames(state, storageWorkNames) {
+		if name == cluster {
+			return true
+		}
+	}
+	return false
 }
 
 func ResetMachineConvergeRecordsAfterDestroy(runsDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds map[string]bool, purgeHistory, skipUnreachable bool) []error {

@@ -90,8 +90,11 @@ machine-granular: the cluster must appear in
 the release record carries no machine list for that cluster (a cluster-scoped
 destroy released everything) or the `<cluster>/<machine>` pair appears in
 `bootwright_substrate_reset_machines` (written by `destroy --machines`); an
-uncovered sibling machine keeps its normal gates. `--skip-unreachable`
-withholds the release record entirely, so skipped nodes keep failing closed.
+uncovered sibling machine keeps its normal gates. With `--skip-unreachable`, a
+managed storage cluster receives the release only when the storage completion
+report proves that no node was skipped; partial storage and teardown paths
+without equivalent per-node proof withhold it, so skipped nodes keep failing
+closed.
 No change was needed in `marker.yml` or
 `wait.yml` — both already key off `install_required`, and kickstart's `%post`
 (not the ansible task) is what stamps a freshly reinstalled host's marker, so

@@ -344,7 +344,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
 				partialErr = fmt.Errorf("the storage teardown ran with --skip-unreachable but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
 			}
-			resetPartial := partial.Recorded
+			resetPartial := partial.Clusters
 			if partialErr != nil {
 				resetPartial = storageScopeNames
 			}

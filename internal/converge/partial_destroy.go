@@ -29,6 +29,7 @@ type storageDestroyResult struct {
 type PartialStorageDestroy struct {
 	Recorded   []string
 	Unrecorded []string
+	Clusters   []string
 	Skipped    string
 	Found      bool
 }
@@ -47,6 +48,7 @@ func RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath string) (
 	if !ok || len(result.PartialClusters) == 0 {
 		return out, nil
 	}
+	out.Clusters = uniqueSorted(result.PartialClusters)
 	out.Skipped = strings.Join(result.SkippedNodes, ",")
 	records, err := ownership.LoadContext(ownershipDir, contextName)
 	if err != nil {
@@ -59,7 +61,7 @@ func RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath string) (
 		}
 	}
 	var firstErr error
-	for _, name := range uniqueSorted(result.PartialClusters) {
+	for _, name := range out.Clusters {
 		rec, found := byName[name]
 		if !found {
 			out.Unrecorded = append(out.Unrecorded, name)

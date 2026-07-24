@@ -103,7 +103,37 @@ func TestFailedMachineTeardownRecordsNoSubstrateRelease(t *testing.T) {
 	}
 }
 
-func TestSkipUnreachableDestroyWithholdsSubstrateRelease(t *testing.T) {
+func TestSkipUnreachablePartialStorageDestroyWithholdsSubstrateRelease(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-bm"}, nil, false, true)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	released, err := workflow.ReleasedSubstrateClusters(runsDir)
+	if err != nil || len(released) != 0 {
+		t.Fatalf("a partial storage destroy leaves nodes with data standing and must not authorize their reinstall; re-running destroy is the completion path, got %v err=%v", released, err)
+	}
+}
+
+func TestSkipUnreachableCompleteStorageDestroyRecordsSubstrateRelease(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, false, true)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	released, err := workflow.ReleasedSubstrateClusters(runsDir)
+	if err != nil || strings.Join(released, ",") != "ceph-bm" {
+		t.Fatalf("a completed storage teardown must authorize reinstall even when --skip-unreachable was enabled, got %v err=%v", released, err)
+	}
+}
+
+func TestSkipUnreachableInfraDestroyWithholdsSubstrateRelease(t *testing.T) {
 	runsDir := t.TempDir()
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
@@ -114,7 +144,23 @@ func TestSkipUnreachableDestroyWithholdsSubstrateRelease(t *testing.T) {
 	}
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
-		t.Fatalf("a --skip-unreachable destroy leaves nodes with data standing and must not authorize their reinstall; re-running destroy is the completion path, got %v err=%v", released, err)
+		t.Fatalf("an infra-only --skip-unreachable destroy has no storage completion report and must not authorize reinstall, got %v err=%v", released, err)
+	}
+}
+
+func TestSkipUnreachableFailedStorageDestroyWithholdsSubstrateRelease(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+	succeeded := map[string]bool{workflow.DestroyTaskKindMachineInfra: true}
+
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, succeeded, false, true)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	released, err := workflow.ReleasedSubstrateClusters(runsDir)
+	if err != nil || len(released) != 0 {
+		t.Fatalf("a failed storage teardown must not authorize reinstall when only machine cleanup succeeded, got %v err=%v", released, err)
 	}
 }
 

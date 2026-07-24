@@ -84,6 +84,22 @@ residual Ceph state instead of re-bootstrapping. Guarded by
 TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster. `status`
 surfaces the partial-destroy marker kept on the ownership record.
 
+**`--skip-unreachable` release authorization follows the completion report,
+not flag presence:** a successful managed-storage teardown always writes
+`storage-destroy-result.json`, including an empty skipped-node set when every
+topology node completed. `ResetConvergeRecordsAfterDestroy` may record a
+substrate release for a storage cluster only when that cluster is absent from
+the report's partial set and the storage destroy task succeeded. A partial
+cluster stays in the reset exclusion set whether its ownership marker was
+successfully stamped or no controller owner record existed. An infra-only or
+machine-scoped destroy, a non-storage cluster, or a failed storage task still
+withholds the release because no equivalent per-node completion proof exists.
+This prevents a harmless defensive
+`--skip-unreachable` from stranding a fully destroyed root-revoked Ceph fleet:
+the next apply can legitimately find the old OS reachable without a usable
+probe identity after teardown, and then needs the positive release to authorize
+its reinstall.
+
 **Release vs blocked (shared bastion services):** `PlanInfraComponentReleases`
 keys on the record ROLE — role=reference is released (extra-var
 `bootwright_infra_component_release_records`, comma-joined names: the roles skip

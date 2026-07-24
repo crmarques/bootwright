@@ -503,6 +503,13 @@ treated as fully gone; `bootwright status` flags it, and the teardown prints a
 warning naming the skipped nodes. Re-run `destroy` once the nodes are back up, or
 wipe them manually, before reusing the hardware.
 
+When the flag is enabled but every managed storage node is reachable, the
+completion report proves that the storage teardown finished and the next
+`apply` remains authorized to reinstall its machines. A report that names any
+skipped node withholds that authorization; infra-only, machine-scoped, and
+non-storage teardown with `--skip-unreachable` also withhold it because they do
+not produce the same per-node completion proof.
+
 !!! danger "Storage teardown fails closed when the Ceph **seed** host is down"
     Cluster ownership is proven on the seed host before any node wipes its OSD
     devices. If the seed host itself is unreachable, `--skip-unreachable` does

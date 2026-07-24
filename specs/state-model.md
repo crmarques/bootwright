@@ -1796,9 +1796,13 @@ Rules:
   honors the release only for covered machines. A release is consumed only for
   the machines an apply actually covered: a `--machines`-scoped apply shrinks
   the record to the still-released remainder and clears it when none remain,
-  and an unscoped apply clears it. `destroy --skip-unreachable` withholds the
-  release record entirely — the skipped nodes keep failing closed on apply
-  until a destroy without skips finishes the teardown.
+  and an unscoped apply clears it. With `destroy --skip-unreachable`, a managed
+  storage cluster receives the release only when its teardown completion report
+  proves that no topology node was skipped. A partially destroyed storage
+  cluster withholds it, as do infra-only, machine-scoped, and non-storage
+  teardowns under this flag because they have no equivalent per-node completion
+  proof. Those machines keep failing closed on apply until a destroy without
+  skips finishes the teardown.
 - A bare-metal destroy never wipes the OS disk in place; the disk is reclaimed
   by the release-authorized reinstall on the next `apply`. That apply is
   therefore the moment data is actually lost, and a release-authorized apply
