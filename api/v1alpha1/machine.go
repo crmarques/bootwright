@@ -276,7 +276,6 @@ type MachineInstallSSH struct {
 
 type MachineInstallStorage struct {
 	RootDevice MachineInstallRootDevice `yaml:"rootDevice,omitempty" json:"rootDevice,omitempty"`
-	Wipe       bool                     `yaml:"wipe,omitempty" json:"wipe,omitempty"`
 }
 
 type MachineInstallRootDevice struct {

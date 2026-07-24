@@ -18,8 +18,25 @@
   changed_when: false
   failed_when: false
 
+- name: Require a conclusive libvirt domain probe before destroy
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+        or (bootwright_libvirt_destroy_domain_xml.stderr | default('')) is search('(failed to get domain|Domain not found|no domain with matching name)')
+    fail_msg: >-
+      Could not determine whether libvirt domain
+      {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
+      exists on {{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}:
+      {{ bootwright_libvirt_destroy_domain_xml.stderr | default('virsh dumpxml failed with no detail') }}.
+      Refusing to tear down or delete anything Bootwright cannot conclusively
+      probe — the domain may still exist while its disks, state, and ownership
+      record would be removed. Fix libvirtd/connection access and re-run
+      destroy.
+
 - name: Resolve libvirt domain ownership for destroy
   ansible.builtin.set_fact:
+    bootwright_libvirt_domain_present: "{{ bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0 }}"
     bootwright_libvirt_destroy_owned: >-
       {{
         (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
@@ -27,7 +44,6 @@
         and (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?machine>' ~ (bootwright_component.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?machine>')
       }}
   changed_when: false
-  when: bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
 
 - name: Refuse to destroy a non-Bootwright libvirt domain
   ansible.builtin.assert:
@@ -41,7 +57,7 @@
       domain before removing it manually, then retry, or pass --include-unowned to
       tear it down anyway.
   when:
-    - bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+    - bootwright_libvirt_domain_present | bool
     - not (bootwright_destroy_force_unowned | default(false) | bool)
 
 - name: Warn before force-destroying an unowned libvirt domain
@@ -52,7 +68,7 @@
       despite a missing or mismatched Bootwright ownership marker for this
       context/cluster/machine.
   when:
-    - bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+    - bootwright_libvirt_domain_present | bool
     - bootwright_destroy_force_unowned | default(false) | bool
     - not (bootwright_libvirt_destroy_owned | default(false) | bool)
 
@@ -132,6 +148,22 @@
   register: bootwright_libvirt_destroy_network_xml
   changed_when: false
   failed_when: false
+
+- name: Require a conclusive libvirt network probe before destroy
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_destroy_network_xml.rc | default(1) == 0
+        or (bootwright_libvirt_destroy_network_xml.stderr | default('')) is search('(Network not found|no network with matching name)')
+    fail_msg: >-
+      Could not determine whether libvirt network {{ bootwright_libvirt_network_name }}
+      exists on {{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}:
+      {{ bootwright_libvirt_destroy_network_xml.stderr | default('virsh net-dumpxml failed with no detail') }}.
+      Refusing to tear down or delete anything Bootwright cannot conclusively
+      probe — the network and its ownership record would be removed while the
+      network may still serve other machines. Fix libvirtd/connection access
+      and re-run destroy.
+  when: bootwright_destroy_machine_scope is not defined
 
 - name: Resolve libvirt network ownership for destroy
   ansible.builtin.set_fact:

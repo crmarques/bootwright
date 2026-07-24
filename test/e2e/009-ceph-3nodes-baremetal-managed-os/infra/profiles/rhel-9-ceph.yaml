@@ -22,7 +22,6 @@ spec:
     storage:
       rootDevice:
         source: machineRootDeviceHints
-      wipe: true
     packages:
       environment: minimal
       installWeakDeps: false

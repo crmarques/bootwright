@@ -15,6 +15,40 @@
     bootwright_os_pre_ssh_reachable: "{{ (bootwright_os_pre_ssh_port.msg | default('')) | length == 0 }}"
   changed_when: false
 
+- name: Resolve substrate release membership before install
+  ansible.builtin.set_fact:
+    bootwright_os_reset_pairs: >-
+      {{
+        bootwright_substrate_reset_machines | default('')
+        | split(',') | map('trim') | reject('equalto', '') | list
+      }}
+    bootwright_os_cluster_released: >-
+      {{
+        bootwright_current_cluster.name in (
+          bootwright_substrate_reset_clusters | default('')
+          | split(',') | map('trim') | reject('equalto', '') | list
+        )
+      }}
+  changed_when: false
+
+- name: Resolve substrate release machine scope before install
+  ansible.builtin.set_fact:
+    bootwright_os_machine_released: >-
+      {{
+        (bootwright_os_cluster_released | bool)
+        and (
+          (
+            bootwright_os_reset_pairs | map('split', '/') | map('first')
+            | select('equalto', bootwright_current_cluster.name) | list | length == 0
+          )
+          or (
+            (bootwright_current_cluster.name ~ '/' ~ bootwright_component.osInstall.marker.machine)
+            in bootwright_os_reset_pairs
+          )
+        )
+      }}
+  changed_when: false
+
 - name: Refuse to wipe a reachable managed OS with no host-key trust to verify it
   ansible.builtin.fail:
     msg: >-
@@ -66,10 +100,76 @@
     - bootwright_os_pre_ssh_reachable | bool
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
 
+- name: Probe managed OS SSH authentication as the cluster orchestration account
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "15"
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=5
+      - -o
+      - GSSAPIAuthentication=no
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
+      - "{{ bootwright_component.osInstall.ssh.fallbackUser }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "true"
+  delegate_to: localhost
+  register: bootwright_os_pre_ssh_auth_fallback
+  failed_when: false
+  changed_when: false
+  when:
+    - bootwright_os_pre_ssh_reachable | bool
+    - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
+    - (bootwright_os_pre_ssh_auth.rc | default(1) | int) != 0
+    - (bootwright_component.osInstall.ssh.fallbackUser | default('') | length) > 0
+
 - name: Resolve managed OS readiness before install
   ansible.builtin.set_fact:
-    bootwright_managed_os_already_ready: "{{ (bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0 }}"
+    bootwright_managed_os_already_ready: >-
+      {{
+        ((bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0)
+        or ((bootwright_os_pre_ssh_auth_fallback.rc | default(1) | int) == 0)
+      }}
+    bootwright_os_probe_user: >-
+      {{
+        ((bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0)
+        | ternary(
+          bootwright_component.osInstall.ssh.user,
+          bootwright_component.osInstall.ssh.fallbackUser | default(bootwright_component.osInstall.ssh.user)
+        )
+      }}
   changed_when: false
+
+- name: Refuse to reinstall a reachable managed OS Bootwright cannot authenticate to
+  ansible.builtin.fail:
+    msg: >-
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} answers SSH but
+      rejects Bootwright's install identity
+      {{ bootwright_component.osInstall.ssh.user }}
+      {%- if (bootwright_component.osInstall.ssh.fallbackUser | default('') | length) > 0 %}
+      and orchestration account {{ bootwright_component.osInstall.ssh.fallbackUser }}
+      {%- endif %}
+      (ssh rc {{ bootwright_os_pre_ssh_auth.rc | default(1) }}). Bootwright cannot read
+      {{ bootwright_os_marker_path }} to prove it owns this host, and a reinstall wipes
+      its disks, so an unverifiable host fails closed like a foreign one. Restore
+      key-based access for the machine's access.ssh identity; if the host key changed
+      after an authorized out-of-band rebuild, re-record it with `bootwright machine
+      trust --replace {{ bootwright_component.osInstall.marker.machine }}`; if this
+      machine must be rebuilt from scratch, run `bootwright destroy --stage infra
+      --machines {{ bootwright_component.osInstall.marker.machine }} --force` (or
+      --clusters {{ bootwright_current_cluster.name }}) and re-apply; if the host is
+      truly unused, power it off so it is not seen as occupied.
+  when:
+    - bootwright_os_pre_ssh_reachable | bool
+    - not (bootwright_managed_os_already_ready | bool)
+    - not (bootwright_os_machine_released | default(false) | bool)
 
 - name: Read managed OS install marker before install
   ansible.builtin.command:
@@ -89,7 +189,7 @@
       - StrictHostKeyChecking=yes
       - -o
       - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
-      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "{{ bootwright_os_probe_user | default(bootwright_component.osInstall.ssh.user) }}@{{ bootwright_component.osInstall.ssh.address }}"
       - "cat {{ bootwright_os_marker_path | quote }}"
   delegate_to: localhost
   register: bootwright_os_pre_marker
@@ -120,6 +220,21 @@
   changed_when: false
   when: bootwright_managed_os_already_ready | bool
 
+- name: Refuse a pre-existing managed OS under --expect-new
+  ansible.builtin.fail:
+    msg: >-
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} already runs an
+      OS ({{ (bootwright_os_pre_marker_owned | default(false) | bool)
+      | ternary('Bootwright-owned', 'not marked as Bootwright-owned') }}) but this
+      apply ran with --expect-new, which requires a greenfield environment. Drop
+      --expect-new to reconcile the machine, or tear it down first with `bootwright
+      destroy --stage infra --clusters {{ bootwright_current_cluster.name }}` and
+      re-apply.
+  when:
+    - bootwright_managed_os_already_ready | bool
+    - (bootwright_apply_mode | default('continue')) == 'create'
+    - not (bootwright_os_machine_released | default(false) | bool)
+
 - name: Refuse foreign or unmarked reachable managed OS
   ansible.builtin.fail:
     msg: >-
@@ -142,7 +257,7 @@
     - bootwright_os_pre_marker_owned | default(false) | bool
     - not (bootwright_os_pre_marker_matches | default(false) | bool)
     - (bootwright_apply_mode | default('continue')) != 'override'
-    - bootwright_current_cluster.name not in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
+    - not (bootwright_os_machine_released | default(false) | bool)
 
 - name: Resolve whether managed OS may be stamped as Bootwright-owned
   ansible.builtin.set_fact:
@@ -168,7 +283,7 @@
     - bootwright_os_pre_marker_owned | default(false) | bool
     - not (bootwright_os_pre_marker_matches | default(false) | bool)
     - (bootwright_apply_mode | default('continue')) == 'override'
-    - bootwright_current_cluster.name not in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
+    - not (bootwright_os_machine_released | default(false) | bool)
 
 - name: Resolve whether an owned managed OS must be rebuilt because its substrate was released
   ansible.builtin.set_fact:
@@ -176,7 +291,7 @@
       {{
         (bootwright_managed_os_already_ready | bool)
         and (bootwright_os_pre_marker_owned | default(false) | bool)
-        and (bootwright_current_cluster.name in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list))
+        and (bootwright_os_machine_released | default(false) | bool)
       }}
   changed_when: false
 

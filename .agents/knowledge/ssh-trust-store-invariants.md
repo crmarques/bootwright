@@ -27,6 +27,22 @@ never reached key exchange (host unreachable) and the caller reports
 `roles/machine_os_install_anaconda/tasks/ssh_trust.yml`; pinned by
 `TestScanHostKeyCommandUsesFIPSHonoringSSH`.
 
+**A pinned managed-OS key is replaced only by an actual install:**
+`machine_os_install_anaconda/tasks/ssh_trust.yml` keeps an existing
+known_hosts entry for the address — the `accept-new` scan runs only when no
+entry exists or `bootwright_os_ssh_keyscan_replace` is true, and the only
+caller passing true is `wait.yml`, with
+`bootwright_managed_os_install_required` (an install this run actually
+performed, which mints a new host key by construction). Until 2026-07-23 the
+task deleted-and-re-accepted the recorded key on EVERY probe, so a swapped
+host was silently re-pinned and the pre-install ownership probe proved
+nothing. Now a changed live key fails the probe's `StrictHostKeyChecking=yes`
+auth and lands in the fail-closed unverifiable refusal (see
+[managed-os-install-gates.md](managed-os-install-gates.md)); the deliberate
+rotation path is `bootwright machine trust --replace <machine>`. The
+`connectionAddress` alias entry is always re-derived from the address pin, so
+the alias can never carry a different key than the pinned address.
+
 **Ref-vs-managed resolution is the only centralized part:**
 `MachineKnownHostsPath` (`internal/sshtrust/machine.go`) resolves what a
 Machine verifies SSH host keys against: the explicit per-Machine

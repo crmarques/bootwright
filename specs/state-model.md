@@ -1736,7 +1736,11 @@ Rules:
 - `destroy --stage clusters` removes cluster-stage runtime for selected or all
   `ContainerCluster` and `StorageCluster` names: OpenShift install runtime,
   add-on records, generated storage attachment records, and managed storage
-  cluster services/runtime. It does not destroy provider infrastructure.
+  cluster services/runtime. It does not destroy provider infrastructure. On a
+  node that also carries a foreign (non-Bootwright) Ceph cluster, local Ceph
+  state removal is scoped to the owned cluster's fsid directories; the shared
+  `/etc/ceph`, `/var/lib/ceph`, and `/var/log/ceph` trees are removed
+  wholesale only when no foreign fsid remains on the node.
 - `destroy` with `--stage` omitted tears down the whole context: it runs the
   clusters teardown then the infra teardown as one ordered task graph (the
   reverse of the apply order), and sweeps context-owned VM artifacts and orphan
@@ -1766,6 +1770,24 @@ Rules:
   remains — and continues, leaving the cluster partially destroyed. It requires
   `--force`. Storage teardown still fails closed when a cluster's Ceph seed
   host is unreachable, so ownership stays proven before any device wipe.
+- A destroy that tears down machine substrate writes a substrate-release
+  record (`runs/substrate-release/`) — the positive authorization the next
+  `apply` needs before it may reinstall the released substrate. The record is
+  machine-granular: `destroy --machines` writes (or merges into) the cluster's
+  record the names of the released machines, while a cluster-scoped destroy
+  releases the whole cluster (no machine list); the managed-OS install probe
+  honors the release only for covered machines. A release is consumed only for
+  the machines an apply actually covered: a `--machines`-scoped apply shrinks
+  the record to the still-released remainder and clears it when none remain,
+  and an unscoped apply clears it. `destroy --skip-unreachable` withholds the
+  release record entirely — the skipped nodes keep failing closed on apply
+  until a destroy without skips finishes the teardown.
+- A bare-metal destroy never wipes the OS disk in place; the disk is reclaimed
+  by the release-authorized reinstall on the next `apply`. That apply is
+  therefore the moment data is actually lost, and a release-authorized apply
+  covering bare-metal managed-OS machines counts as a destructive action in
+  apply's data-loss gate: an interactive run confirms it at the destructive
+  prompt, and a non-interactive run (`--yes`) must pass `--confirm-data-loss`.
 - `destroy --purge-history` deletes retained per-component history once a
   cluster's or machine's teardown actually succeeds: the `ContainerCluster`
   installer working directory and install/connection records under
@@ -1799,6 +1821,38 @@ Rules:
   already exists. `--expect-new` and `--converge-drifted` are mutually exclusive.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `diff --recorded`.
+- Before a managed-OS install mutates a host, the install probe classifies the
+  live host by presence evidence, independent of recorded state. An
+  SSH-unreachable host is absent — greenfield — and the install proceeds. A
+  reachable host that authenticates against the pinned host key with a probe
+  identity is present: the on-host install-marker ownership and match checks
+  apply. A reachable host that rejects every probe identity — or one with no
+  host-key trust configured to probe with — is unverifiable: Bootwright cannot
+  read its marker to prove ownership, and unprovable is not absent, so the
+  install fails closed in every apply mode, naming the
+  remedies: restore key access for the machine's `access.ssh` identity;
+  `bootwright machine trust --replace <machine>` when an authorized
+  out-of-band rebuild changed the host key; `bootwright destroy --stage infra
+  --machines <machine> --force` (or `--clusters <cluster>`) then re-apply to
+  rebuild it; power off a truly unused host. Only coverage by the machine's
+  substrate-release record authorizes reclaiming the host — destroy remains
+  the consent moment. A changed host key fails the same way: the probe never
+  re-accepts a changed key (the recorded key is replaced only after an install
+  this run actually performed), so key rotation is always the deliberate
+  `machine trust --replace` step.
+- The probe carries a fallback identity for root-revoked nodes: when a
+  `Machine` sets `access.rootLogin: revoke` and its managed `StorageCluster`
+  declares a non-root `cephadm.clusterSSH.user`, the render emits that account
+  as `osInstall.ssh.fallbackUser` — excluded from the install-marker hash —
+  and a probe whose primary install identity is rejected retries
+  authentication and reads the marker as that orchestration account, so a
+  re-run after root revocation classifies a healthy owned node as present
+  instead of unverifiable.
+- `apply --expect-new` is also enforced against live state at the managed-OS
+  probe: a reachable host that already runs an OS — Bootwright-owned or not —
+  fails closed under `--expect-new` unless the machine's substrate release
+  covers it, so recorded state alone can never make `--expect-new` treat a
+  live host as greenfield.
 - `apply` is additive for every kind: it never removes, deprovisions, or
   unconfigures a live resource whose declaration was deleted from desired state.
   Deletion is not a plannable apply action; removal crosses the destroy

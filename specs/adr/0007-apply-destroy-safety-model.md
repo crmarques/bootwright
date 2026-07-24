@@ -40,12 +40,19 @@ residual state.
 Destruction also leaves a positive re-authorization trail. On destroy,
 Bootwright writes a per-cluster substrate release that records that the
 cluster's substrate was deliberately torn down and so authorizes the subsequent
-`apply` to reinstall it; the matching per-machine install task clears the
-release once it has reprovisioned. The release is a fail-safe token like the
+`apply` to reinstall it. The release is machine-granular: `destroy --machines`
+records (or merges) the released machine names into the cluster's record, a
+cluster-scoped destroy releases the whole cluster, and an apply consumes the
+release only for the machines it actually covered — a scoped apply shrinks the
+record to the still-released remainder. `--skip-unreachable` withholds the
+release, so skipped nodes keep failing closed until a full destroy finishes.
+The release is a fail-safe token like the
 others here — its absence can only withhold, never manufacture, authority to
 reinstall — closing the window where a re-run after a destroy would otherwise
 have to guess whether a missing substrate is greenfield intent or an
-interrupted teardown.
+interrupted teardown. Because a bare-metal destroy defers the disk wipe to the
+reinstall, a release-authorized apply covering bare-metal managed-OS machines
+is the moment data is lost and still crosses the data-loss acknowledgment.
 
 ### One explicit mode variable, enforced on both sides
 
@@ -65,6 +72,11 @@ target: ownership records on the controller, substrate markers (libvirt domain
 XML, vSphere annotations, KubeVirt labels, managed-OS install markers), and
 live container provenance labels for shared bastion services. Foreign fails
 closed in every mode; `--converge-drifted` rebuilds owned drift but never adopts.
+Unprovable is not absent: a live host that answers SSH but rejects every probe
+identity (or presents a changed host key) cannot prove ownership either way,
+so the managed-OS install fails closed on it exactly as on a foreign host —
+only the machine's substrate release, written by a destroy, authorizes
+reclaiming it.
 Destructive authority flows through positive, fail-safe tokens — e.g. the
 storage role wipes only clusters named in
 `bootwright_ceph_rebuild_authorized_clusters`, so an absent or stale value can

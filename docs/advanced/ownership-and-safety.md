@@ -59,7 +59,7 @@ clusters; see [Operations](operations.md#comparing-against-live-cluster-state)):
 | --- | --- | --- |
 | `missing` | No record exists | Create it |
 | `match` | Recorded desired hash equals current | Skip (when a concrete probe supports it) |
-| `drift` | Recorded desired hash differs | Fail closed — needs `--converge-drifted` (config-only kinds re-apply in place; machines/clusters rebuild destructively) |
+| `drift` | Recorded desired hash differs | Reconcilable-in-place drift converges on a bare `apply`; structural (destructive-identity) drift fails closed — needs `--converge-drifted` (reconfigure-only kinds re-apply in place; machines/clusters rebuild destructively) |
 | `foreign` | Record carries a non-Bootwright owner | Fail closed — never touched |
 
 Under `--converge-drifted`, the consequence depends on the object kind: for the
@@ -72,8 +72,12 @@ the destructive kinds cross the destroy-protection boundary (below).
 
 !!! warning "Classification is not a blanket skip gate"
     Before any mutation, a records-based apply-mode preflight fails closed when
-    any selected object is `drift` or `foreign`, for **every** kind — so plain
-    `apply` never silently reconciles drift. Once a run proceeds (a clean run, or
+    any selected object carries structural (destructive-identity) drift or is
+    `foreign`, for **every** kind. Drift that is reconcilable in place — an
+    OSD-device add, a `ceph … set`-reconcilable sub-object edit, day-2-owned
+    container intent — converges on a bare `apply`; what plain `apply` never
+    does is destructively rebuild, or touch what it does not own. Once a run
+    proceeds (a clean run, reconcilable drift, or
     `--converge-drifted`), execution-time behavior differs by task: many provider-service
     and component-config tasks have no reliable external probe, so they **re-run
     and rely on idempotent execution** rather than being skipped — their record is
@@ -104,8 +108,9 @@ run *before* any mutation if its precondition is not met:
    front with `bootwright machine trust`.
 3. **Run lease.** A short-lived lease admits one mutating run at a time, so two
    applies cannot race the same context.
-4. **Foreign-ownership refusal.** Drift and foreign outcomes fail closed; a
-   plain `apply` never overwrites a resource it does not own.
+4. **Foreign-ownership refusal.** Structural drift and foreign outcomes fail
+   closed; reconcilable-in-place drift converges; a plain `apply` never
+   overwrites a resource it does not own.
 5. **Concrete-probe gating.** Install, add-on, managed-OS, provider, and storage
    sites refuse to reinstall or rebuild over existing state without an explicit
    `--converge-drifted`.
@@ -122,10 +127,11 @@ greenfield build), and `--converge-drifted` (break-glass rebuild) — described 
 full under [Apply modes](../concepts/index.md#apply-modes). What matters here is
 how each treats resources Bootwright does **not** own:
 
-- Bare `apply` and `--expect-new` are non-destructive. Bare `apply` fails closed
-  on drift or foreign ownership; `--expect-new` additionally refuses if any
-  selected object already exists — a guardrail for first builds, so a stale
-  context or a name collision fails loudly instead of half-converging.
+- Bare `apply` and `--expect-new` are non-destructive. Bare `apply` converges
+  reconcilable-in-place drift and fails closed on structural drift or foreign
+  ownership; `--expect-new` additionally refuses if any selected object already
+  exists — a guardrail for first builds, so a stale context or a name collision
+  fails loudly instead of half-converging.
 - `--converge-drifted` is the only mode that destroys, and only over resources a
   Bootwright ownership marker proves it created (see below).
 

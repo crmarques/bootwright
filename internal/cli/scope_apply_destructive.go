@@ -36,7 +36,8 @@ func filterReclaimDestructiveDescriptors(clusters []string) []string {
 	return []string{"auto-reclaim dirty filter-OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
 }
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedClusters []string, clustersDir string, ocpReinstalls []string, allowDestroy bool) {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) {
+	releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
 	var substrateReset []string
 	if mode == workflow.ApplyModeOverride {
 		if len(ocpReinstalls) > 0 {
@@ -52,7 +53,21 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		converge.ApplyRebuildAuthorizedStorageExtraVar(plan, converge.RebuildAuthorizedStorageClusters(objects))
 		subObjectKeys := converge.SubObjectRebuildAuthorizedKeys(objects)
 		if allowDestroy {
-			subObjectKeys = workflow.UnionClusterNames(subObjectKeys, converge.AllStorageSubObjectRebuildKeys(objects))
+			widened := workflow.UnionClusterNames(subObjectKeys, converge.AllStorageSubObjectRebuildKeys(objects))
+			if len(widened) > len(subObjectKeys) {
+				named := make(map[string]bool, len(subObjectKeys))
+				for _, key := range subObjectKeys {
+					named[key] = true
+				}
+				var extra []string
+				for _, key := range widened {
+					if !named[key] {
+						extra = append(extra, key)
+					}
+				}
+				cliout.NewContinuation(stdout).Warning("confirm-data-loss", "additionally authorizes destructive rebuild of storage sub-objects whose records match but whose LIVE structural identity may have drifted out of band: "+strings.Join(extra, ", ")+". Each is rebuilt (its data destroyed) only if its live pool/filesystem identity mismatches the declaration; an in-sync object is untouched.")
+			}
+			subObjectKeys = widened
 		}
 		converge.ApplySubObjectRebuildAuthorizedExtraVar(plan, subObjectKeys)
 		if allowDestroy {
@@ -66,12 +81,15 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 			substrateReset = reset
 		}
 	}
-	if len(releasedClusters) > 0 {
-		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of cluster(s) "+strings.Join(releasedClusters, ", ")+" was destroyed by a previous `bootwright destroy`: this apply re-creates their machines and reinstalls any managed OS, wiping the target disks.")
+	if len(releasedRecords) > 0 {
+		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of "+describeReleasedSubstrates(releasedRecords)+" was destroyed by a previous `bootwright destroy`: this apply re-creates the released machines and reinstalls any managed OS, wiping the target disks.")
 		substrateReset = workflow.UnionClusterNames(substrateReset, releasedClusters)
 	}
 	if len(substrateReset) > 0 {
 		converge.ApplySubstrateResetExtraVar(plan, substrateReset)
+	}
+	if pairs := workflow.SubstrateReleaseMachinePairs(releasedRecords); len(pairs) > 0 {
+		converge.ApplySubstrateResetMachinesExtraVar(plan, pairs)
 	}
 	if reclaimDevices != "" {
 		owned := converge.OwnedStorageClusters(objects)
@@ -87,6 +105,50 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
 	}
 	converge.ApplyOCPReinstallClustersExtraVar(plan, workflow.UnionClusterNames(bootProven, releasedContainerClusters(plan.State, releasedClusters)))
+}
+
+func describeReleasedSubstrates(records []workflow.SubstrateReleaseRecord) string {
+	var parts []string
+	for _, record := range records {
+		if len(record.Machines) > 0 {
+			parts = append(parts, record.Cluster+" (machine(s) "+strings.Join(record.Machines, ", ")+")")
+			continue
+		}
+		parts = append(parts, record.Cluster)
+	}
+	return "cluster(s) " + strings.Join(parts, "; ")
+}
+
+func releasedBareMetalReinstallDescriptors(state v1alpha1.State, records []workflow.SubstrateReleaseRecord) []string {
+	providers := make(map[string]string, len(state.InfraProviders))
+	for _, provider := range state.InfraProviders {
+		providers[provider.Metadata.Name] = provider.Spec.Type
+	}
+	machines := make(map[string]v1alpha1.Machine, len(state.Machines))
+	for _, machine := range state.Machines {
+		machines[machine.Metadata.Name] = machine
+	}
+	var out []string
+	for _, record := range records {
+		released := record.Machines
+		if len(released) == 0 {
+			released = workflow.ClusterSubstrateMachineNames(state, record.Cluster)
+		}
+		var bareMetal []string
+		for _, name := range released {
+			machine, ok := machines[name]
+			if !ok || !v1alpha1.MachineInstallsOS(machine) {
+				continue
+			}
+			if providers[machine.Spec.Substrate.ProviderRef.Name] == v1alpha1.ProvisionerBareMetal {
+				bareMetal = append(bareMetal, name)
+			}
+		}
+		if len(bareMetal) > 0 {
+			out = append(out, "reinstall destroy-released bare-metal machine(s) "+strings.Join(bareMetal, ", ")+" of cluster "+record.Cluster+" (still-running OS wiped)")
+		}
+	}
+	return out
 }
 
 func releasedContainerClusters(state v1alpha1.State, released []string) []string {

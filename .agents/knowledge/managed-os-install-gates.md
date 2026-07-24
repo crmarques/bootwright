@@ -11,11 +11,49 @@ module sets `msg` only on a failure path (e.g. `Timeout when waiting...`), so
 absence of `msg` is the reliable "port is open" predicate. Everything
 downstream keys reachability off that fact.
 
-**Reachable but unverifiable fails closed:** when the SSH port is REACHABLE but
-no `knownHostsPath` is configured, the ownership probe is skipped, readiness
-defaults to false, and the install would wipe an occupied host blind — foreign,
-or lost-record Bootwright production. That combination is refused. A truly
-greenfield host has the port closed and never trips this.
+**Probe order (2026-07-23):** reachability (port probe) → substrate-release
+membership resolution (`bootwright_substrate_reset_clusters` plus the
+`<cluster>/<machine>` pairs in `bootwright_substrate_reset_machines`) → trust
+gate (reachable with no `knownHostsPath` refuses) → primary auth as
+`osInstall.ssh.user` against the PINNED host key
+(`StrictHostKeyChecking=yes`) → fallback auth as
+`osInstall.ssh.fallbackUser` (only when the primary was rejected and the
+render emitted one) → fail-closed unverifiable refusal (reachable, neither
+identity authenticated, machine not released) → marker read as whichever
+identity authenticated (`bootwright_os_probe_user`) → `--expect-new` live gate
+(apply mode `create` refuses a host that already runs an OS, owned or not,
+unless released) → foreign/drifted mode gates (all suppressed for a released
+machine) → release force-rebuild.
+
+**Reachable but unverifiable fails closed — two shapes:** (1) the SSH port is
+REACHABLE but no `knownHostsPath` is configured, so the ownership probe cannot
+run at all. (2) Since 2026-07-23: reachable WITH trust configured but every
+auth probe rejected — wrong/rotated authorized key, or a changed host key (the
+probe pins the recorded key and never re-accepts a different one). Shape (2)
+previously fell through as `already_ready=false` → "no OS present" →
+unconditional reinstall (disk wipe) in ANY apply mode with no ownership check.
+Both shapes now hard-refuse unless the machine's substrate release covers it,
+naming the remedies: restore key access for the machine's `access.ssh`
+identity; `bootwright machine trust --replace <machine>` after an authorized
+out-of-band rebuild changed the host key; `bootwright destroy --stage infra
+--machines <m> --force` (or `--clusters <c>`) then re-apply; power off a truly
+unused host. A greenfield host has the port closed and never trips this.
+
+**Fallback probe identity for root-revoked nodes:** when the Machine sets
+`access.rootLogin: revoke` and its managed StorageCluster's
+`cephadm.clusterSSH.user` is non-root, the render emits that account as
+`osInstall.ssh.fallbackUser` (`vars_machine_os_install.go`
+`managedOSFallbackSSHUser`), EXCLUDED from the install-marker hash
+(`vars_machine_os_marker.go` deletes it from the stable input) so adding it
+never reclassifies an existing install. The probe retries auth as that account
+and reads the marker as it, so a post-revoke rerun classifies a healthy owned
+node as present instead of tripping the unverifiable refusal — the 2026-07-23
+ceph-prd-01 incident shape, where the cluster's own root revocation would have
+sent the next apply down the wipe path. Downstream tasks (the wait-phase auth
+verify, nmstate configure, the controller-side marker rewrite) reuse the
+identity that authenticated as `bootwright_os_effective_user` (fresh install →
+the primary install user) and elevate with `sudo -n` instead of assuming
+root.
 
 **Ownership and match are separate predicates:** a Bootwright-owned marker is
 one whose owner == bootwright, regardless of whether its hash still matches
@@ -41,13 +79,20 @@ that "the OS disk is reclaimed by the next apply reinstall." Until 2026-07-23,
 `not bootwright_os_pre_marker_matches`, so a bare-metal host destroyed and
 re-applied with an UNCHANGED desired spec kept answering SSH with its old,
 still-matching marker and the reinstall was silently skipped — `destroy` then
-`apply` was not equivalent to a from-scratch apply. Membership in
-`bootwright_substrate_reset_clusters` (a prior destroy's release record, see
+`apply` was not equivalent to a from-scratch apply. Membership in the
+substrate release (a prior destroy's release record, see
 [substrate-ownership-markers.md](substrate-ownership-markers.md)) is now
 sufficient on its own to force the rebuild, independent of whether the on-host
 marker happens to match; a destroy's own record of "this substrate was torn
-down" outranks the still-live host's self-reported hash. No change was needed
-in `marker.yml` or
+down" outranks the still-live host's self-reported hash. Membership is
+machine-granular: the cluster must appear in
+`bootwright_substrate_reset_clusters` AND the machine must be covered — either
+the release record carries no machine list for that cluster (a cluster-scoped
+destroy released everything) or the `<cluster>/<machine>` pair appears in
+`bootwright_substrate_reset_machines` (written by `destroy --machines`); an
+uncovered sibling machine keeps its normal gates. `--skip-unreachable`
+withholds the release record entirely, so skipped nodes keep failing closed.
+No change was needed in `marker.yml` or
 `wait.yml` — both already key off `install_required`, and kickstart's `%post`
 (not the ansible task) is what stamps a freshly reinstalled host's marker, so
 the rebuilt host is stamped correctly either way.
@@ -98,9 +143,12 @@ remedy can scope the command. Pinned by
 TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy (which also locks
 out the old dead-end "for that scope" guidance).
 
-**`customizations.storage.wipe` is a latent dead field:** the renderer projects
-a var for it, but `ks.cfg.j2` never reads that var — the kickstart's `clearpart`
-is unconditional, so authoring `storage.wipe: false` does NOT preserve existing
-partitions. Do not treat the field as a working guard; wiring it up (or removing
-it) is unfinished work, and any managed-OS install currently wipes the disk
-regardless of its value.
+**`customizations.storage.wipe` was REMOVED (2026-07-23):** the field was
+decorative — no validator, renderer var consumer, or playbook ever read it,
+and `ks.cfg.j2`'s `clearpart`/`zerombr` are unconditional for a machine whose
+install is authorized — so it was deleted from `MachineInstallStorage`
+(`api/v1alpha1/machine.go`); strict decode now rejects it (closes backlog
+B-001). Do not re-add a wipe toggle without actually wiring it into the
+kickstart render; `internal/render/inventory/managed_os_test.go` pins that the
+render emits no `wipe` var. Disk-wipe consent lives in the install
+authorization gates above, not in a per-profile field.

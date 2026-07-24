@@ -612,3 +612,35 @@ func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
 		t.Fatalf("split localization localePackages = %v, want [glibc-langpack-pt glibc-langpack-es] (regional only, system language excluded)", got)
 	}
 }
+
+func TestManagedOSInstallFallbackUserForRevokedRootKeepsMarkerHash(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	baselineVars := VarsWithSecretsDir(state, "/context/secrets")
+	baselineGroups := baselineVars["bootwright_managed_os_install_groups"].([]any)
+	baselineFirst := baselineGroups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	baselineInstall := baselineFirst["osInstall"].(map[string]any)
+	if _, hasFallback := baselineInstall["ssh"].(map[string]any)["fallbackUser"]; hasFallback {
+		t.Fatalf("fallbackUser must not render without rootLogin revoke")
+	}
+	baselineHash := baselineInstall["marker"].(map[string]any)["desiredHash"].(string)
+
+	for i := range state.StorageClusters {
+		state.StorageClusters[i].Spec.Ceph.Cephadm.ClusterSSH.User = "cephadm"
+	}
+	for i := range state.Machines {
+		state.Machines[i].Spec.Access.RootLogin = v1alpha1.MachineRootLoginRevoke
+	}
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	osInstall := first["osInstall"].(map[string]any)
+	if got := osInstall["ssh"].(map[string]any)["fallbackUser"]; got != "cephadm" {
+		t.Fatalf("managed OS ssh.fallbackUser = %v, want cephadm for revoked root", got)
+	}
+	if got := osInstall["marker"].(map[string]any)["desiredHash"].(string); got != baselineHash {
+		t.Fatalf("marker desiredHash changed with fallbackUser: %q vs %q; the probe fallback identity must not perturb recorded install identity", got, baselineHash)
+	}
+}

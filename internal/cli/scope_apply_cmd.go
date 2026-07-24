@@ -249,10 +249,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir); err != nil {
 				return failErr(1, err)
 			}
-			releasedClusters, releaseErr := workflow.ConsumableSubstrateReleases(ctx.RunsDir, tasks)
+			releasedRecords, releaseErr := workflow.ConsumableSubstrateReleases(ctx.RunsDir, tasks)
 			if releaseErr != nil {
 				cliout.NewContinuation(stdout).Warning("substrate release", releaseErr.Error()+"; a destroyed cluster's rebuild authorization could not be read, so its reinstall may be refused — fix or remove the reported record and re-apply")
 			}
+			releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
 			if override {
 				reinstalls := workflow.OverrideRebuildInstalledClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)
 				ocpReinstallDescriptors = workflow.ClusterReinstallDescriptors(reinstalls)
@@ -265,6 +266,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
+			destructiveOverride = append(destructiveOverride, releasedBareMetalReinstallDescriptors(plan.State, releasedRecords)...)
 			rebuiltHosts := workflow.UnionClusterNames(ocpReinstallAcked, substrateResetClusters)
 			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, flags.clusterScope, rebuiltHosts); err != nil {
 				return failErr(1, err)
@@ -288,7 +290,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
-			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedClusters, clustersDir, ocpReinstallDescriptors, allowDestroy)
+			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedRecords, clustersDir, ocpReinstallDescriptors, allowDestroy)
 			noteIneffectiveAllowDestroy(stdout, allowDestroy, false, destructiveOverride)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
@@ -339,6 +341,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
 		runOpts.OverrideAckedReinstalls = ocpReinstallAcked
+		runOpts.SelectedMachines = sel.MachineScopeNames()
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {

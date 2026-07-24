@@ -56,7 +56,7 @@ func TestConsumableSubstrateReleasesIntersectPlannedMachineWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("consumable: %v", err)
 	}
-	if strings.Join(got, ",") != "ceph-prd,ocp-prd-01" {
+	if strings.Join(SubstrateReleaseClusterNames(got), ",") != "ceph-prd,ocp-prd-01" {
 		t.Fatalf("consumable = %v, want only released clusters with planned machine-substrate work", got)
 	}
 }
@@ -82,5 +82,70 @@ func TestUnionClusterNamesDeduplicatesAndSorts(t *testing.T) {
 	}
 	if UnionClusterNames(nil, nil) != nil {
 		t.Fatalf("union of empty lists must be nil")
+	}
+}
+
+func TestMarkSubstrateMachinesReleasedMergesAndYieldsToWholeCluster(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Unix(1700000000, 0)
+	if err := MarkSubstrateMachinesReleased(runsDir, "ceph-prd", []string{"m02"}, now); err != nil {
+		t.Fatalf("mark m02: %v", err)
+	}
+	if err := MarkSubstrateMachinesReleased(runsDir, "ceph-prd", []string{"m01"}, now); err != nil {
+		t.Fatalf("mark m01: %v", err)
+	}
+	record, found, err := loadSubstrateRelease(runsDir, "ceph-prd")
+	if err != nil || !found {
+		t.Fatalf("load: found=%v err=%v", found, err)
+	}
+	if got := strings.Join(record.Machines, ","); got != "m01,m02" {
+		t.Fatalf("machines = %q, want merged sorted list", got)
+	}
+	if err := MarkSubstrateReleased(runsDir, "ceph-prd", now); err != nil {
+		t.Fatalf("mark whole cluster: %v", err)
+	}
+	if err := MarkSubstrateMachinesReleased(runsDir, "ceph-prd", []string{"m03"}, now); err != nil {
+		t.Fatalf("mark after whole-cluster: %v", err)
+	}
+	record, _, err = loadSubstrateRelease(runsDir, "ceph-prd")
+	if err != nil || len(record.Machines) != 0 {
+		t.Fatalf("whole-cluster release must stay whole-cluster, got machines=%v err=%v", record.Machines, err)
+	}
+}
+
+func TestConsumeSubstrateReleaseCoverageSemantics(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Unix(1700000000, 0)
+	clusterMachines := []string{"m01", "m02", "m03"}
+	if err := MarkSubstrateReleased(runsDir, "ceph-prd", now); err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+	if err := ConsumeSubstrateRelease(runsDir, "ceph-prd", []string{"m01"}, clusterMachines); err != nil {
+		t.Fatalf("consume m01: %v", err)
+	}
+	record, found, err := loadSubstrateRelease(runsDir, "ceph-prd")
+	if err != nil || !found {
+		t.Fatalf("partial consume must keep the record, found=%v err=%v", found, err)
+	}
+	if got := strings.Join(record.Machines, ","); got != "m02,m03" {
+		t.Fatalf("remaining machines = %q, want uncovered machines", got)
+	}
+	if err := ConsumeSubstrateRelease(runsDir, "ceph-prd", []string{"m02", "m03"}, clusterMachines); err != nil {
+		t.Fatalf("consume rest: %v", err)
+	}
+	if _, found, _ := loadSubstrateRelease(runsDir, "ceph-prd"); found {
+		t.Fatalf("full coverage must remove the record")
+	}
+	if err := MarkSubstrateMachinesReleased(runsDir, "ceph-prd", []string{"m02"}, now); err != nil {
+		t.Fatalf("re-mark m02: %v", err)
+	}
+	if err := ConsumeSubstrateRelease(runsDir, "ceph-prd", nil, clusterMachines); err != nil {
+		t.Fatalf("unscoped consume: %v", err)
+	}
+	if _, found, _ := loadSubstrateRelease(runsDir, "ceph-prd"); found {
+		t.Fatalf("unscoped run must clear the record entirely")
+	}
+	if err := ConsumeSubstrateRelease(runsDir, "never-released", []string{"m01"}, clusterMachines); err != nil {
+		t.Fatalf("consuming an absent release must be a no-op, got %v", err)
 	}
 }

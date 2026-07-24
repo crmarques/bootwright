@@ -511,7 +511,6 @@ through Anaconda.
 | `spec.customizations.ssh.authorizeMachineSSHKey` | No | `false` | Authorize the machine SSH key during install. |
 | `spec.customizations.ssh.passwordAuthentication` | No | `false` | Enable or disable password SSH auth. |
 | `spec.customizations.storage.rootDevice.source` | No | None | Currently `machineRootDeviceHints`. |
-| `spec.customizations.storage.wipe` | No | `false` | Wipe the selected root device before install. |
 | `spec.customizations.packages.environment` | No | None | Currently `minimal`. |
 | `spec.customizations.packages.install[]` | No | None | Packages to install. |
 | `spec.customizations.packages.excludeDocs` | No | `false` | Render Kickstart `--excludedocs`. |

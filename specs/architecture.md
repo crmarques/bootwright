@@ -133,10 +133,12 @@ identity, and writes a durable convergence-safety record. The records classifier
 compares that recorded evidence against current desired state into the four
 outcomes `diff --recorded` reports (`missing`/`foreign`/`match`/`drift`; defined in
 the `state-model.md` CLI Contract). A records-based apply-mode preflight uses that
-classification to fail closed on `drift` or `foreign` before any mutation, for
-every kind, so plain `apply` never silently reconciles drift; but the
+classification to fail closed on structural (destructive-identity) drift or
+`foreign` before any mutation, for every kind; drift that is reconcilable in
+place converges on a bare `apply`, so plain `apply` never destructively
+rebuilds and never touches foreign state, but the
 classification is not itself a per-task execution-time skip gate. Once a run
-proceeds (a clean run, or `--converge-drifted`), most provider-service and infra-component
+proceeds (a clean run, reconcilable drift, or `--converge-drifted`), most provider-service and infra-component
 config tasks have no reliable external probe: they re-run and rely on idempotent
 execution, and their record is marked `unknown` (recorded but not classified) as
 durable evidence rather than an apply-time skip. Execution-time skip-vs-fail

@@ -17,18 +17,21 @@
       kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
       addr={{ bootwright_component.osInstall.ssh.address | quote }}
       conn={{ bootwright_component.osInstall.ssh.connectionAddress | default(bootwright_component.osInstall.ssh.address) | quote }}
-      ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
-      rm -f "$kh.old"
-      ssh \
-        -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
-        -o StrictHostKeyChecking=accept-new \
-        -o UserKnownHostsFile="$kh" \
-        -o BatchMode=yes \
-        -o ConnectTimeout=15 \
-        -o GSSAPIAuthentication=no \
-        {{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
-        true >/dev/null 2>&1 || true
-      ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1 || exit 1
+      replace={{ (bootwright_os_ssh_keyscan_replace | default(false) | bool) | ternary('true', 'false') }}
+      if [ "$replace" = "true" ] || ! ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1; then
+        ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
+        rm -f "$kh.old"
+        ssh \
+          -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
+          -o StrictHostKeyChecking=accept-new \
+          -o UserKnownHostsFile="$kh" \
+          -o BatchMode=yes \
+          -o ConnectTimeout=15 \
+          -o GSSAPIAuthentication=no \
+          {{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
+          true >/dev/null 2>&1 || true
+        ssh-keygen -F "$addr" -f "$kh" >/dev/null 2>&1 || exit 1
+      fi
       if [ "$conn" != "$addr" ]; then
         ssh-keygen -R "$conn" -f "$kh" >/dev/null 2>&1 || true
         rm -f "$kh.old"

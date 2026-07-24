@@ -26,7 +26,7 @@
     cmd: |
       set -uo pipefail
       kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
-      dest={{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }}
+      dest={{ ((bootwright_os_effective_user | default(bootwright_component.osInstall.ssh.user)) ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }}
       src={{ (bootwright_os_install_root ~ '/nmstate.yml') | quote }}
       ssh_common=(
         -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }}
@@ -35,9 +35,10 @@
         -o StrictHostKeyChecking=yes
         -o UserKnownHostsFile="$kh"
       )
-      scp "${ssh_common[@]}" "$src" "$dest":/root/bootwright-nmstate.yml || exit 1
+      ssh "${ssh_common[@]}" "$dest" \
+        'sudo -n install -d -m 0700 /root >/dev/null 2>&1 && sudo -n tee /root/bootwright-nmstate.yml >/dev/null && sudo -n chmod 0600 /root/bootwright-nmstate.yml' <"$src" || exit 1
       exec ssh "${ssh_common[@]}" "$dest" \
-        'command -v nmstatectl >/dev/null 2>&1 || { echo "nmstatectl (nmstate package) is required on the managed OS" >&2; exit 2; }; nmstatectl rollback >/dev/null 2>&1 || true; nmstatectl apply --no-commit --timeout {{ bootwright_managed_os_nmstate_timeout | default(120) | int }} /root/bootwright-nmstate.yml'
+        'command -v nmstatectl >/dev/null 2>&1 || { echo "nmstatectl (nmstate package) is required on the managed OS" >&2; exit 2; }; sudo -n nmstatectl rollback >/dev/null 2>&1 || true; sudo -n nmstatectl apply --no-commit --timeout {{ bootwright_managed_os_nmstate_timeout | default(120) | int }} /root/bootwright-nmstate.yml'
   delegate_to: localhost
   register: bootwright_os_nmstate_apply
   changed_when: false
@@ -57,7 +58,9 @@
       - StrictHostKeyChecking=yes
       - -o
       - "UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}"
-      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "{{ (bootwright_os_effective_user | default(bootwright_component.osInstall.ssh.user)) }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - sudo
+      - -n
       - nmstatectl
       - commit
   delegate_to: localhost

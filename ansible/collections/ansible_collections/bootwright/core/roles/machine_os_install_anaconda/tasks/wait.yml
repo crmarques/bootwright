@@ -60,7 +60,21 @@
     bootwright_os_ssh_keyscan_required: true
     bootwright_os_ssh_keyscan_retries: 60
     bootwright_os_ssh_keyscan_delay: 10
+    bootwright_os_ssh_keyscan_replace: >-
+      {{ bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool }}
   when: (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
+
+- name: Resolve managed OS post-install SSH identity
+  ansible.builtin.set_fact:
+    bootwright_os_effective_user: >-
+      {{
+        (bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool)
+        | ternary(
+          bootwright_component.osInstall.ssh.user,
+          bootwright_os_probe_user | default(bootwright_component.osInstall.ssh.user)
+        )
+      }}
+  changed_when: false
 
 - name: Verify managed OS SSH authentication
   ansible.builtin.shell:
@@ -87,7 +101,7 @@
         -o BatchMode=yes \
         -o StrictHostKeyChecking=yes \
         -o UserKnownHostsFile="$kh" \
-        {{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
+        {{ ((bootwright_os_effective_user | default(bootwright_component.osInstall.ssh.user)) ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
         true
   delegate_to: localhost
   register: bootwright_os_ssh_auth

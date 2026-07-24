@@ -11,7 +11,7 @@
       - StrictHostKeyChecking=yes
       - -o
       - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
-      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "{{ (bootwright_os_effective_user | default(bootwright_component.osInstall.ssh.user)) }}@{{ bootwright_component.osInstall.ssh.address }}"
       - >-
         sudo install -d -m 0755 {{ bootwright_os_marker_path | dirname | quote }}
         && printf '%s\n' {{ bootwright_os_marker_payload | quote }}

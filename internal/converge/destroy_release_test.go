@@ -63,7 +63,7 @@ func TestInfraDestroyRecordsSubstrateRelease(t *testing.T) {
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, false)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, false, false)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}
@@ -81,7 +81,7 @@ func TestClustersDestroyRecordsNoSubstrateRelease(t *testing.T) {
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, false, false)
 
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
@@ -95,10 +95,63 @@ func TestFailedMachineTeardownRecordsNoSubstrateRelease(t *testing.T) {
 	st := bareMetalCephDestroyState()
 	succeeded := map[string]bool{workflow.DestroyTaskKindInfraComponents: true}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, succeeded, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, succeeded, false, false)
 
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
 		t.Fatalf("a destroy whose machine teardown did not succeed must not authorize a reinstall, got %v err=%v", released, err)
 	}
+}
+
+func TestSkipUnreachableDestroyWithholdsSubstrateRelease(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, false, true)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	released, err := workflow.ReleasedSubstrateClusters(runsDir)
+	if err != nil || len(released) != 0 {
+		t.Fatalf("a --skip-unreachable destroy leaves nodes with data standing and must not authorize their reinstall; re-running destroy is the completion path, got %v err=%v", released, err)
+	}
+}
+
+func TestMachineScopedDestroyRecordsMachineRelease(t *testing.T) {
+	runsDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, st, map[string]bool{"ceph-1": true}, nil, false, false)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	records, err := workflow.ConsumableSubstrateReleases(runsDir, mustPlanMachineTasks(t, st))
+	if err != nil {
+		t.Fatalf("consumable: %v", err)
+	}
+	if len(records) != 1 || records[0].Cluster != "ceph-bm" {
+		t.Fatalf("machine-scoped destroy must release its cluster substrate, got %v", records)
+	}
+	if strings.Join(records[0].Machines, ",") != "ceph-1" {
+		t.Fatalf("release must cover only the destroyed machine, got %v", records[0].Machines)
+	}
+
+	problems = ResetMachineConvergeRecordsAfterDestroy(runsDir, st, map[string]bool{"ceph-1": true}, nil, false, true)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	records, err = workflow.ConsumableSubstrateReleases(runsDir, mustPlanMachineTasks(t, st))
+	if err != nil || len(records) != 1 || strings.Join(records[0].Machines, ",") != "ceph-1" {
+		t.Fatalf("a --skip-unreachable machine destroy must not widen the release, got %v err=%v", records, err)
+	}
+}
+
+func mustPlanMachineTasks(t *testing.T, st v1alpha1.State) []workflow.ApplyTask {
+	t.Helper()
+	tasks, err := workflow.PlanApplyTasksChecked(InfraScope.ApplyTarget(), st)
+	if err != nil {
+		t.Fatalf("plan tasks: %v", err)
+	}
+	return tasks
 }

@@ -117,7 +117,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 	}
 	if SubstrateReleaseClearKind(task.Entry.Kind) {
-		if recordErr := ClearSubstrateRelease(runsDir, task.Entry.Cluster); recordErr != nil {
+		if recordErr := ConsumeSubstrateRelease(runsDir, task.Entry.Cluster, opts.SelectedMachines, ClusterSubstrateMachineNames(task.State, task.Entry.Cluster)); recordErr != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}
