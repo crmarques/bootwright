@@ -10,8 +10,10 @@ import (
 )
 
 type hookTargetMachine struct {
-	label   string
-	machine v1alpha1.Machine
+	label     string
+	machine   v1alpha1.Machine
+	sshUser   string
+	sshKeyRef v1alpha1.SecretRef
 }
 
 func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddonHook) ([]hookTargetMachine, error) {
@@ -39,7 +41,7 @@ func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddon
 			if !ok {
 				return nil, fmt.Errorf("hook %s target machine %q not found", hook.Name, name)
 			}
-			add([]hookTargetMachine{{label: "Machine/" + name, machine: machine}})
+			add([]hookTargetMachine{machineHookTarget("Machine/"+name, machine)})
 		}
 	}
 	if target.FromInput != nil {
@@ -77,7 +79,7 @@ func (e *addonHookExecutor) fromInputMachines(hook v1alpha1.ClusterAddonHook, fr
 		if !ok {
 			return nil, fmt.Errorf("hook %s fromInput references unknown Machine %q", hook.Name, name)
 		}
-		return []hookTargetMachine{{label: "Machine/" + name, machine: machine}}, nil
+		return []hookTargetMachine{machineHookTarget("Machine/"+name, machine)}, nil
 	}
 	return nil, fmt.Errorf("hook %s fromInput refKind %q is not supported", hook.Name, refKind)
 }
@@ -112,7 +114,7 @@ func (e *addonHookExecutor) containerClusterMachines(name string) ([]hookTargetM
 		if !ok {
 			continue
 		}
-		out = append(out, hookTargetMachine{label: "ContainerCluster/" + name + " node/" + node.MachineRef.Name, machine: machine})
+		out = append(out, machineHookTarget("ContainerCluster/"+name+" node/"+node.MachineRef.Name, machine))
 	}
 	return out, nil
 }
@@ -136,9 +138,23 @@ func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMac
 		if !ok {
 			continue
 		}
-		out = append(out, hookTargetMachine{label: "StorageCluster/" + name + " node/" + node.Name, machine: machine})
+		target := machineHookTarget("StorageCluster/"+name+" node/"+node.Name, machine)
+		target.sshUser = v1alpha1.StorageClusterCephadmSSHUser(cluster)
+		if ref := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name; ref != "" {
+			target.sshKeyRef = v1alpha1.SecretRef{Name: ref}
+		}
+		out = append(out, target)
 	}
 	return out, nil
+}
+
+func machineHookTarget(label string, machine v1alpha1.Machine) hookTargetMachine {
+	target := hookTargetMachine{label: label, machine: machine}
+	if machine.Spec.Access.SSH != nil {
+		target.sshUser = machine.Spec.Access.SSH.User
+		target.sshKeyRef = machine.Spec.Access.SSH.KeyRef
+	}
+	return target
 }
 
 func (e *addonHookExecutor) inputRefKind(input string) (string, bool) {
@@ -153,7 +169,7 @@ func (e *addonHookExecutor) inputRefKind(input string) (string, bool) {
 	return "", false
 }
 
-func machineSecretNames(machines []hookTargetMachine) []string {
+func hookConnectionSecretNames(machines []hookTargetMachine) []string {
 	seen := map[string]bool{}
 	var names []string
 	add := func(name string) {
@@ -166,7 +182,7 @@ func machineSecretNames(machines []hookTargetMachine) []string {
 		if m.machine.Spec.Access.SSH == nil {
 			continue
 		}
-		add(m.machine.Spec.Access.SSH.KeyRef.Name)
+		add(m.sshKeyRef.Name)
 		add(m.machine.Spec.Access.SSH.KnownHostsRef.Name)
 	}
 	return names

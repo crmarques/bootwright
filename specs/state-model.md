@@ -1350,7 +1350,10 @@ Rules:
     or static `clusters`/`machines` lists. A hook carries no `hostGroups` and can
     never resolve to the controller/localhost. `target.limit` is `firstReachable`
     (default: run against the first machine that answers) or `all` (run against
-    every resolved machine).
+    every resolved machine). Storage-cluster targets connect through the
+    cluster's post-install `cephadm.clusterSSH` user and key (falling back to
+    the Machine access key when `clusterSSH.keyRef` is omitted); container-cluster
+    and direct Machine targets use the Machine's `access.ssh` identity.
   - `hooks[].secretRefs[]` name `Secret`s materialized into the hook's scoped
     per-run secrets directory (`bootwright_hook_secrets_dir`) — only the declared
     secrets, never the whole store. `hooks[].extraVars` is a free-form map handed

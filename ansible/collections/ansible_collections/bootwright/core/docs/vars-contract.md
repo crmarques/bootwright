@@ -624,8 +624,8 @@ Each host carries just its SSH connection facts:
 | --- | --- |
 | `ansible_host` | The target machine's resolved SSH address. |
 | `bootwright_host_name` | The target `Machine` name (the hook's per-host label). |
-| `ansible_user` | The machine's `access.ssh.user`, when set. |
-| `ansible_ssh_private_key_file` | Path to the materialized SSH private key, when set. |
+| `ansible_user` | A storage target's post-install `cephadm.clusterSSH.user`; otherwise the machine's `access.ssh.user`, when set. |
+| `ansible_ssh_private_key_file` | Path to the storage target's materialized `cephadm.clusterSSH.keyRef` private key, falling back to the Machine access key when omitted; other targets use the Machine access key. |
 | `ansible_ssh_common_args` | `-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<trusted known_hosts>`. |
 
 The `vars.yaml` handed to the run is empty (`{}`); every hook fact arrives as an

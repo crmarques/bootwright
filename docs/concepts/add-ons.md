@@ -421,7 +421,9 @@ paths: read and write them from `delegate_to: localhost` tasks. That is also
 how a hook drives the bound cluster's API — the shipped Data Foundation
 add-ons, for example, run `oc --kubeconfig {{ bootwright_kubeconfig }}` on the
 controller to fetch the exporter script the operator publishes before staging
-and running it on a Ceph node.
+and running it on a Ceph node. A storage-cluster target uses that cluster's
+post-install `cephadm.clusterSSH` user and key; direct Machine and
+container-cluster targets use their Machine `access.ssh` identity.
 
 Manifest templates use whole-scalar tokens: `{{ cluster }}`,
 `{{ output <name> }}`, `{{ input <in> }}`, `{{ secret <name> }}`, and

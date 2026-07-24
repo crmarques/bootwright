@@ -39,7 +39,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 		}
 	}
 	store := secret.NewContextStore(effectiveContextName(e.opts.ContextName), e.opts.SecretsDir)
-	if err := store.MaterializeSelected(connectionDir, machineSecretNames(machines)); err != nil {
+	if err := store.MaterializeSelected(connectionDir, hookConnectionSecretNames(machines)); err != nil {
 		return nil, err
 	}
 	if err := store.MaterializeSelected(hookSecretsDir, hookSecretNames(hook)); err != nil {
@@ -57,8 +57,8 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 			label:          m.label,
 			inventoryName:  "hook_" + strconv.Itoa(i),
 			address:        address,
-			user:           m.machine.Spec.Access.SSH.User,
-			keyPath:        secret.ResolveSSHPrivateKeyPath(m.machine.Spec.Access.SSH.KeyRef.Name, idx, connectionDir),
+			user:           m.sshUser,
+			keyPath:        secret.ResolveSSHPrivateKeyPath(m.sshKeyRef.Name, idx, connectionDir),
 			knownHostsPath: workflowMachineKnownHostsPath(m.machine, idx, connectionDir, e.opts.SecretsDir),
 		})
 	}

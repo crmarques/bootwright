@@ -8,10 +8,16 @@ on every apply rather than being skipped by the content/input hash.
 
 **Inventory and secrets:** Hooks build an ad-hoc SSH inventory (never a
 rendered inventory group) and materialize only scoped secrets: the target
-machines' SSH material into a connection dir plus declared `secretRefs` into
-the playbook-visible dir. `target.limit: firstReachable` (the default) tries
-each resolved host in order until one RUN SUCCEEDS — the exporter admin-node
-pattern — while `all` runs once against every resolved host.
+machines' effective SSH material into a connection dir plus declared
+`secretRefs` into the playbook-visible dir. Storage-cluster targets are
+post-storage work and therefore use the owning cluster's
+`cephadm.clusterSSH.user` and `clusterSSH.keyRef`, with the Machine access key
+as the declared fallback when the cluster key is absent. Using the Machine
+install identity here breaks exporter hooks after root SSH is revoked. Direct
+Machine and ContainerCluster targets retain the Machine `access.ssh` identity.
+`target.limit: firstReachable` (the default) tries each resolved host in order
+until one RUN SUCCEEDS — the exporter admin-node pattern — while `all` runs
+once against every resolved host.
 
 **Output persistence paths:** Captured hook outputs persist at fixed paths:
 secret outputs under
