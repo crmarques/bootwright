@@ -54,11 +54,14 @@ Pinned by `TestApplyOLMGateTimeoutRecordsGateFailureNotApplyFailure` and
 `TestApplyOLMCatalogGateTimeoutRecordsGateFailureNotApplyFailure`.
 
 **Quiet poll output:** Readiness polls, the idempotency pre-check, and the OLM
-gates run through a quiet read runner that keeps the apply log (same
-`LogPath`) but writes nothing to the console, so expected `NotFound` /
-`no matches for kind` poll output does not surface as alarming error lines
-during a normal apply. The addon task reports "skipped" only when BOTH the
-install and the wait-ready phases were no-ops.
+gates run through a quiet read runner that writes neither raw `oc get` commands
+nor their JSON responses to the task log or console. Active waits append only
+compact `<resource>/<name> <state>` observations to the task and cluster logs,
+deduplicated until the state changes or the heartbeat elapses. For condition
+checks the resource is the CRD-style argument, such as
+`storagecluster.ocs.openshift.io/ocs-external-storagecluster`, and state prefers
+`status.phase`. Timeout diagnostics remain detailed. The addon task reports
+"skipped" only when BOTH the install and the wait-ready phases were no-ops.
 
 **Preflight gates:** A stage-scoped add-ons run (base phase out of scope)
 installs no cluster, so every binding target cluster's kubeconfig

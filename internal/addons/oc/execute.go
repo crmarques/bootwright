@@ -364,7 +364,7 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 	if pollInterval <= 0 {
 		pollInterval = WaitInterval(timeout)
 	}
-	tracker := startWaitProgress(progress, fmt.Sprintf("waiting for the operator CSV of Subscription/%s/%s to reach Succeeded", namespace, subscription), timeout)
+	tracker := startWaitProgress(progress)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	var last string
@@ -405,7 +405,7 @@ func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, na
 	if pollInterval <= 0 {
 		pollInterval = WaitInterval(timeout)
 	}
-	tracker := startWaitProgress(progress, fmt.Sprintf("waiting for CatalogSource/%s/%s to reach connectionState READY", namespace, name), timeout)
+	tracker := startWaitProgress(progress)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	var last string
@@ -434,15 +434,16 @@ func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, na
 }
 
 func catalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, namespace, name string) (bool, string) {
+	resource := "catalogsource.operators.coreos.com/" + name
 	obj, err := getNamedResource(ctx, runner, kubeconfig, "catalogsource.operators.coreos.com", namespace, name)
 	if err != nil {
-		return false, fmt.Sprintf("CatalogSource/%s/%s unavailable", namespace, name)
+		return false, resource + " Unavailable"
 	}
 	state := nestedString(obj, "status", "connectionState", "lastObservedState")
 	if state != "READY" {
-		return false, fmt.Sprintf("CatalogSource/%s/%s connectionState=%s", namespace, name, state)
+		return false, resource + " " + orUnknown(state)
 	}
-	return true, fmt.Sprintf("CatalogSource/%s/%s READY", namespace, name)
+	return true, resource + " READY"
 }
 
 type catalogGateError struct {
@@ -524,118 +525,6 @@ func requireKubeconfig(path string) error {
 	return nil
 }
 
-func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, pollInterval time.Duration, progress io.Writer) (string, error) {
-	timeout, err := parsePositiveDuration(extension.Spec.Readiness.Timeout)
-	if err != nil {
-		return "", err
-	}
-	if len(extension.Spec.Readiness.Checks) == 0 {
-		return "no readiness checks declared", nil
-	}
-	parent := ctx
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	if pollInterval <= 0 {
-		pollInterval = WaitInterval(timeout)
-	}
-	tracker := startWaitProgress(progress, fmt.Sprintf("waiting for ClusterAddon/%s readiness checks", extension.Metadata.Name), timeout)
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-	var last string
-	for {
-		ready, observed, err := Ready(ctx, runner, kubeconfig, extension)
-		if ready && err == nil {
-			tracker.done(observed)
-			return observed, nil
-		}
-		if observed != "" {
-			last = observed
-		} else if err != nil {
-			last = err.Error()
-		}
-		tracker.observe(last)
-		select {
-		case <-ctx.Done():
-			if parent.Err() != nil {
-				return last, parent.Err()
-			}
-			return last, fmt.Errorf("ClusterAddon/%s readiness timed out after %s; last observed: %s", extension.Metadata.Name, timeout, last)
-		case <-ticker.C:
-		}
-	}
-}
-
-func Ready(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon) (bool, string, error) {
-	var observed []string
-	for _, check := range extension.Spec.Readiness.Checks {
-		ready, detail, err := checkReady(ctx, runner, kubeconfig, check)
-		if err != nil {
-			return false, strings.Join(append(observed, detail), "; "), err
-		}
-		observed = append(observed, detail)
-		if !ready {
-			return false, strings.Join(observed, "; "), nil
-		}
-	}
-	return true, strings.Join(observed, "; "), nil
-}
-
-func checkReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonReadinessCheck) (bool, string, error) {
-	switch {
-	case check.CSVSucceeded != nil:
-		return csvSucceeded(ctx, runner, kubeconfig, check.CSVSucceeded.Namespace, check.CSVSucceeded.Subscription)
-	case check.Condition != nil:
-		return conditionReady(ctx, runner, kubeconfig, *check.Condition)
-	case check.ResourceExists != nil:
-		exists := check.ResourceExists
-		_, err := getResource(ctx, runner, kubeconfig, exists.APIVersion, exists.Kind, exists.Namespace, exists.Name)
-		if err != nil {
-			return false, fmt.Sprintf("%s/%s not found", exists.Kind, exists.Name), nil
-		}
-		return true, fmt.Sprintf("%s/%s exists", exists.Kind, exists.Name), nil
-	default:
-		return false, "", fmt.Errorf("readiness check must set exactly one arm")
-	}
-}
-
-func csvSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription string) (bool, string, error) {
-	sub, err := getNamedResource(ctx, runner, kubeconfig, "subscription.operators.coreos.com", namespace, subscription)
-	if err != nil {
-		return false, fmt.Sprintf("Subscription/%s/%s unavailable", namespace, subscription), nil
-	}
-	csv := nestedString(sub, "status", "installedCSV")
-	if csv == "" {
-		return false, fmt.Sprintf("Subscription/%s/%s installedCSV empty", namespace, subscription), nil
-	}
-	csvObj, err := getNamedResource(ctx, runner, kubeconfig, "clusterserviceversion.operators.coreos.com", namespace, csv)
-	if err != nil {
-		return false, fmt.Sprintf("CSV/%s/%s unavailable", namespace, csv), nil
-	}
-	phase := nestedString(csvObj, "status", "phase")
-	if phase != "Succeeded" {
-		return false, fmt.Sprintf("CSV/%s/%s phase=%s", namespace, csv, phase), nil
-	}
-	return true, fmt.Sprintf("CSV/%s/%s Succeeded", namespace, csv), nil
-}
-
-func conditionReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonConditionReadiness) (bool, string, error) {
-	obj, err := getResource(ctx, runner, kubeconfig, check.APIVersion, check.Kind, check.Namespace, check.Name)
-	if err != nil {
-		return false, fmt.Sprintf("%s/%s unavailable", check.Kind, check.Name), nil
-	}
-	conditions, _ := nestedValue(obj, "status", "conditions").([]any)
-	for _, item := range conditions {
-		condition, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if stringValue(condition["type"]) == check.Condition.Type && stringValue(condition["status"]) == check.Condition.Status {
-			return true, fmt.Sprintf("%s/%s condition %s=%s", check.Kind, check.Name, check.Condition.Type, check.Condition.Status), nil
-		}
-	}
-	return false, fmt.Sprintf("%s/%s condition %s not %s", check.Kind, check.Name, check.Condition.Type, check.Condition.Status), nil
-}
-
 func parsePositiveDuration(value string) (time.Duration, error) {
 	duration, err := time.ParseDuration(value)
 	if err != nil {
@@ -645,10 +534,6 @@ func parsePositiveDuration(value string) (time.Duration, error) {
 		return 0, fmt.Errorf("duration %s must be greater than 0", value)
 	}
 	return duration, nil
-}
-
-func getResource(ctx context.Context, runner OCRunner, kubeconfig, apiVersion, kind, namespace, name string) (map[string]any, error) {
-	return getNamedResource(ctx, runner, kubeconfig, resourceArg(apiVersion, kind), namespace, name)
 }
 
 func getNamedResource(ctx context.Context, runner OCRunner, kubeconfig, resource, namespace, name string) (map[string]any, error) {
@@ -665,17 +550,6 @@ func getNamedResource(ctx context.Context, runner OCRunner, kubeconfig, resource
 		return nil, fmt.Errorf("decode oc get %s/%s: %w", resource, name, err)
 	}
 	return decoded, nil
-}
-
-func resourceArg(apiVersion, kind string) string {
-	group := apiVersion
-	if slash := strings.Index(apiVersion, "/"); slash >= 0 {
-		group = apiVersion[:slash]
-	}
-	if group == "" || group == "v1" {
-		return kind
-	}
-	return strings.ToLower(kind) + "." + group
 }
 
 func nestedString(m map[string]any, path ...string) string {

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 type diagOCRunner struct {
@@ -42,8 +44,8 @@ func TestCSVGateTimeoutSurfacesImagePullFailure(t *testing.T) {
 		t.Fatalf("error did not surface the image pull failure: %v", err)
 	}
 	out := log.String()
-	if !strings.Contains(out, "waiting for the operator CSV") {
-		t.Fatalf("progress log missing wait header: %q", out)
+	if !strings.Contains(out, "subscription.operators.coreos.com/odf-operator Pending") {
+		t.Fatalf("progress log missing compact wait state: %q", out)
 	}
 	if !strings.Contains(out, "ImagePullBackOff pulling "+image) {
 		t.Fatalf("progress log missing pod pull failure: %q", out)
@@ -55,24 +57,52 @@ func TestCSVGateTimeoutSurfacesImagePullFailure(t *testing.T) {
 
 func TestWaitProgressEmitsOnChangeWithinHeartbeat(t *testing.T) {
 	var log strings.Builder
-	p := startWaitProgress(&log, "waiting for X", time.Minute)
-	p.observe("state A")
-	p.observe("state A")
-	p.observe("state B")
-	out := log.String()
-	if !strings.Contains(out, "waiting for X (timeout 1m0s)") {
-		t.Fatalf("missing header: %q", out)
-	}
-	if strings.Count(out, "state A") != 1 {
-		t.Fatalf("unchanged observation should emit once within the heartbeat window: %q", out)
-	}
-	if !strings.Contains(out, "state B") {
-		t.Fatalf("changed observation should emit: %q", out)
+	p := startWaitProgress(&log)
+	p.observe("resource.example.io/example Pending")
+	p.observe("resource.example.io/example Pending")
+	p.observe("resource.example.io/example Ready")
+	want := "resource.example.io/example Pending\nresource.example.io/example Ready\n"
+	if got := log.String(); got != want {
+		t.Fatalf("progress = %q, want %q", got, want)
 	}
 }
 
 func TestWaitProgressNilWriterIsInert(t *testing.T) {
-	p := startWaitProgress(nil, "waiting", time.Second)
+	p := startWaitProgress(nil)
 	p.observe("something")
 	p.done("done")
+}
+
+type objectRunner string
+
+func (r objectRunner) Run(context.Context, string, []string, []byte) ([]byte, error) {
+	return []byte(r), nil
+}
+
+func TestConditionReadyReportsCRDAndCurrentPhase(t *testing.T) {
+	check := v1alpha1.ClusterAddonConditionReadiness{
+		APIVersion: "ocs.openshift.io/v1",
+		Kind:       "StorageCluster",
+		Name:       "ocs-external-storagecluster",
+		Condition: v1alpha1.ClusterAddonConditionRequirement{
+			Type:   "Available",
+			Status: "True",
+		},
+	}
+	ready, detail, err := conditionReady(
+		context.Background(),
+		objectRunner(`{"status":{"phase":"Progressing","conditions":[{"type":"Available","status":"False","reason":"Reconciling"}]}}`),
+		"/tmp/kubeconfig",
+		check,
+	)
+	if err != nil {
+		t.Fatalf("conditionReady: %v", err)
+	}
+	if ready {
+		t.Fatal("conditionReady returned ready for a progressing resource")
+	}
+	want := "storagecluster.ocs.openshift.io/ocs-external-storagecluster Progressing"
+	if detail != want {
+		t.Fatalf("detail = %q, want %q", detail, want)
+	}
 }

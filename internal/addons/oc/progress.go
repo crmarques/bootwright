@@ -11,17 +11,14 @@ import (
 
 type waitProgress struct {
 	w         io.Writer
-	start     time.Time
 	heartbeat time.Duration
 	last      string
 	lastAt    time.Time
 	emitted   bool
 }
 
-func startWaitProgress(w io.Writer, header string, timeout time.Duration) *waitProgress {
-	p := &waitProgress{w: w, start: time.Now(), heartbeat: 30 * time.Second}
-	p.line(fmt.Sprintf("%s (timeout %s)", header, roundDuration(timeout)))
-	return p
+func startWaitProgress(w io.Writer) *waitProgress {
+	return &waitProgress{w: w, heartbeat: 30 * time.Second}
 }
 
 func (p *waitProgress) observe(detail string) {
@@ -35,32 +32,18 @@ func (p *waitProgress) observe(detail string) {
 	p.last = detail
 	p.lastAt = now
 	p.emitted = true
-	p.line(fmt.Sprintf("  [+%s] %s", roundDuration(now.Sub(p.start)), detail))
+	p.line(detail)
 }
 
 func (p *waitProgress) done(detail string) {
-	if p == nil || p.w == nil || strings.TrimSpace(detail) == "" {
-		return
-	}
-	p.line(fmt.Sprintf("  [+%s] %s", roundDuration(time.Since(p.start)), detail))
+	p.observe(detail)
 }
 
 func (p *waitProgress) line(msg string) {
 	if p == nil || p.w == nil {
 		return
 	}
-	fmt.Fprintf(p.w, "%s %s\n", waitTimestamp(time.Now()), msg)
-}
-
-func waitTimestamp(now time.Time) string {
-	return now.UTC().Format(time.RFC3339)
-}
-
-func roundDuration(d time.Duration) time.Duration {
-	if d < time.Second {
-		return d.Round(time.Millisecond)
-	}
-	return d.Round(time.Second)
+	fmt.Fprintln(p.w, msg)
 }
 
 func diagnoseCSVGate(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription string, p *waitProgress) string {

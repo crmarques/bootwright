@@ -49,8 +49,10 @@ separator and must never emit ANSI cursor control. Pinned by
 `RunConfig.ReadRunner` is a second, quiet OCRunner used for all
 read-only `oc` calls in the add-on engine — readiness polls, the
 idempotency pre-check, the CSV gate, and the CatalogSource READY gate —
-so their expected NotFound / `no matches for kind` / empty-installedCSV
-output stays off the console. The mutating `oc apply` always uses the
-runner passed to `Apply`, and a nil `ReadRunner` falls back to it.
+so their commands and full JSON output stay out of both the console and task
+log. Active waits emit only `<resource>/<name> <state>` observations to the
+task and cluster logs; timeout diagnostics may expand after the wait fails.
+The mutating `oc apply` always uses the runner passed to `Apply`, and a nil
+`ReadRunner` falls back to it.
 `waitCSVSucceeded` and `waitCatalogSourceReady` take the read runner for
 the same reason.

@@ -294,7 +294,7 @@ func TestReadinessChecks(t *testing.T) {
 					{out: `{"status":{"phase":"Succeeded"}}`},
 				},
 			},
-			want: "CSV/openshift-cnv/hco.v1 Succeeded",
+			want: "clusterserviceversion.operators.coreos.com/hco.v1 Succeeded",
 		},
 		{
 			name: "condition",
@@ -312,7 +312,7 @@ func TestReadinessChecks(t *testing.T) {
 					{out: `{"status":{"conditions":[{"type":"Available","status":"True"}]}}`},
 				},
 			},
-			want: "HyperConverged/kubevirt-hyperconverged condition Available=True",
+			want: "hyperconverged.hco.kubevirt.io/kubevirt-hyperconverged Available",
 		},
 		{
 			name: "resource-exists",
@@ -328,7 +328,7 @@ func TestReadinessChecks(t *testing.T) {
 					{out: `{"metadata":{"name":"cluster"}}`},
 				},
 			},
-			want: "Console/cluster exists",
+			want: "console.operator.openshift.io/cluster Exists",
 		},
 	}
 	for _, tc := range cases {
@@ -368,7 +368,7 @@ func TestReadinessTimeoutReportsLastObservedState(t *testing.T) {
 	if !strings.Contains(err.Error(), "readiness timed out after 3ms") {
 		t.Fatalf("timeout error = %v", err)
 	}
-	if !strings.Contains(last, "ConfigMap/missing not found") {
+	if !strings.Contains(last, "ConfigMap/missing NotFound") {
 		t.Fatalf("last observed = %q, want missing ConfigMap", last)
 	}
 }
