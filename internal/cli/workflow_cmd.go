@@ -70,7 +70,13 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
   bootwright apply --stage clusters --clusters dc1-ocp,ceph-storage --yes
 
   # Run everything from the beginning up to and including a stage
-  bootwright apply --through base --yes`,
+  bootwright apply --through base --yes
+
+  # Run a contiguous range of stages, inclusive on both ends
+  bootwright apply --stage deps --through add-ons --yes
+
+  # Start at a stage and run through to the end of the graph
+  bootwright apply --stage deps --through end --yes`,
 	})
 }
 
@@ -96,6 +102,9 @@ func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 
   # Preview everything from the beginning up to and including a stage
   bootwright plan --through base
+
+  # Preview a contiguous range of stages, inclusive on both ends
+  bootwright plan --stage deps --through end
 
   # Machine-readable output for automation
   bootwright plan --output json`,

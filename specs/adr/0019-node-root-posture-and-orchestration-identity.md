@@ -170,10 +170,10 @@ reconciliation idempotent.
 
 ### Alternatives rejected
 
-- **A new `harden` apply stage.** The stage model is a strict linear prefix
+- **A new `harden` apply stage.** The stage model is a strict linear ordering
   over `ProvisioningStages()` — `fabric`, `machines`, `deps`, `base`,
-  `add-ons` — where `--through <stage>` runs a cumulative prefix and the
-  sub-phase names are pinned to that list by
+  `add-ons` — where `--stage`/`--through` select an inclusive range over that
+  list and the sub-phase names are pinned to it by
   `internal/converge/provisioning_stage_pin_test.go`. It cannot host a stage
   that must run *inside* the storage work (after the account exists and
   before cephadm bootstraps), and adding one would also widen the authored

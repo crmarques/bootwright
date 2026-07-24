@@ -1722,9 +1722,16 @@ Rules:
   `apply`, `plan`, and `diff` accept sub-phase `--stage` values.
   `destroy --stage` accepts only the two families (`infra`, `clusters`);
   sub-phases are apply-only and rejected on `destroy`.
-- `--through <stage>`, on `apply`, `plan`, and `diff`, runs every stage
-  from the beginning up to and including `<stage>`, cumulatively; `--stage` and
-  `--through` are mutually exclusive.
+- `--stage` and `--through`, on `apply`, `plan`, and `diff`, together select an
+  inclusive range of ordered stages: `--stage <s>` is the first stage to run and
+  `--through <t>` is the last, so combined they run `<s>` through `<t>` inclusive.
+  `--stage <s>` alone runs exactly that stage (the range collapses to one);
+  `--through <t>` alone runs from the first stage up to and including `<t>` (a
+  cumulative prefix from the beginning); with neither, the full graph runs.
+  `--through end` runs through the final stage regardless of how the sub-phase
+  list grows. A `--stage` that orders after its `--through` is a usage error, and
+  a range whose first stage is not the graph's first assumes the omitted earlier
+  stages already applied and says so.
 - `destroy --stage infra` tears down infrastructure for the current context.
   It uses current desired state plus root-managed ownership records. Without
   `--clusters`, it must also remove all context-owned VMs that provider

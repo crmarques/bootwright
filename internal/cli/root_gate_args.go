@@ -121,21 +121,27 @@ func argsNeedLocalRoot(args []string) bool {
 }
 
 func applyArgsNeedLocalRoot(args []string) bool {
-	valid := converge.ApplyStageNames()
+	stageValid := converge.ApplyStageNames()
+	throughValid := converge.ApplyThroughNames()
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
-		case (arg == "--stage" || arg == "--through") && i+1 < len(args):
-			if !slices.Contains(valid, args[i+1]) {
+		case arg == "--stage" && i+1 < len(args):
+			if !slices.Contains(stageValid, args[i+1]) {
+				return false
+			}
+			i++
+		case arg == "--through" && i+1 < len(args):
+			if !slices.Contains(throughValid, args[i+1]) {
 				return false
 			}
 			i++
 		case strings.HasPrefix(arg, "--stage="):
-			if !slices.Contains(valid, strings.TrimPrefix(arg, "--stage=")) {
+			if !slices.Contains(stageValid, strings.TrimPrefix(arg, "--stage=")) {
 				return false
 			}
 		case strings.HasPrefix(arg, "--through="):
-			if !slices.Contains(valid, strings.TrimPrefix(arg, "--through=")) {
+			if !slices.Contains(throughValid, strings.TrimPrefix(arg, "--through=")) {
 				return false
 			}
 		}

@@ -18,6 +18,19 @@ func TestStageFlagCompletionOffersCanonicalValues(t *testing.T) {
 		}
 	}
 
+	throughOut, _, code := runCLI(t, "__complete", "apply", "--through", "")
+	if code != 0 {
+		t.Fatalf("apply --through __complete exit = %d, out=%q", code, throughOut)
+	}
+	for _, want := range converge.ApplyThroughNames() {
+		if !strings.Contains(throughOut, want) {
+			t.Fatalf("apply --through completion missing %q:\n%s", want, throughOut)
+		}
+	}
+	if !strings.Contains(throughOut, converge.ThroughEndSentinel) {
+		t.Fatalf("apply --through completion missing the %q sentinel:\n%s", converge.ThroughEndSentinel, throughOut)
+	}
+
 	destroyOut, _, code := runCLI(t, "__complete", "destroy", "--stage", "")
 	if code != 0 {
 		t.Fatalf("destroy __complete exit = %d, out=%q", code, destroyOut)

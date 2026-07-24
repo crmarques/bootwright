@@ -14,6 +14,10 @@ func SubPhaseStageNames() []string {
 func ApplyStageNames() []string   { return append(FamilyStageNames(), SubPhaseStageNames()...) }
 func DestroyStageNames() []string { return FamilyStageNames() }
 
+const ThroughEndSentinel = "end"
+
+func ApplyThroughNames() []string { return append(ApplyStageNames(), ThroughEndSentinel) }
+
 func ApplyStageScope(stage string) (Scope, error) {
 	switch s := strings.TrimSpace(stage); s {
 	case "":
@@ -37,7 +41,7 @@ func ApplyThroughScope(stage string) (Scope, error) {
 	}
 	end, ok := throughEndPhase(s)
 	if !ok {
-		return Scope{}, fmt.Errorf("--through must be one of %s", strings.Join(ApplyStageNames(), ", "))
+		return Scope{}, fmt.Errorf("--through must be one of %s", strings.Join(ApplyThroughNames(), ", "))
 	}
 	idx := slices.Index(AllScope.PhaseNames, end)
 	prefix := append([]string(nil), AllScope.PhaseNames[:idx+1]...)
@@ -53,6 +57,8 @@ func ApplyThroughScope(stage string) (Scope, error) {
 
 func throughEndPhase(stage string) (string, bool) {
 	switch stage {
+	case ThroughEndSentinel:
+		return AllScope.PhaseNames[len(AllScope.PhaseNames)-1], true
 	case "infra":
 		return PhaseMachines, true
 	case "clusters":
@@ -62,6 +68,106 @@ func throughEndPhase(stage string) (string, bool) {
 			return stage, true
 		}
 		return "", false
+	}
+}
+
+func stageStartPhase(stage string) (string, bool) {
+	switch stage {
+	case "infra":
+		return PhaseFabric, true
+	case "clusters":
+		return PhaseDeps, true
+	default:
+		if slices.Contains(SubPhaseStageNames(), stage) {
+			return stage, true
+		}
+		return "", false
+	}
+}
+
+func ApplyRangeScope(stage, through string) (Scope, error) {
+	s := strings.TrimSpace(stage)
+	t := strings.TrimSpace(through)
+
+	startIdx := 0
+	if s != "" {
+		start, ok := stageStartPhase(s)
+		if !ok {
+			return Scope{}, fmt.Errorf("--stage must be one of %s", strings.Join(ApplyStageNames(), ", "))
+		}
+		startIdx = slices.Index(AllScope.PhaseNames, start)
+	}
+
+	endIdx := len(AllScope.PhaseNames) - 1
+	switch {
+	case t != "":
+		end, ok := throughEndPhase(t)
+		if !ok {
+			return Scope{}, fmt.Errorf("--through must be one of %s", strings.Join(ApplyThroughNames(), ", "))
+		}
+		endIdx = slices.Index(AllScope.PhaseNames, end)
+	case s != "":
+		end, _ := throughEndPhase(s)
+		endIdx = slices.Index(AllScope.PhaseNames, end)
+	}
+
+	if startIdx > endIdx {
+		return Scope{}, fmt.Errorf("--stage %s starts after --through %s: the start stage must not come after the end stage", s, t)
+	}
+	return stageRangeScope(startIdx, endIdx), nil
+}
+
+func stageRangeScope(startIdx, endIdx int) Scope {
+	names := append([]string(nil), AllScope.PhaseNames[startIdx:endIdx+1]...)
+	switch {
+	case slices.Equal(names, AllScope.PhaseNames):
+		return AllScope
+	case slices.Equal(names, InfraScope.PhaseNames):
+		return InfraScope
+	case slices.Equal(names, ClustersScope.PhaseNames):
+		return ClustersScope
+	case len(names) == 1:
+		return subPhaseStageScope(names[0])
+	case names[0] == AllScope.PhaseNames[0]:
+		return prefixStageScope(names)
+	default:
+		return midRangeScope(names)
+	}
+}
+
+func midRangeScope(names []string) Scope {
+	reachesInfra := slices.Contains(names, PhaseFabric) || slices.Contains(names, PhaseMachines)
+	reachesClusters := slices.Contains(names, PhaseDeps) || slices.Contains(names, PhaseBase) || slices.Contains(names, PhaseAddons)
+	limit := ""
+	switch {
+	case !reachesClusters:
+		limit = infraAnsibleLimit
+	case !reachesInfra:
+		limit = clustersAnsibleLimit
+	}
+	name := "range-" + names[0] + "-" + names[len(names)-1]
+	return Scope{
+		Name:                    name,
+		PhaseNames:              names,
+		ArtifactsBaseName:       name,
+		NoAnsible:               false,
+		TargetsContainerInstall: reachesClusters,
+		AnsibleLimit:            limit,
+	}
+}
+
+func ApplyRangeCommandLabel(stage, through, action, defaultLabel string) string {
+	s := strings.TrimSpace(stage)
+	t := strings.TrimSpace(through)
+	switch {
+	case s != "" && t != "":
+		return s + " through " + t + " " + action
+	case t != "":
+		return "through " + t + " " + action
+	case s != "":
+		return s + " " + action
+	default:
+		return defaultLabel
 	}
 }
 

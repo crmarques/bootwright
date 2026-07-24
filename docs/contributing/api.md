@@ -172,7 +172,9 @@ Most read-only verbs must not contact hosts at all. Four deliberate carve-outs:
     `--stage` accepts the two families `infra` and `clusters` and, on `apply`,
     `plan`, and `diff`, their five ordered sub-phases (`fabric`,
     `machines`, `deps`, `base`, `add-ons`); `destroy --stage` takes only the two
-    families. `--clusters` takes a comma-separated list of `ContainerCluster`
+    families. On `apply`, `plan`, and `diff`, `--stage` and `--through` compose
+    into an inclusive stage range (`--through` also accepts `end` for the final
+    stage). `--clusters` takes a comma-separated list of `ContainerCluster`
     *and* `StorageCluster` names from one shared namespace, so each bare name must
     resolve to exactly one cluster root. A new verb that narrows scope should
     accept the same flags with the same meaning.

@@ -69,7 +69,7 @@ func isClusterRootScopeTarget(target string) bool {
 	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
 		return true
 	}
-	return strings.HasPrefix(target, "through-")
+	return strings.HasPrefix(target, "through-") || strings.HasPrefix(target, "range-")
 }
 
 func ClusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []string, error) {
@@ -279,7 +279,7 @@ func scopeProvisionsSharedMachineLayer(target string) bool {
 	case "infra", "all", "fabric", "machines":
 		return true
 	}
-	return strings.HasPrefix(target, "through-")
+	return strings.HasPrefix(target, "through-") || strings.HasPrefix(target, "range-machines-")
 }
 
 func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {

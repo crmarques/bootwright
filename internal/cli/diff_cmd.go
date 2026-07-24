@@ -56,10 +56,10 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
   bootwright diff --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("limit to a stage: %s (or sub-phase %s)", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+	cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("limit to a stage: %s (or sub-phase %s); with --through, the start of an inclusive range", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 	registerStageCompletion(cmd, converge.ApplyStageNames())
-	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
-	registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
+	cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit to all stages up to and including STAGE: %s (or sub-phase %s, or 'end'); with --stage, the end of an inclusive range [--stage..STAGE]", strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+	registerFlagCompletion(cmd, "through", converge.ApplyThroughNames())
 	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to check (default: all)")
 	registerClusterScopeCompletion(cmd, clusterKindAny)
 	cmd.Flags().BoolVar(&recorded, "recorded", false, "skip cluster contact; report drift against the last recorded apply instead of live state")
@@ -70,14 +70,14 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
 		}
-		if stage != "" && through != "" {
-			return failErr(2, errors.New("--stage and --through are mutually exclusive: --stage limits to exactly that phase, --through limits to every phase from the beginning up to and including it"))
-		}
 		if recorded && adopt {
 			return failErr(2, errors.New("--adopt requires live discovery and cannot be combined with --recorded"))
 		}
 		scope, err := converge.ApplyStageScope(stage)
-		if through != "" {
+		switch {
+		case stage != "" && through != "":
+			scope, err = converge.ApplyRangeScope(stage, through)
+		case through != "":
 			scope, err = converge.ApplyThroughScope(through)
 		}
 		if err != nil {

@@ -34,7 +34,8 @@ touch root-owned state:
   cobra's error (including its "Did you mean" suggestion) as themselves,
   never after a doomed sudo password prompt: unknown top-level commands
   and subcommands, a bogus `apply`/`destroy` `--stage`/`--through` value
-  (validated against `converge.ApplyStageNames`), a `validate`
+  (validated against `converge.ApplyStageNames`, plus the `end` sentinel
+  for `--through` via `converge.ApplyThroughNames`), a `validate`
   invocation with an unknown flag or stray positional, and any
   `--name`-targeted command missing a non-empty `--name` value
   (`argsHaveNameValue`).
@@ -72,7 +73,9 @@ touch root-owned state:
   `--stage`/`--through` values come from `internal/converge`
   (`FamilyStageNames()` = `infra`, `clusters`; `SubPhaseStageNames()` =
   `fabric`, `machines`, `deps`, `base`, `add-ons`) in all three surfaces
-  — validation/error text, help, and shell completion. `destroy`
+  — validation/error text, help, and shell completion. `--through` adds the
+  `end` sentinel (`ApplyThroughNames()`), which resolves to the final stage;
+  `--stage` and `--through` compose into an inclusive stage range. `destroy`
   accepts families only, because a sub-phase has no single destroy
   playbook.
 - Targeted resource commands take `--name` rather than positionals

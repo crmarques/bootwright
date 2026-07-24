@@ -35,6 +35,8 @@ func ledgerRetryCommand(ledger workflow.RunLedger) string {
 		}
 	} else if through, ok := strings.CutPrefix(ledger.Target, "through-"); ok {
 		command += " --through " + through
+	} else if stage, through, ok := ledgerApplyRange(ledger.Target); ok {
+		command += " --stage " + stage + " --through " + through
 	} else if ledgerTargetIsApplyStage(ledger.Target) {
 		command += " --stage " + ledger.Target
 	}
@@ -63,6 +65,18 @@ func ledgerDestroyStage(target string) (string, bool) {
 		}
 	}
 	return "", true
+}
+
+func ledgerApplyRange(target string) (stage, through string, ok bool) {
+	rem, found := strings.CutPrefix(target, "range-")
+	if !found {
+		return "", "", false
+	}
+	i := strings.Index(rem, "-")
+	if i <= 0 || i >= len(rem)-1 {
+		return "", "", false
+	}
+	return rem[:i], rem[i+1:], true
 }
 
 func ledgerTargetIsApplyStage(target string) bool {

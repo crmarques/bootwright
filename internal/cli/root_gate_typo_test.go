@@ -28,6 +28,8 @@ func TestGateStaysRootlessForTyposAndBogusStages(t *testing.T) {
 		{args: []string{"apply"}, want: true},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--through", "base"}, want: true},
+		{args: []string{"apply", "--through", "end"}, want: true},
+		{args: []string{"apply", "--stage", "deps", "--through", "base"}, want: true},
 		{args: []string{"apply", "--stage", "bogus"}, want: false},
 		{args: []string{"apply", "--stage=bogus"}, want: false},
 		{args: []string{"apply", "--through", "bogus"}, want: false},

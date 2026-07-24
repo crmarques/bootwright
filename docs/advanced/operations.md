@@ -266,14 +266,24 @@ maintenance.
   bootwright apply --stage infra --yes
   ```
 
-- **A cumulative build-out with `--through <stage>`.** Where `--stage` limits a
-  run to exactly one phase, `--through` runs every phase from the beginning up to
-  and including the named one. The two are mutually exclusive. It is accepted by
-  `apply`, `plan`, and `diff` (not `destroy`), and takes the same family and
-  sub-phase names as `--stage`:
+- **A range of stages with `--stage` and `--through`.** `--stage` names the
+  first stage of a run and `--through` names the last; together they run every
+  phase in that inclusive range. `--stage` alone runs exactly that one phase;
+  `--through` alone runs from the very beginning up to and including the named
+  phase (a cumulative build-out); `--through end` runs through to the last phase.
+  They are accepted by `apply`, `plan`, and `diff` (not `destroy`) and take the
+  same family and sub-phase names as `--stage`. A range that starts past the
+  first phase assumes the earlier phases already applied and reports which ones:
 
   ```text
+  # From the beginning up to and including machines
   bootwright apply --through machines --yes
+
+  # A contiguous mid-graph range: deps through base, inclusive
+  bootwright apply --stage deps --through base --yes
+
+  # From a phase through to the end of the graph
+  bootwright apply --stage deps --through end --yes
   ```
 
 - **A surgical sub-phase rerun.** `apply` and `plan` additionally accept the

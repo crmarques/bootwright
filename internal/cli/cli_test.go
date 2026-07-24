@@ -239,13 +239,38 @@ func TestStageRejectionMessagesListCanonicalVocabulary(t *testing.T) {
 	}
 }
 
-func TestApplyThroughAndStageMutuallyExclusive(t *testing.T) {
-	_, stderr, code := runCLI(t, "apply", "--stage", "infra", "--through", "base", "--dry-run")
-	if code != 2 {
-		t.Fatalf("apply --stage infra --through base exited %d, want 2; stderr=%q", code, stderr)
+func TestApplyStageThroughRunsMidGraphRange(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "deps", "--through", "base", "--dry-run", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("apply --stage deps --through base --dry-run exited %d, want 0; stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stderr, "--stage and --through are mutually exclusive") {
-		t.Fatalf("apply --stage+--through stderr = %q, want mutual-exclusion message", stderr)
+	if !strings.Contains(stdout, "phases not in this plan: fabric, machines, add-ons") {
+		t.Fatalf("mid-graph range deps..base should omit fabric, machines, add-ons:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "assumes a prior apply completed: fabric, machines") {
+		t.Fatalf("mid-graph range starting at deps should warn about assumed prior phases:\n%s", stdout)
+	}
+}
+
+func TestApplyThroughEndRunsFullGraph(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "apply", "--through", "end", "--dry-run", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("apply --through end --dry-run exited %d, want 0; stderr=%q", code, stderr)
+	}
+	if strings.Contains(stdout, "phases not in this plan") {
+		t.Fatalf("apply --through end runs the full graph and should omit no phases:\n%s", stdout)
+	}
+}
+
+func TestApplyStageAfterThroughRejected(t *testing.T) {
+	_, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--through", "infra", "--dry-run")
+	if code != 2 {
+		t.Fatalf("apply --stage clusters --through infra exited %d, want 2; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "starts after") {
+		t.Fatalf("apply --stage clusters --through infra stderr = %q, want start-after-end message", stderr)
 	}
 }
 

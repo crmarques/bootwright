@@ -182,13 +182,16 @@ bootwright apply --stage clusters --clusters dc1-ocp --yes
 `destroy` accepts only the two families. The full stage model — families versus
 sub-phases — is on [Concepts → Apply stages](../concepts/index.md).
 
-Where `--stage` limits a run to exactly one phase, `--through <stage>` limits it
-to every phase from the beginning **up to and including** that stage — a
-cumulative build-out rather than a single slice. The two are mutually exclusive.
-Use it to converge a fleet incrementally up to a checkpoint:
+`--stage` and `--through` together select an inclusive **range** of stages:
+`--stage` is the first phase to run, `--through` is the last. `--stage` alone
+runs exactly one phase; `--through` alone runs every phase **from the beginning
+up to and including** that stage (a cumulative build-out); `--through end` runs
+through to the final phase. Use them to converge a fleet incrementally up to a
+checkpoint, or to replay a contiguous mid-graph slice:
 
 ```text
 bootwright apply --through machines --clusters dc1-ocp --yes
+bootwright apply --stage deps --through base --clusters dc1-ocp --yes
 ```
 
 ### Whole-input validation

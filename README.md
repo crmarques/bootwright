@@ -51,11 +51,14 @@ bootwright cluster info
 `apply` is the normal convergence path. Use `--stage infra` to prepare
 providers, infra services, and selected machines, or `--stage clusters` to
 install selected container and storage clusters, add-ons, and integrations.
-Where `--stage X` runs only that stage, `--through X` runs every phase from the
-beginning up to and including `X` (a cumulative prefix), e.g. `apply --through
-base`; the two are mutually exclusive. A family endpoint means through its last
-phase, so `--through infra` equals `--through machines` and `--through clusters`
-is the full graph. `--through` is available on `apply`, `plan`, and `diff`.
+`--stage` and `--through` together select an inclusive range of stages: `--stage`
+is the first phase to run, `--through` the last. `--stage X` alone runs only that
+stage; `--through X` alone runs every phase from the beginning up to and including
+`X` (a cumulative prefix), e.g. `apply --through base`; combined,
+`apply --stage deps --through base` runs the deps..base range; `--through end`
+runs through the final phase. A family endpoint means through its last phase, so
+`--through infra` equals `--through machines` and `--through clusters` is the full
+graph. Both flags are available on `apply`, `plan`, and `diff`.
 (`machine trust` pre-records SSH host-key trust; scripted runs like `apply --yes`
 require it, while interactive `preflight`/`apply` runs can instead confirm
 each unknown host's fingerprint on first use.)

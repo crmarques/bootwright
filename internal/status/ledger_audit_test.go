@@ -48,3 +48,11 @@ func TestLedgerNextStepsFamilyApplyKeepsStageAndScope(t *testing.T) {
 		t.Fatalf("family apply must keep its --stage and scope, got %v", steps)
 	}
 }
+
+func TestLedgerNextStepsRangeApplyKeepsStageAndThrough(t *testing.T) {
+	ledger := workflow.RunLedger{Target: "range-base-add-ons", Status: workflow.RunStatusFailed}
+	steps := LedgerNextSteps(ledger, workflow.RunActivity{}, nil)
+	if len(steps) == 0 || steps[0] != "bootwright apply --stage base --through add-ons --yes" {
+		t.Fatalf("mid-graph range apply must retry with --stage and --through, got %v", steps)
+	}
+}

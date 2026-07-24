@@ -102,10 +102,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			flags.executable = workspace.ResolveAnsiblePlaybook()
 		}
 		addOutputFlagDryRun(cmd, &flags.output)
-		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to %s: %s (or sub-phase %s); default: full graph", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("first stage to %s: %s (or sub-phase %s); with --through it is the start of an inclusive range, otherwise the only stage; default: full graph", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerStageCompletion(cmd, converge.ApplyStageNames())
-		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("limit %s to all stages up to and including STAGE: %s (or sub-phase %s); cumulative, excludes --stage", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
-		registerFlagCompletion(cmd, "through", converge.ApplyStageNames())
+		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("last stage to %s (inclusive): %s (or sub-phase %s, or 'end' for the final stage); pairs with --stage as the range end, otherwise runs from the first stage", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		registerFlagCompletion(cmd, "through", converge.ApplyThroughNames())
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply (default: all)")
 		registerClusterScopeCompletion(cmd, clusterKindAny)
 		cmd.Flags().StringVar(&machinesScope, "machines", "", flagMachinesUsage)
@@ -143,14 +143,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		runScope := scope
 		runCommandLabel := commandLabel
 		if options.stageSelector {
-			if stage != "" && through != "" {
-				return failErr(2, errors.New("--stage and --through are mutually exclusive: --stage runs exactly that phase, --through runs every phase from the beginning up to and including it"))
-			}
 			var err error
-			if through != "" {
+			switch {
+			case stage != "" && through != "":
+				runScope, err = converge.ApplyRangeScope(stage, through)
+				runCommandLabel = converge.ApplyRangeCommandLabel(stage, through, action, commandLabel)
+			case through != "":
 				runScope, err = converge.ApplyThroughScope(through)
 				runCommandLabel = converge.ApplyThroughCommandLabel(through, action, commandLabel)
-			} else {
+			default:
 				runScope, err = converge.ApplyStageScope(stage)
 				runCommandLabel = converge.ApplyStageCommandLabel(stage, action, commandLabel)
 			}
