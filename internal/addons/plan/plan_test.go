@@ -361,7 +361,7 @@ func TestReadinessTimeoutReportsLastObservedState(t *testing.T) {
 		"get ConfigMap missing -o json": {{err: errors.New("not found")}},
 	}}
 
-	last, err := extensionoc.WaitReady(context.Background(), runner, "/tmp/kubeconfig", extension, time.Millisecond)
+	last, err := extensionoc.WaitReady(context.Background(), runner, "/tmp/kubeconfig", extension, time.Millisecond, nil)
 	if err == nil {
 		t.Fatal("expected readiness timeout")
 	}

@@ -29,6 +29,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 			StartedAt:    time.Now(),
 			PollInterval: 0,
 			ReadRunner:   readRunner,
+			Progress:     stdout,
 			Hooks:        newAddonHookExecutor(stdout, stderr, runsDir, runID, opts, task, runnerFactory),
 			Effects:      newAddonEffectExecutor(stdout, stderr, runsDir, runID, opts, task),
 		}

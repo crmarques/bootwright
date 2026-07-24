@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -63,6 +64,7 @@ type RunConfig struct {
 	ReadRunner   OCRunner
 	Hooks        HookRunner
 	Effects      EffectRunner
+	Progress     io.Writer
 }
 
 func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
@@ -219,7 +221,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
-	last, err := WaitReady(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension, cfg.PollInterval)
+	last, err := WaitReady(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension, cfg.PollInterval, cfg.Progress)
 	record.UpdatedAt = time.Now().UTC()
 	record.LastObserved = last
 	if err != nil {
@@ -293,7 +295,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		}
 		if len(catalog) > 0 {
 			olm := plan.Extension.Spec.OLM
-			if err := waitCatalogSourceReady(ctx, cfg.readRunner(runner), kubeconfig, olm.Subscription.SourceNamespace, olm.CatalogSource.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
+			if err := waitCatalogSourceReady(ctx, cfg.readRunner(runner), kubeconfig, olm.Subscription.SourceNamespace, olm.CatalogSource.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval, cfg.Progress); err != nil {
 				return observed, "", err
 			}
 		}
@@ -310,7 +312,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 			return observed, "", err
 		}
 		subscriptionOLM := plan.Extension.Spec.OLM
-		if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, subscriptionOLM.Namespace.Name, subscriptionOLM.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval); err != nil {
+		if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, subscriptionOLM.Namespace.Name, subscriptionOLM.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval, cfg.Progress); err != nil {
 			return observed, "", err
 		}
 		postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady)
@@ -351,7 +353,7 @@ func applyResources(ctx context.Context, runner OCRunner, kubeconfig string, pol
 	return observed, "", nil
 }
 
-func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription, timeoutStr string, pollInterval time.Duration) error {
+func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription, timeoutStr string, pollInterval time.Duration, progress io.Writer) error {
 	timeout, err := parsePositiveDuration(timeoutStr)
 	if err != nil {
 		return err
@@ -362,12 +364,14 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 	if pollInterval <= 0 {
 		pollInterval = WaitInterval(timeout)
 	}
+	tracker := startWaitProgress(progress, fmt.Sprintf("waiting for the operator CSV of Subscription/%s/%s to reach Succeeded", namespace, subscription), timeout)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	var last string
 	for {
 		ready, detail, err := csvSucceeded(ctx, runner, kubeconfig, namespace, subscription)
 		if err == nil && ready {
+			tracker.done(detail)
 			return nil
 		}
 		if detail != "" {
@@ -375,18 +379,22 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 		} else if err != nil {
 			last = err.Error()
 		}
+		tracker.observe(last)
 		select {
 		case <-ctx.Done():
 			if parent.Err() != nil {
 				return parent.Err()
 			}
-			return &csvGateError{namespace: namespace, subscription: subscription, timeout: timeout, lastObserved: last}
+			diagCtx, diagCancel := context.WithTimeout(parent, 30*time.Second)
+			cause := diagnoseCSVGate(diagCtx, runner, kubeconfig, namespace, subscription, tracker)
+			diagCancel()
+			return &csvGateError{namespace: namespace, subscription: subscription, timeout: timeout, lastObserved: last, cause: cause}
 		case <-ticker.C:
 		}
 	}
 }
 
-func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, namespace, name, timeoutStr string, pollInterval time.Duration) error {
+func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, namespace, name, timeoutStr string, pollInterval time.Duration, progress io.Writer) error {
 	timeout, err := parsePositiveDuration(timeoutStr)
 	if err != nil {
 		return err
@@ -397,23 +405,29 @@ func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, na
 	if pollInterval <= 0 {
 		pollInterval = WaitInterval(timeout)
 	}
+	tracker := startWaitProgress(progress, fmt.Sprintf("waiting for CatalogSource/%s/%s to reach connectionState READY", namespace, name), timeout)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	var last string
 	for {
 		ready, detail := catalogSourceReady(ctx, runner, kubeconfig, namespace, name)
 		if ready {
+			tracker.done(detail)
 			return nil
 		}
 		if detail != "" {
 			last = detail
 		}
+		tracker.observe(last)
 		select {
 		case <-ctx.Done():
 			if parent.Err() != nil {
 				return parent.Err()
 			}
-			return &catalogGateError{namespace: namespace, name: name, timeout: timeout, lastObserved: last}
+			diagCtx, diagCancel := context.WithTimeout(parent, 30*time.Second)
+			cause := diagnoseCatalogGate(diagCtx, runner, kubeconfig, namespace, name, tracker)
+			diagCancel()
+			return &catalogGateError{namespace: namespace, name: name, timeout: timeout, lastObserved: last, cause: cause}
 		case <-ticker.C:
 		}
 	}
@@ -436,14 +450,23 @@ type catalogGateError struct {
 	name         string
 	timeout      time.Duration
 	lastObserved string
+	cause        string
 }
 
 func (e *catalogGateError) Error() string {
-	return fmt.Sprintf("CatalogSource/%s/%s did not reach connectionState READY within %s; last observed: %s", e.namespace, e.name, e.timeout, e.lastObserved)
+	base := fmt.Sprintf("CatalogSource/%s/%s did not reach connectionState READY within %s", e.namespace, e.name, e.timeout)
+	if strings.TrimSpace(e.cause) != "" {
+		return base + ": " + e.cause
+	}
+	return base + "; last observed: " + e.lastObserved
 }
 
 func (e *catalogGateError) summary() string {
-	return fmt.Sprintf("CatalogSource/%s/%s did not reach connectionState READY within %s; see the apply log for details", e.namespace, e.name, e.timeout)
+	base := fmt.Sprintf("CatalogSource/%s/%s did not reach connectionState READY within %s", e.namespace, e.name, e.timeout)
+	if strings.TrimSpace(e.cause) != "" {
+		return base + ": " + e.cause
+	}
+	return base + "; see the apply log for details"
 }
 
 type csvGateError struct {
@@ -451,14 +474,23 @@ type csvGateError struct {
 	subscription string
 	timeout      time.Duration
 	lastObserved string
+	cause        string
 }
 
 func (e *csvGateError) Error() string {
-	return fmt.Sprintf("Subscription/%s/%s operator CSV did not reach Succeeded within %s; last observed: %s", e.namespace, e.subscription, e.timeout, e.lastObserved)
+	base := fmt.Sprintf("operator CSV for Subscription/%s/%s did not reach Succeeded within %s", e.namespace, e.subscription, e.timeout)
+	if strings.TrimSpace(e.cause) != "" {
+		return base + ": " + e.cause
+	}
+	return base + "; last observed: " + e.lastObserved
 }
 
 func (e *csvGateError) summary() string {
-	return fmt.Sprintf("operator CSV for Subscription/%s/%s did not reach Succeeded within %s; see the apply log for details", e.namespace, e.subscription, e.timeout)
+	base := fmt.Sprintf("operator CSV for Subscription/%s/%s did not reach Succeeded within %s", e.namespace, e.subscription, e.timeout)
+	if strings.TrimSpace(e.cause) != "" {
+		return base + ": " + e.cause
+	}
+	return base + "; see the apply log for details"
 }
 
 func applyFailureSummary(failedID string) string {
@@ -492,7 +524,7 @@ func requireKubeconfig(path string) error {
 	return nil
 }
 
-func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, pollInterval time.Duration) (string, error) {
+func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, pollInterval time.Duration, progress io.Writer) (string, error) {
 	timeout, err := parsePositiveDuration(extension.Spec.Readiness.Timeout)
 	if err != nil {
 		return "", err
@@ -506,12 +538,14 @@ func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extensio
 	if pollInterval <= 0 {
 		pollInterval = WaitInterval(timeout)
 	}
+	tracker := startWaitProgress(progress, fmt.Sprintf("waiting for ClusterAddon/%s readiness checks", extension.Metadata.Name), timeout)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	var last string
 	for {
 		ready, observed, err := Ready(ctx, runner, kubeconfig, extension)
 		if ready && err == nil {
+			tracker.done(observed)
 			return observed, nil
 		}
 		if observed != "" {
@@ -519,6 +553,7 @@ func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extensio
 		} else if err != nil {
 			last = err.Error()
 		}
+		tracker.observe(last)
 		select {
 		case <-ctx.Done():
 			if parent.Err() != nil {
