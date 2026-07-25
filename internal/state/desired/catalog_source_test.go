@@ -51,6 +51,38 @@ func TestValidateClusterAddonCatalogSource(t *testing.T) {
 			wantErr: "catalogSource.pollInterval \"often\" is not a valid duration",
 		},
 		{
+			name: "valid restricted security context",
+			mutate: func(a *v1alpha1.ClusterAddon) {
+				a.Spec.OLM.CatalogSource.GRPCPodConfig = &v1alpha1.ClusterAddonOLMCatalogGRPCPodConfig{
+					SecurityContextConfig: v1alpha1.CatalogSecurityContextRestricted,
+				}
+			},
+		},
+		{
+			name: "valid legacy security context",
+			mutate: func(a *v1alpha1.ClusterAddon) {
+				a.Spec.OLM.CatalogSource.GRPCPodConfig = &v1alpha1.ClusterAddonOLMCatalogGRPCPodConfig{
+					SecurityContextConfig: v1alpha1.CatalogSecurityContextLegacy,
+				}
+			},
+		},
+		{
+			name: "missing security context",
+			mutate: func(a *v1alpha1.ClusterAddon) {
+				a.Spec.OLM.CatalogSource.GRPCPodConfig = &v1alpha1.ClusterAddonOLMCatalogGRPCPodConfig{}
+			},
+			wantErr: "catalogSource.grpcPodConfig.securityContextConfig is required",
+		},
+		{
+			name: "bad security context",
+			mutate: func(a *v1alpha1.ClusterAddon) {
+				a.Spec.OLM.CatalogSource.GRPCPodConfig = &v1alpha1.ClusterAddonOLMCatalogGRPCPodConfig{
+					SecurityContextConfig: "privileged",
+				}
+			},
+			wantErr: "catalogSource.grpcPodConfig.securityContextConfig \"privileged\" must be one of {legacy, restricted}",
+		},
+		{
 			name:    "subscription source mismatch",
 			mutate:  func(a *v1alpha1.ClusterAddon) { a.Spec.OLM.Subscription.Source = "redhat-operators" },
 			wantErr: "subscription.source \"redhat-operators\" must match catalogSource.name \"partner-catalog\"",

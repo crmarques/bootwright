@@ -12,4 +12,4 @@ entries:
     versions:
       - version: "4.21"
         channel: stable-4.21
-        notes: Ships the IBM catalog; operand images need the IBM entitlement key in the cluster pull secret (the ibm-entitlement input merges it).
+        notes: Ships the IBM catalog with its restricted pod security context; operand images need the IBM entitlement key in the cluster pull secret (the ibm-entitlement input merges it).

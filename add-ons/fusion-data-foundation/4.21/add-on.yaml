@@ -39,6 +39,8 @@ spec:
       publisher: IBM
       image: icr.io/cpopen/isf-data-foundation-catalog:v4.21
       pollInterval: 45m
+      grpcPodConfig:
+        securityContextConfig: restricted
     subscription:
       name: odf-operator
       package: odf-operator

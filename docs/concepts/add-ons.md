@@ -185,6 +185,7 @@ install.
 | `olm.catalogSource.displayName` | No | — | CatalogSource display name. |
 | `olm.catalogSource.publisher` | No | — | CatalogSource publisher. |
 | `olm.catalogSource.pollInterval` | No | — | `updateStrategy.registryPoll.interval` (how often OLM re-pulls the index). |
+| `olm.catalogSource.grpcPodConfig.securityContextConfig` | No | — | Catalog registry pod security mode: `legacy` or `restricted`. |
 | `olm.namespace.name` | Yes | — | Namespace name. |
 | `olm.namespace.create` | No | `false` | Whether Bootwright creates the namespace. When `false`, the namespace must already exist. |
 | `olm.namespace.labels` | No | — | Namespace labels applied when Bootwright creates it. |
@@ -206,6 +207,9 @@ install.
     normalize phase fills it in). The registry hosting the index image must be
     reachable from the cluster — for authenticated registries the pull
     credentials must already be in the cluster's global pull secret.
+    Catalogs built for restricted pod security should declare
+    `grpcPodConfig.securityContextConfig: restricted`; the bundled IBM Fusion
+    Data Foundation add-on does so to match IBM's catalog manifest.
 
 !!! note "Required vs defaulted Subscription fields"
     `subscription.sourceNamespace` and `subscription.installPlanApproval` are

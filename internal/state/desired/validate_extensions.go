@@ -216,6 +216,16 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 				errs = append(errs, fmt.Sprintf("%s.catalogSource.pollInterval %q is not a valid duration", prefix, catalog.PollInterval))
 			}
 		}
+		if podConfig := catalog.GRPCPodConfig; podConfig != nil {
+			switch podConfig.SecurityContextConfig {
+			case v1alpha1.CatalogSecurityContextLegacy, v1alpha1.CatalogSecurityContextRestricted:
+			case "":
+				errs = append(errs, prefix+".catalogSource.grpcPodConfig.securityContextConfig is required")
+			default:
+				errs = append(errs, fmt.Sprintf("%s.catalogSource.grpcPodConfig.securityContextConfig %q must be one of {%s, %s}",
+					prefix, podConfig.SecurityContextConfig, v1alpha1.CatalogSecurityContextLegacy, v1alpha1.CatalogSecurityContextRestricted))
+			}
+		}
 		if catalog.Name != "" && olm.Subscription.Source != "" && olm.Subscription.Source != catalog.Name {
 			errs = append(errs, fmt.Sprintf("%s.subscription.source %q must match catalogSource.name %q", prefix, olm.Subscription.Source, catalog.Name))
 		}

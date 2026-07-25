@@ -1280,8 +1280,10 @@ Rules:
   `olm.operatorGroup` sets the OperatorGroup `name` and `targetNamespaces[]`.
   Optional `olm.catalogSource` ships an operator catalog with the add-on:
   `name` and `image` are required, `displayName`/`publisher`/`pollInterval` are
-  optional (`pollInterval` is a Go duration), and `subscription.source` must
-  match `catalogSource.name` (normalize defaults it when omitted).
+  optional (`pollInterval` is a Go duration), and optional
+  `grpcPodConfig.securityContextConfig` must be `legacy` or `restricted`.
+  `subscription.source` must match `catalogSource.name` (normalize defaults it
+  when omitted).
   `olm.subscription` requires `name`, `package`, `channel`, and `source`;
   `sourceNamespace` defaults to `openshift-marketplace` and `installPlanApproval`
   defaults to `Automatic` (both normalize-materialized; `installPlanApproval`

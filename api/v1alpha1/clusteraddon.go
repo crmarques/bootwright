@@ -58,11 +58,16 @@ type ClusterAddonOLMSpec struct {
 }
 
 type ClusterAddonOLMCatalogSource struct {
-	Name         string `yaml:"name" json:"name"`
-	Image        string `yaml:"image" json:"image"`
-	DisplayName  string `yaml:"displayName,omitempty" json:"displayName,omitempty"`
-	Publisher    string `yaml:"publisher,omitempty" json:"publisher,omitempty"`
-	PollInterval string `yaml:"pollInterval,omitempty" json:"pollInterval,omitempty"`
+	Name          string                               `yaml:"name" json:"name"`
+	Image         string                               `yaml:"image" json:"image"`
+	DisplayName   string                               `yaml:"displayName,omitempty" json:"displayName,omitempty"`
+	Publisher     string                               `yaml:"publisher,omitempty" json:"publisher,omitempty"`
+	PollInterval  string                               `yaml:"pollInterval,omitempty" json:"pollInterval,omitempty"`
+	GRPCPodConfig *ClusterAddonOLMCatalogGRPCPodConfig `yaml:"grpcPodConfig,omitempty" json:"grpcPodConfig,omitempty"`
+}
+
+type ClusterAddonOLMCatalogGRPCPodConfig struct {
+	SecurityContextConfig string `yaml:"securityContextConfig" json:"securityContextConfig"`
 }
 
 type ClusterAddonOLMNamespace struct {

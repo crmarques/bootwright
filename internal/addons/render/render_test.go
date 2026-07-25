@@ -20,6 +20,9 @@ func cataloguedExtension() v1alpha1.ClusterAddon {
 					DisplayName:  "Partner Catalog",
 					Publisher:    "Partner",
 					PollInterval: "45m",
+					GRPCPodConfig: &v1alpha1.ClusterAddonOLMCatalogGRPCPodConfig{
+						SecurityContextConfig: v1alpha1.CatalogSecurityContextRestricted,
+					},
 				},
 				Subscription: v1alpha1.ClusterAddonOLMSubscription{
 					Name: "cat-op", Package: "cat-op", Channel: "stable",
@@ -52,6 +55,9 @@ func TestCatalogResourcesRenderShippedCatalog(t *testing.T) {
 		"image":       "icr.io/cpopen/partner-catalog:v1",
 		"displayName": "Partner Catalog",
 		"publisher":   "Partner",
+		"grpcPodConfig": map[string]any{
+			"securityContextConfig": "restricted",
+		},
 		"updateStrategy": map[string]any{
 			"registryPoll": map[string]any{"interval": "45m"},
 		},

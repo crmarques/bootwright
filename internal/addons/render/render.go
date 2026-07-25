@@ -54,6 +54,11 @@ func CatalogResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, erro
 	if catalog.Publisher != "" {
 		spec["publisher"] = catalog.Publisher
 	}
+	if podConfig := catalog.GRPCPodConfig; podConfig != nil {
+		spec["grpcPodConfig"] = map[string]any{
+			"securityContextConfig": podConfig.SecurityContextConfig,
+		}
+	}
 	if catalog.PollInterval != "" {
 		spec["updateStrategy"] = map[string]any{
 			"registryPoll": map[string]any{

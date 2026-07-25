@@ -203,6 +203,9 @@ const (
 	InstallPlanApprovalAutomatic = "Automatic"
 	InstallPlanApprovalManual    = "Manual"
 
+	CatalogSecurityContextLegacy     = "legacy"
+	CatalogSecurityContextRestricted = "restricted"
+
 	ClusterAddonReadinessCSVSucceeded   = "csvSucceeded"
 	ClusterAddonReadinessCondition      = "condition"
 	ClusterAddonReadinessResourceExists = "resourceExists"

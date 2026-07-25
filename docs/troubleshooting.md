@@ -276,7 +276,11 @@ that task is in its log under
   and the registry pod never reported `READY`. Usually the catalog image
   cannot be pulled: confirm the image reference and tag exist, and that the
   cluster's pull secret (or the add-on's `globalPullSecretMerge` input, e.g.
-  `ibm-entitlement`) actually carries credentials for that registry.
+  `ibm-entitlement`) actually carries credentials for that registry. A
+  `TRANSIENT_FAILURE` with a pod-security admission error means the catalog
+  also needs the matching
+  `catalogSource.grpcPodConfig.securityContextConfig`; the bundled IBM Fusion
+  Data Foundation add-on declares `restricted`.
 - **`Subscription/... operator CSV did not reach Succeeded`** — the catalog
   resolved but the operator's ClusterServiceVersion never installed. Check the
   Subscription's `installPlanApproval` (a `Manual` plan needs approving) and
