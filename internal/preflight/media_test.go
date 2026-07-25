@@ -121,6 +121,6 @@ func TestCollectChecksIncludesInstallerMedia(t *testing.T) {
 		CommandOutput: func(string, ...string) ([]byte, error) { return []byte("Python 3.12.4"), nil },
 		UID:           func() int { return 0 },
 	}
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	assertPreflightCheckStatus(t, checks, "local-media:rhel-9.7-x86_64-dvd.iso", "FAIL")
 }

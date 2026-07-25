@@ -38,6 +38,24 @@ func (r Resolver) ReadMaterial(name string, role MaterialRole) ([]byte, error) {
 	return r.Store.Read(MaterialKey{Name: name, Role: role})
 }
 
+func (r Resolver) WithMaterialized(name string, role MaterialRole, parentDir string, fn func(string) error) error {
+	key := MaterialKey{Name: name, Role: role}
+	if err := validateMaterialKey(key); err != nil {
+		return err
+	}
+	if MaterialPathUsesExternalSource(name, r.Index, role) {
+		data, err := r.ReadMaterial(name, role)
+		if err != nil {
+			return err
+		}
+		return withMaterializedData(key, parentDir, data, fn)
+	}
+	if r.Store == nil {
+		return fmt.Errorf("context secret store is not configured for %s/%s", name, role)
+	}
+	return r.Store.WithMaterialized(key, parentDir, fn)
+}
+
 func (r Resolver) ReadMaterialWithPath(name string, role MaterialRole, kind string) (string, string, error) {
 	path := ResolveMaterialPath(name, r.Index, r.SecretsDir, role)
 	if path == "" {

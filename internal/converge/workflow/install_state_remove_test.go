@@ -24,16 +24,9 @@ func TestRemoveClusterInstallStateClearsControllerRecords(t *testing.T) {
 		t.Fatalf("seed connection record: %v", err)
 	}
 	kubeconfig := clusterKubeconfigPath(clustersDir, cluster)
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-		t.Fatalf("mkdir secrets: %v", err)
-	}
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("seed kubeconfig: %v", err)
-	}
 	kubeadminPassword := filepath.Join(ClusterSecretsDir(clustersDir, cluster), "kubeadmin-password")
-	if err := os.WriteFile(kubeadminPassword, []byte("hunter2\n"), 0o600); err != nil {
-		t.Fatalf("seed kubeadmin-password: %v", err)
-	}
+	writeEncryptedClusterKubeconfig(t, clustersDir, cluster)
+	writeEncryptedClusterMaterial(t, clustersDir, cluster, "kubeadmin-password", "hunter2\n")
 
 	if _, found, err := LoadClusterInstallRecord(clustersDir, cluster); err != nil || !found {
 		t.Fatalf("precondition: install record should exist, found=%v err=%v", found, err)

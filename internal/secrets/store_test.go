@@ -3,6 +3,7 @@ package secret
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,6 +144,84 @@ func TestMaterializeRuntimeRemovesPartialPlaintextOnError(t *testing.T) {
 	}
 	if entries, statErr := os.ReadDir(targetDir); statErr == nil && len(entries) > 0 {
 		t.Fatalf("failed materialization left partial plaintext on disk: %v", entries)
+	}
+}
+
+func TestContextStoreWithMaterializedDecryptsAndCleansUp(t *testing.T) {
+	store := NewContextStore("lab", t.TempDir())
+	runtimeDir := t.TempDir()
+	if err := os.Chmod(runtimeDir, 0o700); err != nil {
+		t.Fatalf("chmod runtime dir: %v", err)
+	}
+	key := MaterialKey{Name: "kubeconfig", Role: MaterialPrimary}
+	if err := store.Write(key, []byte("apiVersion: v1\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	callbackErr := errors.New("probe failed")
+	var materializedPath string
+	err := store.WithMaterialized(key, runtimeDir, func(path string) error {
+		materializedPath = path
+		if rel, relErr := filepath.Rel(runtimeDir, path); relErr != nil || strings.HasPrefix(rel, "..") {
+			t.Fatalf("materialized path %q is outside runtime dir %q", path, runtimeDir)
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if string(data) != "apiVersion: v1\n" {
+			t.Fatalf("materialized data = %q", data)
+		}
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("materialized mode = %04o, want 0600", info.Mode().Perm())
+		}
+		dirInfo, statErr := os.Stat(filepath.Dir(path))
+		if statErr != nil {
+			return statErr
+		}
+		if dirInfo.Mode().Perm() != 0o700 {
+			t.Fatalf("materialized directory mode = %04o, want 0700", dirInfo.Mode().Perm())
+		}
+		return callbackErr
+	})
+	if !errors.Is(err, callbackErr) {
+		t.Fatalf("WithMaterialized error = %v, want %v", err, callbackErr)
+	}
+	if _, err := os.Stat(materializedPath); !os.IsNotExist(err) {
+		t.Fatalf("materialized file was not removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Dir(materializedPath)); !os.IsNotExist(err) {
+		t.Fatalf("materialized directory was not removed: %v", err)
+	}
+}
+
+func TestContextStoreWithMaterializedRejectsPlaintext(t *testing.T) {
+	secretsDir := t.TempDir()
+	store := NewContextStore("lab", secretsDir)
+	path := filepath.Join(secretsDir, "kubeconfig")
+	if err := os.WriteFile(path, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write plaintext material: %v", err)
+	}
+	runtimeDir := t.TempDir()
+	if err := os.Chmod(runtimeDir, 0o700); err != nil {
+		t.Fatalf("chmod runtime dir: %v", err)
+	}
+	err := store.WithMaterialized(MaterialKey{Name: "kubeconfig", Role: MaterialPrimary}, runtimeDir, func(string) error {
+		t.Fatal("callback ran with plaintext material")
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "not encrypted") {
+		t.Fatalf("WithMaterialized error = %v, want plaintext refusal", err)
+	}
+	raw, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("read plaintext material: %v", readErr)
+	}
+	if string(raw) != "apiVersion: v1\n" {
+		t.Fatalf("plaintext material changed during rejected read: %q", raw)
 	}
 }
 

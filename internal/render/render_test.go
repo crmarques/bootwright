@@ -132,6 +132,30 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if got := kubevirt["kubeconfig"]; got != "{{ bootwright_clusters_dir }}/dc1-metal-ocp/secrets/kubeconfig" {
 		t.Fatalf("kubeconfig = %v, want host cluster secret kubeconfig template", got)
 	}
+	runtimeKubeconfig := "/run/bootwright/kubevirt-host/kubeconfig"
+	runtimeVars := inventory.VarsWithPathOptionsAndOwnership(state, inventory.PathOptions{
+		SecretsDir: "/run/bootwright/secrets",
+		KubeVirtHostKubeconfigPaths: map[string]string{
+			"dc1-metal-ocp": runtimeKubeconfig,
+		},
+	}, nil)
+	runtimeChild := clustersByName(t, runtimeVars)["dc1-child-ocp"]
+	runtimeMachine := firstMachineComponent(t, runtimeChild)
+	if got := runtimeMachine["kubevirt"].(map[string]any)["kubeconfig"]; got != runtimeKubeconfig {
+		t.Fatalf("runtime kubeconfig = %v, want %s", got, runtimeKubeconfig)
+	}
+	if got := runtimeVars["bootwright_kubevirt_host_kubeconfigs"].(map[string]string)["dc1-metal-ocp"]; got != runtimeKubeconfig {
+		t.Fatalf("host kubeconfig map = %v, want %s", got, runtimeKubeconfig)
+	}
+	unmaterializedVars := inventory.VarsWithPathOptionsAndOwnership(state, inventory.PathOptions{
+		SecretsDir:                  "/run/bootwright/secrets",
+		KubeVirtHostKubeconfigPaths: map[string]string{},
+	}, nil)
+	unmaterializedChild := clustersByName(t, unmaterializedVars)["dc1-child-ocp"]
+	unmaterializedMachine := firstMachineComponent(t, unmaterializedChild)
+	if _, found := unmaterializedMachine["kubevirt"].(map[string]any)["kubeconfig"]; found {
+		t.Fatal("execution render emitted a durable host kubeconfig without runtime material")
+	}
 	interfaces := machine["interfaces"].([]any)
 	iface := interfaces[0].(map[string]any)
 	mac, _ := iface["macAddress"].(string)

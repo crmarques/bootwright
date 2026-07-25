@@ -12,3 +12,32 @@ The readiness probe uses the same
 distinguishes a reachable host without OpenShift Virtualization from a
 kubeconfig that does not reach the expected Kubernetes API surface. Once the
 KubeVirt API prerequisite fails, dependent network probes must not run.
+
+The durable managed-host path
+`clusters/<host>/secrets/kubeconfig` contains an AES-GCM envelope, not
+kubectl input. Passing that path directly to kubectl provides no usable
+kubeconfig context and can surface the same misleading generic HTTP 404. Host
+references decrypt through their per-cluster store; `kubeconfigRef` references
+decrypt or copy through the declared-secret resolver.
+
+Preflight creates a private per-invocation directory below the context runs
+directory and uses it as the materialization parent. The materializer creates
+a nested `0700` scratch directory and `0600` file, then removes that scratch on
+every callback return, including errors. A target's KubeVirt readiness and
+network probes share that one materialized file inside the callback. Human
+evidence and remediation continue to name the durable source path. Deferred
+cleanup is a normal-return guarantee, not a claim that `SIGKILL` can run
+cleanup handlers.
+
+KubeVirt execution has the same boundary. `workflow.Run` materializes each
+managed host kubeconfig required by the current playbook or task under the
+task's runtime secrets directory and keeps the selected set alive through one
+Ansible invocation. The renderer projects those paths both into
+machine-component KubeVirt variables and the host-to-kubeconfig map used by
+controller `virtctl` provisioning. Provision, boot, and destroy roles never
+receive the durable envelope path. This map covers `hostClusterRef` only:
+Ansible `kubeconfigRef` paths continue through ordinary declared-secret
+resolution, so context material uses the task runtime secret store and an
+explicit file source in source mode remains the operator-owned source path.
+Dry-run keeps the logical managed-host path and creates no plaintext runtime
+material.

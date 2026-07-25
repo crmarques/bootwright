@@ -4,11 +4,14 @@
 self-escalated `apply`, the plain `Deps.CommandOutput` de-escalates back to the
 invoking caller (via `callerio`), who cannot traverse the `0700` root-owned
 managed workspace. Preflight probes that read root-owned workspace artifacts —
-a host-cluster kubeconfig under `clusters/<name>/secrets/`, the managed Ansible
-venv interpreter — must use `Deps.CommandOutputLocalRoot`, which runs as the
-local-root process itself; otherwise a caller-run `kubectl`/`python` fails with
-`EACCES` on a file that is present and valid. This mirrors the apply path, which
-runs `oc`/`kubectl` against the same kubeconfig as root. Pinned by
+a materialized host-cluster kubeconfig under the private runs tree, the managed
+Ansible venv interpreter — must use `Deps.CommandOutputLocalRoot`, which runs
+as the local-root process itself; otherwise a caller-run `kubectl`/`python`
+fails with `EACCES` on a file that is present and valid. The durable
+`clusters/<name>/secrets/kubeconfig` path is an encrypted envelope; preflight
+decrypts it to the bounded runtime copy and keeps diagnostics pointed at the
+durable source path. This mirrors the apply path, which runs `oc`/`kubectl`
+against a materialized kubeconfig as root. Pinned by
 `TestKubeVirtHostClusterChecksRunAsLocalRoot` and
 `TestVSpherePyvmomiCheckRunsAsLocalRoot`.
 

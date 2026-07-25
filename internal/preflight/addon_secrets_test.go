@@ -96,7 +96,7 @@ func TestCollectChecksIncludesAddonSecretMaterial(t *testing.T) {
 		UID:      func() int { return 0 },
 	}
 
-	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	assertPreflightCheckStatus(t, checks, "add-on df input pullSecret secretRef", "FAIL")
 }
 
@@ -108,7 +108,7 @@ func TestCollectChecksSkipsAddonSecretMaterialOutsideAddonsPhase(t *testing.T) {
 		UID:      func() int { return 0 },
 	}
 
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	for _, c := range checks {
 		if c.Name == "add-on df input pullSecret secretRef" {
 			t.Fatalf("add-on secret check present outside add-ons phase: %+v", c)

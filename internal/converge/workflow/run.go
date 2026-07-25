@@ -109,9 +109,23 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		defer os.RemoveAll(runtimeSecretsDir)
 		runSecretsDir = runtimeSecretsDir
 	}
+	if opts.DryRun {
+		return runWithMaterializedSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, nil, runner, reporter)
+	}
+	var result RunResult
+	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, runSecretsDir, kubeVirtHostClustersForRun(opts), func(paths map[string]string) error {
+		var runErr error
+		result, runErr = runWithMaterializedSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, paths, runner, reporter)
+		return runErr
+	})
+	return result, err
+}
+
+func runWithMaterializedSecrets(ctx context.Context, opts RunOptions, renderDir, contextName, runSecretsDir, ownershipDir string, ownershipRecords []ownership.ResourceRecord, kubeVirtHostKubeconfigPaths map[string]string, runner ansible.Runner, reporter Reporter) (RunResult, error) {
 	result, err := render.AllWithOwnershipRecordsAndPathOptions(renderDir, opts.ClustersDir, render.PathOptions{
-		SecretsDir:      runSecretsDir,
-		TrustSecretsDir: opts.SecretsDir,
+		SecretsDir:                  runSecretsDir,
+		TrustSecretsDir:             opts.SecretsDir,
+		KubeVirtHostKubeconfigPaths: kubeVirtHostKubeconfigPaths,
 	}, opts.State, ownershipRecords)
 	if err != nil {
 		return RunResult{}, err

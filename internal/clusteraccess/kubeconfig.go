@@ -23,9 +23,6 @@ func Kubeconfig(state v1alpha1.State, contextName, clustersDir, clusterName stri
 	}
 	store := secret.NewContextStore(contextName, workflow.ClusterSecretsDir(clustersDir, clusterName))
 	key := secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}
-	if _, err := store.MigratePlaintextMaterial(key); err != nil {
-		return nil, fmt.Errorf("encrypt kubeconfig for %s: %w", clusterName, err)
-	}
 	data, err := store.Read(key)
 	if err != nil {
 		return nil, fmt.Errorf("read kubeconfig for %s: %w", clusterName, err)

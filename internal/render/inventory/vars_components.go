@@ -8,12 +8,12 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, secretsDir string) []any {
+func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, paths PathOptions) []any {
 	var out []any
 	clusterName := ocp.Metadata.Name
 
 	for _, m := range ci.Machines {
-		out = append(out, machineComponentVars(state, ci, m, clusterName, secretsDir))
+		out = append(out, machineComponentVars(state, ci, m, clusterName, paths))
 	}
 	for _, component := range loadBalancerComponentsForCluster(state, ci, ocp) {
 		lb := loadBalancerComponentVars(state, component)

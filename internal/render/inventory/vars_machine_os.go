@@ -21,7 +21,7 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) 
 			if !ok || !v1alpha1.MachineInstallsOS(machine) {
 				continue
 			}
-			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, paths.SecretsDir)
+			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, paths)
 			component["machineRef"] = managedOSTaskHost(state, m)
 			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, paths); len(osInstall) > 0 {
 				component["osInstall"] = osInstall

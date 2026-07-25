@@ -39,7 +39,7 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 			"baseDomain":             installer.EnvironmentBaseDomain(env),
 			"endpoints":              endpointsVars(state, ci),
 			"networks":               clusterNetworksVars(state, ci),
-			"components":             componentsVars(state, ci, ocp, paths.SecretsDir),
+			"components":             componentsVars(state, ci, ocp, paths),
 			"nodes":                  nodesVars(ocp),
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}
@@ -89,6 +89,9 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 	if records := ownershipRecordsVars(ownershipRecords); len(records) > 0 {
 		out["bootwright_ownership_records"] = records
 		out["bootwright_ownership_records_by_kind"] = ownershipRecordsByKindVars(ownershipRecords)
+	}
+	if len(paths.KubeVirtHostKubeconfigPaths) > 0 {
+		out["bootwright_kubevirt_host_kubeconfigs"] = paths.KubeVirtHostKubeconfigPaths
 	}
 	return out
 }

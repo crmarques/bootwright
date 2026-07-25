@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -177,11 +176,5 @@ func auditInstallSkipped(out []ApplyTask, cluster string) (skipped, total int) {
 
 func writeAuditKubeconfig(t *testing.T, clustersDir, cluster string) {
 	t.Helper()
-	kubeconfig := clusterKubeconfigPath(clustersDir, cluster)
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-		t.Fatalf("mkdir kubeconfig dir: %v", err)
-	}
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
+	writeEncryptedClusterKubeconfig(t, clustersDir, cluster)
 }

@@ -20,6 +20,19 @@ authors.
 | `bootwright_provider_machine_setups` | provider-machine setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
 | `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses; consumed by the libvirt substrate network template for DHCP NTP options |
+| `bootwright_kubevirt_host_kubeconfigs` | managed KubeVirt host cluster name → controller-local materialized kubeconfig path for the current non-dry Ansible playbook or task; omitted when no managed host kubeconfig is required |
+
+For a real Ansible invocation, each KubeVirt `hostClusterRef` machine component
+selected by the current playbook or task receives the same runtime path as its
+entry in `bootwright_kubevirt_host_kubeconfigs`. The controller `virtctl`
+provisioning playbook indexes this map by host cluster name. An execution
+render never falls back to the durable encrypted host path when no runtime
+entry exists. The map does not cover
+`kubeconfigRef`: that arm follows ordinary declared-secret resolution, so
+context material resolves from the task runtime secret store and an explicit
+file source in source mode remains the operator-owned source path. Dry-run
+creates no plaintext material and omits the map; its machine component retains
+the logical managed-host path for command display only.
 
 ## Environment Shape
 
@@ -122,7 +135,7 @@ bootwright_clusters:
         profile: {}             # inlined provider profile when present
         kubevirt:
           hostClusterRef: metal-ocp
-          kubeconfig: "{{ bootwright_clusters_dir }}/metal-ocp/secrets/kubeconfig"
+          kubeconfig: <task-runtime-secrets>/bootwright-material-<id>/kubeconfig
           namespace: bootwright-child-ocp
           storageClassRef: lvms-vg1
         vsphere:                # vCenter-managed machines; consumed by
@@ -233,6 +246,13 @@ bootwright_clusters:
         role: master
         machineRef:
           name: master-0
+```
+
+For the runtime component above, the corresponding top-level map is:
+
+```yaml
+bootwright_kubevirt_host_kubeconfigs:
+  metal-ocp: <task-runtime-secrets>/bootwright-material-<id>/kubeconfig
 ```
 
 ## Machine Service Shapes

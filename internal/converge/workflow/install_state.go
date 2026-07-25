@@ -752,22 +752,14 @@ func clusterKubeconfigExists(clustersDir, clusterName string) bool {
 
 func withMaterializedClusterKubeconfig(contextName, clustersDir, cluster string, fn func(kubeconfigPath string) error) error {
 	runtimeDir := ClusterRuntimeDir(clustersDir, cluster)
-	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+	if err := safefs.EnsureDir(runtimeDir, 0o700); err != nil {
 		return fmt.Errorf("create cluster runtime dir for %s: %w", cluster, err)
 	}
-	scratchDir, err := os.MkdirTemp(runtimeDir, "kubeconfig-*")
-	if err != nil {
-		return fmt.Errorf("create kubeconfig scratch dir for cluster %s: %w", cluster, err)
-	}
-	defer os.RemoveAll(scratchDir)
 	store := secret.NewContextStore(effectiveContextName(contextName), ClusterSecretsDir(clustersDir, cluster))
-	if _, err := store.MigratePlaintextMaterial(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}); err != nil {
-		return fmt.Errorf("encrypt kubeconfig for cluster %s: %w", cluster, err)
-	}
-	if err := store.MaterializeSelected(scratchDir, []string{"kubeconfig"}); err != nil {
+	if err := store.WithMaterialized(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}, runtimeDir, fn); err != nil {
 		return fmt.Errorf("materialize kubeconfig for cluster %s: %w", cluster, err)
 	}
-	return fn(filepath.Join(scratchDir, "kubeconfig"))
+	return nil
 }
 
 func clusterConnectionRecord(clustersDir, clusterName string, environments []v1alpha1.Environment, now time.Time) ClusterConnectionRecord {

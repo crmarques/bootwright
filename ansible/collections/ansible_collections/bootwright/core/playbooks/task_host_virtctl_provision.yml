@@ -18,4 +18,4 @@
       ansible.builtin.import_role:
         name: bootwright.core.controller_virtctl
       vars:
-        bootwright_virtctl_kubeconfig: "{{ bootwright_clusters_dir }}/{{ bootwright_task_host_cluster_name }}/secrets/kubeconfig"
+        bootwright_virtctl_kubeconfig: "{{ bootwright_kubevirt_host_kubeconfigs[bootwright_task_host_cluster_name] }}"

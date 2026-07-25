@@ -80,7 +80,7 @@ func (s *ContextStore) readEnvelope(path string, key MaterialKey) (envelope, err
 	}
 	var env envelope
 	if err := json.Unmarshal(data, &env); err != nil {
-		return envelope{}, fmt.Errorf("context secret %s is not encrypted; run bootwright secret encryption migrate", materialLabel(key))
+		return envelope{}, fmt.Errorf("context secret %s is not encrypted", materialLabel(key))
 	}
 	if err := s.validateEnvelope(env, key); err != nil {
 		return envelope{}, err

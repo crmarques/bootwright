@@ -148,6 +148,6 @@ func TestCollectChecksIncludesPackageSource(t *testing.T) {
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
 		},
 	}
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	assertPreflightCheckStatus(t, checks, "https://mirror.example.test/rhel/9/BaseOS/x86_64/os/", "OK")
 }

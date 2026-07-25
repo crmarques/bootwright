@@ -84,6 +84,10 @@ func ensureOwnedDir(path string, ownerUID int, mode fs.FileMode) error {
 	if err := os.Chmod(path, mode); err != nil {
 		return fmt.Errorf("chmod directory %s: %w", path, err)
 	}
+	return validateOwnedDir(path, ownerUID, mode)
+}
+
+func validateOwnedDir(path string, ownerUID int, mode fs.FileMode) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return fmt.Errorf("stat directory %s: %w", path, err)

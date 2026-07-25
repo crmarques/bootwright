@@ -264,8 +264,49 @@ func (s *ContextStore) MaterializeSelected(targetDir string, names []string) (er
 	})
 }
 
+func (s *ContextStore) WithMaterialized(key MaterialKey, parentDir string, fn func(string) error) error {
+	data, err := s.Read(key)
+	if err != nil {
+		return err
+	}
+	return withMaterializedData(key, parentDir, data, fn)
+}
+
 func (s *ContextStore) MaterializeRuntime(targetDir string) (err error) {
 	return s.materialize(targetDir, func(MaterialStatus) bool { return true })
+}
+
+func withMaterializedData(key MaterialKey, parentDir string, data []byte, fn func(string) error) (err error) {
+	defer clear(data)
+	if err := validateMaterialKey(key); err != nil {
+		return err
+	}
+	if parentDir == "" {
+		return errors.New("materialized secret runtime parent is empty")
+	}
+	if fn == nil {
+		return errors.New("materialized secret callback is nil")
+	}
+	if err := validateOwnedDir(parentDir, os.Geteuid(), 0o700); err != nil {
+		return fmt.Errorf("validate materialized secret runtime parent: %w", err)
+	}
+	scratchDir, err := os.MkdirTemp(parentDir, "bootwright-material-*")
+	if err != nil {
+		return fmt.Errorf("create materialized secret directory: %w", err)
+	}
+	defer func() {
+		if cleanupErr := os.RemoveAll(scratchDir); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove materialized secret directory %s: %w", scratchDir, cleanupErr))
+		}
+	}()
+	if err := ensureOwnedDir(scratchDir, os.Geteuid(), 0o700); err != nil {
+		return err
+	}
+	target := contextMaterialPath(key.Name, scratchDir, key.Role)
+	if err := safefs.AtomicWriteFile(target, data, 0o600); err != nil {
+		return err
+	}
+	return fn(target)
 }
 
 func (s *ContextStore) materialize(targetDir string, include func(MaterialStatus) bool) (err error) {

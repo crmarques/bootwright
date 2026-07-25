@@ -9,6 +9,19 @@ import (
 	secretstore "github.com/crmarques/bootwright/internal/secrets"
 )
 
+func writeEncryptedClusterMaterial(t *testing.T, clustersDir, cluster, name, body string) {
+	t.Helper()
+	store := secretstore.NewContextStore("test", ClusterSecretsDir(clustersDir, cluster))
+	if err := store.Write(secretstore.MaterialKey{Name: name, Role: secretstore.MaterialPrimary}, []byte(body)); err != nil {
+		t.Fatalf("write encrypted %s: %v", name, err)
+	}
+}
+
+func writeEncryptedClusterKubeconfig(t *testing.T, clustersDir, cluster string) {
+	t.Helper()
+	writeEncryptedClusterMaterial(t, clustersDir, cluster, "kubeconfig", "apiVersion: v1\n")
+}
+
 func TestEncryptCapturedClusterSecretsStorageClusterEncryptsInPlace(t *testing.T) {
 	clustersDir := t.TempDir()
 	cluster := "demo"
@@ -127,7 +140,7 @@ func TestWithMaterializedClusterKubeconfigDecryptsAndCleansUp(t *testing.T) {
 	}
 }
 
-func TestWithMaterializedClusterKubeconfigMigratesLegacyPlaintext(t *testing.T) {
+func TestWithMaterializedClusterKubeconfigRejectsPlaintext(t *testing.T) {
 	clustersDir := t.TempDir()
 	cluster := "demo"
 	secretsDir := ClusterSecretsDir(clustersDir, cluster)
@@ -136,28 +149,23 @@ func TestWithMaterializedClusterKubeconfigMigratesLegacyPlaintext(t *testing.T) 
 	}
 	path := filepath.Join(secretsDir, "kubeconfig")
 	if err := os.WriteFile(path, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("seed legacy plaintext kubeconfig: %v", err)
+		t.Fatalf("seed plaintext kubeconfig: %v", err)
 	}
 
-	var seenContent []byte
 	err := withMaterializedClusterKubeconfig("test", clustersDir, cluster, func(kubeconfigPath string) error {
-		data, readErr := os.ReadFile(kubeconfigPath)
-		seenContent = data
-		return readErr
+		t.Fatalf("callback ran with plaintext material: %s", kubeconfigPath)
+		return nil
 	})
-	if err != nil {
-		t.Fatalf("withMaterializedClusterKubeconfig: %v", err)
-	}
-	if string(seenContent) != "apiVersion: v1\n" {
-		t.Fatalf("materialized legacy kubeconfig content = %q", seenContent)
+	if err == nil || !strings.Contains(err.Error(), "not encrypted") {
+		t.Fatalf("withMaterializedClusterKubeconfig error = %v, want plaintext refusal", err)
 	}
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read on-disk kubeconfig: %v", err)
 	}
-	if string(raw) == "apiVersion: v1\n" {
-		t.Fatalf("legacy plaintext kubeconfig was not encrypted in place by withMaterializedClusterKubeconfig")
+	if string(raw) != "apiVersion: v1\n" {
+		t.Fatalf("plaintext kubeconfig changed during rejected read: %q", raw)
 	}
 }
 

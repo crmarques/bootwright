@@ -3,6 +3,7 @@ package clusteraccess
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -27,7 +28,7 @@ func TestRevealClusterSecretDecryptsEncryptedMaterial(t *testing.T) {
 	}
 }
 
-func TestRevealClusterSecretMigratesLegacyPlaintext(t *testing.T) {
+func TestRevealClusterSecretRejectsPlaintextMaterial(t *testing.T) {
 	clustersDir := t.TempDir()
 	cluster := "ceph-libvirt"
 	secretsDir := workflow.ClusterSecretsDir(clustersDir, cluster)
@@ -36,23 +37,20 @@ func TestRevealClusterSecretMigratesLegacyPlaintext(t *testing.T) {
 	}
 	path := filepath.Join(secretsDir, "dashboard-password")
 	if err := os.WriteFile(path, []byte("hunter2\n"), 0o600); err != nil {
-		t.Fatalf("seed legacy plaintext dashboard-password: %v", err)
+		t.Fatalf("seed plaintext dashboard-password: %v", err)
 	}
 
-	value, err := RevealClusterSecret("test", clustersDir, cluster, "dashboard-password")
-	if err != nil {
-		t.Fatalf("RevealClusterSecret: %v", err)
-	}
-	if value != "hunter2" {
-		t.Fatalf("revealed value = %q, want %q", value, "hunter2")
+	_, err := RevealClusterSecret("test", clustersDir, cluster, "dashboard-password")
+	if err == nil || !strings.Contains(err.Error(), "not encrypted") {
+		t.Fatalf("RevealClusterSecret error = %v, want plaintext refusal", err)
 	}
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	if string(raw) == "hunter2\n" {
-		t.Fatalf("legacy plaintext dashboard-password must be encrypted in place after RevealClusterSecret")
+	if string(raw) != "hunter2\n" {
+		t.Fatalf("plaintext material changed during rejected read: %q", raw)
 	}
 }
 

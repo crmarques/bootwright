@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,13 +29,7 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 	}
 	writeKubeconfig := func(t *testing.T, clustersDir string) {
 		t.Helper()
-		kubeconfig := clusterKubeconfigPath(clustersDir, cluster)
-		if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-			t.Fatalf("mkdir kubeconfig dir: %v", err)
-		}
-		if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-			t.Fatalf("write kubeconfig: %v", err)
-		}
+		writeEncryptedClusterKubeconfig(t, clustersDir, cluster)
 	}
 	reconcile := func(t *testing.T, hash string, available bool, acked []string) []ApplyTask {
 		t.Helper()
@@ -135,13 +128,7 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 	}
 	writeKubeconfig := func(t *testing.T, clustersDir string) {
 		t.Helper()
-		kubeconfig := clusterKubeconfigPath(clustersDir, cluster)
-		if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-			t.Fatalf("mkdir kubeconfig dir: %v", err)
-		}
-		if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-			t.Fatalf("write kubeconfig: %v", err)
-		}
+		writeEncryptedClusterKubeconfig(t, clustersDir, cluster)
 	}
 	one := func(t *testing.T, got []ClusterReinstall, want string) {
 		t.Helper()

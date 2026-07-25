@@ -25,12 +25,30 @@ first was already written.
 
 **Cluster stores are not flat:** A per-cluster `ContextStore` shares
 `clusters/<cluster>/secrets/` with the hierarchical `addons/` secret-output
-area. Cluster-captured credential access and post-install capture therefore use
-`MigratePlaintextMaterial` for the known `kubeconfig`,
-`kubeadmin-password`, or `dashboard-password` key. Broad
+area. Post-install capture therefore uses `MigratePlaintextMaterial` only for
+the known `kubeconfig`, `kubeadmin-password`, or `dashboard-password` key.
+Access paths are strict encrypted reads and never invoke migration. Broad
 `MigratePlaintext` is reserved for the flat context secret store: running it
 against a cluster root interprets `addons/` as a primary material named
 `addons` and fails with "is not a regular file" before an add-on runner starts.
+
+**Bounded single-material staging:** `ContextStore.WithMaterialized` and the
+resolver equivalent require an existing current-process-owned `0700` private
+runtime parent. The store decrypts exactly one selected material; the resolver
+either decrypts context material or copies an explicitly declared external
+file source. Both write a `0600` file under a new `0700` scratch directory,
+invoke the consumer callback, and remove the scratch directory on every
+callback return, including callback failure. Context-store reads never fall
+back to plaintext, and neither helper migrates durable material.
+`workflow.Run` nests these callbacks for the managed `hostClusterRef`
+kubeconfigs selected by the current KubeVirt-capable playbook or task, keeping
+them available for one bounded Ansible invocation.
+
+Callback cleanup is not crash recovery: an abrupt process termination cannot
+run deferred removals. Task runtime secret directories are reclaimed by the
+post-lease stale sweep described above. A different private runtime parent
+must not be described as crash-reclaimed unless its owner supplies an
+equivalent sweep.
 
 **MkdirAll does not fix modes:** `ensureLocalDir`
 (`internal/render/filesystem.go`) must explicitly `Chmod` after `MkdirAll`:

@@ -9,7 +9,7 @@ import (
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
-func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir, secretsDir string, deps Deps, secretScope *SecretScope) []Check {
+func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, contextName, clustersDir, secretsDir, runtimeDir string, deps Deps, secretScope *SecretScope) []Check {
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
 		return nil
 	}
@@ -19,89 +19,108 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			provisionedThisRun[cluster.Metadata.Name] = true
 		}
 	}
-	seen := map[string]bool{}
-	usable := map[string]string{}
-	var checks []Check
-	for _, p := range state.InfraProviders {
-		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil || p.Spec.KubeVirt.HostClusterRef.Name == "" {
-			continue
-		}
-		if !kubeVirtProviderInScope(p.Metadata.Name, state, secretScope) {
-			continue
-		}
-		name := p.Spec.KubeVirt.HostClusterRef.Name
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
-		info, err := deps.StatPath(path)
-		switch {
-		case err != nil && provisionedThisRun[name]:
-			checks = append(checks, infoCheck(checkGroupInstallerTools, name+" kubeconfig", "will be provisioned this run: "+name+" installs in the base phase before its dependent KubeVirt child clusters boot"))
-		case err != nil:
-			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
-		case info.IsDir():
-			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
-		default:
-			checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
-			apiCheck := kubeVirtAPIReadyCheck(name, path, deps)
-			checks = append(checks, apiCheck)
-			if apiCheck.Status == StatusOK {
-				usable["host:"+name] = path
-			}
-		}
+	type probeTarget struct {
+		name           string
+		path           string
+		hostCluster    bool
+		externalSource bool
+		providers      []v1alpha1.InfraProvider
 	}
 	idx := secret.NewIndex(state)
+	seen := map[string]*probeTarget{}
+	var targets []*probeTarget
 	for _, p := range state.InfraProviders {
 		k := p.Spec.KubeVirt
-		if k == nil || k.KubeconfigRef == nil || k.KubeconfigRef.Name == "" {
-			continue
-		}
-		if k.HostClusterRef != nil && k.HostClusterRef.Name != "" {
-			continue
-		}
-		if !kubeVirtProviderInScope(p.Metadata.Name, state, secretScope) {
-			continue
-		}
-		refName := k.KubeconfigRef.Name
-		if seen["kc:"+refName] {
-			continue
-		}
-		seen["kc:"+refName] = true
-		path := secret.ResolveMaterialPath(refName, idx, secretsDir, secret.MaterialPrimary)
-		externalSource := secret.MaterialPathUsesExternalSource(refName, idx, secret.MaterialPrimary)
-		info, err := deps.statSecretPath(path, externalSource)
-		if err != nil || info.IsDir() {
-			continue
-		}
-		apiCheck := kubeVirtAPIReadyCheck(refName, path, deps)
-		checks = append(checks, apiCheck)
-		if apiCheck.Status == StatusOK {
-			usable["kc:"+refName] = path
-		}
-	}
-	for _, p := range state.InfraProviders {
-		k := p.Spec.KubeVirt
-		if k == nil {
+		if k == nil || !kubeVirtProviderInScope(p.Metadata.Name, state, secretScope) {
 			continue
 		}
 		var key string
+		var target probeTarget
 		switch {
 		case k.HostClusterRef != nil && k.HostClusterRef.Name != "":
-			key = "host:" + k.HostClusterRef.Name
+			target.name = k.HostClusterRef.Name
+			target.path = filepath.Join(clustersDir, target.name, "secrets", "kubeconfig")
+			target.hostCluster = true
+			key = "host:" + target.name
 		case k.KubeconfigRef != nil && k.KubeconfigRef.Name != "":
-			key = "kc:" + k.KubeconfigRef.Name
+			target.name = k.KubeconfigRef.Name
+			target.path = secret.ResolveMaterialPath(target.name, idx, secretsDir, secret.MaterialPrimary)
+			target.externalSource = secret.MaterialPathUsesExternalSource(target.name, idx, secret.MaterialPrimary)
+			key = "kubeconfig:" + target.name
 		default:
 			continue
 		}
-		path, ok := usable[key]
+		current, ok := seen[key]
 		if !ok {
+			current = &target
+			seen[key] = current
+			targets = append(targets, current)
+		}
+		current.providers = append(current.providers, p)
+	}
+	var checks []Check
+	probe := func(target *probeTarget, kubeconfigPath string) []Check {
+		var targetChecks []Check
+		apiCheck := kubeVirtCheckSourcePath(kubeVirtAPIReadyCheck(target.name, kubeconfigPath, deps), kubeconfigPath, target.path)
+		targetChecks = append(targetChecks, apiCheck)
+		if apiCheck.Status != StatusOK {
+			return targetChecks
+		}
+		for _, provider := range target.providers {
+			networkChecks := kubeVirtNetworkRefChecks(provider, kubeconfigPath, deps)
+			for i := range networkChecks {
+				networkChecks[i] = kubeVirtCheckSourcePath(networkChecks[i], kubeconfigPath, target.path)
+			}
+			targetChecks = append(targetChecks, networkChecks...)
+		}
+		return targetChecks
+	}
+	for _, target := range targets {
+		info, err := deps.statSecretPath(target.path, target.externalSource)
+		if target.hostCluster {
+			switch {
+			case err != nil && provisionedThisRun[target.name]:
+				checks = append(checks, infoCheck(checkGroupInstallerTools, target.name+" kubeconfig", "will be provisioned this run: "+target.name+" installs in the base phase before its dependent KubeVirt child clusters boot"))
+			case err != nil:
+				checks = append(checks, failCheck(checkGroupInstallerTools, target.name+" kubeconfig", target.path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+target.name+" in --clusters or run bootwright apply --stage clusters --clusters "+target.name+" --yes first"))
+			case info.IsDir():
+				checks = append(checks, failCheck(checkGroupInstallerTools, target.name+" kubeconfig", target.path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+target.path+" with the host cluster kubeconfig"))
+			default:
+				checks = append(checks, okCheck(checkGroupInstallerTools, target.name+" kubeconfig", target.path))
+				store := secret.NewContextStore(contextName, filepath.Dir(target.path))
+				var targetChecks []Check
+				err = store.WithMaterialized(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}, runtimeDir, func(kubeconfigPath string) error {
+					targetChecks = probe(target, kubeconfigPath)
+					return nil
+				})
+				if err != nil {
+					checks = append(checks, kubeVirtMaterializationFailure(target.name, target.path, err))
+				} else {
+					checks = append(checks, targetChecks...)
+				}
+			}
 			continue
 		}
-		checks = append(checks, kubeVirtNetworkRefChecks(p, path, deps)...)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		resolver := secret.NewResolver(contextName, secretsDir, idx)
+		var targetChecks []Check
+		err = resolver.WithMaterialized(target.name, secret.MaterialPrimary, runtimeDir, func(kubeconfigPath string) error {
+			targetChecks = probe(target, kubeconfigPath)
+			return nil
+		})
+		if err != nil {
+			checks = append(checks, kubeVirtMaterializationFailure(target.name, target.path, err))
+		} else {
+			checks = append(checks, targetChecks...)
+		}
 	}
 	return checks
+}
+
+func kubeVirtMaterializationFailure(name, kubeconfigPath string, err error) Check {
+	return failCheck(checkGroupInstallerTools, name+" KubeVirt API", err.Error(), "KubeVirt child clusters need a readable host cluster kubeconfig", "ensure "+kubeconfigPath+" contains readable kubeconfig material and any Bootwright encryption key is available")
 }
 
 func kubeVirtProviderInScope(providerName string, state v1alpha1.State, secretScope *SecretScope) bool {
@@ -138,6 +157,14 @@ func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
 		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need access to the host cluster Kubernetes API", "ensure "+kubeconfigPath+" identifies a reachable Kubernetes API server and grants access (Bootwright manages it under the root-owned workspace)")
 	}
 	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "subresources.kubevirt.io/v1/version")
+}
+
+func kubeVirtCheckSourcePath(check Check, kubeconfigPath, sourcePath string) Check {
+	if kubeconfigPath != sourcePath {
+		check.Evidence = strings.ReplaceAll(check.Evidence, kubeconfigPath, sourcePath)
+		check.Remediation = strings.ReplaceAll(check.Remediation, kubeconfigPath, sourcePath)
+	}
+	return check
 }
 
 func kubernetesResourceMissing(evidence, name string) bool {

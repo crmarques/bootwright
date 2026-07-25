@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/locality"
+	secretstore "github.com/crmarques/bootwright/internal/secrets"
 )
 
 func TestPythonVersionCheckUsesInjectedDeps(t *testing.T) {
@@ -81,7 +82,7 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	var tools []string
 	for _, check := range checks {
 		if check.Group == checkGroupInstallerTools {
@@ -93,14 +94,16 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 	}
 }
 
-func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
+func TestKubeVirtHostClusterPreflightDecryptsKubeconfigForAPI(t *testing.T) {
 	clustersDir := t.TempDir()
-	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	runsDir := t.TempDir()
+	if err := os.Chmod(runsDir, 0o700); err != nil {
+		t.Fatalf("chmod runs dir: %v", err)
 	}
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
+	store := secretstore.NewContextStore("test", filepath.Dir(kubeconfig))
+	if err := store.Write(secretstore.MaterialKey{Name: "kubeconfig", Role: secretstore.MaterialPrimary}, []byte("apiVersion: v1\n")); err != nil {
+		t.Fatalf("seed encrypted kubeconfig: %v", err)
 	}
 	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
 		Metadata: v1alpha1.Metadata{Name: "child-provider"},
@@ -113,8 +116,29 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 					Name: "sno",
 				}},
 			},
+			NetworkAttachments: []v1alpha1.NetworkAttachmentCapability{{
+				Name: "child-net",
+				KubeVirt: &v1alpha1.NetworkAttachmentKubeVirt{
+					NetworkRef: v1alpha1.KubeVirtNetworkRef{
+						Kind: v1alpha1.KubeVirtNetworkKindNAD, Name: "child-net", Namespace: "bootwright-child-ocp",
+					},
+				},
+			}},
 		},
 	}}}
+	secondProvider := state.InfraProviders[0]
+	secondProvider.Metadata.Name = "second-child-provider"
+	secondProvider.Spec.NetworkAttachments = []v1alpha1.NetworkAttachmentCapability{{
+		Name: "second-child-net",
+		KubeVirt: &v1alpha1.NetworkAttachmentKubeVirt{
+			NetworkRef: v1alpha1.KubeVirtNetworkRef{
+				Kind: v1alpha1.KubeVirtNetworkKindNAD, Name: "second-child-net", Namespace: "bootwright-child-ocp",
+			},
+		},
+	}}
+	state.InfraProviders = append(state.InfraProviders, secondProvider)
+	var probedPaths []string
+	var probedContent []byte
 	deps := Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
@@ -125,6 +149,15 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		},
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			if name == "kubectl" {
+				for i, arg := range args {
+					if arg == "--kubeconfig" && i+1 < len(args) {
+						probedPaths = append(probedPaths, args[i+1])
+						probedContent, _ = os.ReadFile(args[i+1])
+					}
+					if strings.Contains(arg, "network-attachment-definitions/") {
+						return []byte("networkattachmentdefinition.k8s.cni.cncf.io/" + filepath.Base(arg) + "\n"), nil
+					}
+				}
 				return []byte(`{"gitVersion":"v1.4.1"}`), nil
 			}
 			return []byte("Python 3.12.4"), nil
@@ -132,9 +165,114 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		UID: func() int { return 1000 },
 	}
 
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, runsDir, deps, nil, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
+	assertPreflightCheckStatus(t, checks, "child-net network", "OK")
+	assertPreflightCheckStatus(t, checks, "second-child-net network", "OK")
+	if len(probedPaths) != 3 || probedPaths[0] != probedPaths[1] || probedPaths[0] != probedPaths[2] || probedPaths[0] == kubeconfig {
+		t.Fatalf("kubectl kubeconfig paths = %v, want one shared materialized copy distinct from %q", probedPaths, kubeconfig)
+	}
+	probedPath := probedPaths[0]
+	if rel, err := filepath.Rel(runsDir, probedPath); err != nil || strings.HasPrefix(rel, "..") {
+		t.Fatalf("kubectl kubeconfig path %q is outside runs dir %q", probedPath, runsDir)
+	}
+	if string(probedContent) != "apiVersion: v1\n" {
+		t.Fatalf("materialized kubeconfig content = %q", probedContent)
+	}
+	if _, err := os.Stat(probedPath); !os.IsNotExist(err) {
+		t.Fatalf("materialized kubeconfig was not removed: %v", err)
+	}
+}
+
+func TestKubeVirtHostClusterPreflightRejectsPlaintextKubeconfig(t *testing.T) {
+	clustersDir := t.TempDir()
+	runtimeDir := t.TempDir()
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write plaintext kubeconfig: %v", err)
+	}
+	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
+		Metadata: v1alpha1.Metadata{Name: "child-provider"},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerKubeVirt,
+			KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+				HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+				Namespace:      "bootwright-child-ocp",
+			},
+		},
+	}}}
+	probes := 0
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "test", clustersDir, "", runtimeDir, Deps{
+		StatPath: os.Stat,
+		CommandOutputLocalRoot: func(string, ...string) ([]byte, error) {
+			probes++
+			return []byte(`{"gitVersion":"v1.4.1"}`), nil
+		},
+	}, nil)
+	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
+	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "FAIL")
+	if probes != 0 {
+		t.Fatalf("kubectl probe count = %d, want 0", probes)
+	}
+	data, err := os.ReadFile(kubeconfig)
+	if err != nil {
+		t.Fatalf("read plaintext kubeconfig after refusal: %v", err)
+	}
+	if string(data) != "apiVersion: v1\n" {
+		t.Fatalf("plaintext kubeconfig was modified: %q", data)
+	}
+}
+
+func TestKubeVirtHostClusterPreflightProbesEachHostCluster(t *testing.T) {
+	clustersDir := t.TempDir()
+	runsDir := t.TempDir()
+	if err := os.Chmod(runsDir, 0o700); err != nil {
+		t.Fatalf("chmod runs dir: %v", err)
+	}
+	var state v1alpha1.State
+	for _, name := range []string{"metal-ocp-a", "metal-ocp-b"} {
+		store := secretstore.NewContextStore("test", filepath.Join(clustersDir, name, "secrets"))
+		if err := store.Write(secretstore.MaterialKey{Name: "kubeconfig", Role: secretstore.MaterialPrimary}, []byte(name)); err != nil {
+			t.Fatalf("seed %s encrypted kubeconfig: %v", name, err)
+		}
+		state.InfraProviders = append(state.InfraProviders, v1alpha1.InfraProvider{
+			Metadata: v1alpha1.Metadata{Name: name + "-provider"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+					HostClusterRef: &v1alpha1.LocalObjectReference{Name: name},
+					Namespace:      "child",
+				},
+			},
+		})
+	}
+	probes := map[string]int{}
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "test", clustersDir, "", runsDir, Deps{
+		StatPath: os.Stat,
+		CommandOutputLocalRoot: func(_ string, args ...string) ([]byte, error) {
+			for i, arg := range args {
+				if arg != "--kubeconfig" || i+1 >= len(args) {
+					continue
+				}
+				data, err := os.ReadFile(args[i+1])
+				if err != nil {
+					t.Fatalf("read materialized kubeconfig: %v", err)
+				}
+				probes[string(data)]++
+			}
+			return []byte(`{"gitVersion":"v1.4.1"}`), nil
+		},
+	}, nil)
+	for _, name := range []string{"metal-ocp-a", "metal-ocp-b"} {
+		assertPreflightCheckStatus(t, checks, name+" KubeVirt API", "OK")
+		if probes[name] != 1 {
+			t.Fatalf("%s probe count = %d, want 1", name, probes[name])
+		}
+	}
 }
 
 func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
@@ -210,12 +348,14 @@ func TestKubeVirtHostClusterPreflightClassifiesGenericNotFoundAsAPIAccessFailure
 
 func TestKubeVirtHostClusterPreflightSkipsNetworkChecksWhenAPIFails(t *testing.T) {
 	clustersDir := t.TempDir()
-	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	runsDir := t.TempDir()
+	if err := os.Chmod(runsDir, 0o700); err != nil {
+		t.Fatalf("chmod runs dir: %v", err)
 	}
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
+	store := secretstore.NewContextStore("test", filepath.Dir(kubeconfig))
+	if err := store.Write(secretstore.MaterialKey{Name: "kubeconfig", Role: secretstore.MaterialPrimary}, []byte("apiVersion: v1\n")); err != nil {
+		t.Fatalf("seed encrypted kubeconfig: %v", err)
 	}
 	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
 		Metadata: v1alpha1.Metadata{Name: "child-provider"},
@@ -236,7 +376,7 @@ func TestKubeVirtHostClusterPreflightSkipsNetworkChecksWhenAPIFails(t *testing.T
 		},
 	}}}
 	probes := 0
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", Deps{
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "test", clustersDir, "", runsDir, Deps{
 		StatPath: os.Stat,
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			probes++
@@ -270,7 +410,7 @@ func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T)
 		}},
 	}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps, nil)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, "test", clustersDir, "", "/runs", deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "INFO")
 	for _, check := range checks {
 		if check.Name == "metal-ocp KubeVirt API" {
@@ -292,7 +432,7 @@ func TestKubeVirtHostClusterExternalStillRequiresKubeconfig(t *testing.T) {
 		},
 	}}}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, clustersDir, "", deps, nil)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, "test", clustersDir, "", "/runs", deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
 }
 
@@ -314,7 +454,7 @@ func TestKubeVirtHostClusterSelfProvisionedMachinesOnlyStillRequiresKubeconfig(t
 		}},
 	}
 	deps := Deps{StatPath: os.Stat}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", deps, nil)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "test", clustersDir, "", "/runs", deps, nil)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "FAIL")
 }
 
@@ -344,7 +484,7 @@ func TestKubeVirtHostClusterChecksSkipOutOfScopeProviders(t *testing.T) {
 	}
 	deps := Deps{StatPath: os.Stat}
 	scope := &SecretScope{Machines: map[string]bool{"srv4203": true}, StorageClusters: map[string]bool{}}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", deps, scope)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "test", clustersDir, "", "/runs", deps, scope)
 	if checkPresent(checks, "ocp-prd-01 kubeconfig") {
 		t.Fatalf("out-of-scope KubeVirt host cluster kubeconfig must not be checked when its provider is not selected: %+v", checkNames(checks))
 	}
@@ -486,15 +626,15 @@ func TestVirtctlPreflightGatedOnDepsProvisioning(t *testing.T) {
 		}
 		return false
 	}
-	baseOnly := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
+	baseOnly := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/clusters", "/runs", deps, nil, nil)
 	if !hasVirtctl(baseOnly) {
 		t.Fatalf("base-without-deps must require virtctl up front: %+v", baseOnly)
 	}
-	withDeps := CollectChecks(state, []Phase{{Name: "deps"}, {Name: "base"}}, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
+	withDeps := CollectChecks(state, []Phase{{Name: "deps"}, {Name: "base"}}, true, "test", "/context/secrets", "/clusters", "/runs", deps, nil, nil)
 	if hasVirtctl(withDeps) {
 		t.Fatalf("deps in scope provisions virtctl, so the hard gate must be skipped")
 	}
-	fullApply := CollectChecks(state, nil, true, "test", "/context/secrets", "/clusters", deps, nil, nil)
+	fullApply := CollectChecks(state, nil, true, "test", "/context/secrets", "/clusters", "/runs", deps, nil, nil)
 	if hasVirtctl(fullApply) {
 		t.Fatalf("a full apply (no --stage) includes deps, so the hard gate must be skipped")
 	}
@@ -529,7 +669,7 @@ func TestKubeVirtToolingGatesSkipOutOfScopeMachines(t *testing.T) {
 		UID:                    func() int { return 1000 },
 	}
 	scope := &SecretScope{Machines: map[string]bool{"srv4203": true}, StorageClusters: map[string]bool{}}
-	checks := CollectChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, true, "test", "/context/secrets", "/clusters", deps, nil, scope)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}, {Name: "base"}}, true, "test", "/context/secrets", "/clusters", "/runs", deps, nil, scope)
 	for _, name := range []string{"kubectl", "virtctl"} {
 		if checkPresent(checks, name) {
 			t.Fatalf("%s tooling must not be required when no in-scope machine provisions on a KubeVirt provider: %+v", name, checkNames(checks))
@@ -732,7 +872,7 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 			},
 		}},
 	}
-	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", Deps{
+	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", "/runs", Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
 		},
@@ -815,7 +955,7 @@ func TestPreflightSecretScopeDropsRenderReferenceStorage(t *testing.T) {
 		StatPath: func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 	}
 	scope := &SecretScope{Machines: map[string]bool{}, StorageClusters: map[string]bool{}}
-	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, scope)
+	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, scope)
 
 	for _, name := range []string{
 		"StorageCluster/ceph ceph entitlementRef rhsm organizationRef",
@@ -868,14 +1008,14 @@ func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
 			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
 		},
 	}}
-	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 
 	assertPreflightCheckStatus(t, checks, "oc", "OK")
 	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
 	assertPreflightCheckStatus(t, checks, "python3", "OK")
 
 	state = importedCephSecretState(v1alpha1.SecretSource{})
-	checks = CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks = CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	for _, name := range []string{"ansible-playbook", "python3"} {
 		if checkPresent(checks, name) {
 			t.Errorf("add-ons run without playbook hooks must not require %s: %+v", name, checkNames(checks))
@@ -1098,7 +1238,7 @@ func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 
 	for _, name := range []string{"oc", "openshift-install"} {
 		for _, check := range checks {
@@ -1206,10 +1346,10 @@ func TestAddonsStageGatesMissingKubeconfig(t *testing.T) {
 		StatPath: func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 		UID:      func() int { return 0 },
 	}
-	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	assertPreflightCheckStatus(t, checks, "dc1 kubeconfig", "FAIL")
 
-	checks = CollectChecks(state, []Phase{{Name: "add-ons"}, {Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps, nil, nil)
+	checks = CollectChecks(state, []Phase{{Name: "add-ons"}, {Name: "base"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	if _, ok := findCheckByName(checks, "dc1 kubeconfig"); ok {
 		t.Fatalf("a base-in-scope run must not gate the add-on kubeconfig: %+v", checks)
 	}
@@ -1217,6 +1357,10 @@ func TestAddonsStageGatesMissingKubeconfig(t *testing.T) {
 
 func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 	sourceDir := t.TempDir()
+	runsDir := t.TempDir()
+	if err := os.Chmod(runsDir, 0o700); err != nil {
+		t.Fatalf("chmod runs dir: %v", err)
+	}
 	kubeconfig := filepath.Join(sourceDir, "hub-kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
@@ -1255,10 +1399,20 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 		}},
 	}
 	var probedKubeVirt, probedNAD bool
+	var probedPaths []string
 	deps := Deps{
 		StatPath:         os.Stat,
 		StatExternalPath: os.Stat,
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
+			for i, arg := range args {
+				if arg == "--kubeconfig" && i+1 < len(args) {
+					probedPaths = append(probedPaths, args[i+1])
+					data, err := os.ReadFile(args[i+1])
+					if err != nil || string(data) != "apiVersion: v1\n" {
+						t.Fatalf("materialized external kubeconfig: data=%q err=%v", data, err)
+					}
+				}
+			}
 			for _, a := range args {
 				if strings.Contains(a, "/subresources.kubevirt.io/") {
 					probedKubeVirt = true
@@ -1269,11 +1423,17 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 			return []byte("networkattachmentdefinition.k8s.cni.cncf.io/vmnet\n"), nil
 		},
 	}
-	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "/clusters", sourceDir, deps, nil)
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "test", "/clusters", sourceDir, runsDir, deps, nil)
 	assertPreflightCheckStatus(t, checks, "hub-kubeconfig KubeVirt API", "OK")
 	assertPreflightCheckStatus(t, checks, "vmnet network", "OK")
 	if !probedKubeVirt || !probedNAD {
 		t.Fatalf("kubeconfigRef arm did not run both probes: kubevirt=%v nad=%v", probedKubeVirt, probedNAD)
+	}
+	if len(probedPaths) != 2 || probedPaths[0] != probedPaths[1] || probedPaths[0] == kubeconfig {
+		t.Fatalf("probe kubeconfig paths = %v, want one shared materialized copy", probedPaths)
+	}
+	if _, err := os.Stat(probedPaths[0]); !os.IsNotExist(err) {
+		t.Fatalf("materialized external kubeconfig was not removed: %v", err)
 	}
 }
 

@@ -661,13 +661,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
-	kubeconfig := clusterKubeconfigPath(clustersDir, "sno-libvirt")
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-		t.Fatalf("mkdir kubeconfig dir: %v", err)
-	}
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
+	writeEncryptedClusterKubeconfig(t, clustersDir, "sno-libvirt")
 	checker := &fakeClusterAvailabilityChecker{available: true}
 	calls := 0
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{

@@ -31,16 +31,17 @@ already-installed cluster.
 ## Decision
 
 Every cluster-captured credential is encrypted at rest using the same
-mechanism as declared secrets, reusing `internal/secrets.ContextStore`
-unchanged: a dedicated `ContextStore` instance is constructed **per cluster**,
-rooted at `clusters/<cluster>/secrets/` instead of the context-level
-`contexts/<context>/secrets/`. Each cluster gets its own AES-256-GCM key and
-its own keyring subdir at `clusters/<cluster>/secrets/.bootwright/`, isolated
-from every other cluster and from the context secret store — so two clusters
-can each have a "kubeconfig" entry without collision. `dashboard-password`,
-`kubeconfig`, and `kubeadmin-password` are all written under `MaterialPrimary`,
-which maps to a bare filename with no suffix, so the encrypted envelope lands
-at exactly the path these files occupied before this change.
+mechanism as declared secrets, reusing the envelope mechanism owned by
+`internal/secrets.ContextStore`: a dedicated `ContextStore` instance is
+constructed **per cluster**, rooted at `clusters/<cluster>/secrets/` instead of
+the context-level `contexts/<context>/secrets/`. Each cluster gets its own
+AES-256-GCM key and its own keyring subdir at
+`clusters/<cluster>/secrets/.bootwright/`, isolated from every other cluster
+and from the context secret store — so two clusters can each have a
+"kubeconfig" entry without collision. `dashboard-password`, `kubeconfig`, and
+`kubeadmin-password` are all written under `MaterialPrimary`, which maps to a
+bare filename with no suffix, so the encrypted envelope lands at exactly the
+path these files occupied before this change.
 
 Ansible roles are unchanged: `dashboard_secret.yml` and `wait_install.yml`
 still write plaintext to that same path. Immediately after the capturing
@@ -50,18 +51,41 @@ the per-cluster store, converting each plaintext file just written into a
 ciphertext envelope in place before the task's result is returned. The
 targeted method is required because the same secrets root also contains the
 hierarchical `addons/` output area, which is not context-store material.
-Migration is idempotent — a no-op once a named file is already encrypted — so
-this runs after every succeeding task, not just the one that captured the
-credential, and self-heals any pre-existing plaintext file left by a cluster
-installed before this change.
+This conversion is part of the capture boundary. Normal cluster-secret reads
+accept only encrypted envelopes and never migrate plaintext implicitly.
 
-`kubeconfig` is additionally consumed programmatically. Every such call site —
-add-on apply/wait, node-config apply, the pull-secret merge effect, Ansible
-hook extra-vars, and every plan-time `ClusterAvailabilityChecker.Available`
-probe — now decrypts kubeconfig into a fresh, task-scoped scratch file via
-`ContextStore.MaterializeSelected`, uses it, and removes it unconditionally
-afterward. Kubeconfig plaintext exists on disk only for the span of one
-`oc`/`kubectl` invocation or one Ansible hook run, never as the durable state.
+Captured `kubeconfig` is additionally consumed programmatically. Add-on
+apply/wait, node-config apply, the pull-secret merge effect, Ansible hook
+extra-vars, every plan-time `ClusterAvailabilityChecker.Available` probe, and
+KubeVirt `hostClusterRef` preflight all perform a strict encrypted read through
+the owning per-cluster store. A file-based consumer receives a fresh `0600`
+scratch copy below an existing current-process-owned `0700` private runtime
+parent. The copy is bounded to its callback and removed on every callback
+return, including errors.
+
+KubeVirt Ansible execution follows the same managed-host boundary.
+`workflow.Run` materializes the `hostClusterRef` kubeconfigs required by the
+current playbook or task beneath that task's runtime secrets directory and
+keeps them available for the bounded Ansible invocation. The renderer projects
+each path into its machine components and into the
+`bootwright_kubevirt_host_kubeconfigs` host-to-path map used by controller
+`virtctl` provisioning. VM provisioning, boot, and destroy roles therefore
+never receive a managed host's durable encrypted path. Dry-run emits only the
+logical managed-host path and creates no plaintext copy.
+
+External `kubeconfigRef` follows the declared `Secret` contract instead.
+Preflight decrypts context material or copies an explicit file source through
+the declared-secret resolver into its private runtime scratch. During Ansible
+execution, context material resolves from the task's materialized context
+secret store, while a `source.file` secret in source mode remains the
+operator-owned source path. That external file is authored secret input, not a
+cluster-captured encrypted envelope.
+
+Durable encrypted paths are never passed directly to `oc`, `kubectl`, or
+`virtctl` during real execution. Under normal process completion, kubeconfig
+plaintext exists on disk only for its bounded callback or Ansible invocation,
+never as durable cluster state.
+
 Human-facing reveals (`bootwright cluster info --secrets`, `bootwright cluster
 kubeconfig`) decrypt straight to memory or stdout — no scratch file at all.
 
@@ -83,9 +107,6 @@ cleanup gap.
 - `internal/clusteraccess` gained a new dependency on `internal/secrets`
   (added to the import-matrix allow-list); no cycle risk, since `internal/secrets`
   does not import back into `internal/clusteraccess` or `internal/converge`.
-- A cluster installed by a pre-ADR-0020 Bootwright still has plaintext
-  material at these paths; the next access through any of the paths above
-  (an apply task succeeding, a `withMaterializedClusterKubeconfig` call, or a
-  `RevealClusterSecret`/`Kubeconfig` read) targets that credential and
-  transparently encrypts it in place before use. There is no separate migration
-  command to run.
+- Non-encrypted cluster-secret material is rejected by access, preflight, and
+  runtime execution paths. Plaintext is accepted only at the explicit
+  post-capture conversion boundary after the producing Ansible task succeeds.

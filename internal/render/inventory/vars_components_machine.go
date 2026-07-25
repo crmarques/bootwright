@@ -8,7 +8,7 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string, secretsDir string) map[string]any {
+func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string, paths PathOptions) map[string]any {
 	driver := ProviderDriver(state, m)
 	out := map[string]any{
 		"kind":          v1alpha1.ServiceKindMachines,
@@ -71,7 +71,7 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 						out["bmcEmulated"] = be
 					}
 				case v1alpha1.ProvisionerVSphere:
-					if vsphere := vSphereMachineVars(state, provider, profile, secretsDir); vsphere != nil {
+					if vsphere := vSphereMachineVars(state, provider, profile, paths.SecretsDir); vsphere != nil {
 						out["vsphere"] = vsphere
 					}
 				case v1alpha1.ProvisionerKubeVirt:
@@ -84,15 +84,17 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					}
 					if k.HostClusterRef != nil {
 						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
-						if secret.IsPlaceholderSecretsDir(secretsDir) {
+						if secret.IsPlaceholderSecretsDir(paths.SecretsDir) {
 							out["kubevirt"].(map[string]any)["kubeconfig"] = secret.SecretPlaceholder(k.HostClusterRef.Name+"-kubeconfig", "")
-						} else {
+						} else if paths.KubeVirtHostKubeconfigPaths == nil {
 							out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
+						} else if kubeconfigPath := paths.KubeVirtHostKubeconfigPaths[k.HostClusterRef.Name]; kubeconfigPath != "" {
+							out["kubevirt"].(map[string]any)["kubeconfig"] = kubeconfigPath
 						}
 					}
 					if k.KubeconfigRef != nil {
 						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name
-						if path := secret.ResolvePath(k.KubeconfigRef.Name, secret.NewIndex(state), secretsDir); path != "" {
+						if path := secret.ResolvePath(k.KubeconfigRef.Name, secret.NewIndex(state), paths.SecretsDir); path != "" {
 							out["kubevirt"].(map[string]any)["kubeconfig"] = path
 						}
 					}
