@@ -122,21 +122,22 @@ func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
 		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", ferr.Error(), "KubeVirt child clusters need a readable host cluster kubeconfig", "ensure "+kubeconfigPath+" is a readable, valid kubeconfig (bootwright manages it under the root-owned workspace)")
 	}
 	_ = f.Close()
-	out, err := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "--raw=/apis/apiextensions.k8s.io/v1/customresourcedefinitions/virtualmachines.kubevirt.io")
+	out, err := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "--raw=/apis/subresources.kubevirt.io/v1/version")
 	if err != nil {
 		evidence := strings.TrimSpace(string(out))
 		if evidence == "" {
 			evidence = err.Error()
 		}
-		if kubernetesResourceMissing(evidence, "virtualmachines.kubevirt.io") {
+		kubernetesOut, kubernetesErr := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "--raw=/version")
+		if kubernetesErr == nil && strings.Contains(string(kubernetesOut), `"gitVersion"`) {
 			return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
 		}
 		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need access to the host cluster Kubernetes API", "ensure "+kubeconfigPath+" identifies a reachable Kubernetes API server and grants access (Bootwright manages it under the root-owned workspace)")
 	}
-	if !strings.Contains(string(out), "virtualmachines.kubevirt.io") {
+	if !strings.Contains(string(out), `"gitVersion"`) {
 		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need access to the host cluster Kubernetes API", "ensure "+kubeconfigPath+" identifies a reachable Kubernetes API server and grants access (Bootwright manages it under the root-owned workspace)")
 	}
-	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "virtualmachines.kubevirt.io")
+	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "subresources.kubevirt.io/v1/version")
 }
 
 func kubernetesResourceMissing(evidence, name string) bool {

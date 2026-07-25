@@ -20,14 +20,14 @@ func TestKubeVirtAPIReadyCheckBoundsProbeWithRequestTimeout(t *testing.T) {
 			if name == "kubectl" {
 				gotArgs = args
 			}
-			return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
+			return []byte(`{"gitVersion":"v1.4.1"}`), nil
 		},
 	})
 	if !slices.Contains(gotArgs, "--request-timeout=5s") {
 		t.Fatalf("kubectl argv must bound the probe with --request-timeout=5s, got %v", gotArgs)
 	}
-	if !slices.Contains(gotArgs, "--raw=/apis/apiextensions.k8s.io/v1/customresourcedefinitions/virtualmachines.kubevirt.io") {
-		t.Fatalf("kubectl argv must probe the CRD without discovery, got %v", gotArgs)
+	if !slices.Contains(gotArgs, "--raw=/apis/subresources.kubevirt.io/v1/version") {
+		t.Fatalf("kubectl argv must probe the KubeVirt version API without discovery, got %v", gotArgs)
 	}
 }
 

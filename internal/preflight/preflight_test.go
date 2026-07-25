@@ -125,7 +125,7 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		},
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			if name == "kubectl" {
-				return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
+				return []byte(`{"gitVersion":"v1.4.1"}`), nil
 			}
 			return []byte("Python 3.12.4"), nil
 		},
@@ -148,7 +148,12 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	}
 	check := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
-			return []byte("Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io \"virtualmachines.kubevirt.io\" not found\n"), errors.New("not found")
+			for _, arg := range args {
+				if arg == "--raw=/version" {
+					return []byte(`{"gitVersion":"v1.34.0"}`), nil
+				}
+			}
+			return []byte("Error from server (NotFound): the server could not find the requested resource\n"), errors.New("not found")
 		},
 	})
 	if check.Status == "OK" {
@@ -156,6 +161,29 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	}
 	if !strings.Contains(check.Remediation, "bootwright apply --stage clusters --clusters metal-ocp --yes") {
 		t.Fatalf("remediation = %q", check.Remediation)
+	}
+}
+
+func TestKubeVirtHostClusterPreflightClassifiesGenericNotFoundAsMissingKubeVirtWhenKubernetesIsReachable(t *testing.T) {
+	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	check := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
+		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
+			for _, arg := range args {
+				if arg == "--raw=/version" {
+					return []byte(`{"gitVersion":"v1.34.0"}`), nil
+				}
+			}
+			return []byte("Error from server (NotFound): the server could not find the requested resource\n"), errors.New("not found")
+		},
+	})
+	if check.Status != StatusFail {
+		t.Fatalf("generic API NotFound accepted: %+v", check)
+	}
+	if !strings.Contains(check.Remediation, "apply --stage clusters") {
+		t.Fatalf("generic KubeVirt API NotFound misreported: %q", check.Remediation)
 	}
 }
 
@@ -173,7 +201,7 @@ func TestKubeVirtHostClusterPreflightClassifiesGenericNotFoundAsAPIAccessFailure
 		t.Fatalf("generic API NotFound accepted: %+v", check)
 	}
 	if strings.Contains(check.Remediation, "apply --stage clusters") {
-		t.Fatalf("generic API NotFound misreported as KubeVirt-not-ready: %q", check.Remediation)
+		t.Fatalf("generic host API NotFound misreported as KubeVirt-not-ready: %q", check.Remediation)
 	}
 	if !strings.Contains(check.Remediation, "reachable Kubernetes API server") {
 		t.Fatalf("remediation should name host API reachability: %q", check.Remediation)
@@ -219,8 +247,8 @@ func TestKubeVirtHostClusterPreflightSkipsNetworkChecksWhenAPIFails(t *testing.T
 	if checkPresent(checks, "child-net network") {
 		t.Fatalf("network check ran after failed host API prerequisite: %+v", checkNames(checks))
 	}
-	if probes != 1 {
-		t.Fatalf("probe count = %d, want one host API probe", probes)
+	if probes != 2 {
+		t.Fatalf("probe count = %d, want KubeVirt and Kubernetes API probes", probes)
 	}
 }
 
@@ -362,7 +390,7 @@ func TestKubeVirtHostClusterChecksRunAsLocalRoot(t *testing.T) {
 	api := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
 		CommandOutput: callerDenied,
 		CommandOutputLocalRoot: func(_ string, _ ...string) ([]byte, error) {
-			return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
+			return []byte(`{"gitVersion":"v1.4.1"}`), nil
 		},
 	})
 	if api.Status != StatusOK {
@@ -1226,15 +1254,15 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 			},
 		}},
 	}
-	var probedCRD, probedNAD bool
+	var probedKubeVirt, probedNAD bool
 	deps := Deps{
 		StatPath:         os.Stat,
 		StatExternalPath: os.Stat,
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			for _, a := range args {
-				if strings.Contains(a, "/customresourcedefinitions/") {
-					probedCRD = true
-					return []byte("virtualmachines.kubevirt.io\n"), nil
+				if strings.Contains(a, "/subresources.kubevirt.io/") {
+					probedKubeVirt = true
+					return []byte(`{"gitVersion":"v1.4.1"}`), nil
 				}
 			}
 			probedNAD = true
@@ -1244,8 +1272,8 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, "/clusters", sourceDir, deps, nil)
 	assertPreflightCheckStatus(t, checks, "hub-kubeconfig KubeVirt API", "OK")
 	assertPreflightCheckStatus(t, checks, "vmnet network", "OK")
-	if !probedCRD || !probedNAD {
-		t.Fatalf("kubeconfigRef arm did not run both probes: crd=%v nad=%v", probedCRD, probedNAD)
+	if !probedKubeVirt || !probedNAD {
+		t.Fatalf("kubeconfigRef arm did not run both probes: kubevirt=%v nad=%v", probedKubeVirt, probedNAD)
 	}
 }
 
