@@ -71,7 +71,7 @@
   vars:
     bootwright_virtctl_installed_client_version: >-
       {{ bootwright_virtctl_installed_probe.stdout | default('')
-         | regex_search('GitVersion:"?(v[0-9][^",}\s]*)', '\1') | default('', true) }}
+         | bootwright.core.bootwright_virtctl_version }}
   changed_when: false
 
 - name: Resolve virtctl ConsoleCLIDownload from the host cluster
@@ -207,7 +207,7 @@
   vars:
     bootwright_virtctl_installed_client_version: >-
       {{ bootwright_virtctl_final_probe.stdout | default('')
-         | regex_search('GitVersion:"?(v[0-9][^",}\s]*)', '\1') | default('', true) }}
+         | bootwright.core.bootwright_virtctl_version }}
   when: bootwright_virtctl_install | bool
 
 - name: Remove virtctl tmp directory
