@@ -310,6 +310,13 @@ servers for resolvers not declared in the environment (operator-external ones).
 Keep `nameResolutionRefs` outside `template.networkConfig`; that map is raw
 NMState.
 
+Before an agent install, Bootwright also routes the cluster domain through
+those selected resolver addresses on a systemd-resolved controller, then
+verifies the API, api-int, and ingress records resolve to their declared VIPs.
+External entries use their authored `address`; managed entries use the
+component's explicit bind address. On a controller without systemd-resolved,
+the operator must make the same resolver path available to the host.
+
 ### Machine and node records
 
 A managed name-resolution (dnsmasq) component publishes, for every machine it

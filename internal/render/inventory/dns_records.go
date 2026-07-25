@@ -156,14 +156,21 @@ func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterIns
 	seen := map[string]bool{}
 	var out []any
 	for _, entry := range env.Spec.InfraComponents.NameResolution {
-		if entry.Management != v1alpha1.EnvironmentComponentManaged || !refs[entry.Name] {
+		if !refs[entry.Name] {
 			continue
 		}
-		component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
-		if !ok || component.Spec.NameResolution == nil {
+		bind := entry.Address
+		if entry.Management == v1alpha1.EnvironmentComponentManaged {
+			component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+			if !ok || component.Spec.NameResolution == nil {
+				continue
+			}
+			bind = component.Spec.NameResolution.BindAddress
+		}
+		if entry.Management != v1alpha1.EnvironmentComponentExternal &&
+			entry.Management != v1alpha1.EnvironmentComponentManaged {
 			continue
 		}
-		bind := component.Spec.NameResolution.BindAddress
 		if bind == "" || bind == "0.0.0.0" || bind == "::" || seen[bind] {
 			continue
 		}

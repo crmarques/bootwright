@@ -1,6 +1,6 @@
 ---
 
-- name: Wire controller resolver to managed name resolution
+- name: Wire controller resolver to selected name resolution
   when: bootwright_current_cluster.controllerNameResolvers | default([]) | length > 0
   block:
     - name: Detect systemd-resolved on the controller

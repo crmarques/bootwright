@@ -219,17 +219,20 @@ func TestSNOLibvirtRedfishExampleWiresControllerResolver(t *testing.T) {
 	}
 }
 
-func TestClusterControllerNameResolversSkipsExternal(t *testing.T) {
+func TestClusterControllerNameResolversFromExternal(t *testing.T) {
 	state := dnsRecordsState()
-	state.InfraComponents[0].Spec.NameResolution.BindAddress = "192.168.130.1"
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].Management = v1alpha1.EnvironmentComponentExternal
+	state.Environments[0].Spec.InfraComponents.NameResolution[0].ComponentRef = v1alpha1.LocalObjectReference{}
+	state.Environments[0].Spec.InfraComponents.NameResolution[0].Address = "192.168.130.53"
 	ci, err := installer.ClusterInstallForOCP(state, state.ContainerClusters[0])
 	if err != nil {
 		t.Fatalf("ClusterInstallForOCP: %v", err)
 	}
 
-	if got := ClusterControllerNameResolvers(state, ci); got != nil {
-		t.Fatalf("ClusterControllerNameResolvers = %v, want nil for external entry", got)
+	got := ClusterControllerNameResolvers(state, ci)
+	want := []any{map[string]any{"bindAddress": "192.168.130.53", "domain": "example.test"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ClusterControllerNameResolvers = %v, want %v", got, want)
 	}
 }
 
