@@ -25,3 +25,11 @@ relying on play/task environment merge semantics. The optional disconnected
 override `bootwright_virtctl_mirror_base` instead downloads
 `<base>/<server-version>/virtctl-linux-amd64.tar.gz` verified against the
 controller trust store (an internally trusted host, so no ingress CA).
+
+**virtctl image-upload trust:** managed `hostClusterRef` boots reuse the same
+published ingress CA for the CDI upload-proxy route. The boot role writes the
+CA beside the task-runtime materialized kubeconfig and scopes
+`SSL_CERT_FILE` to the upload command while explicitly retaining the proxy
+environment. External `kubeconfigRef` providers remain operator-owned trust
+boundaries and use controller system trust; `--insecure` stays an explicit
+role override rather than the managed-host default.

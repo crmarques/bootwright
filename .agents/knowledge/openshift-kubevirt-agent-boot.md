@@ -38,6 +38,23 @@ agent ISO (~1–1.5 GiB) with headroom. A larger release payload makes
 `virtctl image-upload` fail on an ISO above this size — raise the variable,
 do not shrink it.
 
+**Symptom (managed-host upload TLS):** `virtctl image-upload` reaches the CDI
+upload proxy route but fails with `tls: failed to verify certificate: x509:
+certificate signed by unknown authority`. The managed OpenShift host
+cluster's ingress wildcard certificate is signed by an ingress CA that is not
+normally in the controller system trust store.
+
+**Fix (managed-host upload TLS):** For a `hostClusterRef` provider, the boot
+role reads the host cluster's published ingress CA from
+`openshift-config-managed/default-ingress-cert`, writes it beside the
+task-runtime materialized kubeconfig, and runs only `virtctl image-upload`
+with `SSL_CERT_FILE` pointing at that CA. The task environment explicitly
+retains `bootwright_proxy_env`. This mirrors the verified
+ConsoleCLIDownload flow in `controller_virtctl`; it does not make
+`--insecure` the default. A `kubeconfigRef` provider remains an
+operator-owned external trust boundary and relies on the controller system
+trust unless the explicit role override opts out of verification.
+
 **Negative pin (`virtctl image-upload` kept deliberately):** uploading the
 agent ISO through `virtctl image-upload` has no clean declarative CR equivalent
 (evaluated 2026-06-28) — a DataVolume upload source still needs the imperative

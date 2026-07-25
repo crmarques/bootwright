@@ -805,8 +805,35 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	}
 
 	bootTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml")
+	readCAIdx := findAnsibleTask(t, bootTasks, "Read managed KubeVirt host cluster ingress CA bundle")
+	validateCAIdx := findAnsibleTask(t, bootTasks, "Validate managed KubeVirt host cluster ingress CA bundle")
+	writeCAIdx := findAnsibleTask(t, bootTasks, "Write managed KubeVirt host cluster ingress CA bundle")
 	uploadIdx := findAnsibleTask(t, bootTasks, "Upload KubeVirt agent ISO DataVolume")
 	labelIdx := findAnsibleTask(t, bootTasks, "Label KubeVirt agent ISO DataVolume as Bootwright-managed")
+	if !(readCAIdx < validateCAIdx && validateCAIdx < writeCAIdx && writeCAIdx < uploadIdx) {
+		t.Fatalf("boot role must resolve and write the managed host ingress CA before uploading (read=%d validate=%d write=%d upload=%d)", readCAIdx, validateCAIdx, writeCAIdx, uploadIdx)
+	}
+	readCA, ok := bootTasks[readCAIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("managed host ingress CA read must be a command, got %v", bootTasks[readCAIdx])
+	}
+	if !stringListContains(readCA["argv"], "default-ingress-cert") || !stringListContains(readCA["argv"], "openshift-config-managed") {
+		t.Fatalf("managed host ingress CA read must use the published OpenShift ingress CA, got %v", readCA["argv"])
+	}
+	if got := fmt.Sprint(bootTasks[readCAIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_cluster_ref") {
+		t.Fatalf("managed host ingress CA read must be limited to hostClusterRef providers, got when=%v", bootTasks[readCAIdx]["when"])
+	}
+	writeCA, ok := bootTasks[writeCAIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("managed host ingress CA write must be a copy, got %v", bootTasks[writeCAIdx])
+	}
+	if got := fmt.Sprint(writeCA["dest"]); !strings.Contains(got, "bootwright_kubevirt_kubeconfig | dirname") {
+		t.Fatalf("managed host ingress CA must stay in the task runtime material directory, got dest=%v", writeCA["dest"])
+	}
+	uploadEnvironment := fmt.Sprint(bootTasks[uploadIdx]["environment"])
+	if !strings.Contains(uploadEnvironment, "SSL_CERT_FILE") || !strings.Contains(uploadEnvironment, "bootwright_proxy_env") || !strings.Contains(uploadEnvironment, "bootwright_kubevirt_host_cluster_ref") {
+		t.Fatalf("image upload must preserve proxy env and verify managed ingress with SSL_CERT_FILE, got environment=%v", bootTasks[uploadIdx]["environment"])
+	}
 	if !(uploadIdx < labelIdx) {
 		t.Fatalf("boot role must label the agent-ISO DataVolume after uploading it (upload=%d label=%d)", uploadIdx, labelIdx)
 	}
