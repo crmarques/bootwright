@@ -34,6 +34,7 @@
       {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
       it became mounted or in use after the initial check
       ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}).
+    quiet: true
   loop: "{{ bootwright_ceph_device_mounts_final.results | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"

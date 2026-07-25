@@ -355,6 +355,7 @@
       else '(no daemons are deployed)') }}
       CRUSH tree (ceph osd tree):
       {{ bootwright_ceph_osd_host_tree.stdout | default('(CRUSH tree unavailable)') }}
+    quiet: true
   loop: "{{ bootwright_ceph_osd_dynamic_hosts }}"
   loop_control:
     loop_var: bootwright_ceph_osd_dynamic_host

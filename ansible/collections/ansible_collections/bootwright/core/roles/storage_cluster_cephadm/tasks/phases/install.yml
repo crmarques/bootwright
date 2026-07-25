@@ -234,6 +234,7 @@
       be reclaimed", re-establish ownership first (restore the context's runs
       records, or apply once with this device removed from the declaration, then
       re-add it).{% endif %}
+    quiet: true
   loop: "{{ bootwright_ceph_device_check.results | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"

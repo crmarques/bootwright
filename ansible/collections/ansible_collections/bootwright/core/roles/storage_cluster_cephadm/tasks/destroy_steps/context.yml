@@ -40,6 +40,7 @@
       Refusing to wipe undeclared or unsupported storage device {{ item }}
       for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}.
       Declare stable /dev/disk/by-id, /dev/disk/by-path, /dev/mapper, NVMe, or /dev/sdX paths only.
+    quiet: true
   loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"

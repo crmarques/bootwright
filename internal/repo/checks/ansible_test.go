@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
@@ -64,6 +65,54 @@ func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("walk ansible roles: %v", err)
+	}
+}
+
+func TestLoopedAssertionsUseQuietOutput(t *testing.T) {
+	root := filepath.Join(repoRoot(t), "ansible", "collections", "ansible_collections", "bootwright", "core")
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".yml" {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var document any
+		if err := yaml.Unmarshal(body, &document); err != nil {
+			return fmt.Errorf("%s: decode YAML: %w", path, err)
+		}
+		rel, err := filepath.Rel(repoRoot(t), path)
+		if err != nil {
+			return err
+		}
+		checkLoopedAssertionOutput(t, filepath.ToSlash(rel), document)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk Bootwright collection YAML: %v", err)
+	}
+}
+
+func checkLoopedAssertionOutput(t *testing.T, path string, node any) {
+	t.Helper()
+	switch value := node.(type) {
+	case []any:
+		for _, item := range value {
+			checkLoopedAssertionOutput(t, path, item)
+		}
+	case map[string]any:
+		if assertion, ok := value["ansible.builtin.assert"].(map[string]any); ok {
+			if _, looped := value["loop"]; looped && assertion["quiet"] != true {
+				t.Errorf("%s task %q loops over an assertion without quiet output", path, value["name"])
+			}
+		}
+		for _, item := range value {
+			checkLoopedAssertionOutput(t, path, item)
+		}
 	}
 }
 

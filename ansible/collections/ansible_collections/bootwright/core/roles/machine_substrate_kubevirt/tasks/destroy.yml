@@ -201,6 +201,7 @@
           {{ item.stderr | default('kubectl get failed with no detail') }}.
           Refusing to treat it as absent — its teardown would be silently
           skipped. Fix host-cluster kubeconfig access and re-run destroy.
+        quiet: true
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"
       loop_control:
         label: "{{ item.item }}"
@@ -214,6 +215,7 @@
           {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
           bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
           Pass --include-unowned to delete it anyway.
+        quiet: true
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"
       loop_control:
         label: "{{ item.item }}"

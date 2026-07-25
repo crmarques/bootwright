@@ -24,6 +24,7 @@
       {{ item.cephHostname }}; cephadm registers hosts under their real OS
       hostname, so set the machine's hostname (or, for a provided OS, author
       spec.ceph.topology.nodes[].name) to match {{ item.cephHostname }}.
+    quiet: true
   loop: "{{ bootwright_host_storage_nodes }}"
   loop_control:
     label: "{{ item.hostname }}"
@@ -165,6 +166,7 @@
          ~ ' Bootwright OSD device, so it holds foreign data. Wipe it, correct the declared'
          ~ ' devices, or destroy the owning cluster before apply.')
       }}
+    quiet: true
   loop: "{{ bootwright_preflight_storage_device.results | default([]) }}"
   loop_control:
     label: "{{ item.item.0.hostname }} {{ item.item.1 }}"

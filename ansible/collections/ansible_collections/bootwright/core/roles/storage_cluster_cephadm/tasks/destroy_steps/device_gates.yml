@@ -63,6 +63,7 @@
       {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
       it is mounted or in use ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}),
       so it is not a wipeable Bootwright OSD device. Correct the declared devices list before destroying.
+    quiet: true
   loop: "{{ bootwright_ceph_present_probe | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
@@ -132,6 +133,7 @@
          ~ '. Re-apply to re-record OSD devices, or verify and wipe it manually.'
          ~ ' (--include-unowned does not relax this device data-safety gate.)')
       }}
+    quiet: true
   loop: "{{ bootwright_ceph_destroy_signatures.results | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
