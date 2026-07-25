@@ -60,9 +60,11 @@ than re-deciding the split. Provider, InfraComponent, machine-infrastructure, an
 storage playbooks use Ansible-native parallelism, while Bootwright enforces
 resource locks before launching concurrent playbooks: one mutating task per
 provider or service machine until roles are classified more finely, and one
-task per Redfish system or BMC target. KubeVirt-backed child VM infrastructure
-and VM boot tasks also lock
-`kubevirt:<host-cluster-or-kubeconfig>:<namespace>`.
+task per Redfish system or BMC target. KubeVirt-backed machine infrastructure,
+managed-OS, and VM boot tasks lock
+`kubevirt:<host-cluster-or-kubeconfig>:<namespace>:vm:<virtual-machine>`:
+operations targeting the same VM serialize while independent VMs in one
+namespace converge concurrently.
 
 The Ansible source tree is authored under `/ansible`. `make sync-bundle` packs
 that source and pinned external collections into the generated embedded archive

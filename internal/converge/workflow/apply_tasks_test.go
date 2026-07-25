@@ -1269,10 +1269,10 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 	}
 
 	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
-	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
 	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization", "infra.child-ocp.child-master-0")
 	assertTaskResourceKeys(t, tasks, "infrafinalize.child-ocp.localhost", "host:localhost:mutating")
-	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
 }
 
 func TestPlanApplyAllOrdersKubeVirtManagedCephAfterHostReadiness(t *testing.T) {
@@ -1284,7 +1284,7 @@ func TestPlanApplyAllOrdersKubeVirtManagedCephAfterHostReadiness(t *testing.T) {
 	}
 
 	assertTaskDeps(t, tasks, "osinstall.ceph-vms", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
-	assertTaskResourceKeys(t, tasks, "osinstall.ceph-vms", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskResourceKeys(t, tasks, "osinstall.ceph-vms", "kubevirt:metal-ocp:bootwright-child-ocp:vm:ceph-vms-ceph-0")
 	assertTaskDeps(t, tasks, "storageinfra.ceph-vms", "osinstall.ceph-vms")
 	assertTaskDeps(t, tasks, "storage.ceph-vms", "storageinfra.ceph-vms")
 }

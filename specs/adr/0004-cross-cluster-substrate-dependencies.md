@@ -54,6 +54,8 @@ cluster install and KubeVirt add-on are already ready.
   to Bootwright cluster secrets output, and `kubeconfigRef` resolves through secret
   material.
 - Validation can reject self-hosting and dependency cycles before rendering.
-- The scheduler can lock KubeVirt namespace operations with
-  `kubevirt:<host-cluster-or-kubeconfig>:<namespace>` independently of provider
-  host and Redfish locks.
+- The scheduler locks KubeVirt machine and boot operations per VM with
+  `kubevirt:<host-cluster-or-kubeconfig>:<namespace>:vm:<virtual-machine>`
+  independently of provider-host and Redfish locks. Operations against one VM
+  serialize, while distinct VMs in a shared namespace provision and boot
+  concurrently.

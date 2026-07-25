@@ -654,6 +654,38 @@ func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
 	}
 }
 
+func TestKubeVirtStorageClassValidatedBeforeMutation(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/main.yml")
+	probeIdx := findAnsibleTask(t, tasks, "Probe configured KubeVirt storage class")
+	requireIdx := findAnsibleTask(t, tasks, "Require configured KubeVirt storage class")
+	namespaceIdx := findAnsibleTask(t, tasks, "Ensure KubeVirt namespace exists")
+	dataVolumeIdx := findAnsibleTask(t, tasks, "Apply KubeVirt root disk DataVolume")
+	if !(probeIdx < requireIdx && requireIdx < namespaceIdx && namespaceIdx < dataVolumeIdx) {
+		t.Fatalf("storage class must be validated before namespace and DataVolume mutation (probe=%d require=%d namespace=%d dataVolume=%d)", probeIdx, requireIdx, namespaceIdx, dataVolumeIdx)
+	}
+	probe, ok := tasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage class probe must be a command, got %v", tasks[probeIdx])
+	}
+	argv := fmt.Sprint(probe["argv"])
+	if !strings.Contains(argv, "storageclass") || !strings.Contains(argv, "bootwright_kubevirt_storage_class") {
+		t.Fatalf("storage class probe must query the configured class, got %v", probe["argv"])
+	}
+	if tasks[probeIdx]["failed_when"] != false {
+		t.Fatalf("storage class probe must defer the actionable failure to the assert, got failed_when=%v", tasks[probeIdx]["failed_when"])
+	}
+	require, ok := tasks[requireIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage class requirement must be an assert, got %v", tasks[requireIdx])
+	}
+	if got := fmt.Sprint(require["that"]); !strings.Contains(got, "bootwright_kubevirt_storage_class_probe.rc") {
+		t.Fatalf("storage class requirement must check the probe result, got %v", require["that"])
+	}
+	if got := fmt.Sprint(require["fail_msg"]); !strings.Contains(got, "storageClassRef") || !strings.Contains(got, "cluster oc") {
+		t.Fatalf("storage class requirement must name the bad field and discovery command, got %v", require["fail_msg"])
+	}
+}
+
 func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read libvirt domain ownership metadata")

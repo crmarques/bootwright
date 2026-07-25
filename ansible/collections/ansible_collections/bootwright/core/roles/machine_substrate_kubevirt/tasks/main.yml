@@ -37,6 +37,43 @@
       KubeVirt machine {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is missing a node binding, kubeconfig, namespace, NAD, or rendered interface.
 
+- name: Probe configured KubeVirt storage class
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - get
+      - storageclass
+      - "{{ bootwright_kubevirt_storage_class }}"
+      - -o
+      - name
+  register: bootwright_kubevirt_storage_class_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_kubevirt_storage_class | length > 0
+
+- name: Require configured KubeVirt storage class
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_storage_class_probe.rc | default(1)) == 0
+    fail_msg: >-
+      InfraProvider/{{ bootwright_component.providerName }} selects KubeVirt storageClassRef
+      {{ bootwright_kubevirt_storage_class }}, but that StorageClass does not exist on
+      {{
+        ('host cluster ' ~ bootwright_component.kubevirt.hostClusterRef)
+        if (bootwright_component.kubevirt.hostClusterRef | default('') | length > 0)
+        else 'the external KubeVirt host cluster'
+      }}. Correct storageClassRef to a class returned by
+      {{
+        ('`bootwright cluster oc --name ' ~ bootwright_component.kubevirt.hostClusterRef
+         ~ ' get storageclass`')
+        if (bootwright_component.kubevirt.hostClusterRef | default('') | length > 0)
+        else '`kubectl --kubeconfig <host-kubeconfig> get storageclass`'
+      }}
+      before provisioning {{ bootwright_component.name }}.
+  when: bootwright_kubevirt_storage_class | length > 0
+
 - name: Ensure KubeVirt namespace exists
   ansible.builtin.command:
     argv:

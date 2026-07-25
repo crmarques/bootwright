@@ -158,14 +158,14 @@ func extensionProvides(extension v1alpha1.ClusterAddon, capability string) bool 
 	return false
 }
 
-func kubeVirtResourceKey(profile *v1alpha1.InfraProviderKubeVirt) string {
+func kubeVirtResourceKey(profile *v1alpha1.InfraProviderKubeVirt, clusterName, machineName string) string {
 	owner := "external"
 	if profile.HostClusterRef != nil && profile.HostClusterRef.Name != "" {
 		owner = profile.HostClusterRef.Name
 	} else if profile.KubeconfigRef != nil && profile.KubeconfigRef.Name != "" {
 		owner = "kubeconfig:" + profile.KubeconfigRef.Name
 	}
-	return "kubevirt:" + owner + ":" + profile.Namespace
+	return "kubevirt:" + owner + ":" + profile.Namespace + ":vm:" + clusterName + "-" + machineName
 }
 
 func providerIndex(state v1alpha1.State) map[string]v1alpha1.InfraProvider {
@@ -216,7 +216,7 @@ func applyNodeBootResourceKeys(state v1alpha1.State, clusterName string, machine
 		}
 		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
 		if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && provider.Spec.KubeVirt != nil {
-			out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt))
+			out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt, clusterName, machineName))
 			continue
 		}
 		if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {

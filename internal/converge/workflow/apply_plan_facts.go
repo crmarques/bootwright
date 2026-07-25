@@ -67,7 +67,7 @@ func applyMachineExclusiveResourceKeys(state v1alpha1.State, clusterName, machin
 	}
 	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
 	if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && provider.Spec.KubeVirt != nil {
-		return []string{kubeVirtResourceKey(provider.Spec.KubeVirt)}
+		return []string{kubeVirtResourceKey(provider.Spec.KubeVirt, clusterName, machineName)}
 	}
 	if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {
 		return []string{vsphereResourceKey(provider, machine)}
