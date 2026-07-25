@@ -113,6 +113,13 @@ func ApplyOCPReinstallClustersExtraVar(plan *WorkflowPlan, names []string) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ocp_reinstall_clusters="+strings.Join(names, ","))
 }
 
+func ApplyOCPRebuildAuthorizedClustersExtraVar(plan *WorkflowPlan, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ocp_rebuild_authorized_clusters="+strings.Join(names, ","))
+}
+
 func OwnedStorageClusters(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {

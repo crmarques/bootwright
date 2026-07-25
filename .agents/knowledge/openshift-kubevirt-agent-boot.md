@@ -1,5 +1,29 @@
 # KubeVirt agent boot: DataVolume re-upload, VMI wait race, ownership label
 
+**Symptom (ordinary apply stops installed guests):** Re-applying an unchanged
+virtualized OpenShift cluster makes its KubeVirt VMs stop, the guest console
+becomes unavailable, and later guest API work can report unrelated resources
+such as a CatalogSource as unavailable.
+
+**Root cause (apply/runtime coupling):** Installed-cluster reconciliation
+skipped the agent ISO, node boot, and install wait tasks after proving the
+cluster healthy, but did not skip the per-machine substrate task. That task
+re-applied a VirtualMachine manifest with `spec.running: false`; KubeVirt
+therefore stopped a VM that the boot role had previously started with
+`virtctl`. The VM was reconciled rather than necessarily deleted, but the
+result looked like a recreation and interrupted the guest API and console.
+
+**Fix (apply semantics):** A verified installed cluster whose install inputs
+still match skips its machine substrate tasks with the rest of the install
+tasks. KubeVirt VMs use `runStrategy: Manual`, so a necessary declarative
+reconcile never changes the current running/stopped state. Before creating,
+reconciling, stopping, or deleting a same-name VM or DataVolume, the roles
+probe live labels and fail closed unless the exact context, cluster, and node
+identity is Bootwright-owned. `--expect-new` rejects any pre-existing live
+resource. A VM/root-disk delete is possible only when the controller passes an
+exact machine-substrate reset or acknowledged OpenShift reinstall token; a
+plain apply and a healthy `--converge-drifted` apply receive neither.
+
 **Symptom:** A retried KubeVirt cluster boot leaves the VM running the *old*
 agent ISO (the install never picks up regenerated installer inputs), or the
 boot fails spuriously with `no matching resources found` from
@@ -27,10 +51,11 @@ bounded by `bootwright_kubevirt_boot_vmi_timeout` (default 600s).
 **Constraint (ownership label):** `virtctl image-upload` stamps no labels,
 unlike the root DataVolume and VM templates which carry
 `bootwright.io/managed-by`. The boot role explicitly labels the agent-ISO
-DataVolume `bootwright.io/managed-by=bootwright` (with `--overwrite` so a
-re-upload stays idempotent). Without it, the destroy ownership gate cannot
-tell a Bootwright-owned DV from a foreign DataVolume that merely collides on
-name in a shared namespace, and would refuse or mis-delete.
+DataVolume with the managed-by, context, cluster, node, and agent-ISO role
+identity (with `--overwrite` so a re-upload stays idempotent). Without it, the
+apply and destroy ownership gates cannot tell a Bootwright-owned DV from a
+foreign DataVolume that merely collides on name in a shared namespace, and
+would refuse or mis-delete.
 
 **Constraint (DV size):** The agent-ISO DataVolume size is
 `bootwright_kubevirt_agent_iso_size` (default `4Gi`), sized for a typical

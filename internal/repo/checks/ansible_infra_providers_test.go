@@ -654,6 +654,60 @@ func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
 	}
 }
 
+func TestKubeVirtApplyPreservesRuntimeState(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/virtualmachine.yaml.j2")
+	if !strings.Contains(body, "runStrategy: Manual") {
+		t.Fatal("KubeVirt VM apply must use Manual runStrategy so declarative reconciliation does not stop a running guest")
+	}
+	if strings.Contains(body, "running: false") {
+		t.Fatal("KubeVirt VM apply must not declare running=false because re-apply would stop a running guest")
+	}
+}
+
+func TestKubeVirtApplyGatesLiveResourcesBeforeMutation(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/main.yml")
+	vmProbeIdx := findAnsibleTask(t, tasks, "Read existing KubeVirt VirtualMachine identity")
+	dvProbeIdx := findAnsibleTask(t, tasks, "Read existing KubeVirt root DataVolume identity")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt live resource ownership")
+	vmGateIdx := findAnsibleTask(t, tasks, "Enforce KubeVirt VirtualMachine apply mode")
+	dvGateIdx := findAnsibleTask(t, tasks, "Enforce KubeVirt root DataVolume apply mode")
+	stopIdx := findAnsibleTask(t, tasks, "Stop KubeVirt VirtualMachine for authorized rebuild")
+	vmDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt VirtualMachine for authorized rebuild")
+	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt root DataVolume for authorized rebuild")
+	namespaceIdx := findAnsibleTask(t, tasks, "Ensure KubeVirt namespace exists")
+	applyIdx := findAnsibleTask(t, tasks, "Apply KubeVirt VirtualMachine")
+	if !(vmProbeIdx < resolveIdx && dvProbeIdx < resolveIdx &&
+		resolveIdx < vmGateIdx && resolveIdx < dvGateIdx &&
+		vmGateIdx < stopIdx && dvGateIdx < stopIdx &&
+		stopIdx < vmDeleteIdx && vmDeleteIdx < dvDeleteIdx &&
+		dvDeleteIdx < namespaceIdx && namespaceIdx < applyIdx) {
+		t.Fatalf("KubeVirt apply must probe and gate live identity before rebuild or reconcile mutation (vmProbe=%d dvProbe=%d resolve=%d vmGate=%d dvGate=%d stop=%d vmDelete=%d dvDelete=%d namespace=%d apply=%d)", vmProbeIdx, dvProbeIdx, resolveIdx, vmGateIdx, dvGateIdx, stopIdx, vmDeleteIdx, dvDeleteIdx, namespaceIdx, applyIdx)
+	}
+	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt live ownership decision must be a set_fact, got %v", tasks[resolveIdx])
+	}
+	for _, fact := range []string{"bootwright_kubevirt_vm_owned", "bootwright_kubevirt_root_dv_owned"} {
+		got := fmt.Sprint(resolve[fact])
+		for _, label := range []string{"bootwright.io/managed-by", "bootwright.io/context", "bootwright.io/cluster", "bootwright.io/node"} {
+			if !strings.Contains(got, label) {
+				t.Fatalf("%s must require exact live identity label %q, got %v", fact, label, resolve[fact])
+			}
+		}
+	}
+	for _, idx := range []int{vmGateIdx, dvGateIdx} {
+		include, ok := tasks[idx]["ansible.builtin.include_role"].(map[string]any)
+		if !ok || fmt.Sprint(include["name"]) != "bootwright.core.ownership_record" || fmt.Sprint(include["tasks_from"]) != "apply_mode_gate.yml" {
+			t.Fatalf("KubeVirt live apply gate must use the shared apply-mode contract, got %v", tasks[idx])
+		}
+	}
+	for _, idx := range []int{stopIdx, vmDeleteIdx, dvDeleteIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_rebuild_authorized") {
+			t.Fatalf("%s must require controller-issued rebuild authorization, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+}
+
 func TestKubeVirtStorageClassValidatedBeforeMutation(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/main.yml")
 	probeIdx := findAnsibleTask(t, tasks, "Probe configured KubeVirt storage class")
@@ -843,6 +897,38 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	}
 	if !stringListContains(label["argv"], "bootwright.io/managed-by=bootwright") {
 		t.Fatalf("agent-ISO label task must stamp bootwright.io/managed-by=bootwright, got %v", label["argv"])
+	}
+}
+
+func TestKubeVirtBootGatesLiveResourcesBeforeMutation(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml")
+	vmProbeIdx := findAnsibleTask(t, tasks, "Read KubeVirt boot VirtualMachine identity")
+	vmRequireIdx := findAnsibleTask(t, tasks, "Require an owned KubeVirt boot VirtualMachine")
+	isoProbeIdx := findAnsibleTask(t, tasks, "Read existing KubeVirt agent ISO DataVolume identity")
+	isoGateIdx := findAnsibleTask(t, tasks, "Enforce KubeVirt agent ISO DataVolume apply mode")
+	stopIdx := findAnsibleTask(t, tasks, "Stop KubeVirt VirtualMachine before replacing the agent ISO")
+	deleteIdx := findAnsibleTask(t, tasks, "Remove previous KubeVirt agent ISO DataVolume")
+	if !(vmProbeIdx < vmRequireIdx && isoProbeIdx < isoGateIdx &&
+		vmRequireIdx < stopIdx && isoGateIdx < stopIdx && stopIdx < deleteIdx) {
+		t.Fatalf("KubeVirt boot must prove VM and ISO identity before stop/delete (vmProbe=%d vmRequire=%d isoProbe=%d isoGate=%d stop=%d delete=%d)", vmProbeIdx, vmRequireIdx, isoProbeIdx, isoGateIdx, stopIdx, deleteIdx)
+	}
+	require, ok := tasks[vmRequireIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt boot VM ownership guard must be an assert, got %v", tasks[vmRequireIdx])
+	}
+	if got := fmt.Sprint(require["that"]); !strings.Contains(got, "bootwright_kubevirt_boot_vm_owned") {
+		t.Fatalf("KubeVirt boot VM ownership guard must require exact live ownership, got %v", require["that"])
+	}
+	include, ok := tasks[isoGateIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || fmt.Sprint(include["name"]) != "bootwright.core.ownership_record" || fmt.Sprint(include["tasks_from"]) != "apply_mode_gate.yml" {
+		t.Fatalf("KubeVirt agent ISO gate must use the shared apply-mode contract, got %v", tasks[isoGateIdx])
+	}
+	labelIdx := findAnsibleTask(t, tasks, "Label KubeVirt agent ISO DataVolume as Bootwright-managed")
+	label := fmt.Sprint(tasks[labelIdx]["ansible.builtin.command"])
+	for _, want := range []string{"bootwright.io/context=", "bootwright.io/cluster=", "bootwright.io/node=", "bootwright.io/role=agent-iso"} {
+		if !strings.Contains(label, want) {
+			t.Fatalf("agent ISO must carry exact identity label %q, got %v", want, tasks[labelIdx])
+		}
 	}
 }
 

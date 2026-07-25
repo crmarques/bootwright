@@ -13,6 +13,15 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	const cluster = "sno-libvirt"
 	tasks := mustPlanApplyTasks(applyContainerClusterTarget(), state)
+	tasks = append(tasks, ApplyTask{
+		Entry: TaskLedgerEntry{
+			ID:      "infra." + cluster + ".node-0",
+			Kind:    ApplyTaskKindClusterInstall,
+			Cluster: cluster,
+			Status:  TaskStatusPending,
+		},
+		State: state,
+	})
 	now := time.Now()
 
 	installSkipped := func(out []ApplyTask) (skipped, total int) {
@@ -58,9 +67,23 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 	}
 
 	t.Run("healthy match is not rebuilt", func(t *testing.T) {
-		skipped, total := installSkipped(reconcile(t, "", true, nil))
+		out := reconcile(t, "", true, nil)
+		skipped, total := installSkipped(out)
 		if total == 0 || skipped != total {
 			t.Fatalf("override over a healthy match must skip all %d install tasks, skipped %d", total, skipped)
+		}
+		machineTasks := 0
+		for _, task := range out {
+			if task.Entry.Cluster != cluster || task.Entry.Kind != ApplyTaskKindClusterInstall {
+				continue
+			}
+			machineTasks++
+			if task.Entry.Status != TaskStatusSkipped {
+				t.Fatalf("healthy match must skip machine substrate task %s, got status %s", task.Entry.ID, task.Entry.Status)
+			}
+		}
+		if machineTasks == 0 {
+			t.Fatal("fixture must plan at least one machine substrate task")
 		}
 	})
 	t.Run("acked drift is rebuilt", func(t *testing.T) {

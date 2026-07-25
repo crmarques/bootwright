@@ -11,7 +11,7 @@ metadata:
     bootwright.io/role: {{ bootwright_kubevirt_node.value.role }}
     bootwright.io/managed-by: bootwright
 spec:
-  running: false
+  runStrategy: Manual
   template:
     metadata:
       labels:

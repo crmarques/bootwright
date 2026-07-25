@@ -291,6 +291,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
+			converge.ApplyOCPRebuildAuthorizedClustersExtraVar(&plan, ocpReinstallAcked)
 			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedRecords, clustersDir, ocpReinstallDescriptors, allowDestroy)
 			noteIneffectiveAllowDestroy(stdout, allowDestroy, false, destructiveOverride)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
