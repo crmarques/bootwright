@@ -136,6 +136,11 @@ managed-OS teardown fails closed, because Bootwright installs a managed OS only
 on cluster-member machines and refuses to invent per-machine teardown for a
 machine with no provisioning work.
 
+`--force` never widens a selected root set. In particular, a KubeVirt host
+cluster cannot be destroyed while an installed nested cluster is left outside
+`--clusters`; the child must be selected in the same full-lifecycle destroy or
+destroyed first.
+
 ### One mutating run at a time
 
 An `O_EXCL` run lease with process-identity and heartbeat liveness admits one
@@ -143,11 +148,20 @@ mutating run per context; destroy acquires it explicitly because it mutates
 outside the apply scheduler. Losing the lease (takeover after a stall, or a
 failed heartbeat save) stops the run rather than risking a double mutator.
 
-### Teardown makes maximal progress behind per-step gates
+### Teardown makes maximal progress behind dependency-aware gates
 
-The destroy task graph sequences stages with ordering dependencies, not hard
-ones: a failed stage never blocks later independent stages, because safety
-lives in each step's own ownership and data gates, not in chain order. The
+The destroy task graph sequences independent stages with ordering dependencies,
+so a failed stage does not block later independent cleanup. Full-lifecycle
+container runtime cleanup is the exception: it has a hard dependency on
+successful machine-infrastructure teardown because deleting cluster kubeconfigs
+or install records while an owned VM remains would erase the evidence and access
+needed to retry. Machine infrastructure is therefore removed before container
+runtime; when a KubeVirt host and child are selected together, child guests are
+deleted through the still-live host before the host's own machine substrate or
+kubeconfig is removed. Machine teardown uses child-before-host dependency order
+and rejects a KubeVirt host-reference cycle. An unreachable KubeVirt host
+holding a recorded guest fails closed even under `--skip-unreachable`; it is not
+evidence that the guest is absent. The
 decomposed task playbooks are constrained to split-equals-monolith: same
 `--limit`, same extra-vars, own `hosts:` selector.
 

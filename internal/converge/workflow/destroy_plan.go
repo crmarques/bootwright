@@ -25,17 +25,19 @@ const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
 
 const DestroyMachineScopeExtraVar = "bootwright_destroy_machine_scope"
 
+const DestroyClusterOrderExtraVar = "bootwright_destroy_cluster_order"
+
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	if destroyMachineScoped(extraVars) {
-		return destroyChain(state, limit, extraVars, infraMachineDestroySteps(), storageWorkNames), nil
+		return destroyChain(state, limit, extraVars, infraMachineDestroySteps(), storageWorkNames)
 	}
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
-		return destroyChain(state, limit, extraVars, infraDestroySteps(), storageWorkNames), nil
+		return destroyChain(state, limit, extraVars, infraDestroySteps(), storageWorkNames)
 	case "clusters":
-		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), storageNodeAccessDestroySteps()...), storageWorkNames), nil
+		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), storageNodeAccessDestroySteps()...), storageWorkNames)
 	case "all":
-		return destroyChain(state, limit, extraVars, append(append(clusterDestroySteps(), infraDestroySteps()...), storageNodeAccessDestroySteps()...), storageWorkNames), nil
+		return destroyChain(state, limit, extraVars, fullDestroySteps(), storageWorkNames)
 	default:
 		return nil, fmt.Errorf("granular destroy is only supported for the infra, clusters, and all stages, not %q", scopeName)
 	}
@@ -52,6 +54,18 @@ func infraDestroySteps() []destroyStep {
 
 func infraMachineDestroySteps() []destroyStep {
 	return infraDestroySteps()[:2]
+}
+
+func fullDestroySteps() []destroyStep {
+	return []destroyStep{
+		{id: DestroyStorageClustersTaskID, kind: DestroyTaskKindStorageCluster, label: "Storage clusters", playbook: roles.PlaybookTaskStorageClusterDestroy},
+		{id: "destroy.machine-registration", kind: DestroyTaskKindMachineRegistration, label: "Machine registration", playbook: roles.PlaybookTaskMachineRegistrationDeregister, limit: render.GroupStorageHosts},
+		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
+		{id: "destroy.container-clusters", kind: DestroyTaskKindContainerCluster, label: "Container clusters", playbook: roles.PlaybookTaskContainerClusterAgentDestroy, dependencies: []string{"destroy.machine-infra"}},
+		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
+		{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
+		{id: "destroy.storage-node-access", kind: DestroyTaskKindStorageNodeAccess, label: "Storage node access", playbook: roles.PlaybookTaskStorageNodeAccessDestroy, limit: render.GroupStorageHosts},
+	}
 }
 
 func destroyMachineScoped(extraVars []string) bool {
@@ -80,14 +94,15 @@ func storageNodeAccessDestroySteps() []destroyStep {
 }
 
 type destroyStep struct {
-	id       string
-	kind     string
-	label    string
-	playbook string
-	limit    string
+	id           string
+	kind         string
+	label        string
+	playbook     string
+	limit        string
+	dependencies []string
 }
 
-func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) []ApplyTask {
+func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) ([]ApplyTask, error) {
 	tasks := make([]ApplyTask, 0, len(steps))
 	prev := ""
 	for _, step := range steps {
@@ -105,6 +120,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			Label:        step.label,
 			ResourceKeys: resourceKeys,
 			Status:       TaskStatusPending,
+			Dependencies: append([]string(nil), step.dependencies...),
 		}
 		if prev != "" {
 			entry.OrderingDependencies = []string{prev}
@@ -113,16 +129,101 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		if step.limit != "" {
 			taskLimit = step.limit
 		}
+		taskExtraVars := append([]string(nil), extraVars...)
+		if step.kind == DestroyTaskKindMachineInfra {
+			order, err := machineInfraDestroyOrder(state)
+			if err != nil {
+				return nil, err
+			}
+			if len(order) > 0 {
+				taskExtraVars = append(taskExtraVars, DestroyClusterOrderExtraVar+"="+strings.Join(order, ","))
+			}
+		}
 		tasks = append(tasks, ApplyTask{
 			Entry:         entry,
 			Playbook:      step.playbook,
 			Limit:         taskLimit,
-			ExtraVarPairs: append([]string(nil), extraVars...),
+			ExtraVarPairs: taskExtraVars,
 			State:         state,
 		})
 		prev = step.id
 	}
-	return tasks
+	return tasks, nil
+}
+
+func machineInfraDestroyOrder(state v1alpha1.State) ([]string, error) {
+	names := map[string]bool{}
+	for _, cluster := range state.ContainerClusters {
+		names[cluster.Metadata.Name] = true
+	}
+	for _, cluster := range state.StorageClusters {
+		names[cluster.Metadata.Name] = true
+	}
+	machines := make(map[string]v1alpha1.Machine, len(state.Machines))
+	for _, machine := range state.Machines {
+		machines[machine.Metadata.Name] = machine
+	}
+	providers := make(map[string]v1alpha1.InfraProvider, len(state.InfraProviders))
+	for _, provider := range state.InfraProviders {
+		providers[provider.Metadata.Name] = provider
+	}
+	parents := map[string]map[string]bool{}
+	incoming := map[string]int{}
+	for name := range names {
+		incoming[name] = 0
+	}
+	for _, cluster := range state.ContainerClusters {
+		child := cluster.Metadata.Name
+		for _, node := range cluster.Spec.Nodes {
+			machine, ok := machines[node.MachineRef.Name]
+			if !ok {
+				continue
+			}
+			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
+			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil {
+				continue
+			}
+			parent := provider.Spec.KubeVirt.HostClusterRef.Name
+			if !names[parent] {
+				continue
+			}
+			if parents[child] == nil {
+				parents[child] = map[string]bool{}
+			}
+			if parents[child][parent] {
+				continue
+			}
+			parents[child][parent] = true
+			incoming[parent]++
+		}
+	}
+	var ready []string
+	for name, count := range incoming {
+		if count == 0 {
+			ready = append(ready, name)
+		}
+	}
+	sort.Strings(ready)
+	order := make([]string, 0, len(names))
+	for len(ready) > 0 {
+		name := ready[0]
+		ready = ready[1:]
+		order = append(order, name)
+		var next []string
+		for parent := range parents[name] {
+			incoming[parent]--
+			if incoming[parent] == 0 {
+				next = append(next, parent)
+			}
+		}
+		sort.Strings(next)
+		ready = append(ready, next...)
+		sort.Strings(ready)
+	}
+	if len(order) != len(names) {
+		return nil, fmt.Errorf("cannot plan machine infrastructure destroy: KubeVirt hostClusterRef dependency cycle")
+	}
+	return order, nil
 }
 
 func destroyStepClusters(state v1alpha1.State, kind string) []string {

@@ -175,6 +175,27 @@ sits inside `printDestroyRecordReset`, AFTER `RecordPartialStorageDestroy`
 already read `storage-destroy-result.json` out of the run's task-artifacts
 directory — purging earlier would race that read.
 
+**Full lifecycle reverses credential dependencies, not only stage names:**
+no-stage `destroy --clusters` uses the selected `all` work set. Managed storage
+must be removed before its machines; machine registration then machine
+substrate are removed before container runtime; container cleanup has a HARD
+dependency on successful machine teardown. That hard edge keeps cluster
+kubeconfigs, install records, and ownership evidence when VM deletion fails.
+It is also what lets a selected KubeVirt child be deleted through its still-live
+host before a selected host cluster loses either its own substrate or its
+kubeconfig. The machine-infra play consumes a deterministic child-before-host
+cluster order under the linear strategy so deletions on different provider
+hosts cannot race; a host-reference cycle fails planning. The remaining
+independent steps keep ordering-only edges and continue after unrelated failures.
+
+**An unreachable KubeVirt host is not an absent guest:** a recorded
+`kubevirt-machine` requires a successful host API probe even when
+`--skip-unreachable` is set. Unlike a node-local cleanup, host-cluster
+unreachability gives no evidence that the VirtualMachine or DataVolumes are
+gone. The machine-infra task therefore fails before removing the ownership
+record; the full-lifecycle hard dependency blocks container runtime cleanup, so
+a retry keeps both the host access material and the guest evidence.
+
 **Storage node access revocation is the one ordering EXCEPTION:**
 `destroy.storage-node-access` ("Storage node access") must run LAST in both the
 "clusters" and "all" chains, never folded back into `clusterDestroySteps()`.

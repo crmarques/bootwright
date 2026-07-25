@@ -72,7 +72,7 @@ func TestKubeVirtTenantDestroyConflicts(t *testing.T) {
 	err := FormatKubeVirtTenantConflicts(conflicts)
 	_ = err
 	msg := FormatKubeVirtTenantConflicts([]KubeVirtTenantConflict{{Host: "hub", Tenants: []string{"nested"}}}).Error()
-	for _, want := range []string{"hub", "nested", "--clusters", "--converge-drifted"} {
+	for _, want := range []string{"hub", "nested", "--clusters", "--force does not widen"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("conflict message must mention %q, got %q", want, msg)
 		}

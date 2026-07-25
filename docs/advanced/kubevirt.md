@@ -215,6 +215,40 @@ silently widen their scope.
     parent and child, or run the child apply after the parent is independently
     converged.
 
+## Destroying a nested cluster
+
+A no-stage scoped destroy tears down the child's full lifecycle:
+
+```text
+bootwright destroy --clusters dc1-child-ocp
+```
+
+Bootwright deletes only the child's positively owned VirtualMachines and
+DataVolumes through the parent API, then removes the child's installer runtime,
+kubeconfig, and records. The parent cluster, KubeVirt add-on, external network
+objects, storage class, and namespace remain. Use the explicit cluster stage
+when the VMs must remain:
+
+```text
+bootwright destroy --stage clusters --clusters dc1-child-ocp
+```
+
+When parent and child are selected together, the destroy graph deletes child
+guests through the still-live parent before removing either the parent's own
+machine substrate or its kubeconfig:
+
+```text
+bootwright destroy --clusters dc1-child-ocp,dc1-metal-ocp
+```
+
+Selecting an installed parent without its installed child fails closed;
+`--force` does not widen the selected work set. If the parent API is unreachable,
+Bootwright keeps guest ownership and cluster runtime records even with
+`--skip-unreachable`, because host unreachability does not prove that the VM and
+DataVolumes are absent. A bare-metal parent selected in the same destroy retains
+its physical hardware and installed OS; only Bootwright-local lifecycle state is
+released.
+
 ## virtctl is provisioned during the deps stage
 
 Booting child VMs runs `virtctl image-upload` and `virtctl start` against the

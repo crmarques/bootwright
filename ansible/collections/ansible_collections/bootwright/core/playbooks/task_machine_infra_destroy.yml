@@ -1,7 +1,7 @@
 ---
 - name: Destroy cluster infrastructure
   hosts: bootwright_provider_hosts:bootwright_infra_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min
@@ -40,12 +40,21 @@
       }}
 
   tasks:
-    - name: Destroy substrate per cluster on this host
+    - name: Destroy substrate in dependency order
       ansible.builtin.include_tasks: tasks/machine_infra/destroy_cluster.yml
-      loop: "{{ bootwright_host_clusters }}"
+      loop: >-
+        {{
+          (bootwright_destroy_cluster_order.split(','))
+          if (bootwright_destroy_cluster_order | default('') | length > 0)
+          else (bootwright_clusters | map(attribute='name') | list)
+        }}
       loop_control:
         loop_var: bootwright_cluster_name
-      when: bootwright_host_clusters | length > 0
+      when:
+        - bootwright_cluster_name in bootwright_host_clusters
+        - >-
+          bootwright_destroy_cluster_scope is not defined
+          or bootwright_cluster_name in bootwright_destroy_cluster_scope.split(',')
 
     - name: Resolve managed OS machine components on this host
       ansible.builtin.set_fact:

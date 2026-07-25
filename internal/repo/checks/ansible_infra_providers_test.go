@@ -583,7 +583,17 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 	if got := plays[0]["hosts"]; got != "bootwright_provider_hosts:bootwright_infra_hosts" {
 		t.Fatalf("machine infra destroy hosts = %v", got)
 	}
+	if got := plays[0]["strategy"]; got != "linear" {
+		t.Fatalf("machine infra destroy must keep child-before-host cluster passes in lockstep, got strategy=%v", got)
+	}
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	ordered := tasks[findAnsibleTask(t, tasks, "Destroy substrate in dependency order")]
+	if got := fmt.Sprint(ordered["loop"]); !strings.Contains(got, "bootwright_destroy_cluster_order") {
+		t.Fatalf("machine infra destroy must consume the planner's dependency order, got loop=%v", ordered["loop"])
+	}
+	if got := fmt.Sprint(ordered["when"]); !strings.Contains(got, "bootwright_destroy_cluster_scope") {
+		t.Fatalf("ordered machine infra destroy must remain selected-root scoped, got when=%v", ordered["when"])
+	}
 	sweep := tasks[findAnsibleTask(t, tasks, "Sweep current-context libvirt domains")]
 	when := fmt.Sprint(sweep["when"])
 	for _, want := range []string{
@@ -796,14 +806,17 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("kubevirt destroy must resolve record presence from the in-scope kubevirt-machine ownership records, got %v", recordDecide["bootwright_kubevirt_machine_recorded"])
 	}
 	gateWhen := fmt.Sprint(topTasks[gateIdx]["when"])
-	if !strings.Contains(gateWhen, "not (bootwright_destroy_skip_unreachable") {
-		t.Fatalf("host-reachability gate must fail closed unless --skip-unreachable, got when=%v", topTasks[gateIdx]["when"])
+	if strings.Contains(gateWhen, "bootwright_destroy_skip_unreachable") {
+		t.Fatalf("host-reachability gate must not let --skip-unreachable discard a recorded guest, got when=%v", topTasks[gateIdx]["when"])
 	}
 	if !strings.Contains(gateWhen, "bootwright_kubevirt_machine_recorded") {
 		t.Fatalf("host-reachability gate must only fail closed for a recorded guest, got when=%v", topTasks[gateIdx]["when"])
 	}
 	if _, ok := topTasks[gateIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("host-reachability gate must be a hard assert, got %v", topTasks[gateIdx])
+	}
+	if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, "--skip-unreachable cannot prove them absent") {
+		t.Fatalf("host-reachability refusal must explain why skipping cannot release guest ownership, got %v", topTasks[gateIdx])
 	}
 	if got := fmt.Sprint(topTasks[blockIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_reachable") {
 		t.Fatalf("guest teardown must be gated on host reachability, got when=%v", topTasks[blockIdx]["when"])

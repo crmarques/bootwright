@@ -1017,7 +1017,7 @@ func TestDestroyPurgeHistoryAcceptedWithClusterScopeDryRun(t *testing.T) {
 	}
 }
 
-func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
+func TestDestroyFullDryRunJSONPlansDependencySafeLifecycle(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
 		"destroy",
@@ -1043,9 +1043,9 @@ func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
 	}
 	wantIDs := []string{
 		"destroy.storage-clusters",
-		"destroy.container-clusters",
 		"destroy.machine-registration",
 		"destroy.machine-infra",
+		"destroy.container-clusters",
 		"destroy.infra-components",
 		"destroy.provider-services",
 		"destroy.storage-node-access",
@@ -1103,9 +1103,14 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	if report.DestroyPlan == nil || len(report.DestroyPlan.Tasks) == 0 {
 		t.Fatalf("staged destroy dry-run must carry the executed task plan, got %+v", report.DestroyPlan)
 	}
+	for _, task := range report.DestroyPlan.Tasks {
+		if task.ID == "destroy.machine-infra" {
+			t.Fatalf("explicit clusters stage must retain machine substrate: %+v", report.DestroyPlan.Tasks)
+		}
+	}
 }
 
-func TestDestroyClustersInfersStageFromClusterScope(t *testing.T) {
+func TestDestroyClustersDefaultsToSelectedFullLifecycle(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
 		"destroy",
@@ -1121,11 +1126,26 @@ func TestDestroyClustersInfersStageFromClusterScope(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
-	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
+	if report.Target != "all" || report.Action != "destroy" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
 	if report.DestroyPlan == nil || len(report.DestroyPlan.Tasks) == 0 {
 		t.Fatalf("staged destroy dry-run must carry the executed task plan, got %+v", report.DestroyPlan)
+	}
+	var ids []string
+	for _, task := range report.DestroyPlan.Tasks {
+		ids = append(ids, task.ID)
+	}
+	for _, want := range []string{"destroy.machine-infra", "destroy.container-clusters"} {
+		if !slices.Contains(ids, want) {
+			t.Fatalf("selected full lifecycle tasks = %v, missing %s", ids, want)
+		}
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_destroy_cluster_scope=sno-libvirt") {
+		t.Fatalf("selected full lifecycle must scope recorded-resource cleanup: %#v", report.ExtraVars)
+	}
+	if slices.Contains(report.ExtraVars, "bootwright_infra_destroy_context_sweep=true") {
+		t.Fatalf("selected full lifecycle must not enable the context sweep: %#v", report.ExtraVars)
 	}
 }
 

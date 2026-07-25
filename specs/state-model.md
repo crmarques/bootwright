@@ -1753,12 +1753,25 @@ Rules:
   state removal is scoped to the owned cluster's fsid directories; the shared
   `/etc/ceph`, `/var/lib/ceph`, and `/var/log/ceph` trees are removed
   wholesale only when no foreign fsid remains on the node.
-- `destroy` with `--stage` omitted tears down the whole context: it runs the
-  clusters teardown then the infra teardown as one ordered task graph (the
-  reverse of the apply order), and sweeps context-owned VM artifacts and orphan
-  ownership records exactly as unscoped `destroy --stage infra` does. `--clusters`
-  with no `--stage` still narrows to `destroy --stage clusters`; the full
-  teardown is the no-selector form.
+- `destroy` with `--stage` omitted tears down the full lifecycle of its work set:
+  storage-cluster runtime is removed before machine infrastructure, then
+  container-cluster runtime and exclusively owned infra-component/provider
+  services are removed. Without `--clusters`, the work set is the whole context
+  and the infra teardown also sweeps context-owned VM artifacts and orphan
+  ownership records exactly as unscoped `destroy --stage infra` does. With
+  `--clusters`, the work set is limited to the selected roots, machine
+  infrastructure includes only their machines, and no context-wide sweep runs.
+  Positively owned libvirt, vSphere, and KubeVirt machines and their owned disks
+  are deleted; bare-metal hardware and its installed OS are retained while
+  Bootwright-local install state is released. `destroy --stage clusters
+  --clusters <names>` is the explicit retain-machine-substrate operation.
+  Container-cluster runtime cleanup has a hard dependency on successful machine
+  teardown so failed virtual-machine deletion preserves kubeconfigs, install
+  records, and ownership evidence for retry. When a selected KubeVirt host and
+  its nested cluster are both destroyed, nested guest machines are removed
+  through the still-live host before either the host cluster's own machine
+  substrate or its kubeconfig and runtime are removed. Machine teardown orders
+  KubeVirt tenants before their host clusters and rejects a host-reference cycle.
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
@@ -1798,7 +1811,15 @@ Rules:
   teardown: it skips them — their devices are NOT wiped and their local state
   remains — and continues, leaving the cluster partially destroyed. It requires
   `--force`. Storage teardown still fails closed when a cluster's Ceph seed
-  host is unreachable, so ownership stays proven before any device wipe.
+  host is unreachable, so ownership stays proven before any device wipe. A
+  KubeVirt host-cluster API holding a recorded guest is not a skippable node:
+  when it is unreachable Bootwright cannot prove the guest VM and DataVolumes
+  absent, so destroy fails closed and retains their ownership and cluster
+  runtime records even with `--skip-unreachable`.
+- Destroying a KubeVirt host cluster while an installed nested cluster is left
+  outside the selected work set fails before mutation. `--force` does not widen
+  `--clusters`; the nested cluster must be selected in the same full-lifecycle
+  destroy or destroyed first.
 - A destroy that tears down machine substrate writes a substrate-release
   record (`runs/substrate-release/`) — the positive authorization the next
   `apply` needs before it may reinstall the released substrate. The record is

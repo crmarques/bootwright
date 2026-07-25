@@ -1,6 +1,6 @@
 ---
 title: Operations and Recovery
-description: The three apply modes including break-glass --converge-drifted and greenfield --expect-new, destroy stages and the no-selector full-teardown default, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, and --include-unowned / --skip-unreachable.
+description: The three apply modes including break-glass --converge-drifted and greenfield --expect-new, full-lifecycle and staged destroy, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, and --include-unowned / --skip-unreachable.
 ---
 
 # Operations and recovery
@@ -107,17 +107,22 @@ apply/plan reruns only; `destroy` does not accept them.
 | --- | --- |
 | `destroy --stage clusters` | Cluster-stage runtime for selected or all `ContainerCluster` and `StorageCluster` names: OpenShift install runtime, add-on records, generated storage attachment records, and managed storage cluster services and runtime. Does not touch provider infrastructure. |
 | `destroy --stage infra` | Provider, infra-component, machine-infra, and storage-infra state. Without `--clusters` it also sweeps every context-owned VM that provider adapters can identify. |
-| `destroy` (no `--stage`) | The whole context: clusters teardown then infra teardown as one ordered graph (the reverse of apply order), plus the same context-wide VM and orphan-ownership sweep as unscoped `destroy --stage infra`. |
+| `destroy` (no `--stage`) | Full lifecycle for the work set: storage runtime, machine infrastructure, container runtime, then exclusively owned services. With no selector it covers the context and also runs the context-wide VM and orphan-ownership sweep; with `--clusters` it is limited to those roots. |
 
 !!! note "The no-stage default is full teardown"
-    Omitting `--stage` tears down the **whole context**, clusters first and then
-    the infrastructure they ran on. This is the no-selector form. Adding
-    `--clusters` with no `--stage` narrows to `destroy --stage clusters` — the
-    full whole-context teardown only happens when no selector is given.
+    Omitting `--stage` tears down the full lifecycle of the work set. With no
+    selector that is the whole context. Adding `--clusters` narrows the same
+    lifecycle to those roots: positively owned libvirt, vSphere, and KubeVirt
+    machines are deleted, while bare-metal hardware and its installed OS are
+    retained. Use explicit `--stage clusters --clusters <names>` to keep virtual
+    machines standing.
 
 ```text
-# Full context teardown (clusters, then infra), with confirmation prompt.
+# Full context lifecycle teardown, with confirmation prompt.
 bootwright destroy
+
+# Full teardown of one cluster, including its owned virtual machines.
+bootwright destroy --clusters child-ocp
 
 # Tear down only the cluster stage; leave provider infrastructure standing.
 bootwright destroy --stage clusters
@@ -140,15 +145,17 @@ ordered task chain. `--yes` skips the confirmation prompt and nothing more.
 - **Host packages.** A package is removed only when ownership records prove
   Bootwright installed it *and* no remaining ownership record on that host still
   requires it.
-- **VM sweep scope.** The context-wide VM sweep runs only for the no-selector
-  full teardown and unscoped `destroy --stage infra`. With `--clusters`, infra
-  teardown is limited to the selected roots and runs no context-wide VM cleanup.
+- **VM scope.** The context-wide VM sweep runs only for unscoped full teardown
+  and unscoped `destroy --stage infra`. With `--clusters`, full-lifecycle or
+  infra teardown deletes only positively owned machines of the selected roots
+  and runs no context-wide cleanup.
 
 !!! warning "Scoped infra destroy refuses shared-service conflicts"
-    A scoped `destroy --stage infra --clusters …` refuses to proceed when the
-    selected clusters share a provider service with clusters left out of the
-    selection, rather than tearing down state another cluster still depends on.
-    Widen or narrow the selection so the shared service is unambiguous.
+    A scoped full-lifecycle destroy or `destroy --stage infra --clusters …`
+    refuses to proceed when the selected clusters share a provider service with
+    clusters left out of the selection, rather than tearing down state another
+    cluster still depends on. Widen or narrow the selection so the shared
+    service is unambiguous.
 
 ### Removing only the artifact server
 
@@ -494,8 +501,8 @@ implies neither `--force` nor `--yes`. The normative contract is in the
 
 The node-targeting teardown plays (managed Ceph storage and OpenShift agent
 clusters) connect to every node over SSH. When a node is powered off the
-teardown stops with `UNREACHABLE!`, and because the storage step gates the
-container step, one down node blocks the whole teardown.
+affected step stops with `UNREACHABLE!`; the overall teardown remains
+incomplete even when independent cleanup steps can continue.
 
 `--skip-unreachable` lets the teardown proceed on the nodes it can reach: an
 unreachable node is skipped rather than aborting the play. It **requires
@@ -538,9 +545,11 @@ substrate teardown is a clean no-op that consults the local record set and never
 contacts the (possibly nonexistent) host, so a plain `destroy` completes it
 without `--skip-unreachable` and without requiring the host to be reachable.
 
-`--skip-unreachable` is therefore only needed for a substrate Bootwright **did**
-record but now cannot reach — a powered-off node, or a recorded guest whose host
-cluster is temporarily down.
+`--skip-unreachable` is therefore only needed for a node substrate Bootwright
+**did** record but can no longer reach. A KubeVirt host-cluster API is not a
+skippable node: if it is unreachable while Bootwright still records a guest,
+destroy cannot prove the VM or its DataVolumes absent, so it fails closed and
+retains the ownership and cluster runtime records for retry.
 
 ### Managed bare-metal is torn down locally, wiped on reinstall
 

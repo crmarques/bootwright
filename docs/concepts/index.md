@@ -302,16 +302,17 @@ no-`--stage` default differs from `apply`:
 
 | Invocation | Effect |
 | --- | --- |
-| `destroy` (no `--stage`) | Full context teardown: clusters then infra, the reverse of apply order, sweeping context-owned VM artifacts and orphan ownership records. |
+| `destroy` (no `--stage`) | Full lifecycle teardown: storage runtime, machine infrastructure, container runtime, then exclusively owned services; unscoped also sweeps context-owned VM artifacts and orphan ownership records. |
 | `destroy --stage clusters` | Cluster-stage runtime only (install runtime, add-on records, storage attachment records, managed storage services); leaves provider infrastructure. |
 | `destroy --stage infra` | Infrastructure teardown; without `--clusters` it also sweeps all context-owned VMs the provider adapters can identify. |
-| `destroy --clusters <names>` | Narrows to `destroy --stage clusters` for those roots. |
+| `destroy --clusters <names>` | Full lifecycle teardown for those roots, including positively owned virtual machines; retains bare-metal hardware and installed OS. |
 | `destroy --machines <names>` | Tears down only the named machines' substrate; leaves shared services and the rest of the cluster standing, and refuses installed-cluster nodes without `--force`. |
 
-!!! note "The full teardown is the no-selector form"
-    Passing `--clusters` with no `--stage` narrows to `destroy --stage
-    clusters`. Disk cleanup is limited to provider-owned disks or declared
-    Bootwright-managed devices — Bootwright never wipes arbitrary visible disks.
+!!! note "No stage means full lifecycle"
+    Passing `--clusters` narrows the full lifecycle to those roots. Use
+    `--stage clusters --clusters <names>` to retain their machine substrate.
+    Disk cleanup is limited to provider-owned disks or declared
+    Bootwright-managed devices; physical bare-metal hardware is retained.
     Recovery patterns live in
     [Operations, recovery and teardown](../advanced/operations.md).
 

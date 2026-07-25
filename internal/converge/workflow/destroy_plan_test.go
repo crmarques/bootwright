@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,9 +87,9 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 	}
 	wantIDs := []string{
 		"destroy.storage-clusters",
-		"destroy.container-clusters",
 		"destroy.machine-registration",
 		"destroy.machine-infra",
+		"destroy.container-clusters",
 		"destroy.infra-components",
 		"destroy.provider-services",
 		"destroy.storage-node-access",
@@ -102,8 +104,12 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
 		}
-		if len(task.Entry.Dependencies) != 0 {
-			t.Fatalf("task[%d] hard deps = %v, want none (ordering only)", i, task.Entry.Dependencies)
+		wantDependencies := []string(nil)
+		if task.Entry.ID == "destroy.container-clusters" {
+			wantDependencies = []string{"destroy.machine-infra"}
+		}
+		if !reflect.DeepEqual(task.Entry.Dependencies, wantDependencies) {
+			t.Fatalf("task[%d] hard deps = %v, want %v", i, task.Entry.Dependencies, wantDependencies)
 		}
 		if i == 0 {
 			if len(task.Entry.OrderingDependencies) != 0 {
@@ -116,11 +122,79 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 	if last := tasks[len(tasks)-1]; last.Entry.Kind != DestroyTaskKindStorageNodeAccess {
 		t.Fatalf("storage node access revoke must run last in the full destroy chain, after Machine registration and every other step that still needs the storage hosts' rendered identity; got last kind %q", last.Entry.Kind)
 	}
+	if got := tasks[3].Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
+		t.Fatalf("container runtime cleanup must require successful machine teardown so KubeVirt host credentials and retry evidence survive a failed guest deletion, got %v", got)
+	}
 }
 
 func TestPlanDestroyTasksRejectsUnknownScope(t *testing.T) {
 	if _, err := PlanDestroyTasks("bogus", v1alpha1.State{}, "", nil, nil); err == nil {
 		t.Fatal("expected an error for an unsupported destroy scope")
+	}
+}
+
+func TestPlanDestroyTasksOrdersKubeVirtTenantBeforeHost(t *testing.T) {
+	state := destroyKubeVirtDependencyState("child", "host")
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range tasks {
+		if task.Entry.Kind != DestroyTaskKindMachineInfra {
+			continue
+		}
+		want := DestroyClusterOrderExtraVar + "=child,host"
+		if !slices.Contains(task.ExtraVarPairs, want) {
+			t.Fatalf("machine teardown extra vars = %v, want %q", task.ExtraVarPairs, want)
+		}
+		return
+	}
+	t.Fatal("full destroy plan has no machine infrastructure task")
+}
+
+func TestPlanDestroyTasksRejectsKubeVirtHostCycle(t *testing.T) {
+	state := destroyKubeVirtDependencyState("a", "b")
+	second := destroyKubeVirtDependencyState("b", "a")
+	state.Machines = append(state.Machines, second.Machines...)
+	state.InfraProviders = append(state.InfraProviders, second.InfraProviders...)
+	state.ContainerClusters = []v1alpha1.ContainerCluster{state.ContainerClusters[0], second.ContainerClusters[0]}
+	if _, err := PlanDestroyTasks("all", state, "", nil, nil); err == nil || !strings.Contains(err.Error(), "dependency cycle") {
+		t.Fatalf("KubeVirt host cycle error = %v", err)
+	}
+}
+
+func destroyKubeVirtDependencyState(child, host string) v1alpha1.State {
+	machineName := child + "-m0"
+	providerName := child + "-kubevirt"
+	return v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{
+			{
+				Metadata: v1alpha1.Metadata{Name: child},
+				Spec: v1alpha1.ContainerClusterSpec{
+					Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: machineName}}},
+				},
+			},
+			{Metadata: v1alpha1.Metadata{Name: host}},
+		},
+		Machines: []v1alpha1.Machine{
+			{
+				Metadata: v1alpha1.Metadata{Name: machineName},
+				Spec: v1alpha1.MachineSpec{
+					Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: providerName}},
+				},
+			},
+		},
+		InfraProviders: []v1alpha1.InfraProvider{
+			{
+				Metadata: v1alpha1.Metadata{Name: providerName},
+				Spec: v1alpha1.InfraProviderSpec{
+					Type: v1alpha1.ProvisionerKubeVirt,
+					KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+						HostClusterRef: &v1alpha1.LocalObjectReference{Name: host},
+					},
+				},
+			},
+		},
 	}
 }
 

@@ -146,9 +146,11 @@ bootwright apply --clusters dc1-ocp --yes
 bootwright destroy --clusters dc1-ocp
 ```
 
-For `destroy`, a bare `--clusters` (no `--stage`) narrows to
-`destroy --stage clusters` for those roots — it tears down cluster-stage runtime
-and leaves provider infrastructure standing.
+For `destroy`, a bare `--clusters` (no `--stage`) tears down the full lifecycle
+of those roots. Positively owned virtual machines are deleted; bare-metal
+hardware and its installed OS are retained. Add `--stage clusters` when the
+intent is to remove only cluster-stage runtime and leave virtual machines
+standing.
 
 ### Narrow to machines
 

@@ -52,13 +52,10 @@
     fail_msg: >-
       KubeVirt host cluster for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is unreachable (kubeconfig {{ bootwright_kubevirt_kubeconfig }}: API not reachable or
-      file missing). Its recorded guest VirtualMachine and DataVolumes cannot be removed. If
-      the host cluster is powered off or is itself being torn down, re-run with
-      --skip-unreachable to treat this recorded guest as already-absent; otherwise bring the
-      host cluster back up and retry.
-  when: >-
-    not (bootwright_destroy_skip_unreachable | default(false) | bool)
-    and (bootwright_kubevirt_machine_recorded | default(false) | bool)
+      file missing). Its recorded guest VirtualMachine and DataVolumes cannot be removed,
+      and --skip-unreachable cannot prove them absent. Restore the host cluster and its
+      kubeconfig, then retry so Bootwright can delete the guest before releasing its records.
+  when: bootwright_kubevirt_machine_recorded | default(false) | bool
 
 - name: Note never-provisioned KubeVirt guest on unreachable host cluster
   ansible.builtin.debug:
@@ -68,17 +65,6 @@
       so substrate teardown is a no-op.
   when:
     - not (bootwright_kubevirt_machine_recorded | default(false) | bool)
-    - not (bootwright_kubevirt_host_reachable | bool)
-
-- name: Note skipped KubeVirt teardown on unreachable host cluster
-  ansible.builtin.debug:
-    msg: >-
-      --skip-unreachable: host cluster for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
-      is unreachable; treating recorded guest VirtualMachine {{ bootwright_kubevirt_vm_name }} and its
-      DataVolumes as already-absent.
-  when:
-    - bootwright_destroy_skip_unreachable | default(false) | bool
-    - bootwright_kubevirt_machine_recorded | default(false) | bool
     - not (bootwright_kubevirt_host_reachable | bool)
 
 - name: Tear down KubeVirt guest on the reachable host cluster

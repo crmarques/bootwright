@@ -78,5 +78,6 @@ accept cluster-root narrowing (infra/clusters/all, sub-phases
 fabric/machines/deps/base, and every synthetic `through-<phase>` scope);
 single-kind targets validate against their own namespace; everything else gets
 the shared "`--clusters` is not supported for <target>" error, deliberately
-spelled in one function. The `all` scope accepts `--clusters` for check/apply
-but never destroy (a full destroy takes the task-chain path).
+spelled in one function. The `all` scope accepts `--clusters` for apply and for
+destroy's full-lifecycle task-chain path; render references remain outside the
+work set in both directions.

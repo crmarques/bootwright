@@ -39,8 +39,8 @@ touch root-owned state:
   invocation with an unknown flag or stray positional, and any
   `--name`-targeted command missing a non-empty `--name` value
   (`argsHaveNameValue`).
-- `destroy` with an omitted `--stage` is a whole-context full destroy
-  (or, with `--clusters`, the inferred clusters stage) and must escalate
+- `destroy` with an omitted `--stage` is a full-lifecycle destroy of the whole
+  context or of the roots selected by `--clusters`, and must escalate
   BEFORE context resolution — a non-root run would fail to `lstat` the
   root-owned context directory. A bogus explicit `--stage` deliberately
   stays rootless so it fails stage validation before any context read.

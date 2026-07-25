@@ -75,9 +75,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	if options.stageSelector {
 		flags.executable = workspace.ResolveAnsiblePlaybook()
 		addOutputFlagDryRun(cmd, &flags.output)
-		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to destroy: %s (sub-phases %s are apply-only); default: full teardown of clusters then infra", strings.Join(converge.DestroyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
+		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to destroy: %s (sub-phases %s are apply-only); default: full lifecycle teardown for the selected work set", strings.Join(converge.DestroyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerStageCompletion(cmd, converge.DestroyStageNames())
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy (default: all); implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy (default: all); without --stage, tears down the selected clusters and their exclusively owned infrastructure; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
 		registerClusterScopeCompletion(cmd, clusterKindAny)
 		cmd.Flags().StringVar(&machinesScope, "machines", "", flagMachinesDestroyUsage)
 		registerMachineScopeCompletion(cmd)
@@ -94,9 +94,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		runScope := scope
 		runCommandLabel := commandLabel
 		if options.stageSelector {
-			if strings.TrimSpace(stage) == "" && strings.TrimSpace(flags.clusterScope) != "" {
-				stage = "clusters"
-			}
 			var err error
 			runScope, err = converge.DestroyStageScope(stage)
 			if err != nil {
@@ -158,7 +155,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
 		}
-		if runScope.Name == "infra" && sel.Active && !sel.MachineSelection {
+		if (runScope.Name == "infra" || fullDestroy) && sel.Active && !sel.MachineSelection {
 			conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
 			if len(conflicts) > 0 {
 				if standingTasks, perr := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state); perr == nil {
@@ -169,13 +166,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
-		var kubeVirtTenantOverrideNotice string
 		if sel.Active && len(sel.ContainerRoots) > 0 {
 			if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.ContainerRoots); len(conflicts) > 0 {
-				if !override {
-					return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
-				}
-				kubeVirtTenantOverrideNotice = converge.FormatKubeVirtTenantConflicts(conflicts).Error() + "; proceeding because --force was supplied"
+				return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
 			}
 		}
 		var storageConsumerOverrideNotice string
@@ -266,9 +259,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		printDestroySafety(stdout, destroySafety, override, dryRun)
-		if kubeVirtTenantOverrideNotice != "" {
-			cliout.NewContinuation(stdout).Warning("kubevirt tenants", kubeVirtTenantOverrideNotice)
-		}
 		if storageConsumerOverrideNotice != "" {
 			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
 		}

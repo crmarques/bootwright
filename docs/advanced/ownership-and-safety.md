@@ -180,12 +180,14 @@ A few habits keep operators on the safe side of these guardrails:
     directs you to run `destroy --force` for the affected scope first — a
     second, explicit decision.
 
-- **Know what `destroy` does.** The full teardown is the *no-selector* form
-  (`destroy`), which removes clusters then infra. `destroy --clusters <names>`
-  narrows to the clusters stage. Disk cleanup is bounded to provider-owned disks
-  or declared Bootwright-managed devices — Bootwright never wipes arbitrary
-  visible disks — and `--include-unowned` / `--skip-unreachable` are explicit
-  opt-ins, never defaults. See [Operations, recovery & teardown](operations.md).
+- **Know what `destroy` does.** Omitting `--stage` requests a full lifecycle
+  teardown: `destroy` covers the context and `destroy --clusters <names>`
+  narrows it to those roots. Positively owned virtual machines are deleted;
+  bare-metal hardware and its installed OS are retained. Use `--stage clusters`
+  to keep machine substrate. Disk cleanup is bounded to provider-owned disks or
+  declared Bootwright-managed devices — Bootwright never wipes arbitrary visible
+  disks — and `--include-unowned` / `--skip-unreachable` are explicit opt-ins,
+  never defaults. See [Operations, recovery & teardown](operations.md).
 - **Keep state safe to commit.** Desired state names secrets but never carries
   bytes; keep pull secrets, keys, and kubeconfigs out of Git
   ([Secrets & entitlements](../concepts/secrets.md)).

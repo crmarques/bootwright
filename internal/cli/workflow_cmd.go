@@ -196,7 +196,7 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 			"usage error, non-zero on teardown failure.",
 		stageSelector: true,
 		commandLabel:  "destroy",
-		example: `  # Tear down the whole context: clusters first, then the infra they ran on
+		example: `  # Tear down the full lifecycle of the whole context
   bootwright destroy --yes
 
   # Preview that full teardown without executing it
@@ -221,8 +221,7 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   # Remove only the generated artifact publication service
   bootwright destroy --stage infra --clusters artifact-server --yes
 
-  # Remove selected cluster-stage runtime and managed storage state
-  # (--clusters implies --stage clusters)
+  # Tear down selected clusters and their exclusively owned infrastructure
   bootwright destroy --clusters dc1-ocp,ceph-storage --yes`,
 	})
 	return cmd
