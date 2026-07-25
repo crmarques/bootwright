@@ -20,7 +20,10 @@ target's fabric-host set is tri-state: nil means unscoped/all hosts, while a
 non-nil set admits only named work hosts. Without that gate, graph lowering
 fails with `infra-component.<host> requires unavailable capability
 machine.os-ready:<host>` or, when the dropped machine is OS-ready in the full
-state, a scoped run mutates an unrelated service.
+state, a scoped run mutates an unrelated service. Post-destroy converge-record
+reset replans the corresponding apply graph and must carry the same
+`WorkMachines` fabric-host set; otherwise a successful scoped destroy emits the
+same unavailable-capability failure and leaves its record cleanup incomplete.
 
 **Conditional ISO dependency:** boot/wait tasks depend on the agent-ISO task
 only when the deps phase is in scope. A base-only run (`apply --stage base`)

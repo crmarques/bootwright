@@ -63,7 +63,7 @@ func TestInfraDestroyRecordsSubstrateRelease(t *testing.T) {
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, false, false)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, nil, false, false)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}
@@ -81,7 +81,7 @@ func TestClustersDestroyRecordsNoSubstrateRelease(t *testing.T) {
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, false, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, false, false)
 
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
@@ -95,7 +95,7 @@ func TestFailedMachineTeardownRecordsNoSubstrateRelease(t *testing.T) {
 	st := bareMetalCephDestroyState()
 	succeeded := map[string]bool{workflow.DestroyTaskKindInfraComponents: true}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, succeeded, false, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, succeeded, false, false)
 
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
@@ -108,7 +108,7 @@ func TestSkipUnreachablePartialStorageDestroyWithholdsSubstrateRelease(t *testin
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-bm"}, nil, false, true)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-bm"}, nil, nil, false, true)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}
@@ -123,7 +123,7 @@ func TestSkipUnreachableCompleteStorageDestroyRecordsSubstrateRelease(t *testing
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, false, true)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, false, true)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}
@@ -138,7 +138,7 @@ func TestSkipUnreachableInfraDestroyWithholdsSubstrateRelease(t *testing.T) {
 	clustersDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, false, true)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, nil, false, true)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}
@@ -154,7 +154,7 @@ func TestSkipUnreachableFailedStorageDestroyWithholdsSubstrateRelease(t *testing
 	st := bareMetalCephDestroyState()
 	succeeded := map[string]bool{workflow.DestroyTaskKindMachineInfra: true}
 
-	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, succeeded, false, true)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, succeeded, false, true)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}

@@ -77,5 +77,5 @@ func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runs
 		printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, plan.State, sel.MachineProvision, succeeded, purgeHistory, skipUnreachable))
 		return
 	}
-	printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, succeeded, purgeHistory, skipUnreachable))
+	printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, sel.WorkMachines, succeeded, purgeHistory, skipUnreachable))
 }

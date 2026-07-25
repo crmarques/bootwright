@@ -49,7 +49,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 		t.Fatalf("precondition: expected storage drift, got %v", err)
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, after, nil, nil, nil, false, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, after, nil, nil, nil, nil, false, false)
 
 	objects, err = workflow.ClassifyApplyObjects(afterTasks, runsDir)
 	if err != nil {
@@ -60,6 +60,71 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 	}
 	if _, found, err := workflow.LoadClusterInstallRecord(clustersDir, "ocp"); err != nil || found {
 		t.Fatalf("container install record must be cleared after infra destroy, found=%v err=%v", found, err)
+	}
+}
+
+func TestScopedDestroyRecordResetExcludesUnconsumedFabricHost(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	full := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "test"},
+			Spec: v1alpha1.EnvironmentSpec{
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					Proxies: []v1alpha1.EnvironmentProxyComponent{{
+						Name:         "default",
+						Default:      true,
+						Management:   v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
+					}},
+				},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ocp"},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "proxy"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotProxy,
+				Proxy: &v1alpha1.ProxyComponent{
+					Implementation: v1alpha1.InfraComponentTypeSquid,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+				},
+			},
+		}},
+	}
+	tasks, err := workflow.PlanApplyTasksChecked(InfraScope.ApplyTarget(), full)
+	if err != nil {
+		t.Fatalf("plan full state: %v", err)
+	}
+	var componentTask workflow.ApplyTask
+	for _, task := range tasks {
+		if task.Entry.ID == "infra-component.bastion" {
+			componentTask = task
+			break
+		}
+	}
+	if componentTask.Entry.ID == "" {
+		t.Fatalf("full state did not plan infra-component.bastion: %v", tasks)
+	}
+	if err := workflow.MarkApplyTaskConvergeSafety(runsDir, "test", "apply", componentTask, workflow.ConvergeSafetyStatusReconciled, time.Unix(1700000000, 0)); err != nil {
+		t.Fatalf("mark component record: %v", err)
+	}
+	scoped := full
+	scoped.Machines = nil
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, scoped, nil, nil, map[string]bool{}, nil, false, false)
+	if len(problems) != 0 {
+		t.Fatalf("scoped reset problems: %v", problems)
+	}
+	if !workflow.HasConvergeSafetyRecords(runsDir) {
+		t.Fatal("an unconsumed shared component outside the destroy work set must keep its converge record")
 	}
 }
 
@@ -87,7 +152,7 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 		}
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, false, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, nil, false, false)
 
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
@@ -141,7 +206,7 @@ func TestFullDestroySweepsRecordsForUndeclaredObjects(t *testing.T) {
 		t.Fatal("precondition: records must exist")
 	}
 
-	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, false, false)
+	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, false, false)
 
 	if workflow.HasConvergeSafetyRecords(runsDir) {
 		t.Fatal("a full-estate destroy must leave no converge safety records, including for objects deleted from the desired state before the destroy")

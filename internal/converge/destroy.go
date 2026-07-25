@@ -102,7 +102,7 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	return renderResult, ledger, workflow.ApplyRunLogPath(ctx.RunsDir, prepared.RunID), err
 }
 
-func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string, succeededDestroyKinds map[string]bool, purgeHistory, skipUnreachable bool) []error {
+func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string, fabricHosts map[string]bool, succeededDestroyKinds map[string]bool, purgeHistory, skipUnreachable bool) []error {
 	var problems []error
 	var purgedClusters []string
 	partial := make(map[string]bool, len(partialStorageClusters))
@@ -118,6 +118,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 	if storageWorkNames != nil {
 		target.StorageClusterNames = append([]string{}, storageWorkNames...)
 	}
+	target.FabricHosts = fabricHosts
 	if tasks, perr := workflow.PlanApplyTasksChecked(target, state); perr != nil {
 		problems = append(problems, fmt.Errorf("plan converge-record reset: %w", perr))
 	} else {

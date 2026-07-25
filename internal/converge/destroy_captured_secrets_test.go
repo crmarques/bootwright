@@ -24,7 +24,7 @@ func TestResetConvergeRecordsRemovesStorageClusterDashboardPassword(t *testing.T
 		t.Fatalf("precondition: dashboard-password must exist, %v", err)
 	}
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, false, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, false, false); len(problems) != 0 {
 		t.Fatalf("ResetConvergeRecordsAfterDestroy: %v", problems)
 	}
 
