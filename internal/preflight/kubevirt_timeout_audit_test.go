@@ -26,6 +26,9 @@ func TestKubeVirtAPIReadyCheckBoundsProbeWithRequestTimeout(t *testing.T) {
 	if !slices.Contains(gotArgs, "--request-timeout=5s") {
 		t.Fatalf("kubectl argv must bound the probe with --request-timeout=5s, got %v", gotArgs)
 	}
+	if !slices.Contains(gotArgs, "--raw=/apis/apiextensions.k8s.io/v1/customresourcedefinitions/virtualmachines.kubevirt.io") {
+		t.Fatalf("kubectl argv must probe the CRD without discovery, got %v", gotArgs)
+	}
 }
 
 func TestKubeVirtNetworkRefCheckBoundsProbeWithRequestTimeout(t *testing.T) {
@@ -41,5 +44,8 @@ func TestKubeVirtNetworkRefCheckBoundsProbeWithRequestTimeout(t *testing.T) {
 	})
 	if !slices.Contains(gotArgs, "--request-timeout=5s") {
 		t.Fatalf("kubectl argv must bound the probe with --request-timeout=5s, got %v", gotArgs)
+	}
+	if !slices.Contains(gotArgs, "--raw=/apis/k8s.cni.cncf.io/v1/namespaces/bootwright-child-ocp/network-attachment-definitions/child-net") {
+		t.Fatalf("kubectl argv must probe the network resource without discovery, got %v", gotArgs)
 	}
 }

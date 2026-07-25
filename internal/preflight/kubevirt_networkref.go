@@ -2,6 +2,7 @@ package preflight
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -24,23 +25,20 @@ func kubeVirtNetworkRefCheck(attachmentName string, ref v1alpha1.KubeVirtNetwork
 		ref.EffectiveKind(), ref.Name, ref.EffectiveAPIGroup(), ref.Namespace)
 	impact := "KubeVirt VMs attach to this network by NetworkAttachmentDefinition <namespace>/<name>; without it the child nodes have no network"
 
-	args := []string{"--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "networkattachmentdefinition.k8s.cni.cncf.io", ref.Name, "-o", "name"}
-	if ref.Namespace != "" {
-		args = append(args, "-n", ref.Namespace)
-	}
-	out, err := deps.CommandOutputLocalRoot("kubectl", args...)
+	resourcePath := fmt.Sprintf("/apis/k8s.cni.cncf.io/v1/namespaces/%s/network-attachment-definitions/%s", url.PathEscape(ref.Namespace), url.PathEscape(ref.Name))
+	out, err := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "--raw="+resourcePath)
 	if err != nil {
 		evidence := strings.TrimSpace(string(out))
 		if evidence == "" {
 			evidence = err.Error()
 		}
-		if kubeconfigUnreadable(evidence) {
-			return failCheck(checkGroupInstallerTools, name, evidence, impact, "ensure "+kubeconfigPath+" is a readable, valid kubeconfig (bootwright manages it under the root-owned workspace)")
+		if kubernetesResourceMissing(evidence, ref.Name) {
+			return failCheck(checkGroupInstallerTools, name, evidence, impact, remediation)
 		}
-		return failCheck(checkGroupInstallerTools, name, evidence, impact, remediation)
+		return failCheck(checkGroupInstallerTools, name, evidence, impact, "ensure "+kubeconfigPath+" identifies a reachable Kubernetes API server and grants access to k8s.cni.cncf.io/v1")
 	}
-	if !strings.Contains(string(out), "networkattachmentdefinition.k8s.cni.cncf.io/"+ref.Name) {
-		return failCheck(checkGroupInstallerTools, name, strings.TrimSpace(string(out)), impact, remediation)
+	if !strings.Contains(string(out), ref.Name) {
+		return failCheck(checkGroupInstallerTools, name, strings.TrimSpace(string(out)), impact, "ensure "+kubeconfigPath+" identifies a reachable Kubernetes API server and grants access to k8s.cni.cncf.io/v1")
 	}
 	return okCheck(checkGroupInstallerTools, name, ref.Namespace+"/"+ref.Name)
 }

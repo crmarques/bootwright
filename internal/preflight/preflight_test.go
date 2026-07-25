@@ -159,6 +159,71 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	}
 }
 
+func TestKubeVirtHostClusterPreflightClassifiesGenericNotFoundAsAPIAccessFailure(t *testing.T) {
+	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	check := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
+		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
+			return []byte("Error from server (NotFound): the server could not find the requested resource\n"), errors.New("not found")
+		},
+	})
+	if check.Status != StatusFail {
+		t.Fatalf("generic API NotFound accepted: %+v", check)
+	}
+	if strings.Contains(check.Remediation, "apply --stage clusters") {
+		t.Fatalf("generic API NotFound misreported as KubeVirt-not-ready: %q", check.Remediation)
+	}
+	if !strings.Contains(check.Remediation, "reachable Kubernetes API server") {
+		t.Fatalf("remediation should name host API reachability: %q", check.Remediation)
+	}
+}
+
+func TestKubeVirtHostClusterPreflightSkipsNetworkChecksWhenAPIFails(t *testing.T) {
+	clustersDir := t.TempDir()
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
+		Metadata: v1alpha1.Metadata{Name: "child-provider"},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerKubeVirt,
+			KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+				HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+				Namespace:      "bootwright-child-ocp",
+			},
+			NetworkAttachments: []v1alpha1.NetworkAttachmentCapability{{
+				Name: "child-net",
+				KubeVirt: &v1alpha1.NetworkAttachmentKubeVirt{
+					NetworkRef: v1alpha1.KubeVirtNetworkRef{
+						Kind: v1alpha1.KubeVirtNetworkKindCUDN, Name: "child-net", Namespace: "bootwright-child-ocp",
+					},
+				},
+			}},
+		},
+	}}}
+	probes := 0
+	checks := kubeVirtHostClusterChecks(state, []Phase{{Name: "machines"}}, clustersDir, "", Deps{
+		StatPath: os.Stat,
+		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
+			probes++
+			return []byte("Error from server (NotFound): the server could not find the requested resource\n"), errors.New("not found")
+		},
+	}, nil)
+	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "FAIL")
+	if checkPresent(checks, "child-net network") {
+		t.Fatalf("network check ran after failed host API prerequisite: %+v", checkNames(checks))
+	}
+	if probes != 1 {
+		t.Fatalf("probe count = %d, want one host API probe", probes)
+	}
+}
+
 func TestKubeVirtHostClusterSelfProvisionedDefersMissingKubeconfig(t *testing.T) {
 	clustersDir := t.TempDir()
 	state := v1alpha1.State{
@@ -340,8 +405,8 @@ func TestKubeVirtChecksClassifyUnreadableKubeconfig(t *testing.T) {
 	if strings.Contains(net.Remediation, "ClusterUserDefinedNetwork") {
 		t.Fatalf("EACCES misreported as missing network: %q", net.Remediation)
 	}
-	if !strings.Contains(net.Remediation, "readable, valid kubeconfig") {
-		t.Fatalf("remediation should name the unreadable kubeconfig: %q", net.Remediation)
+	if !strings.Contains(net.Remediation, "reachable Kubernetes API server") {
+		t.Fatalf("remediation should name host API access: %q", net.Remediation)
 	}
 }
 
@@ -1167,7 +1232,7 @@ func TestKubeVirtKubeconfigRefProbesAPI(t *testing.T) {
 		StatExternalPath: os.Stat,
 		CommandOutputLocalRoot: func(name string, args ...string) ([]byte, error) {
 			for _, a := range args {
-				if a == "crd" {
+				if strings.Contains(a, "/customresourcedefinitions/") {
 					probedCRD = true
 					return []byte("virtualmachines.kubevirt.io\n"), nil
 				}
