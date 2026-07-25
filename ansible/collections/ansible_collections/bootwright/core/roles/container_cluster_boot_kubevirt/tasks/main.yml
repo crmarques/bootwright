@@ -8,6 +8,9 @@
     bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-agent-iso"
     bootwright_kubevirt_context_name: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_kubevirt_machine_record_path: >-
+      {{ bootwright_ownership_dir }}/resources/kubevirt-machine/{{
+        bootwright_current_cluster.name }}-{{ bootwright_component.name }}.json
   changed_when: false
 
 - name: Read generated agent ISO path
@@ -135,6 +138,65 @@
       }}
   changed_when: false
 
+- name: Resolve legacy KubeVirt agent ISO DataVolume candidate
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_boot_iso_legacy_candidate: >-
+      {{
+        (bootwright_kubevirt_boot_iso_probe.rc | default(1)) == 0
+        and bootwright_kubevirt_boot_vm_owned | bool
+        and bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {}).get('bootwright.io/managed-by', '') == 'bootwright'
+        and bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {}).get('bootwright.io/cluster', '') == bootwright_current_cluster.name
+        and bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {}).get('bootwright.io/role', '') == 'agent-iso'
+        and 'bootwright.io/context' not in bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {})
+        and 'bootwright.io/node' not in bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {})
+      }}
+    bootwright_kubevirt_machine_recorded: false
+  changed_when: false
+
+- name: Read KubeVirt machine ownership record
+  ansible.builtin.slurp:
+    src: "{{ bootwright_kubevirt_machine_record_path }}"
+  register: bootwright_kubevirt_machine_record_slurp
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
+
+- name: Resolve KubeVirt machine ownership record
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_machine_record: >-
+      {{
+        (bootwright_kubevirt_machine_record_slurp.content | b64decode | from_json)
+        if bootwright_kubevirt_machine_record_slurp.content is defined
+        else {}
+      }}
+  changed_when: false
+  when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
+
+- name: Verify KubeVirt machine ownership record
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_machine_recorded: >-
+      {{
+        bootwright_kubevirt_machine_record.get('apiVersion', '') == 'bootwright.io/ownership/v1alpha1'
+        and bootwright_kubevirt_machine_record.get('kind', '') == 'kubevirt-machine'
+        and bootwright_kubevirt_machine_record.get('name', '') == bootwright_kubevirt_vm_name
+        and bootwright_kubevirt_machine_record.get('owner', '') == 'bootwright'
+        and bootwright_kubevirt_machine_record.get('context', '') == bootwright_kubevirt_context_name
+        and bootwright_kubevirt_machine_record.get('cluster', '') == bootwright_current_cluster.name
+        and bootwright_kubevirt_machine_record.get('machine', '') == bootwright_component.name
+      }}
+  changed_when: false
+  when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
+
+- name: Resolve legacy KubeVirt agent ISO DataVolume ownership
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_boot_iso_legacy_owned: >-
+      {{
+        bootwright_kubevirt_boot_iso_legacy_candidate | bool
+        and bootwright_kubevirt_machine_recorded | bool
+      }}
+  changed_when: false
+
 - name: Resolve KubeVirt agent ISO DataVolume ownership
   ansible.builtin.set_fact:
     bootwright_kubevirt_boot_iso_exists: "{{ (bootwright_kubevirt_boot_iso_probe.rc | default(1)) == 0 }}"
@@ -148,6 +210,7 @@
           and bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {}).get('bootwright.io/node', '') == bootwright_component.name
           and bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {}).get('bootwright.io/role', '') == 'agent-iso'
         )
+        or bootwright_kubevirt_boot_iso_legacy_owned | bool
       }}
   changed_when: false
 
@@ -160,6 +223,24 @@
       KubeVirt DataVolume {{ bootwright_kubevirt_namespace }}/{{ bootwright_kubevirt_iso_dv_name }}
     bootwright_gate_exists: "{{ bootwright_kubevirt_boot_iso_exists }}"
     bootwright_gate_owned: "{{ bootwright_kubevirt_boot_iso_owned }}"
+
+- name: Upgrade legacy KubeVirt agent ISO DataVolume ownership labels
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - label
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_dv_name }}"
+      - "bootwright.io/context={{ bootwright_kubevirt_context_name }}"
+      - "bootwright.io/node={{ bootwright_component.name }}"
+      - --overwrite
+  register: bootwright_kubevirt_iso_legacy_label
+  changed_when: bootwright_kubevirt_iso_legacy_label.rc == 0
+  when: bootwright_kubevirt_boot_iso_legacy_owned | bool
 
 - name: Read managed KubeVirt host cluster ingress CA bundle
   ansible.builtin.command:

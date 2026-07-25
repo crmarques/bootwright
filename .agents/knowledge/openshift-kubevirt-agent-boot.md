@@ -57,6 +57,22 @@ apply and destroy ownership gates cannot tell a Bootwright-owned DV from a
 foreign DataVolume that merely collides on name in a shared namespace, and
 would refuse or mis-delete.
 
+**Symptom (pre-exact-label agent ISO):** Apply fails at `Refuse to modify
+foreign KubeVirt DataVolume` for a same-name `*-agent-iso` DataVolume after
+upgrading from a build that stamped only managed-by, cluster, and role.
+A selected `destroy --clusters <name>` intentionally runs only the clusters
+stage, so it leaves KubeVirt machine infrastructure and its DataVolumes
+standing; `--stage infra` or a full unscoped destroy is the substrate teardown.
+
+**Fix (bounded label upgrade):** The boot role accepts that one historical
+agent-ISO label shape only when the context's exact `kubevirt-machine`
+ownership record and the exact context/cluster/node-labelled VirtualMachine
+both prove the same machine, the old managed-by/cluster/agent-ISO-role labels
+match, and context/node labels are absent rather than contradictory. After
+the shared apply-mode gate admits reconciliation, the role stamps the missing
+labels before any stop or delete. Any partial or mismatched identity still
+fails closed.
+
 **Constraint (DV size):** The agent-ISO DataVolume size is
 `bootwright_kubevirt_agent_iso_size` (default `4Gi`), sized for a typical
 agent ISO (~1–1.5 GiB) with headroom. A larger release payload makes

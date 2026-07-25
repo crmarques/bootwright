@@ -905,12 +905,36 @@ func TestKubeVirtBootGatesLiveResourcesBeforeMutation(t *testing.T) {
 	vmProbeIdx := findAnsibleTask(t, tasks, "Read KubeVirt boot VirtualMachine identity")
 	vmRequireIdx := findAnsibleTask(t, tasks, "Require an owned KubeVirt boot VirtualMachine")
 	isoProbeIdx := findAnsibleTask(t, tasks, "Read existing KubeVirt agent ISO DataVolume identity")
+	legacyCandidateIdx := findAnsibleTask(t, tasks, "Resolve legacy KubeVirt agent ISO DataVolume candidate")
+	recordReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt machine ownership record")
+	recordVerifyIdx := findAnsibleTask(t, tasks, "Verify KubeVirt machine ownership record")
 	isoGateIdx := findAnsibleTask(t, tasks, "Enforce KubeVirt agent ISO DataVolume apply mode")
+	legacyUpgradeIdx := findAnsibleTask(t, tasks, "Upgrade legacy KubeVirt agent ISO DataVolume ownership labels")
 	stopIdx := findAnsibleTask(t, tasks, "Stop KubeVirt VirtualMachine before replacing the agent ISO")
 	deleteIdx := findAnsibleTask(t, tasks, "Remove previous KubeVirt agent ISO DataVolume")
-	if !(vmProbeIdx < vmRequireIdx && isoProbeIdx < isoGateIdx &&
-		vmRequireIdx < stopIdx && isoGateIdx < stopIdx && stopIdx < deleteIdx) {
-		t.Fatalf("KubeVirt boot must prove VM and ISO identity before stop/delete (vmProbe=%d vmRequire=%d isoProbe=%d isoGate=%d stop=%d delete=%d)", vmProbeIdx, vmRequireIdx, isoProbeIdx, isoGateIdx, stopIdx, deleteIdx)
+	if !(vmProbeIdx < vmRequireIdx && isoProbeIdx < legacyCandidateIdx &&
+		legacyCandidateIdx < recordReadIdx && recordReadIdx < recordVerifyIdx &&
+		recordVerifyIdx < isoGateIdx &&
+		vmRequireIdx < stopIdx && isoGateIdx < legacyUpgradeIdx &&
+		legacyUpgradeIdx < stopIdx && stopIdx < deleteIdx) {
+		t.Fatalf("KubeVirt boot must prove VM and ISO identity, conditionally verify the legacy record, upgrade eligible labels, then stop/delete (vmProbe=%d vmRequire=%d isoProbe=%d legacyCandidate=%d recordRead=%d recordVerify=%d isoGate=%d legacyUpgrade=%d stop=%d delete=%d)", vmProbeIdx, vmRequireIdx, isoProbeIdx, legacyCandidateIdx, recordReadIdx, recordVerifyIdx, isoGateIdx, legacyUpgradeIdx, stopIdx, deleteIdx)
+	}
+	recordRead, ok := tasks[recordReadIdx]["ansible.builtin.slurp"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(recordRead["src"]), "kubevirt_machine_record_path") {
+		t.Fatalf("legacy recovery must read the exact kubevirt-machine ownership record path, got %v", tasks[recordReadIdx])
+	}
+	if got := fmt.Sprint(tasks[recordReadIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_boot_iso_legacy_candidate") {
+		t.Fatalf("KubeVirt machine ownership record read must run only for a legacy candidate, got when=%v", tasks[recordReadIdx]["when"])
+	}
+	recordVerify, ok := tasks[recordVerifyIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt machine ownership record verification must be a set_fact, got %v", tasks[recordVerifyIdx])
+	}
+	recorded := fmt.Sprint(recordVerify["bootwright_kubevirt_machine_recorded"])
+	for _, want := range []string{"apiVersion", "kind", "name", "owner", "context", "cluster", "machine"} {
+		if !strings.Contains(recorded, want) {
+			t.Fatalf("KubeVirt machine record verification must require %q, got %v", want, recordVerify["bootwright_kubevirt_machine_recorded"])
+		}
 	}
 	require, ok := tasks[vmRequireIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -922,6 +946,55 @@ func TestKubeVirtBootGatesLiveResourcesBeforeMutation(t *testing.T) {
 	include, ok := tasks[isoGateIdx]["ansible.builtin.include_role"].(map[string]any)
 	if !ok || fmt.Sprint(include["name"]) != "bootwright.core.ownership_record" || fmt.Sprint(include["tasks_from"]) != "apply_mode_gate.yml" {
 		t.Fatalf("KubeVirt agent ISO gate must use the shared apply-mode contract, got %v", tasks[isoGateIdx])
+	}
+	legacyResolveIdx := findAnsibleTask(t, tasks, "Resolve legacy KubeVirt agent ISO DataVolume ownership")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO DataVolume ownership")
+	if !(legacyResolveIdx < resolveIdx && resolveIdx < isoGateIdx) {
+		t.Fatalf("legacy agent ISO ownership must resolve before the final ownership decision and gate (legacyResolve=%d resolve=%d gate=%d)", legacyResolveIdx, resolveIdx, isoGateIdx)
+	}
+	legacyCandidate, ok := tasks[legacyCandidateIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("legacy KubeVirt agent ISO candidate resolution must be a set_fact, got %v", tasks[legacyCandidateIdx])
+	}
+	legacyResolve, ok := tasks[legacyResolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("legacy KubeVirt agent ISO ownership resolution must be a set_fact, got %v", tasks[legacyResolveIdx])
+	}
+	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt agent ISO ownership resolution must be a set_fact, got %v", tasks[resolveIdx])
+	}
+	legacyCandidateExpr := fmt.Sprint(legacyCandidate["bootwright_kubevirt_boot_iso_legacy_candidate"])
+	for _, want := range []string{
+		"bootwright_kubevirt_boot_vm_owned",
+		"bootwright.io/managed-by",
+		"bootwright.io/cluster",
+		"bootwright.io/role",
+		"bootwright.io/context' not in",
+		"bootwright.io/node' not in",
+	} {
+		if !strings.Contains(legacyCandidateExpr, want) {
+			t.Fatalf("legacy agent ISO candidate must require %q, got %v", want, legacyCandidate["bootwright_kubevirt_boot_iso_legacy_candidate"])
+		}
+	}
+	legacyOwned := fmt.Sprint(legacyResolve["bootwright_kubevirt_boot_iso_legacy_owned"])
+	for _, want := range []string{"bootwright_kubevirt_boot_iso_legacy_candidate", "bootwright_kubevirt_machine_recorded"} {
+		if !strings.Contains(legacyOwned, want) {
+			t.Fatalf("legacy agent ISO ownership must require %q, got %v", want, legacyResolve["bootwright_kubevirt_boot_iso_legacy_owned"])
+		}
+	}
+	owned := fmt.Sprint(resolve["bootwright_kubevirt_boot_iso_owned"])
+	if !strings.Contains(owned, "bootwright_kubevirt_boot_iso_legacy_owned") {
+		t.Fatalf("agent ISO ownership must admit the fully-proven legacy identity, got %v", resolve["bootwright_kubevirt_boot_iso_owned"])
+	}
+	upgrade := fmt.Sprint(tasks[legacyUpgradeIdx]["ansible.builtin.command"])
+	for _, want := range []string{"bootwright.io/context=", "bootwright.io/node=", "--overwrite"} {
+		if !strings.Contains(upgrade, want) {
+			t.Fatalf("legacy agent ISO upgrade must stamp %q, got %v", want, tasks[legacyUpgradeIdx])
+		}
+	}
+	if got := fmt.Sprint(tasks[legacyUpgradeIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_boot_iso_legacy_owned") {
+		t.Fatalf("legacy agent ISO upgrade must require the proven legacy identity, got when=%v", tasks[legacyUpgradeIdx]["when"])
 	}
 	labelIdx := findAnsibleTask(t, tasks, "Label KubeVirt agent ISO DataVolume as Bootwright-managed")
 	label := fmt.Sprint(tasks[labelIdx]["ansible.builtin.command"])
