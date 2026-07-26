@@ -1044,9 +1044,9 @@ func TestDestroyFullDryRunJSONPlansDependencySafeLifecycle(t *testing.T) {
 	wantIDs := []string{
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
+		"destroy.infra-components",
 		"destroy.machine-infra",
 		"destroy.container-clusters",
-		"destroy.infra-components",
 		"destroy.provider-services",
 		"destroy.storage-node-access",
 	}

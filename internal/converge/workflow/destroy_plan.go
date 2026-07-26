@@ -46,23 +46,26 @@ func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extr
 func infraDestroySteps() []destroyStep {
 	return []destroyStep{
 		{id: "destroy.machine-registration", kind: DestroyTaskKindMachineRegistration, label: "Machine registration", playbook: roles.PlaybookTaskMachineRegistrationDeregister, limit: render.GroupStorageHosts},
-		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
 		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
+		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
 		{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
 	}
 }
 
 func infraMachineDestroySteps() []destroyStep {
-	return infraDestroySteps()[:2]
+	return []destroyStep{
+		{id: "destroy.machine-registration", kind: DestroyTaskKindMachineRegistration, label: "Machine registration", playbook: roles.PlaybookTaskMachineRegistrationDeregister, limit: render.GroupStorageHosts},
+		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
+	}
 }
 
 func fullDestroySteps() []destroyStep {
 	return []destroyStep{
 		{id: DestroyStorageClustersTaskID, kind: DestroyTaskKindStorageCluster, label: "Storage clusters", playbook: roles.PlaybookTaskStorageClusterDestroy},
 		{id: "destroy.machine-registration", kind: DestroyTaskKindMachineRegistration, label: "Machine registration", playbook: roles.PlaybookTaskMachineRegistrationDeregister, limit: render.GroupStorageHosts},
+		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
 		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
 		{id: "destroy.container-clusters", kind: DestroyTaskKindContainerCluster, label: "Container clusters", playbook: roles.PlaybookTaskContainerClusterAgentDestroy, dependencies: []string{"destroy.machine-infra"}},
-		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
 		{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
 		{id: "destroy.storage-node-access", kind: DestroyTaskKindStorageNodeAccess, label: "Storage node access", playbook: roles.PlaybookTaskStorageNodeAccessDestroy, limit: render.GroupStorageHosts},
 	}

@@ -1742,9 +1742,10 @@ Rules:
   `--clusters`, it must also remove all context-owned VMs that provider
   adapters can identify. With `--clusters`, it is limited to selected
   `ContainerCluster` or `StorageCluster` roots and must not run context-wide VM
-  cleanup. Managed machine disk cleanup is limited to provider-owned disks or
-  declared Bootwright-managed devices; Bootwright must not wipe arbitrary
-  visible disks.
+  cleanup. Infra-component services are removed before machine infrastructure
+  so their placement machines remain reachable for teardown. Managed machine
+  disk cleanup is limited to provider-owned disks or declared
+  Bootwright-managed devices; Bootwright must not wipe arbitrary visible disks.
 - `destroy --stage clusters` removes cluster-stage runtime for selected or all
   `ContainerCluster` and `StorageCluster` names: OpenShift install runtime,
   add-on records, generated storage attachment records, and managed storage
@@ -1754,13 +1755,14 @@ Rules:
   `/etc/ceph`, `/var/lib/ceph`, and `/var/log/ceph` trees are removed
   wholesale only when no foreign fsid remains on the node.
 - `destroy` with `--stage` omitted tears down the full lifecycle of its work set:
-  storage-cluster runtime is removed before machine infrastructure, then
-  container-cluster runtime and exclusively owned infra-component/provider
-  services are removed. Without `--clusters`, the work set is the whole context
-  and the infra teardown also sweeps context-owned VM artifacts and orphan
-  ownership records exactly as unscoped `destroy --stage infra` does. With
-  `--clusters`, the work set is limited to the selected roots, machine
-  infrastructure includes only their machines, and no context-wide sweep runs.
+  storage-cluster runtime, machine registration, and exclusively owned
+  infra-component services are removed before machine infrastructure, then
+  container-cluster runtime and provider services are removed. Without
+  `--clusters`, the work set is the whole context and the infra teardown also
+  sweeps context-owned VM artifacts and orphan ownership records exactly as
+  unscoped `destroy --stage infra` does. With `--clusters`, the work set is
+  limited to the selected roots, machine infrastructure includes only their
+  machines, and no context-wide sweep runs.
   Positively owned libvirt, vSphere, and KubeVirt machines and their owned disks
   are deleted; bare-metal hardware and its installed OS are retained while
   Bootwright-local install state is released. `destroy --stage clusters

@@ -177,16 +177,24 @@ directory — purging earlier would race that read.
 
 **Full lifecycle reverses credential dependencies, not only stage names:**
 no-stage `destroy --clusters` uses the selected `all` work set. Managed storage
-must be removed before its machines; machine registration then machine
-substrate are removed before container runtime; container cleanup has a HARD
-dependency on successful machine teardown. That hard edge keeps cluster
-kubeconfigs, install records, and ownership evidence when VM deletion fails.
-It is also what lets a selected KubeVirt child be deleted through its still-live
-host before a selected host cluster loses either its own substrate or its
-kubeconfig. The machine-infra play consumes a deterministic child-before-host
-cluster order under the linear strategy so deletions on different provider
-hosts cannot race; a host-reference cycle fails planning. The remaining
-independent steps keep ordering-only edges and continue after unrelated failures.
+must be removed before its machines; machine registration and infra-component
+services are removed before machine substrate, then container runtime follows.
+Infra-component teardown connects over SSH to its placement machine, so running
+machine infrastructure first makes a successfully deleted service host
+unresolvable or unreachable before its services and ownership records can be
+removed. Machine-scoped destroy deliberately keeps only registration and
+machine-infrastructure steps; it must not inherit the reordered full infra
+chain by slicing it. Container cleanup has a HARD dependency on successful
+machine teardown. That hard edge keeps cluster kubeconfigs, install records,
+and ownership evidence when VM deletion fails. It is also what lets a selected
+KubeVirt child be deleted through its still-live host before a selected host
+cluster loses either its own substrate or its kubeconfig. The machine-infra
+play consumes a deterministic child-before-host cluster order under the linear
+strategy so deletions on different provider hosts cannot race; a host-reference
+cycle fails planning. The remaining independent steps keep ordering-only edges
+and continue after unrelated failures. Guarded by
+TestPlanDestroyTasksInfraChain, TestPlanDestroyTasksAllChain, and
+TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra.
 
 **An unreachable KubeVirt host is not an absent guest:** a recorded
 `kubevirt-machine` requires a successful host API probe even when

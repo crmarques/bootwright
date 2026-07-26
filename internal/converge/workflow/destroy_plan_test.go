@@ -16,7 +16,7 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs := []string{"destroy.machine-registration", "destroy.machine-infra", "destroy.infra-components", "destroy.provider-services"}
+	wantIDs := []string{"destroy.machine-registration", "destroy.infra-components", "destroy.machine-infra", "destroy.provider-services"}
 	if len(tasks) != len(wantIDs) {
 		t.Fatalf("planned %d tasks, want %d: %+v", len(tasks), len(wantIDs), tasks)
 	}
@@ -45,8 +45,8 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 			t.Fatalf("task[%d] ordering deps = %v, want [%s]", i, task.Entry.OrderingDependencies, wantIDs[i-1])
 		}
 	}
-	if tasks[0].Playbook == "" || tasks[0].Playbook == tasks[2].Playbook {
-		t.Fatalf("tasks must carry distinct destroy playbooks: %q / %q", tasks[0].Playbook, tasks[2].Playbook)
+	if tasks[0].Playbook == "" || tasks[0].Playbook == tasks[1].Playbook {
+		t.Fatalf("tasks must carry distinct destroy playbooks: %q / %q", tasks[0].Playbook, tasks[1].Playbook)
 	}
 }
 
@@ -88,9 +88,9 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 	wantIDs := []string{
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
+		"destroy.infra-components",
 		"destroy.machine-infra",
 		"destroy.container-clusters",
-		"destroy.infra-components",
 		"destroy.provider-services",
 		"destroy.storage-node-access",
 	}
@@ -122,7 +122,7 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 	if last := tasks[len(tasks)-1]; last.Entry.Kind != DestroyTaskKindStorageNodeAccess {
 		t.Fatalf("storage node access revoke must run last in the full destroy chain, after Machine registration and every other step that still needs the storage hosts' rendered identity; got last kind %q", last.Entry.Kind)
 	}
-	if got := tasks[3].Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
+	if got := tasks[4].Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
 		t.Fatalf("container runtime cleanup must require successful machine teardown so KubeVirt host credentials and retry evidence survive a failed guest deletion, got %v", got)
 	}
 }
