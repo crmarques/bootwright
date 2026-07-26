@@ -46,12 +46,14 @@ func TestInfraDestroyPlaysHonorSkipUnreachable(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_destroy.yml",
 	} {
 		plays := readAnsiblePlays(t, path)
-		if len(plays) != 1 {
-			t.Fatalf("%s play count = %d, want 1", path, len(plays))
+		if len(plays) == 0 {
+			t.Fatalf("%s has no plays", path)
 		}
-		ignoreUnreachable, ok := plays[0]["ignore_unreachable"].(string)
-		if !ok || !strings.Contains(ignoreUnreachable, "bootwright_destroy_skip_unreachable") {
-			t.Fatalf("%s must template ignore_unreachable from bootwright_destroy_skip_unreachable so --skip-unreachable reaches the infra stage, got %v", path, plays[0]["ignore_unreachable"])
+		for i, play := range plays {
+			ignoreUnreachable, ok := play["ignore_unreachable"].(string)
+			if !ok || !strings.Contains(ignoreUnreachable, "bootwright_destroy_skip_unreachable") {
+				t.Fatalf("%s play %d must template ignore_unreachable from bootwright_destroy_skip_unreachable so --skip-unreachable reaches the infra stage, got %v", path, i, play["ignore_unreachable"])
+			}
 		}
 	}
 }
@@ -577,23 +579,55 @@ func TestVsphereManagedOSResetGatedOnDriftAuthorization(t *testing.T) {
 
 func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml")
-	if len(plays) != 1 {
-		t.Fatalf("task_machine_infra_destroy plays = %d, want 1", len(plays))
+	if len(plays) != 3 {
+		t.Fatalf("task_machine_infra_destroy plays = %d, want 3", len(plays))
 	}
 	if got := plays[0]["hosts"]; got != "bootwright_provider_hosts:bootwright_infra_hosts" {
-		t.Fatalf("machine infra destroy hosts = %v", got)
+		t.Fatalf("machine infra destroy preparation hosts = %v", got)
 	}
 	if got := plays[0]["strategy"]; got != "linear" {
-		t.Fatalf("machine infra destroy must keep child-before-host cluster passes in lockstep, got strategy=%v", got)
+		t.Fatalf("machine infra destroy preparation must keep child-before-host cluster passes in lockstep, got strategy=%v", got)
 	}
-	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
-	ordered := tasks[findAnsibleTask(t, tasks, "Destroy substrate in dependency order")]
+	prepareTasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	ordered := prepareTasks[findAnsibleTask(t, prepareTasks, "Prepare substrate destroy in dependency order")]
 	if got := fmt.Sprint(ordered["loop"]); !strings.Contains(got, "bootwright_destroy_cluster_order") {
-		t.Fatalf("machine infra destroy must consume the planner's dependency order, got loop=%v", ordered["loop"])
+		t.Fatalf("machine infra destroy preparation must consume the planner's dependency order, got loop=%v", ordered["loop"])
 	}
 	if got := fmt.Sprint(ordered["when"]); !strings.Contains(got, "bootwright_destroy_cluster_scope") {
-		t.Fatalf("ordered machine infra destroy must remain selected-root scoped, got when=%v", ordered["when"])
+		t.Fatalf("ordered machine infra destroy preparation must remain selected-root scoped, got when=%v", ordered["when"])
 	}
+	if got := plays[1]["hosts"]; got != "bootwright_machine_task_hosts" {
+		t.Fatalf("parallel machine infra destroy hosts = %v", got)
+	}
+	if got := plays[1]["strategy"]; got != "linear" {
+		t.Fatalf("parallel machine infra destroy must keep cluster dependency passes in lockstep, got strategy=%v", got)
+	}
+	machineTasks := nestedAnsibleTasks(t, plays[1], "tasks")
+	machineDestroy := machineTasks[findAnsibleTask(t, machineTasks, "Destroy machine substrate in dependency order")]
+	if got := fmt.Sprint(machineDestroy["loop"]); !strings.Contains(got, "bootwright_destroy_cluster_order") {
+		t.Fatalf("parallel machine infra destroy must consume the planner's dependency order, got loop=%v", machineDestroy["loop"])
+	}
+	machineWhen := fmt.Sprint(machineDestroy["when"])
+	for _, want := range []string{
+		"bootwright_machine_task_cluster_name",
+		"bootwright_destroy_cluster_scope",
+		"bootwright_destroy_machine_scope",
+	} {
+		if !strings.Contains(machineWhen, want) {
+			t.Fatalf("parallel machine infra destroy when missing %q: %v", want, machineDestroy["when"])
+		}
+	}
+	machineBody := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra/destroy_machine.yml")
+	if strings.Contains(machineBody, "loop: \"{{ bootwright_current_machines }}\"") {
+		t.Fatal("machine infra destroy must dispatch one selected machine per synthetic host instead of serially looping over a provider host's machines")
+	}
+	if !strings.Contains(machineBody, "bootwright_component.substrateDestroyRole") {
+		t.Fatal("machine infra destroy must dispatch the selected machine substrate role")
+	}
+	if got := plays[2]["hosts"]; got != "bootwright_provider_hosts:bootwright_infra_hosts" {
+		t.Fatalf("machine infra destroy cleanup hosts = %v", got)
+	}
+	tasks := nestedAnsibleTasks(t, plays[2], "tasks")
 	sweep := tasks[findAnsibleTask(t, tasks, "Sweep current-context libvirt domains")]
 	when := fmt.Sprint(sweep["when"])
 	for _, want := range []string{

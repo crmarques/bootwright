@@ -133,7 +133,14 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			taskLimit = step.limit
 		}
 		taskExtraVars := append([]string(nil), extraVars...)
+		forks := 0
 		if step.kind == DestroyTaskKindMachineInfra {
+			taskLimit = strings.Join([]string{
+				render.GroupMachineTaskHosts,
+				render.GroupProviderHosts,
+				render.GroupInfraHosts,
+			}, ":")
+			forks = AnsibleForksForLimit(state, taskLimit)
 			order, err := machineInfraDestroyOrder(state)
 			if err != nil {
 				return nil, err
@@ -146,6 +153,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			Entry:         entry,
 			Playbook:      step.playbook,
 			Limit:         taskLimit,
+			Forks:         forks,
 			ExtraVarPairs: taskExtraVars,
 			State:         state,
 		})

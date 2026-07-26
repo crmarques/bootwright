@@ -1,0 +1,19 @@
+---
+
+- name: Resolve current cluster
+  ansible.builtin.set_fact:
+    bootwright_current_cluster: >-
+      {{
+        bootwright_clusters
+        | selectattr('name', 'equalto', bootwright_cluster_name)
+        | first
+      }}
+  changed_when: false
+
+- name: Detach managed load balancer VIPs
+  ansible.builtin.import_role:
+    name: bootwright.core.cluster_network_load_balancer_vips
+    tasks_from: destroy.yml
+  when:
+    - bootwright_destroy_machine_scope is not defined
+    - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | selectattr('machineRef', 'equalto', bootwright_host_name) | list | length > 0

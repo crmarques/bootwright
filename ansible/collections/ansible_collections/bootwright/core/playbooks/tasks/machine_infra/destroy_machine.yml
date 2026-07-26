@@ -1,0 +1,61 @@
+---
+
+- name: Resolve current machine destroy group
+  ansible.builtin.set_fact:
+    bootwright_current_machine_destroy_groups: >-
+      {{
+        (
+          (bootwright_clusters | default([]))
+          + (bootwright_managed_os_install_groups | default([]))
+        )
+        | selectattr('name', 'equalto', bootwright_cluster_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Validate current machine destroy group
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_machine_destroy_groups | length == 1
+    fail_msg: >-
+      Could not resolve cluster or managed OS group
+      {{ bootwright_cluster_name | default('<unset>') }}
+      for machine task host {{ inventory_hostname }}.
+
+- name: Set current machine destroy group
+  ansible.builtin.set_fact:
+    bootwright_current_cluster: "{{ bootwright_current_machine_destroy_groups | first }}"
+  changed_when: false
+
+- name: Pick selected machine component
+  ansible.builtin.set_fact:
+    bootwright_current_machines: >-
+      {{
+        bootwright_current_cluster.components
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('name', 'equalto', bootwright_machine_task_machine_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_machine_task_provider_host_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Validate selected machine component
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_machines | length == 1
+    fail_msg: >-
+      Could not resolve machine
+      {{ bootwright_machine_task_machine_name | default('<unset>') }}
+      for cluster or managed OS group
+      {{ bootwright_cluster_name | default('<unset>') }}.
+
+- name: Set selected machine component
+  ansible.builtin.set_fact:
+    bootwright_component: "{{ bootwright_current_machines | first }}"
+  changed_when: false
+
+- name: Dispatch selected machine substrate destroy
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.substrateDestroyRole }}"
+    tasks_from: destroy.yml

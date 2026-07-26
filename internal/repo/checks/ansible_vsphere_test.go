@@ -120,10 +120,11 @@ func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 }
 
 func TestMachineInfraDestroyDispatchesManagedOSSubstrates(t *testing.T) {
-	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml") +
+		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra/destroy_machine.yml")
 	for _, want := range []string{
 		"bootwright_managed_os_install_groups",
-		"bootwright_managed_os_component.substrateDestroyRole",
+		"bootwright_component.substrateDestroyRole",
 		"tasks_from: destroy.yml",
 		"bootwright_destroy_cluster_scope",
 	} {

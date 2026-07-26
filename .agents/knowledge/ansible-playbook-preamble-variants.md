@@ -5,7 +5,7 @@ Most `playbooks/task_*.yml` plays share one preamble: `strategy: free`,
 `environment: "{{ bootwright_proxy_env | default({}) }}"`, and a
 `machine_proxy tasks_from: facts` pre_task. Ansible cannot factor play
 keywords into an include, so this repetition is structural, not accidental —
-do not try to extract it. Four playbooks deviate on purpose:
+do not try to extract it. Five playbooks deviate on purpose:
 
 - `task_bastion_apply_tools.yml` forwards `lookup('env', …)` proxy variables
   and skips the proxy-facts pre_task: bastion setup runs before any rendered
@@ -20,6 +20,11 @@ do not try to extract it. Four playbooks deviate on purpose:
   `gather_facts: false` (facts gathered inside the role): the storage role
   coordinates non-seed hosts against seed-host decisions via
   `hostvars[seedHost]`, which requires lockstep task execution.
+- `task_machine_infra_destroy.yml` has three plays: real-host VIP preparation,
+  a synthetic-host machine pass under `strategy: linear`, and a real-host
+  record/sweep cleanup under `strategy: free`. Linear runs each role task
+  concurrently across the current cluster's machine hosts while preserving
+  the planner's child-before-host barrier between cluster passes.
 
 The per-play component-selection blocks (`Resolve selected cluster` /
 `Pick … component`) look alike but differ in source lists

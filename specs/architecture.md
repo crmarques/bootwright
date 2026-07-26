@@ -64,7 +64,10 @@ task per Redfish system or BMC target. KubeVirt-backed machine infrastructure,
 managed-OS, and VM boot tasks lock
 `kubevirt:<host-cluster-or-kubeconfig>:<namespace>:vm:<virtual-machine>`:
 operations targeting the same VM serialize while independent VMs in one
-namespace converge concurrently.
+namespace converge concurrently. Machine destroy uses one synthetic inventory
+host per machine so independent VMs in the same child-before-host cluster pass
+tear down concurrently; shared VIP preparation and ownership-record sweeps
+remain serialized at the real provider-host boundary.
 
 The Ansible source tree is authored under `/ansible`. `make sync-bundle` packs
 that source and pinned external collections into the generated embedded archive

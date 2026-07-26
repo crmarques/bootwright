@@ -27,6 +27,7 @@ const (
 	GroupControllerHosts     = inventory.GroupControllerHosts
 	GroupOCPHosts            = inventory.GroupOCPHosts
 	GroupBootHosts           = inventory.GroupBootHosts
+	GroupMachineTaskHosts    = inventory.GroupMachineTaskHosts
 	GroupStorageHosts        = inventory.GroupStorageHosts
 )
 

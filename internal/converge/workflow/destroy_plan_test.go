@@ -27,6 +27,8 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 		wantLimit := limit
 		if task.Entry.ID == "destroy.machine-registration" {
 			wantLimit = "bootwright_storage_hosts"
+		} else if task.Entry.ID == "destroy.machine-infra" {
+			wantLimit = "bootwright_machine_task_hosts:bootwright_provider_hosts:bootwright_infra_hosts"
 		}
 		if task.Limit != wantLimit {
 			t.Fatalf("task[%d] limit = %q, want %q", i, task.Limit, wantLimit)
@@ -48,6 +50,27 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	if tasks[0].Playbook == "" || tasks[0].Playbook == tasks[1].Playbook {
 		t.Fatalf("tasks must carry distinct destroy playbooks: %q / %q", tasks[0].Playbook, tasks[1].Playbook)
 	}
+}
+
+func TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
+	tasks, err := PlanDestroyTasks("infra", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range tasks {
+		if task.Entry.Kind != DestroyTaskKindMachineInfra {
+			continue
+		}
+		if task.Limit != "bootwright_machine_task_hosts:bootwright_provider_hosts:bootwright_infra_hosts" {
+			t.Fatalf("machine infra destroy limit = %q", task.Limit)
+		}
+		if task.Forks != 4 {
+			t.Fatalf("machine infra destroy forks = %d, want 4 for three VM task hosts plus their provider host", task.Forks)
+		}
+		return
+	}
+	t.Fatal("infra destroy plan has no machine infrastructure task")
 }
 
 func TestPlanDestroyTasksClustersChain(t *testing.T) {

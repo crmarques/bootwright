@@ -190,11 +190,21 @@ and ownership evidence when VM deletion fails. It is also what lets a selected
 KubeVirt child be deleted through its still-live host before a selected host
 cluster loses either its own substrate or its kubeconfig. The machine-infra
 play consumes a deterministic child-before-host cluster order under the linear
-strategy so deletions on different provider hosts cannot race; a host-reference
-cycle fails planning. The remaining independent steps keep ordering-only edges
-and continue after unrelated failures. Guarded by
+strategy. Each machine is represented by its apply-compatible synthetic
+inventory host, so the linear strategy runs one substrate-role task across all
+machines in the current cluster concurrently before advancing to the next task
+or parent-cluster pass. The old real-provider-host loop serialized every VM on
+that host, making teardown time grow by roughly one VM deletion duration per
+node. VIP detachment stays in a real-host preparation play, and ownership-record
+and context sweeps stay in a real-host cleanup play; only independent
+per-machine teardown is parallel. The planner includes both synthetic and real
+host groups in the task limit and sizes Ansible forks to the declared hosts. A
+host-reference cycle fails planning. The remaining independent steps keep
+ordering-only edges and continue after unrelated failures. Guarded by
 TestPlanDestroyTasksInfraChain, TestPlanDestroyTasksAllChain, and
-TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra.
+TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra,
+TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost, and
+TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped.
 
 **An unreachable KubeVirt host is not an absent guest:** a recorded
 `kubevirt-machine` requires a successful host API probe even when

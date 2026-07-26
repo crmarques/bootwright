@@ -1,5 +1,5 @@
 ---
-- name: Destroy cluster infrastructure
+- name: Prepare cluster infrastructure destroy
   hosts: bootwright_provider_hosts:bootwright_infra_hosts
   strategy: linear
   gather_subset:
@@ -9,14 +9,6 @@
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
 
   vars:
-    bootwright_host_libvirt_providers: >-
-      {{
-        bootwright_providers | default([])
-        | selectattr('capabilities.type', 'equalto', 'libvirt')
-        | selectattr('capabilities.libvirt.machineRef', 'defined')
-        | selectattr('capabilities.libvirt.machineRef', 'equalto', bootwright_host_name)
-        | list
-      }}
     bootwright_host_machine_components: >-
       {{
         bootwright_clusters | default([])
@@ -32,16 +24,9 @@
         | map(attribute='clusterName')
         | unique | list
       }}
-    bootwright_host_infra_ownership_records: >-
-      {{
-        bootwright_ownership_records | default([])
-        | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
-        | list
-      }}
-
   tasks:
-    - name: Destroy substrate in dependency order
-      ansible.builtin.include_tasks: tasks/machine_infra/destroy_cluster.yml
+    - name: Prepare substrate destroy in dependency order
+      ansible.builtin.include_tasks: tasks/machine_infra/prepare_destroy_cluster.yml
       loop: >-
         {{
           (bootwright_destroy_cluster_order.split(','))
@@ -56,37 +41,64 @@
           bootwright_destroy_cluster_scope is not defined
           or bootwright_cluster_name in bootwright_destroy_cluster_scope.split(',')
 
-    - name: Resolve managed OS machine components on this host
-      ansible.builtin.set_fact:
-        bootwright_host_managed_os_components: >-
-          {{
-            bootwright_managed_os_install_groups | default([])
-            | map(attribute='components') | flatten
-            | selectattr('kind', 'equalto', 'machines')
-            | selectattr('machineRef', 'defined')
-            | selectattr('machineRef', 'equalto', bootwright_host_name)
-            | list
-          }}
-      changed_when: false
+- name: Destroy machine substrate
+  hosts: bootwright_machine_task_hosts
+  strategy: linear
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
 
-    - name: Destroy managed OS substrate per machine
-      ansible.builtin.include_role:
-        name: "{{ bootwright_managed_os_component.substrateDestroyRole }}"
-        tasks_from: destroy.yml
-      vars:
-        bootwright_component: "{{ bootwright_managed_os_component }}"
-        bootwright_current_cluster:
-          name: "{{ bootwright_managed_os_component.clusterName }}"
-      loop: "{{ bootwright_host_managed_os_components }}"
+  tasks:
+    - name: Destroy machine substrate in dependency order
+      ansible.builtin.include_tasks: tasks/machine_infra/destroy_machine.yml
+      loop: >-
+        {{
+          (bootwright_destroy_cluster_order.split(','))
+          if (bootwright_destroy_cluster_order | default('') | length > 0)
+          else (
+            (bootwright_clusters | default([]) | map(attribute='name') | list)
+            + (bootwright_managed_os_install_groups | default([]) | map(attribute='name') | list)
+          )
+        }}
       loop_control:
-        loop_var: bootwright_managed_os_component
-        label: "{{ bootwright_managed_os_component.clusterName }}/{{ bootwright_managed_os_component.name }}"
-      when: >-
-        (bootwright_destroy_cluster_scope is not defined
-         or bootwright_managed_os_component.clusterName | default('') in bootwright_destroy_cluster_scope.split(','))
-        and (bootwright_destroy_machine_scope is not defined
-             or bootwright_managed_os_component.name in bootwright_destroy_machine_scope.split(','))
+        loop_var: bootwright_cluster_name
+      when:
+        - bootwright_cluster_name == bootwright_machine_task_cluster_name
+        - >-
+          bootwright_destroy_cluster_scope is not defined
+          or bootwright_cluster_name in bootwright_destroy_cluster_scope.split(',')
+        - >-
+          bootwright_destroy_machine_scope is not defined
+          or bootwright_machine_task_machine_name in bootwright_destroy_machine_scope.split(',')
 
+- name: Clean up machine infrastructure records
+  hosts: bootwright_provider_hosts:bootwright_infra_hosts
+  strategy: free
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
+
+  vars:
+    bootwright_host_libvirt_providers: >-
+      {{
+        bootwright_providers | default([])
+        | selectattr('capabilities.type', 'equalto', 'libvirt')
+        | selectattr('capabilities.libvirt.machineRef', 'defined')
+        | selectattr('capabilities.libvirt.machineRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+    bootwright_host_infra_ownership_records: >-
+      {{
+        bootwright_ownership_records | default([])
+        | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
+        | list
+      }}
+
+  tasks:
     - name: Destroy recorded machine infrastructure resources
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
