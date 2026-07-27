@@ -81,15 +81,8 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		{Key: "context", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},
 		{Key: "input-dir", Value: ctx.InputDir},
-		{Key: "rendered-dir", Value: ctx.RenderedDir},
-		{Key: "clusters-dir", Value: ctx.ClustersDir},
-		{Key: "runs-dir", Value: ctx.RunsDir},
-		{Key: "managed-services-dir", Value: ctx.ManagedServicesDir},
-		{Key: "provider-state-dir", Value: ctx.ProviderStateDir},
-		{Key: "ownership-dir", Value: ctx.OwnershipDir},
-		{Key: "secrets-dir", Value: ctx.SecretsDir},
 	})
-	p.Checks(contextReadinessChecks(ctx))
+	p.CheckLines(contextLayoutChecks(ctx))
 
 	state, loadErr := loadOptionalDesiredState(cf)
 	stateLoaded := loadErr == nil && status.HasAnyState(state)

@@ -149,7 +149,7 @@ func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 
 func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, verbose bool, streamAnsible bool, stderr io.Writer) (map[string]cephstate.Discovery, string) {
 	clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
-	reporter := newWorkflowReporter(stderr)
+	reporter := newWorkflowReporter(stderr, "Run")
 	bundle, err := prepareWorkflowBundle(false)
 	if err != nil {
 		return nil, "live Ceph discovery skipped: could not prepare the Ansible bundle: " + firstErrorLine(err)

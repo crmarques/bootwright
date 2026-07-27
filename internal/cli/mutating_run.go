@@ -11,16 +11,7 @@ func printMutatingRunPreamble(stdout io.Writer, output, label string) {
 	if output != outputText {
 		return
 	}
-	p := cliout.New(stdout)
-	p.Command(label)
-	p.Section("Prepare")
-	p.List([]cliout.Item{{Label: "Load desired state"}})
-}
-
-func printPlanStep(stdout io.Writer, output, label string) {
-	if output == outputText {
-		cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + label}})
-	}
+	cliout.New(stdout).Command(label)
 }
 
 func prepareMutatingRunCredential(stdin io.Reader, stdout, stderr io.Writer, plan converge.WorkflowPlan, dryRun bool) (becomeCredential, *workflowReporter, func(), error) {
@@ -37,7 +28,11 @@ func prepareMutatingRunCredential(stdin io.Reader, stdout, stderr io.Writer, pla
 		cleanup = c
 		become = credential
 	}
-	reporter := newWorkflowReporter(stdout)
+	section := "Run"
+	if dryRun {
+		section = "Plan"
+	}
+	reporter := newWorkflowReporter(stdout, section)
 	if plan.AskBecomePass && become.PasswordFile == "" {
 		reporter.WithPromptGap(stderr)
 	}

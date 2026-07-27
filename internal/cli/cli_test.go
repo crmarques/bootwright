@@ -640,12 +640,12 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		{
 			name: "plan",
 			args: []string{"plan", "--ask-become-pass=false"},
-			want: []string{"Bootwright: plan", "Apply plan", "planned task(s)", "Rendered artifacts", "Bundle"},
+			want: []string{"Bootwright: plan", "Stages", "planned task(s)", "Machines", "Cluster install", "Rendered artifacts", "Bundle"},
 		},
 		{
 			name: "apply stage infra dry-run",
 			args: []string{"apply", "--stage", "infra", "--dry-run", "--ask-become-pass=false"},
-			want: []string{"Bootwright: infra apply", "Apply plan", "planned task(s)", "Infrastructure", "Shared services", "Rendered artifacts", "Bundle"},
+			want: []string{"Bootwright: infra apply", "Stages", "planned task(s)", "Infrastructure", "Shared services", "Rendered artifacts", "Bundle"},
 		},
 	}
 	for _, tc := range tests {
@@ -693,7 +693,7 @@ func TestFailedCheckOutputIsActionable(t *testing.T) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, heading := range []string{"Prepare", "Bastion tools", "Secret material", "Summary"} {
+	for _, heading := range []string{"Bastion tools", "Secret material", "Summary"} {
 		want := "\n\n" + heading + "\n"
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("stdout does not separate %q with an empty line:\n%s", heading, stdout)
@@ -2397,8 +2397,8 @@ func TestStatusReportsReadyAndMissingSetupChecks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "[OK] input") {
-		t.Fatalf("stdout missing input OK setup check:\n%s", stdout)
+	if !strings.Contains(stdout, "[OK] layout") {
+		t.Fatalf("stdout missing the collapsed context layout OK check:\n%s", stdout)
 	}
 	if err := os.RemoveAll(ctx.InputDir); err != nil {
 		t.Fatal(err)

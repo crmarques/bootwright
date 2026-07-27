@@ -257,7 +257,7 @@ func syntaxDiagnosticChecks(err error, rerun, source string) []preflightCheck {
 }
 
 func stateCountFields(state v1alpha1.State) []cliout.Field {
-	return []cliout.Field{
+	counts := []cliout.Field{
 		{Key: "Environments", Value: fmt.Sprint(len(state.Environments))},
 		{Key: "Machines", Value: fmt.Sprint(len(state.Machines))},
 		{Key: "MachineImages", Value: fmt.Sprint(len(state.MachineImages))},
@@ -278,4 +278,11 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "ClusterAddonBindings", Value: fmt.Sprint(len(state.ClusterAddonBindings))},
 		{Key: "ProvisioningPlaybooks", Value: fmt.Sprint(len(state.ProvisioningPlaybooks))},
 	}
+	declared := make([]cliout.Field, 0, len(counts))
+	for _, field := range counts {
+		if field.Value != "0" {
+			declared = append(declared, field)
+		}
+	}
+	return declared
 }

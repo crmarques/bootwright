@@ -38,10 +38,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 			return failErr(2, err)
 		}
 		if flags.output == outputText {
-			p := cliout.New(stdout)
-			p.Command(scope.Name + " preflight")
-			p.Section("Prepare")
-			p.List([]cliout.Item{{Label: "Load desired state"}})
+			cliout.New(stdout).Command(scope.Name + " preflight")
 		}
 		state, err := loadDesiredState(cf)
 		if err != nil {
@@ -49,9 +46,6 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		}
 		ctx := cf.ctx
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
-		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.Name + " preflight"}})
-		}
 		sel, err := clusteraccess.Resolve(state, scope.Name, flags.clusterScope)
 		if err != nil {
 			return failErr(1, err)
@@ -79,7 +73,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope); err != nil {
 			return err
 		}
-		reporter := newWorkflowReporter(stdout)
+		reporter := newWorkflowReporter(stdout, "Run")
 		if !dryRun {
 			reporter.BundleStart()
 		}

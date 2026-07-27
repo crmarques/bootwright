@@ -12,12 +12,13 @@ import (
 type workflowReporter struct {
 	printer       *output.Printer
 	promptGap     *output.Printer
+	section       string
 	opened        bool
 	showPromptGap bool
 }
 
-func newWorkflowReporter(stdout io.Writer) *workflowReporter {
-	return &workflowReporter{printer: output.NewContinuation(stdout)}
+func newWorkflowReporter(stdout io.Writer, section string) *workflowReporter {
+	return &workflowReporter{printer: output.NewContinuation(stdout), section: section}
 }
 
 func (r *workflowReporter) WithPromptGap(w io.Writer) *workflowReporter {
@@ -57,7 +58,11 @@ func (r *workflowReporter) DryRunCommand(label string, command []string) {
 
 func (r *workflowReporter) DryRunTasks(label string, tasks []workflow.TaskLedgerEntry, limits workflow.ConcurrencyLimits, groups []output.StepGroup) {
 	r.ensure()
-	r.printer.Status(output.StatusOK, label, fmt.Sprintf("%d planned task(s), parallelism %d", len(tasks), limits.Parallelism))
+	steps := 0
+	for _, group := range groups {
+		steps += len(group.Steps)
+	}
+	r.printer.Status(output.StatusOK, label, fmt.Sprintf("%d step(s) covering %d planned task(s), parallelism %d", steps, len(tasks), limits.Parallelism))
 	r.printer.Steps(groups)
 }
 
@@ -78,6 +83,6 @@ func (r *workflowReporter) ensure() {
 	if r.opened {
 		return
 	}
-	r.printer.Section("Run")
+	r.printer.Section(r.section)
 	r.opened = true
 }

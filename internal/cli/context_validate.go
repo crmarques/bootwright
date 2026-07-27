@@ -91,10 +91,26 @@ func validateContextChecks(ctx workspace.Context) []output.Check {
 
 func bastionLocalityCheck(state v1alpha1.State) output.Check {
 	result := locality.CheckController(state, controllerLocalityPolicy)
-	if result.OK {
-		return okContextCheck("bastion locality", result.Evidence)
+	check := okContextCheck("bastion locality", result.Evidence)
+	if !result.OK {
+		check = missingContextCheck("bastion locality", result.Evidence, "run bootwright from the local bastion context")
 	}
-	return missingContextCheck("bastion locality", result.Evidence, "run bootwright from the local bastion context")
+	check.Group = "Bastion"
+	return check
+}
+
+func contextLayoutChecks(ctx workspace.Context) []output.Check {
+	checks := contextReadinessChecks(ctx)
+	problems := make([]output.Check, 0, len(checks))
+	for _, check := range checks {
+		if check.Status != output.StatusOK {
+			problems = append(problems, check)
+		}
+	}
+	if len(problems) > 0 {
+		return problems
+	}
+	return []output.Check{okContextCheck("layout", "every context directory is present and secrets-dir is mode 0700")}
 }
 
 func declaredSecretContextChecks(contextName, secretsDir string, state v1alpha1.State) []output.Check {

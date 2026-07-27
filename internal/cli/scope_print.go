@@ -16,35 +16,39 @@ import (
 var currentEUID = os.Geteuid
 
 func printApplySummary(w io.Writer, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
-	printWorkflowSummary(w, "Apply plan", selected, askBecomePass, dryRun, noRemoteWork)
+	printWorkflowSummary(w, "Stages", selected, askBecomePass, dryRun, noRemoteWork, true)
 }
 
 func printDestroySummary(w io.Writer, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
-	printWorkflowSummary(w, "Destroy plan", selected, askBecomePass, dryRun, noRemoteWork)
+	printWorkflowSummary(w, "", selected, askBecomePass, dryRun, noRemoteWork, false)
 }
 
-func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
+func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool, listStages bool) {
 	p := output.NewContinuation(w)
-	p.Section(title)
-	var items []output.PlanItem
+	names := make([]string, 0, len(selected))
 	rootPhases := 0
-	for _, p := range selected {
-		if p.NeedsRoot {
+	for _, phase := range selected {
+		if phase.NeedsRoot {
 			rootPhases++
 		}
-		items = append(items, output.PlanItem{Name: p.Name, Description: p.Description, Root: p.NeedsRoot})
+		names = append(names, phase.Name)
 	}
-	p.Plan(items)
-	if noRemoteWork {
+	if listStages && len(names) > 0 {
+		p.Section(title)
+		detail := strings.Join(names, " → ")
+		if rootPhases > 0 {
+			detail += "  (root)"
+		}
+		p.Status(output.StatusInfo, "selected", detail)
+	}
+	if noRemoteWork || rootPhases == 0 {
 		return
 	}
-	if rootPhases > 0 {
-		switch {
-		case dryRun:
-			p.Warning("Root phases", "sudo escalation is required; this is a dry run, no commands execute")
-		case !askBecomePass && currentEUID() != 0:
-			p.Warning("Root phases", "--ask-become-pass=false requires passwordless sudo or an already-root connection user")
-		}
+	switch {
+	case dryRun:
+		p.Warning("root escalation", "this run needs sudo; a dry run executes nothing")
+	case !askBecomePass && currentEUID() != 0:
+		p.Warning("root escalation", "--ask-become-pass=false requires passwordless sudo or an already-root connection user")
 	}
 }
 

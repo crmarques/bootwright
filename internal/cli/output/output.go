@@ -270,19 +270,27 @@ func (p *Printer) Checks(checks []Check) {
 	}
 	for _, group := range groupedChecks(checks) {
 		p.Section(group.name)
-		for _, check := range group.checks {
-			fmt.Fprintf(p.w, "  %s %s", p.statusLabel(check.Status), check.Name)
-			if check.Evidence != "" {
-				fmt.Fprintf(p.w, ": %s", check.Evidence)
+		p.CheckLines(group.checks)
+	}
+	p.wrote = true
+}
+
+func (p *Printer) CheckLines(checks []Check) {
+	if p == nil || p.w == nil || len(checks) == 0 {
+		return
+	}
+	for _, check := range checks {
+		fmt.Fprintf(p.w, "  %s %s", p.statusLabel(check.Status), check.Name)
+		if check.Evidence != "" {
+			fmt.Fprintf(p.w, ": %s", check.Evidence)
+		}
+		fmt.Fprintln(p.w)
+		if check.Status != StatusOK {
+			if check.Impact != "" {
+				fmt.Fprintf(p.w, "      impact: %s\n", check.Impact)
 			}
-			fmt.Fprintln(p.w)
-			if check.Status != StatusOK {
-				if check.Impact != "" {
-					fmt.Fprintf(p.w, "      impact: %s\n", check.Impact)
-				}
-				if check.Remediation != "" {
-					fmt.Fprintf(p.w, "      fix: %s\n", check.Remediation)
-				}
+			if check.Remediation != "" {
+				fmt.Fprintf(p.w, "      fix: %s\n", check.Remediation)
 			}
 		}
 	}

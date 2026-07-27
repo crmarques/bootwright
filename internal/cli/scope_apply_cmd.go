@@ -187,7 +187,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(1, err)
 		}
-		printPlanStep(stdout, flags.output, runCommandLabel)
 		sel, err := resolveScopeSelection(state, runScope.Name, flags.clusterScope, machinesScope)
 		if err != nil {
 			return failErr(1, err)

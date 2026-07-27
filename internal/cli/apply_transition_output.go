@@ -59,7 +59,7 @@ func printApplyTransitionLedger(stdout io.Writer, tasks []workflow.ApplyTask, ru
 	if len(items) == 0 {
 		return
 	}
-	p := cliout.New(stdout)
+	p := cliout.NewContinuation(stdout)
 	p.Section("Change plan")
 	p.List(items)
 }

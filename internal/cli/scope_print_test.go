@@ -27,17 +27,17 @@ func TestWorkflowSummaryOmitsPasswordPromptExplanations(t *testing.T) {
 	t.Run("running as root prints no Root phases note", func(t *testing.T) {
 		currentEUID = func() int { return 0 }
 		var out bytes.Buffer
-		printWorkflowSummary(&out, "Apply plan", rootPhase, false, false, false)
-		if got := out.String(); strings.Contains(got, "Root phases") {
-			t.Fatalf("running as root must not annotate Root phases:\n%s", got)
+		printWorkflowSummary(&out, "Stages", rootPhase, false, false, false, true)
+		if got := out.String(); strings.Contains(got, "root escalation") {
+			t.Fatalf("running as root must not annotate root escalation:\n%s", got)
 		}
 	})
 
 	t.Run("prompted run does not explain the password prompt", func(t *testing.T) {
 		currentEUID = func() int { return 1000 }
 		var out bytes.Buffer
-		printWorkflowSummary(&out, "Apply plan", rootPhase, true, false, false)
-		if got := out.String(); strings.Contains(got, "Root phases") {
+		printWorkflowSummary(&out, "Stages", rootPhase, true, false, false, true)
+		if got := out.String(); strings.Contains(got, "root escalation") {
 			t.Fatalf("prompted run must not explain the password prompt:\n%s", got)
 		}
 	})
@@ -45,8 +45,8 @@ func TestWorkflowSummaryOmitsPasswordPromptExplanations(t *testing.T) {
 	t.Run("ask-become-pass=false keeps the requirement warning", func(t *testing.T) {
 		currentEUID = func() int { return 1000 }
 		var out bytes.Buffer
-		printWorkflowSummary(&out, "Apply plan", rootPhase, false, false, false)
-		if got := out.String(); !strings.Contains(got, "[WARN] Root phases: --ask-become-pass=false requires passwordless sudo") {
+		printWorkflowSummary(&out, "Stages", rootPhase, false, false, false, true)
+		if got := out.String(); !strings.Contains(got, "[WARN] root escalation: --ask-become-pass=false requires passwordless sudo") {
 			t.Fatalf("ask-become-pass=false must keep the requirement warning:\n%s", got)
 		}
 	})
@@ -54,8 +54,8 @@ func TestWorkflowSummaryOmitsPasswordPromptExplanations(t *testing.T) {
 	t.Run("dry run keeps the no-execution notice", func(t *testing.T) {
 		currentEUID = func() int { return 1000 }
 		var out bytes.Buffer
-		printWorkflowSummary(&out, "Apply plan", rootPhase, true, true, false)
-		if got := out.String(); !strings.Contains(got, "[WARN] Root phases: sudo escalation is required; this is a dry run") {
+		printWorkflowSummary(&out, "Stages", rootPhase, true, true, false, true)
+		if got := out.String(); !strings.Contains(got, "[WARN] root escalation: this run needs sudo; a dry run executes nothing") {
 			t.Fatalf("dry run must keep the no-execution notice:\n%s", got)
 		}
 	})

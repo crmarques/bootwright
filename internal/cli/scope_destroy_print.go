@@ -99,15 +99,63 @@ func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraCompon
 }
 
 func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State, storageWorkNames []string) {
-	switch {
-	case converge.DestroyIsFullScope(scope):
-		printDestroyClustersPreview(w, clustersDir, state, storageWorkNames)
-		printDestroyInfraPreview(w, state, storageWorkNames)
-	case scope.Name == "clusters" || scope.Name == "container-cluster":
-		printDestroyClustersPreview(w, clustersDir, state, storageWorkNames)
-	case scope.Name == "infra":
-		printDestroyInfraPreview(w, state, storageWorkNames)
+	full := converge.DestroyIsFullScope(scope)
+	runtimeLayer := full || scope.Name == "clusters" || scope.Name == "container-cluster"
+	machineLayer := full || scope.Name == "infra"
+	if !runtimeLayer && !machineLayer {
+		return
 	}
+	storageNames := destroyStoragePreviewNames(state, storageWorkNames)
+	containerNames := make([]string, 0, len(state.ContainerClusters))
+	for _, cluster := range state.ContainerClusters {
+		containerNames = append(containerNames, cluster.Metadata.Name)
+	}
+	sort.Strings(containerNames)
+	if len(storageNames) == 0 && len(containerNames) == 0 {
+		return
+	}
+	items := make([]output.Item, 0, len(storageNames)+len(containerNames))
+	for _, name := range storageNames {
+		items = append(items, output.Item{Label: name + " (StorageCluster)", Detail: destroyStorageClusterDetail(runtimeLayer, machineLayer)})
+	}
+	for _, name := range containerNames {
+		items = append(items, output.Item{Label: name + " (ContainerCluster)", Detail: destroyContainerClusterDetail(state, clustersDir, name, runtimeLayer, machineLayer)})
+	}
+	p := output.NewContinuation(w)
+	p.Section("Will destroy")
+	p.List(items)
+	if runtimeLayer && !machineLayer {
+		p.Status(output.StatusInfo, "retained", "machine substrate is kept; remove it with destroy --stage infra")
+	}
+}
+
+func destroyStorageClusterDetail(runtimeLayer, machineLayer bool) string {
+	var parts []string
+	if runtimeLayer {
+		parts = append(parts, "cephadm rm-cluster --zap-osds: ALL OSD DATA destroyed; declared devices wiped (wipefs + sgdisk --zap-all) — irreversible")
+	}
+	if machineLayer {
+		parts = append(parts, "provider-owned machines and declared managed disks wiped — ALL OSD DATA on this storage cluster is destroyed")
+	}
+	return strings.Join(parts, "; ")
+}
+
+func destroyContainerClusterDetail(state v1alpha1.State, clustersDir, name string, runtimeLayer, machineLayer bool) string {
+	var parts []string
+	if runtimeLayer {
+		parts = append(parts, "runtime dir "+filepath.Join(clustersDir, name, "runtime")+" and generated add-on records")
+	}
+	if machineLayer {
+		if cluster, ok := containerClusterByName(state, name); ok {
+			ci, _ := stateview.ClusterInstallForContainerCluster(state, cluster)
+			detail := fmt.Sprintf("substrate: %d machine(s)", len(ci.Machines))
+			if services := destroyManagedServices(state, ci); services != "" {
+				detail += "; managed " + services
+			}
+			parts = append(parts, detail)
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 func destroyStoragePreviewNames(state v1alpha1.State, storageWorkNames []string) []string {
@@ -122,68 +170,6 @@ func destroyStoragePreviewNames(state v1alpha1.State, storageWorkNames []string)
 	}
 	sort.Strings(out)
 	return out
-}
-
-func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1.State, storageWorkNames []string) {
-	storageNames := destroyStoragePreviewNames(state, storageWorkNames)
-	if len(state.ContainerClusters) == 0 && len(storageNames) == 0 {
-		return
-	}
-	p := output.NewContinuation(w)
-	p.Section("Will destroy")
-	var items []output.Item
-	for _, name := range storageNames {
-		items = append(items, output.Item{Label: "storage cluster " + name, Detail: "cephadm rm-cluster --zap-osds: ALL OSD DATA destroyed; declared devices wiped (wipefs + sgdisk --zap-all) — irreversible"})
-	}
-
-	names := make([]string, 0, len(state.ContainerClusters))
-	for _, c := range state.ContainerClusters {
-		names = append(names, c.Metadata.Name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(clustersDir, name, "runtime") + " and generated add-on records"})
-	}
-	p.List(items)
-	p.Status(output.StatusInfo, "destroy clusters", "machine substrate cleanup is handled by destroy --stage infra")
-}
-
-func printDestroyInfraPreview(w io.Writer, state v1alpha1.State, storageWorkNames []string) {
-	storageNames := destroyStoragePreviewNames(state, storageWorkNames)
-	if len(state.Machines) == 0 && len(state.ContainerClusters) == 0 && len(storageNames) == 0 {
-		return
-	}
-	p := output.NewContinuation(w)
-	p.Section("Will destroy")
-
-	clusters := make([]string, 0, len(state.ContainerClusters))
-	for _, c := range state.ContainerClusters {
-		clusters = append(clusters, c.Metadata.Name)
-	}
-	sort.Strings(clusters)
-	var items []output.Item
-	for _, name := range clusters {
-		items = append(items, output.Item{Label: "cluster " + name, Detail: "substrate"})
-	}
-
-	for _, name := range clusters {
-		cluster, ok := containerClusterByName(state, name)
-		if !ok {
-			continue
-		}
-		ci, _ := stateview.ClusterInstallForContainerCluster(state, cluster)
-		machines := len(ci.Machines)
-		services := destroyManagedServices(state, ci)
-		detail := fmt.Sprintf("%d machine(s)", machines)
-		if services != "" {
-			detail += "; managed " + services
-		}
-		items = append(items, output.Item{Label: "cluster " + name + " infra", Detail: detail})
-	}
-	for _, name := range storageNames {
-		items = append(items, output.Item{Label: "storage cluster " + name + " infra", Detail: "provider-owned machines and declared managed disks wiped — ALL OSD DATA on this storage cluster is destroyed"})
-	}
-	p.List(items)
 }
 
 func printDestroyArtifactServerPreview(w io.Writer, state v1alpha1.State) {

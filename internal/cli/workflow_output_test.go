@@ -36,7 +36,7 @@ func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
 	var out bytes.Buffer
 	out.WriteString("Summary\n  [OK] host check: all 7 check(s) passed\n")
 
-	reporter := newWorkflowReporter(&out)
+	reporter := newWorkflowReporter(&out, "Run")
 	reporter.BundleStart()
 	reporter.BundleReady(bundle.AnsibleBundleResult{
 		Dir:   "/var/lib/bootwright/cache/ansible-bundles/version=dev",
@@ -62,7 +62,7 @@ func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
 func TestWorkflowReporterAddsPromptGap(t *testing.T) {
 	var out bytes.Buffer
 	var prompt bytes.Buffer
-	reporter := newWorkflowReporter(&out).WithPromptGap(&prompt)
+	reporter := newWorkflowReporter(&out, "Run").WithPromptGap(&prompt)
 
 	reporter.AnsibleStart("/usr/bin/ansible-playbook")
 
