@@ -59,10 +59,6 @@ func ClusterAddonHookLifecycles() []string {
 	}
 }
 
-func ClusterAddonHookIsManifestOnly(hook ClusterAddonHook) bool {
-	return hook.Playbook == ""
-}
-
 func ClusterAddonHookTimeout(hook ClusterAddonHook) string {
 	if hook.Timeout == "" {
 		return DefaultClusterAddonHookTimeout
