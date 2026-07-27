@@ -58,11 +58,24 @@ func DefaultRegistryURL(distribution string) string {
 	return ""
 }
 
-func DerivedOSSImage(release string) string {
+func DerivedOSSImageVersion(distribution, release string) string {
+	if distribution != v1alpha1.StorageCephDistributionOSS {
+		return ""
+	}
 	if ossUpstreamVersionPattern.MatchString(release) {
-		return ossImageRepository + ":v" + release
+		return "v" + release
 	}
 	return ""
+}
+
+func JoinImageReference(base, version string) string {
+	if base == "" || version == "" {
+		return ""
+	}
+	if strings.HasPrefix(version, "sha256:") {
+		return base + "@" + version
+	}
+	return base + ":" + version
 }
 
 func ImageRepository(image string) string {

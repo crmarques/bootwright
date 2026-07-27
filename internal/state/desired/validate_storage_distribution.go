@@ -3,11 +3,17 @@ package desiredstate
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/media"
 	"github.com/crmarques/bootwright/internal/storage/cephprovider"
+)
+
+var (
+	cephPackageVersionPattern = regexp.MustCompile(`^(?:[0-9]+:)?[0-9][0-9A-Za-z._+~^-]*$`)
+	cephImageBasePattern      = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*)+$`)
 )
 
 func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
@@ -65,38 +71,77 @@ func validateStorageCephRelease(prefix, distribution, release string) []string {
 	return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading component selects the product stream", prefix, release)}
 }
 
-func validateStorageCephImage(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
-	image := cluster.Spec.Ceph.Image
-	distribution := storageCephDistribution(cluster)
-	if image != "" {
-		if err := validatePinnedImageReference(image); err != "" {
-			return []string{fmt.Sprintf("%s.image %q %s", prefix, image, err)}
-		}
+func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
+	var errs []string
+	errs = append(errs, validateStorageCephDistribution(prefix, cluster, state)...)
+	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), cluster.Spec.Ceph.Release)...)
+	errs = append(errs, validateStorageCephPackageVersion(prefix, cluster)...)
+	errs = append(errs, validateStorageCephImage(prefix+".image", cluster, state)...)
+	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
+	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster)...)
+	return errs
+}
+
+func validateStorageCephPackageVersion(prefix string, cluster v1alpha1.StorageCluster) []string {
+	version := cluster.Spec.Ceph.PackageVersion
+	if version == "" {
+		return nil
 	}
-	if v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
-		vendorRegistry := cephprovider.DefaultRegistryURL(distribution)
-		registry := vendorRegistry
-		if entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, cluster.Spec.Ceph.EntitlementRef.Name); ok && entitlement.Spec.Registry != nil && entitlement.Spec.Registry.URL != "" {
-			registry = entitlement.Spec.Registry.URL
-			if registry != vendorRegistry && image == "" {
-				return []string{fmt.Sprintf("%s.image is required when Entitlement/%s spec.registry.url overrides the vendor registry; pin the mirrored daemon image explicitly", prefix, entitlement.Metadata.Name)}
-			}
-		}
-		if image != "" {
-			return validateStorageCephImageRepository(prefix, distribution, cluster.Spec.Ceph.Release, registry, image)
-		}
+	if storageCephDistribution(cluster) == v1alpha1.StorageCephDistributionOSS {
+		return []string{prefix + ".packageVersion must be empty when distribution=oss; the exact community build is named by .release as an x.y.z version, which selects the package repository"}
+	}
+	if !cephPackageVersionPattern.MatchString(version) {
+		return []string{fmt.Sprintf("%s.packageVersion %q must be an RPM version-release such as 19.2.1-245.el9cp, optionally epoch-prefixed; it names the cephadm build to install and must not carry a package name, glob, or separator", prefix, version)}
 	}
 	return nil
 }
 
-func validateStorageCephImageRepository(prefix, distribution, authored, registry, image string) []string {
+func validateStorageCephImage(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
+	image := cluster.Spec.Ceph.Image
+	if image == nil {
+		image = &v1alpha1.StorageCephImageSpec{}
+	}
+	errs := validateStorageCephImageParts(prefix, *image)
+	distribution := storageCephDistribution(cluster)
+	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
+		return errs
+	}
+	vendorRegistry := cephprovider.DefaultRegistryURL(distribution)
+	registry := vendorRegistry
+	if entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, cluster.Spec.Ceph.EntitlementRef.Name); ok && entitlement.Spec.Registry != nil && entitlement.Spec.Registry.URL != "" {
+		registry = entitlement.Spec.Registry.URL
+		if registry != vendorRegistry && image.Base == "" {
+			return append(errs, fmt.Sprintf("%s.base is required when Entitlement/%s spec.registry.url overrides the vendor registry; the derived base names the vendor registry, which a mirrored estate cannot pull", prefix, entitlement.Metadata.Name))
+		}
+	}
+	if image.Base != "" {
+		errs = append(errs, validateStorageCephImageBase(prefix, distribution, cluster.Spec.Ceph.Release, registry, image.Base)...)
+	}
+	return errs
+}
+
+func validateStorageCephImageParts(prefix string, image v1alpha1.StorageCephImageSpec) []string {
+	var errs []string
+	if image.Base != "" && !cephImageBasePattern.MatchString(image.Base) {
+		errs = append(errs, fmt.Sprintf("%s.base %q must be a bare %s reference carrying no tag, digest, or scheme; the build belongs in .version", prefix, image.Base, "<registry>/<path>"))
+	}
+	if image.Version != "" && !imageVersionTag.MatchString(image.Version) && !imageSHA256Digest.MatchString(image.Version) {
+		errs = append(errs, fmt.Sprintf("%s.version %q must be an image tag or a sha256: digest; a mutable tag such as latest is not a pin", prefix, image.Version))
+	}
+	if image.Base != "" && image.Version == "" {
+		errs = append(errs, prefix+".base names no image until .version completes it")
+	}
+	return errs
+}
+
+func validateStorageCephImageBase(prefix, distribution, authored, registry, base string) []string {
 	release, ok := cephprovider.ResolveRelease(distribution, authored)
 	if !ok {
 		return nil
 	}
 	vendorPrefix, ok := cephprovider.ImageRepositoryPrefix(distribution, authored, registry)
-	if ok && !strings.HasPrefix(cephprovider.ImageRepository(image), vendorPrefix) {
-		return []string{fmt.Sprintf("%s.image repository must start with %q for %s release %s; the vendor namespace and stream must match the cluster, the trailing build base is yours to declare", prefix, vendorPrefix, distribution, release.Value)}
+	if ok && !strings.HasPrefix(base, vendorPrefix) {
+		return []string{fmt.Sprintf("%s.base must start with %q for %s release %s; the vendor namespace and stream must match the cluster, the trailing build base is yours to declare", prefix, vendorPrefix, distribution, release.Value)}
 	}
 	return nil
 }

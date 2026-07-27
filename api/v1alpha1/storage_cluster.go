@@ -1,5 +1,7 @@
 package v1alpha1
 
+import "strings"
+
 type StorageCluster struct {
 	APIVersion string             `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string             `yaml:"kind" json:"kind"`
@@ -130,7 +132,8 @@ func machineOSSubscriptionRef(state State, machineName string) string {
 type StorageClusterCephSpec struct {
 	Distribution      string                       `yaml:"distribution,omitempty" json:"distribution,omitempty"`
 	Release           string                       `yaml:"release,omitempty" json:"release,omitempty"`
-	Image             string                       `yaml:"image,omitempty" json:"image,omitempty"`
+	PackageVersion    string                       `yaml:"packageVersion,omitempty" json:"packageVersion,omitempty"`
+	Image             *StorageCephImageSpec        `yaml:"image,omitempty" json:"image,omitempty"`
 	Community         *StorageCephCommunitySpec    `yaml:"community,omitempty" json:"community,omitempty"`
 	IBM               *StorageCephIBMSpec          `yaml:"ibm,omitempty" json:"ibm,omitempty"`
 	EntitlementRef    LocalObjectReference         `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
@@ -152,6 +155,51 @@ type StorageCephSecurity struct {
 
 type StorageCephFIPS struct {
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+type StorageCephImageSpec struct {
+	Base    string `yaml:"base,omitempty" json:"base,omitempty"`
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+}
+
+func StorageCephImageBase(ceph *StorageClusterCephSpec) string {
+	if ceph == nil || ceph.Image == nil {
+		return ""
+	}
+	return ceph.Image.Base
+}
+
+func StorageCephImageVersion(ceph *StorageClusterCephSpec) string {
+	if ceph == nil || ceph.Image == nil {
+		return ""
+	}
+	return ceph.Image.Version
+}
+
+func StorageCephImagePinned(ceph *StorageClusterCephSpec) bool {
+	return StorageCephImageVersion(ceph) != ""
+}
+
+const (
+	StorageCephContainerImageConfigPrefix  = "mgr/cephadm/container_image_"
+	StorageCephContainerImageBaseConfigKey = "mgr/cephadm/container_image_base"
+)
+
+func StorageCephSidecarImagePins(ceph *StorageClusterCephSpec) map[string]string {
+	if ceph == nil {
+		return nil
+	}
+	var pins map[string]string
+	for key, value := range ceph.Config["mgr"] {
+		if !strings.HasPrefix(key, StorageCephContainerImageConfigPrefix) || key == StorageCephContainerImageBaseConfigKey {
+			continue
+		}
+		if pins == nil {
+			pins = map[string]string{}
+		}
+		pins[key] = value
+	}
+	return pins
 }
 
 type StorageCephCommunitySpec struct {

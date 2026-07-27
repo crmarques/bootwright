@@ -32,3 +32,39 @@
   when:
     - bootwright_ceph_image_base | default('') | length > 0
     - (bootwright_ceph_image_base_current.stdout | default('') | trim) != bootwright_ceph_image_base
+
+- name: Read current cephadm sidecar container images
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - get
+      - mgr
+      - "{{ item.key }}"
+  loop: "{{ bootwright_selected_storage_cluster.ceph.sidecarImagePins | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: bootwright_ceph_sidecar_image_current
+  changed_when: false
+  failed_when: false
+
+- name: Pin cephadm sidecar container images before the monitoring stack deploys
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - set
+      - mgr
+      - "{{ item.item.key }}"
+      - "{{ item.item.value }}"
+  loop: "{{ bootwright_ceph_sidecar_image_current.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  changed_when: true
+  when: (item.stdout | default('') | trim) != item.item.value

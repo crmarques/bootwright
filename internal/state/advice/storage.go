@@ -86,10 +86,8 @@ func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluste
 	if !disconnected && !vendorMismatch {
 		return nil
 	}
-	for key := range ceph.Config["mgr"] {
-		if strings.HasPrefix(key, "mgr/cephadm/container_image_") && key != "mgr/cephadm/container_image_base" {
-			return nil
-		}
+	if len(v1alpha1.StorageCephSidecarImagePins(ceph)) > 0 {
+		return nil
 	}
 	return []StorageAdvisory{{
 		Severity:    SeverityWarn,
@@ -149,21 +147,20 @@ func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []St
 	if distribution != v1alpha1.StorageCephDistributionIBM && distribution != v1alpha1.StorageCephDistributionRedHat {
 		return nil
 	}
-	if cluster.Spec.Ceph.Image != "" {
+	if v1alpha1.StorageCephImagePinned(cluster.Spec.Ceph) {
 		return nil
 	}
 	example, ok := cephprovider.DerivedImageRepository(distribution, cluster.Spec.Ceph.Release, "")
 	if !ok {
 		return nil
 	}
-	example += "@sha256:..."
 	return []StorageAdvisory{{
 		Severity:    SeverityWarn,
 		Group:       cephBestPracticeGroup,
 		Object:      object,
-		Finding:     fmt.Sprintf("distribution %q pins no spec.ceph.image", distribution),
+		Finding:     fmt.Sprintf("distribution %q pins no spec.ceph.image.version", distribution),
 		Impact:      "the install uses the distribution-packaged cephadm's default image tag, which floats; the running Ceph version is not reproducible across re-installs",
-		Remediation: "set spec.ceph.image to a digest-pinned reference (for example " + example + ")",
+		Remediation: "set spec.ceph.image.version to the vendor build you run, as a tag or a sha256: digest; spec.ceph.image.base defaults to " + example + " and is only authored for a mirror",
 	}}
 }
 

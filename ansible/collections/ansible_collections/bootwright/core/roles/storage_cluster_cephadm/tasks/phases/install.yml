@@ -8,13 +8,28 @@
   changed_when: false
   failed_when: false
 
+- name: Gather installed package facts before pinning the cephadm build
+  ansible.builtin.package_facts:
+    manager: auto
+  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
+
 - name: Install cephadm package on storage node when not preinstalled
   ansible.builtin.package:
     name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
     state: present
   register: bootwright_cephadm_package_install
   failed_when: false
-  when: bootwright_cephadm_initial_probe.rc | default(1) != 0
+  when:
+    - bootwright_ceph_provider.cephadmPackageSpec | default('') | length == 0
+    - bootwright_cephadm_initial_probe.rc | default(1) != 0
+
+- name: Install the pinned cephadm build on storage node
+  ansible.builtin.dnf:
+    name: "{{ bootwright_ceph_provider.cephadmPackageSpec }}"
+    state: present
+    allow_downgrade: true
+  register: bootwright_cephadm_pinned_install
+  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
 
 - name: Create cephadm package ownership directory
   ansible.builtin.file:
@@ -23,7 +38,7 @@
     owner: root
     group: root
     mode: "0700"
-  when: bootwright_cephadm_package_install.changed | default(false)
+  when: (bootwright_cephadm_package_install.changed | default(false)) or (bootwright_cephadm_pinned_install.changed | default(false))
 
 - name: Write cephadm package ownership record
   ansible.builtin.include_role:
@@ -32,7 +47,7 @@
   vars:
     bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
     bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
-  when: bootwright_cephadm_package_install.changed | default(false)
+  when: (bootwright_cephadm_package_install.changed | default(false)) or (bootwright_cephadm_pinned_install.changed | default(false))
 
 - name: Verify cephadm CLI on storage node
   ansible.builtin.command:

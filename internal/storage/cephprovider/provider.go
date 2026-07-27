@@ -82,6 +82,7 @@ type Provider struct {
 	RequiresLicense      bool
 	PrerequisitePackages []string
 	CephadmPackage       string
+	CephadmPackageSpec   string
 	Image                string
 	ImageBase            string
 	Community            Community
@@ -116,11 +117,19 @@ func cephRelease(cluster v1alpha1.StorageCluster) string {
 	return cluster.Spec.Ceph.Release
 }
 
-func cephImage(cluster v1alpha1.StorageCluster) string {
+func cephImageBase(cluster v1alpha1.StorageCluster) string {
+	return v1alpha1.StorageCephImageBase(cluster.Spec.Ceph)
+}
+
+func cephImageVersion(cluster v1alpha1.StorageCluster) string {
+	return v1alpha1.StorageCephImageVersion(cluster.Spec.Ceph)
+}
+
+func cephPackageVersion(cluster v1alpha1.StorageCluster) string {
 	if cluster.Spec.Ceph == nil {
 		return ""
 	}
-	return cluster.Spec.Ceph.Image
+	return cluster.Spec.Ceph.PackageVersion
 }
 
 func communitySource(cluster v1alpha1.StorageCluster) Community {
@@ -141,22 +150,20 @@ func communitySource(cluster v1alpha1.StorageCluster) Community {
 	return out
 }
 
-func ossImage(cluster v1alpha1.StorageCluster, community Community) string {
-	if image := cephImage(cluster); image != "" {
-		return image
-	}
-	if community.Version != "" {
-		return DerivedOSSImage(community.Version)
-	}
-	return ""
-}
-
-func imageBase(distribution, release, registryURL, image string) string {
-	if image != "" {
-		return ImageRepository(image)
+func imageBase(cluster v1alpha1.StorageCluster, distribution, release, registryURL string) string {
+	if base := cephImageBase(cluster); base != "" {
+		return base
 	}
 	repository, _ := DerivedImageRepository(distribution, release, registryURL)
 	return repository
+}
+
+func resolvedImage(cluster v1alpha1.StorageCluster, base string, community Community) string {
+	version := cephImageVersion(cluster)
+	if version == "" {
+		version = DerivedOSSImageVersion(Distribution(cluster), community.Version)
+	}
+	return JoinImageReference(base, version)
 }
 
 func subscriptionStream(cluster v1alpha1.StorageCluster) string {
@@ -193,10 +200,11 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 	}
 	if distribution == v1alpha1.StorageCephDistributionOSS {
 		provider.Community = communitySource(cluster)
-		provider.Image = ossImage(cluster, provider.Community)
 	} else {
 		provider.Repository = subscriptionRepository(def, subscriptionStream(cluster))
-		provider.Image = cephImage(cluster)
+	}
+	if version := cephPackageVersion(cluster); version != "" {
+		provider.CephadmPackageSpec = provider.CephadmPackage + "-" + version
 	}
 	if def.requiresEntitlement() && cluster.Spec.Ceph != nil {
 		provider.Entitlement, _ = entitlements.Resolve(ents, idx, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
@@ -205,7 +213,8 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 	if provider.Entitlement.Registry.URL != "" {
 		registryURL = provider.Entitlement.Registry.URL
 	}
-	provider.ImageBase = imageBase(distribution, release.Value, registryURL, provider.Image)
+	provider.ImageBase = imageBase(cluster, distribution, release.Value, registryURL)
+	provider.Image = resolvedImage(cluster, provider.ImageBase, provider.Community)
 	if distribution == v1alpha1.StorageCephDistributionIBM && cluster.Spec.Ceph != nil && cluster.Spec.Ceph.IBM != nil {
 		provider.IBMCallHome = cluster.Spec.Ceph.IBM.CallHome
 	}
@@ -221,6 +230,9 @@ func Vars(provider Provider) map[string]any {
 		"requiresLicense":      provider.RequiresLicense,
 		"prerequisitePackages": append([]string(nil), provider.PrerequisitePackages...),
 		"cephadmPackage":       provider.CephadmPackage,
+	}
+	if provider.CephadmPackageSpec != "" {
+		out["cephadmPackageSpec"] = provider.CephadmPackageSpec
 	}
 	if provider.Community.Release != "" || provider.Community.Version != "" {
 		community := map[string]any{}

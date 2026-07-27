@@ -79,11 +79,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
-	errs = append(errs, validateStorageCephDistribution(prefix, cluster, state)...)
-	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), ceph.Release)...)
-	errs = append(errs, validateStorageCephImage(prefix, cluster, state)...)
-	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
-	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster)...)
+	errs = append(errs, validateStorageCephDistributionFamily(prefix, cluster, state)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephFIPS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, state)...)
@@ -129,6 +125,9 @@ func validateStorageCephSingleHostDefaults(prefix string, cluster v1alpha1.Stora
 				errs = append(errs, fmt.Sprintf("%s owns %s at bootstrap; remove it from spec.ceph.config[global]", prefix, key))
 			}
 		}
+	}
+	if _, ok := cluster.Spec.Ceph.Config["mgr"]["mgr_standby_modules"]; ok {
+		errs = append(errs, fmt.Sprintf("%s owns mgr_standby_modules at bootstrap; remove it from spec.ceph.config[mgr]", prefix))
 	}
 	return errs
 }

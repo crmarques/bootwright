@@ -331,8 +331,13 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster, state v1alpha1.St
 	if release, ok := cephprovider.ResolveRelease(ceph.Distribution, ceph.Release); ok {
 		ceph.Release = release.Value
 	}
-	if ceph.Distribution == v1alpha1.StorageCephDistributionOSS && ceph.Image == "" {
-		ceph.Image = cephprovider.DerivedOSSImage(ceph.Release)
+	if version := cephprovider.DerivedOSSImageVersion(ceph.Distribution, ceph.Release); version != "" {
+		if ceph.Image == nil {
+			ceph.Image = &v1alpha1.StorageCephImageSpec{}
+		}
+		if ceph.Image.Version == "" {
+			ceph.Image.Version = version
+		}
 	}
 	if ceph.Community != nil && ceph.Community.Checksum != "" {
 		if checksum, err := media.NormalizeSHA256(ceph.Community.Checksum); err == nil {

@@ -56,6 +56,7 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		if ceph == nil {
 			continue
 		}
+		ceph.PackageVersion = ""
 		ceph.Topology.Nodes = nil
 		ceph.Topology.OSDDrivegroups = nil
 		ceph.Management = nil
@@ -84,6 +85,7 @@ func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alp
 	clone.InfraComponents = nil
 	for i := range clone.StorageClusters {
 		if ceph := clone.StorageClusters[i].Spec.Ceph; ceph != nil {
+			ceph.PackageVersion = ""
 			for j := range ceph.Topology.Nodes {
 				ceph.Topology.Nodes[j].Devices = nil
 				ceph.Topology.Nodes[j].OSD = nil

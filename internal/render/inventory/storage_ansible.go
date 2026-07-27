@@ -163,6 +163,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 				"coreServicesSpecPath": asset.CoreServicesSpecPath,
 				"lateServicesSpecPath": asset.LateServicesSpecPath,
 				"operationsPath":       asset.OperationsPath,
+				"sidecarImagePins":     v1alpha1.StorageCephSidecarImagePins(ceph),
 			},
 			"osdReadiness": storageOSDReadinessVars(cluster),
 		}

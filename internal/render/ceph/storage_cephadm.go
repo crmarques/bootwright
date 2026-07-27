@@ -13,7 +13,7 @@ func CephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
 	ceph := cluster.Spec.Ceph
 	publics := ceph.Networks.PublicCIDRs
 	var out strings.Builder
-	for _, section := range []string{"global", "mon", "osd"} {
+	for _, section := range []string{"global", "mon", "mgr", "osd"} {
 		options := ceph.Config[section]
 		keys := make([]string, 0, len(options))
 		for key := range options {
