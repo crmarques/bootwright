@@ -117,7 +117,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if result.Skipped {
 		return applyTaskResult{id: task.Entry.ID, skipped: true, err: nil}
 	}
-	if task.Entry.Kind == ApplyTaskKindStorageCluster || task.Entry.Kind == ApplyTaskKindInstallWait {
+	if task.Entry.Kind == ApplyTaskKindStorageCluster || task.Entry.Kind == ApplyTaskKindInstallWait || task.Entry.Kind == ApplyTaskKindBootstrapWait {
 		if err := encryptCapturedClusterSecrets(opts, task); err != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 		}

@@ -31,3 +31,4 @@ files.
 | [0019](0019-node-root-posture-and-orchestration-identity.md) | Node Root Posture and Ceph Orchestration Identity | Accepted |
 | [0020](0020-cluster-captured-secrets-encrypted-at-rest.md) | Cluster-Captured Secrets Are Encrypted at Rest | Accepted |
 | [0021](0021-external-playbook-content.md) | External Playbook Content | Accepted |
+| [0022](0022-cluster-wait-bootstrap-boundary.md) | Cluster Install Wait Splits at the Bootstrap Boundary | Accepted |

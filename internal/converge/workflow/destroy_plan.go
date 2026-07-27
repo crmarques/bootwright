@@ -191,24 +191,34 @@ func storageNodeAccessDestroySteps() []destroyStep {
 
 type destroyStep struct {
 	id                   string
+	baseID               string
 	kind                 string
 	label                string
 	playbook             string
 	limit                string
 	forksLimit           string
+	resourceKeys         []string
 	dependencies         []string
 	orderingDependencies []string
 }
 
+func (s destroyStep) base() string {
+	if s.baseID != "" {
+		return s.baseID
+	}
+	return s.id
+}
+
 func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) ([]ApplyTask, error) {
-	planned, keys := plannedDestroySteps(state, steps, storageWorkNames)
+	planned := plannedDestroySteps(state, steps, storageWorkNames)
 	declared := make(map[string][]string, len(steps))
-	emitted := make(map[string]bool, len(planned))
+	emitted := make(map[string][]string, len(planned))
 	for _, step := range steps {
 		declared[step.id] = step.orderingDependencies
 	}
 	for _, step := range planned {
-		emitted[step.id] = true
+		base := step.base()
+		emitted[base] = append(emitted[base], step.id)
 	}
 	tasks := make([]ApplyTask, 0, len(planned))
 	for _, step := range planned {
@@ -216,9 +226,9 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			ID:                   step.id,
 			Kind:                 step.kind,
 			Label:                step.label,
-			ResourceKeys:         keys[step.id],
+			ResourceKeys:         step.resourceKeys,
 			Status:               TaskStatusPending,
-			Dependencies:         append([]string(nil), step.dependencies...),
+			Dependencies:         destroyEmittedDependencies(step.dependencies, emitted),
 			OrderingDependencies: destroyOrderingDependencies(step, declared, emitted),
 		}
 		taskLimit := limit
@@ -251,25 +261,102 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 	return tasks, nil
 }
 
-func plannedDestroySteps(state v1alpha1.State, steps []destroyStep, storageWorkNames []string) ([]destroyStep, map[string][]string) {
+func plannedDestroySteps(state v1alpha1.State, steps []destroyStep, storageWorkNames []string) []destroyStep {
 	planned := make([]destroyStep, 0, len(steps))
-	keys := make(map[string][]string, len(steps))
 	for _, step := range steps {
-		resourceKeys := destroyStepClusters(state, step.kind)
-		if (step.kind == DestroyTaskKindStorageCluster || step.kind == DestroyTaskKindStorageNodeAccess) && storageWorkNames != nil {
+		clusters := destroyStepClusters(state, step.kind)
+		if destroyStepIsStorageScoped(step.kind) && storageWorkNames != nil {
 			if len(storageWorkNames) == 0 {
 				continue
 			}
-			resourceKeys = append([]string(nil), storageWorkNames...)
-			sort.Strings(resourceKeys)
+			clusters = append([]string(nil), storageWorkNames...)
+			sort.Strings(clusters)
 		}
+		if destroyStepIsStorageScoped(step.kind) {
+			if fannable := destroyFanOutClusters(state, clusters); len(fannable) > 1 {
+				planned = append(planned, fanOutDestroyStep(state, step, fannable)...)
+				continue
+			}
+		}
+		step.resourceKeys = clusters
 		planned = append(planned, step)
-		keys[step.id] = resourceKeys
 	}
-	return planned, keys
+	return planned
 }
 
-func destroyOrderingDependencies(step destroyStep, declared map[string][]string, emitted map[string]bool) []string {
+func destroyStepIsStorageScoped(kind string) bool {
+	return kind == DestroyTaskKindStorageCluster || kind == DestroyTaskKindStorageNodeAccess
+}
+
+func destroyFanOutClusters(state v1alpha1.State, clusters []string) []string {
+	grouped := destroyStorageInventoryGroupClusters(state)
+	out := make([]string, 0, len(clusters))
+	for _, name := range clusters {
+		if grouped[name] {
+			out = append(out, name)
+		}
+	}
+	if len(out) != len(clusters) {
+		return nil
+	}
+	return out
+}
+
+func destroyStorageInventoryGroupClusters(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if strings.TrimSpace(node.MachineRef.Name) != "" {
+				out[cluster.Metadata.Name] = true
+				break
+			}
+		}
+	}
+	return out
+}
+
+func fanOutDestroyStep(state v1alpha1.State, step destroyStep, clusters []string) []destroyStep {
+	out := make([]destroyStep, 0, len(clusters))
+	for _, cluster := range clusters {
+		fanned := step
+		fanned.id = step.id + "." + cluster
+		fanned.baseID = step.id
+		fanned.label = step.label + " " + cluster
+		fanned.limit = render.StorageClusterGroupName(cluster)
+		fanned.forksLimit = render.StorageClusterGroupName(cluster)
+		fanned.resourceKeys = destroyClusterResourceKeys(state, cluster)
+		out = append(out, fanned)
+	}
+	return out
+}
+
+func destroyClusterResourceKeys(state v1alpha1.State, cluster string) []string {
+	out := []string{cluster}
+	for _, machine := range ClusterSubstrateMachineNames(state, cluster) {
+		out = append(out, DestroyMachineResourceKeyPrefix+machine)
+	}
+	return out
+}
+
+func destroyEmittedDependencies(ids []string, emitted map[string][]string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		for _, emittedID := range emitted[id] {
+			if seen[emittedID] {
+				continue
+			}
+			seen[emittedID] = true
+			out = append(out, emittedID)
+		}
+	}
+	return out
+}
+
+func destroyOrderingDependencies(step destroyStep, declared map[string][]string, emitted map[string][]string) []string {
 	var out []string
 	seen := map[string]bool{}
 	var walk func(ids []string)
@@ -279,8 +366,8 @@ func destroyOrderingDependencies(step destroyStep, declared map[string][]string,
 				continue
 			}
 			seen[id] = true
-			if emitted[id] {
-				out = append(out, id)
+			if concrete := emitted[id]; len(concrete) > 0 {
+				out = append(out, concrete...)
 				continue
 			}
 			walk(declared[id])
@@ -451,14 +538,74 @@ func destroyRunID(now time.Time) string {
 	return "destroy-" + now.UTC().Format("20060102T150405.000000000Z")
 }
 
-func SucceededDestroyTaskKinds(ledger RunLedger) map[string]bool {
-	out := map[string]bool{}
+type DestroyOutcome map[string]bool
+
+const destroyOutcomeAttemptedPrefix = "attempted:"
+
+const DestroyMachineResourceKeyPrefix = "machine:"
+
+func destroyOutcomeClusterKey(kind, cluster string) string {
+	return kind + "/" + cluster
+}
+
+func destroyTaskClusterKeys(task TaskLedgerEntry) []string {
+	var out []string
+	for _, key := range task.ResourceKeys {
+		if key == "" || strings.HasPrefix(key, DestroyMachineResourceKeyPrefix) {
+			continue
+		}
+		out = append(out, key)
+	}
+	return out
+}
+
+func SucceededDestroyTaskKinds(ledger RunLedger) DestroyOutcome {
+	out := DestroyOutcome{}
+	kinds := map[string]bool{}
+	unfinished := map[string]bool{}
 	for _, task := range ledger.Tasks {
-		if task.Status == TaskStatusOK {
-			out[task.Kind] = true
+		if task.Kind == "" {
+			continue
+		}
+		kinds[task.Kind] = true
+		out[destroyOutcomeAttemptedPrefix+task.Kind] = true
+		for _, cluster := range destroyTaskClusterKeys(task) {
+			out[destroyOutcomeAttemptedPrefix+destroyOutcomeClusterKey(task.Kind, cluster)] = true
+		}
+		if task.Status != TaskStatusOK {
+			unfinished[task.Kind] = true
+			continue
+		}
+		for _, cluster := range destroyTaskClusterKeys(task) {
+			out[destroyOutcomeClusterKey(task.Kind, cluster)] = true
+		}
+	}
+	for kind := range kinds {
+		if !unfinished[kind] {
+			out[kind] = true
 		}
 	}
 	return out
+}
+
+func (o DestroyOutcome) Covers(kind, cluster string) bool {
+	if o == nil {
+		return true
+	}
+	if o[kind] {
+		return true
+	}
+	return cluster != "" && o[destroyOutcomeClusterKey(kind, cluster)]
+}
+
+func (o DestroyOutcome) Attempted(kind, cluster string) bool {
+	if o == nil {
+		return false
+	}
+	if o[destroyOutcomeAttemptedPrefix+kind] {
+		return true
+	}
+	return cluster != "" && o[destroyOutcomeAttemptedPrefix+destroyOutcomeClusterKey(kind, cluster)]
 }
 
 func DestroyScopeCoversStorage(scopeName string) bool {

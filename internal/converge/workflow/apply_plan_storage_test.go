@@ -41,6 +41,39 @@ func TestStorageManagedOSInstallKeepsMachineServiceDependencies(t *testing.T) {
 	assertTaskHasDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion")
 }
 
+func TestProvisioningPlaybookBeforeDepsHardGatesStorageClusterPrereqs(t *testing.T) {
+	state := managedOSLibvirtCephState(t)
+	state.Playbooks = []v1alpha1.Playbook{
+		provisioningPlaybook("delegated-registration", v1alpha1.PlaybookAnchorDeps, anchorKeyGates,
+			v1alpha1.PlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
+	}
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	prereqs := taskByID(t, tasks, "storageinfra.ceph-libvirt")
+	for _, dep := range prereqs.Entry.Dependencies {
+		if dep == "playbook.delegated-registration" {
+			return
+		}
+	}
+	t.Fatalf("storageinfra.ceph-libvirt dependencies = %v, want to include playbook.delegated-registration: ADR 0015 and specs/state-model.md promise that a deps-gating Playbook with the default failureMode: fail hard-gates the deps-phase Ceph work, which is how rhsm.management: external delegates node registration; the gate exists only because the Ceph prerequisite phases are carried by a task whose kind maps to the deps phase, so folding them into storage.ceph-libvirt (a base-phase kind) empties the deps anchor set and drops the edge", prereqs.Entry.Dependencies)
+}
+
+func TestProvisioningPlaybookAfterDepsAnchorsOnStorageClusterPrereqs(t *testing.T) {
+	state := managedOSLibvirtCephState(t)
+	state.Playbooks = []v1alpha1.Playbook{
+		provisioningPlaybook("post-deps", v1alpha1.PlaybookAnchorDeps, anchorKeyFollows,
+			v1alpha1.PlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
+	}
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	hook := taskByID(t, tasks, "playbook.post-deps")
+	assertDependsOn(t, hook, "storageinfra.ceph-libvirt")
+}
+
 func TestProvidedOSStorageClusterKeepsMachineServiceDependencies(t *testing.T) {
 	state := managedOSLibvirtCephState(t)
 	provided := true

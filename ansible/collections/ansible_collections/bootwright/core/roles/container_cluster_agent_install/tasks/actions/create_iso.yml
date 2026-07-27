@@ -94,6 +94,7 @@
         - rendezvousIP
         - auth
         - agent-iso.path
+        - bootstrap-complete
 
     - name: Generate agent ISO publish token
       ansible.builtin.set_fact:

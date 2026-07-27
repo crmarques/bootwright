@@ -55,7 +55,7 @@ func TaskPhaseLabel(task workflow.TaskLedgerEntry) string {
 		return PhaseMachines
 	case workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindHostVirtctl, workflow.ApplyTaskKindStorageInfra:
 		return PhasePrerequisites
-	case workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindInstallWait, workflow.ApplyTaskKindStorageCluster:
+	case workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindBootstrapWait, workflow.ApplyTaskKindInstallWait, workflow.ApplyTaskKindStorageCluster:
 		return PhaseClusterInstall
 	case workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindNodeConfigApply:
 		return PhaseAddOns

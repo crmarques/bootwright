@@ -205,7 +205,7 @@ func applyTaskKindPhase(kind string) (string, bool) {
 		return ApplyPhaseMachines, true
 	case ApplyTaskKindStorageInfra, ApplyTaskKindClusterISO, ApplyTaskKindHostVirtctl:
 		return ApplyPhaseDeps, true
-	case ApplyTaskKindStorageCluster, ApplyTaskKindNodeBoot, ApplyTaskKindInstallWait:
+	case ApplyTaskKindStorageCluster, ApplyTaskKindNodeBoot, ApplyTaskKindBootstrapWait, ApplyTaskKindInstallWait:
 		return ApplyPhaseBase, true
 	case ApplyTaskKindClusterAddon, ApplyTaskKindNodeConfigApply:
 		return ApplyPhaseAddons, true

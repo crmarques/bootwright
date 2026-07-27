@@ -179,6 +179,21 @@ ledger and logs live under `/var/lib/bootwright/contexts/<context>/runs/`.
   ledger) is reported by `status`; the next `apply` or `destroy` marks that run
   cancelled before continuing.
 
+## A run takes far longer than expected
+
+A run that succeeds but takes too long is a timing question, not a failure one.
+`bootwright status --timings` (add `--run <runID>` for a finished run, `--output
+json` for CI) reports each task's duration, how long it waited for a free slot,
+what it was blocked on, and the run's **critical path** — the longest dependency
+chain, which is the number to compare between runs. Set
+`BOOTWRIGHT_ANSIBLE_PROFILE=1` on the next run to get per-Ansible-task durations
+inside the slow task. See
+[Timing a run and reading its critical path](advanced/operations.md#timing-a-run-and-reading-its-critical-path)
+for the report and
+[Tuning apply and destroy concurrency](advanced/operations.md#tuning-apply-and-destroy-concurrency)
+for the caps — notably the per-host cap of 4, which throttles concurrent virtual
+machine creation on a single hypervisor.
+
 ## SSH or artifact fetch failures
 
 `preflight infra` and `apply --stage infra` require SSH to provider/service

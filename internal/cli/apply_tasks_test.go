@@ -28,8 +28,8 @@ func planApplyTasks(t *testing.T, target workflow.ApplyTarget, state v1alpha1.St
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
-	if len(tasks) != 8 {
-		t.Fatalf("planned %d tasks, want 8: %+v", len(tasks), tasks)
+	if len(tasks) != 9 {
+		t.Fatalf("planned %d tasks, want 9: %+v", len(tasks), tasks)
 	}
 	if tasks[0].Entry.ID != "provider.bastion" {
 		t.Fatalf("first task = %s, want provider.bastion", tasks[0].Entry.ID)
@@ -66,10 +66,14 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 		t.Fatalf("seventh task = %s, want boot.sno-libvirt", tasks[6].Entry.ID)
 	}
 	assertPlannedDeps(t, tasks[6], "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
-	if tasks[7].Entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("eighth task = %s, want wait.sno-libvirt", tasks[7].Entry.ID)
+	if tasks[7].Entry.ID != "wait-bootstrap.sno-libvirt" {
+		t.Fatalf("eighth task = %s, want wait-bootstrap.sno-libvirt", tasks[7].Entry.ID)
 	}
 	assertPlannedDeps(t, tasks[7], "boot.sno-libvirt")
+	if tasks[8].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("ninth task = %s, want wait.sno-libvirt", tasks[8].Entry.ID)
+	}
+	assertPlannedDeps(t, tasks[8], "wait-bootstrap.sno-libvirt")
 }
 
 func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
@@ -82,8 +86,8 @@ func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
 func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
-	if len(tasks) != 3 {
-		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
+	if len(tasks) != 4 {
+		t.Fatalf("planned %d tasks, want 4: %+v", len(tasks), tasks)
 	}
 	if tasks[0].Entry.ID != "iso.sno-libvirt" {
 		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[0].Entry.ID)
@@ -97,19 +101,25 @@ func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing
 	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "iso.sno-libvirt" {
 		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[1].Entry.Dependencies)
 	}
-	if tasks[2].Entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[2].Entry.ID)
+	if tasks[2].Entry.ID != "wait-bootstrap.sno-libvirt" {
+		t.Fatalf("task = %s, want wait-bootstrap.sno-libvirt", tasks[2].Entry.ID)
 	}
 	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "boot.sno-libvirt" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt", tasks[2].Entry.Dependencies)
+		t.Fatalf("bootstrap wait deps = %v, want boot.sno-libvirt", tasks[2].Entry.Dependencies)
+	}
+	if tasks[3].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[3].Entry.ID)
+	}
+	if len(tasks[3].Entry.Dependencies) != 1 || tasks[3].Entry.Dependencies[0] != "wait-bootstrap.sno-libvirt" {
+		t.Fatalf("wait deps = %v, want wait-bootstrap.sno-libvirt", tasks[3].Entry.Dependencies)
 	}
 }
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
 	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
-	if len(tasks) != 3 {
-		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
+	if len(tasks) != 4 {
+		t.Fatalf("planned %d tasks, want 4: %+v", len(tasks), tasks)
 	}
 	boot := tasks[1]
 	if boot.Entry.ID != "boot.3-nodes-ocp-baremetal" {
@@ -127,12 +137,19 @@ func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	if boot.RedfishSlots != 3 {
 		t.Fatalf("boot RedfishSlots = %d, want 3", boot.RedfishSlots)
 	}
-	wait := tasks[2]
+	bootstrap := tasks[2]
+	if bootstrap.Entry.ID != "wait-bootstrap.3-nodes-ocp-baremetal" {
+		t.Fatalf("bootstrap wait task = %s, want wait-bootstrap.3-nodes-ocp-baremetal", bootstrap.Entry.ID)
+	}
+	if len(bootstrap.Entry.Dependencies) != 1 || bootstrap.Entry.Dependencies[0] != "boot.3-nodes-ocp-baremetal" {
+		t.Fatalf("bootstrap wait deps = %v, want boot.3-nodes-ocp-baremetal", bootstrap.Entry.Dependencies)
+	}
+	wait := tasks[3]
 	if wait.Entry.ID != "wait.3-nodes-ocp-baremetal" {
 		t.Fatalf("wait task = %s, want wait.3-nodes-ocp-baremetal", wait.Entry.ID)
 	}
-	if len(wait.Entry.Dependencies) != 1 || wait.Entry.Dependencies[0] != "boot.3-nodes-ocp-baremetal" {
-		t.Fatalf("wait deps = %v, want boot.3-nodes-ocp-baremetal", wait.Entry.Dependencies)
+	if len(wait.Entry.Dependencies) != 1 || wait.Entry.Dependencies[0] != "wait-bootstrap.3-nodes-ocp-baremetal" {
+		t.Fatalf("wait deps = %v, want wait-bootstrap.3-nodes-ocp-baremetal", wait.Entry.Dependencies)
 	}
 }
 

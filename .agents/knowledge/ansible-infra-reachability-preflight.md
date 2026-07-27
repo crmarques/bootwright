@@ -44,3 +44,16 @@ container-cluster-ansible-flow.md).
 if any single check fails; the operator fixes the underlying issue and
 re-runs. Tunables (timeouts) live in the role's `defaults/main.yml` so a
 field run can override them without editing the role.
+
+**Flat includes, credentials loaded once, but one probe task per BMC.**
+`tasks/main.yml` computes the cluster components, the BMC target list, and the
+distinct `credentialsRef` set in three `set_fact` tasks, then loads credentials
+once per distinct reference (`tasks/credentials.yml` accumulating a
+ref-keyed map under `no_log`) instead of re-entering the credential loader for
+every BMC. The probe itself stays a per-BMC `include_tasks` (`tasks/bmc.yml`)
+and must NOT be collapsed into a single looped `uri` task: the probe carries
+`no_log` for `url_password`, and `no_log` censors a looped task's item label, so
+a collapsed probe would fail with `{"censored": ...}` and no indication of WHICH
+BMC is unreachable. The BMC name survives only because it is interpolated into
+the task NAME, which `no_log` does not censor. Guarded by the
+`TestReachability*` checks in `internal/repo/checks`.

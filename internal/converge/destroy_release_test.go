@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -55,6 +56,77 @@ func bareMetalCephDestroyState() v1alpha1.State {
 				},
 			},
 		}},
+	}
+}
+
+func twoClusterBareMetalCephDestroyState() v1alpha1.State {
+	base := bareMetalCephDestroyState()
+	second := bareMetalCephDestroyState()
+	second.StorageClusters[0].Metadata.Name = "ceph-b"
+	second.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.Node = "ceph-b0"
+	second.Machines[0].Metadata.Name = "ceph-b0"
+	second.Machines[1].Metadata.Name = "ceph-b1"
+	second.Machines[0].Spec.Addresses[0].Address = "10.10.10.20"
+	second.Machines[1].Spec.Addresses[0].Address = "10.10.10.21"
+	second.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].Name = "ceph-b0"
+	second.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].MachineRef.Name = "ceph-b0"
+	second.StorageClusters[0].Spec.Ceph.Topology.Nodes[1].Name = "ceph-b1"
+	second.StorageClusters[0].Spec.Ceph.Topology.Nodes[1].MachineRef.Name = "ceph-b1"
+
+	out := base
+	out.StorageClusters[0].Metadata.Name = "ceph-a"
+	out.Machines = append(append([]v1alpha1.Machine(nil), base.Machines...), second.Machines...)
+	out.StorageClusters = append(append([]v1alpha1.StorageCluster(nil), out.StorageClusters...), second.StorageClusters...)
+	return out
+}
+
+func perClusterStorageDestroyLedger() workflow.RunLedger {
+	return workflow.RunLedger{Tasks: []workflow.TaskLedgerEntry{
+		{
+			ID:           "destroy.storage-clusters.ceph-a",
+			Kind:         workflow.DestroyTaskKindStorageCluster,
+			ResourceKeys: []string{"ceph-a"},
+			Status:       workflow.TaskStatusOK,
+		},
+		{
+			ID:           "destroy.storage-clusters.ceph-b",
+			Kind:         workflow.DestroyTaskKindStorageCluster,
+			ResourceKeys: []string{"ceph-b"},
+			Status:       workflow.TaskStatusFailed,
+		},
+		{
+			ID:     "destroy.machine-infra",
+			Kind:   workflow.DestroyTaskKindMachineInfra,
+			Status: workflow.TaskStatusOK,
+		},
+	}}
+}
+
+func TestFailedClusterTeardownWithholdsOnlyThatClustersSubstrateRelease(t *testing.T) {
+	st := twoClusterBareMetalCephDestroyState()
+	succeeded := workflow.SucceededDestroyTaskKinds(perClusterStorageDestroyLedger())
+
+	for _, skipUnreachable := range []bool{false, true} {
+		runsDir := t.TempDir()
+		clustersDir := t.TempDir()
+
+		problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, succeeded, false, skipUnreachable)
+		if len(problems) != 0 {
+			t.Fatalf("reset problems (skipUnreachable=%v): %v", skipUnreachable, problems)
+		}
+		released, err := workflow.ReleasedSubstrateClusters(runsDir)
+		if err != nil {
+			t.Fatalf("list releases: %v", err)
+		}
+		if slices.Contains(released, "ceph-b") {
+			t.Fatalf("ceph-b's teardown failed, so its nodes still hold data: releasing its substrate re-arms a bare-metal reinstall over live disks (skipUnreachable=%v, released=%v)", skipUnreachable, released)
+		}
+		if skipUnreachable {
+			continue
+		}
+		if !slices.Contains(released, "ceph-a") {
+			t.Fatalf("ceph-a tore down cleanly and must keep its own release; a sibling cluster's failure must not withhold it, got %v", released)
+		}
 	}
 }
 

@@ -1,24 +1,15 @@
 ---
 
-- name: "[bmc {{ bootwright_validate_machine.name }}] Resolve BMC credentials path"
+- name: "[bmc {{ bootwright_validate_machine.name }}] Select BMC credentials"
   ansible.builtin.set_fact:
-    bootwright_validate_bmc_cred_path: >-
+    bootwright_validate_bmc_credential: >-
       {{
-        (bootwright_secrets_dir ~ '/' ~ bootwright_validate_machine.boot.redfish.credentialsRef)
-        if (bootwright_validate_machine.boot.redfish.credentialsRef | default('') | length) > 0
-        else ''
+        (bootwright_validate_bmc_credentials | default({}))[
+          bootwright_validate_machine.boot.redfish.credentialsRef | default('')
+        ] | default({})
       }}
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   changed_when: false
-
-- name: "[bmc {{ bootwright_validate_machine.name }}] Load BMC credentials"
-  ansible.builtin.include_role:
-    name: bootwright.core.support_credentials
-    tasks_from: load
-  vars:
-    bootwright_creds_path: "{{ bootwright_validate_bmc_cred_path }}"
-    bootwright_creds_var: bootwright_validate_bmc_credentials
-    bootwright_creds_label: "BMC credentialsRef {{ bootwright_validate_bmc_cred_path }}"
-  when: (bootwright_validate_bmc_cred_path | length) > 0
 
 - name: "[bmc {{ bootwright_validate_machine.name }}] Probe Redfish /Systems"
   ansible.builtin.uri:
@@ -26,11 +17,11 @@
     method: GET
     return_content: false
     validate_certs: "{{ bootwright_validate_machine.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_validate_bmc_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_validate_bmc_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_validate_bmc_credentials.password | default(omit) }}"
+    force_basic_auth: "{{ (bootwright_validate_bmc_credential | length) > 0 }}"
+    url_username: "{{ bootwright_validate_bmc_credential.username | default(omit) }}"
+    url_password: "{{ bootwright_validate_bmc_credential.password | default(omit) }}"
     timeout: "{{ bootwright_external_validate_bmc_timeout }}"
     status_code: 200
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_validate_bmc_cred_path | length) > 0) }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_validate_bmc_credential | length) > 0) }}"
   register: bootwright_validate_bmc_probe
   changed_when: false

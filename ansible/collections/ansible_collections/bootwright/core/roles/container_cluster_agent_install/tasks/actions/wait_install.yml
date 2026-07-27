@@ -1,10 +1,49 @@
 ---
+- name: Validate selected agent wait target
+  ansible.builtin.assert:
+    that:
+      - bootwright_install_wait_target in ['bootstrap', 'install']
+    fail_msg: "Unsupported install wait target {{ bootwright_install_wait_target }}"
+
 - name: Wait for agent install completion when install is not already complete
   when: not bootwright_install_already_complete
   block:
     - name: Show agent install log path
       ansible.builtin.debug:
         msg: "Follow agent install progress with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log"
+
+    - name: Check recorded agent bootstrap completion
+      ansible.builtin.stat:
+        path: "{{ bootwright_install_bootstrap_marker_path }}"
+      register: bootwright_install_bootstrap_marker_stat
+
+    - name: Wait for agent bootstrap completion
+      ansible.builtin.command:
+        argv:
+          - "{{ bootwright_openshift_install_path }}"
+          - agent
+          - wait-for
+          - bootstrap-complete
+          - --dir
+          - "{{ bootwright_install_work_dir }}"
+          - --log-level
+          - info
+      async: "{{ bootwright_install_bootstrap_timeout_seconds }}"
+      poll: "{{ bootwright_install_wait_poll_seconds }}"
+      register: bootwright_install_bootstrap_wait
+      changed_when: bootwright_install_bootstrap_wait.rc == 0
+      when:
+        - bootwright_install_wait_target == 'bootstrap'
+        - not bootwright_install_bootstrap_marker_stat.stat.exists
+
+    - name: Record agent bootstrap completion
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_bootstrap_marker_path }}"
+        mode: "0600"
+        content: "bootstrap-complete\n"
+      when:
+        - bootwright_install_wait_target == 'bootstrap'
+        - (bootwright_install_bootstrap_wait.rc | default(1) | int) == 0
 
     - name: Wait for agent install completion
       ansible.builtin.command:
@@ -21,13 +60,27 @@
       poll: "{{ bootwright_install_wait_poll_seconds }}"
       register: bootwright_install_wait
       changed_when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_target == 'install'
+
+    - name: Determine agent wait outcome
+      ansible.builtin.set_fact:
+        bootwright_install_wait_succeeded: >-
+          {{
+            (
+              (bootwright_install_bootstrap_marker_stat.stat.exists | default(false) | bool)
+              or ((bootwright_install_bootstrap_wait.rc | default(1) | int) == 0)
+            )
+            if bootwright_install_wait_target == 'bootstrap'
+            else ((bootwright_install_wait.rc | default(1) | int) == 0)
+          }}
+      changed_when: false
 
     - name: Record kubeconfig path
       ansible.builtin.copy:
         dest: "{{ bootwright_install_work_dir }}/kubeconfig.path"
         mode: "0600"
         content: "{{ bootwright_install_work_dir }}/auth/kubeconfig\n"
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Create local installer auth directory
       ansible.builtin.file:
@@ -36,14 +89,14 @@
         mode: "0700"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Fetch kubeconfig to local runtime state
       ansible.builtin.fetch:
         src: "{{ bootwright_install_work_dir }}/auth/kubeconfig"
         dest: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
         flat: true
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Restrict local kubeconfig permissions
       ansible.builtin.file:
@@ -51,14 +104,14 @@
         mode: "0600"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Fetch kubeadmin password to local runtime state
       ansible.builtin.fetch:
         src: "{{ bootwright_install_work_dir }}/auth/kubeadmin-password"
         dest: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
         flat: true
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Restrict local kubeadmin password permissions
       ansible.builtin.file:
@@ -66,7 +119,7 @@
         mode: "0600"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Create local cluster secrets directory
       ansible.builtin.file:
@@ -75,7 +128,7 @@
         mode: "0700"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Store kubeconfig in cluster secrets
       ansible.builtin.copy:
@@ -84,7 +137,7 @@
         mode: "0600"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Store kubeadmin password in cluster secrets
       ansible.builtin.copy:
@@ -93,7 +146,7 @@
         mode: "0600"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Record local kubeconfig path
       ansible.builtin.copy:
@@ -102,7 +155,7 @@
         content: "{{ bootwright_cluster_secrets_dir }}/kubeconfig\n"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when: bootwright_install_wait_succeeded | bool
 
     - name: Clean virtual media after successful install
       ansible.builtin.include_role:
@@ -114,7 +167,9 @@
       loop_control:
         loop_var: bootwright_cleanup_media_component
         label: "{{ bootwright_cleanup_media_component.name }} via {{ bootwright_cleanup_media_component.cleanupMediaRole }}"
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Find remote generated agent ISO files
       ansible.builtin.find:
@@ -122,7 +177,9 @@
         patterns: "agent.*.iso"
         file_type: any
       register: bootwright_remote_agent_iso_cleanup_find
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Remove remote generated agent ISO files
       ansible.builtin.file:
@@ -131,13 +188,17 @@
       loop: "{{ bootwright_remote_agent_iso_cleanup_find.files | default([]) }}"
       loop_control:
         label: "{{ item.path }}"
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Remove remote generated boot artifacts
       ansible.builtin.file:
         path: "{{ bootwright_install_work_dir }}/boot-artifacts"
         state: absent
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Find local generated agent ISO files
       ansible.builtin.find:
@@ -147,7 +208,9 @@
       register: bootwright_local_agent_iso_cleanup_find
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Remove local generated agent ISO files
       ansible.builtin.file:
@@ -158,13 +221,17 @@
         label: "{{ item.path }}"
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Remove remote agent ISO path record
       ansible.builtin.file:
         path: "{{ bootwright_install_work_dir }}/agent-iso.path"
         state: absent
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
 
     - name: Remove local agent ISO path record
       ansible.builtin.file:
@@ -172,7 +239,9 @@
         state: absent
       delegate_to: localhost
       become: false
-      when: bootwright_install_wait.rc == 0
+      when:
+        - bootwright_install_wait_succeeded | bool
+        - bootwright_install_wait_target == 'install'
   always:
     - name: Read agent ISO publish token for cleanup
       ansible.builtin.slurp:
@@ -182,7 +251,9 @@
       become: false
       failed_when: false
       no_log: "{{ bootwright_no_log | default(true) | bool }}"
-      when: (bootwright_current_cluster.agentIsoPublishTargets | default([]) | length) > 0
+      when:
+        - bootwright_install_wait_target == 'install'
+        - (bootwright_current_cluster.agentIsoPublishTargets | default([]) | length) > 0
 
     - name: Set agent ISO publish cleanup token
       ansible.builtin.set_fact:
@@ -190,6 +261,7 @@
       changed_when: false
       no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when:
+        - bootwright_install_wait_target == 'install'
         - bootwright_agent_iso_publish_cleanup_token_file is defined
         - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0
 
@@ -199,7 +271,9 @@
       loop_control:
         loop_var: bootwright_agent_iso_publish_target
         label: "{{ bootwright_agent_iso_publish_target.stagePath }}"
-      when: (bootwright_agent_iso_publish_token | default('') | length) > 0
+      when:
+        - bootwright_install_wait_target == 'install'
+        - (bootwright_agent_iso_publish_token | default('') | length) > 0
 
     - name: Remove local agent ISO publish token
       ansible.builtin.file:
@@ -209,5 +283,6 @@
       become: false
       no_log: "{{ bootwright_no_log | default(true) | bool }}"
       when:
+        - bootwright_install_wait_target == 'install'
         - bootwright_agent_iso_publish_cleanup_token_file is defined
         - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0

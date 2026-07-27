@@ -693,9 +693,90 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 		t.Fatalf("local ISO path cleanup must run locally, got %v", got)
 	}
 	for _, idx := range []int{cleanMediaIdx, findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
-		if got := tasks[idx]["when"]; got != "bootwright_install_wait.rc == 0" {
-			t.Fatalf("%s must only clean after successful wait, got when=%v", tasks[idx]["name"], got)
+		if !stringListContains(tasks[idx]["when"], "bootwright_install_wait_succeeded | bool") {
+			t.Fatalf("%s must only clean after a successful wait, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
 		}
+		if !stringListContains(tasks[idx]["when"], "bootwright_install_wait_target == 'install'") {
+			t.Fatalf("%s must not clean installer media at the bootstrap gate, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+}
+
+func TestInstallAgentWaitsForBootstrapBeforePublishingCredentials(t *testing.T) {
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
+	guard := topTasks[findAnsibleTask(t, topTasks, "Validate selected agent wait target")]
+	guardAssert, ok := guard["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert body", guard["name"])
+	}
+	if !stringListContains(guardAssert["that"], "bootwright_install_wait_target in ['bootstrap', 'install']") {
+		t.Fatalf("wait target validation got %v", guardAssert["that"])
+	}
+
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+	markerIdx := findAnsibleTask(t, tasks, "Check recorded agent bootstrap completion")
+	bootstrapIdx := findAnsibleTask(t, tasks, "Wait for agent bootstrap completion")
+	recordIdx := findAnsibleTask(t, tasks, "Record agent bootstrap completion")
+	installIdx := findAnsibleTask(t, tasks, "Wait for agent install completion")
+	outcomeIdx := findAnsibleTask(t, tasks, "Determine agent wait outcome")
+	kubeconfigIdx := findAnsibleTask(t, tasks, "Store kubeconfig in cluster secrets")
+	if !(markerIdx < bootstrapIdx && bootstrapIdx < recordIdx && recordIdx < installIdx && installIdx < outcomeIdx && outcomeIdx < kubeconfigIdx) {
+		t.Fatalf("wait_install must probe the bootstrap marker, wait, record it, then resolve the outcome before publishing credentials")
+	}
+
+	bootstrap, ok := tasks[bootstrapIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", tasks[bootstrapIdx]["name"])
+	}
+	if !stringListContains(bootstrap["argv"], "bootstrap-complete") {
+		t.Fatalf("bootstrap wait argv = %v", bootstrap["argv"])
+	}
+	if got := tasks[bootstrapIdx]["async"]; got != "{{ bootwright_install_bootstrap_timeout_seconds }}" {
+		t.Fatalf("bootstrap wait async got %v", got)
+	}
+	for _, want := range []string{
+		"bootwright_install_wait_target == 'bootstrap'",
+		"not bootwright_install_bootstrap_marker_stat.stat.exists",
+	} {
+		if !stringListContains(tasks[bootstrapIdx]["when"], want) {
+			t.Fatalf("bootstrap wait when missing %q: %v", want, tasks[bootstrapIdx]["when"])
+		}
+	}
+
+	install, ok := tasks[installIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", tasks[installIdx]["name"])
+	}
+	if !stringListContains(install["argv"], "install-complete") {
+		t.Fatalf("install wait argv = %v", install["argv"])
+	}
+	if got := tasks[installIdx]["when"]; got != "bootwright_install_wait_target == 'install'" {
+		t.Fatalf("install wait when got %v", got)
+	}
+	if got := tasks[kubeconfigIdx]["when"]; got != "bootwright_install_wait_succeeded | bool" {
+		t.Fatalf("credential publication when got %v", got)
+	}
+
+	always := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "always")
+	for _, name := range []string{
+		"Read agent ISO publish token for cleanup",
+		"Set agent ISO publish cleanup token",
+		"Remove staged agent ISO publish directories",
+		"Remove local agent ISO publish token",
+	} {
+		idx := findAnsibleTask(t, always, name)
+		if !stringListContains(always[idx]["when"], "bootwright_install_wait_target == 'install'") {
+			t.Fatalf("%s must not unstage boot media at the bootstrap gate, got when=%v", name, always[idx]["when"])
+		}
+	}
+}
+
+func TestInstallAgentClearsBootstrapMarkerBeforeISOGeneration(t *testing.T) {
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/create_iso.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Create cluster agent ISO when install is not already complete")], "block")
+	stale := tasks[findAnsibleTask(t, tasks, "Remove stale installer state before ISO generation")]
+	if !stringListContains(stale["loop"], "bootstrap-complete") {
+		t.Fatalf("ISO generation must clear the recorded bootstrap completion, got loop=%v", stale["loop"])
 	}
 }
 
@@ -756,7 +837,7 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 		if got := tasks[idx]["become"]; got != false {
 			t.Fatalf("%s must not become remotely, got %v", tasks[idx]["name"], got)
 		}
-		if got := tasks[idx]["when"]; got != "bootwright_install_wait.rc == 0" {
+		if got := tasks[idx]["when"]; got != "bootwright_install_wait_succeeded | bool" {
 			t.Fatalf("%s must only run after successful wait, got %v", tasks[idx]["name"], got)
 		}
 	}

@@ -1,6 +1,6 @@
 ---
 title: Operations and Recovery
-description: The three apply modes including break-glass --converge-drifted and greenfield --expect-new, full-lifecycle and staged destroy, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, and --include-unowned / --skip-unreachable.
+description: The three apply modes including break-glass --converge-drifted and greenfield --expect-new, full-lifecycle and staged destroy, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, --include-unowned / --skip-unreachable, run timings and the critical path, and the concurrency caps.
 ---
 
 # Operations and recovery
@@ -601,6 +601,125 @@ bootwright apply --clusters ceph-nprd --verbose
     opt-in debugging aid only; default runs stay redacted. Avoid it on shared
     terminals and scrub any logs captured during a verbose run.
 
+## Timing a run and reading its critical path
+
+Every mutating run records per-task timestamps in its ledger. `status --timings`
+reports them for the current run, or for any recorded run with `--run <runID>`:
+
+```text
+bootwright status --timings
+bootwright status --run apply-20260727T101500.000000000Z --timings
+bootwright status --run apply-20260727T101500.000000000Z --timings --output json
+```
+
+```text
+Bootwright: status --timings
+
+Run
+  Run: apply-20260727T101500.000000000Z
+  Target: clusters
+  Status: ok
+  Wall clock: 2m0s
+  Parallelism: tasks 16, per host 4, Redfish 8
+
+Critical path
+  [DONE] Create ISO demo: 10s (cumulative 10s)
+  [DONE] Boot demo nodes: 1m0s (cumulative 1m10s)
+  [DONE] Install demo: 10s (cumulative 1m20s)
+  Total: 1m20s of 2m0s wall clock (67%)
+
+Task timings
+  [DONE] Boot demo nodes: 1m0s  queue 0s  blocked 0s  cluster demo  kind nodeBoot
+  [DONE] Infra demo: 30s  queue 5s  blocked 4s on host slot host:bastion:machine  cluster demo  kind infra
+```
+
+- **Run** — wall clock plus the concurrency caps the run actually ran under. A
+  cap that never constrained this graph — its value already covered every task
+  that could run at once — prints as `unbounded`.
+- **Critical path** — the longest dependency chain through the run's task graph,
+  each hop with its own duration and the running total.
+- **Task timings** — every task, longest first, with its duration, `queue` (ready
+  but waiting for a free slot), `blocked` (waiting on a dependency or a named
+  slot), and what it was blocked on.
+
+**Compare the critical-path total, not the wall clock.** A run cannot finish
+before its longest dependency chain does, so speeding up thirty tasks that all
+run concurrently *beside* that chain buys nothing — the total is unchanged and
+only the idle headroom grew. Work that shortens the run either removes a hop
+from the critical path, shortens a hop on it, or removes an edge that put it
+there. Queue and blocked time reported *on a critical-path hop* is the exception
+worth chasing directly: it means a concurrency cap or an ordering edge, not the
+task itself, is holding the run.
+
+`--output json` emits the same report machine-readably (`criticalPath.hops[]`
+with `durationSeconds`/`cumulativeSeconds`, and `tasks[]` with
+`queueWaitSeconds`, `blockedWaitSeconds`, and `blockedOn`), which is the form to
+record if you want to track run cost across releases.
+
+!!! note "Flag combinations"
+    `--run` is only accepted together with `--timings`, and `--timings` cannot be
+    combined with `--watch` — a timing report describes a run, `--watch` follows
+    one. Without `--run`, the report covers the current run ledger.
+
+### Profiling the Ansible tasks inside a run
+
+`--timings` resolves down to the Bootwright task. To see which *Ansible* task
+inside one of them is slow, set `BOOTWRIGHT_ANSIBLE_PROFILE=1` for the run:
+
+```text
+BOOTWRIGHT_ANSIBLE_PROFILE=1 bootwright apply --clusters demo --yes
+```
+
+Each Ansible task result is then appended as one JSON line to
+`runs/history/<run-id>/tasks/<task-id>/artifacts/task-profile.jsonl`, alongside
+that task's ordinary Ansible output log. Nothing else about the run changes —
+the callback swallows its own errors, so profiling cannot alter the outcome of a
+play.
+
+!!! note "Profiling is opt-in on purpose"
+    It works by enabling an extra Ansible callback plugin, and callback dispatch
+    has disagreed with a callback's hook signature before on an unstable
+    `ansible-core` pin — printing `Callback dispatch … failed for plugin` noise
+    across an otherwise healthy run. Leaving profiling off keeps every normal run
+    on the shipped callback set; enable it for the run you are investigating
+    rather than as a standing setting.
+
+## Tuning apply and destroy concurrency
+
+Independent tasks run in parallel under three caps. Each has a default and an
+environment-variable escape hatch:
+
+| Environment variable | Caps | Default |
+| --- | --- | --- |
+| `BOOTWRIGHT_APPLY_PARALLELISM` | Tasks in flight across the whole run | `NumCPU × 2`, clamped to the range 8–32 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST` | Tasks in flight against any single host (hypervisor, bastion, vCenter) | 4 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH` | Concurrent Redfish/BMC operations | 8 |
+
+Despite the `APPLY` in the names, `destroy` plans its task graph under the same
+three caps.
+
+These are environment variables and not flags by design: the parallelism CLI
+flags were removed deliberately, because concurrency is a property of the
+machine and estate you run from, not of an individual invocation. Keep the value
+in your shell profile or CI job, not in the command you paste into a runbook.
+
+A requested value is clamped down to what the task graph can actually use — ask
+for 64 in a run that has 9 tasks and you get 9 — and raised to the floor a single
+task needs to be dispatchable at all. A value that is not a positive integer is
+ignored and the default applies. `status --timings` prints what the run really
+used, and prints `unbounded` for a cap that never constrained the graph — a cap
+reported that way is not the thing making the run slow.
+
+!!! warning "The per-host cap of 4 throttles libvirt VM creation"
+    The per-host cap counts every task targeting the same host, so on a lab where
+    one hypervisor backs the whole fleet, virtual machines are now created four
+    at a time instead of all at once. That is deliberate — an unbounded fan-out
+    onto a single libvirtd is how storage pools and `virsh` calls start timing
+    out — but it is a change in behaviour for large single-hypervisor labs. If
+    the hypervisor has the headroom, raise
+    `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST`; `status --timings` shows what the
+    cap is costing as `blocked … on host slot host:<host>:machine`.
+
 ## Where run logs, the ledger, and leases live
 
 Mutating runs write their state under the root-managed context tree at
@@ -613,6 +732,7 @@ there.
 | `runs/history/<run-id>/bootwright.log` | The shared apply flow log: shared-stage tool output plus one `<cluster> apply initiated … / finished successfully \| failed` marker per cluster that points at its split-out log. |
 | `runs/history/<run-id>/bootwright-<cluster>.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
 | `runs/history/<run-id>/input/` | The forensic snapshot of the input YAML an `apply` loaded, written at the start of the mutating run. |
+| `runs/history/<run-id>/tasks/<task-id>/artifacts/` | One task's Ansible output log, plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
 | `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `diff` classifies against. |
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |

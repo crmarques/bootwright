@@ -34,22 +34,70 @@ type PartialStorageDestroy struct {
 	Found      bool
 }
 
-func StorageDestroyResultPath(runLogPath string) string {
-	return filepath.Join(filepath.Dir(runLogPath), "tasks", workflow.DestroyStorageClustersTaskID, "artifacts", "storage-destroy-result.json")
+const storageDestroyResultFileName = "storage-destroy-result.json"
+
+func storageDestroyTaskResultPath(runLogPath, taskID string) string {
+	return filepath.Join(filepath.Dir(runLogPath), "tasks", taskID, "artifacts", storageDestroyResultFileName)
+}
+
+func storageDestroyTaskIDs(runLogPath string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(runLogPath), "tasks"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list destroy task artifacts: %w", err)
+	}
+	var out []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name != workflow.DestroyStorageClustersTaskID && !strings.HasPrefix(name, workflow.DestroyStorageClustersTaskID+".") {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func readStorageDestroyResults(runLogPath string) (storageDestroyResult, bool, error) {
+	taskIDs, err := storageDestroyTaskIDs(runLogPath)
+	if err != nil {
+		return storageDestroyResult{}, false, err
+	}
+	var merged storageDestroyResult
+	complete := len(taskIDs) > 0
+	for _, taskID := range taskIDs {
+		result, ok, err := readStorageDestroyResult(storageDestroyTaskResultPath(runLogPath, taskID))
+		if err != nil {
+			return storageDestroyResult{}, false, err
+		}
+		if !ok {
+			complete = false
+			continue
+		}
+		merged.PartialClusters = append(merged.PartialClusters, result.PartialClusters...)
+		merged.SkippedNodes = append(merged.SkippedNodes, result.SkippedNodes...)
+		merged.SkippedHosts = append(merged.SkippedHosts, result.SkippedHosts...)
+	}
+	return merged, complete, nil
 }
 
 func RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath string) (PartialStorageDestroy, error) {
 	var out PartialStorageDestroy
-	result, ok, err := readStorageDestroyResult(StorageDestroyResultPath(runLogPath))
+	result, ok, err := readStorageDestroyResults(runLogPath)
 	if err != nil {
 		return out, err
 	}
 	out.Found = ok
-	if !ok || len(result.PartialClusters) == 0 {
+	if len(result.PartialClusters) == 0 {
 		return out, nil
 	}
 	out.Clusters = uniqueSorted(result.PartialClusters)
-	out.Skipped = strings.Join(result.SkippedNodes, ",")
+	out.Skipped = strings.Join(uniqueSorted(result.SkippedNodes), ",")
 	records, err := ownership.LoadContext(ownershipDir, contextName)
 	if err != nil {
 		return out, fmt.Errorf("load ownership records to persist partial-destroy markers: %w", err)

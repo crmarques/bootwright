@@ -30,9 +30,12 @@ selection remains in `~/.bootwright/contexts.yaml`.
 OpenShift agent apply is scheduled as dependency stages: prepare provider and
 machine infrastructure, create the cluster agent ISO with `openshift-install`,
 boot each declared node through its rendered boot adapter as parallel node
-tasks, then run `openshift-install agent wait-for install-complete` after every
-node boot task has completed. Post-install add-on apply is scheduled after that
-install wait.
+tasks, then wait in two steps after every node boot task has completed:
+`openshift-install agent wait-for bootstrap-complete`, which also publishes the
+captured `kubeconfig` and `kubeadmin-password`, followed by
+`openshift-install agent wait-for install-complete`. Post-install add-on apply
+and node config apply are scheduled after the install wait, never after the
+bootstrap wait ([ADR 0022](adr/0022-cluster-wait-bootstrap-boundary.md)).
 
 Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
 tool inputs under `storage/<storageCluster>/`. The `machines` sub-phase (within

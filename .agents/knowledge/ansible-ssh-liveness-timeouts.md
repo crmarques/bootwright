@@ -27,3 +27,8 @@ completes the handshake and then stalls, tearing the connection down after
 touching `ssh_common_args` (the same line carries
 `StrictHostKeyChecking=accept-new`); removing them regresses to unbounded
 hangs that look like a frozen apply.
+
+This cfg line does NOT reach hosts whose inventory entry sets
+`ansible_ssh_common_args` — that variable fully replaces it, so the inventory
+string must carry the keepalives itself. See
+ansible-ssh-common-args-precedence.md.

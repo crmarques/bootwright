@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -428,14 +429,248 @@ func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var unscopedStorage *ApplyTask
-	for i := range unscoped {
-		if unscoped[i].Entry.Kind == DestroyTaskKindStorageCluster {
-			unscopedStorage = &unscoped[i]
+	var covered []string
+	for _, task := range unscoped {
+		if task.Entry.Kind != DestroyTaskKindStorageCluster {
+			continue
+		}
+		covered = append(covered, task.Entry.ResourceKeys...)
+	}
+	sort.Strings(covered)
+	if !reflect.DeepEqual(covered, []string{"ceph-render-ref", "ceph-selected"}) {
+		t.Fatalf("unscoped destroy must tear down every storage cluster; covered %v", covered)
+	}
+}
+
+func destroyStorageFanOutState(clusters map[string][]string) v1alpha1.State {
+	state := v1alpha1.State{}
+	names := make([]string, 0, len(clusters))
+	for name := range clusters {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	seen := map[string]bool{}
+	for _, name := range names {
+		nodes := make([]v1alpha1.StorageCephNode, 0, len(clusters[name]))
+		for _, machine := range clusters[name] {
+			nodes = append(nodes, v1alpha1.StorageCephNode{
+				Name:       machine,
+				MachineRef: v1alpha1.LocalObjectReference{Name: machine},
+			})
+			if seen[machine] {
+				continue
+			}
+			seen[machine] = true
+			state.Machines = append(state.Machines, v1alpha1.Machine{Metadata: v1alpha1.Metadata{Name: machine}})
+		}
+		state.StorageClusters = append(state.StorageClusters, v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: name},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{Nodes: nodes},
+				},
+			},
+		})
+	}
+	return state
+}
+
+func TestPlanDestroyTasksKeepsOneTaskForASingleStorageCluster(t *testing.T) {
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0", "a1"}})
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage := destroyTaskByID(t, tasks, DestroyStorageClustersTaskID)
+	if storage.Limit != render.GroupStorageHosts {
+		t.Fatalf("single-cluster storage teardown limit = %q, want the proven whole-group limit %q", storage.Limit, render.GroupStorageHosts)
+	}
+	if !reflect.DeepEqual(storage.Entry.ResourceKeys, []string{"ceph-a"}) {
+		t.Fatalf("single-cluster storage teardown keys = %v, want just the cluster; per-machine keys only serialise concurrent per-cluster tasks", storage.Entry.ResourceKeys)
+	}
+}
+
+func TestPlanDestroyTasksNeverFansOutOntoAnUnrenderedInventoryGroup(t *testing.T) {
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0"}, "ceph-external": {"x0"}})
+	for i := range state.StorageClusters {
+		if state.StorageClusters[i].Metadata.Name == "ceph-external" {
+			state.StorageClusters[i].Spec.Management = v1alpha1.StorageClusterManagementExternal
 		}
 	}
-	if unscopedStorage == nil || len(unscopedStorage.Entry.ResourceKeys) != 2 {
-		t.Fatalf("unscoped destroy must tear down every storage cluster; got %+v", unscopedStorage)
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage := destroyTaskByID(t, tasks, DestroyStorageClustersTaskID)
+	if storage.Limit != render.GroupStorageHosts {
+		t.Fatalf("storage teardown limit = %q; only one cluster renders an inventory group, and ansible aborts the whole run when --limit names a group the inventory never emitted", storage.Limit)
+	}
+	for _, task := range tasks {
+		if strings.HasPrefix(task.Entry.ID, DestroyStorageClustersTaskID+".") {
+			t.Fatalf("task %q limits itself to %q, but external storage clusters have no rendered host group", task.Entry.ID, task.Limit)
+		}
+	}
+}
+
+func TestPlanDestroyTasksFallsBackWholesaleWhenAnyClusterHasNoHostGroup(t *testing.T) {
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0"}, "ceph-b": {"b0"}, "ceph-empty": {}})
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, task := range tasks {
+		if task.Entry.Kind == DestroyTaskKindStorageCluster {
+			ids = append(ids, task.Entry.ID)
+		}
+	}
+	if !reflect.DeepEqual(ids, []string{DestroyStorageClustersTaskID}) {
+		t.Fatalf("storage teardown tasks = %v; when any selected cluster lacks a rendered host group the plan must fall back to the single proven whole-group task rather than drop that cluster or limit onto a group that does not exist", ids)
+	}
+	if got := destroyTaskByID(t, tasks, DestroyStorageClustersTaskID).Entry.ResourceKeys; !reflect.DeepEqual(got, []string{"ceph-a", "ceph-b", "ceph-empty"}) {
+		t.Fatalf("the fallback task must still claim every cluster it tears down, got %v", got)
+	}
+}
+
+func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0", "a1"}, "ceph-b": {"b0"}})
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []string{
+		"destroy.storage-clusters.ceph-a",
+		"destroy.storage-clusters.ceph-b",
+		"destroy.machine-registration",
+		"destroy.storage-node-access.ceph-a",
+		"destroy.storage-node-access.ceph-b",
+		"destroy.infra-components",
+		"destroy.machine-infra",
+		"destroy.container-clusters",
+		"destroy.provider-services",
+	}
+	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
+		t.Fatalf("fanned destroy plan = %v, want %v", got, wantIDs)
+	}
+	assertDestroyOrderingEdges(t, tasks, map[string][]string{
+		"destroy.storage-clusters.ceph-a":    nil,
+		"destroy.storage-clusters.ceph-b":    nil,
+		"destroy.machine-registration":       {"destroy.storage-clusters.ceph-a", "destroy.storage-clusters.ceph-b"},
+		"destroy.storage-node-access.ceph-a": {"destroy.machine-registration"},
+		"destroy.storage-node-access.ceph-b": {"destroy.machine-registration"},
+		"destroy.infra-components":           {"destroy.storage-node-access.ceph-a", "destroy.storage-node-access.ceph-b"},
+		"destroy.machine-infra":              {"destroy.infra-components"},
+		"destroy.container-clusters":         {"destroy.machine-infra"},
+		"destroy.provider-services":          {"destroy.machine-infra", "destroy.container-clusters"},
+	})
+	if got := destroyTaskByID(t, tasks, "destroy.container-clusters").Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
+		t.Fatalf("fanning storage out must keep the container-cluster hard dependency on machine teardown, got %v", got)
+	}
+	for _, id := range []string{"destroy.storage-clusters.ceph-a", "destroy.storage-node-access.ceph-a"} {
+		task := destroyTaskByID(t, tasks, id)
+		if task.Limit != render.StorageClusterGroupName("ceph-a") {
+			t.Fatalf("task %q limit = %q, want its own cluster group so the play only reaches that cluster's nodes", id, task.Limit)
+		}
+		want := []string{"ceph-a", DestroyMachineResourceKeyPrefix + "a0", DestroyMachineResourceKeyPrefix + "a1"}
+		if !reflect.DeepEqual(task.Entry.ResourceKeys, want) {
+			t.Fatalf("task %q resource keys = %v, want %v", id, task.Entry.ResourceKeys, want)
+		}
+	}
+}
+
+func TestPlanDestroyTasksSerialisesStorageClustersSharingANode(t *testing.T) {
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0", "shared"}, "ceph-b": {"shared", "b1"}})
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := destroyTaskByID(t, tasks, "destroy.storage-clusters.ceph-a")
+	b := destroyTaskByID(t, tasks, "destroy.storage-clusters.ceph-b")
+	shared := DestroyMachineResourceKeyPrefix + "shared"
+	if !slices.Contains(a.Entry.ResourceKeys, shared) || !slices.Contains(b.Entry.ResourceKeys, shared) {
+		t.Fatalf("both teardowns of the shared node must claim %q or two rm-cluster runs race on one host; got %v and %v", shared, a.Entry.ResourceKeys, b.Entry.ResourceKeys)
+	}
+	if busy := busyTaskResourceKey(b, map[string]int{shared: 1}); busy != shared {
+		t.Fatalf("scheduler must hold %q back while the sibling cluster's teardown holds the shared node, got %q", shared, busy)
+	}
+}
+
+func TestPlanDestroyTasksFansOutOnlyTheSelectedStorageClusters(t *testing.T) {
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0"}, "ceph-b": {"b0"}, "ceph-c": {"c0"}})
+	tasks, err := PlanDestroyTasks("clusters", state, "limit", nil, []string{"ceph-a", "ceph-c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var storage []string
+	for _, task := range tasks {
+		if task.Entry.Kind == DestroyTaskKindStorageCluster {
+			storage = append(storage, task.Entry.ID)
+		}
+	}
+	want := []string{"destroy.storage-clusters.ceph-a", "destroy.storage-clusters.ceph-c"}
+	if !reflect.DeepEqual(storage, want) {
+		t.Fatalf("fan-out must stay inside the selected work set, got %v want %v", storage, want)
+	}
+}
+
+func TestSucceededDestroyTaskKindsScopesSuccessToItsOwnCluster(t *testing.T) {
+	outcome := SucceededDestroyTaskKinds(RunLedger{Tasks: []TaskLedgerEntry{
+		{
+			ID:           "destroy.storage-clusters.ceph-a",
+			Kind:         DestroyTaskKindStorageCluster,
+			ResourceKeys: []string{"ceph-a", DestroyMachineResourceKeyPrefix + "a0"},
+			Status:       TaskStatusOK,
+		},
+		{
+			ID:           "destroy.storage-clusters.ceph-b",
+			Kind:         DestroyTaskKindStorageCluster,
+			ResourceKeys: []string{"ceph-b"},
+			Status:       TaskStatusFailed,
+		},
+	}})
+	if !outcome.Covers(DestroyTaskKindStorageCluster, "ceph-a") {
+		t.Fatal("the cluster whose teardown succeeded must be covered")
+	}
+	if outcome.Covers(DestroyTaskKindStorageCluster, "ceph-b") {
+		t.Fatal("ceph-b's teardown failed: rolling success up by task kind authorizes a cluster that was never wiped")
+	}
+	if outcome[DestroyTaskKindStorageCluster] {
+		t.Fatal("a kind is only fleet-wide successful when every task of that kind succeeded")
+	}
+	if outcome.Covers(DestroyTaskKindStorageCluster, DestroyMachineResourceKeyPrefix+"a0") {
+		t.Fatal("per-machine serialisation keys are not cluster names and must never authorize a cluster")
+	}
+	if !outcome.Attempted(DestroyTaskKindStorageCluster, "ceph-b") {
+		t.Fatal("ceph-b's teardown ran, so callers must be able to tell an attempted-and-failed cluster from one never in scope")
+	}
+	if outcome.Attempted(DestroyTaskKindMachineInfra, "ceph-a") {
+		t.Fatal("no machine teardown ran in this ledger")
+	}
+}
+
+func TestSucceededDestroyTaskKindsMarksKindsWhoseTasksAllSucceeded(t *testing.T) {
+	outcome := SucceededDestroyTaskKinds(RunLedger{Tasks: []TaskLedgerEntry{
+		{ID: "destroy.storage-clusters.ceph-a", Kind: DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph-a"}, Status: TaskStatusOK},
+		{ID: "destroy.storage-clusters.ceph-b", Kind: DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph-b"}, Status: TaskStatusOK},
+		{ID: "destroy.machine-infra", Kind: DestroyTaskKindMachineInfra, Status: TaskStatusFailed},
+	}})
+	if !outcome[DestroyTaskKindStorageCluster] {
+		t.Fatal("every storage teardown task succeeded, so the kind is covered fleet-wide")
+	}
+	if outcome.Covers(DestroyTaskKindMachineInfra, "ceph-a") {
+		t.Fatal("the machine teardown failed and must not be covered for any cluster")
+	}
+}
+
+func TestDestroyOutcomeNilMeansEverythingSucceeded(t *testing.T) {
+	var outcome DestroyOutcome
+	if !outcome.Covers(DestroyTaskKindStorageCluster, "ceph-a") {
+		t.Fatal("a nil outcome is the fully successful run and covers every cluster")
+	}
+	if outcome.Attempted(DestroyTaskKindStorageCluster, "ceph-a") {
+		t.Fatal("a nil outcome carries no evidence that a step was attempted")
 	}
 }
 

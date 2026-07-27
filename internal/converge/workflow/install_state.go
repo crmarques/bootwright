@@ -914,12 +914,12 @@ func skipClusterInstallTasks(tasks []ApplyTask, clusterName string, kinds []stri
 }
 
 func allClusterInstallTaskKinds() []string {
-	return []string{ApplyTaskKindClusterInstall, ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindInstallWait}
+	return []string{ApplyTaskKindClusterInstall, ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindBootstrapWait, ApplyTaskKindInstallWait}
 }
 
 func isClusterInstallTaskKind(kind string) bool {
 	switch kind {
-	case ApplyTaskKindClusterInstall, ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindInstallWait:
+	case ApplyTaskKindClusterInstall, ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindBootstrapWait, ApplyTaskKindInstallWait:
 		return true
 	default:
 		return false

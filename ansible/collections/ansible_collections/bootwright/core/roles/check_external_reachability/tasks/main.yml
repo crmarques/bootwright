@@ -1,18 +1,55 @@
 ---
 
-- name: Run per-cluster external validation
-  ansible.builtin.include_tasks: per_cluster.yml
-  loop: "{{ bootwright_clusters | default([]) }}"
+- name: Flatten external validation components
+  ansible.builtin.set_fact:
+    bootwright_validate_components: >-
+      {{
+        bootwright_clusters | default([])
+        | map(attribute='components') | flatten | list
+      }}
+  changed_when: false
+
+- name: Compute external probe targets
+  ansible.builtin.set_fact:
+    bootwright_validate_bmc_machines: >-
+      {{
+        bootwright_validate_components
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('externalBMC', 'defined')
+        | selectattr('boot', 'defined')
+        | list
+      }}
+  changed_when: false
+
+- name: Compute distinct external BMC credentials references
+  ansible.builtin.set_fact:
+    bootwright_validate_bmc_cred_refs: >-
+      {{
+        bootwright_validate_bmc_machines
+        | map(attribute='boot.redfish.credentialsRef', default='')
+        | select | unique | list
+      }}
+  changed_when: false
+
+- name: Load external BMC credentials once per credentials reference
+  ansible.builtin.include_tasks: credentials.yml
+  loop: "{{ bootwright_validate_bmc_cred_refs }}"
   loop_control:
-    loop_var: bootwright_validate_cluster
-    label: "{{ bootwright_validate_cluster.name }}"
+    loop_var: bootwright_validate_cred_ref
+    label: "{{ bootwright_validate_cred_ref }}"
+
+- name: Validate external Redfish BMCs
+  ansible.builtin.include_tasks: bmc.yml
+  loop: "{{ bootwright_validate_bmc_machines }}"
+  loop_control:
+    loop_var: bootwright_validate_machine
+    label: "{{ bootwright_validate_machine.name }} @ {{ bootwright_validate_machine.boot.redfish.baseUrl }}"
 
 - name: Run external-proxy validation
   ansible.builtin.include_tasks: proxy.yml
   when:
     - bootwright_proxy is defined
     - (bootwright_proxy.http | default('') | length) > 0 or (bootwright_proxy.https | default('') | length) > 0
-    - (bootwright_clusters | default([])
-       | map(attribute='components') | flatten
+    - (bootwright_validate_components
        | selectattr('kind', 'equalto', 'proxy')
        | list | length) == 0

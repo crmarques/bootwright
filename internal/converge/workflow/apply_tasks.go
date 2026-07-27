@@ -23,6 +23,7 @@ const (
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindHostVirtctl            = "hostVirtctl"
 	ApplyTaskKindNodeBoot               = "nodeBoot"
+	ApplyTaskKindBootstrapWait          = "bootstrapWait"
 	ApplyTaskKindInstallWait            = "installWait"
 	ApplyTaskKindStorageCluster         = "storageCluster"
 	ApplyTaskKindClusterAddon           = "clusterAddon"
@@ -67,6 +68,7 @@ func ApplyTaskKinds() []string {
 		ApplyTaskKindClusterISO,
 		ApplyTaskKindHostVirtctl,
 		ApplyTaskKindNodeBoot,
+		ApplyTaskKindBootstrapWait,
 		ApplyTaskKindInstallWait,
 		ApplyTaskKindStorageCluster,
 		ApplyTaskKindClusterAddon,

@@ -836,11 +836,18 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
-	if calls != 1 {
-		t.Fatalf("runner factory calls = %d, want 1", calls)
+	if calls != 2 {
+		t.Fatalf("runner factory calls = %d, want 2", calls)
 	}
 	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_container_cluster_wait_agent_install") {
 		t.Fatalf("playbook = %q, want wait-agent-install.yml", runner.lastSpec.Playbook)
+	}
+	bootstrap, ok := ledger.Task("wait-bootstrap.sno-libvirt")
+	if !ok {
+		t.Fatal("missing bootstrap wait task")
+	}
+	if bootstrap.Status != TaskStatusOK {
+		t.Fatalf("bootstrap wait status = %s, want ok", bootstrap.Status)
 	}
 	for _, id := range []string{"iso.sno-libvirt", "boot.sno-libvirt"} {
 		task, ok := ledger.Task(id)
@@ -1155,6 +1162,7 @@ func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	gotIDs := applyTaskIDs(tasks)
 	wantIDs := []string{
 		"iso.demo",
+		"wait-bootstrap.demo",
 		"wait.demo",
 		"addon.demo.a",
 		"addon.demo.b",
@@ -1175,7 +1183,8 @@ func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
 	}
 	assertTaskMissing(t, baseOnly, "iso.sno-libvirt")
 	assertTaskDeps(t, baseOnly, "boot.sno-libvirt")
-	assertTaskDeps(t, baseOnly, "wait.sno-libvirt", "boot.sno-libvirt")
+	assertTaskDeps(t, baseOnly, "wait-bootstrap.sno-libvirt", "boot.sno-libvirt")
+	assertTaskDeps(t, baseOnly, "wait.sno-libvirt", "wait-bootstrap.sno-libvirt")
 
 	depsBase, err := PlanApplyTasksChecked(ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase}}, state)
 	if err != nil {
@@ -1195,7 +1204,8 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 
 	assertTaskDeps(t, tasks, "storage.ceph", "storageinfra.ceph")
 	assertTaskDeps(t, tasks, "iso.demo")
-	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
+	assertTaskDeps(t, tasks, "wait-bootstrap.demo", "iso.demo")
+	assertTaskDeps(t, tasks, "wait.demo", "wait-bootstrap.demo")
 	assertTaskDeps(t, tasks, "addon.demo.odf", "wait.demo")
 }
 

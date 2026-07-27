@@ -280,11 +280,35 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 			} else {
 				waitDeps = append(waitDeps, isoDeps...)
 			}
+			bootstrapID := containerBootstrapWaitTaskID(name)
+			if err := graph.Add(Activity{
+				ID:                   bootstrapID,
+				Provides:             []CapabilityRef{clusterBootstrappedCapability(name)},
+				ExplicitDependencies: waitDeps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:          bootstrapID,
+						Kind:        ApplyTaskKindBootstrapWait,
+						Label:       "wait bootstrap " + name,
+						Cluster:     name,
+						ClusterKind: ApplyClusterKindContainer,
+						Status:      TaskStatusPending,
+					},
+					Playbook:           applyWaitInstallPlaybook,
+					Limit:              render.GroupOCPHosts,
+					Forks:              1,
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_install_wait_target=bootstrap"},
+					State:              clusterState,
+					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
+				},
+			}); err != nil {
+				return err
+			}
 			waitID := "wait." + name
 			if err := graph.Add(Activity{
 				ID:                   waitID,
 				Provides:             []CapabilityRef{clusterInstalledCapability(name)},
-				ExplicitDependencies: waitDeps,
+				ExplicitDependencies: []string{bootstrapID},
 				Task: ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:          waitID,
@@ -297,7 +321,7 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 					Playbook:           applyWaitInstallPlaybook,
 					Limit:              render.GroupOCPHosts,
 					Forks:              1,
-					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name},
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_install_wait_target=install"},
 					State:              clusterState,
 					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 				},
@@ -307,6 +331,14 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 		}
 	}
 	return nil
+}
+
+func containerBootstrapWaitTaskID(cluster string) string {
+	return "wait-bootstrap." + cluster
+}
+
+func clusterBootstrappedCapability(cluster string) CapabilityRef {
+	return CapabilityRef{Kind: "cluster.bootstrapped", Name: cluster}
 }
 
 func virtctlDesiredHashVars(host, mirror string) map[string]string {

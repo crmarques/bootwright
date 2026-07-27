@@ -225,12 +225,12 @@ func TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess(t *testing.T) {
 }
 
 func TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess(t *testing.T) {
-	include := destroyKindIncluded(map[string]bool{workflow.DestroyTaskKindMachineInfra: true})
-	if !include(workflow.DestroyTaskKindStorageNodeAccess) {
+	include := destroyKindIncluded(workflow.DestroyOutcome{workflow.DestroyTaskKindMachineInfra: true})
+	if !include(workflow.DestroyTaskKindStorageNodeAccess, "ceph-a") {
 		t.Fatal("a successful Machine infrastructure destroy wipes the machine, so it must also count as reverting storage node access")
 	}
-	includeStorageOnly := destroyKindIncluded(map[string]bool{workflow.DestroyTaskKindStorageCluster: true})
-	if includeStorageOnly(workflow.DestroyTaskKindStorageNodeAccess) {
+	includeStorageOnly := destroyKindIncluded(workflow.DestroyOutcome{workflow.DestroyTaskKindStorageCluster: true})
+	if includeStorageOnly(workflow.DestroyTaskKindStorageNodeAccess, "ceph-a") {
 		t.Fatal("a successful Storage clusters destroy must not, by itself, imply storage node access was reverted -- that is now a separate destroy step that can fail independently")
 	}
 }

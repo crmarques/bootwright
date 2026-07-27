@@ -78,6 +78,65 @@ func TestRecordPartialStorageDestroyStampsOwnershipRecord(t *testing.T) {
 	}
 }
 
+func writeStorageDestroyTaskResult(t *testing.T, runsDir, runID, taskID, content string) string {
+	t.Helper()
+	runLog := filepath.Join(runsDir, "history", runID, "bootwright.log")
+	artifactDir := filepath.Join(runsDir, "history", runID, "tasks", taskID, "artifacts")
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+		t.Fatalf("mkdir artifacts: %v", err)
+	}
+	if content == "" {
+		return runLog
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "storage-destroy-result.json"), []byte(content), 0o600); err != nil {
+		t.Fatalf("write result: %v", err)
+	}
+	return runLog
+}
+
+func TestRecordPartialStorageDestroyCollectsEveryPerClusterTask(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	runID := "destroy-20260101T000000Z"
+
+	writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-a",
+		`{"partialClusters":["ceph-a"],"skippedNodes":["ceph-a1"],"skippedHosts":["storage__ceph-a__ceph-a1"]}`)
+	runLog := writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-b",
+		`{"partialClusters":["ceph-b"],"skippedNodes":["ceph-b1"],"skippedHosts":["storage__ceph-b__ceph-b1"]}`)
+
+	partial, err := RecordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog)
+	if err != nil {
+		t.Fatalf("RecordPartialStorageDestroy: %v", err)
+	}
+	if !partial.Found {
+		t.Fatal("every per-cluster teardown task reported, so the run has a complete report")
+	}
+	if len(partial.Clusters) != 2 || partial.Clusters[0] != "ceph-a" || partial.Clusters[1] != "ceph-b" {
+		t.Fatalf("partial clusters = %v; a per-cluster fan-out writes one report per task and every one of them must be read, or a cluster with unwiped nodes is silently treated as fully destroyed", partial.Clusters)
+	}
+	if partial.Skipped != "ceph-a1,ceph-b1" {
+		t.Fatalf("skipped nodes = %q, want both clusters' skipped nodes", partial.Skipped)
+	}
+}
+
+func TestRecordPartialStorageDestroyMissingPerClusterReportIsIncomplete(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	runID := "destroy-20260101T000000Z"
+
+	writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-a",
+		`{"partialClusters":[],"skippedNodes":[],"skippedHosts":[]}`)
+	runLog := writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-b", "")
+
+	partial, err := RecordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog)
+	if err != nil {
+		t.Fatalf("RecordPartialStorageDestroy: %v", err)
+	}
+	if partial.Found {
+		t.Fatal("ceph-b's teardown task produced no completion report, so the run must not be reported as fully accounted for")
+	}
+}
+
 func TestRecordPartialStorageDestroyNoResultIsClean(t *testing.T) {
 	dir := t.TempDir()
 	runLog := filepath.Join(dir, "runs", "history", "destroy-x", "bootwright.log")
