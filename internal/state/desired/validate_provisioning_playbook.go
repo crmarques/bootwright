@@ -46,6 +46,9 @@ func validateProvisioningPlaybooks(state v1alpha1.State) []string {
 
 		baseDir := filepath.Dir(p.SourcePath)
 		errs = append(errs, validateContainedFile(prefix+".playbook", baseDir, p.Spec.Playbook, true)...)
+		if p.Spec.Playbook != "" && !hookPathHasSegment(p.Spec.Playbook, "playbooks") {
+			errs = append(errs, fmt.Sprintf("%s.playbook %q must live under a playbooks/ directory so the loader does not parse it as desired state", prefix, p.Spec.Playbook))
+		}
 		if p.Spec.RolesPath != "" {
 			errs = append(errs, validateContainedDir(prefix+".rolesPath", baseDir, p.Spec.RolesPath)...)
 		}

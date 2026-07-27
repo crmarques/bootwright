@@ -93,13 +93,29 @@ func TestValidateProvisioningPlaybookOrdering(t *testing.T) {
 
 func TestValidateProvisioningPlaybookValidPassesOnDisk(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "playbooks"), 0o700); err != nil {
+		t.Fatalf("mkdir playbooks: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "playbooks", "harden.yml"), []byte("---\n- hosts: all\n  tasks: []\n"), 0o600); err != nil {
+		t.Fatalf("write playbook: %v", err)
+	}
+	p := basePlaybook("harden")
+	p.SourcePath = filepath.Join(dir, "harden.yaml")
+	p.Spec.Playbook = "playbooks/harden.yml"
+	if errs := validateProvisioningPlaybooks(provisioningState(p)); len(errs) != 0 {
+		t.Fatalf("valid playbook reported errors: %v", errs)
+	}
+}
+
+func TestValidateProvisioningPlaybookRequiresPlaybooksDirectory(t *testing.T) {
+	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "harden.yml"), []byte("---\n- hosts: all\n  tasks: []\n"), 0o600); err != nil {
 		t.Fatalf("write playbook: %v", err)
 	}
 	p := basePlaybook("harden")
 	p.SourcePath = filepath.Join(dir, "harden.yaml")
 	p.Spec.Playbook = "harden.yml"
-	if errs := validateProvisioningPlaybooks(provisioningState(p)); len(errs) != 0 {
-		t.Fatalf("valid playbook reported errors: %v", errs)
+	if errs := validateProvisioningPlaybooks(provisioningState(p)); !containsSubstring(errs, "playbooks/ directory") {
+		t.Fatalf("playbook outside playbooks/ not reported: %v", errs)
 	}
 }
