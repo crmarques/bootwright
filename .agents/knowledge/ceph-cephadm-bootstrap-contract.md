@@ -6,13 +6,42 @@ CIDRs must be in the initial ceph.conf handed to `cephadm bootstrap --config`;
 the `set-public-network` operation keeps the value converged on later applies
 (`ceph config set` is last-write-wins).
 
-**Constraint:** Only the `global`/`mon`/`osd` config sections (no masks) seed
-into the bootstrap ceph.conf. Their daemons exist at bootstrap, so seeding them
-means cephadm's own auto-created pools (e.g. `.mgr`) honor the declared defaults
-instead of cephadm defaults the post-bootstrap `ceph config set` ops would only
-correct afterward. `mgr`/`mds`/`client`/`<type>.<id>` sections have no daemon
-yet and are left to the post-bootstrap ops (which run for every section
+**Constraint:** Only the `global`/`mon`/`mgr`/`osd` config sections (no masks)
+seed into the bootstrap ceph.conf. Their daemons exist at bootstrap, so seeding
+them means cephadm's own auto-created pools (e.g. `.mgr`) honor the declared
+defaults instead of cephadm defaults the post-bootstrap `ceph config set` ops
+would only correct afterward. `mds`/`client`/`<type>.<id>` sections have no
+daemon yet and are left to the post-bootstrap ops (which run for every section
 regardless).
+
+`mgr` was excluded on the same "no daemon yet" reasoning, and that reasoning was
+wrong: `cephadm bootstrap` creates a mgr and enables the `cephadm` module inside
+the same command — which is exactly why `CephadmBootstrapSpec` exists, to race
+the in-bootstrap mon/mgr placement. With monitoring enabled (the default),
+bootstrap then deploys prometheus/grafana/alertmanager/node-exporter **in
+process**, from cephadm's compiled-in upstream defaults, long before the
+post-bootstrap `set-config-mgr-*` ops run at step 15 of 20. So a disconnected or
+IBM cluster that pinned `mgr/cephadm/container_image_*` per the documented
+remedy still burned its first pulls against unreachable upstream registries. The
+family is additionally re-applied by `bootstrap_steps/container_image_base.yml`
+(step 5) with a guarded `ceph config get`, which bounds the exposure to seconds
+if a given cephadm build does not assimilate mgr *module* options from
+`--config`.
+
+`--skip-monitoring-stack` is NOT an acceptable substitute for seeding, and must
+stay conditional on the rendered `skipMonitoringStack` flag (guarded by a test).
+`cephadmMonitoringSpecs` skips services with no role and no config and skips
+empty placements, so a zero-config cluster renders no monitoring specs at all;
+`ceph-exporter` and `crash` are never rendered by Bootwright at any time. Making
+the flag unconditional therefore deletes monitoring outright for those clusters,
+and — because bootstrap runs once ever — leaves clusters built before and after
+the change permanently divergent.
+
+Consequence of seeding the whole section rather than only
+`mgr/cephadm/container_image_*`: an operator-authored `config[mgr]` value now
+reaches the bootstrap conf, where cephadm sets `mgr_standby_modules` under
+`--single-host-defaults` with `if not cp.has_option(...)`. That key is therefore
+rejected in `config[mgr]` alongside the three `[global]` keys the same flag owns.
 
 **Constraint:** `--allow-fqdn-hostname` is unconditional, matching IBM's
 recommended bootstrap command (`--ssh-user --mon-ip --allow-fqdn-hostname

@@ -23,7 +23,39 @@ repository. The authored release is carried verbatim — no normalization to a
 Bootwright-preferred value. `ResolvedRelease` holds exactly `Value` and `Stream`;
 adding a support-matrix field to it is the mistake this constraint exists to
 prevent. Two earlier attempts got this wrong: first a closed release catalog that
-hard-failed unknown releases, then an advisory catalog that warned on them.
+hard-failed unknown releases, then an advisory catalog that warned on them. The
+same rule governs `spec.ceph.packageVersion` and `spec.ceph.image.version`: both
+are coordinates the operator reads off the vendor's own release-to-build table,
+validated syntactically and never cross-checked against `release` or each other.
+
+**Constraint:** `spec.ceph.image` is a `{base, version}` block, not a reference
+string. `version` is the build (tag or `sha256:` digest) and `base` defaults to
+`DerivedImageRepository(distribution, release, registryURL)`; the renderer joins
+them in `cephprovider.resolvedImage`, with `@` for a digest and `:` for a tag.
+Because the derived base is the same value `validateStorageCephImageBase`
+compares against, an unauthored base satisfies the vendor-prefix guard by
+construction and the guard is deliberately not re-run on it — a property test in
+`cephprovider` welds the two. `version` has NO vendor default: `redhat` and `ibm`
+image tags are build-numbered and a product release such as `9.1` or `9.9.1.0` is
+not a tag, so defaulting it to the release would compose a reference that fails
+the pull. Only `oss` derives one, `v<x.y.z>`, and only from an exact version.
+
+**Constraint:** `spec.ceph.packageVersion` renders as `CephadmPackageSpec`
+(`cephadm-<nvr>`) and reaches exactly one task — the `dnf` install of the pinned
+build. `CephadmPackage` stays the bare name because it is the ownership-record
+key, and the destroy list (`vars/os/RedHat.yml` `bootwright_ceph_managed_packages`)
+is static and bare: keying the record on the versioned string orphans the package
+forever. The pinned install uses `ansible.builtin.dnf` with `allow_downgrade`
+(`ansible.builtin.package` cannot downgrade, so a pin below the installed build
+would fail on re-apply) and fails closed, unlike the unpinned fallback. It also
+gathers `package_facts` first: `package_records_write.yml` computes `preexisting`
+by membership in `ansible_facts.packages`, and the pinned path is the first one
+that can touch an already-installed cephadm — without the gather, `preexisting`
+reads false and destroy removes the operator's own package. The pin is
+reconcilable drift, not structural: it is nulled from both
+`storageClusterStructuralHashVars` and `managedMachineOSStructuralHashVars`, the
+latter because that task kind is not reconfigure-only and would propose a machine
+reinstall.
 
 **Constraint:** The only storage-node OS check is `ansible_os_family == 'RedHat'`
 (mirrored by a `family: rhel` validation error). That is a Bootwright capability

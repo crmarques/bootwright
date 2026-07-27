@@ -5,9 +5,14 @@ all subscription and registry material through one `Entitlement` object
 (`rhcs`, type `redhat-ceph`), referenced from the `StorageCluster` with
 `spec.ceph.entitlementRef`.
 
-The StorageCluster selects Red Hat Ceph Storage 9.1, whose managed-OS matrix is
-RHEL 9.8 or 10.2. `examples/ceph-external-rhsm` retains the supported 9.0 path
-to demonstrate delegated registration and the older RHEL matrix.
+The StorageCluster selects Red Hat Ceph Storage 9.1 and pins both build axes:
+`spec.ceph.packageVersion` fixes the `cephadm` RPM the nodes install, and
+`spec.ceph.image.version` fixes the daemon container build. Read both off Red
+Hat's own release-to-package-version table — Bootwright keeps no such table and
+takes whatever you write verbatim. `spec.ceph.image.base` is left unset, so the
+vendor repository is derived from the distribution and release and cannot drift
+from them. `examples/ceph-external-rhsm` uses the 9.0 stream instead, to
+demonstrate delegated registration.
 
 Bootwright registers each provided RHEL node with RHSM in the machines phase,
 before any Ceph work; the clusters-stage Ceph work then enables the RHEL

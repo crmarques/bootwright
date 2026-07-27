@@ -8,6 +8,9 @@ spec:
   ceph:
     distribution: ibm
     release: "9.9.1.0"
+    packageVersion: "19.2.1-245.el9cp"
+    image:
+      version: "9.9.1.0-123"
     ibm:
       callHome: disabled
     entitlementRef: ibm-storage-ceph

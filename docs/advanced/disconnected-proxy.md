@@ -97,8 +97,10 @@ deps-phase repo and registry work reaches the remaining rows.
 | `cert-api.access.redhat.com`, `console.redhat.com` | Red Hat Insights — only when `rhsm.connectToInsights: true`. | Red Hat |
 
 For a mirrored vendor registry, set `Entitlement.spec.registry.url` to the
-mirror root and pin `StorageCluster.spec.ceph.image` at that root plus the
-canonical vendor repository suffix. Stream `9` uses
+mirror root and pin `StorageCluster.spec.ceph.image.base` at that root plus the
+canonical vendor repository suffix. `image.version` alone does not satisfy this:
+the base Bootwright derives names the vendor registry, which the mirror cannot
+serve, so the mirrored base must be stated. Stream `9` uses
 `rhceph/rhceph-9-rhel9` for Red Hat or `ibm-ceph/ceph-9-rhel9` for IBM;
 arbitrary repositories below the registry root are rejected. The check covers
 the vendor namespace and stream (`rhceph/rhceph-<stream>-rhel`) so the two
@@ -106,7 +108,7 @@ distributions cannot be crossed; the trailing build base is yours to supply and
 is never validated against a release.
 
 **Community Ceph (OSS):** overridable via `spec.ceph.community.mirror` and
-`spec.ceph.image`.
+`spec.ceph.image.base`.
 
 | Host | Purpose |
 | --- | --- |
@@ -490,6 +492,16 @@ spec:
         mgr/cephadm/container_image_haproxy: mirror.example.test:5000/library/haproxy:2.8
         mgr/cephadm/container_image_keepalived: mirror.example.test:5000/library/keepalived:2.2.8
 ```
+
+These pins reach the cluster by two routes, both before anything pulls them.
+Every `mgr` section key is seeded into the ceph.conf handed to `cephadm bootstrap
+--config`, so the monitoring stack that bootstrap deploys **in-process** already
+resolves them; and the whole `mgr/cephadm/container_image_*` family is re-applied
+with a guarded `ceph config get`/`set` immediately after bootstrap returns, ahead
+of the ingress specs that consume HAProxy and keepalived. Bootwright does not
+pass `--skip-monitoring-stack` to work around this: a cluster that declares no
+monitoring roles and no `monitoring` block renders no monitoring specs at all, so
+skipping the stack would silently leave it with no monitoring.
 
 `bootwright validate` raises a non-blocking advisory when monitoring is enabled
 on a disconnected (mirror/`imageDigestSources`) or IBM cluster that has not

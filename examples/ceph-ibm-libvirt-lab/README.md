@@ -159,10 +159,14 @@ need an **IBM entitlement key**:
 > lab into IBM Call Home outbound communication.
 
 **Version:** the StorageCluster pins `spec.ceph.release: "9.9.1.0"` — the IBM
-Storage Ceph product version. Bootwright validates its RHEL 9.8 or 10.2 runtime
-matrix and uses the `9` repository/image stream. `spec.ceph.image` is left unset
-so cephadm uses the distribution-packaged default build; pin a digest there for
-a frozen, reproducible daemon image (`:latest` is rejected).
+Storage Ceph product version, whose leading component gives the `9`
+repository/image stream. Bootwright keeps no release list and no support matrix,
+so it neither checks that version nor the RHEL version underneath it.
+`spec.ceph.image` and `spec.ceph.packageVersion` are left unset in this lab, so
+cephadm installs and runs whatever build its packaged default resolves to. For a
+reproducible install set `spec.ceph.image.version` (a vendor build tag, or a
+`sha256:` digest — `latest` is rejected) and `spec.ceph.packageVersion` to the
+`cephadm` RPM build IBM's table names.
 
 ---
 

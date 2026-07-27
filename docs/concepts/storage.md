@@ -90,7 +90,9 @@ spec:
 | --- | --- | --- | --- |
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
 | `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1.0` (`ibm`) | Ceph release for the chosen distribution. Bootwright keeps no list of releases and never checks yours against one: it derives the package repository, `.repo` URL, and image repository from the string you give it, so a release published after your Bootwright build installs without an update. `oss` takes an upstream release name (`tentacle`) or an exact `x.y.z` version; an exact version pins the package repository and derives `quay.io/ceph/ceph:vX.Y.Z`. `redhat` and `ibm` take a dot-separated numeric product version of any length (`9.1`, `9.9.1.0`), whose leading component is the product stream. The value is used verbatim — nothing is rewritten to a Bootwright-preferred release. |
-| `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). A `redhat` or `ibm` image must sit in that distribution and release's canonical repository, and is the escape hatch for a release whose vendor image build base Bootwright has not recorded. |
+| `ceph.packageVersion` | No | — | Pins the exact Ceph package build to install, as an RPM `[epoch:]version[-release]` such as `19.2.1-245.el9cp` — the build your vendor's release-to-package-version table names. It governs the `cephadm` RPM on each storage node and nothing else: the daemons run from the container image, so bumping it reconciles the host CLI in place rather than upgrading or rebuilding the cluster. `redhat` and `ibm` only; for `oss` the build is already named by `ceph.release`. |
+| `ceph.image.version` | No | `vX.Y.Z` from an exact `x.y.z` `oss` `ceph.release`; otherwise none | The daemon image build, as a tag or a `sha256:` digest, applied as the default image for every Ceph daemon. A mutable `latest` is not a pin. There is no `redhat`/`ibm` default because vendor tags are build-numbered and a product release such as `9.9.1.0` is not a tag; left unset, the install uses the distribution-packaged cephadm's own default tag, which floats. |
+| `ceph.image.base` | No | The repository derived from `ceph.distribution`, `ceph.release` and the entitlement registry | The `<registry>/<path>` the version hangs off — `quay.io/ceph/ceph`, `registry.redhat.io/rhceph/rhceph-<stream>-rhel9`, or `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9`. Leave it unset in the normal case: the derived value keeps the vendor namespace and stream welded to the release. Author it to mirror the image or to name a vendor build base Bootwright has not recorded. Must carry no tag, digest, or scheme. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the community package payload fetched from `community.mirror`. `oss` only. |
 | `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Entitlement` object. Must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
@@ -120,6 +122,10 @@ spec:
     orch upgrade`; the desired state then names the old release, so `diff`
     reports drift until a future apply refreshes the record. Adopting an
     out-of-band upgrade into the recorded desired state is an open design item.
+
+    `ceph.packageVersion` is the exception: it pins the host `cephadm` RPM, not
+    the daemons, so a change to it is reconciled in place on the next apply and
+    never proposes a rebuild.
 
 !!! note "Cross-field rules"
     - `ceph.config` **rejects** `public_network` and `cluster_network` keys in
@@ -164,16 +170,38 @@ each node's own RHEL major filling the repo templates at run time. Declare
 `release: "9.9.2.0"` the day IBM ships it and it installs, with no Bootwright
 update and no warning.
 
+The same applies to the two build pins. `ceph.packageVersion` and
+`ceph.image.version` are exactly the coordinates you read off your vendor's own
+release-to-build table, and Bootwright takes both verbatim: it never checks them
+against `ceph.release`, never checks them against each other, and never warns
+that a build is unknown. Pin them together to make an install reproducible on
+both axes — the `cephadm` RPM on the hosts and the container image the daemons
+run from:
+
+```yaml
+spec:
+  ceph:
+    distribution: ibm
+    release: "9.9.1.0"
+    packageVersion: "19.2.1-245.el9cp"
+    image:
+      version: "9.9.1.0-123"
+```
+
 Two things are still checked, and neither is a version claim. A Ceph node's
 `MachineInstallProfile` must declare `family: rhel`, because the subscription-backed
 provider only implements RHEL-family package sources — a Bootwright capability
-limit. And a pinned `ceph.image` must sit in your cluster's own vendor namespace
-and stream, so a Red Hat cluster cannot silently run an IBM image.
+limit. And an authored `ceph.image.base` must sit in your cluster's own vendor
+namespace and stream, so a Red Hat cluster cannot silently run an IBM image.
+Leaving `base` unset sidesteps that entirely: the derived value is built from the
+release, so it cannot drift from it.
 
 When `Entitlement.spec.registry.url` overrides the vendor namespace,
-`ceph.image` must explicitly pin the vendor repository below that mirror root —
-for stream `9`, `mirror.example.test/vendor/rhceph/rhceph-9-rhel9:<tag>` for Red
-Hat or `mirror.example.test/vendor/ibm-ceph/ceph-9-rhel9:<tag>` for IBM. The
+`ceph.image.base` becomes required and must name the vendor repository below that
+mirror root — for stream `9`, `mirror.example.test/vendor/rhceph/rhceph-9-rhel9`
+for Red Hat or `mirror.example.test/vendor/ibm-ceph/ceph-9-rhel9` for IBM. A
+`version` alone does not satisfy it: the derived base names the vendor registry,
+which a mirrored estate cannot pull. The
 check covers the namespace and stream prefix (`.../rhceph/rhceph-<stream>-rhel`);
 the trailing build base is whatever the vendor compiled that release against and
 is yours to declare. The registry override controls credentials and trust; it

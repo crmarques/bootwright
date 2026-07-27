@@ -819,30 +819,54 @@ Rules:
   supplier. Bootwright therefore never emits an error, warning, or advisory about
   a release being unknown, newer, older, or mismatched against a node OS. The
   authored release is carried verbatim into normalization and convergence
-  hashing; nothing is silently rewritten to a Bootwright-preferred value.
+  hashing; nothing is silently rewritten to a Bootwright-preferred value. The
+  same rule governs `spec.ceph.packageVersion` and `spec.ceph.image.version`:
+  both are read off the vendor's own release-to-build tables by the operator and
+  taken verbatim, and neither is checked against `release` or against any list of
+  builds Bootwright would have to carry.
 - The only storage-node OS check is a capability statement, not a compatibility
   one: the subscription-backed provider implements RHEL-family package sources
   only, so a Ceph node's `MachineInstallProfile` must declare `family: rhel`
   (validation error, re-asserted on the node at apply time as
   `ansible_os_family == 'RedHat'`). No OS *version* is examined anywhere.
-- `spec.ceph.image` optionally pins the exact cephadm container image, which
+- `spec.ceph.packageVersion` optionally pins the exact Ceph package build to
+  install, as an RPM `[epoch:]version[-release]` such as `19.2.1-245.el9cp`. It
+  names the `cephadm` build on each storage node and nothing else: the daemons
+  run from the container image, so a `packageVersion` bump reconciles the host
+  CLI in place and is **not** a cluster upgrade and **not** a rebuild. It applies
+  to `redhat` and `ibm` only; for `oss` the exact build is already named by
+  `release` as an `x.y.z` version, which selects the package repository. The
+  ownership record keys on the bare package name, so destroy still matches a
+  pinned install. Validation is syntactic — the value must not carry a package
+  name, glob, or separator — and is never checked against `release`.
+- `spec.ceph.image` optionally pins the cephadm container image, which
   `cephadm bootstrap` applies as the default image for every Ceph daemon, making
-  the running cluster version reproducible. It must pin a version tag or a
-  `sha256` digest and must not use a mutable `:latest` tag. For `oss` an `x.y.z`
-  `release` derives `quay.io/ceph/ceph:vX.Y.Z` automatically when `image` is
-  unset; a release name leaves the daemon image unpinned. `redhat` and `ibm`
-  registry tags are not `x.y.z`, so reproducible pins are supplied here
-  explicitly. A subscription image repository must start with the cluster's own
-  vendor namespace and stream — `registry.redhat.io/rhceph/rhceph-<stream>-rhel`
-  for `redhat` or `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel` for `ibm`. This is a
-  cross-vendor guard (a Red Hat cluster must not run an IBM image, and vice
-  versa), not a version check: the trailing build base is whatever the vendor
-  compiled that release against and is never validated. When `image` is unset the
-  same coordinates are derived for the `container_image_base` pin, with the build
-  base defaulting to `rhel9`; pin `image` when a vendor build differs.
-  When an entitlement overrides `registry.url`, `image` is required and the same
-  namespace rule applies against that mirror root. Changing only the login target
-  or using an arbitrary repository below a broad registry namespace is rejected.
+  the running cluster version reproducible. It is a block of two halves:
+  - `version` is the build: an image tag, or a `sha256:` digest. A mutable tag
+    such as `latest` is not a pin and is rejected. Left unset, the install uses
+    the distribution-packaged cephadm's own default tag, which floats. There is
+    no vendor default: `redhat` and `ibm` registry tags are build-numbered and a
+    product release such as `9.1` or `9.9.1.0` is not a tag, so the build is
+    supplied here explicitly. For `oss` an exact `x.y.z` `release` derives
+    `vX.Y.Z`; a release name leaves the daemon image unpinned.
+  - `base` is the `<registry>/<path>` the version hangs off, and defaults to the
+    repository Bootwright derives from distribution, release and the entitlement
+    registry — `quay.io/ceph/ceph`,
+    `registry.redhat.io/rhceph/rhceph-<stream>-rhel9`, or
+    `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9`. Leaving it unset is the normal
+    case and keeps the namespace and stream welded to the release. It must be a
+    bare reference carrying no tag, digest, or scheme, and it is also what
+    `container_image_base` is pinned to.
+
+  An authored subscription `base` must start with the cluster's own vendor
+  namespace and stream. This is a cross-vendor guard (a Red Hat cluster must not
+  run an IBM image, and vice versa), not a version check: the trailing build base
+  is whatever the vendor compiled that release against and is never validated.
+  When an entitlement overrides `registry.url`, `base` is required and the same
+  namespace rule applies against that mirror root — the derived base names the
+  vendor registry, which a mirrored estate cannot pull. Changing only the login
+  target or using an arbitrary repository below a broad registry namespace is
+  rejected.
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
   community repository on each node with cephadm and runs Ceph client commands

@@ -428,6 +428,7 @@ bootwright_storage_clusters:
         - podman
         - chrony
       cephadmPackage: cephadm
+      cephadmPackageSpec: cephadm-19.2.1-245.el9cp
       entitlement:
         name: rhcs
         provider: redhat
@@ -489,7 +490,7 @@ are copied to the seed host for cephadm.
 
 The storage role dispatches its repository preparation on the rendered
 `provider.name` (the distribution): the repository phase validates the node OS
-against the rendered `runtimeOS` matrix, then includes
+against the rendered `runtimeOS` family, then includes
 `tasks/providers/<name>.yml` — `oss.yml`, `redhat.yml`, or `ibm.yml`. Behavior
 inside those files stays keyed to rendered capability flags and data
 (`requiresRHSM`, `requiresLicense`, `rhsmManagement`, `repository.*`,
@@ -530,12 +531,28 @@ renderer/table change plus one provider task file keyed by its name (or a
 composition of the shared subscription file), not new branches in the shared
 flow.
 
-The provider also carries the release-specific `runtimeOS` matrix and, for IBM,
+`cephadmPackage` is always the bare package name and is the key the ownership
+record is written under, so destroy — which looks the package up by that bare
+name from a static list — still matches. `cephadmPackageSpec` is present only
+when `spec.ceph.packageVersion` pins a build, carries the composed
+`<package>-<version>`, and is consumed by exactly one task: the `dnf` install
+that pins the build. The role never composes the two itself.
+
+The provider also carries the `runtimeOS` family and, for IBM,
 `ibm.callHome`. IBM bootstrap adds `--automatically-accept-license`; the
 bootstrap phase then enables and acknowledges Call Home or denies it according
 to the required authored value. A custom entitlement `registry.url` is paired
-with an explicit daemon image under the same registry namespace by desired-state
-validation.
+with an explicit daemon image base under the same registry namespace by
+desired-state validation. The rendered `image` and `imageBase` are already
+composed by the renderer from `spec.ceph.image.base` (or the derived vendor
+repository) and `spec.ceph.image.version`; the role consumes them verbatim.
+
+`ceph.sidecarImagePins` carries the cluster's `config[mgr]`
+`mgr/cephadm/container_image_*` entries, excluding `container_image_base`. The
+bootstrap phase applies them with a guarded `ceph config get`/`set` immediately
+after bootstrap, ahead of the ingress specs; the same keys are also seeded into
+the bootstrap ceph.conf so the monitoring stack cephadm deploys in-process
+resolves them.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
 stable `phase`, `name`, and `command`. Create-style operations also declare

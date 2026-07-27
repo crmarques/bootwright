@@ -57,9 +57,10 @@ version of any length, defaulting to `9.1` and `9.9.1.0`.
 
 Bootwright keeps no list of releases and no vendor support matrix, so it never
 judges the release you declare, nor the RHEL version you run it on. A release
-published today installs today. The immutable vendor image build tag is not
-derivable from a product release, so pin `spec.ceph.image` to lock the exact
-build. To mirror upstream packages for a
+published today installs today. Neither the vendor image build tag nor the Ceph
+package build is derivable from a product release, so name them yourself with
+`spec.ceph.image.version` and `spec.ceph.packageVersion` to lock the exact build
+on both axes. To mirror upstream packages for a
 disconnected `oss` install, set an HTTPS `spec.ceph.community.mirror`.
 Check what a release supports against the vendor's own sources — the upstream
 [Ceph releases](https://docs.ceph.com/en/latest/releases/) page, the
@@ -70,21 +71,34 @@ and IBM's [node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?to
 ceph:
   distribution: redhat
   release: "9.1"
-  entitlementRef: rhcs           # names a redhat-ceph Entitlement
+  packageVersion: "19.2.1-245.el9cp"   # the cephadm RPM build from the vendor's table
+  image:
+    version: "9-1234"                  # the daemon image build; base is derived
+  entitlementRef: rhcs                 # names a redhat-ceph Entitlement
   cephadm:
     bootstrap:
-      node: node-01              # topology node cephadm bootstraps on (node name)
+      node: node-01                    # topology node cephadm bootstraps on (node name)
 ```
 
 The `ceph-distribution-oss`, `ceph-distribution-redhat`, and
 `ceph-distribution-ibm` [reference examples](examples.md) show each source end
 to end, including the entitlement and license-acceptance workflow.
 
-!!! note "Pin the image on `redhat`/`ibm`"
-    Set `spec.ceph.image` to a digest-pinned reference for production. Left
-    unset, the install uses the distribution-packaged `cephadm`'s default image
-    tag, which floats, so the running Ceph version is not reproducible across
-    re-installs.
+!!! note "Pin the build on `redhat`/`ibm`"
+    Set `spec.ceph.image.version` for production — a vendor build tag, or a
+    `sha256:` digest for a fully immutable pin. Left unset, the install uses the
+    distribution-packaged `cephadm`'s default image tag, which floats, so the
+    running Ceph version is not reproducible across re-installs. You normally
+    only write the version: `spec.ceph.image.base` defaults to the vendor
+    repository Bootwright derives from the distribution, release and entitlement
+    registry, so the namespace and stream cannot drift from the release. Author
+    `base` only to mirror the image or to name a build base Bootwright has not
+    recorded.
+
+    Pin `spec.ceph.packageVersion` alongside it to fix the `cephadm` RPM on the
+    hosts. It is the one version field that is *not* install-time-only: it names
+    the host CLI, not the daemons, so changing it reconciles in place instead of
+    proposing a rebuild.
 
 !!! warning "IBM Call Home is an explicit choice"
     IBM Storage Ceph 9.9.1.0 enables Call Home when the license is accepted.

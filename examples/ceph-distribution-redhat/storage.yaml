@@ -8,6 +8,9 @@ spec:
   ceph:
     distribution: redhat
     release: "9.1"
+    packageVersion: "19.2.1-245.el9cp"
+    image:
+      version: "9-1234"
     entitlementRef: rhcs
     cephadm:
       bootstrap:
