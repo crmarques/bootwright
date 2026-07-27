@@ -1,11 +1,15 @@
 package workflow
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/render"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
+
+const addonCapabilityKindPrefix = "addon."
 
 func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTask, error) {
 	return PlanApplyTasksCheckedWithHashState(target, state, state)
@@ -59,7 +63,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	}
 
 	clusterNames := applyClusterNames(state)
-	infraDepsByCluster, err := planContainerMachineInfraActivities(graph, state, target, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, machineServiceTaskIDs)
+	infraDepsByCluster, prepareDepsByCluster, err := planContainerMachineInfraActivities(graph, state, target, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, machineServiceTaskIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +74,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	if err := planHostVirtctlActivities(graph, state, phaseSet, includeContainer, hostVirtctlReadiness); err != nil {
 		return nil, err
 	}
-	if err := planContainerInstallActivities(graph, state, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, infraDepsByCluster, hostsByContainerCluster); err != nil {
+	if err := planContainerInstallActivities(graph, state, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, infraDepsByCluster, prepareDepsByCluster, machineServiceTaskIDs, hostsByContainerCluster); err != nil {
 		return nil, err
 	}
 
@@ -93,33 +97,42 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 	if err != nil {
 		return err
 	}
+	exclusiveOLMOwner := map[string]string{}
 	for _, binding := range plans {
 		if !stateHasContainerCluster(state, binding.Cluster) {
 			continue
 		}
-		deps := []string{}
+		clusterDeps := []string{}
 		if installPhasePlanned {
-			deps = append(deps, "wait."+binding.Cluster)
+			clusterDeps = append(clusterDeps, "wait."+binding.Cluster)
 		}
 		for _, extension := range binding.Addons {
 			extension := extension
 			id := "addon." + binding.Cluster + "." + extension.Name
-			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
+			provides := append(addonProvidedCapabilities(binding.Cluster, extension.Extension), addonAppliedCapability(binding.Cluster, extension.Name))
 			hookDeps := hookCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
-			addonDeps := appendUniqueStrings(append([]string(nil), deps...), hookDeps...)
+			addonDeps := appendUniqueStrings(append([]string(nil), clusterDeps...), hookDeps...)
+			for _, key := range addonExclusiveOLMKeys(binding.Cluster, extension.Extension) {
+				if previous := exclusiveOLMOwner[key]; previous != "" {
+					addonDeps = appendUniqueStrings(addonDeps, previous)
+				}
+				exclusiveOLMOwner[key] = id
+			}
 			hookStateContainers, hookStateStorage := hookReferencedClusters(state, binding, extension.Name, extension.Extension)
 			if err := graph.Add(Activity{
 				ID:                   id,
+				Requires:             addonRequiredCapabilities(binding.Cluster, extension.Extension),
 				Provides:             provides,
 				ExplicitDependencies: addonDeps,
 				Task: ApplyTask{
 					Entry: TaskLedgerEntry{
-						ID:          id,
-						Kind:        ApplyTaskKindClusterAddon,
-						Label:       "addon " + extension.Name,
-						Cluster:     binding.Cluster,
-						ClusterKind: ApplyClusterKindContainer,
-						Status:      TaskStatusPending,
+						ID:           id,
+						Kind:         ApplyTaskKindClusterAddon,
+						Label:        "addon " + extension.Name,
+						Cluster:      binding.Cluster,
+						ClusterKind:  ApplyClusterKindContainer,
+						ResourceKeys: addonSharedResourceKeys(binding.Cluster, extension),
+						Status:       TaskStatusPending,
 					},
 					State:     stategraph.FilterStateToApplyClusterRoots(state, hookStateContainers, hookStateStorage),
 					Extension: &extension,
@@ -127,10 +140,56 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			}); err != nil {
 				return err
 			}
-			deps = []string{id}
 		}
 	}
 	return nil
+}
+
+func addonExclusiveOLMKeys(cluster string, extension v1alpha1.ClusterAddon) []string {
+	olm := extension.Spec.OLM
+	if olm == nil {
+		return nil
+	}
+	var out []string
+	if olm.Namespace.Name != "" && (olm.Namespace.Create || olm.OperatorGroup != nil) {
+		out = append(out, cluster+"/namespace/"+olm.Namespace.Name)
+	}
+	if olm.CatalogSource != nil && olm.CatalogSource.Name != "" {
+		out = append(out, cluster+"/catalogsource/"+olm.Subscription.SourceNamespace+"/"+olm.CatalogSource.Name)
+	}
+	return out
+}
+
+func addonSharedResourceKeys(cluster string, extension extensionplan.ExtensionPlan) []string {
+	for _, input := range extension.Extension.Spec.Accepts.Inputs {
+		if !addonInputMergesGlobalPullSecret(input) || addonBindingInputValue(extension.Inputs, input.Name) == "" {
+			continue
+		}
+		return []string{globalPullSecretResource(cluster)}
+	}
+	return nil
+}
+
+func addonInputMergesGlobalPullSecret(input v1alpha1.ClusterAddonAcceptedInput) bool {
+	for _, effect := range input.Effects {
+		if effect.GlobalPullSecretMerge != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func addonBindingInputValue(inputs []v1alpha1.ClusterAddonBindingInput, name string) string {
+	for _, input := range inputs {
+		if input.Name == name {
+			return input.Value
+		}
+	}
+	return ""
+}
+
+func globalPullSecretResource(cluster string) string {
+	return "pullsecret:" + cluster
 }
 
 func addAvailablePriorPhaseCapabilities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, kubeVirtReqsByCluster map[string][]CapabilityRef) {
@@ -145,7 +204,6 @@ func addAvailablePriorPhaseCapabilities(graph *ActivityGraph, state v1alpha1.Sta
 		}
 	}
 	clusterInstalledKind := clusterInstalledCapability("").Kind
-	kubevirtAddonKind := addonProvidesCapability("", v1alpha1.ClusterAddonProvidesKubeVirt).Kind
 	baseInScope := phaseSet[ApplyPhaseBase]
 	addonsInScope := phaseSet[ApplyPhaseAddons]
 	for _, caps := range kubeVirtReqsByCluster {
@@ -153,7 +211,7 @@ func addAvailablePriorPhaseCapabilities(graph *ActivityGraph, state v1alpha1.Sta
 			switch {
 			case capability.Kind == clusterInstalledKind && !baseInScope:
 				graph.AddAvailable(capability)
-			case capability.Kind == kubevirtAddonKind && !addonsInScope:
+			case strings.HasPrefix(capability.Kind, addonCapabilityKindPrefix) && !addonsInScope:
 				graph.AddAvailable(capability)
 			}
 		}
@@ -169,7 +227,7 @@ func addAvailableMachineOSCapabilities(graph *ActivityGraph, state v1alpha1.Stat
 }
 
 func addonProvidedCapabilities(cluster string, extension v1alpha1.ClusterAddon) []CapabilityRef {
-	out := make([]CapabilityRef, 0, len(extension.Spec.Provides))
+	out := make([]CapabilityRef, 0, len(extension.Spec.Provides)+1)
 	for _, capability := range extension.Spec.Provides {
 		if capability == "" {
 			continue
@@ -177,4 +235,19 @@ func addonProvidedCapabilities(cluster string, extension v1alpha1.ClusterAddon) 
 		out = append(out, addonProvidesCapability(cluster, capability))
 	}
 	return out
+}
+
+func addonRequiredCapabilities(cluster string, extension v1alpha1.ClusterAddon) []CapabilityRef {
+	out := make([]CapabilityRef, 0, len(extension.Spec.Requires))
+	for _, capability := range extension.Spec.Requires {
+		if capability == "" {
+			continue
+		}
+		out = append(out, addonProvidesCapability(cluster, capability))
+	}
+	return out
+}
+
+func addonAppliedCapability(cluster, addon string) CapabilityRef {
+	return CapabilityRef{Kind: addonCapabilityKindPrefix + "applied", Name: cluster + "/" + addon}
 }

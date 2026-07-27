@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
@@ -15,6 +16,10 @@ func kubeVirtHostClusterApplyCapabilities(state v1alpha1.State) (map[string][]Ca
 	providers := providerIndex(state)
 	machines := machineIndex(state)
 	provides, err := kubeVirtProviderExtensionCapabilities(state)
+	if err != nil {
+		return nil, err
+	}
+	resources, storageProviders, err := addonDeclaredResourceIndex(state)
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +47,9 @@ func kubeVirtHostClusterApplyCapabilities(state v1alpha1.State) (map[string][]Ca
 			for _, cap := range caps {
 				out[cluster.Metadata.Name] = appendUniqueCapability(out[cluster.Metadata.Name], cap)
 			}
+			for _, addon := range kubeVirtProviderAddonDependencies(provider, resources[parent], storageProviders[parent]) {
+				out[cluster.Metadata.Name] = appendUniqueCapability(out[cluster.Metadata.Name], addonAppliedCapability(parent, addon))
+			}
 		}
 	}
 	return out, nil
@@ -55,6 +63,10 @@ func kubeVirtHostClusterApplyCapabilitiesForMachines(state v1alpha1.State, machi
 	providers := providerIndex(state)
 	machines := machineIndex(state)
 	provides, err := kubeVirtProviderExtensionCapabilities(state)
+	if err != nil {
+		return nil, err
+	}
+	resources, storageProviders, err := addonDeclaredResourceIndex(state)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +93,147 @@ func kubeVirtHostClusterApplyCapabilitiesForMachines(state v1alpha1.State, machi
 		for _, cap := range caps {
 			out = appendUniqueCapability(out, cap)
 		}
+		for _, addon := range kubeVirtProviderAddonDependencies(provider, resources[parent], storageProviders[parent]) {
+			out = appendUniqueCapability(out, addonAppliedCapability(parent, addon))
+		}
 	}
 	return out, nil
+}
+
+type addonDeclaredResource struct {
+	group     string
+	kind      string
+	name      string
+	namespace string
+}
+
+type addonResourceOwner struct {
+	addon    string
+	resource addonDeclaredResource
+}
+
+const addonStorageClassKind = "StorageClass"
+
+func addonDeclaredResourceIndex(state v1alpha1.State) (map[string][]addonResourceOwner, map[string][]string, error) {
+	plans, err := extensionplan.BindingPlans(state)
+	if err != nil {
+		return nil, nil, err
+	}
+	resources := map[string][]addonResourceOwner{}
+	storageProviders := map[string][]string{}
+	for _, binding := range plans {
+		for _, extension := range binding.Addons {
+			for _, resource := range clusterAddonDeclaredResources(extension.Extension) {
+				if resource.kind == "" || resource.name == "" {
+					continue
+				}
+				resources[binding.Cluster] = append(resources[binding.Cluster], addonResourceOwner{addon: extension.Name, resource: resource})
+			}
+			if extensionProvides(extension.Extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
+				storageProviders[binding.Cluster] = appendUniqueString(storageProviders[binding.Cluster], extension.Name)
+			}
+		}
+	}
+	return resources, storageProviders, nil
+}
+
+func clusterAddonDeclaredResources(extension v1alpha1.ClusterAddon) []addonDeclaredResource {
+	var out []addonDeclaredResource
+	for _, check := range extension.Spec.Readiness.Checks {
+		if exists := check.ResourceExists; exists != nil {
+			out = append(out, addonDeclaredResource{
+				group:     addonResourceAPIGroup(exists.APIVersion),
+				kind:      exists.Kind,
+				name:      exists.Name,
+				namespace: exists.Namespace,
+			})
+		}
+		if condition := check.Condition; condition != nil {
+			out = append(out, addonDeclaredResource{
+				group:     addonResourceAPIGroup(condition.APIVersion),
+				kind:      condition.Kind,
+				name:      condition.Name,
+				namespace: condition.Namespace,
+			})
+		}
+	}
+	if extension.Spec.OLM != nil {
+		for _, resource := range extension.Spec.OLM.CustomResources {
+			metadata, _ := resource["metadata"].(map[string]any)
+			out = append(out, addonDeclaredResource{
+				group:     addonResourceAPIGroup(addonResourceField(resource, "apiVersion")),
+				kind:      addonResourceField(resource, "kind"),
+				name:      addonResourceField(metadata, "name"),
+				namespace: addonResourceField(metadata, "namespace"),
+			})
+		}
+	}
+	return out
+}
+
+func addonResourceAPIGroup(apiVersion string) string {
+	slash := strings.Index(apiVersion, "/")
+	if slash < 0 {
+		return ""
+	}
+	return apiVersion[:slash]
+}
+
+func addonResourceField(in map[string]any, key string) string {
+	if in == nil {
+		return ""
+	}
+	value, ok := in[key].(string)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func kubeVirtProviderAddonDependencies(provider v1alpha1.InfraProvider, owners []addonResourceOwner, storageProviders []string) []string {
+	var out []string
+	if profile := provider.Spec.KubeVirt; profile != nil && profile.StorageClassRef != nil && profile.StorageClassRef.Name != "" {
+		for _, addon := range addonsProvidingStorageClass(owners, storageProviders, profile.StorageClassRef.Name) {
+			out = appendUniqueString(out, addon)
+		}
+	}
+	for _, attachment := range provider.Spec.NetworkAttachments {
+		if attachment.KubeVirt == nil || attachment.KubeVirt.NetworkRef.Name == "" {
+			continue
+		}
+		for _, addon := range addonsProvidingNetworkAttachment(owners, attachment.KubeVirt.NetworkRef) {
+			out = appendUniqueString(out, addon)
+		}
+	}
+	return out
+}
+
+func addonsProvidingStorageClass(owners []addonResourceOwner, storageProviders []string, name string) []string {
+	var out []string
+	for _, owner := range owners {
+		if owner.resource.kind == addonStorageClassKind && owner.resource.name == name {
+			out = appendUniqueString(out, owner.addon)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	return storageProviders
+}
+
+func addonsProvidingNetworkAttachment(owners []addonResourceOwner, ref v1alpha1.KubeVirtNetworkRef) []string {
+	var out []string
+	for _, owner := range owners {
+		resource := owner.resource
+		if resource.name != ref.Name || resource.kind != ref.EffectiveKind() || resource.group != ref.EffectiveAPIGroup() {
+			continue
+		}
+		if ref.Namespace != "" && resource.namespace != "" && resource.namespace != ref.Namespace {
+			continue
+		}
+		out = appendUniqueString(out, owner.addon)
+	}
+	return out
 }
 
 func kubeVirtHostClusterReadiness(state v1alpha1.State) (map[string][]CapabilityRef, map[string][]string, error) {

@@ -26,7 +26,7 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 		if len(managedOSMachines) == 0 {
 			continue
 		}
-		prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, hashState, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+		prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, hashState, cluster.Metadata.Name, managedOSMachines)
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +313,7 @@ func planStorageClusterActivities(graph *ActivityGraph, state v1alpha1.State, ha
 	return storageDepsByCluster, nil
 }
 
-func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, clusterName string, machineNames []string, deps []string) (map[string]string, error) {
+func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, clusterName string, machineNames []string) (map[string]string, error) {
 	out := map[string]string{}
 	seen := map[string]bool{}
 	for _, machineName := range machineNames {
@@ -325,9 +325,8 @@ func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State
 		taskID := "osprepare." + clusterName + "." + host
 		out[host] = taskID
 		if err := graph.Add(Activity{
-			ID:                   taskID,
-			Requires:             []CapabilityRef{providerHostReadyCapability(host)},
-			ExplicitDependencies: append([]string(nil), deps...),
+			ID:       taskID,
+			Requires: []CapabilityRef{providerHostReadyCapability(host)},
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           taskID,

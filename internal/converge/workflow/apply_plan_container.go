@@ -8,10 +8,11 @@ import (
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
 
-func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, machineServiceTaskIDs []string) (map[string][]string, error) {
+func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, machineServiceTaskIDs []string) (map[string][]string, map[string][]string, error) {
 	infraDepsByCluster := map[string][]string{}
+	prepareDepsByCluster := map[string][]string{}
 	if !(phaseSet[ApplyPhaseMachines] && includeContainer) {
-		return infraDepsByCluster, nil
+		return infraDepsByCluster, prepareDepsByCluster, nil
 	}
 	for _, name := range clusterNames {
 		machineNames := selectedMachineNames(applyClusterMachineNames(state, name), target)
@@ -27,11 +28,15 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 		clusterState := stategraph.FilterStateToClusters(state, []string{name})
 		infraHosts := retainSelectedHosts(render.HostGroupMembers(clusterState)[render.GroupInfraHosts], selectedHosts, target.MachineScoped())
 		baseDeps := append([]string(nil), machineServiceTaskIDs...)
-		prepareDepsByHost, err := planContainerMachinePrepareTasks(graph, state, name, infraHosts, baseDeps)
+		prepareDepsByHost, err := planContainerMachinePrepareTasks(graph, state, name, infraHosts)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		machineTaskIDsByHost := map[string][]string{}
+		for _, host := range infraHosts {
+			if prepareID := prepareDepsByHost[host]; prepareID != "" {
+				prepareDepsByCluster[name] = append(prepareDepsByCluster[name], prepareID)
+			}
+		}
 		for _, machineName := range machineNames {
 			host := applyMachineHost(state, machineName)
 			if host == "" {
@@ -43,7 +48,7 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 				deps = append(deps, prepareID)
 			}
 			hostSlotKey := applyMachineHostSlotKey(state, machineName)
-			machineTaskIDsByHost[host] = append(machineTaskIDsByHost[host], taskID)
+			infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
 			if err := graph.Add(Activity{
 				ID:                   taskID,
 				Requires:             kubeVirtReqsByCluster[name],
@@ -73,7 +78,7 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 					HostSlotCount:      1,
 				},
 			}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		for _, host := range infraHosts {
@@ -83,8 +88,7 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 				finalizeLabel += " on " + host
 			}
 			deps := append([]string(nil), baseDeps...)
-			deps = append(deps, machineTaskIDsByHost[host]...)
-			if prepareID := prepareDepsByHost[host]; prepareID != "" && len(machineTaskIDsByHost[host]) == 0 {
+			if prepareID := prepareDepsByHost[host]; prepareID != "" {
 				deps = append(deps, prepareID)
 			}
 			infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
@@ -111,14 +115,14 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 				},
 			}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
-	return infraDepsByCluster, nil
+	return infraDepsByCluster, prepareDepsByCluster, nil
 }
 
-func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State, clusterName string, hosts []string, deps []string) (map[string]string, error) {
+func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State, clusterName string, hosts []string) (map[string]string, error) {
 	out := map[string]string{}
 	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
 	for _, host := range hosts {
@@ -128,9 +132,8 @@ func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State
 		taskID := "infraprepare." + clusterName + "." + host
 		out[host] = taskID
 		if err := graph.Add(Activity{
-			ID:                   taskID,
-			Requires:             []CapabilityRef{providerHostReadyCapability(host)},
-			ExplicitDependencies: append([]string(nil), deps...),
+			ID:       taskID,
+			Requires: []CapabilityRef{providerHostReadyCapability(host)},
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           taskID,
@@ -199,16 +202,15 @@ func planHostVirtctlActivities(graph *ActivityGraph, state v1alpha1.State, phase
 	return nil
 }
 
-func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, infraDepsByCluster map[string][]string, hostsByContainerCluster map[string][]string) error {
+func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, clusterNames []string, kubeVirtReqsByCluster map[string][]CapabilityRef, infraDepsByCluster, prepareDepsByCluster map[string][]string, machineServiceTaskIDs []string, hostsByContainerCluster map[string][]string) error {
 	for _, name := range clusterNames {
-		infraDeps := append([]string(nil), infraDepsByCluster[name]...)
 		isoTaskID := "iso." + name
 		if phaseSet[ApplyPhaseDeps] && includeContainer {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
+			fabricDeps := appendUniqueStrings(append([]string(nil), machineServiceTaskIDs...), prepareDepsByCluster[name]...)
 			if err := graph.Add(Activity{
 				ID:                   isoTaskID,
-				Requires:             kubeVirtReqsByCluster[name],
-				ExplicitDependencies: infraDeps,
+				ExplicitDependencies: fabricDeps,
 				Task: ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:          isoTaskID,
@@ -245,10 +247,11 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 						bootRequires = appendUniqueCapability(bootRequires, virtctlProvisionedCapability(host))
 					}
 				}
+				bootDeps := appendUniqueStrings(append([]string(nil), isoDeps...), infraDepsByCluster[name]...)
 				if err := graph.Add(Activity{
 					ID:                   bootTaskID,
 					Requires:             bootRequires,
-					ExplicitDependencies: isoDeps,
+					ExplicitDependencies: bootDeps,
 					Task: ApplyTask{
 						Entry: TaskLedgerEntry{
 							ID:           bootTaskID,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -45,41 +46,36 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	if tasks[2].Entry.ID != "infraprepare.sno-libvirt.bastion" {
 		t.Fatalf("third task = %s, want infraprepare.sno-libvirt.bastion", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].Entry.Dependencies) != 2 || tasks[2].Entry.Dependencies[0] != "provider.bastion" || tasks[2].Entry.Dependencies[1] != "infra-component.bastion" {
-		t.Fatalf("infra prepare deps = %v, want provider and infra-component services", tasks[2].Entry.Dependencies)
-	}
+	assertPlannedDeps(t, tasks[2], "provider.bastion")
 	if tasks[3].Entry.ID != "infra.sno-libvirt.master-0" {
 		t.Fatalf("fourth task = %s, want infra.sno-libvirt.master-0", tasks[3].Entry.ID)
 	}
-	if len(tasks[3].Entry.Dependencies) != 3 || tasks[3].Entry.Dependencies[0] != "provider.bastion" || tasks[3].Entry.Dependencies[1] != "infra-component.bastion" || tasks[3].Entry.Dependencies[2] != "infraprepare.sno-libvirt.bastion" {
-		t.Fatalf("machine infra deps = %v, want provider, infra-component, and prepare", tasks[3].Entry.Dependencies)
-	}
+	assertPlannedDeps(t, tasks[3], "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
 	if tasks[3].Entry.HostSlotKey != "host:bastion:machine" || tasks[3].Entry.HostSlotCount != 1 {
 		t.Fatalf("machine infra host slot = %q/%d, want host:bastion:machine/1", tasks[3].Entry.HostSlotKey, tasks[3].Entry.HostSlotCount)
 	}
 	if tasks[4].Entry.ID != "infrafinalize.sno-libvirt.bastion" {
 		t.Fatalf("fifth task = %s, want infrafinalize.sno-libvirt.bastion", tasks[4].Entry.ID)
 	}
-	if len(tasks[4].Entry.Dependencies) != 3 || tasks[4].Entry.Dependencies[0] != "provider.bastion" || tasks[4].Entry.Dependencies[1] != "infra-component.bastion" || tasks[4].Entry.Dependencies[2] != "infra.sno-libvirt.master-0" {
-		t.Fatalf("infra finalize deps = %v, want provider, infra-component, and machine infra", tasks[4].Entry.Dependencies)
-	}
+	assertPlannedDeps(t, tasks[4], "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
 	if tasks[5].Entry.ID != "iso.sno-libvirt" {
 		t.Fatalf("sixth task = %s, want iso.sno-libvirt", tasks[5].Entry.ID)
 	}
-	if len(tasks[5].Entry.Dependencies) != 1 || tasks[5].Entry.Dependencies[0] != "infrafinalize.sno-libvirt.bastion" {
-		t.Fatalf("iso deps = %v, want infrafinalize.sno-libvirt.bastion", tasks[5].Entry.Dependencies)
-	}
+	assertPlannedDeps(t, tasks[5], "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
 	if tasks[6].Entry.ID != "boot.sno-libvirt" {
 		t.Fatalf("seventh task = %s, want boot.sno-libvirt", tasks[6].Entry.ID)
 	}
-	if len(tasks[6].Entry.Dependencies) != 1 || tasks[6].Entry.Dependencies[0] != "iso.sno-libvirt" {
-		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[6].Entry.Dependencies)
-	}
+	assertPlannedDeps(t, tasks[6], "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
 	if tasks[7].Entry.ID != "wait.sno-libvirt" {
 		t.Fatalf("eighth task = %s, want wait.sno-libvirt", tasks[7].Entry.ID)
 	}
-	if len(tasks[7].Entry.Dependencies) != 1 || tasks[7].Entry.Dependencies[0] != "boot.sno-libvirt" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt", tasks[7].Entry.Dependencies)
+	assertPlannedDeps(t, tasks[7], "boot.sno-libvirt")
+}
+
+func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
+	t.Helper()
+	if !reflect.DeepEqual(task.Entry.Dependencies, want) {
+		t.Fatalf("%s deps = %v, want %v", task.Entry.ID, task.Entry.Dependencies, want)
 	}
 }
 

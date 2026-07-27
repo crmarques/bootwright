@@ -157,9 +157,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	for completed < len(tasks) {
 		startedAny := false
 		for _, task := range tasks {
-			if running >= parallelism {
-				break
-			}
 			if fatalErr != nil || ctx.Err() != nil {
 				break
 			}
@@ -167,6 +164,10 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 				continue
 			}
 			ledger.MarkDependencyReady(task.Entry.ID, time.Now())
+			if running >= parallelism {
+				ledger.RecordBlockedOn(task.Entry.ID, applyTaskBudgetBlocker)
+				continue
+			}
 			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit); blocker != "" {
 				ledger.RecordBlockedOn(task.Entry.ID, blocker)
 				continue
@@ -368,6 +369,8 @@ func blockUnfinishedApplyTasks(ledger *RunLedger, now time.Time) []string {
 	return blocked
 }
 
+const applyTaskBudgetBlocker = "task budget"
+
 func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int) string {
 	if !taskRedfishAvailable(task, runningRedfish, redfishLimit) {
 		return "redfish budget"
@@ -566,59 +569,4 @@ func taskReady(ledger RunLedger, task TaskLedgerEntry) bool {
 
 func applyRunID(now time.Time) string {
 	return "apply-" + now.UTC().Format("20060102T150405.000000000Z")
-}
-
-func autoParallelism(taskCount int) int {
-	if taskCount < 1 {
-		return 1
-	}
-	return taskCount
-}
-
-func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) ConcurrencyLimits {
-	autoGlobal := autoParallelism(len(tasks))
-	if limits.Parallelism <= 0 || limits.Parallelism > autoGlobal {
-		limits.Parallelism = autoGlobal
-	}
-	autoPerHost := hostSlotAutoParallelism(tasks)
-	if limits.ParallelismPerHost <= 0 || limits.ParallelismPerHost > autoPerHost {
-		limits.ParallelismPerHost = autoPerHost
-	}
-	autoRedfish := nodeBootTaskCount(tasks)
-	if autoRedfish < 1 {
-		autoRedfish = 1
-	}
-	if limits.ParallelismRedfish <= 0 || limits.ParallelismRedfish > autoRedfish {
-		limits.ParallelismRedfish = autoRedfish
-	}
-	limits.AutoParallelism = autoGlobal
-	limits.AutoParallelismPerHost = autoPerHost
-	limits.AutoParallelismRedfish = autoRedfish
-	return limits
-}
-
-func nodeBootTaskCount(tasks []ApplyTask) int {
-	count := 0
-	for _, task := range tasks {
-		if task.RedfishSlots > 0 {
-			count += task.RedfishSlots
-		}
-	}
-	return count
-}
-
-func hostSlotAutoParallelism(tasks []ApplyTask) int {
-	counts := map[string]int{}
-	maxCount := 1
-	for _, task := range tasks {
-		key, count := taskHostSlot(task)
-		if key == "" {
-			continue
-		}
-		counts[key] += count
-		if counts[key] > maxCount {
-			maxCount = counts[key]
-		}
-	}
-	return maxCount
 }

@@ -177,6 +177,30 @@ func TestMergeGlobalPullSecretCredentialRetriesConflictWithLatestResourceVersion
 	}
 }
 
+func TestMergeGlobalPullSecretCredentialSurvivesRepeatedConflicts(t *testing.T) {
+	config := dockerConfig(t, map[string]map[string]string{"quay.io": {"auth": "cXVheQ=="}})
+	runner := &conflictPullSecretRunner{}
+	for attempt := 0; attempt < pullSecretMergeAttempts; attempt++ {
+		runner.gets = append(runner.gets, livePullSecretJSON(t, "1", config))
+	}
+	for attempt := 0; attempt < pullSecretMergeAttempts-1; attempt++ {
+		runner.replaceErrs = append(runner.replaceErrs, errors.New(`Error from server (Conflict): the object has been modified`))
+	}
+	if pullSecretMergeAttempts < 6 {
+		t.Fatalf("pullSecretMergeAttempts = %d, want a budget that tolerates a busy MCO rollout", pullSecretMergeAttempts)
+	}
+	changed, err := mergeGlobalPullSecretCredential(context.Background(), runner, "/tmp/kubeconfig", "cp.icr.io", "cp", "KEY")
+	if err != nil {
+		t.Fatalf("mergeGlobalPullSecretCredential: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true after the final attempt succeeded")
+	}
+	if runner.replaceCalls != pullSecretMergeAttempts {
+		t.Fatalf("replace calls = %d, want %d", runner.replaceCalls, pullSecretMergeAttempts)
+	}
+}
+
 func livePullSecretJSON(t *testing.T, resourceVersion string, config []byte) []byte {
 	t.Helper()
 	live, err := json.Marshal(map[string]any{

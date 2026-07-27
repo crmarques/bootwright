@@ -93,7 +93,7 @@ func pullSecretCredential(secretName, registry, username string, raw []byte) (st
 	return credential, nil
 }
 
-const pullSecretMergeAttempts = 3
+const pullSecretMergeAttempts = 8
 
 func mergeGlobalPullSecretCredential(ctx context.Context, runner extensionoc.OCRunner, kubeconfig, registry, username, password string) (bool, error) {
 	var conflict error

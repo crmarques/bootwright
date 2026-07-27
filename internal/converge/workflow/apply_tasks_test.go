@@ -963,7 +963,176 @@ func TestPlanApplyAddonsOrdersAddonTasks(t *testing.T) {
 		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
 	}
 	assertTaskDeps(t, tasks, "addon.demo.a")
+	assertTaskDeps(t, tasks, "addon.demo.b")
+}
+
+func assertNoTaskPath(t *testing.T, tasks []ApplyTask, from, to string) {
+	t.Helper()
+	deps := map[string][]string{}
+	for _, task := range tasks {
+		deps[task.Entry.ID] = task.Entry.Dependencies
+	}
+	if _, ok := deps[from]; !ok {
+		t.Fatalf("task %s not found in %+v", from, applyTaskIDs(tasks))
+	}
+	seen := map[string]bool{}
+	queue := append([]string(nil), deps[from]...)
+	for len(queue) > 0 {
+		next := queue[0]
+		queue = queue[1:]
+		if next == to {
+			t.Fatalf("%s unexpectedly depends on %s", from, to)
+		}
+		if seen[next] {
+			continue
+		}
+		seen[next] = true
+		queue = append(queue, deps[next]...)
+	}
+}
+
+func TestPlanApplyAddonsWithoutDeclaredRelationRunConcurrently(t *testing.T) {
+	state := extensionPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertNoTaskPath(t, tasks, "addon.demo.a", "addon.demo.b")
+	assertNoTaskPath(t, tasks, "addon.demo.b", "addon.demo.a")
+}
+
+func TestPlanApplyAddonsOrderByDeclaredCapabilities(t *testing.T) {
+	state := extensionPlanningState()
+	state.ClusterAddons[0].Spec.Provides = []string{"storage"}
+	state.ClusterAddons[1].Spec.Requires = []string{"storage"}
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
 	assertTaskDeps(t, tasks, "addon.demo.b", "addon.demo.a")
+}
+
+func TestPlanApplyAddonsSharingOLMNamespaceAreSerialized(t *testing.T) {
+	state := extensionPlanningState()
+	for i := range state.ClusterAddons {
+		state.ClusterAddons[i].Spec.Type = v1alpha1.ClusterAddonTypeOLM
+		state.ClusterAddons[i].Spec.OLM = &v1alpha1.ClusterAddonOLMSpec{
+			Namespace:     v1alpha1.ClusterAddonOLMNamespace{Name: "openshift-shared", Create: true},
+			OperatorGroup: &v1alpha1.ClusterAddonOLMOperatorGroup{Name: "shared-group"},
+		}
+	}
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskDeps(t, tasks, "addon.demo.b", "addon.demo.a")
+}
+
+func TestPlanApplyAddonsInDistinctOLMNamespacesRunConcurrently(t *testing.T) {
+	state := extensionPlanningState()
+	for i, name := range []string{"openshift-a", "openshift-b"} {
+		state.ClusterAddons[i].Spec.Type = v1alpha1.ClusterAddonTypeOLM
+		state.ClusterAddons[i].Spec.OLM = &v1alpha1.ClusterAddonOLMSpec{
+			Namespace:     v1alpha1.ClusterAddonOLMNamespace{Name: name, Create: true},
+			OperatorGroup: &v1alpha1.ClusterAddonOLMOperatorGroup{Name: name + "-group"},
+		}
+	}
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertNoTaskPath(t, tasks, "addon.demo.b", "addon.demo.a")
+}
+
+func TestPlanApplyAddonsSharingOLMCatalogSourceAreSerialized(t *testing.T) {
+	state := extensionPlanningState()
+	for i, name := range []string{"openshift-a", "openshift-b"} {
+		state.ClusterAddons[i].Spec.Type = v1alpha1.ClusterAddonTypeOLM
+		state.ClusterAddons[i].Spec.OLM = &v1alpha1.ClusterAddonOLMSpec{
+			Namespace:     v1alpha1.ClusterAddonOLMNamespace{Name: name, Create: true},
+			CatalogSource: &v1alpha1.ClusterAddonOLMCatalogSource{Name: "vendor-catalog", Image: "example.test/catalog:v1"},
+			Subscription:  v1alpha1.ClusterAddonOLMSubscription{Source: "vendor-catalog", SourceNamespace: "openshift-marketplace"},
+		}
+	}
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskDeps(t, tasks, "addon.demo.b", "addon.demo.a")
+}
+
+func TestPlanApplyAddonsMergingGlobalPullSecretShareResourceKey(t *testing.T) {
+	state := extensionPlanningState()
+	for i := range state.ClusterAddons {
+		state.ClusterAddons[i].Spec.Accepts = v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
+			Name:      "entitlement",
+			SecretRef: &v1alpha1.ClusterAddonInputSecret{},
+			Effects: []v1alpha1.ClusterAddonInputEffect{{
+				GlobalPullSecretMerge: &v1alpha1.ClusterAddonGlobalPullSecretMergeEffect{Registry: "cp.icr.io", Username: "cp"},
+			}},
+		}}}
+	}
+	state.ClusterAddonBindings[0].Spec.AddonConfigs = []v1alpha1.ClusterAddonBindingAddonConfig{
+		{
+			AddonRef: v1alpha1.LocalObjectReference{Name: "a"},
+			Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "entitlement", Value: "entitlement-key"}},
+		},
+		{
+			AddonRef: v1alpha1.LocalObjectReference{Name: "b"},
+			Inputs:   []v1alpha1.ClusterAddonBindingInput{{Name: "entitlement", Value: "entitlement-key"}},
+		},
+	}
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskResourceKeys(t, tasks, "addon.demo.a", "pullsecret:demo")
+	assertTaskResourceKeys(t, tasks, "addon.demo.b", "pullsecret:demo")
+}
+
+func TestPlanApplyAddonsWithoutPullSecretMergeCarryNoResourceKey(t *testing.T) {
+	state := extensionPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "add-ons", PhaseNames: []string{ApplyPhaseAddons}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	for _, id := range []string{"addon.demo.a", "addon.demo.b"} {
+		task := assertTaskPresent(t, tasks, id)
+		if len(task.Entry.ResourceKeys) != 0 {
+			t.Fatalf("%s resource keys = %v, want none", id, task.Entry.ResourceKeys)
+		}
+	}
+}
+
+func TestPlanApplyISOWaitsForFabricNotVirtualMachines(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskDeps(t, tasks, "iso.sno-libvirt", "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
+	assertTaskDeps(t, tasks, "infrafinalize.sno-libvirt.bastion", "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
+	assertTaskDeps(t, tasks, "boot.sno-libvirt", "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
+	assertNoTaskPath(t, tasks, "iso.sno-libvirt", "infra.sno-libvirt.master-0")
+	assertNoTaskPath(t, tasks, "infrafinalize.sno-libvirt.bastion", "infra.sno-libvirt.master-0")
+}
+
+func TestPlanApplyBareMetalOnlyISOKeepsFabricDependency(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "005-3nodes-baremetal")
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskDeps(t, tasks, "iso.3-nodes-ocp-baremetal", "infra-component.bastion")
 }
 
 func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
@@ -994,7 +1163,7 @@ func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
 	}
 	assertTaskDeps(t, tasks, "addon.demo.a", "wait.demo")
-	assertTaskDeps(t, tasks, "addon.demo.b", "addon.demo.a")
+	assertTaskDeps(t, tasks, "addon.demo.b", "wait.demo")
 }
 
 func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
@@ -1237,7 +1406,7 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion", "infra-component.bastion")
+	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion")
 	assertTaskPresent(t, tasks, "infra-component.bastion")
 	task := assertTaskPresent(t, tasks, "osinstall.ceph-libvirt")
 	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osprepare.ceph-libvirt.bastion")
@@ -1270,9 +1439,16 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 
 	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
-	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization", "infra.child-ocp.child-master-0")
+	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "infrafinalize.child-ocp.localhost", "host:localhost:mutating")
+	assertTaskHasDeps(t, tasks, "boot.child-ocp", "iso.child-ocp", "infra.child-ocp.child-master-0", "infrafinalize.child-ocp.localhost")
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
+	iso := assertTaskPresent(t, tasks, "iso.child-ocp")
+	for _, dep := range iso.Entry.Dependencies {
+		if dep == "infra.child-ocp.child-master-0" || dep == "infrafinalize.child-ocp.localhost" {
+			t.Fatalf("iso.child-ocp deps = %v, must not wait for virtual machine creation", iso.Entry.Dependencies)
+		}
+	}
 }
 
 func TestPlanApplyAllOrdersKubeVirtManagedCephAfterHostReadiness(t *testing.T) {

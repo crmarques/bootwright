@@ -70,6 +70,54 @@ func TestRunApplyTaskGraphRecordsReadyAtAndBlockedOnForHostSlotContention(t *tes
 	}
 }
 
+func TestRunApplyTaskGraphAttributesTheGlobalTaskBudget(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := &recordingApplyRunner{delay: 10 * time.Millisecond}
+	tasks := []ApplyTask{}
+	for _, id := range []string{"task-a", "task-b", "task-c"} {
+		tasks = append(tasks, ApplyTask{
+			Entry: TaskLedgerEntry{
+				ID:     id,
+				Kind:   ApplyTaskKindClusterInstall,
+				Label:  id,
+				Status: TaskStatusPending,
+			},
+			Playbook: id,
+			State:    state,
+		})
+	}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseMachines}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(io.Writer, io.Writer) ansible.Runner {
+		return runner
+	})
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	if runner.maxActive > 1 {
+		t.Fatalf("a global limit of 1 ran %d tasks at once", runner.maxActive)
+	}
+	budgeted := 0
+	for _, task := range ledger.Tasks {
+		for _, blocker := range task.BlockedOn {
+			if blocker == applyTaskBudgetBlocker {
+				budgeted++
+			}
+		}
+	}
+	if budgeted == 0 {
+		t.Fatal("a binding global task budget must be attributed on the tasks it held back, not left invisible")
+	}
+}
+
 func TestTaskDispatchBlockerReportsTheFirstUnavailableBudget(t *testing.T) {
 	task := ApplyTask{
 		Entry: TaskLedgerEntry{

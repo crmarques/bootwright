@@ -5,13 +5,22 @@
     - "!all"
     - min
   become: true
-  environment: "{{ bootwright_proxy_env | default({}) }}"
+  environment: "{{ (bootwright_proxy_env | default({})) | combine({'XDG_CACHE_HOME': bootwright_agent_iso_cache_dir}) }}"
+
+  vars:
+    bootwright_agent_iso_cache_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_task_cluster_name }}/runtime/installer-cache"
 
   pre_tasks:
     - name: Resolve proxy environment
       ansible.builtin.import_role:
         name: bootwright.core.machine_proxy
         tasks_from: facts
+
+    - name: Create per-cluster installer image cache directory
+      ansible.builtin.file:
+        path: "{{ bootwright_agent_iso_cache_dir }}"
+        state: directory
+        mode: "0700"
 
   tasks:
     - name: Create agent ISO for selected cluster
