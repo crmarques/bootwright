@@ -16,7 +16,7 @@ type hookTargetMachine struct {
 	sshKeyRef v1alpha1.SecretRef
 }
 
-func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddonHook) ([]hookTargetMachine, error) {
+func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddonStep) ([]hookTargetMachine, error) {
 	target := hook.Target
 	var out []hookTargetMachine
 	add := func(more []hookTargetMachine) { out = append(out, more...) }
@@ -54,7 +54,7 @@ func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddon
 	return dedupeTargetMachines(out), nil
 }
 
-func (e *addonHookExecutor) fromInputMachines(hook v1alpha1.ClusterAddonHook, from v1alpha1.ClusterAddonHookInputTarget) ([]hookTargetMachine, error) {
+func (e *addonHookExecutor) fromInputMachines(hook v1alpha1.ClusterAddonStep, from v1alpha1.ClusterAddonStepInputTarget) ([]hookTargetMachine, error) {
 	refKind, ok := e.inputRefKind(from.Input)
 	if !ok {
 		return nil, fmt.Errorf("hook %s fromInput %s is not a resourceRef input", hook.Name, from.Input)

@@ -5,7 +5,7 @@ description: Run operator-supplied Ansible playbooks (with vendored roles and co
 
 # Provisioning playbooks
 
-A `ProvisioningPlaybook` runs an **operator-supplied Ansible playbook** against
+A `Playbook` runs an **operator-supplied Ansible playbook** against
 machines at a chosen provisioning stage. It is the imperative escape hatch for
 site-specific steps bootwright does not model — hardening a node after OS
 install, preparing storage before cluster dependencies land, registering nodes
@@ -49,12 +49,11 @@ its stage and whose `--clusters` scope includes its target, so
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: ProvisioningPlaybook
+kind: Playbook
 metadata:
   name: harden-storage-nodes
 spec:
-  stage: machines
-  timing: after
+  follows: machines
   target:
     clusters: [nprd-ceph]     # a StorageCluster → its ceph nodes
   playbook: playbooks/harden.yml
@@ -64,15 +63,15 @@ spec:
     tuned_profile: throughput-performance
   secretRefs: [vault-token]
   run: onChange
-  failureMode: fail
+  onFailure: fail
 ```
 
 On disk, the object sits beside its Ansible content:
 
 ```text
 input/
-  provisioning-playbooks/
-    harden-storage-nodes.yaml      # the ProvisioningPlaybook object
+  playbooks-custom/
+    harden-storage-nodes.yaml      # the Playbook object
     playbooks/harden.yml           # the entry playbook
     roles/<role>/tasks/main.yml    # optional vendored roles
     collections/ansible_collections/<ns>/<name>/...  # optional vendored collections

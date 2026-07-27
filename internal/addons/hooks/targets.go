@@ -16,7 +16,7 @@ func SupportedTargetRefKinds() []string {
 	return []string{RefKindStorageExport, RefKindStorageCluster, RefKindContainerCluster, RefKindMachine}
 }
 
-func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundCluster string, hook v1alpha1.ClusterAddonHook, inputs []v1alpha1.ClusterAddonBindingInput) (containers []string, storage []string) {
+func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundCluster string, hook v1alpha1.ClusterAddonStep, inputs []v1alpha1.ClusterAddonBindingInput) (containers []string, storage []string) {
 	c := newClusterSet()
 	s := newClusterSet()
 	target := hook.Target
@@ -40,7 +40,7 @@ func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundClus
 	return c.list(), s.list()
 }
 
-func resolveInputRef(addon v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook, inputs []v1alpha1.ClusterAddonBindingInput, from v1alpha1.ClusterAddonHookInputTarget) (refKind, name string, ok bool) {
+func resolveInputRef(addon v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep, inputs []v1alpha1.ClusterAddonBindingInput, from v1alpha1.ClusterAddonStepInputTarget) (refKind, name string, ok bool) {
 	accepted, found := acceptedInput(addon, from.Input)
 	if !found {
 		return "", "", false

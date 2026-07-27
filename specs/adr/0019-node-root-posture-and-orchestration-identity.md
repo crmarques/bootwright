@@ -177,7 +177,7 @@ reconciliation idempotent.
   `internal/converge/provisioning_stage_pin_test.go`. It cannot host a stage
   that must run *inside* the storage work (after the account exists and
   before cephadm bootstraps), and adding one would also widen the authored
-  `ProvisioningPlaybook.spec.stage` vocabulary for a concern no operator
+  `Playbook.spec.stage` vocabulary for a concern no operator
   playbook targets. Account provisioning and revocation are ordered steps of
   the storage-cluster task instead.
 - **An `Environment`-wide fan-out** (a fleet default that revokes root on

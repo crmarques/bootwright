@@ -30,9 +30,9 @@ func TestSyntaxCheckJSONIncludesDiagnostics(t *testing.T) {
 	}
 }
 
-func TestSyntaxCheckJSONCountsProvisioningPlaybooks(t *testing.T) {
+func TestSyntaxCheckJSONCountsPlaybooks(t *testing.T) {
 	state := v1alpha1.State{
-		ProvisioningPlaybooks: []v1alpha1.ProvisioningPlaybook{
+		Playbooks: []v1alpha1.Playbook{
 			{Metadata: v1alpha1.Metadata{Name: "post-install"}},
 		},
 	}
@@ -44,8 +44,8 @@ func TestSyntaxCheckJSONCountsProvisioningPlaybooks(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout.String())
 	}
-	if report.ProvisioningPlaybooks != 1 {
-		t.Fatalf("provisioningPlaybooks count = %d, want 1 (must not be omitted from the Objects summary)", report.ProvisioningPlaybooks)
+	if report.Playbooks != 1 {
+		t.Fatalf("provisioningPlaybooks count = %d, want 1 (must not be omitted from the Objects summary)", report.Playbooks)
 	}
 	if report.ExitCode != 0 {
 		t.Fatalf("valid report exitCode = %d, want 0", report.ExitCode)

@@ -17,7 +17,7 @@ against machines.
 
 ## Decision
 
-Introduce a declarative kind, `ProvisioningPlaybook`, that runs one
+Introduce a declarative kind, `Playbook`, that runs one
 operator-supplied Ansible playbook (with optional vendored roles/collections)
 against machines, anchored to one of the five provisioning sub-phases
 (`fabric`, `machines`, `deps`, `base`, `add-ons`) with `before`/`after` timing.

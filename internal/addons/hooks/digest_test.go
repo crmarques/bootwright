@@ -24,7 +24,7 @@ func TestContentDigestChangesWithContent(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "add-on.yaml")
 	writeHookContent(t, dir, "playbooks/run.yaml", "- hosts: all")
-	hook := v1alpha1.ClusterAddonHook{Name: "h", Playbook: "playbooks/run.yaml"}
+	hook := v1alpha1.ClusterAddonStep{Name: "h", Playbook: "playbooks/run.yaml"}
 
 	first, err := ContentDigest(source, hook)
 	if err != nil {
@@ -52,10 +52,10 @@ func TestContentDigestFailsClosedOnUnreadableContent(t *testing.T) {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	hook := v1alpha1.ClusterAddonHook{
+	hook := v1alpha1.ClusterAddonStep{
 		Name:      "h",
 		Playbook:  "playbooks/run.yaml",
-		Manifests: []v1alpha1.ClusterAddonHookManifest{{Path: "manifests/object.yaml"}},
+		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/object.yaml"}},
 	}
 	if _, err := ContentDigest(source, hook); err == nil {
 		t.Fatal("expected an error for unreadable hook content")
@@ -69,7 +69,7 @@ func TestContentDigestToleratesAbsentOptionalPaths(t *testing.T) {
 	source := filepath.Join(dir, "add-on.yaml")
 	writeHookContent(t, dir, "playbooks/run.yaml", "- hosts: all")
 
-	hook := v1alpha1.ClusterAddonHook{Name: "h", Playbook: "playbooks/run.yaml"}
+	hook := v1alpha1.ClusterAddonStep{Name: "h", Playbook: "playbooks/run.yaml"}
 	withRoles := hook
 	withRoles.RolesPath = "roles"
 	bare, err := ContentDigest(source, hook)

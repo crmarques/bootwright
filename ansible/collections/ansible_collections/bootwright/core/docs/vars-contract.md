@@ -626,7 +626,7 @@ reserve seed-only cephadm work for the final storage task.
 ## Add-On Hook Vars
 
 Add-on hooks (`ClusterAddon.spec.hooks[]`) run through a separate, narrower engine
-than the core layer tasks and `ProvisioningPlaybook`s above
+than the core layer tasks and `Playbook`s above
 (`internal/converge/workflow`, `runHookAnsible`). A hook playbook does **not**
 receive the full `bootwright_*` vars contract documented in this file — there is
 no `bootwright_environment`, `bootwright_machines`, `bootwright_clusters`, or any
@@ -657,8 +657,8 @@ The `vars.yaml` handed to the run is empty (`{}`); every hook fact arrives as an
 
 | Fact | Shape |
 | --- | --- |
-| `bootwright_hook_name` | The hook's `name`. |
-| `bootwright_hook_lifecycle` | The hook's `lifecycle` (`preApply`, `postOperatorReady`, `postReady`). |
+| `bootwright_step_name` | The hook's `name`. |
+| `bootwright_step_anchor` | The hook's `lifecycle` (`preApply`, `postOperatorReady`, `postReady`). |
 | `bootwright_addon_name` | The bound `ClusterAddon` name. |
 | `bootwright_bound_cluster` | The bound `ContainerCluster` name. |
 | `bootwright_hook_outputs_dir` | Controller-local directory the playbook writes its declared `outputs[]` files into. |

@@ -256,11 +256,11 @@ func stringValue(value any) string {
 }
 
 func hookContentDigest(extension v1alpha1.ClusterAddon) (string, error) {
-	if len(extension.Spec.Hooks) == 0 {
+	if len(extension.Spec.Steps) == 0 {
 		return "", nil
 	}
 	sum := sha256.New()
-	for _, hook := range extension.Spec.Hooks {
+	for _, hook := range extension.Spec.Steps {
 		digest, err := hooks.ContentDigest(extension.SourcePath, hook)
 		if err != nil {
 			return "", fmt.Errorf("ClusterAddon/%s hook %s: %w", extension.Metadata.Name, hook.Name, err)

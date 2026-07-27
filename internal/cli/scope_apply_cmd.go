@@ -325,7 +325,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
-			for _, problem := range workflow.RemoveProvisioningPlaybookRecordsForClusters(ctx.RunsDir, plan.State, tasks, substrateResetClusters) {
+			for _, problem := range workflow.RemovePlaybookRecordsForClusters(ctx.RunsDir, plan.State, tasks, substrateResetClusters) {
 				cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; the playbook may be skipped as unchanged although its machines are rebuilt")
 			}
 		}
@@ -362,7 +362,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 			noteIneffectiveAllowDestroy(stdout, allowDestroy, true, nil)
 			printExtensionDryRun(stdout, dryRunTasks)
-			printProvisioningPlaybookDryRun(stdout, dryRunTasks)
+			printPlaybookDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 			if err != nil {
 				return failErr(1, err)

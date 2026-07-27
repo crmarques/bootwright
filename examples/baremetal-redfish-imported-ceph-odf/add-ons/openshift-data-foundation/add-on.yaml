@@ -33,9 +33,9 @@ spec:
       channel: stable-4.21
       source: redhat-operators
 
-  hooks:
+  steps:
     - name: attach-external-storage
-      lifecycle: postOperatorReady
+      follows: operatorReady
       manifests:
         - path: manifests/rook-ceph-external-cluster-details.yaml
           reclaimRendered: true

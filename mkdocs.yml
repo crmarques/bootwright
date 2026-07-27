@@ -109,7 +109,7 @@ nav:
       - Container clusters (OpenShift / OKD): concepts/container-clusters.md
       - Storage (Ceph): concepts/storage.md
       - Post-install add-ons: concepts/add-ons.md
-      - Provisioning playbooks: concepts/provisioning-playbooks.md
+      - Playbooks: concepts/playbooks.md
       - Secrets & entitlements: concepts/secrets.md
   - Advanced Scenarios:
       - advanced/index.md

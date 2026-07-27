@@ -43,7 +43,7 @@ func validateClusterAddons(state v1alpha1.State) []string {
 		errs = append(errs, validateClusterAddonProvides(extension)...)
 		errs = append(errs, validateClusterAddonRequires(extension)...)
 		errs = append(errs, validateClusterAddonAccepts(extension)...)
-		errs = append(errs, validateClusterAddonHooks(state, extension)...)
+		errs = append(errs, validateClusterAddonSteps(state, extension)...)
 	}
 	return errs
 }

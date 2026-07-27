@@ -41,7 +41,7 @@ through a separate `redhat-rhel` subscription named by their
 which the machines-phase registration task registers each node with — after the OS is in
 place and before the Ceph deps work, not inside the cephadm flow. An
 entitlement with `rhsm.management: external` delegates that registration to an
-operator-supplied `ProvisioningPlaybook` instead. The entitlement model — the
+operator-supplied `Playbook` instead. The entitlement model — the
 `spec.type` values, license acceptance, the `rhsm.management` axis, and the
 credential plumbing — lives in
 [Secrets and entitlements](../concepts/secrets.md#entitlements).

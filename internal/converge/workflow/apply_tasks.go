@@ -27,7 +27,7 @@ const (
 	ApplyTaskKindStorageCluster         = "storageCluster"
 	ApplyTaskKindClusterAddon           = "clusterAddon"
 	ApplyTaskKindNodeConfigApply        = "nodeConfigApply"
-	ApplyTaskKindProvisioningPlaybook   = "provisioningPlaybook"
+	ApplyTaskKindPlaybook               = "provisioningPlaybook"
 
 	ApplyClusterKindContainer = "container"
 	ApplyClusterKindStorage   = "storage"
@@ -71,7 +71,7 @@ func ApplyTaskKinds() []string {
 		ApplyTaskKindStorageCluster,
 		ApplyTaskKindClusterAddon,
 		ApplyTaskKindNodeConfigApply,
-		ApplyTaskKindProvisioningPlaybook,
+		ApplyTaskKindPlaybook,
 	}
 }
 

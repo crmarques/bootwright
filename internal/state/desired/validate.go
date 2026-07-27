@@ -31,7 +31,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateClusterAddons(state))...)
 	errs = append(errs, notes(validateClusterAddonProfiles(state))...)
 	errs = append(errs, notes(validateClusterAddonBindings(state))...)
-	errs = append(errs, notes(validateProvisioningPlaybooks(state))...)
+	errs = append(errs, notes(validatePlaybooks(state))...)
 	errs = append(errs, notes(validateStorage(state))...)
 	errs = append(errs, notes(validateCrossLayer(state))...)
 	errs = append(errs, notes(validateSecrets(state))...)
@@ -725,13 +725,13 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			}
 		}
 	}
-	for _, playbook := range state.ProvisioningPlaybooks {
+	for _, playbook := range state.Playbooks {
 		for i, ref := range playbook.Spec.SecretRefs {
-			require(fmt.Sprintf("ProvisioningPlaybook/%s spec.secretRefs[%d]", playbook.Metadata.Name, i), ref)
+			require(fmt.Sprintf("Playbook/%s spec.secretRefs[%d]", playbook.Metadata.Name, i), ref)
 		}
 	}
 	for _, addon := range state.ClusterAddons {
-		for i, hook := range addon.Spec.Hooks {
+		for i, hook := range addon.Spec.Steps {
 			for j, ref := range hook.SecretRefs {
 				require(fmt.Sprintf("ClusterAddon/%s spec.hooks[%d].secretRefs[%d]", addon.Metadata.Name, i, j), ref)
 			}

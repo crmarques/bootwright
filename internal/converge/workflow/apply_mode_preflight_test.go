@@ -13,7 +13,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindHostVirtctl:            true,
 		ApplyTaskKindClusterAddon:           true,
 		ApplyTaskKindMachineRegistration:    true,
-		ApplyTaskKindProvisioningPlaybook:   true,
+		ApplyTaskKindPlaybook:               true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
 		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --converge-drifted taxonomy", len(overrideReconfigureOnlyKinds), len(want))

@@ -86,7 +86,7 @@ func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) ([]string
 		}); recordErr != nil {
 			fmt.Fprintf(e.stderr, "warning: could not record failed hook %s (%s): %v; a prior ready record may skip it on the next run\n", hook.Name, lifecycle, recordErr)
 		}
-		if v1alpha1.ClusterAddonHookFailureMode(hook) == v1alpha1.ProvisioningPlaybookFailureContinue {
+		if v1alpha1.ClusterAddonStepFailureMode(hook) == v1alpha1.PlaybookFailureContinue {
 			fmt.Fprintf(e.stderr, "hook %s (%s) failed, continuing: %s\n", hook.Name, lifecycle, detail)
 			continue
 		}
@@ -95,12 +95,12 @@ func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) ([]string
 	return observed, nil
 }
 
-func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAddonHook) ([]string, error) {
+func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAddonStep) ([]string, error) {
 	digest, err := e.hookDigest(hook)
 	if err != nil {
 		return nil, err
 	}
-	if v1alpha1.ClusterAddonHookRun(hook) == v1alpha1.ProvisioningPlaybookRunOnChange && e.hookConverged(hook.Name, digest) {
+	if v1alpha1.ClusterAddonStepRun(hook) == v1alpha1.PlaybookRunOnChange && e.hookConverged(hook.Name, digest) {
 		return nil, nil
 	}
 	hookRoot := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "hooks", hook.Name)
@@ -120,15 +120,16 @@ func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAd
 	if err := e.reclaimSecretHookOutputs(hook); err != nil {
 		return observed, err
 	}
+	anchor, _ := v1alpha1.ClusterAddonStepAnchor(hook)
 	return observed, extensionrecords.SetHook(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, extensionrecords.HookRecord{
-		Lifecycle: hook.Lifecycle,
+		Lifecycle: anchor,
 		Status:    extensionrecords.RecordStatusReady,
 		Digest:    digest,
 		RanAt:     time.Now().UTC(),
 	})
 }
 
-func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) (string, error) {
+func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonStep) (string, error) {
 	content, err := hooks.ContentDigest(e.plan.Addon.SourcePath, hook)
 	if err != nil {
 		return "", fmt.Errorf("ClusterAddon/%s hook %s: %w; fix or remove the unreadable content so bootwright can prove what would run", e.plan.Name, hook.Name, err)
@@ -136,11 +137,11 @@ func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) (string, 
 	projection := struct {
 		Content    string                              `json:"content"`
 		Inputs     []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
-		Target     v1alpha1.ClusterAddonHookTarget     `json:"target"`
-		Manifests  []v1alpha1.ClusterAddonHookManifest `json:"manifests,omitempty"`
+		Target     v1alpha1.ClusterAddonStepTarget     `json:"target"`
+		Manifests  []v1alpha1.ClusterAddonStepManifest `json:"manifests,omitempty"`
 		ExtraVars  map[string]any                      `json:"extraVars,omitempty"`
 		SecretRefs []v1alpha1.SecretRef                `json:"secretRefs,omitempty"`
-		Outputs    []v1alpha1.ClusterAddonHookOutput   `json:"outputs,omitempty"`
+		Outputs    []v1alpha1.ClusterAddonStepOutput   `json:"outputs,omitempty"`
 	}{
 		Content:    content,
 		Inputs:     e.inputs,
@@ -167,7 +168,7 @@ func (e *addonHookExecutor) hookConverged(name, digest string) bool {
 	return ok && hook.Status == extensionrecords.RecordStatusReady && hook.Digest == digest
 }
 
-func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha1.ClusterAddonHook, outputs map[string]string) ([]string, error) {
+func (e *addonHookExecutor) applyHookManifests(ctx context.Context, hook v1alpha1.ClusterAddonStep, outputs map[string]string) ([]string, error) {
 	if len(hook.Manifests) == 0 {
 		return nil, nil
 	}
@@ -205,7 +206,7 @@ func hookManifestResourceID(object map[string]any) string {
 	return extensionrender.ObservedResourceID(kind, namespace, name)
 }
 
-func (e *addonHookExecutor) renderHookManifest(hook v1alpha1.ClusterAddonHook, manifest v1alpha1.ClusterAddonHookManifest, outputs map[string]string) (map[string]any, error) {
+func (e *addonHookExecutor) renderHookManifest(hook v1alpha1.ClusterAddonStep, manifest v1alpha1.ClusterAddonStepManifest, outputs map[string]string) (map[string]any, error) {
 	path := filepath.Join(filepath.Dir(e.plan.Addon.SourcePath), manifest.Path)
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -216,7 +217,7 @@ func (e *addonHookExecutor) renderHookManifest(hook v1alpha1.ClusterAddonHook, m
 	})
 }
 
-func (e *addonHookExecutor) resolveManifestToken(hook v1alpha1.ClusterAddonHook, token hooks.Token, outputs map[string]string) (string, error) {
+func (e *addonHookExecutor) resolveManifestToken(hook v1alpha1.ClusterAddonStep, token hooks.Token, outputs map[string]string) (string, error) {
 	switch token.Kind {
 	case hooks.TokenCluster:
 		return e.plan.Cluster, nil
@@ -271,10 +272,11 @@ func addonBindingInputs(state v1alpha1.State, bindingName, addonName string) (v1
 	return v1alpha1.ClusterAddonBinding{}, nil
 }
 
-func hookExtraVarPairs(hook v1alpha1.ClusterAddonHook, addonName, cluster, outputsDir, secretsDir, kubeconfig string, refs map[string]any, inputs []v1alpha1.ClusterAddonBindingInput) ([]string, error) {
+func hookExtraVarPairs(hook v1alpha1.ClusterAddonStep, addonName, cluster, outputsDir, secretsDir, kubeconfig string, refs map[string]any, inputs []v1alpha1.ClusterAddonBindingInput) ([]string, error) {
+	anchor, _ := v1alpha1.ClusterAddonStepAnchor(hook)
 	pairs := []string{
-		"bootwright_hook_name=" + hook.Name,
-		"bootwright_hook_lifecycle=" + hook.Lifecycle,
+		"bootwright_step_name=" + hook.Name,
+		"bootwright_step_anchor=" + anchor,
 		"bootwright_addon_name=" + addonName,
 		"bootwright_bound_cluster=" + cluster,
 		"bootwright_hook_outputs_dir=" + outputsDir,
@@ -317,7 +319,7 @@ func jsonVarPair(name string, value any) (string, error) {
 	return string(data), nil
 }
 
-func hookSecretNames(hook v1alpha1.ClusterAddonHook) []string {
+func hookSecretNames(hook v1alpha1.ClusterAddonStep) []string {
 	names := make([]string, 0, len(hook.SecretRefs))
 	for _, ref := range hook.SecretRefs {
 		names = append(names, ref.Name)
@@ -327,11 +329,11 @@ func hookSecretNames(hook v1alpha1.ClusterAddonHook) []string {
 
 func hookReferencedClusters(state v1alpha1.State, binding extensionplan.BindingPlan, addonName string, addon v1alpha1.ClusterAddon) (containers, storage []string) {
 	containers = []string{binding.Cluster}
-	if len(addon.Spec.Hooks) == 0 {
+	if len(addon.Spec.Steps) == 0 {
 		return containers, nil
 	}
 	_, inputs := addonBindingInputs(state, binding.Binding, addonName)
-	for _, hook := range addon.Spec.Hooks {
+	for _, hook := range addon.Spec.Steps {
 		c, s := hooks.TargetClusters(state, addon, binding.Cluster, hook, inputs)
 		containers = appendUniqueStrings(containers, c...)
 		storage = appendUniqueStrings(storage, s...)
@@ -340,12 +342,12 @@ func hookReferencedClusters(state v1alpha1.State, binding extensionplan.BindingP
 }
 
 func hookCrossClusterDependencies(state v1alpha1.State, binding extensionplan.BindingPlan, addonName string, addon v1alpha1.ClusterAddon, installPhasePlanned bool, storageDepsByCluster map[string][]string) []string {
-	if len(addon.Spec.Hooks) == 0 {
+	if len(addon.Spec.Steps) == 0 {
 		return nil
 	}
 	_, inputs := addonBindingInputs(state, binding.Binding, addonName)
 	var deps []string
-	for _, hook := range addon.Spec.Hooks {
+	for _, hook := range addon.Spec.Steps {
 		containers, storage := hooks.TargetClusters(state, addon, binding.Cluster, hook, inputs)
 		for _, name := range storage {
 			deps = appendUniqueStrings(deps, storageDepsByCluster[name]...)

@@ -14,7 +14,7 @@ func hashScopedState(state v1alpha1.State) v1alpha1.State {
 	roots.Entitlements = nil
 	roots.MachineImages = nil
 	roots.MachineInstallProfiles = nil
-	roots.ProvisioningPlaybooks = nil
+	roots.Playbooks = nil
 	roots.NetworkConfigs = nil
 
 	referenced := map[string]bool{}
@@ -40,7 +40,7 @@ func hashScopedState(state v1alpha1.State) v1alpha1.State {
 		for _, obj := range state.MachineInstallProfiles {
 			grew = keepReferenced(referenced, keptProfile, obj.Metadata.Name, obj) || grew
 		}
-		for _, obj := range state.ProvisioningPlaybooks {
+		for _, obj := range state.Playbooks {
 			grew = keepReferenced(referenced, keptPlaybook, obj.Metadata.Name, obj) || grew
 		}
 		for _, obj := range state.NetworkConfigs {
@@ -55,7 +55,7 @@ func hashScopedState(state v1alpha1.State) v1alpha1.State {
 	state.Entitlements = keepByName(state.Entitlements, keptEntitlement, func(o v1alpha1.Entitlement) string { return o.Metadata.Name })
 	state.MachineImages = keepByName(state.MachineImages, keptImage, func(o v1alpha1.MachineImage) string { return o.Metadata.Name })
 	state.MachineInstallProfiles = keepByName(state.MachineInstallProfiles, keptProfile, func(o v1alpha1.MachineInstallProfile) string { return o.Metadata.Name })
-	state.ProvisioningPlaybooks = keepByName(state.ProvisioningPlaybooks, keptPlaybook, func(o v1alpha1.ProvisioningPlaybook) string { return o.Metadata.Name })
+	state.Playbooks = keepByName(state.Playbooks, keptPlaybook, func(o v1alpha1.Playbook) string { return o.Metadata.Name })
 	state.NetworkConfigs = keepByName(state.NetworkConfigs, keptNetwork, func(o v1alpha1.NetworkConfig) string { return o.Metadata.Name })
 	return state
 }

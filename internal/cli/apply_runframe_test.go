@@ -91,9 +91,9 @@ func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
 
 func TestApplyRunFrameKeepsPlaybookHookPointsSeparate(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "playbook.pre", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook pre (before machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "playbook.post", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook post (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "playbook.post2", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook tuning (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning},
+		{ID: "playbook.pre", Kind: workflow.ApplyTaskKindPlaybook, Label: "playbook pre (before machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
+		{ID: "playbook.post", Kind: workflow.ApplyTaskKindPlaybook, Label: "playbook post (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
+		{ID: "playbook.post2", Kind: workflow.ApplyTaskKindPlaybook, Label: "playbook tuning (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning},
 	}, time.Now())
 
 	steps := applyRunFrame(ledger, nil).Groups[0].Steps

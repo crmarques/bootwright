@@ -46,9 +46,9 @@ func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
 					InstallPlanApproval: v1alpha1.InstallPlanApprovalAutomatic,
 				},
 			},
-			Hooks: []v1alpha1.ClusterAddonHook{
-				{Name: "prep", Lifecycle: v1alpha1.ClusterAddonHookPreApply},
-				{Name: "gather", Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady},
+			Steps: []v1alpha1.ClusterAddonStep{
+				{Name: "prep", Gates: v1alpha1.ClusterAddonStepGateApply},
+				{Name: "gather", Follows: v1alpha1.ClusterAddonStepFollowsOperatorReady},
 			},
 			Readiness: v1alpha1.ClusterAddonReadiness{
 				Timeout: "30m",
@@ -78,10 +78,10 @@ func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
 		}
 		return -1
 	}
-	preApply := idx("hook:preApply")
+	preApply := idx("hook:apply")
 	namespace := idx("apply:Namespace")
 	gate := idx("get:csv")
-	postOp := idx("hook:postOperatorReady")
+	postOp := idx("hook:operatorReady")
 	if preApply < 0 || namespace < 0 || gate < 0 || postOp < 0 {
 		t.Fatalf("missing event; events=%v", runner.events)
 	}
@@ -104,7 +104,7 @@ func TestApplyHookErrorRecordsHookSummary(t *testing.T) {
 		Spec: v1alpha1.ClusterAddonSpec{
 			Type:        v1alpha1.ClusterAddonTypeManifestSet,
 			ManifestSet: &v1alpha1.ClusterAddonManifestSet{},
-			Hooks:       []v1alpha1.ClusterAddonHook{{Name: "prep", Lifecycle: v1alpha1.ClusterAddonHookPreApply}},
+			Steps:       []v1alpha1.ClusterAddonStep{{Name: "prep", Gates: v1alpha1.ClusterAddonStepGateApply}},
 		},
 	}
 	plan := extensionplan.ExtensionPlan{Name: "odf", Cluster: "metal-ocp", Extension: extension, Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"}}
@@ -120,7 +120,7 @@ func TestApplyHookErrorRecordsHookSummary(t *testing.T) {
 type failingHookRunner struct{}
 
 func (failingHookRunner) Run(context.Context, string) ([]string, error) {
-	return nil, &HookError{Hook: "prep", Lifecycle: v1alpha1.ClusterAddonHookPreApply, Detail: "boom"}
+	return nil, &HookError{Hook: "prep", Lifecycle: v1alpha1.ClusterAddonStepGateApply, Detail: "boom"}
 }
 
 type observingHookRunner struct {
@@ -142,12 +142,12 @@ func TestApplyRecordsHookObservedResources(t *testing.T) {
 		Spec: v1alpha1.ClusterAddonSpec{
 			Type:        v1alpha1.ClusterAddonTypeManifestSet,
 			ManifestSet: &v1alpha1.ClusterAddonManifestSet{},
-			Hooks:       []v1alpha1.ClusterAddonHook{{Name: "attach", Lifecycle: v1alpha1.ClusterAddonHookPreApply}},
+			Steps:       []v1alpha1.ClusterAddonStep{{Name: "attach", Gates: v1alpha1.ClusterAddonStepGateApply}},
 		},
 	}
 	plan := extensionplan.ExtensionPlan{Name: "odf", Cluster: "metal-ocp", Extension: extension, Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"}}
 	hookRunner := observingHookRunner{observed: map[string][]string{
-		v1alpha1.ClusterAddonHookPreApply: {"Secret/openshift-storage/rook-ceph-external-cluster-details"},
+		v1alpha1.ClusterAddonStepGateApply: {"Secret/openshift-storage/rook-ceph-external-cluster-details"},
 	}}
 	if _, err := Apply(context.Background(), &sequencingRunner{}, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run", StartedAt: time.Now(),

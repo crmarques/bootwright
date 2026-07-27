@@ -59,7 +59,7 @@ func TaskPhaseLabel(task workflow.TaskLedgerEntry) string {
 		return PhaseClusterInstall
 	case workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindNodeConfigApply:
 		return PhaseAddOns
-	case workflow.ApplyTaskKindProvisioningPlaybook:
+	case workflow.ApplyTaskKindPlaybook:
 		if hook := PlaybookHookPoint(task.Label); hook != "" {
 			return PhaseCustomPlaybooks + " (" + hook + ")"
 		}
@@ -135,7 +135,7 @@ func TaskUnitName(task workflow.TaskLedgerEntry) string {
 	switch task.Kind {
 	case workflow.ApplyTaskKindClusterAddon:
 		return strings.TrimPrefix(task.Label, "addon ")
-	case workflow.ApplyTaskKindProvisioningPlaybook:
+	case workflow.ApplyTaskKindPlaybook:
 		name := strings.TrimPrefix(task.Label, "playbook ")
 		if open := strings.LastIndex(name, " ("); open > 0 {
 			name = name[:open]

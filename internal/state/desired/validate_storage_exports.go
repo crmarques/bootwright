@@ -117,7 +117,7 @@ func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[st
 
 func validateHookPlaybookAgainstExternalStorage(prefix string, effect addoninputs.EffectBinding, export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster) []string {
 	var errs []string
-	for _, hook := range effect.Extension.Spec.Hooks {
+	for _, hook := range effect.Extension.Spec.Steps {
 		if hook.Playbook == "" || hook.Target.FromInput == nil || hook.Target.FromInput.Input != effect.Input.Name {
 			continue
 		}

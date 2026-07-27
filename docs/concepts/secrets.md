@@ -363,7 +363,7 @@ type. The secrets it names are declared as first-class `Secret` objects.
 | --- | --- | --- | --- |
 | `metadata.name` | Yes | — | Entitlement name referenced by storage or OS install inputs. |
 | `spec.type` | Yes | — | Discriminator: `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
-| `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`ProvisioningPlaybook`](provisioning-playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). `ibm-storage-ceph` carries no `rhsm`; its nodes register RHEL through a separate `redhat-rhel` subscription named by the profile `subscription` or the cluster `osSubscriptionRef`. |
+| `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`Playbook`](playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). `ibm-storage-ceph` carries no `rhsm`; its nodes register RHEL through a separate `redhat-rhel` subscription named by the profile `subscription` or the cluster `osSubscriptionRef`. |
 | `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
 | `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
 | `spec.rhsm.connectToInsights` | No | `false` | Whether registered RHEL nodes enroll in Insights. |
@@ -407,7 +407,7 @@ where Bootwright registers the storage nodes itself in a machines-phase task —
 after the OS is in place, before the Ceph deps work. Under `management:
 external` the arm carries only `management`: Bootwright plans no registration
 task and demands no RHSM secrets; the operator delegates registration to a
-[`ProvisioningPlaybook`](provisioning-playbooks.md) at `stage: deps`,
+[`Playbook`](playbooks.md) at `stage: deps`,
 `timing: before` (which gates the Ceph deps work), and it must leave nodes
 able to install the distribution packages. The `examples/ceph-external-rhsm`
 snippet shows the pattern;

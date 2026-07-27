@@ -156,7 +156,7 @@ Rules:
   Bootwright plans no registration task and never touches `rhsm.conf`; the arm
   must then carry only `management` (`organizationRef`, `activationKeyRef`,
   `satellite`, and `connectToInsights` are rejected), and the operator owns
-  registration — typically through a [`ProvisioningPlaybook`](#provisioningplaybook)
+  registration — typically through a [`Playbook`](#provisioningplaybook)
   at `stage: deps, timing: before`, which runs after the machines phase and
   (with the default `failureMode: fail`) gates the deps-phase Ceph work; a
   `machines`/`after` playbook runs at the same point in time but does not gate
@@ -1340,14 +1340,14 @@ Rules:
   `globalPullSecretMerge` arm, and the input must declare `secretRef: {}`. Before
   the add-on's resources apply, the referenced secret's value is merged into the
   bound cluster's global pull secret as the `auths[<registry>]` credential.
-- `spec.hooks[]` ship add-on-owned imperative integration run at a lifecycle
+- `spec.steps[]` ship add-on-owned imperative integration run at a lifecycle
   point of the add-on apply — an Ansible playbook, templated Kubernetes
   manifests, or both — so the logic travels with the add-on instead of being
   compiled into Bootwright. `playbook`, `rolesPath`, `collectionsPath`, and each
   `manifests[].path` are relative paths resolved against the `ClusterAddon` file
   (the `manifestSet.path` rules); the loader skips the `playbooks/`, `roles/`,
   and `collections/` subtrees as Ansible content.
-  - `hooks[].name` is required and unique within the add-on. `hooks[].lifecycle`
+  - `hooks[].name` is required and unique within the add-on. `steps[].gates` / `steps[].follows`
     is required: `preApply` (before the operator install), `postOperatorReady`
     (after the operator CSV reaches `Succeeded`, before `olm.customResources`;
     olm add-ons only), or `postReady` (after the readiness checks pass). Hooks
@@ -1376,7 +1376,7 @@ Rules:
   - `hooks[].timeout` bounds the playbook run (a Go duration; default `10m`).
     `hooks[].run` is `onChange` (default: skip a hook whose content and resolved
     inputs are unchanged since the last reconcile) or `always`.
-    `hooks[].failureMode` is `fail` (default: a failing hook blocks the add-on
+    `steps[].onFailure` is `fail` (default: a failing hook blocks the add-on
     apply) or `continue` (record the failure and proceed); a hook whose manifests
     consume its outputs must be `fail`.
   - `hooks[].outputs[]` declare files the playbook writes under
@@ -1456,23 +1456,22 @@ Rules:
   unresolved-reference validation error, whose remedy names `add-ons add` when
   the built-in catalog ships the referenced name.
 
-## ProvisioningPlaybook
+## Playbook
 
-`ProvisioningPlaybook` owns one operator-supplied Ansible playbook run against
+`Playbook` owns one operator-supplied Ansible playbook run against
 machines at a chosen provisioning stage. It is the imperative escape hatch
 sibling of `ClusterAddon`: where an add-on applies declarative Kubernetes objects
-into an installed cluster, a `ProvisioningPlaybook` injects an operator playbook
+into an installed cluster, a `Playbook` injects an operator playbook
 (and optional vendored roles/collections) into the provisioning DAG at any of the
 five sub-phases, before or after that phase's built-in work.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: ProvisioningPlaybook
+kind: Playbook
 metadata:
   name: harden-storage-nodes
 spec:
-  stage: machines          # fabric | machines | deps | base | add-ons
-  timing: after            # before | after (default after)
+  follows: machines        # fabric | machines | deps | base | add-ons
   target:
     clusters: [nprd-ceph]
   playbook: playbooks/harden.yml
@@ -1482,16 +1481,20 @@ spec:
     tuned_profile: throughput-performance
   secretRefs: [vault-token]
   run: onChange            # onChange (default) | always
-  failureMode: fail        # fail (default) | continue
+  onFailure: fail          # fail (default) | continue
 ```
 
 Rules:
 
-- `spec.stage` is one of the five sub-phase names (`fabric`, `machines`, `deps`,
-  `base`, `add-ons`) — the same vocabulary as `--stage`. `spec.timing` is
-  `before` or `after` (default `after`).
+- Exactly one of `spec.gates` or `spec.follows` is required, and its value is one
+  of the five sub-phase names (`fabric`, `machines`, `deps`, `base`, `add-ons`) —
+  the same vocabulary as `--stage`. `follows` runs the playbook once that phase's
+  built-in work has completed; `gates` runs it first and makes that phase's own
+  tasks hard-depend on it, so the phase does not start until the playbook
+  succeeds. `gates` may not be combined with `onFailure: continue`: a gate that
+  lets the phase proceed on failure is not a gate.
 - `spec.playbook` is required, a `.yml`/`.yaml` file path relative to the
-  `ProvisioningPlaybook` file, contained within its directory (no absolute paths,
+  `Playbook` file, contained within its directory (no absolute paths,
   `..`, or symlinks) — the `ClusterAddon` `manifestSet.path` rules. `rolesPath`
   and `collectionsPath` are optional relative directories under the same rules,
   and must not be named `vendor` or `node_modules` (directories `context init`'s
@@ -1510,7 +1513,7 @@ Rules:
   `bootwright_controller_hosts`): a controller-targeted playbook would run
   operator code as root over every context's secrets.
 - `spec.provides`/`spec.requires` order playbooks within the same
-  `(stage, timing)` bucket: every `requires` must be met by another enabled
+  `(gates/follows, phase)` bucket: every `requires` must be met by another enabled
   playbook's `provides` in the same bucket, `provides` are unique, and the graph
   is acyclic. `spec.order` tie-breaks within a bucket.
 - `spec.secretRefs` must resolve to declared `Secret` objects; the playbook
@@ -1518,15 +1521,15 @@ Rules:
 - `spec.run` selects re-run behaviour: `onChange` (default) skips a run whose
   declared inputs — spec plus a content digest of the playbook and vendored trees
   — are unchanged since the last reconcile; `always` re-runs every apply.
-- `spec.failureMode` is `fail` (default: a failed playbook blocks the anchor
+- `spec.onFailure` is `fail` (default: a failed playbook blocks the anchor
   phase) or `continue` (the failure is recorded and the phase proceeds).
 - `spec.enabled` defaults true; `enabled: false` keeps the object but skips it.
 
-A playbook is planned only when its `stage` is in the run's phase set (the
+A playbook is planned only when its anchor phase is in the run's phase set (the
 `--stage` filter) and its target resolves to at least one in-scope host (the
-`--clusters` filter). An `after` playbook waits for the anchor stage's core tasks
-in scope; a `before` playbook gates every anchor-stage core task in scope and
-itself lands after the previous stage. Playbooks flow through `apply`, `plan`,
+`--clusters` filter). A `follows` playbook waits for the anchor phase's core tasks
+in scope; a `gates` playbook blocks every anchor-phase core task in scope and
+itself lands after the previous phase. Playbooks flow through `apply`, `plan`,
 and `diff --recorded` on the existing `--stage`/`--clusters` axes; there
 is no dedicated CLI verb. Because a playbook is opaque, `diff --recorded` reports it
 as `match` (declared inputs unchanged) or `drift` (changed, will re-run) from the

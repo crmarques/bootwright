@@ -163,7 +163,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty-one kind
 | `ClusterAddon` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
 | `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
 | `ClusterAddonBinding` | One installed cluster's post-install bootstrap set: add-ons, profiles, and binding-scoped add-on inputs |
-| `ProvisioningPlaybook` | An operator-supplied Ansible playbook injected into the provisioning DAG at a chosen sub-phase, with optional vendored roles and collections |
+| `Playbook` | An operator-supplied Ansible playbook injected into the provisioning DAG at a chosen sub-phase, with optional vendored roles and collections |
 | `Secret` | Named secret material a `SecretRef` resolves to: its type (opaque, token, username/password, docker config, CA bundle, TLS certificate, or SSH key pair) and its source (literal, file, or Bootwright-generated) |
 
 `ContainerCluster` owns install intent while machines own substrate and OS

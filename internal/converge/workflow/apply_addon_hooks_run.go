@@ -21,7 +21,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.ClusterAddonHook, hookRoot string) (map[string]string, error) {
+func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.ClusterAddonStep, hookRoot string) (map[string]string, error) {
 	machines, err := e.resolveHookTargetMachines(hook)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	return outputs, nil
 }
 
-func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.ClusterAddonHook, inventoryPath, varsPath, hookRoot string, targets []hookSSHTarget, extraVars []string, timeout time.Duration) error {
+func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.ClusterAddonStep, inventoryPath, varsPath, hookRoot string, targets []hookSSHTarget, extraVars []string, timeout time.Duration) error {
 	runner := ansible.Runner(ansible.CommandRunner{})
 	if e.runnerFactory != nil {
 		runner = e.runnerFactory(e.stdout, e.stderr)
@@ -120,7 +120,7 @@ func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.Cl
 			UseControllingTTY:  e.opts.UseControllingTTY,
 		}
 	}
-	if v1alpha1.ClusterAddonHookTargetLimit(hook) == v1alpha1.ClusterAddonHookTargetLimitAll {
+	if v1alpha1.ClusterAddonStepTargetLimit(hook) == v1alpha1.ClusterAddonStepTargetLimitAll {
 		return e.runOneHookAnsible(ctx, runner, newSpec("", 0), timeout)
 	}
 	var failures []string
@@ -150,7 +150,7 @@ func (e *addonHookExecutor) runOneHookAnsible(ctx context.Context, runner ansibl
 	return nil
 }
 
-func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, outputsDir string) (map[string]string, error) {
+func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonStep, outputsDir string) (map[string]string, error) {
 	values := map[string]string{}
 	for _, output := range hook.Outputs {
 		path := filepath.Join(outputsDir, output.File)
@@ -158,7 +158,7 @@ func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, o
 		if err != nil {
 			return nil, fmt.Errorf("hook %s did not produce declared output %q (%s): %w", hook.Name, output.Name, output.File, err)
 		}
-		if v1alpha1.ClusterAddonHookOutputFormatValue(output) == v1alpha1.ClusterAddonHookOutputFormatJSON {
+		if v1alpha1.ClusterAddonStepOutputFormatValue(output) == v1alpha1.ClusterAddonStepOutputFormatJSON {
 			var probe any
 			if err := json.Unmarshal(data, &probe); err != nil {
 				return nil, fmt.Errorf("hook %s output %q is not valid JSON: %w", hook.Name, output.Name, err)
@@ -173,7 +173,7 @@ func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonHook, o
 	return values, nil
 }
 
-func (e *addonHookExecutor) reclaimSecretHookOutputs(hook v1alpha1.ClusterAddonHook) error {
+func (e *addonHookExecutor) reclaimSecretHookOutputs(hook v1alpha1.ClusterAddonStep) error {
 	for _, output := range hook.Outputs {
 		if !output.Secret {
 			continue
@@ -289,8 +289,8 @@ func objectToMap(value any) map[string]any {
 	return out
 }
 
-func hookTimeout(hook v1alpha1.ClusterAddonHook) time.Duration {
-	d, err := time.ParseDuration(v1alpha1.ClusterAddonHookTimeout(hook))
+func hookTimeout(hook v1alpha1.ClusterAddonStep) time.Duration {
+	d, err := time.ParseDuration(v1alpha1.ClusterAddonStepTimeout(hook))
 	if err != nil {
 		return 10 * time.Minute
 	}

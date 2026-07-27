@@ -1000,12 +1000,12 @@ func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
 	}
 
 	state := importedCephSecretState(v1alpha1.SecretSource{})
-	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
-		Name:      "attach",
-		Lifecycle: v1alpha1.ClusterAddonHookPostOperatorReady,
-		Playbook:  "playbooks/x.yaml",
-		Target: v1alpha1.ClusterAddonHookTarget{
-			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
+	state.ClusterAddons[0].Spec.Steps = []v1alpha1.ClusterAddonStep{{
+		Name:     "attach",
+		Follows:  v1alpha1.ClusterAddonStepFollowsOperatorReady,
+		Playbook: "playbooks/x.yaml",
+		Target: v1alpha1.ClusterAddonStepTarget{
+			FromInput: &v1alpha1.ClusterAddonStepInputTarget{Input: "external-storage"},
 		},
 	}}
 	checks := CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)

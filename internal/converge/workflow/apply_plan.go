@@ -82,7 +82,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 			return nil, err
 		}
 	}
-	if err := planProvisioningPlaybookActivities(graph, state, phaseSet, target); err != nil {
+	if err := planPlaybookActivities(graph, state, phaseSet, target); err != nil {
 		return nil, err
 	}
 	return graph.Lower()

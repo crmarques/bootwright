@@ -33,9 +33,9 @@ spec:
       channel: stable-4.21
       source: redhat-operators
 
-  hooks:
+  steps:
     - name: attach-external-storage
-      lifecycle: postOperatorReady
+      follows: operatorReady
       playbook: playbooks/export-external-details.yaml
       target:
         fromInput:

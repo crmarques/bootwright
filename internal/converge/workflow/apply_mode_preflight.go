@@ -94,7 +94,7 @@ var overrideReconfigureOnlyKinds = map[string]bool{
 	ApplyTaskKindHostVirtctl:            true,
 	ApplyTaskKindClusterAddon:           true,
 	ApplyTaskKindMachineRegistration:    true,
-	ApplyTaskKindProvisioningPlaybook:   true,
+	ApplyTaskKindPlaybook:               true,
 }
 
 var machineSubstrateKinds = map[string]bool{

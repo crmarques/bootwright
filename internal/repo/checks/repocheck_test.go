@@ -36,7 +36,7 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"`ClusterAddon`",
 		"`ClusterAddonProfile`",
 		"`ClusterAddonBinding`",
-		"`ProvisioningPlaybook`",
+		"`Playbook`",
 		"`Secret`",
 		"`Environment`",
 	}

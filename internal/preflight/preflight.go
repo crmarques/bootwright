@@ -181,7 +181,7 @@ func selectedNeedsAnsible(selected []Phase) bool {
 
 func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
 	for _, addon := range state.ClusterAddons {
-		for _, hook := range addon.Spec.Hooks {
+		for _, hook := range addon.Spec.Steps {
 			if hook.Playbook != "" {
 				return true
 			}

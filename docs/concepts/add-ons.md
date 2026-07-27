@@ -14,7 +14,7 @@ the target cluster is installed and reachable.
 
 Add-ons apply *declarative Kubernetes objects* and only after the cluster is
 installed. To run *imperative Ansible* against machines — at any stage, before or
-after the built-in work — use a [provisioning playbook](provisioning-playbooks.md)
+after the built-in work — use a [provisioning playbook](playbooks.md)
 instead.
 
 Add-ons model the initial post-install bootstrap applied *inside* an installed
@@ -362,7 +362,7 @@ Each readiness check must set exactly one arm:
 
 ### Hooks
 
-`spec.hooks` let an add-on ship its own imperative integration logic — Ansible
+`spec.steps` let an add-on ship its own imperative integration logic — Ansible
 playbooks and/or templated Kubernetes manifests — instead of that logic being
 compiled into Bootwright. A hook runs at a lifecycle point of the add-on apply,
 optionally against fleet machines resolved from a binding input, captures
@@ -380,20 +380,20 @@ everywhere else in the input tree.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `hooks[].name` | Yes | — | Hook name, unique within the add-on. |
-| `hooks[].lifecycle` | Yes | — | `preApply` (before the operator install), `postOperatorReady` (after the operator CSV reaches Succeeded, before `olm.customResources`; olm add-ons only), or `postReady` (after readiness checks pass). |
-| `hooks[].playbook` | One of playbook/manifests | — | Entry playbook, relative to the add-on file. |
-| `hooks[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
-| `hooks[].target` | For a playbook hook | — | Machines the playbook runs against (see below). |
-| `hooks[].secretRefs[]` | No | — | `Secret` names materialized into the hook's scoped secrets directory — only these, never the whole store. |
-| `hooks[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. |
-| `hooks[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
-| `hooks[].run` | No | `onChange` | `onChange` skips a hook whose content and inputs are unchanged; `always` re-runs every apply. |
-| `hooks[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |
-| `hooks[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the hook; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
-| `hooks[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
-| `hooks[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
-| `hooks[].manifests[].reclaimRendered` | No | `false` | Delete the rendered plaintext manifest from disk after it applies. Recommended for manifests that embed secret outputs (e.g. the Rook external-details `Secret`), so decrypted material does not linger on the controller. |
+| `steps[].name` | Yes | — | Hook name, unique within the add-on. |
+| `steps[].gates` / `steps[].follows` | Yes (exactly one) | — | `gates: apply` runs the step before the operator install and blocks it until the step succeeds. `follows: operatorReady` runs after the operator CSV reaches Succeeded, before `olm.customResources` (olm add-ons only); `follows: ready` runs after readiness checks pass. `gates` may not be combined with `onFailure: continue`. |
+| `steps[].playbook` | One of playbook/manifests | — | Entry playbook, relative to the add-on file. |
+| `steps[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
+| `steps[].target` | For a playbook hook | — | Machines the playbook runs against (see below). |
+| `steps[].secretRefs[]` | No | — | `Secret` names materialized into the hook's scoped secrets directory — only these, never the whole store. |
+| `steps[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. |
+| `steps[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
+| `steps[].run` | No | `onChange` | `onChange` skips a hook whose content and inputs are unchanged; `always` re-runs every apply. |
+| `steps[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |
+| `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the hook; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
+| `steps[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
+| `steps[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
+| `steps[].manifests[].reclaimRendered` | No | `false` | Delete the rendered plaintext manifest from disk after it applies. Recommended for manifests that embed secret outputs (e.g. the Rook external-details `Secret`), so decrypted material does not linger on the controller. |
 
 The `target` selects machines a playbook runs against — exactly one of
 `boundCluster` (the bound container cluster's nodes), `fromInput` (dereference a
@@ -412,8 +412,8 @@ target:
   limit: all
 ```
 
-A hook run receives scoped variables: `bootwright_hook_name`,
-`bootwright_hook_lifecycle`, `bootwright_addon_name`,
+A hook run receives scoped variables: `bootwright_step_name`,
+`bootwright_step_anchor`, `bootwright_addon_name`,
 `bootwright_bound_cluster`, `bootwright_hook_outputs_dir`,
 `bootwright_hook_secrets_dir` (only the declared `secretRefs`),
 `bootwright_hook_inputs` (input name → scalar value), `bootwright_hook_refs`
@@ -464,9 +464,9 @@ spec:
       source: redhat-operators
       sourceNamespace: openshift-marketplace
       installPlanApproval: Automatic
-  hooks:
+  steps:
     - name: gather-external-details
-      lifecycle: postOperatorReady
+      follows: operatorReady
       target:
         fromInput:
           input: external-storage
@@ -512,7 +512,7 @@ uses a manifest-only hook whose Secret template consumes
 `{{ exportDetails external-storage }}`.
 
 For imperative work that is not tied to an add-on's lifecycle, use a
-[provisioning playbook](provisioning-playbooks.md) instead.
+[provisioning playbook](playbooks.md) instead.
 
 ## ClusterAddonProfile
 

@@ -47,7 +47,7 @@ Operators author desired state as twenty-one YAML kinds:
 | `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |
 | `ClusterAddonBinding` | Which installed cluster receives add-ons, profiles, and binding-scoped input values? |
-| `ProvisioningPlaybook` | Which operator-supplied Ansible playbook runs against machines at a provisioning stage? |
+| `Playbook` | Which operator-supplied Ansible playbook runs against machines at a provisioning stage? |
 | `Secret` | What named secret material does a `SecretRef` resolve to, and how is it obtained? |
 
 Every fact has one owner. Machines own substrate selection, OS lifecycle mode,

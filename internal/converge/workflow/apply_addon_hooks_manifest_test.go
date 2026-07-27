@@ -46,9 +46,9 @@ func TestApplyHookManifestsUsesMaterializedKubeconfig(t *testing.T) {
 		},
 		ocRunner: runner,
 	}
-	hook := v1alpha1.ClusterAddonHook{
+	hook := v1alpha1.ClusterAddonStep{
 		Name: "attach",
-		Manifests: []v1alpha1.ClusterAddonHookManifest{{
+		Manifests: []v1alpha1.ClusterAddonStepManifest{{
 			Path: "manifests/configmap.yaml",
 		}},
 	}

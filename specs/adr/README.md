@@ -14,7 +14,7 @@ files.
 | --- | --- | --- |
 | [0002](0002-ansible-provider-dispatch.md) | Ansible Collection Layout And Provider Dispatch | Accepted |
 | [0004](0004-cross-cluster-substrate-dependencies.md) | Cross-Cluster Substrate Dependencies | Accepted |
-| [0005](0005-provisioning-playbooks.md) | Operator-Supplied Provisioning Playbooks | Accepted |
+| [0005](0005-provisioning-playbooks.md) | Operator-Supplied Playbooks | Accepted |
 | [0006](0006-no-prose-comments-knowledge-catalog.md) | Source Knowledge Lives in the Indexed Catalog, Not Comments | Accepted |
 | [0007](0007-apply-destroy-safety-model.md) | Apply/Destroy Safety Model | Accepted |
 | [0008](0008-ceph-declarative-cephadm-compat.md) | Declarative Ceph API on cephadm Native Concepts | Accepted |

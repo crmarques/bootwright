@@ -32,10 +32,10 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	p.Tasks(lines)
 }
 
-func printProvisioningPlaybookDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
+func printPlaybookDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	var lines []cliout.TaskLine
 	for _, task := range tasks {
-		if task.Entry.Kind != workflow.ApplyTaskKindProvisioningPlaybook {
+		if task.Entry.Kind != workflow.ApplyTaskKindPlaybook {
 			continue
 		}
 		lines = append(lines, cliout.TaskLine{

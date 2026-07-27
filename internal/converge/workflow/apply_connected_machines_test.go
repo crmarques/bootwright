@@ -126,11 +126,11 @@ func TestApplyTaskConnectedMachinesDepsIncludesArbiter(t *testing.T) {
 
 func TestHookReferencedClustersPullsCrossClusterStorageIntoScope(t *testing.T) {
 	state := hostTrustScopePlanningState()
-	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
-		Name:      "seed-export",
-		Lifecycle: v1alpha1.ClusterAddonHookLifecycles()[0],
-		Target: v1alpha1.ClusterAddonHookTarget{
-			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
+	state.ClusterAddons[0].Spec.Steps = []v1alpha1.ClusterAddonStep{{
+		Name:    "seed-export",
+		Follows: v1alpha1.ClusterAddonStepFollows()[0],
+		Target: v1alpha1.ClusterAddonStepTarget{
+			FromInput: &v1alpha1.ClusterAddonStepInputTarget{Input: "external-storage"},
 		},
 	}}
 	binding := extensionplan.BindingPlan{Binding: "ceph-binding", Cluster: "demo"}

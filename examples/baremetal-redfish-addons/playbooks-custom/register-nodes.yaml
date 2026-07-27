@@ -1,11 +1,9 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ProvisioningPlaybook
+kind: Playbook
 metadata:
   name: register-nodes
 spec:
-  stage: base
-
-  timing: after
+  follows: base
 
   target:
     clusters:
@@ -15,7 +13,3 @@ spec:
 
   extraVars:
     cmdb_url: https://cmdb.example.internal
-
-  run: onChange
-
-  failureMode: fail

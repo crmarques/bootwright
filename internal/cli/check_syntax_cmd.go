@@ -179,7 +179,7 @@ type syntaxCheckReport struct {
 	ClusterAddons             int                      `json:"clusterAddons"`
 	Profiles                  int                      `json:"clusterAddonProfiles"`
 	ExtensionBindings         int                      `json:"clusterAddonBindings"`
-	ProvisioningPlaybooks     int                      `json:"provisioningPlaybooks"`
+	Playbooks                 int                      `json:"provisioningPlaybooks"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions desiredstate.ClusterSelectionExclusions, checkErr error) error {
@@ -211,7 +211,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		ClusterAddons:             len(state.ClusterAddons),
 		Profiles:                  len(state.ClusterAddonProfiles),
 		ExtensionBindings:         len(state.ClusterAddonBindings),
-		ProvisioningPlaybooks:     len(state.ProvisioningPlaybooks),
+		Playbooks:                 len(state.Playbooks),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
@@ -276,7 +276,7 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "ClusterAddons", Value: fmt.Sprint(len(state.ClusterAddons))},
 		{Key: "ClusterAddonProfiles", Value: fmt.Sprint(len(state.ClusterAddonProfiles))},
 		{Key: "ClusterAddonBindings", Value: fmt.Sprint(len(state.ClusterAddonBindings))},
-		{Key: "ProvisioningPlaybooks", Value: fmt.Sprint(len(state.ProvisioningPlaybooks))},
+		{Key: "Playbooks", Value: fmt.Sprint(len(state.Playbooks))},
 	}
 	declared := make([]cliout.Field, 0, len(counts))
 	for _, field := range counts {

@@ -17,7 +17,7 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func RemoveProvisioningPlaybookRecordsForClusters(runsDir string, state v1alpha1.State, tasks []ApplyTask, clusters []string) []error {
+func RemovePlaybookRecordsForClusters(runsDir string, state v1alpha1.State, tasks []ApplyTask, clusters []string) []error {
 	if len(clusters) == 0 || strings.TrimSpace(runsDir) == "" {
 		return nil
 	}
@@ -32,7 +32,7 @@ func RemoveProvisioningPlaybookRecordsForClusters(runsDir string, state v1alpha1
 	}
 	var problems []error
 	for _, task := range tasks {
-		if task.Entry.Kind != ApplyTaskKindProvisioningPlaybook {
+		if task.Entry.Kind != ApplyTaskKindPlaybook {
 			continue
 		}
 		targets := limitTargetHosts(task.Limit, render.HostGroupMembers(task.State))
@@ -79,8 +79,8 @@ func clusterMachineNames(state v1alpha1.State, cluster string) []string {
 	return out
 }
 
-func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, target ApplyTarget) error {
-	playbooks := selectedProvisioningPlaybooks(state)
+func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, target ApplyTarget) error {
+	playbooks := selectedPlaybooks(state)
 	if len(playbooks) == 0 {
 		return nil
 	}
@@ -88,8 +88,8 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 	containers, storage := clusterKindSets(state)
 
 	for _, p := range playbooks {
-		stage := p.Spec.Stage
-		if !phaseSet[stage] {
+		anchor, gating := v1alpha1.PlaybookAnchor(p)
+		if !phaseSet[anchor] {
 			continue
 		}
 		limit, orderClusters, fleetWide, inScope, err := resolveProvisioningTarget(state, target, p, containers, storage)
@@ -99,26 +99,25 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 		if !inScope {
 			continue
 		}
-		timing := v1alpha1.ProvisioningPlaybookTiming(p)
 		id := "playbook." + p.Metadata.Name
 		hashVars, err := provisioningDesiredHashVars(p)
 		if err != nil {
-			return fmt.Errorf("ProvisioningPlaybook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
+			return fmt.Errorf("Playbook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
 		}
-		extraVarPairs, err := provisioningExtraVarPairs(p, stage, timing)
+		extraVarPairs, err := provisioningExtraVarPairs(p, anchor, gating)
 		if err != nil {
 			return err
 		}
 
 		activity := Activity{
 			ID:       id,
-			Provides: provisioningProvidesCapabilities(p, timing),
-			Requires: provisioningRequiresCapabilities(p, timing),
+			Provides: provisioningProvidesCapabilities(p, anchor, gating),
+			Requires: provisioningRequiresCapabilities(p, anchor, gating),
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:      id,
-					Kind:    ApplyTaskKindProvisioningPlaybook,
-					Label:   provisioningPlaybookLabel(p, stage, timing),
+					Kind:    ApplyTaskKindPlaybook,
+					Label:   provisioningPlaybookLabel(p, anchor, gating),
 					Cluster: provisioningPlaybookCluster(p, orderClusters),
 					Status:  TaskStatusPending,
 				},
@@ -129,32 +128,23 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 				ExtraVarPairs:     extraVarPairs,
 				State:             state,
 				DesiredHashVars:   hashVars,
-				SkipWhenConverged: v1alpha1.ProvisioningPlaybookRun(p) == v1alpha1.ProvisioningPlaybookRunOnChange,
+				SkipWhenConverged: v1alpha1.PlaybookRunMode(p) == v1alpha1.PlaybookRunOnChange,
 			},
 		}
 
-		anchorIDs := phaseTaskIDsInScope(index, stage, orderClusters, fleetWide)
-		if timing == v1alpha1.ProvisioningPlaybookTimingAfter {
+		anchorIDs := phaseTaskIDsInScope(index, anchor, orderClusters, fleetWide)
+		if !gating {
 			activity.ExplicitDependencies = append(activity.ExplicitDependencies, anchorIDs...)
-		} else {
-			if prev, ok := previousProvisioningStage(stage); ok {
-				activity.ExplicitDependencies = append(activity.ExplicitDependencies, phaseTaskIDsInScope(index, prev, orderClusters, fleetWide)...)
-			}
+		} else if prev, ok := previousProvisioningStage(anchor); ok {
+			activity.ExplicitDependencies = append(activity.ExplicitDependencies, phaseTaskIDsInScope(index, prev, orderClusters, fleetWide)...)
 		}
 		if err := graph.Add(activity); err != nil {
 			return err
 		}
-		if timing == v1alpha1.ProvisioningPlaybookTimingBefore {
-			hard := v1alpha1.ProvisioningPlaybookFailureMode(p) == v1alpha1.ProvisioningPlaybookFailureFail
+		if gating {
 			for _, anchorID := range anchorIDs {
-				if hard {
-					if err := graph.AddDependency(anchorID, id); err != nil {
-						return err
-					}
-				} else {
-					if err := graph.AddOrderingDependency(anchorID, id); err != nil {
-						return err
-					}
+				if err := graph.AddDependency(anchorID, id); err != nil {
+					return err
 				}
 			}
 		}
@@ -162,21 +152,22 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 	return nil
 }
 
-func selectedProvisioningPlaybooks(state v1alpha1.State) []v1alpha1.ProvisioningPlaybook {
-	out := make([]v1alpha1.ProvisioningPlaybook, 0, len(state.ProvisioningPlaybooks))
-	for _, p := range state.ProvisioningPlaybooks {
-		if v1alpha1.ProvisioningPlaybookIsEnabled(p) {
+func selectedPlaybooks(state v1alpha1.State) []v1alpha1.Playbook {
+	out := make([]v1alpha1.Playbook, 0, len(state.Playbooks))
+	for _, p := range state.Playbooks {
+		if v1alpha1.PlaybookIsEnabled(p) {
 			out = append(out, p)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		if a.Spec.Stage != b.Spec.Stage {
-			return a.Spec.Stage < b.Spec.Stage
+		anchorA, gatingA := v1alpha1.PlaybookAnchor(a)
+		anchorB, gatingB := v1alpha1.PlaybookAnchor(b)
+		if anchorA != anchorB {
+			return anchorA < anchorB
 		}
-		ta, tb := v1alpha1.ProvisioningPlaybookTiming(a), v1alpha1.ProvisioningPlaybookTiming(b)
-		if ta != tb {
-			return ta < tb
+		if gatingA != gatingB {
+			return gatingA && !gatingB
 		}
 		if a.Spec.Order != b.Spec.Order {
 			return a.Spec.Order < b.Spec.Order
@@ -246,7 +237,7 @@ func phaseTaskIDsInScope(index map[string]map[string][]string, phase string, clu
 }
 
 func previousProvisioningStage(stage string) (string, bool) {
-	stages := v1alpha1.ProvisioningStages()
+	stages := v1alpha1.PlaybookAnchors()
 	idx := -1
 	for i, s := range stages {
 		if s == stage {
@@ -272,7 +263,7 @@ func clusterKindSets(state v1alpha1.State) (containers, storage map[string]bool)
 	return containers, storage
 }
 
-func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alpha1.ProvisioningPlaybook, containers, storage map[string]bool) (limit string, orderClusters []string, fleetWide bool, inScope bool, err error) {
+func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alpha1.Playbook, containers, storage map[string]bool) (limit string, orderClusters []string, fleetWide bool, inScope bool, err error) {
 	var tokens []string
 	var unresolvedMachines []string
 	deferredByScope := false
@@ -321,7 +312,7 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 	}
 	if len(unresolvedMachines) > 0 {
 		return "", nil, false, false, fmt.Errorf(
-			"ProvisioningPlaybook/%s spec.target.machines %s resolve to no inventory host because they are not nodes of any container cluster or managed storage cluster; target them with spec.target.hostGroups instead, or remove them",
+			"Playbook/%s spec.target.machines %s resolve to no inventory host because they are not nodes of any container cluster or managed storage cluster; target them with spec.target.hostGroups instead, or remove them",
 			p.Metadata.Name, strings.Join(unresolvedMachines, ", "))
 	}
 	tokens = dedupeStrings(tokens)
@@ -330,7 +321,7 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 			return "", nil, false, false, nil
 		}
 		return "", nil, false, false, fmt.Errorf(
-			"ProvisioningPlaybook/%s spec.target resolves to no hosts; refusing to run it with an empty --limit, which would target every host in the fleet",
+			"Playbook/%s spec.target resolves to no hosts; refusing to run it with an empty --limit, which would target every host in the fleet",
 			p.Metadata.Name)
 	}
 	return strings.Join(tokens, ":"), orderClusters, fleetWide, true, nil
@@ -365,50 +356,57 @@ func machineOwningClusters(state v1alpha1.State, machine string) []string {
 	return owners
 }
 
-func provisioningPlaybookLabel(p v1alpha1.ProvisioningPlaybook, stage, timing string) string {
-	return "playbook " + p.Metadata.Name + " (" + timing + " " + stage + ")"
+func provisioningPlaybookLabel(p v1alpha1.Playbook, anchor string, gating bool) string {
+	return "playbook " + p.Metadata.Name + " (" + playbookAnchorKey(gating) + " " + anchor + ")"
 }
 
-func provisioningPlaybookCluster(p v1alpha1.ProvisioningPlaybook, orderClusters []string) string {
+func playbookAnchorKey(gating bool) string {
+	if gating {
+		return "gates"
+	}
+	return "follows"
+}
+
+func provisioningPlaybookCluster(p v1alpha1.Playbook, orderClusters []string) string {
 	if len(orderClusters) == 1 && len(p.Spec.Target.HostGroups) == 0 {
 		return orderClusters[0]
 	}
 	return ""
 }
 
-func provisioningPlaybookPath(p v1alpha1.ProvisioningPlaybook) string {
+func provisioningPlaybookPath(p v1alpha1.Playbook) string {
 	return filepath.Join(filepath.Dir(p.SourcePath), p.Spec.Playbook)
 }
 
-func provisioningVendoredPath(p v1alpha1.ProvisioningPlaybook, rel string) string {
+func provisioningVendoredPath(p v1alpha1.Playbook, rel string) string {
 	if strings.TrimSpace(rel) == "" {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(p.SourcePath), rel)
 }
 
-func provisioningExtraVarPairs(p v1alpha1.ProvisioningPlaybook, stage, timing string) ([]string, error) {
+func provisioningExtraVarPairs(p v1alpha1.Playbook, anchor string, gating bool) ([]string, error) {
 	pairs := []string{
 		"bootwright_playbook_name=" + p.Metadata.Name,
-		"bootwright_playbook_stage=" + stage,
-		"bootwright_playbook_timing=" + timing,
+		"bootwright_playbook_anchor=" + anchor,
+		"bootwright_playbook_anchor_key=" + playbookAnchorKey(gating),
 	}
 	if len(p.Spec.ExtraVars) > 0 {
 		data, err := json.Marshal(p.Spec.ExtraVars)
 		if err != nil {
-			return nil, fmt.Errorf("ProvisioningPlaybook/%s spec.extraVars cannot be encoded: %w", p.Metadata.Name, err)
+			return nil, fmt.Errorf("Playbook/%s spec.extraVars cannot be encoded: %w", p.Metadata.Name, err)
 		}
 		pairs = append(pairs, string(data))
 	}
 	return pairs, nil
 }
 
-func provisioningProvidesCapabilities(p v1alpha1.ProvisioningPlaybook, timing string) []CapabilityRef {
-	return provisioningCapabilities(p.Spec.Provides, p.Spec.Stage, timing)
+func provisioningProvidesCapabilities(p v1alpha1.Playbook, anchor string, gating bool) []CapabilityRef {
+	return provisioningCapabilities(p.Spec.Provides, anchor, playbookAnchorKey(gating))
 }
 
-func provisioningRequiresCapabilities(p v1alpha1.ProvisioningPlaybook, timing string) []CapabilityRef {
-	return provisioningCapabilities(p.Spec.Requires, p.Spec.Stage, timing)
+func provisioningRequiresCapabilities(p v1alpha1.Playbook, anchor string, gating bool) []CapabilityRef {
+	return provisioningCapabilities(p.Spec.Requires, anchor, playbookAnchorKey(gating))
 }
 
 func provisioningCapabilities(names []string, stage, timing string) []CapabilityRef {
@@ -423,23 +421,23 @@ func provisioningCapabilities(names []string, stage, timing string) []Capability
 }
 
 type provisioningPlaybookHashVars struct {
-	Stage           string                              `json:"stage"`
-	Timing          string                              `json:"timing"`
-	Run             string                              `json:"run"`
-	FailureMode     string                              `json:"failureMode"`
-	Playbook        string                              `json:"playbook"`
-	RolesPath       string                              `json:"rolesPath,omitempty"`
-	CollectionsPath string                              `json:"collectionsPath,omitempty"`
-	Order           int                                 `json:"order,omitempty"`
-	Provides        []string                            `json:"provides,omitempty"`
-	Requires        []string                            `json:"requires,omitempty"`
-	Target          v1alpha1.ProvisioningPlaybookTarget `json:"target"`
-	ExtraVars       map[string]any                      `json:"extraVars,omitempty"`
-	SecretRefs      []string                            `json:"secretRefs,omitempty"`
-	ContentDigest   string                              `json:"contentDigest,omitempty"`
+	Anchor          string                  `json:"anchor"`
+	Gates           bool                    `json:"gates"`
+	Run             string                  `json:"run"`
+	OnFailure       string                  `json:"onFailure"`
+	Playbook        string                  `json:"playbook"`
+	RolesPath       string                  `json:"rolesPath,omitempty"`
+	CollectionsPath string                  `json:"collectionsPath,omitempty"`
+	Order           int                     `json:"order,omitempty"`
+	Provides        []string                `json:"provides,omitempty"`
+	Requires        []string                `json:"requires,omitempty"`
+	Target          v1alpha1.PlaybookTarget `json:"target"`
+	ExtraVars       map[string]any          `json:"extraVars,omitempty"`
+	SecretRefs      []string                `json:"secretRefs,omitempty"`
+	ContentDigest   string                  `json:"contentDigest,omitempty"`
 }
 
-func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) (provisioningPlaybookHashVars, error) {
+func provisioningDesiredHashVars(p v1alpha1.Playbook) (provisioningPlaybookHashVars, error) {
 	secretNames := make([]string, 0, len(p.Spec.SecretRefs))
 	for _, ref := range p.Spec.SecretRefs {
 		secretNames = append(secretNames, ref.Name)
@@ -448,11 +446,12 @@ func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) (provisioningP
 	if err != nil {
 		return provisioningPlaybookHashVars{}, err
 	}
+	anchor, gating := v1alpha1.PlaybookAnchor(p)
 	return provisioningPlaybookHashVars{
-		Stage:           p.Spec.Stage,
-		Timing:          v1alpha1.ProvisioningPlaybookTiming(p),
-		Run:             v1alpha1.ProvisioningPlaybookRun(p),
-		FailureMode:     v1alpha1.ProvisioningPlaybookFailureMode(p),
+		Anchor:          anchor,
+		Gates:           gating,
+		Run:             v1alpha1.PlaybookRunMode(p),
+		OnFailure:       v1alpha1.PlaybookFailureMode(p),
 		Playbook:        p.Spec.Playbook,
 		RolesPath:       p.Spec.RolesPath,
 		CollectionsPath: p.Spec.CollectionsPath,
@@ -466,7 +465,7 @@ func provisioningDesiredHashVars(p v1alpha1.ProvisioningPlaybook) (provisioningP
 	}, nil
 }
 
-func provisioningContentDigest(p v1alpha1.ProvisioningPlaybook) (string, error) {
+func provisioningContentDigest(p v1alpha1.Playbook) (string, error) {
 	base := filepath.Dir(p.SourcePath)
 	h := sha256.New()
 	digestPath := func(rel string) error {

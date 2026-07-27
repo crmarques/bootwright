@@ -12,8 +12,8 @@ import (
 	"github.com/crmarques/bootwright/internal/addons/hooks"
 )
 
-func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterAddon) []string {
-	if len(extension.Spec.Hooks) == 0 {
+func validateClusterAddonSteps(state v1alpha1.State, extension v1alpha1.ClusterAddon) []string {
+	if len(extension.Spec.Steps) == 0 {
 		return nil
 	}
 	var errs []string
@@ -22,8 +22,8 @@ func validateClusterAddonHooks(state v1alpha1.State, extension v1alpha1.ClusterA
 	storage := indexStorageClusters(state.StorageClusters)
 	baseDir := filepath.Dir(extension.SourcePath)
 	seen := map[string]bool{}
-	for i, hook := range extension.Spec.Hooks {
-		prefix := fmt.Sprintf("ClusterAddon/%s spec.hooks[%d]", extension.Metadata.Name, i)
+	for i, hook := range extension.Spec.Steps {
+		prefix := fmt.Sprintf("ClusterAddon/%s spec.steps[%d]", extension.Metadata.Name, i)
 		if hook.Name == "" {
 			errs = append(errs, prefix+".name is required")
 		} else if !provisioningTokenRe.MatchString(hook.Name) {
@@ -68,23 +68,39 @@ func hookPathHasSegment(path, segment string) bool {
 	return slices.Contains(strings.Split(filepath.ToSlash(filepath.Clean(path)), "/"), segment)
 }
 
-func validateHookLifecycle(prefix string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook) []string {
-	if !slices.Contains(v1alpha1.ClusterAddonHookLifecycles(), hook.Lifecycle) {
-		return []string{fmt.Sprintf("%s.lifecycle %q must be one of %v", prefix, hook.Lifecycle, v1alpha1.ClusterAddonHookLifecycles())}
+func validateHookLifecycle(prefix string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep) []string {
+	switch {
+	case hook.Gates != "" && hook.Follows != "":
+		return []string{fmt.Sprintf("%s must set exactly one of gates or follows, not both", prefix)}
+	case hook.Gates == "" && hook.Follows == "":
+		return []string{fmt.Sprintf("%s must set gates %v or follows %v", prefix, v1alpha1.ClusterAddonStepGates(), v1alpha1.ClusterAddonStepFollows())}
 	}
-	if hook.Lifecycle == v1alpha1.ClusterAddonHookPostOperatorReady && extension.Spec.Type != v1alpha1.ClusterAddonTypeOLM {
-		return []string{fmt.Sprintf("%s.lifecycle postOperatorReady is only valid for spec.type=olm add-ons", prefix)}
+	anchor, gating := v1alpha1.ClusterAddonStepAnchor(hook)
+	if gating {
+		if !slices.Contains(v1alpha1.ClusterAddonStepGates(), anchor) {
+			return []string{fmt.Sprintf("%s.gates %q must be one of %v", prefix, anchor, v1alpha1.ClusterAddonStepGates())}
+		}
+		if hook.OnFailure == v1alpha1.PlaybookFailureContinue {
+			return []string{fmt.Sprintf("%s.gates cannot be combined with onFailure continue: a gate that lets the add-on proceed on failure is not a gate", prefix)}
+		}
+		return nil
+	}
+	if !slices.Contains(v1alpha1.ClusterAddonStepFollows(), anchor) {
+		return []string{fmt.Sprintf("%s.follows %q must be one of %v", prefix, anchor, v1alpha1.ClusterAddonStepFollows())}
+	}
+	if anchor == v1alpha1.ClusterAddonStepFollowsOperatorReady && extension.Spec.Type != v1alpha1.ClusterAddonTypeOLM {
+		return []string{fmt.Sprintf("%s.follows operatorReady is only valid for spec.type=olm add-ons", prefix)}
 	}
 	return nil
 }
 
-func validateHookVocab(prefix string, hook v1alpha1.ClusterAddonHook) []string {
+func validateHookVocab(prefix string, hook v1alpha1.ClusterAddonStep) []string {
 	var errs []string
-	if hook.Run != "" && hook.Run != v1alpha1.ProvisioningPlaybookRunOnChange && hook.Run != v1alpha1.ProvisioningPlaybookRunAlways {
-		errs = append(errs, fmt.Sprintf("%s.run %q must be %q or %q", prefix, hook.Run, v1alpha1.ProvisioningPlaybookRunOnChange, v1alpha1.ProvisioningPlaybookRunAlways))
+	if hook.Run != "" && hook.Run != v1alpha1.PlaybookRunOnChange && hook.Run != v1alpha1.PlaybookRunAlways {
+		errs = append(errs, fmt.Sprintf("%s.run %q must be %q or %q", prefix, hook.Run, v1alpha1.PlaybookRunOnChange, v1alpha1.PlaybookRunAlways))
 	}
-	if hook.FailureMode != "" && hook.FailureMode != v1alpha1.ProvisioningPlaybookFailureFail && hook.FailureMode != v1alpha1.ProvisioningPlaybookFailureContinue {
-		errs = append(errs, fmt.Sprintf("%s.failureMode %q must be %q or %q", prefix, hook.FailureMode, v1alpha1.ProvisioningPlaybookFailureFail, v1alpha1.ProvisioningPlaybookFailureContinue))
+	if hook.OnFailure != "" && hook.OnFailure != v1alpha1.PlaybookFailureFail && hook.OnFailure != v1alpha1.PlaybookFailureContinue {
+		errs = append(errs, fmt.Sprintf("%s.onFailure %q must be %q or %q", prefix, hook.OnFailure, v1alpha1.PlaybookFailureFail, v1alpha1.PlaybookFailureContinue))
 	}
 	if hook.Timeout != "" {
 		if d, err := time.ParseDuration(hook.Timeout); err != nil {
@@ -96,7 +112,7 @@ func validateHookVocab(prefix string, hook v1alpha1.ClusterAddonHook) []string {
 	return errs
 }
 
-func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook, machines map[string]v1alpha1.Machine, containers map[string]v1alpha1.ContainerCluster, storage map[string]v1alpha1.StorageCluster) []string {
+func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep, machines map[string]v1alpha1.Machine, containers map[string]v1alpha1.ContainerCluster, storage map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
 	target := hook.Target
 	modes := 0
@@ -114,8 +130,8 @@ func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1a
 	} else if modes > 1 {
 		errs = append(errs, prefix+".target must set exactly one of boundCluster, fromInput, or static")
 	}
-	if target.Limit != "" && target.Limit != v1alpha1.ClusterAddonHookTargetLimitFirstReachable && target.Limit != v1alpha1.ClusterAddonHookTargetLimitAll {
-		errs = append(errs, fmt.Sprintf("%s.target.limit %q must be %q or %q", prefix, target.Limit, v1alpha1.ClusterAddonHookTargetLimitFirstReachable, v1alpha1.ClusterAddonHookTargetLimitAll))
+	if target.Limit != "" && target.Limit != v1alpha1.ClusterAddonStepTargetLimitFirstReachable && target.Limit != v1alpha1.ClusterAddonStepTargetLimitAll {
+		errs = append(errs, fmt.Sprintf("%s.target.limit %q must be %q or %q", prefix, target.Limit, v1alpha1.ClusterAddonStepTargetLimitFirstReachable, v1alpha1.ClusterAddonStepTargetLimitAll))
 	}
 	if target.Static != nil {
 		for i, name := range target.Static.Clusters {
@@ -147,7 +163,7 @@ func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1a
 	return errs
 }
 
-func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v1alpha1.ClusterAddonHookInputTarget) []string {
+func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v1alpha1.ClusterAddonStepInputTarget) []string {
 	accepted, ok := acceptedInputByName(extension, from.Input)
 	if !ok {
 		return []string{fmt.Sprintf("%s.input %q does not name a declared spec.accepts.inputs entry", prefix, from.Input)}
@@ -173,7 +189,7 @@ func inputHasStorageExportAttachment(input v1alpha1.ClusterAddonAcceptedInput) b
 	return false
 }
 
-func validateHookOutputs(prefix string, hook v1alpha1.ClusterAddonHook) []string {
+func validateHookOutputs(prefix string, hook v1alpha1.ClusterAddonStep) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for i, output := range hook.Outputs {
@@ -189,14 +205,14 @@ func validateHookOutputs(prefix string, hook v1alpha1.ClusterAddonHook) []string
 		if _, pathErrs := validateContainedPath(owner+".file", output.File); len(pathErrs) > 0 {
 			errs = append(errs, pathErrs...)
 		}
-		if output.Format != "" && output.Format != v1alpha1.ClusterAddonHookOutputFormatText && output.Format != v1alpha1.ClusterAddonHookOutputFormatJSON {
-			errs = append(errs, fmt.Sprintf("%s.format %q must be %q or %q", owner, output.Format, v1alpha1.ClusterAddonHookOutputFormatText, v1alpha1.ClusterAddonHookOutputFormatJSON))
+		if output.Format != "" && output.Format != v1alpha1.ClusterAddonStepOutputFormatText && output.Format != v1alpha1.ClusterAddonStepOutputFormatJSON {
+			errs = append(errs, fmt.Sprintf("%s.format %q must be %q or %q", owner, output.Format, v1alpha1.ClusterAddonStepOutputFormatText, v1alpha1.ClusterAddonStepOutputFormatJSON))
 		}
 	}
 	return errs
 }
 
-func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook) []string {
+func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep) []string {
 	var errs []string
 	outputs := map[string]bool{}
 	for _, output := range hook.Outputs {
@@ -240,7 +256,7 @@ func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAdd
 			errs = append(errs, validateHookToken(owner, extension, hook, token, outputs, secretRefs)...)
 		}
 	}
-	if consumesOutput && v1alpha1.ClusterAddonHookFailureMode(hook) == v1alpha1.ProvisioningPlaybookFailureContinue {
+	if consumesOutput && v1alpha1.ClusterAddonStepFailureMode(hook) == v1alpha1.PlaybookFailureContinue {
 		errs = append(errs, prefix+" consumes a hook output in its manifests, so failureMode must be fail")
 	}
 	return errs
@@ -250,7 +266,7 @@ func tokenConsumesOutput(token hooks.Token) bool {
 	return token.Kind == hooks.TokenOutput
 }
 
-func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonHook, token hooks.Token, outputs, secretRefs map[string]bool) []string {
+func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep, token hooks.Token, outputs, secretRefs map[string]bool) []string {
 	switch token.Kind {
 	case hooks.TokenCluster:
 		return nil

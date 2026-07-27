@@ -8,15 +8,15 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func TestProvisioningPlaybookDryRunUsesGenericLabel(t *testing.T) {
+func TestPlaybookDryRunUsesGenericLabel(t *testing.T) {
 	tasks := []workflow.ApplyTask{{
-		Entry:    workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook os-customizations (after machines)"},
+		Entry:    workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindPlaybook, Label: "playbook os-customizations (after machines)"},
 		Limit:    "ceph-prd",
 		Playbook: "/some/path/site.yml",
 	}}
 
 	buf := &bytes.Buffer{}
-	printProvisioningPlaybookDryRun(buf, tasks)
+	printPlaybookDryRun(buf, tasks)
 	out := buf.String()
 	if !strings.Contains(out, "Custom playbook os-customizations (after machines)") {
 		t.Fatalf("dry-run playbook label not normalized:\n%s", out)

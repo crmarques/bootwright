@@ -31,7 +31,7 @@ Deliberate exceptions:
 
 - `Environment` `spec.containerClusters` and `spec.storageClusters` are fleet
   selection lists, not references — plain strings, no `Ref` suffix.
-- `ProvisioningPlaybook` `spec.target.{clusters,machines,hostGroups}` (and the
+- `Playbook` `spec.target.{clusters,machines,hostGroups}` (and the
   `ClusterAddonHook` target `clusters`/`machines` lists) are inventory
   selection lists, not references — same rule.
 - `proxyFor.{bootwright,containerClusterInstall,machineOSInstall}` name a

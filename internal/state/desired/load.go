@@ -163,7 +163,7 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.ClusterAddons) == 0 &&
 		len(state.ClusterAddonProfiles) == 0 &&
 		len(state.ClusterAddonBindings) == 0 &&
-		len(state.ProvisioningPlaybooks) == 0 &&
+		len(state.Playbooks) == 0 &&
 		len(state.Secrets) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
 	}
@@ -428,13 +428,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.ClusterAddonBindings = append(state.ClusterAddonBindings, item)
-		case v1alpha1.KindProvisioningPlaybook:
-			var item v1alpha1.ProvisioningPlaybook
+		case v1alpha1.KindPlaybook:
+			var item v1alpha1.Playbook
 			if err := decodeKnown(node, &item); err != nil {
 				return fmt.Errorf("decode %s document %d: %w", path, index, err)
 			}
 			item.SourcePath = path
-			state.ProvisioningPlaybooks = append(state.ProvisioningPlaybooks, item)
+			state.Playbooks = append(state.Playbooks, item)
 		case v1alpha1.KindSecret:
 			var item v1alpha1.Secret
 			if err := decodeKnown(node, &item); err != nil {
@@ -612,11 +612,11 @@ func sortState(state *v1alpha1.State) {
 		}
 		return state.ClusterAddonBindings[i].Metadata.Name < state.ClusterAddonBindings[j].Metadata.Name
 	}))
-	sort.SliceStable(state.ProvisioningPlaybooks, sortByName(func(i, j int) bool {
-		if state.ProvisioningPlaybooks[i].Metadata.Name == state.ProvisioningPlaybooks[j].Metadata.Name {
-			return state.ProvisioningPlaybooks[i].SourcePath < state.ProvisioningPlaybooks[j].SourcePath
+	sort.SliceStable(state.Playbooks, sortByName(func(i, j int) bool {
+		if state.Playbooks[i].Metadata.Name == state.Playbooks[j].Metadata.Name {
+			return state.Playbooks[i].SourcePath < state.Playbooks[j].SourcePath
 		}
-		return state.ProvisioningPlaybooks[i].Metadata.Name < state.ProvisioningPlaybooks[j].Metadata.Name
+		return state.Playbooks[i].Metadata.Name < state.Playbooks[j].Metadata.Name
 	}))
 	sort.SliceStable(state.Secrets, sortByName(func(i, j int) bool {
 		if state.Secrets[i].Metadata.Name == state.Secrets[j].Metadata.Name {

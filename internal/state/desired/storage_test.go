@@ -1581,12 +1581,12 @@ func TestExternalStorageValidationAcceptsImportedDataFoundation(t *testing.T) {
 
 func TestExternalStorageValidationRejectsPlaybookHookAgainstExternalCluster(t *testing.T) {
 	state := externalStorageValidationState()
-	state.ClusterAddons[0].Spec.Hooks = []v1alpha1.ClusterAddonHook{{
-		Name:      "attach-external-storage",
-		Lifecycle: v1alpha1.ClusterAddonHookPreApply,
-		Playbook:  "playbooks/export-external-details.yaml",
-		Target: v1alpha1.ClusterAddonHookTarget{
-			FromInput: &v1alpha1.ClusterAddonHookInputTarget{Input: "external-storage"},
+	state.ClusterAddons[0].Spec.Steps = []v1alpha1.ClusterAddonStep{{
+		Name:     "attach-external-storage",
+		Gates:    v1alpha1.ClusterAddonStepGateApply,
+		Playbook: "playbooks/export-external-details.yaml",
+		Target: v1alpha1.ClusterAddonStepTarget{
+			FromInput: &v1alpha1.ClusterAddonStepInputTarget{Input: "external-storage"},
 		},
 	}}
 	got := strings.Join(validateStorage(state), "; ")

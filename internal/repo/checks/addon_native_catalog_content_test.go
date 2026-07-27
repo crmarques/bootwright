@@ -23,13 +23,13 @@ type nativeCatalogAddOn struct {
 				} `yaml:"resourceRef"`
 			} `yaml:"inputs"`
 		} `yaml:"accepts"`
-		Hooks []struct {
+		Steps []struct {
 			Name      string `yaml:"name"`
 			Playbook  string `yaml:"playbook"`
 			Manifests []struct {
 				Path string `yaml:"path"`
 			} `yaml:"manifests"`
-		} `yaml:"hooks"`
+		} `yaml:"steps"`
 	} `yaml:"spec"`
 }
 
@@ -84,7 +84,7 @@ func TestNativeCatalogHookRefTokensResolveToAcceptedInputs(t *testing.T) {
 				refInputs[input.Name] = true
 			}
 		}
-		for _, hook := range addon.Spec.Hooks {
+		for _, hook := range addon.Spec.Steps {
 			if hook.Playbook == "" {
 				continue
 			}
@@ -195,7 +195,7 @@ func TestNativeCatalogManifestAddonAnnotationMatchesOwnName(t *testing.T) {
 			t.Fatalf("%s: add-on.yaml has no metadata.name", key)
 		}
 		dir := filepath.Join(root, "add-ons", strings.SplitN(key, "/", 2)[0], strings.SplitN(key, "/", 2)[1])
-		for _, hook := range addon.Spec.Hooks {
+		for _, hook := range addon.Spec.Steps {
 			for _, manifest := range hook.Manifests {
 				data, err := os.ReadFile(filepath.Join(dir, manifest.Path))
 				if err != nil {

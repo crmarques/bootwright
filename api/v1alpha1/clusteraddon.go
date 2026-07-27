@@ -16,7 +16,7 @@ type ClusterAddonSpec struct {
 	OLM         *ClusterAddonOLMSpec     `yaml:"olm,omitempty" json:"olm,omitempty"`
 	ManifestSet *ClusterAddonManifestSet `yaml:"manifestSet,omitempty" json:"manifestSet,omitempty"`
 	Readiness   ClusterAddonReadiness    `yaml:"readiness,omitempty" json:"readiness,omitempty"`
-	Hooks       []ClusterAddonHook       `yaml:"hooks,omitempty" json:"hooks,omitempty"`
+	Steps       []ClusterAddonStep       `yaml:"steps,omitempty" json:"steps,omitempty"`
 }
 
 type ClusterAddonAccepts struct {

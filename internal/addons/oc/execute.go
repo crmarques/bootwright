@@ -124,14 +124,14 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		return TaskResult{}, err
 	}
 	if len(plan.Extension.Spec.Readiness.Checks) > 0 &&
-		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) &&
+		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) &&
 		!hasActiveGlobalPullSecretMergeEffect(plan) {
 		if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
 			record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 			if err != nil {
 				return TaskResult{}, err
 			}
-			if found && completeReadyRecord(record, hash) && hooksReady(record, plan.Extension, v1alpha1.ClusterAddonHookPreApply, v1alpha1.ClusterAddonHookPostOperatorReady) {
+			if found && completeReadyRecord(record, hash) && hooksReady(record, plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
 				return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 			}
 		}
@@ -199,8 +199,8 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		return TaskResult{}, err
 	}
 	if found && completeReadyRecord(record, hash) &&
-		hooksReady(record, plan.Extension, v1alpha1.ClusterAddonHookPostReady) &&
-		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonHookPostReady) {
+		hooksReady(record, plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) &&
+		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) {
 		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {
 			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
@@ -231,7 +231,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		}
 		return TaskResult{}, err
 	}
-	postReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostReady)
+	postReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepFollowsReady)
 	record.ObservedResources = append(record.ObservedResources, postReadyObserved...)
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
@@ -261,7 +261,7 @@ func completeReadyRecord(record extensionrecords.Record, hash string) bool {
 func hooksReady(record extensionrecords.Record, extension v1alpha1.ClusterAddon, lifecycles ...string) bool {
 	for _, lifecycle := range lifecycles {
 		for _, hook := range hooks.At(extension, lifecycle) {
-			if v1alpha1.ClusterAddonHookRun(hook) == v1alpha1.ProvisioningPlaybookRunAlways {
+			if v1alpha1.ClusterAddonStepRun(hook) == v1alpha1.PlaybookRunAlways {
 				continue
 			}
 			item, ok := record.Hooks[hook.Name]
@@ -278,7 +278,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 	if err := cfg.runEffects(ctx); err != nil {
 		return observed, "", err
 	}
-	preApplyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPreApply)
+	preApplyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepGateApply)
 	observed = append(observed, preApplyObserved...)
 	if err != nil {
 		return observed, "", err
@@ -315,7 +315,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, subscriptionOLM.Namespace.Name, subscriptionOLM.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval, cfg.Progress); err != nil {
 			return observed, "", err
 		}
-		postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonHookPostOperatorReady)
+		postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepFollowsOperatorReady)
 		observed = append(observed, postOperatorReadyObserved...)
 		if err != nil {
 			return observed, "", err

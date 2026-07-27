@@ -456,7 +456,7 @@ and binds katello-ca-consumer before registering. This is how a disconnected or
 proxied estate keeps RHEL package fetches inside the perimeter. The
 entitlement's `rhsm.management` field (`managed`, the default, or `external`)
 picks who registers: `external` delegates registration to an operator
-`ProvisioningPlaybook` and is rejected for `fromSubscription` installs, whose
+`Playbook` and is rejected for `fromSubscription` installs, whose
 install-time registration *is* the package source. See
 [Managed OS installs](managed-os.md) and the entitlement model on
 [Environment](../concepts/environment.md).

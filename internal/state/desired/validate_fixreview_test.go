@@ -40,7 +40,7 @@ func TestEntitlementSatelliteTrustBundleRefMustBeDeclared(t *testing.T) {
 	}
 }
 
-func TestClusterAddonHookSecretRefsMustBeDeclared(t *testing.T) {
+func TestClusterAddonStepSecretRefsMustBeDeclared(t *testing.T) {
 	state := func(ref string) v1alpha1.State {
 		return v1alpha1.State{
 			Secrets:      []v1alpha1.Secret{{Metadata: v1alpha1.Metadata{Name: "hook-secret"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeOpaque}}},
@@ -48,7 +48,7 @@ func TestClusterAddonHookSecretRefsMustBeDeclared(t *testing.T) {
 			ClusterAddons: []v1alpha1.ClusterAddon{{
 				Metadata: v1alpha1.Metadata{Name: "df"},
 				Spec: v1alpha1.ClusterAddonSpec{
-					Hooks: []v1alpha1.ClusterAddonHook{{
+					Steps: []v1alpha1.ClusterAddonStep{{
 						SecretRefs: []v1alpha1.SecretRef{{Name: ref}},
 					}},
 				},

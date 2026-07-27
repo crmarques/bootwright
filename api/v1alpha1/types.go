@@ -29,7 +29,7 @@ const (
 	KindClusterAddon           = "ClusterAddon"
 	KindClusterAddonProfile    = "ClusterAddonProfile"
 	KindClusterAddonBinding    = "ClusterAddonBinding"
-	KindProvisioningPlaybook   = "ProvisioningPlaybook"
+	KindPlaybook               = "Playbook"
 	KindSecret                 = "Secret"
 
 	ProvisionerLibvirt   = "libvirt"
@@ -217,17 +217,17 @@ const (
 	ClusterAddonInputEffectStorageExportAttachment = "storageExportAttachment"
 	ClusterAddonInputEffectGlobalPullSecretMerge   = "globalPullSecretMerge"
 
-	ClusterAddonHookPreApply          = "preApply"
-	ClusterAddonHookPostOperatorReady = "postOperatorReady"
-	ClusterAddonHookPostReady         = "postReady"
+	ClusterAddonStepGateApply            = "apply"
+	ClusterAddonStepFollowsOperatorReady = "operatorReady"
+	ClusterAddonStepFollowsReady         = "ready"
 
-	ClusterAddonHookTargetLimitFirstReachable = "firstReachable"
-	ClusterAddonHookTargetLimitAll            = "all"
+	ClusterAddonStepTargetLimitFirstReachable = "firstReachable"
+	ClusterAddonStepTargetLimitAll            = "all"
 
-	ClusterAddonHookOutputFormatText = "text"
-	ClusterAddonHookOutputFormatJSON = "json"
+	ClusterAddonStepOutputFormatText = "text"
+	ClusterAddonStepOutputFormatJSON = "json"
 
-	DefaultClusterAddonHookTimeout = "10m"
+	DefaultClusterAddonStepTimeout = "10m"
 
 	StorageClusterTypeCeph = "ceph"
 
@@ -279,20 +279,17 @@ const (
 
 	StorageExportTypeDataFoundation = "dataFoundation"
 
-	ProvisioningStageFabric   = "fabric"
-	ProvisioningStageMachines = "machines"
-	ProvisioningStageDeps     = "deps"
-	ProvisioningStageBase     = "base"
-	ProvisioningStageAddOns   = "add-ons"
+	PlaybookAnchorFabric   = "fabric"
+	PlaybookAnchorMachines = "machines"
+	PlaybookAnchorDeps     = "deps"
+	PlaybookAnchorBase     = "base"
+	PlaybookAnchorAddOns   = "add-ons"
 
-	ProvisioningPlaybookTimingBefore = "before"
-	ProvisioningPlaybookTimingAfter  = "after"
+	PlaybookRunOnChange = "onChange"
+	PlaybookRunAlways   = "always"
 
-	ProvisioningPlaybookRunOnChange = "onChange"
-	ProvisioningPlaybookRunAlways   = "always"
-
-	ProvisioningPlaybookFailureFail     = "fail"
-	ProvisioningPlaybookFailureContinue = "continue"
+	PlaybookFailureFail     = "fail"
+	PlaybookFailureContinue = "continue"
 )
 
 func StorageCephRoles() []string {
@@ -333,7 +330,7 @@ type State struct {
 	ClusterAddons            []ClusterAddon           `yaml:"clusterAddons,omitempty" json:"clusterAddons,omitempty"`
 	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`
 	ClusterAddonBindings     []ClusterAddonBinding    `yaml:"clusterAddonBindings,omitempty" json:"clusterAddonBindings,omitempty"`
-	ProvisioningPlaybooks    []ProvisioningPlaybook   `yaml:"provisioningPlaybooks,omitempty" json:"provisioningPlaybooks,omitempty"`
+	Playbooks                []Playbook               `yaml:"playbooks,omitempty" json:"playbooks,omitempty"`
 	Secrets                  []Secret                 `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 }
 

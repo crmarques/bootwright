@@ -24,7 +24,7 @@ func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1al
 	clone.Entitlements = nil
 	clone.MachineImages = nil
 	clone.MachineInstallProfiles = nil
-	clone.ProvisioningPlaybooks = nil
+	clone.Playbooks = nil
 	for i := range clone.ContainerClusters {
 		for j := range clone.ContainerClusters[i].Spec.Nodes {
 			clone.ContainerClusters[i].Spec.Nodes[j].Labels = nil

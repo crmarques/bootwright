@@ -62,20 +62,17 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageExports {
 		normalizeStorageExport(&state.StorageExports[i])
 	}
-	for i := range state.ProvisioningPlaybooks {
-		normalizeProvisioningPlaybook(&state.ProvisioningPlaybooks[i])
+	for i := range state.Playbooks {
+		normalizePlaybook(&state.Playbooks[i])
 	}
 }
 
-func normalizeProvisioningPlaybook(p *v1alpha1.ProvisioningPlaybook) {
-	if p.Spec.Timing == "" {
-		p.Spec.Timing = v1alpha1.ProvisioningPlaybookTimingAfter
-	}
+func normalizePlaybook(p *v1alpha1.Playbook) {
 	if p.Spec.Run == "" {
-		p.Spec.Run = v1alpha1.ProvisioningPlaybookRunOnChange
+		p.Spec.Run = v1alpha1.PlaybookRunOnChange
 	}
-	if p.Spec.FailureMode == "" {
-		p.Spec.FailureMode = v1alpha1.ProvisioningPlaybookFailureFail
+	if p.Spec.OnFailure == "" {
+		p.Spec.OnFailure = v1alpha1.PlaybookFailureFail
 	}
 	if p.Spec.Enabled == nil {
 		enabled := true

@@ -104,11 +104,11 @@ func TestPlanMachineRegistrationSkippedForClustersScope(t *testing.T) {
 	assertTaskPresent(t, tasks, "storageinfra.ceph-ibm")
 }
 
-func TestPlanProvisioningPlaybookAfterMachinesAnchorsOnRegistration(t *testing.T) {
+func TestPlanPlaybookAfterMachinesAnchorsOnRegistration(t *testing.T) {
 	state := cephSubscriptionExampleState(t)
-	state.ProvisioningPlaybooks = []v1alpha1.ProvisioningPlaybook{
-		provisioningPlaybook("corporate-rhsm", v1alpha1.ProvisioningStageMachines, v1alpha1.ProvisioningPlaybookTimingAfter,
-			v1alpha1.ProvisioningPlaybookTarget{Clusters: []string{"ceph-ibm"}}),
+	state.Playbooks = []v1alpha1.Playbook{
+		provisioningPlaybook("corporate-rhsm", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.PlaybookTarget{Clusters: []string{"ceph-ibm"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {

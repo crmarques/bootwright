@@ -27,7 +27,7 @@ var structuralFieldClass = map[string]string{
 	"ClusterAddons":            "day2",
 	"ClusterAddonProfiles":     "day2",
 	"ClusterAddonBindings":     "day2",
-	"ProvisioningPlaybooks":    "excluded",
+	"Playbooks":                "excluded",
 	"Secrets":                  "excluded",
 }
 
@@ -74,7 +74,7 @@ func TestStorageStructuralProjectionClearsReferencedInstallKinds(t *testing.T) {
 		MachineImages:          []v1alpha1.MachineImage{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
 		MachineInstallProfiles: []v1alpha1.MachineInstallProfile{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
 		NetworkConfigs:         []v1alpha1.NetworkConfig{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
-		ProvisioningPlaybooks:  []v1alpha1.ProvisioningPlaybook{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
+		Playbooks:              []v1alpha1.Playbook{{Metadata: v1alpha1.Metadata{Name: "ceph"}}},
 	}
 	desired := storageClusterDesiredHashVars(state, "ceph")
 	for field, value := range map[string]int{
@@ -82,7 +82,7 @@ func TestStorageStructuralProjectionClearsReferencedInstallKinds(t *testing.T) {
 		"MachineImages":          len(desired.MachineImages),
 		"MachineInstallProfiles": len(desired.MachineInstallProfiles),
 		"NetworkConfigs":         len(desired.NetworkConfigs),
-		"ProvisioningPlaybooks":  len(desired.ProvisioningPlaybooks),
+		"Playbooks":              len(desired.Playbooks),
 	} {
 		if value == 0 {
 			t.Fatalf("desired-hash projection must keep referenced kind %q so its edits stay reconcilable drift", field)
@@ -94,7 +94,7 @@ func TestStorageStructuralProjectionClearsReferencedInstallKinds(t *testing.T) {
 		"MachineImages":          len(projected.MachineImages),
 		"MachineInstallProfiles": len(projected.MachineInstallProfiles),
 		"NetworkConfigs":         len(projected.NetworkConfigs),
-		"ProvisioningPlaybooks":  len(projected.ProvisioningPlaybooks),
+		"Playbooks":              len(projected.Playbooks),
 	} {
 		if structuralFieldClass[field] != "excluded" {
 			t.Fatalf("field %q is asserted cleared but not classified excluded", field)

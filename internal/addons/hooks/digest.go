@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func ContentDigest(addonSourcePath string, hook v1alpha1.ClusterAddonHook) (string, error) {
+func ContentDigest(addonSourcePath string, hook v1alpha1.ClusterAddonStep) (string, error) {
 	base := filepath.Dir(addonSourcePath)
 	sum := sha256.New()
 	digestPath := func(rel string) error {
