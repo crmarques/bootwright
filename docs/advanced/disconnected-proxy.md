@@ -99,9 +99,10 @@ For a mirrored vendor registry, set `Entitlement.spec.registry.url` to the
 mirror root and pin `StorageCluster.spec.ceph.image` at that root plus the
 canonical vendor repository suffix. Stream `9` uses
 `rhceph/rhceph-9-rhel9` for Red Hat or `ibm-ceph/ceph-9-rhel9` for IBM;
-arbitrary repositories below the registry root are rejected. For a release
-Bootwright has recorded no build base for, the suffix check covers the vendor
-namespace and stream (`rhceph/rhceph-<stream>-rhel`) and you supply the rest.
+arbitrary repositories below the registry root are rejected. The check covers
+the vendor namespace and stream (`rhceph/rhceph-<stream>-rhel`) so the two
+distributions cannot be crossed; the trailing build base is yours to supply and
+is never validated against a release.
 
 **Community Ceph (OSS):** overridable via `spec.ceph.community.mirror` and
 `spec.ceph.image`.

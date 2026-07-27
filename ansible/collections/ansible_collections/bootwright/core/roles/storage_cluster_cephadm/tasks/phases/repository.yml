@@ -1,30 +1,16 @@
 ---
-- name: Validate Ceph storage node OS for the rendered distribution
+- name: Validate Ceph storage node OS family is implemented
   ansible.builtin.assert:
     that:
       - ansible_os_family == 'RedHat'
-      - >-
-        (bootwright_ceph_provider.runtimeOS.majorVersions | default([]) | length == 0)
-        or ansible_distribution_major_version in bootwright_ceph_provider.runtimeOS.majorVersions
     fail_msg: >-
-      {{ bootwright_ceph_provider.runtimeOS.message | default('selected Ceph distribution is incompatible with this storage node OS') }};
+      Bootwright only implements RedHat-family package sources for Ceph storage nodes;
       {{ bootwright_current_storage_host.hostname }} reported
       {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }}
       (os_family {{ ansible_os_family | default('<unknown>') }}).
+      This is a Bootwright capability limit, not a vendor compatibility claim;
+      the release you declared is never checked against a support matrix.
     quiet: true
-
-- name: Report storage node OS outside the recorded Ceph release matrix
-  ansible.builtin.debug:
-    msg: >-
-      {{ bootwright_current_storage_host.hostname }} runs
-      {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }},
-      outside the versions recorded for this Ceph release
-      ({{ bootwright_ceph_provider.runtimeOS.exactVersions | default([]) | join(', ') }}).
-      The install proceeds because that matrix is a snapshot; confirm the combination
-      against the vendor compatibility guide.
-  when:
-    - bootwright_ceph_provider.runtimeOS.exactVersions | default([]) | length > 0
-    - ansible_distribution_version not in bootwright_ceph_provider.runtimeOS.exactVersions
 
 - name: Load Ceph storage node OS variables
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"

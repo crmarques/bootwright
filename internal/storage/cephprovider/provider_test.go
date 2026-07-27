@@ -99,119 +99,56 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	}
 }
 
-func TestResolveReleaseUsesDistributionVersionMatrix(t *testing.T) {
+func TestResolveReleaseCarriesTheAuthoredValueAndItsStream(t *testing.T) {
 	cases := []struct {
 		distribution string
 		authored     string
 		wantValue    string
 		wantStream   string
-		wantRHEL     string
-		wantOK       bool
 	}{
-		{v1alpha1.StorageCephDistributionRedHat, "", "9.1", "9", "9.8", true},
-		{v1alpha1.StorageCephDistributionRedHat, "9", "9.1", "9", "10.2", true},
-		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.0", "9", "9.6", true},
-		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.0.3", "9", "9.7", true},
-		{v1alpha1.StorageCephDistributionIBM, "", "9.9.1.0", "9", "9.8", true},
-		{v1alpha1.StorageCephDistributionIBM, "9", "9.9.1.0", "9", "10.2", true},
+		{v1alpha1.StorageCephDistributionRedHat, "", "9.1", "9"},
+		{v1alpha1.StorageCephDistributionRedHat, "9", "9", "9"},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.0.3", "9"},
+		{v1alpha1.StorageCephDistributionRedHat, "9.2", "9.2", "9"},
+		{v1alpha1.StorageCephDistributionRedHat, "10", "10", "10"},
+		{v1alpha1.StorageCephDistributionIBM, "", "9.9.1.0", "9"},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "9.9.2.0", "9"},
+		{v1alpha1.StorageCephDistributionIBM, "10.1.0.0", "10.1.0.0", "10"},
 	}
 	for _, tc := range cases {
 		release, ok := ResolveRelease(tc.distribution, tc.authored)
-		if ok != tc.wantOK {
-			t.Fatalf("ResolveRelease(%q, %q) ok = %t, want %t", tc.distribution, tc.authored, ok, tc.wantOK)
-		}
 		if !ok {
-			continue
-		}
-		if !release.Cataloged {
-			t.Fatalf("ResolveRelease(%q, %q) is not cataloged", tc.distribution, tc.authored)
+			t.Fatalf("ResolveRelease(%q, %q) rejected a parseable release", tc.distribution, tc.authored)
 		}
 		if release.Value != tc.wantValue || release.Stream != tc.wantStream {
-			t.Fatalf("ResolveRelease(%q, %q) = %#v", tc.distribution, tc.authored, release)
-		}
-		found := false
-		for _, version := range release.RuntimeOS.ExactVersions {
-			found = found || version == tc.wantRHEL
-		}
-		if !found {
-			t.Fatalf("ResolveRelease(%q, %q) RHEL versions = %v, want %q", tc.distribution, tc.authored, release.RuntimeOS.ExactVersions, tc.wantRHEL)
+			t.Fatalf("ResolveRelease(%q, %q) = %#v, want value %q stream %q", tc.distribution, tc.authored, release, tc.wantValue, tc.wantStream)
 		}
 	}
 }
 
-func TestResolveReleaseAcceptsUncatalogedOSSReleases(t *testing.T) {
-	cases := []struct {
-		release   string
-		ok        bool
-		cataloged bool
-	}{
-		{"", true, true},
-		{"tentacle", true, true},
-		{"20.2.2", true, true},
-		{"squid", true, true},
-		{"19.2.1", true, true},
-		{"reef", true, false},
-		{"18.2.7", true, false},
-		{"21.2.0", true, false},
-		{"20.2", false, false},
-		{"Squid", false, false},
+func TestResolveReleaseAcceptsAnyParseableOSSRelease(t *testing.T) {
+	for _, release := range []string{"", "tentacle", "20.2.2", "squid", "19.2.1", "reef", "18.2.7", "21.2.0", "unicorn"} {
+		if _, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, release); !ok {
+			t.Fatalf("ResolveRelease(oss, %q) rejected a parseable release", release)
+		}
 	}
-	for _, tc := range cases {
-		resolved, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, tc.release)
-		if ok != tc.ok || (ok && resolved.Cataloged != tc.cataloged) {
-			t.Fatalf("ResolveRelease(oss, %q) = %#v, %t; want ok=%t cataloged=%t", tc.release, resolved, ok, tc.ok, tc.cataloged)
+	for _, release := range []string{"20.2", "Squid", "19.2.1-rc1"} {
+		if _, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, release); ok {
+			t.Fatalf("ResolveRelease(oss, %q) accepted an underivable release", release)
 		}
 	}
 }
 
-func TestResolveReleaseDerivesUncatalogedVendorCoordinates(t *testing.T) {
-	cases := []struct {
-		distribution string
-		release      string
-		wantStream   string
-	}{
-		{v1alpha1.StorageCephDistributionRedHat, "9.2", "9"},
-		{v1alpha1.StorageCephDistributionRedHat, "10", "10"},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "9"},
-		{v1alpha1.StorageCephDistributionIBM, "10.1.0.0", "10"},
+func TestResolveReleaseJudgesNoVendorSupportMatrix(t *testing.T) {
+	release, ok := ResolveRelease(v1alpha1.StorageCephDistributionIBM, "9.9.2.0")
+	if !ok {
+		t.Fatal("a vendor release newer than Bootwright was rejected")
 	}
-	for _, tc := range cases {
-		resolved, ok := ResolveRelease(tc.distribution, tc.release)
-		if !ok {
-			t.Fatalf("ResolveRelease(%q, %q) rejected a future vendor release", tc.distribution, tc.release)
-		}
-		if resolved.Cataloged {
-			t.Fatalf("ResolveRelease(%q, %q) reports a catalog entry it does not have", tc.distribution, tc.release)
-		}
-		if resolved.Value != tc.release || resolved.Stream != tc.wantStream {
-			t.Fatalf("ResolveRelease(%q, %q) = %#v, want value %q stream %q", tc.distribution, tc.release, resolved, tc.release, tc.wantStream)
-		}
-		if resolved.RuntimeOS.Family != "rhel" || len(resolved.RuntimeOS.MajorVersions) != 0 || len(resolved.RuntimeOS.ExactVersions) != 0 {
-			t.Fatalf("ResolveRelease(%q, %q) invented a runtime-OS matrix: %#v", tc.distribution, tc.release, resolved.RuntimeOS)
-		}
+	if release != (ResolvedRelease{Value: "9.9.2.0", Stream: "9"}) {
+		t.Fatalf("ResolveRelease carries more than the value and its stream: %#v", release)
 	}
 	if _, ok := ResolveRelease(v1alpha1.StorageCephDistributionIBM, "9.9.1-beta"); ok {
 		t.Fatal("non-numeric vendor product version accepted")
-	}
-}
-
-func TestRuntimeOSMajorGateOutlivesTheExactVersionSnapshot(t *testing.T) {
-	release, ok := ResolveRelease(v1alpha1.StorageCephDistributionRedHat, "9.1")
-	if !ok {
-		t.Fatal("cataloged release did not resolve")
-	}
-	for _, version := range []string{"9.8", "9.11", "10.2", "10.4"} {
-		if !RuntimeOSMajorAllowed(release.RuntimeOS, version) {
-			t.Fatalf("RHEL %s rejected by the major-version gate", version)
-		}
-	}
-	for _, version := range []string{"8.10", "11.0"} {
-		if RuntimeOSMajorAllowed(release.RuntimeOS, version) {
-			t.Fatalf("RHEL %s accepted by the major-version gate", version)
-		}
-	}
-	if !RuntimeOSVersionCataloged(release.RuntimeOS, "9.8") || RuntimeOSVersionCataloged(release.RuntimeOS, "9.11") {
-		t.Fatalf("exact-version catalog lookup misreports: %#v", release.RuntimeOS)
 	}
 }
 
@@ -388,7 +325,7 @@ func TestImageRepositoryStripsTagAndDigest(t *testing.T) {
 	}
 }
 
-func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T) {
+func TestDerivedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T) {
 	cases := []struct {
 		name         string
 		distribution string
@@ -412,7 +349,7 @@ func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T
 			wantOK:       true,
 		},
 		{
-			name:         "ibm current alias",
+			name:         "ibm bare stream",
 			distribution: v1alpha1.StorageCephDistributionIBM,
 			release:      "9",
 			want:         "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
@@ -427,14 +364,14 @@ func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T
 			wantOK:       true,
 		},
 		{
-			name:         "uncataloged release derives its own stream",
+			name:         "release newer than bootwright derives its own stream",
 			distribution: v1alpha1.StorageCephDistributionIBM,
 			release:      "10.1.0.0",
 			want:         "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9",
 			wantOK:       true,
 		},
 		{
-			name:         "uncataloged redhat release derives its own stream",
+			name:         "redhat release newer than bootwright derives its own stream",
 			distribution: v1alpha1.StorageCephDistributionRedHat,
 			release:      "9.2",
 			want:         "registry.redhat.io/rhceph/rhceph-9-rhel9",
@@ -443,21 +380,23 @@ func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := ExpectedImageRepository(tc.distribution, tc.release, tc.registry)
+			got, ok := DerivedImageRepository(tc.distribution, tc.release, tc.registry)
 			if ok != tc.wantOK || got != tc.want {
-				t.Fatalf("ExpectedImageRepository(%q, %q, %q) = %q, %t; want %q, %t", tc.distribution, tc.release, tc.registry, got, ok, tc.want, tc.wantOK)
+				t.Fatalf("DerivedImageRepository(%q, %q, %q) = %q, %t; want %q, %t", tc.distribution, tc.release, tc.registry, got, ok, tc.want, tc.wantOK)
 			}
 		})
 	}
 }
 
-func TestExpectedImageRepositoryPrefixLeavesTheBuildBaseOpen(t *testing.T) {
-	prefix, ok := ExpectedImageRepositoryPrefix(v1alpha1.StorageCephDistributionRedHat, "10.0", "")
+func TestImageRepositoryPrefixLeavesTheBuildBaseOpen(t *testing.T) {
+	prefix, ok := ImageRepositoryPrefix(v1alpha1.StorageCephDistributionRedHat, "10.0", "")
 	if !ok || prefix != "registry.redhat.io/rhceph/rhceph-10-rhel" {
-		t.Fatalf("ExpectedImageRepositoryPrefix = %q, %t", prefix, ok)
+		t.Fatalf("ImageRepositoryPrefix = %q, %t", prefix, ok)
 	}
-	if !strings.HasPrefix("registry.redhat.io/rhceph/rhceph-10-rhel10", prefix) {
-		t.Fatalf("a rhel10-based vendor build does not match prefix %q", prefix)
+	for _, image := range []string{"registry.redhat.io/rhceph/rhceph-10-rhel10", "registry.redhat.io/rhceph/rhceph-10-rhel11"} {
+		if !strings.HasPrefix(image, prefix) {
+			t.Fatalf("vendor build %q does not match prefix %q", image, prefix)
+		}
 	}
 }
 
@@ -636,7 +575,7 @@ func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
 	}
 }
 
-func TestSelectDerivesPackageSourcesForAnUncatalogedRelease(t *testing.T) {
+func TestSelectDerivesPackageSourcesForAReleaseNewerThanBootwright(t *testing.T) {
 	redhat := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution: v1alpha1.StorageCephDistributionRedHat,
 		Release:      "10.0",
@@ -661,13 +600,7 @@ func TestSelectDerivesPackageSourcesForAnUncatalogedRelease(t *testing.T) {
 		t.Fatalf("ibm 9.9.2.0 imageBase = %q", provider.ImageBase)
 	}
 	runtimeOS := Vars(provider)["runtimeOS"].(map[string]any)
-	if runtimeOS["family"] != "rhel" {
-		t.Fatalf("uncataloged release runtimeOS = %#v", runtimeOS)
-	}
-	if _, ok := runtimeOS["majorVersions"]; ok {
-		t.Fatalf("uncataloged release must not render a major-version gate: %#v", runtimeOS)
-	}
-	if _, ok := runtimeOS["exactVersions"]; ok {
-		t.Fatalf("uncataloged release must not render an exact-version matrix: %#v", runtimeOS)
+	if runtimeOS["family"] != "rhel" || len(runtimeOS) != 1 {
+		t.Fatalf("runtimeOS must carry the implemented family and nothing else, got %#v", runtimeOS)
 	}
 }

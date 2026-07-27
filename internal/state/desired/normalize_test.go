@@ -40,9 +40,14 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 			wantRelease: "9.1",
 		},
 		{
-			name:        "redhat stream alias is canonical",
+			name:        "authored release is carried verbatim",
 			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionRedHat, Release: "9"},
-			wantRelease: "9.1",
+			wantRelease: "9",
+		},
+		{
+			name:        "release newer than bootwright is carried verbatim",
+			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionIBM, Release: "9.9.2.0"},
+			wantRelease: "9.9.2.0",
 		},
 		{
 			name:        "ibm default is current exact product release",

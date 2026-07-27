@@ -94,17 +94,9 @@ func validateStorageCephImageRepository(prefix, distribution, authored, registry
 	if !ok {
 		return nil
 	}
-	repository := cephprovider.ImageRepository(image)
-	if release.Cataloged {
-		expected, ok := cephprovider.ExpectedImageRepository(distribution, authored, registry)
-		if ok && repository != expected {
-			return []string{fmt.Sprintf("%s.image repository must be %q for %s release %s; preserve the vendor repository suffix when mirroring", prefix, expected, distribution, release.Value)}
-		}
-		return nil
-	}
-	vendorPrefix, ok := cephprovider.ExpectedImageRepositoryPrefix(distribution, authored, registry)
-	if ok && !strings.HasPrefix(repository, vendorPrefix) {
-		return []string{fmt.Sprintf("%s.image repository must start with %q for %s release %s; Bootwright carries no catalog entry for that release, so the vendor namespace and stream are checked and the trailing build base is yours to declare", prefix, vendorPrefix, distribution, release.Value)}
+	vendorPrefix, ok := cephprovider.ImageRepositoryPrefix(distribution, authored, registry)
+	if ok && !strings.HasPrefix(cephprovider.ImageRepository(image), vendorPrefix) {
+		return []string{fmt.Sprintf("%s.image repository must start with %q for %s release %s; the vendor namespace and stream must match the cluster, the trailing build base is yours to declare", prefix, vendorPrefix, distribution, release.Value)}
 	}
 	return nil
 }
@@ -160,12 +152,7 @@ func isHTTPSURL(value string) bool {
 }
 
 func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
-	distribution := storageCephDistribution(cluster)
-	if distribution == v1alpha1.StorageCephDistributionOSS {
-		return nil
-	}
-	release, ok := cephprovider.ResolveRelease(distribution, cluster.Spec.Ceph.Release)
-	if !ok {
+	if storageCephDistribution(cluster) == v1alpha1.StorageCephDistributionOSS {
 		return nil
 	}
 	var errs []string
@@ -175,17 +162,10 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 			continue
 		}
 		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
-		if !ok {
+		if !ok || strings.ToLower(profile.Spec.OS.Family) == v1alpha1.MachineInstallOSFamilyRHEL {
 			continue
 		}
-		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Name, profile.Metadata.Name)
-		if strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
-			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
-			continue
-		}
-		if !cephprovider.RuntimeOSMajorAllowed(release.RuntimeOS, profile.Spec.OS.Version) {
-			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q release %q; that release runs on RHEL %s", owner, profile.Spec.OS.Version, distribution, release.Value, strings.Join(release.RuntimeOS.MajorVersions, " or ")))
-		}
+		errs = append(errs, fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os.family %q is not RHEL; the subscription-backed Ceph provider only implements RHEL-family package sources", cluster.Metadata.Name, node.Name, profile.Metadata.Name, profile.Spec.OS.Family))
 	}
 	return errs
 }

@@ -31,7 +31,6 @@ const (
 
 type distributionDef struct {
 	defaultRelease      string
-	releases            map[string]releaseDef
 	requiresRHSM        bool
 	requiresRegistry    bool
 	requiresLicense     bool
@@ -41,76 +40,18 @@ type distributionDef struct {
 	ibmRepoTemplate     string
 	imagePathTemplate   string
 	defaultImageOSMajor string
-	runtimeOS           RuntimeOS
-}
-
-type releaseDef struct {
-	value        string
-	imageOSMajor string
-	runtimeOS    RuntimeOS
 }
 
 func (d distributionDef) requiresEntitlement() bool {
 	return d.requiresRHSM || d.requiresRegistry || d.requiresLicense
 }
 
-func rhelCephRuntimeOS(product string, versions []string) RuntimeOS {
-	exact := append([]string(nil), versions...)
-	var majors []string
-	for _, version := range exact {
-		major := leadingComponent(version)
-		if !containsString(majors, major) {
-			majors = append(majors, major)
-		}
-	}
-	return RuntimeOS{
-		Family:         "rhel",
-		MajorVersions:  majors,
-		ExactVersions:  exact,
-		ManagedMessage: fmt.Sprintf("%s runs on RHEL %s storage nodes", product, strings.Join(majors, " or ")),
-	}
-}
-
-func rhelCephFamilyOnly(product string) RuntimeOS {
-	return RuntimeOS{
-		Family:         "rhel",
-		ManagedMessage: fmt.Sprintf("%s runs on RHEL-family storage nodes", product),
-	}
-}
-
-var (
-	rhcs90RuntimeOS = rhelCephRuntimeOS(
-		"Red Hat Ceph Storage 9.0",
-		[]string{"9.6", "9.7", "10", "10.0", "10.1"},
-	)
-	rhcs91RuntimeOS = rhelCephRuntimeOS(
-		"Red Hat Ceph Storage 9.1",
-		[]string{"9.8", "10.2"},
-	)
-	ibm9910RuntimeOS = rhelCephRuntimeOS(
-		"IBM Storage Ceph 9.9.1.0",
-		[]string{"9.8", "10.2"},
-	)
-)
-
 var distributions = map[string]distributionDef{
 	v1alpha1.StorageCephDistributionOSS: {
 		defaultRelease: v1alpha1.StorageCephCommunityDefaultRelease,
-		runtimeOS: RuntimeOS{
-			Family:         "rhel",
-			ManagedMessage: "Community Ceph is supported on RHEL-family storage nodes",
-		},
 	},
 	v1alpha1.StorageCephDistributionRedHat: {
-		defaultRelease: "9.1",
-		releases: map[string]releaseDef{
-			"9":     {value: "9.1", runtimeOS: rhcs91RuntimeOS},
-			"9.0":   {value: "9.0", runtimeOS: rhcs90RuntimeOS},
-			"9.0.1": {value: "9.0.1", runtimeOS: rhcs90RuntimeOS},
-			"9.0.2": {value: "9.0.2", runtimeOS: rhcs90RuntimeOS},
-			"9.0.3": {value: "9.0.3", runtimeOS: rhcs90RuntimeOS},
-			"9.1":   {value: "9.1", runtimeOS: rhcs91RuntimeOS},
-		},
+		defaultRelease:      "9.1",
 		requiresRHSM:        true,
 		requiresRegistry:    true,
 		registryURL:         RedHatRegistryURL,
@@ -118,14 +59,9 @@ var distributions = map[string]distributionDef{
 		usesRHCephToolsRepo: true,
 		imagePathTemplate:   rhcephImagePathTemplate,
 		defaultImageOSMajor: vendorImageOSMajor,
-		runtimeOS:           rhelCephFamilyOnly("Red Hat Ceph Storage"),
 	},
 	v1alpha1.StorageCephDistributionIBM: {
-		defaultRelease: "9.9.1.0",
-		releases: map[string]releaseDef{
-			"9":       {value: "9.9.1.0", runtimeOS: ibm9910RuntimeOS},
-			"9.9.1.0": {value: "9.9.1.0", runtimeOS: ibm9910RuntimeOS},
-		},
+		defaultRelease:      "9.9.1.0",
 		requiresRHSM:        true,
 		requiresRegistry:    true,
 		requiresLicense:     true,
@@ -134,7 +70,6 @@ var distributions = map[string]distributionDef{
 		ibmRepoTemplate:     ibmStorageCephRepoTemplate,
 		imagePathTemplate:   ibmImagePathTemplate,
 		defaultImageOSMajor: vendorImageOSMajor,
-		runtimeOS:           rhelCephFamilyOnly("IBM Storage Ceph"),
 	},
 }
 
@@ -220,7 +155,7 @@ func imageBase(distribution, release, registryURL, image string) string {
 	if image != "" {
 		return ImageRepository(image)
 	}
-	repository, _ := ExpectedImageRepository(distribution, release, registryURL)
+	repository, _ := DerivedImageRepository(distribution, release, registryURL)
 	return repository
 }
 
@@ -254,10 +189,7 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 		RequiresRHSM:         def.requiresRHSM,
 		RequiresRegistry:     def.requiresRegistry,
 		RequiresLicense:      def.requiresLicense,
-		RuntimeOS:            release.RuntimeOS,
-	}
-	if provider.RuntimeOS.Family == "" {
-		provider.RuntimeOS.Family = "linux"
+		RuntimeOS:            RuntimeOS{Family: "rhel"},
 	}
 	if distribution == v1alpha1.StorageCephDistributionOSS {
 		provider.Community = communitySource(cluster)
@@ -341,17 +273,7 @@ func Vars(provider Provider) map[string]any {
 		out["repository"] = repo
 	}
 	if provider.RuntimeOS.Family != "" {
-		os := map[string]any{"family": provider.RuntimeOS.Family}
-		if len(provider.RuntimeOS.MajorVersions) > 0 {
-			os["majorVersions"] = append([]string(nil), provider.RuntimeOS.MajorVersions...)
-		}
-		if len(provider.RuntimeOS.ExactVersions) > 0 {
-			os["exactVersions"] = append([]string(nil), provider.RuntimeOS.ExactVersions...)
-		}
-		if provider.RuntimeOS.ManagedMessage != "" {
-			os["message"] = provider.RuntimeOS.ManagedMessage
-		}
-		out["runtimeOS"] = os
+		out["runtimeOS"] = map[string]any{"family": provider.RuntimeOS.Family}
 	}
 	if regRHSM.OrganizationPath != "" || regRHSM.ActivationKeyPath != "" {
 		rhsm := map[string]any{

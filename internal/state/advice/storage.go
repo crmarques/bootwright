@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -41,7 +42,6 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageMonitorAdvisories(object, cluster)...)
 		out = append(out, storageManagerAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
-		out = append(out, storageReleaseAdvisories(object, state, cluster)...)
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchTiebreakerAdvisories(object, cluster)...)
@@ -152,10 +152,11 @@ func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []St
 	if cluster.Spec.Ceph.Image != "" {
 		return nil
 	}
-	example := "registry.redhat.io/rhceph/rhceph-9-rhel9@sha256:..."
-	if distribution == v1alpha1.StorageCephDistributionIBM {
-		example = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:..."
+	example, ok := cephprovider.DerivedImageRepository(distribution, cluster.Spec.Ceph.Release, "")
+	if !ok {
+		return nil
 	}
+	example += "@sha256:..."
 	return []StorageAdvisory{{
 		Severity:    SeverityWarn,
 		Group:       cephBestPracticeGroup,

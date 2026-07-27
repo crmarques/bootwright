@@ -53,20 +53,18 @@ plus each node's RHEL major build the tools repo, the vendor `.repo` URL, and th
 daemon image repository. `oss` takes an upstream release name (`tentacle`) or an
 exact `x.y.z` version; the default `20.2.2` pins both the package repository and
 `quay.io/ceph/ceph:v20.2.2`. Red Hat and IBM take a dot-separated numeric product
-version of any length, defaulting to `9.1` and `9.9.1.0`. Bare `9` is a
-convenience alias normalized to the exact default for that distribution.
+version of any length, defaulting to `9.1` and `9.9.1.0`.
 
-Bootwright separately records vendor facts — the RHEL runtime matrix and the
-image build base — for Tentacle (`20.2.x`), Squid (`19.2.x`), Red Hat `9.0`
-through `9.0.3` and `9.1`, and IBM `9.9.1.0`. Those facts are advisory. A newer
-release installs without waiting for a Bootwright update; `bootwright check`
-warns and names what it assumed. The immutable vendor image build tag is not
-derivable from the product release either way, so pin `spec.ceph.image` to lock
-the exact build. To mirror upstream packages for a
+Bootwright keeps no list of releases and no vendor support matrix, so it never
+judges the release you declare, nor the RHEL version you run it on. A release
+published today installs today. The immutable vendor image build tag is not
+derivable from a product release, so pin `spec.ceph.image` to lock the exact
+build. To mirror upstream packages for a
 disconnected `oss` install, set an HTTPS `spec.ceph.community.mirror`.
-The recorded facts follow the upstream [Ceph releases](https://docs.ceph.com/en/latest/releases/),
-the [Red Hat Ceph Storage 9 compatibility guide](https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf),
-and IBM's [9.9.1.0 node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes).
+Check what a release supports against the vendor's own sources — the upstream
+[Ceph releases](https://docs.ceph.com/en/latest/releases/) page, the
+[Red Hat Ceph Storage compatibility guide](https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf),
+and IBM's [node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes).
 
 ```yaml
 ceph:

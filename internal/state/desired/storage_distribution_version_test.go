@@ -61,14 +61,14 @@ func TestValidateStorageCephOSSReleaseAcceptsAnyUpstreamCoordinate(t *testing.T)
 	}
 }
 
-func TestValidateStorageCephVendorRuntimeOSMatrix(t *testing.T) {
-	profile := func(version string) map[string]v1alpha1.MachineInstallProfile {
+func TestValidateStorageCephNodeOSJudgesNoVendorSupportMatrix(t *testing.T) {
+	profile := func(family, version string) map[string]v1alpha1.MachineInstallProfile {
 		return map[string]v1alpha1.MachineInstallProfile{
-			"rhel": {Metadata: v1alpha1.Metadata{Name: "rhel"}, Spec: v1alpha1.MachineInstallProfileSpec{OS: v1alpha1.MachineInstallOS{Family: v1alpha1.MachineInstallOSFamilyRHEL, Version: version}}},
+			"os": {Metadata: v1alpha1.Metadata{Name: "os"}, Spec: v1alpha1.MachineInstallProfileSpec{OS: v1alpha1.MachineInstallOS{Family: family, Version: version}}},
 		}
 	}
 	machines := map[string]v1alpha1.Machine{
-		"node": {Metadata: v1alpha1.Metadata{Name: "node"}, Spec: v1alpha1.MachineSpec{OS: v1alpha1.MachineOSSpec{InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel"}}}},
+		"node": {Metadata: v1alpha1.Metadata{Name: "node"}, Spec: v1alpha1.MachineSpec{OS: v1alpha1.MachineOSSpec{InstallProfileRef: v1alpha1.LocalObjectReference{Name: "os"}}}},
 	}
 	cluster := func(distribution, release string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
@@ -85,26 +85,24 @@ func TestValidateStorageCephVendorRuntimeOSMatrix(t *testing.T) {
 	cases := []struct {
 		distribution string
 		release      string
-		rhel         string
+		family       string
+		version      string
 		wantError    bool
 	}{
-		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.7", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.7", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.8", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9.8", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9.11", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.1", "10.4", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.1", "8.10", true},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.8", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.7", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "8.10", true},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "9.9", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "8.10", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0", "rhel", "9.7", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0", "rhel", "9.8", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "rhel", "9.11", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "rhel", "8.10", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.2", "rhel", "10.4", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "rhel", "9.8", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "rhel", "11.0", false},
+		{v1alpha1.StorageCephDistributionIBM, "10.0.0.0", "rhel", "9.8", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "fedora", "42", true},
 	}
 	for _, tc := range cases {
-		errs := validateStorageCephManagedOS(cluster(tc.distribution, tc.release), machines, profile(tc.rhel))
+		errs := validateStorageCephManagedOS(cluster(tc.distribution, tc.release), machines, profile(tc.family, tc.version))
 		if (len(errs) > 0) != tc.wantError {
-			t.Fatalf("validate runtime %s/%s on RHEL %s = %v, wantError=%t", tc.distribution, tc.release, tc.rhel, errs, tc.wantError)
+			t.Fatalf("validate %s/%s on %s %s = %v, wantError=%t", tc.distribution, tc.release, tc.family, tc.version, errs, tc.wantError)
 		}
 	}
 }
@@ -135,12 +133,17 @@ func TestValidateStorageCephCustomVendorRegistryRequiresMatchingImage(t *testing
 		t.Fatalf("custom registry without image = %v", errs)
 	}
 	cluster.Spec.Ceph.Image = "registry.redhat.io/rhceph/rhceph-9-rhel9:9"
-	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "preserve the vendor repository suffix") {
+	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "image repository must start with") {
 		t.Fatalf("cross-registry image = %v", errs)
 	}
 	cluster.Spec.Ceph.Image = "registry.example.test/ceph/rhceph/rhceph-9-rhel9:9"
 	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) != 0 {
 		t.Fatalf("matching mirrored image rejected: %v", errs)
+	}
+	cluster.Spec.Ceph.Release = "10.0"
+	cluster.Spec.Ceph.Image = "registry.example.test/ceph/rhceph/rhceph-10-rhel10:10"
+	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) != 0 {
+		t.Fatalf("a vendor build base newer than Bootwright was rejected: %v", errs)
 	}
 }
 
@@ -190,7 +193,7 @@ func TestStorageValidationRejectsWrongVendorImageRepository(t *testing.T) {
 			ceph.EntitlementRef.Name = "ceph-entitlement"
 			ceph.IBM = tc.ibm
 			errs := strings.Join(validateStorage(state), "; ")
-			if !strings.Contains(errs, "image repository must be") {
+			if !strings.Contains(errs, "image repository must start with") {
 				t.Fatalf("validateStorage errors = %q", errs)
 			}
 		})

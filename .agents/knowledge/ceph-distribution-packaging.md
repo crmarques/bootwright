@@ -8,24 +8,28 @@ Ansible role dispatches on the rendered flags (a `community` block vs
 a table entry plus its api/v1alpha1 constant and validation, not a new `when:`
 clause or task file.
 
-**Constraint:** Releases are *derived*, not enumerated. `ResolveRelease`
-(`internal/storage/cephprovider/release.go`) fails only on syntax; the leading
-dot-component of a product version is the stream, and the stream plus the node's
-own `ansible_distribution_major_version` build every repo id, `.repo` URL, and
-image repository. The per-release table (`releaseDef`) is a *catalog of recorded
-vendor facts* — the exact release a bare stream alias normalizes to, the RHEL
-runtime matrix, the image build base — carried on `ResolvedRelease.Cataloged`.
-A release outside it installs anyway. Do not turn the catalog back into a gate:
-vendor release lists and RHEL compatibility matrices move on the vendor's
-schedule, and a closed catalog makes a correct declaration fail until someone
-edits Go. What the catalog is missing surfaces as a `check` advisory
-(`internal/state/advice/storage_release.go`) instead.
+**Constraint:** Bootwright carries NO Ceph release list and NO vendor support
+matrix, and must never acquire one — not as a validation gate, not as a warning,
+not as a `check` advisory, not as a doc table presented as authoritative. It does
+not know or report which releases exist, which are current or ended, or which
+RHEL versions a release supports. Those facts move on the vendor's schedule, so
+any copy inside Bootwright is wrong the moment the vendor moves, and enforcing or
+even flagging a stale copy turns a correct operator declaration into noise or a
+failure. `ResolveRelease` (`internal/storage/cephprovider/release.go`) fails only
+when a string cannot yield artifact coordinates at all; the leading dot-component
+of a product version is the stream, and the stream plus the node's own
+`ansible_distribution_major_version` build every repo id, `.repo` URL, and image
+repository. The authored release is carried verbatim — no normalization to a
+Bootwright-preferred value. `ResolvedRelease` holds exactly `Value` and `Stream`;
+adding a support-matrix field to it is the mistake this constraint exists to
+prevent. Two earlier attempts got this wrong: first a closed release catalog that
+hard-failed unknown releases, then an advisory catalog that warned on them.
 
-**Constraint:** Node-OS enforcement splits by how fast the fact moves. RHEL
-family and major version are hard (validation error plus an apply-time assert on
-`runtimeOS.majorVersions`). The exact minor is advisory only — a `check` warning
-and an apply-time `debug` keyed on `runtimeOS.exactVersions`. A RHEL z-stream
-released after Bootwright must never fail an otherwise-correct cluster.
+**Constraint:** The only storage-node OS check is `ansible_os_family == 'RedHat'`
+(mirrored by a `family: rhel` validation error). That is a Bootwright capability
+statement — the subscription provider implements RHEL-family package sources only
+— not a vendor compatibility claim. No OS *version* is examined anywhere, in Go or
+in Ansible. The rendered `runtimeOS` var carries `family` and nothing else.
 
 **Symptom:** On an IBM Storage Ceph cluster, `ceph orch upgrade ls` and the
 dashboard "Upgrade" page fail with 401 against `registry.redhat.io`.
@@ -82,8 +86,8 @@ file fails closed for operator review.
 x.y.z, resolving `rpm-<x.y.z>/` + `cephadm add-repo --version`, and deriving
 `quay.io/ceph/ceph:vX.Y.Z` when `image` is unset) or `community.release` (a
 codename, resolving `rpm-<name>/` + `--release`; the image floats). Both paths
-are name-agnostic: Tentacle (`20.2.x`) and Squid (`19.2.x`) are the recorded
-active series, but any parseable codename or `x.y.z` resolves and warns.
+are fully name-agnostic — any parseable codename or `x.y.z` resolves, and no
+upstream series is treated as active or ended.
 `community.checksum` is normalized to bare sha256 hex and re-prefixed into
 `get_url`'s checksum so the fetched-and-executed cephadm bootstrap binary is
 content-verified.
@@ -97,15 +101,7 @@ IBM Storage Ceph 9.9.1.0 also pauses `cephadm bootstrap` for interactive license
 acceptance unless `--automatically-accept-license` is present. That acceptance
 enables the `call_home_agent` mgr module by default, so the StorageCluster must
 declare `ibm.callHome: enabled|disabled`; apply acknowledges the enabled state
-or denies it to turn the module off. The 9.9.1.0 runtime matrix accepts RHEL 9.8
-or 10.2.
-
-**Constraint:** The recorded runtime matrices are Red Hat Ceph Storage 9.0
-through 9.0.3 on RHEL 9.6, 9.7, 10, 10.0, or 10.1; 9.1 on RHEL 9.8 or 10.2; IBM
-Storage Ceph 9.9.1.0 on RHEL 9.8 or 10.2. They are snapshots of vendor
-documentation, enforced at major-version granularity and reported at minor.
-Bare stream `9` normalizes to the cataloged exact release before hashing and
-rendering; an uncataloged value is carried verbatim.
+or denies it to turn the module off.
 
 **Constraint:** IBM Storage Ceph 9 uses IBM's four-component V.R.M.F product
 version. The trailing R.M.F retains the prior Ceph release, modification, and
@@ -118,14 +114,15 @@ components need no Bootwright knowledge.
 **Constraint:** An entitlement registry override changes credentials and trust
 and acts as a mirror root, not permission to select an arbitrary repository. A
 subscription-backed cluster with a custom `registry.url` must pin
-`spec.ceph.image` at that root plus the distribution's canonical suffix:
-`rhceph/rhceph-<stream>-rhel<build base>` for Red Hat or
-`ibm-ceph/ceph-<stream>-rhel<build base>` for IBM. The same suffix check applies
-on the default vendor registry, preventing a Red Hat cluster from accepting an
-IBM or unrelated image merely because it is below the authenticated registry.
-For an uncataloged release the build base is unknown, so the check narrows to
-the `...-rhel` prefix — namespace and stream still bind, the trailing base does
-not.
+`spec.ceph.image` at that root plus the distribution's namespace and stream:
+`rhceph/rhceph-<stream>-rhel` for Red Hat or `ibm-ceph/ceph-<stream>-rhel` for
+IBM. The same prefix check applies on the default vendor registry, preventing a
+Red Hat cluster from accepting an IBM or unrelated image merely because it is
+below the authenticated registry. It is a cross-vendor guard only — the trailing
+build base is never compared against the release, because which base a vendor
+compiled a release against is a vendor fact Bootwright does not track. The
+derived `container_image_base` defaults that base to `rhel9`
+(`defaultImageOSMajor`); an explicit `spec.ceph.image` overrides it.
 Registry addresses are scheme-less `host[:port][/path]`; community package
 mirrors remain HTTPS URLs because cephadm refuses insecure repository
 transport.

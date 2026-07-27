@@ -229,8 +229,8 @@ environment differs.
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |
 | `clusters/storage/ceph-ibm/nodes/*.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
 | `infra/os/rhel-9-x86-64-dvd.yaml` | `spec.bootMedia` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
-| `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`, supported by IBM Storage Ceph 9.9.1.0). |
-| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`; bare `9` normalizes to it). |
+| `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`). Any product version installs; its leading component selects the stream. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `management.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
 | `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsName` and `spec.ceph.ingresses[].address` | The RGW endpoint and ingress VIP, if you changed the network. |
