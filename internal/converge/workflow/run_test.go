@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/roles"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -454,6 +455,67 @@ func TestRunRejectsPlaintextKubeVirtHostClusterKubeconfig(t *testing.T) {
 	}
 	if string(data) != "apiVersion: v1\n" {
 		t.Fatalf("plaintext kubeconfig was modified: %q", data)
+	}
+}
+
+func TestRunMachineInfraDestroyToleratesMissingKubeVirtHostKubeconfig(t *testing.T) {
+	baseDir := t.TempDir()
+	runner := &fakeRunner{}
+	result, err := Run(context.Background(), RunOptions{
+		State:              kubeVirtChildPlanningState(false),
+		RenderedDir:        filepath.Join(baseDir, "rendered"),
+		ClustersDir:        filepath.Join(baseDir, "clusters"),
+		RunsDir:            filepath.Join(baseDir, "runs"),
+		ContextName:        "test",
+		SecretsDir:         filepath.Join(baseDir, "secrets"),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   filepath.Join(baseDir, "provider-state"),
+		BundleDir:          t.TempDir(),
+		Playbook:           roles.PlaybookTaskMachineInfraDestroy,
+		ArtifactsBaseName:  "machine-infra",
+	}, runner, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !runner.runCalled {
+		t.Fatal("machine infrastructure destroy did not reach the runner")
+	}
+	vars, err := os.ReadFile(result.Render.VarsPath)
+	if err != nil {
+		t.Fatalf("read rendered vars: %v", err)
+	}
+	if strings.Contains(string(vars), "bootwright_kubevirt_host_kubeconfigs") {
+		t.Fatalf("destroy rendered a host kubeconfig map for an uninstalled host cluster:\n%s", vars)
+	}
+	if strings.Contains(string(vars), "metal-ocp/secrets/kubeconfig") {
+		t.Fatalf("destroy rendered a host kubeconfig path for an uninstalled host cluster:\n%s", vars)
+	}
+}
+
+func TestRunRejectsMissingKubeVirtHostKubeconfigForApply(t *testing.T) {
+	baseDir := t.TempDir()
+	runner := &fakeRunner{}
+	_, err := Run(context.Background(), RunOptions{
+		State:              kubeVirtChildPlanningState(false),
+		RenderedDir:        filepath.Join(baseDir, "rendered"),
+		ClustersDir:        filepath.Join(baseDir, "clusters"),
+		RunsDir:            filepath.Join(baseDir, "runs"),
+		ContextName:        "test",
+		SecretsDir:         filepath.Join(baseDir, "secrets"),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   filepath.Join(baseDir, "provider-state"),
+		BundleDir:          t.TempDir(),
+		Playbook:           "bootwright.core.workflow_clusters_apply",
+		ArtifactsBaseName:  "clusters",
+	}, runner, nil)
+	if err == nil || !strings.Contains(err.Error(), "ContainerCluster/metal-ocp") {
+		t.Fatalf("Run error = %v, want a named missing-kubeconfig refusal", err)
+	}
+	if !strings.Contains(err.Error(), "bootwright apply --clusters metal-ocp") {
+		t.Fatalf("Run error = %v, want the remedy command", err)
+	}
+	if runner.runCalled {
+		t.Fatal("apply must not run without the KubeVirt host kubeconfig")
 	}
 }
 

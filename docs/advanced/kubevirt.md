@@ -245,7 +245,10 @@ Selecting an installed parent without its installed child fails closed;
 `--force` does not widen the selected work set. If the parent API is unreachable,
 Bootwright keeps guest ownership and cluster runtime records even with
 `--skip-unreachable`, because host unreachability does not prove that the VM and
-DataVolumes are absent. A bare-metal parent selected in the same destroy retains
+DataVolumes are absent. A parent that holds no captured kubeconfig at all — it
+never finished installing, or an earlier destroy already removed its install
+state — is treated the same way: destroy continues for guests it never recorded
+and fails closed, naming the parent, for guests it did. A bare-metal parent selected in the same destroy retains
 its physical hardware and installed OS; only Bootwright-local lifecycle state is
 released.
 

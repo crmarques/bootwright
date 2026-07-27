@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -110,5 +112,31 @@ func TestDestroyRunSummaryPrintsRunLogAndFailure(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("summary missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestDestroyRunSummaryOmitsUnwrittenTaskLog(t *testing.T) {
+	now := time.Now()
+	taskLog := filepath.Join(t.TempDir(), "ansible-output.log")
+	ledger := workflow.NewRunLedger("destroy-test", "destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "destroy.machine-infra", Kind: workflow.DestroyTaskKindMachineInfra, Label: "Machine infrastructure", Status: workflow.TaskStatusPending},
+	}, now)
+	ledger.MarkRunning("destroy.machine-infra", taskLog, now)
+	ledger.MarkFailed("destroy.machine-infra", "failure: host cluster kubeconfig is missing", now)
+	ledger.Finish(workflow.RunStatusFailed, now)
+
+	var buf bytes.Buffer
+	printDestroyRunSummary(&buf, "/runs", ledger)
+	if strings.Contains(buf.String(), taskLog) {
+		t.Fatalf("a failure raised before Ansible ran must not point at an unwritten task log:\n%s", buf.String())
+	}
+
+	if err := os.WriteFile(taskLog, []byte("TASK [assert] failed\n"), 0o600); err != nil {
+		t.Fatalf("write task log: %v", err)
+	}
+	buf.Reset()
+	printDestroyRunSummary(&buf, "/runs", ledger)
+	if !strings.Contains(buf.String(), taskLog) {
+		t.Fatalf("a written task log must still be surfaced:\n%s", buf.String())
 	}
 }

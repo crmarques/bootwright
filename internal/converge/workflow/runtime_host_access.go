@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -61,6 +62,15 @@ func kubeVirtHostClustersForRun(opts RunOptions) []string {
 	return clusters
 }
 
+func playbookToleratesMissingKubeVirtHostKubeconfig(playbook string) bool {
+	switch playbook {
+	case roles.PlaybookTaskMachineInfraDestroy, roles.PlaybookWorkflowInfraDestroy:
+		return true
+	default:
+		return false
+	}
+}
+
 func playbookUsesKubeVirtHostKubeconfigs(playbook string) bool {
 	switch playbook {
 	case applyClusterInstallPlaybook,
@@ -88,7 +98,7 @@ func extraVarValue(pairs []string, name string) string {
 	return ""
 }
 
-func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, hostKubeconfigDir string, clusters []string, fn func(map[string]string) error) error {
+func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, hostKubeconfigDir string, clusters []string, tolerateMissing bool, fn func(map[string]string) error) error {
 	if fn == nil {
 		return errors.New("KubeVirt host kubeconfig callback is nil")
 	}
@@ -111,6 +121,16 @@ func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, hostKubec
 		}
 		cluster := clusters[index]
 		store := secret.NewContextStore(contextName, ClusterSecretsDir(clustersDir, cluster))
+		status, err := store.Inspect(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary})
+		if err != nil {
+			return err
+		}
+		if status.State == secret.MaterialStateMissing {
+			if tolerateMissing {
+				return materialize(index + 1)
+			}
+			return fmt.Errorf("ContainerCluster/%s hosts KubeVirt machines in this run but holds no captured kubeconfig at %s: install or converge that host cluster first (bootwright apply --clusters %s)", cluster, status.Path, cluster)
+		}
 		return store.WithMaterialized(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}, hostKubeconfigDir, func(path string) error {
 			paths[cluster] = path
 			defer delete(paths, cluster)

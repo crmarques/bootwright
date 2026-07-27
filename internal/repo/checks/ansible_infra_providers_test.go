@@ -855,8 +855,29 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if _, ok := topTasks[gateIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("host-reachability gate must be a hard assert, got %v", topTasks[gateIdx])
 	}
-	if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, "--skip-unreachable cannot prove them absent") {
+	if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, "--skip-unreachable cannot prove the guest absent") {
 		t.Fatalf("host-reachability refusal must explain why skipping cannot release guest ownership, got %v", topTasks[gateIdx])
+	}
+	kubeconfigGateIdx := findAnsibleTask(t, topTasks, "Require a captured kubeconfig for the recorded KubeVirt guest")
+	if !(recordIdx < kubeconfigGateIdx && kubeconfigGateIdx < gateIdx) {
+		t.Fatalf("the captured-kubeconfig gate must sit between the ownership record and the reachability gate (record=%d kubeconfig=%d gate=%d)", recordIdx, kubeconfigGateIdx, gateIdx)
+	}
+	kubeconfigGate, ok := topTasks[kubeconfigGateIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the captured-kubeconfig gate must be a hard assert, got %v", topTasks[kubeconfigGateIdx])
+	}
+	if got := fmt.Sprint(kubeconfigGate["that"]); !strings.Contains(got, "bootwright_kubevirt_host_kubeconfig_available") {
+		t.Fatalf("the captured-kubeconfig gate must require the resolved availability fact, got %v", kubeconfigGate["that"])
+	}
+	kubeconfigGateWhen := fmt.Sprint(topTasks[kubeconfigGateIdx]["when"])
+	if !strings.Contains(kubeconfigGateWhen, "bootwright_kubevirt_machine_recorded") {
+		t.Fatalf("a host cluster with no captured kubeconfig must only fail closed for a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
+	}
+	if strings.Contains(kubeconfigGateWhen, "bootwright_destroy_skip_unreachable") {
+		t.Fatalf("the captured-kubeconfig gate must not let --skip-unreachable discard a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
+	}
+	if got := fmt.Sprint(topTasks[gateIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_kubeconfig_available") {
+		t.Fatalf("the reachability gate must defer to the captured-kubeconfig gate when no kubeconfig exists, got when=%v", topTasks[gateIdx]["when"])
 	}
 	if got := fmt.Sprint(topTasks[blockIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_reachable") {
 		t.Fatalf("guest teardown must be gated on host reachability, got when=%v", topTasks[blockIdx]["when"])

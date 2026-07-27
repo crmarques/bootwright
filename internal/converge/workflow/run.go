@@ -130,7 +130,8 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	}
 	defer os.RemoveAll(hostKubeconfigDir)
 	var result RunResult
-	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, hostKubeconfigDir, hostClusters, func(paths map[string]string) error {
+	tolerateMissing := playbookToleratesMissingKubeVirtHostKubeconfig(opts.Playbook)
+	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, hostKubeconfigDir, hostClusters, tolerateMissing, func(paths map[string]string) error {
 		var runErr error
 		result, runErr = runWithRuntimeSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, paths, runner, reporter)
 		return runErr

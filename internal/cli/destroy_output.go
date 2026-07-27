@@ -104,8 +104,8 @@ func printDestroyRunSummary(stdout io.Writer, runsDir string, ledger workflow.Ru
 			fields = append(fields, output.Field{Key: "clusters", Value: covered})
 		}
 		fields = append(fields, output.Field{Key: "reason", Value: status.ApplyFailureReason(task.Failure)})
-		if task.LogPath != "" {
-			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
+		if logPath := writtenTaskLogPath(task.LogPath); logPath != "" {
+			fields = append(fields, output.Field{Key: "log", Value: logPath})
 		}
 		p.Details(fields)
 	}

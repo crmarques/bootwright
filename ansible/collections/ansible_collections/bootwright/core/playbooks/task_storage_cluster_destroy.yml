@@ -62,10 +62,9 @@
           - not (bootwright_storage_reachable_probe.unreachable | default(false) | bool)
         fail_msg: >-
           Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
-          ({{ inventory_hostname }}) for storage cluster {{ bootwright_storage_cluster_name }}
-          is unreachable. If the cluster was never provisioned there is nothing to wipe —
-          re-run with --force --skip-unreachable to tear it down as already-absent
-          (--skip-unreachable requires --force). Otherwise power the node(s) on and retry.
+          for storage cluster {{ bootwright_storage_cluster_name }} is unreachable:
+          power it on and retry, or re-run with --force --skip-unreachable to tear it
+          down as already-absent.
       when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
     - name: Summarize storage hosts skipped as unreachable
@@ -136,11 +135,10 @@
         that:
           - not (hostvars[bootwright_storage_seed_host_name].bootwright_storage_reachable_probe.unreachable | default(false) | bool)
         fail_msg: >-
-          Ceph seed host {{ bootwright_storage_seed_host_name }} for storage
-          cluster {{ bootwright_storage_cluster_name }} is unreachable. The seed
-          proves cluster ownership before any node wipes its OSD devices, so the
-          destroy fails closed. Power the seed host on and retry, or remove the
-          cluster manually after verifying it is safe to destroy.
+          Ceph seed host {{ bootwright_storage_seed_host_name }} for storage cluster
+          {{ bootwright_storage_cluster_name }} is unreachable: power it on and retry.
+          --skip-unreachable cannot skip the seed — it proves cluster ownership before
+          any node wipes its OSD devices.
       when: bootwright_destroy_skip_unreachable | default(false) | bool
 
     - name: Flag storage clusters left partial by unreachable nodes

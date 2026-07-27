@@ -561,11 +561,20 @@ substrate teardown is a clean no-op that consults the local record set and never
 contacts the (possibly nonexistent) host, so a plain `destroy` completes it
 without `--skip-unreachable` and without requiring the host to be reachable.
 
+A host cluster that holds **no captured kubeconfig** counts as unavailable in
+exactly the same way, whether it never finished installing or an earlier destroy
+already removed its install state. Machine-substrate teardown continues past it
+rather than failing on the missing file, so a partially failed destroy stays
+re-runnable. `apply` is the opposite: it refuses before running anything and
+names the host cluster to converge first, because guests cannot be created
+through an API it cannot reach.
+
 `--skip-unreachable` is therefore only needed for a node substrate Bootwright
 **did** record but can no longer reach. A KubeVirt host-cluster API is not a
-skippable node: if it is unreachable while Bootwright still records a guest,
-destroy cannot prove the VM or its DataVolumes absent, so it fails closed and
-retains the ownership and cluster runtime records for retry.
+skippable node: if it is unreachable — or its kubeconfig is gone — while
+Bootwright still records a guest, destroy cannot prove the VM or its DataVolumes
+absent, so it fails closed and retains the ownership and cluster runtime records
+for retry.
 
 ### Managed bare-metal is torn down locally, wiped on reinstall
 

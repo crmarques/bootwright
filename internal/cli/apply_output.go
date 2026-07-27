@@ -3,12 +3,24 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/status"
 )
+
+func writtenTaskLogPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Size() == 0 {
+		return ""
+	}
+	return path
+}
 
 type applyReporter struct {
 	stdout      io.Writer
@@ -150,8 +162,8 @@ func printApplyFailureDetails(stdout io.Writer, runsDir string, clustersDir stri
 			{Key: "phase", Value: status.ApplyFailedPhase(ledger, task)},
 			{Key: "reason", Value: status.ApplyFailureReason(task.Failure)},
 		}
-		if task.LogPath != "" {
-			fields = append(fields, output.Field{Key: "task log", Value: task.LogPath})
+		if logPath := writtenTaskLogPath(task.LogPath); logPath != "" {
+			fields = append(fields, output.Field{Key: "task log", Value: logPath})
 		}
 		if task.Kind == workflow.ApplyTaskKindInstallWait && task.ClusterKind == workflow.ApplyClusterKindContainer && task.Cluster != "" {
 			fields = append(fields, output.Field{Key: "installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)})
