@@ -242,9 +242,88 @@ func TestPlanDestroyTasksOrdersKubeVirtTenantBeforeHost(t *testing.T) {
 		if !slices.Contains(task.ExtraVarPairs, want) {
 			t.Fatalf("machine teardown extra vars = %v, want %q", task.ExtraVarPairs, want)
 		}
+		wantLevels := DestroyClusterLevelsExtraVar + "=child;host"
+		if !slices.Contains(task.ExtraVarPairs, wantLevels) {
+			t.Fatalf("machine teardown extra vars = %v, want %q", task.ExtraVarPairs, wantLevels)
+		}
 		return
 	}
 	t.Fatal("full destroy plan has no machine infrastructure task")
+}
+
+func destroyExtraVar(t *testing.T, task ApplyTask, name string) string {
+	t.Helper()
+	for _, pair := range task.ExtraVarPairs {
+		if key, value, ok := strings.Cut(pair, "="); ok && key == name {
+			return value
+		}
+	}
+	t.Fatalf("machine teardown extra vars = %v, want %q", task.ExtraVarPairs, name)
+	return ""
+}
+
+func TestPlanDestroyTasksGroupsIndependentClustersIntoOneLevel(t *testing.T) {
+	lower := destroyKubeVirtDependencyState("tenant", "middle")
+	upper := destroyKubeVirtDependencyState("middle", "base")
+	state := lower
+	state.Machines = append(state.Machines, upper.Machines...)
+	state.InfraProviders = append(state.InfraProviders, upper.InfraProviders...)
+	state.ContainerClusters = []v1alpha1.ContainerCluster{
+		lower.ContainerClusters[0],
+		upper.ContainerClusters[0],
+		upper.ContainerClusters[1],
+		{Metadata: v1alpha1.Metadata{Name: "solo"}},
+	}
+	state.StorageClusters = []v1alpha1.StorageCluster{{Metadata: v1alpha1.Metadata{Name: "ceph"}}}
+
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := destroyTaskByID(t, tasks, "destroy.machine-infra")
+
+	levels := strings.Split(destroyExtraVar(t, task, DestroyClusterLevelsExtraVar), ";")
+	wantLevels := []string{"ceph,solo,tenant", "middle", "base"}
+	if !reflect.DeepEqual(levels, wantLevels) {
+		t.Fatalf("machine teardown levels = %v, want %v; clusters with no KubeVirt host edge must tear down in one barrier instead of one pass each", levels, wantLevels)
+	}
+
+	levelOf := map[string]int{}
+	for i, level := range levels {
+		for _, name := range strings.Split(level, ",") {
+			levelOf[name] = i
+		}
+	}
+	for child, parent := range map[string]string{"tenant": "middle", "middle": "base"} {
+		if levelOf[child] >= levelOf[parent] {
+			t.Fatalf("guest cluster %q (level %d) must tear down in a strictly earlier level than its KubeVirt host %q (level %d)", child, levelOf[child], parent, levelOf[parent])
+		}
+	}
+
+	wantOrder := DestroyClusterOrderExtraVar + "=ceph,solo,tenant,middle,base"
+	if !slices.Contains(task.ExtraVarPairs, wantOrder) {
+		t.Fatalf("the flat order var is consumed by the preparation play with a comma split, so it must stay wire-compatible; got %v, want %q", task.ExtraVarPairs, wantOrder)
+	}
+	if got := destroyExtraVar(t, task, DestroyClusterOrderExtraVar); strings.Contains(got, ";") {
+		t.Fatalf("flat destroy order must not carry level separators: %q", got)
+	}
+}
+
+func TestPlanDestroyTasksLevelsCoverManagedOSInstallGroups(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{
+			{Metadata: v1alpha1.Metadata{Name: "ceph-b"}},
+			{Metadata: v1alpha1.Metadata{Name: "ceph-a"}},
+		},
+	}
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := destroyTaskByID(t, tasks, "destroy.machine-infra")
+	if got := destroyExtraVar(t, task, DestroyClusterLevelsExtraVar); got != "ceph-a,ceph-b" {
+		t.Fatalf("machine teardown levels = %q; the managed-OS install groups are named after their storage cluster and must appear in the levels the substrate play loops, or their machines are never torn down", got)
+	}
 }
 
 func TestPlanDestroyTasksRejectsKubeVirtHostCycle(t *testing.T) {

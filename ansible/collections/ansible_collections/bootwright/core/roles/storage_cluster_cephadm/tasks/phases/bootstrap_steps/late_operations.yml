@@ -1,12 +1,21 @@
 ---
-- name: Run rendered Ceph late operations
+- name: Run rendered Ceph late operations one container per operation
   ansible.builtin.include_tasks: ../../operations/run.yml
   loop: "{{ bootwright_ceph_operations }}"
   loop_control:
     loop_var: bootwright_ceph_op
     label: "{{ bootwright_ceph_op.name | default('<unnamed>') }}"
   when:
+    - not (bootwright_ceph_batch_enabled | default(false) | bool)
     - >-
       (bootwright_ceph_op.command | default([]) | length > 0)
       or (bootwright_ceph_op.idempotency.kind | default('') == 'stretch-internal-pools')
     - bootwright_ceph_op.phase | default('storage') in ['object-gateway', 'late-topology']
+
+- name: Run rendered Ceph late operations in batches
+  ansible.builtin.include_tasks: ../../operations/step.yml
+  loop: "{{ bootwright_ceph_plan | default([]) | selectattr('group', 'equalto', 'late') | list }}"
+  loop_control:
+    loop_var: bootwright_ceph_step
+    label: "{{ bootwright_ceph_step.batch | default('operation ' ~ (bootwright_ceph_step.operation | default('') | string)) }}"
+  when: bootwright_ceph_batch_enabled | default(false) | bool

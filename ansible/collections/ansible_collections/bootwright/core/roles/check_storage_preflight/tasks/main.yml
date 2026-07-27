@@ -133,41 +133,94 @@
   when: (bootwright_preflight_osd_marker | default({})).content is defined
 
 - name: Probe declared storage OSD devices for signatures
-  ansible.builtin.command:
-    argv:
-      - wipefs
-      - --no-act
-      - --noheadings
-      - "{{ item.1 }}"
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      devices=({{ bootwright_preflight_storage_devices | map('quote') | join(' ') }})
+      errors="$(mktemp)"
+      report="$(mktemp)"
+      trap 'rm -f "$errors" "$report"' EXIT
+      cat >"$report" <<'BOOTWRIGHT_REPORT'
+      import json
+      import sys
+
+      print(json.dumps({
+          "device": sys.argv[1],
+          "rc": int(sys.argv[2]),
+          "signatures": sys.argv[3].strip(),
+          "stderr": sys.argv[4].strip(),
+      }))
+      BOOTWRIGHT_REPORT
+      for device in "${devices[@]}"; do
+        signatures="$(wipefs --no-act --noheadings "$device" 2>"$errors")"
+        rc=$?
+        python3 "$report" "$device" "$rc" "$signatures" "$(cat "$errors")"
+      done
+  vars:
+    bootwright_preflight_storage_devices: >-
+      {{ bootwright_host_storage_nodes | map(attribute='devices', default=[]) | flatten | unique | list }}
   become: true
-  register: bootwright_preflight_storage_device
+  register: bootwright_preflight_storage_device_sweep
   changed_when: false
   failed_when: false
-  loop: "{{ bootwright_host_storage_nodes | subelements('devices', skip_missing=True) }}"
-  loop_control:
-    label: "{{ item.0.hostname }} {{ item.1 }}"
+  when:
+    - bootwright_host_storage_nodes | length > 0
+    - bootwright_preflight_storage_devices | length > 0
+
+- name: Classify the declared storage OSD device probes
+  ansible.builtin.set_fact:
+    bootwright_preflight_storage_device_probes: >-
+      {{
+        (bootwright_preflight_storage_device_sweep.stdout_lines | default([]))
+        | map('trim') | reject('equalto', '')
+        | map('from_json') | list
+      }}
+  changed_when: false
   when: bootwright_host_storage_nodes | length > 0
 
-- name: Assert declared storage OSD devices are present, empty, or Bootwright-owned
+- name: Resolve declared storage OSD devices that could not be probed
+  ansible.builtin.set_fact:
+    bootwright_preflight_unprobeable_probes: >-
+      {{
+        bootwright_preflight_storage_device_probes | default([])
+        | rejectattr('rc', 'equalto', 0) | list
+      }}
+  changed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Refuse declared storage OSD devices that could not be probed
   ansible.builtin.assert:
     that:
-      - item.rc == 0
-      - (item.stdout | trim | length == 0) or (item.item.1 in (bootwright_preflight_owned_osd_devices | default([])))
+      - (bootwright_preflight_unprobeable_probes | default([])) | length == 0
     fail_msg: >-
+      Declared OSD device(s)
+      {{ bootwright_preflight_unprobeable_probes | default([]) | map(attribute='device') | list | join(', ') }}
+      on {{ bootwright_host_name }} could not be probed with wipefs:
       {{
-        ('Declared OSD device ' ~ item.item.1 ~ ' on ' ~ item.item.0.hostname
-         ~ ' could not be probed (wipefs rc=' ~ item.rc ~ '): '
-         ~ (item.stderr | default('') | trim)
-         ~ '. It may not exist on this host or the storage SSH user lacks privilege.')
-        if item.rc != 0
-        else
-        ('Declared OSD device ' ~ item.item.1 ~ ' on ' ~ item.item.0.hostname
-         ~ ' carries data signatures (' ~ (item.stdout | trim) ~ ') and is not recorded as a'
-         ~ ' Bootwright OSD device, so it holds foreign data. Wipe it, correct the declared'
-         ~ ' devices, or destroy the owning cluster before apply.')
+        bootwright_preflight_unprobeable_probes | default([])
+        | map(attribute='stderr') | list | join('; ')
       }}
+      (exit status
+      {{ bootwright_preflight_unprobeable_probes | default([]) | map(attribute='rc') | list | join(', ') }}).
+      They may not exist on this host or the storage SSH user lacks privilege.
+      Failing closed rather than treat an unprobeable device as clean.
     quiet: true
-  loop: "{{ bootwright_preflight_storage_device.results | default([]) }}"
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Assert declared storage OSD devices are empty or Bootwright-owned
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((item.signatures | default('') | trim | length) == 0)
+        or (item.device in (bootwright_preflight_owned_osd_devices | default([])))
+    fail_msg: >-
+      Declared OSD device {{ item.device }} on {{ bootwright_host_name }} carries data
+      signatures ({{ item.signatures | default('') | trim }}) and is not recorded as a
+      Bootwright OSD device, so it holds foreign data. Wipe it, correct the declared
+      devices, or destroy the owning cluster before apply.
+    quiet: true
+  loop: "{{ bootwright_preflight_storage_device_probes | default([]) }}"
   loop_control:
-    label: "{{ item.item.0.hostname }} {{ item.item.1 }}"
+    label: "{{ item.device }}"
   when: bootwright_host_storage_nodes | length > 0

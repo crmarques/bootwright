@@ -66,6 +66,8 @@ type MaterialStatus struct {
 	KeyID     string        `json:"keyID,omitempty"`
 	Algorithm string        `json:"algorithm,omitempty"`
 	Message   string        `json:"message,omitempty"`
+
+	env *envelope
 }
 
 type StoreStatus struct {
@@ -129,21 +131,12 @@ func (s *ContextStore) Read(key MaterialKey) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := s.loadMetadata()
+	session, err := s.newDecryptSession()
 	if err != nil {
 		return nil, err
 	}
-	if err := validateStoreMetadata(metadata); err != nil {
-		return nil, err
-	}
-	if env.KeyProvider != metadata.KeyProvider {
-		return nil, fmt.Errorf("secret %s uses key provider %q but store uses %q", materialLabel(key), env.KeyProvider, metadata.KeyProvider)
-	}
-	keyBytes, err := s.readKey(env.KeyID)
-	if err != nil {
-		return nil, err
-	}
-	return s.decryptEnvelope(key, env, keyBytes)
+	defer session.close()
+	return session.decrypt(key, env)
 }
 
 func (s *ContextStore) Write(key MaterialKey, data []byte) error {
@@ -251,6 +244,7 @@ func (s *ContextStore) Inspect(key MaterialKey) (MaterialStatus, error) {
 		status.State = MaterialStateEncrypted
 		status.KeyID = env.KeyID
 		status.Algorithm = env.Algorithm
+		status.env = &env
 		return status, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {

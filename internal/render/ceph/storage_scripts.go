@@ -20,7 +20,7 @@ type CephScriptOptions struct {
 	IBMCallHome          string
 }
 
-func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) string {
+func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) (string, error) {
 	var b strings.Builder
 	name := cluster.Metadata.Name
 
@@ -49,7 +49,9 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 			lateOps = append(lateOps, op)
 			continue
 		}
-		writeOperation(&b, op)
+		if err := writeOperation(&b, op); err != nil {
+			return "", err
+		}
 	}
 
 	b.WriteString("\necho \"== stage 30: late service specs (ceph orch apply) ==\"\n")
@@ -58,7 +60,9 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	if len(lateOps) > 0 {
 		b.WriteString("\necho \"== stage 40: late objects (after the rgw/nfs services above) ==\"\n")
 		for _, op := range lateOps {
-			writeOperation(&b, op)
+			if err := writeOperation(&b, op); err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -69,7 +73,7 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	}
 
 	fmt.Fprintf(&b, "\necho \"bootwright: ceph apply complete for %s\"\n", name)
-	return b.String()
+	return b.String(), nil
 }
 
 func cephOperationList(state v1alpha1.State, cluster v1alpha1.StorageCluster) []map[string]any {
@@ -145,40 +149,46 @@ func writeIBMCallHomeStage(b *strings.Builder, intent string) {
 	}
 }
 
-func writeOperation(b *strings.Builder, op map[string]any) {
+func writeOperation(b *strings.Builder, op map[string]any) error {
 	name := opString(op, "name")
 	cmd := opCommand(op)
 	kind, resName, guarded := opIdempotency(op)
 	fmt.Fprintf(b, "# %s\n", name)
 	if len(cmd) == 0 {
-		if kind == "stretch-crush-rule" {
+		switch kind {
+		case cephIdempotencyStretchCrushRule:
 			domain, replicas := stretchRuleParams(op)
 			fmt.Fprintf(b, "bw_stretch_crush_rule %s\n", shellquote.QuoteWords([]string{resName, domain, replicas}))
-			return
-		}
-		if kind == "stretch-internal-pools" {
+			return nil
+		case cephIdempotencyStretchInternalPools:
 			rule, size, minSize, pattern := stretchInternalPoolParams(op)
 			fmt.Fprintf(b, "bw_stretch_internal_pools %s\n", shellquote.QuoteWords([]string{rule, size, minSize, pattern}))
-			return
+			return nil
 		}
-		fmt.Fprintf(b, "echo \"  [todo] %s cannot be expressed as a native command; apply it with 'bootwright apply --clusters <cluster>'\"\n", name)
-		return
-	}
-	if stdin := opString(op, "stdin"); stdin != "" {
-		fmt.Fprintf(b, "bw_run %s <<'BW_STDIN'\n%s\nBW_STDIN\n", shellquote.QuoteWords(cmd), stdin)
-		return
+		return fmt.Errorf("ceph operation %q carries no native command and no script equivalent for idempotency kind %q: refusing to render an apply script that silently skips it", name, kind)
 	}
 	sensitive := opSensitive(op)
 	switch {
 	case guarded && sensitive:
-		fmt.Fprintf(b, "bw_guarded_quiet %s\n", shellquote.QuoteWords(append([]string{kind, resName, name}, cmd...)))
+		fmt.Fprintf(b, "bw_guarded_quiet %s", shellquote.QuoteWords(append([]string{kind, resName, name}, cmd...)))
 	case guarded:
-		fmt.Fprintf(b, "bw_guarded %s\n", shellquote.QuoteWords(append([]string{kind, resName}, cmd...)))
+		fmt.Fprintf(b, "bw_guarded %s", shellquote.QuoteWords(append([]string{kind, resName}, cmd...)))
 	case sensitive:
-		fmt.Fprintf(b, "bw_run_quiet %s\n", shellquote.QuoteWords(append([]string{name}, cmd...)))
+		fmt.Fprintf(b, "bw_run_quiet %s", shellquote.QuoteWords(append([]string{name}, cmd...)))
 	default:
-		fmt.Fprintf(b, "bw_run %s\n", shellquote.QuoteWords(cmd))
+		fmt.Fprintf(b, "bw_run %s", shellquote.QuoteWords(cmd))
 	}
+	writeOperationStdin(b, op)
+	return nil
+}
+
+func writeOperationStdin(b *strings.Builder, op map[string]any) {
+	stdin := opString(op, "stdin")
+	if stdin == "" {
+		b.WriteString("\n")
+		return
+	}
+	fmt.Fprintf(b, " <<'BW_STDIN'\n%s\nBW_STDIN\n", stdin)
 }
 
 func stretchRuleParams(op map[string]any) (domain, replicas string) {

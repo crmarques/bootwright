@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,9 +13,22 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/ansible/runconfig"
+	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/secrets"
+)
+
+const (
+	runtimeSecretsDirName         = "secrets"
+	runtimeHostKubeconfigDirName  = "host-kubeconfigs"
+	runtimeSecretsSweptMarkerName = ".runtime-secrets-swept"
+	runTaskDirName                = "tasks"
+	taskRenderedDirName           = "rendered"
+	taskArtifactsDirName          = "artifacts"
+	taskHooksDirName              = "hooks"
+	hookSecretsDirName            = "secrets"
+	hookConnectionSecretsDirName  = "connection-secrets"
 )
 
 type RunOptions struct {
@@ -100,35 +114,51 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		renderDir = opts.RenderedDir
 	}
 	contextName := effectiveContextName(opts.ContextName)
-	runSecretsDir := opts.SecretsDir
-	if !opts.DryRun {
-		runtimeSecretsDir := filepath.Join(runtimeSecretBaseDir(renderDir, opts.ArtifactsRoot), "secrets")
-		if err := secret.NewContextStore(contextName, opts.SecretsDir).MaterializeRuntime(runtimeSecretsDir); err != nil {
-			return RunResult{}, err
-		}
-		defer os.RemoveAll(runtimeSecretsDir)
-		runSecretsDir = runtimeSecretsDir
-	}
 	if opts.DryRun {
-		return runWithMaterializedSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, nil, runner, reporter)
+		return runWithRuntimeSecrets(ctx, opts, renderDir, contextName, opts.SecretsDir, ownershipDir, ownershipRecords, nil, runner, reporter)
 	}
+	runtimeBaseDir := runtimeSecretBaseDir(renderDir, opts.ArtifactsRoot)
+	runSecretsDir := filepath.Join(runtimeBaseDir, runtimeSecretsDirName)
+	defer os.RemoveAll(runSecretsDir)
+	hostClusters := kubeVirtHostClustersForRun(opts)
+	if len(hostClusters) == 0 {
+		return runWithRuntimeSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, map[string]string{}, runner, reporter)
+	}
+	hostKubeconfigDir := filepath.Join(runtimeBaseDir, runtimeHostKubeconfigDirName)
+	if err := ensureRuntimeSecretDir(hostKubeconfigDir); err != nil {
+		return RunResult{}, err
+	}
+	defer os.RemoveAll(hostKubeconfigDir)
 	var result RunResult
-	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, runSecretsDir, kubeVirtHostClustersForRun(opts), func(paths map[string]string) error {
+	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, hostKubeconfigDir, hostClusters, func(paths map[string]string) error {
 		var runErr error
-		result, runErr = runWithMaterializedSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, paths, runner, reporter)
+		result, runErr = runWithRuntimeSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, paths, runner, reporter)
 		return runErr
 	})
 	return result, err
 }
 
-func runWithMaterializedSecrets(ctx context.Context, opts RunOptions, renderDir, contextName, runSecretsDir, ownershipDir string, ownershipRecords []ownership.ResourceRecord, kubeVirtHostKubeconfigPaths map[string]string, runner ansible.Runner, reporter Reporter) (RunResult, error) {
-	result, err := render.AllWithOwnershipRecordsAndPathOptions(renderDir, opts.ClustersDir, render.PathOptions{
+func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, contextName, runSecretsDir, ownershipDir string, ownershipRecords []ownership.ResourceRecord, kubeVirtHostKubeconfigPaths map[string]string, runner ansible.Runner, reporter Reporter) (RunResult, error) {
+	paths := render.PathOptions{
 		SecretsDir:                  runSecretsDir,
 		TrustSecretsDir:             opts.SecretsDir,
 		KubeVirtHostKubeconfigPaths: kubeVirtHostKubeconfigPaths,
-	}, opts.State, ownershipRecords)
+	}
+	perTask := strings.TrimSpace(opts.RenderDir) != ""
+	var result render.Result
+	var err error
+	if perTask {
+		result, err = render.RunInputs(renderDir, paths, opts.State, ownershipRecords)
+	} else {
+		result, err = render.AllWithOwnershipRecordsAndPathOptions(renderDir, opts.ClustersDir, paths, opts.State, ownershipRecords)
+	}
 	if err != nil {
 		return RunResult{}, err
+	}
+	if !opts.DryRun {
+		if err := materializeRunSecrets(contextName, opts.SecretsDir, runSecretsDir, perTask, result); err != nil {
+			return RunResult{Render: result}, err
+		}
 	}
 	if opts.ResolveInstaller && !opts.DryRun {
 		if reporter != nil {
@@ -286,39 +316,137 @@ func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {
 	return filepath.Join(filepath.Dir(renderDir), "runtime")
 }
 
+func ensureRuntimeSecretDir(path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return fmt.Errorf("create runtime secrets directory %s: %w", path, err)
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		return fmt.Errorf("chmod runtime secrets directory %s: %w", path, err)
+	}
+	return nil
+}
+
+func materializeRunSecrets(contextName, contextSecretsDir, runSecretsDir string, perTask bool, rendered render.Result) error {
+	store := secret.NewContextStore(contextName, contextSecretsDir)
+	if !perTask {
+		return store.MaterializeRuntime(runSecretsDir)
+	}
+	inputs, err := readRenderedAnsibleInputs(rendered)
+	if err != nil {
+		return err
+	}
+	return store.MaterializeReferenced(runSecretsDir, func(name string) bool {
+		return name != "" && bytes.Contains(inputs, []byte(name))
+	})
+}
+
+func renderedAnsibleInputPaths(rendered render.Result) []string {
+	paths := []string{rendered.InventoryPath, rendered.VarsPath}
+	for _, asset := range rendered.StorageAssets {
+		for _, dir := range asset.Directories() {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				paths = append(paths, filepath.Join(dir, entry.Name()))
+			}
+		}
+	}
+	return paths
+}
+
+func readRenderedAnsibleInputs(rendered render.Result) ([]byte, error) {
+	var inputs []byte
+	for _, path := range renderedAnsibleInputPaths(rendered) {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("read rendered Ansible input %s: %w", path, err)
+		}
+		inputs = append(inputs, data...)
+	}
+	return inputs, nil
+}
+
 func sweepStaleRuntimeSecrets(runsDir, liveRunID string) {
 	historyRoot := filepath.Join(runsDir, "history")
-	entries, err := os.ReadDir(historyRoot)
+	runEntries, err := os.ReadDir(historyRoot)
 	if err != nil {
 		return
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == liveRunID {
+	for _, runEntry := range runEntries {
+		if !runEntry.IsDir() || runEntry.Name() == liveRunID {
 			continue
 		}
-		removeRuntimeSecretDirs(filepath.Join(historyRoot, entry.Name()))
+		runRoot := filepath.Join(historyRoot, runEntry.Name())
+		marker := filepath.Join(runRoot, runtimeSecretsSweptMarkerName)
+		if _, statErr := os.Lstat(marker); statErr == nil {
+			continue
+		}
+		removeRuntimeSecretDirs(runRoot)
+		_ = safefs.WriteFileEnsuringDir(marker, nil, 0o600)
 	}
 }
 
-func removeRuntimeSecretDirs(root string) {
-	var targets []string
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || !d.IsDir() {
-			return nil
-		}
-		parent := filepath.Base(filepath.Dir(path))
-		grandparent := filepath.Base(filepath.Dir(filepath.Dir(path)))
-		runtimeSecrets := d.Name() == "secrets" && parent == "runtime"
-		hookSecrets := (d.Name() == "secrets" || d.Name() == "connection-secrets") && grandparent == "hooks"
-		if runtimeSecrets || hookSecrets {
-			targets = append(targets, path)
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	for _, target := range targets {
-		_ = os.RemoveAll(target)
+func removeRuntimeSecretDirs(runRoot string) {
+	taskEntries, err := os.ReadDir(filepath.Join(runRoot, runTaskDirName))
+	if err != nil {
+		return
 	}
+	for _, taskEntry := range taskEntries {
+		if !taskEntry.IsDir() {
+			continue
+		}
+		taskRoot := filepath.Join(runRoot, runTaskDirName, taskEntry.Name())
+		for _, target := range taskRuntimeSecretDirs(taskRoot) {
+			_ = os.RemoveAll(target)
+		}
+		for _, target := range taskHookSecretDirs(taskRoot) {
+			_ = os.RemoveAll(target)
+		}
+	}
+}
+
+func taskRuntimeSecretDirs(taskRoot string) []string {
+	bases := []string{
+		runtimeSecretBaseDir(filepath.Join(taskRoot, taskRenderedDirName), ""),
+		runtimeSecretBaseDir("", taskArtifactsRoot(taskRoot)),
+	}
+	targets := make([]string, 0, 2*len(bases))
+	for _, base := range bases {
+		targets = append(targets, filepath.Join(base, runtimeSecretsDirName), filepath.Join(base, runtimeHostKubeconfigDirName))
+	}
+	return targets
+}
+
+func taskHookSecretDirs(taskRoot string) []string {
+	hooksRoot := filepath.Join(taskRoot, taskHooksDirName)
+	entries, err := os.ReadDir(hooksRoot)
+	if err != nil {
+		return nil
+	}
+	targets := make([]string, 0, 2*len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		hookRoot := filepath.Join(hooksRoot, entry.Name())
+		targets = append(targets, filepath.Join(hookRoot, hookSecretsDirName), filepath.Join(hookRoot, hookConnectionSecretsDirName))
+	}
+	return targets
+}
+
+func taskArtifactsRoot(taskRoot string) string {
+	return filepath.Join(taskRoot, taskArtifactsDirName)
 }
 
 func effectiveContextName(name string) string {

@@ -1,0 +1,38 @@
+---
+- name: Write package ownership records
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}/{{ bootwright_ownership_package_safe }}.json"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ bootwright_ownership_package_record | to_nice_json }}\n"
+  loop: "{{ bootwright_ownership_packages }}"
+  loop_control:
+    loop_var: bootwright_ownership_package_item
+    label: "{{ bootwright_ownership_package_item }}"
+  vars:
+    bootwright_ownership_package_name: "{{ bootwright_ownership_package_item }}"
+    bootwright_ownership_package_safe: "{{ bootwright_ownership_package_item | regex_replace('[^A-Za-z0-9_.-]', '_') }}"
+    bootwright_ownership_package_existing: >-
+      {{ (bootwright_ownership_package_index | default({}))[bootwright_ownership_package_safe] | default({}) }}
+    bootwright_ownership_package_existing_required_by_raw: "{{ bootwright_ownership_package_existing.requiredBy | default([]) }}"
+    bootwright_ownership_package_existing_required_by: >-
+      {{
+        bootwright_ownership_package_existing_required_by_raw
+        if bootwright_ownership_package_existing_required_by_raw is sequence
+        and bootwright_ownership_package_existing_required_by_raw is not string
+        else ([bootwright_ownership_package_existing_required_by_raw]
+              if bootwright_ownership_package_existing_required_by_raw | default('') | length > 0
+              else [])
+      }}
+    bootwright_ownership_package_record:
+      apiVersion: bootwright.io/ownership/v1alpha1
+      kind: package
+      name: "{{ inventory_hostname }}-{{ bootwright_ownership_package_safe }}"
+      owner: bootwright
+      context: "{{ bootwright_clusters_dir | dirname | basename }}"
+      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+      package: "{{ bootwright_ownership_package_name }}"
+      requiredBy: "{{ (bootwright_ownership_package_existing_required_by + [bootwright_ownership_required_by]) | unique | list }}"
+      preexisting: "{{ bootwright_ownership_package_existing.preexisting | default(bootwright_ownership_package_name in (ansible_facts.packages | default({}))) | bool }}"
+      updatedAt: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"

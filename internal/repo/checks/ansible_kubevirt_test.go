@@ -1,9 +1,253 @@
 package repocheck
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
+
+const kubeVirtBootTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml"
+
+const kubeVirtSubstrateDestroyTasks = "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml"
+
+func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtBootTasks)
+	groupIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO sharing group")
+	electIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO source election")
+	probeIdx := findAnsibleTask(t, tasks, "Read existing KubeVirt agent ISO source DataVolume identity")
+	conclusiveIdx := findAnsibleTask(t, tasks, "Require a conclusive KubeVirt agent ISO source DataVolume probe")
+	ownedIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO source DataVolume ownership")
+	currentIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO source DataVolume currency")
+	gateIdx := findAnsibleTask(t, tasks, "Enforce KubeVirt agent ISO source DataVolume apply mode")
+	staleIdx := findAnsibleTask(t, tasks, "Remove stale KubeVirt agent ISO source DataVolume")
+	sourceUploadIdx := findAnsibleTask(t, tasks, "Upload KubeVirt agent ISO source DataVolume")
+	sourceLabelIdx := findAnsibleTask(t, tasks, "Label KubeVirt agent ISO source DataVolume as Bootwright-managed")
+	waitIdx := findAnsibleTask(t, tasks, "Wait for the shared KubeVirt agent ISO source DataVolume")
+	readyIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO source DataVolume readiness")
+	deleteIdx := findAnsibleTask(t, tasks, "Remove previous KubeVirt agent ISO DataVolume")
+	cloneIdx := findAnsibleTask(t, tasks, "Clone KubeVirt agent ISO DataVolume from the shared source")
+	clonePhaseIdx := findAnsibleTask(t, tasks, "Wait for the KubeVirt agent ISO DataVolume clone")
+	cloneOutcomeIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO DataVolume clone outcome")
+	cloneCleanupIdx := findAnsibleTask(t, tasks, "Remove the failed KubeVirt agent ISO DataVolume clone")
+	uploadIdx := findAnsibleTask(t, tasks, "Upload KubeVirt agent ISO DataVolume")
+	if !(groupIdx < electIdx && electIdx < probeIdx && probeIdx < conclusiveIdx &&
+		conclusiveIdx < ownedIdx && ownedIdx < currentIdx && currentIdx < gateIdx &&
+		gateIdx < staleIdx && staleIdx < sourceUploadIdx && sourceUploadIdx < sourceLabelIdx &&
+		sourceLabelIdx < waitIdx && waitIdx < readyIdx && readyIdx < deleteIdx &&
+		deleteIdx < cloneIdx && cloneIdx < clonePhaseIdx && clonePhaseIdx < cloneOutcomeIdx &&
+		cloneOutcomeIdx < cloneCleanupIdx && cloneCleanupIdx < uploadIdx) {
+		t.Fatalf("shared agent ISO media must be elected, probed, gated, uploaded and labelled before any clone or per-machine upload (group=%d elect=%d probe=%d conclusive=%d owned=%d current=%d gate=%d stale=%d sourceUpload=%d sourceLabel=%d wait=%d ready=%d delete=%d clone=%d clonePhase=%d cloneOutcome=%d cloneCleanup=%d upload=%d)", groupIdx, electIdx, probeIdx, conclusiveIdx, ownedIdx, currentIdx, gateIdx, staleIdx, sourceUploadIdx, sourceLabelIdx, waitIdx, readyIdx, deleteIdx, cloneIdx, clonePhaseIdx, cloneOutcomeIdx, cloneCleanupIdx, uploadIdx)
+	}
+
+	for _, task := range tasks {
+		if _, ok := task["run_once"]; ok {
+			t.Fatalf("%v: the boot play runs with strategy free, which silently ignores run_once, so single-actor election must come from the cluster machine list", task["name"])
+		}
+	}
+
+	group, ok := tasks[groupIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("agent ISO sharing group must be a set_fact, got %v", tasks[groupIdx])
+	}
+	machines := fmt.Sprint(group["bootwright_kubevirt_iso_source_machines"])
+	for _, want := range []string{
+		"bootwright_component.bootApplyRole",
+		"kubevirt.kubeconfig",
+		"kubevirt.namespace",
+		"| sort",
+	} {
+		if !strings.Contains(machines, want) {
+			t.Fatalf("agent ISO sharing group must be the deterministically sorted set of machines sharing this boot role, kubeconfig and namespace (missing %q): %v", want, group["bootwright_kubevirt_iso_source_machines"])
+		}
+	}
+	for _, guard := range []string{"'bootApplyRole', 'defined'", "'kubevirt', 'defined'", "'kubevirt.kubeconfig', 'defined'", "'kubevirt.namespace', 'defined'"} {
+		if !strings.Contains(machines, guard) {
+			t.Fatalf("agent ISO sharing group must guard %s before matching it, or Jinja raises on machines without the key: %v", guard, group["bootwright_kubevirt_iso_source_machines"])
+		}
+	}
+
+	elect, ok := tasks[electIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("agent ISO source election must be a set_fact, got %v", tasks[electIdx])
+	}
+	actor := fmt.Sprint(elect["bootwright_kubevirt_iso_source_actor"])
+	if !strings.Contains(actor, "| first") || !strings.Contains(actor, "bootwright_component.name") {
+		t.Fatalf("exactly the first machine of the sharing group may upload the shared media, got %v", elect["bootwright_kubevirt_iso_source_actor"])
+	}
+	if got := fmt.Sprint(elect["bootwright_kubevirt_iso_source_shared"]); !strings.Contains(got, "> 1") {
+		t.Fatalf("a single-machine cluster must keep the direct upload instead of paying for a shared source, got %v", elect["bootwright_kubevirt_iso_source_shared"])
+	}
+	signature := fmt.Sprint(elect["bootwright_kubevirt_iso_source_signature"])
+	for _, want := range []string{"bootwright|", "agent-iso-source", "bootwright_kubevirt_iso_generation", "Succeeded"} {
+		if !strings.Contains(signature, want) {
+			t.Fatalf("shared media signature must pin owner, role, generation and phase (missing %q): %v", want, elect["bootwright_kubevirt_iso_source_signature"])
+		}
+	}
+
+	conclusive, ok := tasks[conclusiveIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("shared media probe verdict must be an assert, got %v", tasks[conclusiveIdx])
+	}
+	if got := fmt.Sprint(conclusive["that"]); !strings.Contains(got, "NotFound") || !strings.Contains(got, "rc | default(1)) == 0") {
+		t.Fatalf("shared media probe must refuse on an unprobeable result instead of treating it as absent, got %v", conclusive["that"])
+	}
+
+	owned, ok := tasks[ownedIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("shared media ownership must be a set_fact, got %v", tasks[ownedIdx])
+	}
+	ownedExpr := fmt.Sprint(owned["bootwright_kubevirt_iso_source_owned"])
+	for _, want := range []string{
+		"bootwright.io/managed-by",
+		"bootwright.io/context",
+		"bootwright.io/cluster",
+		"'agent-iso-source'",
+		"bootwright.io/node' not in",
+	} {
+		if !strings.Contains(ownedExpr, want) {
+			t.Fatalf("shared media ownership must accept exactly the node-less source label shape (missing %q): %v", want, owned["bootwright_kubevirt_iso_source_owned"])
+		}
+	}
+
+	current, ok := tasks[currentIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("shared media currency must be a set_fact, got %v", tasks[currentIdx])
+	}
+	currentExpr := fmt.Sprint(current["bootwright_kubevirt_iso_source_current"])
+	for _, want := range []string{"bootwright_kubevirt_iso_source_owned", "bootwright.io/agent-iso-generation", "'Succeeded'"} {
+		if !strings.Contains(currentExpr, want) {
+			t.Fatalf("shared media may only be reused when it is owned, carries this run's generation and imported successfully (missing %q): %v", want, current["bootwright_kubevirt_iso_source_current"])
+		}
+	}
+
+	include, ok := tasks[gateIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || fmt.Sprint(include["name"]) != "bootwright.core.ownership_record" || fmt.Sprint(include["tasks_from"]) != "apply_mode_gate.yml" {
+		t.Fatalf("shared media gate must use the shared apply-mode contract, got %v", tasks[gateIdx])
+	}
+	for _, idx := range []int{gateIdx, staleIdx, sourceUploadIdx, sourceLabelIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_iso_source_actor") {
+			t.Fatalf("%v must run only for the elected uploader, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+	for _, idx := range []int{staleIdx, sourceUploadIdx, sourceLabelIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_iso_source_current") {
+			t.Fatalf("%v must be skipped when the shared media already holds this run's ISO, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+
+	sourceUploadEnv := fmt.Sprint(tasks[sourceUploadIdx]["environment"])
+	if !strings.Contains(sourceUploadEnv, "SSL_CERT_FILE") || !strings.Contains(sourceUploadEnv, "bootwright_proxy_env") {
+		t.Fatalf("shared media upload must keep the managed-host ingress trust and proxy env of the per-machine upload, got environment=%v", tasks[sourceUploadIdx]["environment"])
+	}
+	assertRedactsByDefault(t, "Upload KubeVirt agent ISO source DataVolume", tasks[sourceUploadIdx]["no_log"])
+
+	sourceLabel := fmt.Sprint(tasks[sourceLabelIdx]["ansible.builtin.command"])
+	for _, want := range []string{
+		"bootwright.io/managed-by=bootwright",
+		"bootwright.io/context=",
+		"bootwright.io/cluster=",
+		"bootwright.io/role=agent-iso-source",
+		"bootwright.io/agent-iso-generation=",
+		"--overwrite",
+	} {
+		if !strings.Contains(sourceLabel, want) {
+			t.Fatalf("shared media must be labelled %q so the destroy-side ownership gate can release it, got %v", want, tasks[sourceLabelIdx])
+		}
+	}
+	if strings.Contains(sourceLabel, "bootwright.io/node=") {
+		t.Fatalf("shared media is cluster-scoped and must carry no per-node label, got %v", tasks[sourceLabelIdx])
+	}
+
+	waitUntil := fmt.Sprint(tasks[waitIdx]["until"])
+	if !strings.Contains(waitUntil, "bootwright_kubevirt_iso_source_signature") {
+		t.Fatalf("a non-electing machine must wait for the exact shared-media signature, never merely for the object to exist, got until=%v", tasks[waitIdx]["until"])
+	}
+	if tasks[waitIdx]["failed_when"] != false {
+		t.Fatalf("the shared-media wait must degrade to the direct upload instead of failing the boot, got failed_when=%v", tasks[waitIdx]["failed_when"])
+	}
+	if got := fmt.Sprint(tasks[waitIdx]["when"]); !strings.Contains(got, "not (bootwright_kubevirt_iso_source_actor") {
+		t.Fatalf("only a non-electing machine may wait for the shared media, got when=%v", tasks[waitIdx]["when"])
+	}
+
+	cloneBody, ok := tasks[cloneIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("agent ISO clone must be a command task, got %v", tasks[cloneIdx])
+	}
+	if got := fmt.Sprint(cloneBody["stdin"]); !strings.Contains(got, "datavolume-agent-iso.yaml.j2") {
+		t.Fatalf("agent ISO clone must apply the per-VM clone DataVolume template, got %v", cloneBody["stdin"])
+	}
+	for _, idx := range []int{cloneIdx, clonePhaseIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_iso_source_ready") {
+			t.Fatalf("%v must run only once the shared media is proven ready, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+	if got := fmt.Sprint(tasks[clonePhaseIdx]["until"]); !strings.Contains(got, "'Succeeded'") || !strings.Contains(got, "'Failed'") {
+		t.Fatalf("the clone wait must settle on either terminal phase instead of burning the whole timeout, got until=%v", tasks[clonePhaseIdx]["until"])
+	}
+	for _, idx := range []int{cloneCleanupIdx, uploadIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_iso_cloned") {
+			t.Fatalf("%v must be driven by the clone outcome so unsupported storage falls back to the direct upload, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+	cleanupArgv := fmt.Sprint(tasks[cloneCleanupIdx]["ansible.builtin.command"])
+	if !strings.Contains(cleanupArgv, "bootwright_kubevirt_iso_dv_name") || !strings.Contains(cleanupArgv, "--ignore-not-found=true") {
+		t.Fatalf("a failed clone must be removed before the direct upload recreates the per-machine DataVolume, got %v", tasks[cloneCleanupIdx])
+	}
+
+	template := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/templates/datavolume-agent-iso.yaml.j2")
+	for _, want := range []string{
+		"name: {{ bootwright_kubevirt_iso_dv_name }}",
+		"bootwright.io/node: {{ bootwright_component.name }}",
+		"bootwright.io/role: agent-iso",
+		"bootwright.io/managed-by: bootwright",
+		"cdi.kubevirt.io/storage.bind.immediate.requested",
+		"name: {{ bootwright_kubevirt_iso_source_dv_name }}",
+	} {
+		if !strings.Contains(template, want) {
+			t.Fatalf("per-VM agent ISO clone template must keep the per-VM name, labels and immediate binding while sourcing the shared PVC (missing %q)", want)
+		}
+	}
+	if !strings.Contains(template, "source:\n    pvc:") {
+		t.Fatal("per-VM agent ISO DataVolume must clone from the shared source PVC")
+	}
+}
+
+func TestKubeVirtDestroyReleasesSharedAgentISOSourceAtClusterScope(t *testing.T) {
+	topTasks := readAnsibleTasks(t, kubeVirtSubstrateDestroyTasks)
+	inputs, ok := topTasks[findAnsibleTask(t, topTasks, "Resolve KubeVirt destroy inputs")]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatal("kubevirt destroy inputs must be a set_fact")
+	}
+	if got := fmt.Sprint(inputs["bootwright_kubevirt_iso_source_dv_name"]); !strings.Contains(got, "agent-iso-source") {
+		t.Fatalf("kubevirt destroy must know the cluster-scoped shared media name, got %v", inputs["bootwright_kubevirt_iso_source_dv_name"])
+	}
+	if got := fmt.Sprint(inputs["bootwright_kubevirt_cluster_scope_teardown"]); !strings.Contains(got, "bootwright_destroy_machine_scope is not defined") {
+		t.Fatalf("shared media teardown must be reserved for a cluster-scoped destroy so a --machines destroy cannot pull media the other machines still boot from, got %v", inputs["bootwright_kubevirt_cluster_scope_teardown"])
+	}
+
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Tear down KubeVirt guest on the reachable host cluster")], "block")
+	probeIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt DataVolume")
+	sourceDeleteIdx := findAnsibleTask(t, tasks, "Delete the shared KubeVirt agent ISO source DataVolume")
+	if !(probeIdx < refuseIdx && refuseIdx < sourceDeleteIdx) {
+		t.Fatalf("shared media must be probed and ownership-verified before deletion (probe=%d refuse=%d sourceDelete=%d)", probeIdx, refuseIdx, sourceDeleteIdx)
+	}
+	probeLoop := fmt.Sprint(tasks[probeIdx]["loop"])
+	if !strings.Contains(probeLoop, "bootwright_kubevirt_iso_source_dv_name") || !strings.Contains(probeLoop, "bootwright_kubevirt_cluster_scope_teardown") {
+		t.Fatalf("the per-item DataVolume probe must cover the shared media exactly when the destroy is cluster-scoped, got loop=%v", tasks[probeIdx]["loop"])
+	}
+	sourceWhen := fmt.Sprint(tasks[sourceDeleteIdx]["when"])
+	if !strings.Contains(sourceWhen, "bootwright_kubevirt_cluster_scope_teardown") {
+		t.Fatalf("shared media deletion must be gated on cluster scope, got when=%v", tasks[sourceDeleteIdx]["when"])
+	}
+	if !strings.Contains(sourceWhen, "bootwright_kubevirt_dv_owner") || !strings.Contains(sourceWhen, "bootwright_kubevirt_iso_source_dv_name") {
+		t.Fatalf("shared media deletion must stay gated on its own per-item probe, got when=%v", tasks[sourceDeleteIdx]["when"])
+	}
+	sourceArgv := fmt.Sprint(tasks[sourceDeleteIdx]["ansible.builtin.command"])
+	if !strings.Contains(sourceArgv, "--ignore-not-found=true") {
+		t.Fatalf("shared media deletion must stay idempotent across the cluster's machines, got %v", tasks[sourceDeleteIdx])
+	}
+}
 
 func TestHostVirtctlUsesMaterializedHostKubeconfig(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_host_virtctl_provision.yml")

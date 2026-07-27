@@ -219,7 +219,7 @@ func TestRunMaterializesKubeVirtHostClusterKubeconfigForAnsible(t *testing.T) {
 			baseDir := t.TempDir()
 			renderedDir := filepath.Join(baseDir, "rendered")
 			clustersDir := filepath.Join(baseDir, "clusters")
-			runtimeSecretsDir := filepath.Join(baseDir, "runtime", "secrets")
+			hostKubeconfigDir := filepath.Join(baseDir, "runtime", runtimeHostKubeconfigDirName)
 			state := twoKubeVirtHostPlanningState()
 			hostContents := map[string]string{
 				"metal-ocp":   "apiVersion: v1\ncurrent-context: first\n",
@@ -248,7 +248,7 @@ func TestRunMaterializesKubeVirtHostClusterKubeconfigForAnsible(t *testing.T) {
 					seenPaths := map[string]string{}
 					for host, content := range hostContents {
 						path := rendered.HostKubeconfigs[host]
-						if path == "" || !strings.HasPrefix(path, runtimeSecretsDir+string(os.PathSeparator)) {
+						if path == "" || !strings.HasPrefix(path, hostKubeconfigDir+string(os.PathSeparator)) {
 							return fmt.Errorf("runtime kubeconfig for %s = %q", host, path)
 						}
 						if otherHost := seenPaths[path]; otherHost != "" {
@@ -401,7 +401,7 @@ func TestRunCleansMaterializedKubeVirtHostsWhenLaterHostIsPlaintext(t *testing.T
 	if runner.runCalled {
 		t.Fatal("runner must not run after host kubeconfig materialization fails")
 	}
-	matches, globErr := filepath.Glob(filepath.Join(baseDir, "runtime", "secrets", "bootwright-material-*"))
+	matches, globErr := filepath.Glob(filepath.Join(baseDir, "runtime", runtimeHostKubeconfigDirName, "bootwright-material-*"))
 	if globErr != nil {
 		t.Fatalf("glob materialized hosts: %v", globErr)
 	}

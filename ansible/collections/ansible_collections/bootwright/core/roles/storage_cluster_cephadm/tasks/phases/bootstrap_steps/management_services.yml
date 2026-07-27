@@ -55,7 +55,7 @@
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_management.hosts is defined
 
-- name: Check current Ceph dashboard SSL setting
+- name: Read the Ceph configuration database for the dashboard settings
   ansible.builtin.command:
     argv:
       - cephadm
@@ -63,12 +63,37 @@
       - --
       - ceph
       - config
-      - get
-      - mgr
-      - mgr/dashboard/ssl
-  register: bootwright_ceph_dashboard_ssl_current
+      - dump
+      - --format
+      - json
+  register: bootwright_ceph_config_dump
   changed_when: false
   failed_when: false
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Resolve the live Ceph dashboard SSL and HTTP port settings
+  ansible.builtin.set_fact:
+    bootwright_ceph_dashboard_ssl_current: >-
+      {{
+        bootwright_ceph_config_options
+        | selectattr('name', 'equalto', 'mgr/dashboard/ssl')
+        | map(attribute='value') | list | first | default('') | string | trim
+      }}
+    bootwright_ceph_dashboard_port_current: >-
+      {{
+        bootwright_ceph_config_options
+        | selectattr('name', 'equalto', 'mgr/dashboard/server_port')
+        | map(attribute='value') | list | first | default('') | string | trim
+      }}
+  vars:
+    bootwright_ceph_config_options: >-
+      {{
+        (bootwright_ceph_config_dump.stdout | default('') | trim | default('[]', true) | from_json)
+        | selectattr('section', 'defined')
+        | selectattr('name', 'defined')
+        | selectattr('section', 'in', ['mgr', 'global'])
+        | sort(attribute='section', reverse=True)
+      }}
   when: bootwright_ceph_management.hosts is defined
 
 - name: Disable Ceph dashboard SSL so it stops occupying the mgmt-gateway port
@@ -87,23 +112,7 @@
   changed_when: true
   when: >-
     bootwright_ceph_management.hosts is defined
-    and (bootwright_ceph_dashboard_ssl_current.stdout | default('') | trim) != 'false'
-
-- name: Check current Ceph dashboard HTTP port setting
-  ansible.builtin.command:
-    argv:
-      - cephadm
-      - shell
-      - --
-      - ceph
-      - config
-      - get
-      - mgr
-      - mgr/dashboard/server_port
-  register: bootwright_ceph_dashboard_port_current
-  changed_when: false
-  failed_when: false
-  when: bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_dashboard_ssl_current | default('')) != 'false'
 
 - name: Move the Ceph dashboard off its default HTTP port to avoid colliding with RGW or other daemons
   ansible.builtin.command:
@@ -121,7 +130,7 @@
   changed_when: true
   when: >-
     bootwright_ceph_management.hosts is defined
-    and (bootwright_ceph_dashboard_port_current.stdout | default('') | trim)
+    and (bootwright_ceph_dashboard_port_current | default(''))
         != (bootwright_ceph_dashboard_http_port | default(8081) | string)
 
 - name: Record whether the Ceph dashboard's SSL/port settings changed
@@ -207,6 +216,30 @@
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_mgr_restart_required | default(false) | bool)
 
+- name: Resolve the storage nodes that actually run a Ceph manager daemon
+  ansible.builtin.set_fact:
+    bootwright_ceph_mgr_restart_hosts: >-
+      {{
+        dict((bootwright_selected_storage_cluster.hosts | default([])
+              | map(attribute='cephHostname') | map('split', '.') | map('first') | list)
+             | zip(bootwright_selected_storage_cluster.hosts | default([])
+                   | map(attribute='inventoryHost') | list))
+        | dict2items
+        | selectattr('key', 'in', bootwright_ceph_mgr_daemon_hosts)
+        | map(attribute='value') | list
+      }}
+  vars:
+    bootwright_ceph_mgr_daemon_hosts: >-
+      {{
+        (bootwright_ceph_mgr_before_restart.stdout | default('') | trim | default('[]', true) | from_json)
+        | selectattr('hostname', 'defined')
+        | map(attribute='hostname') | map('split', '.') | map('first') | list
+      }}
+  changed_when: false
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_restart_required | default(false) | bool)
+
 - name: Restart the Ceph manager systemd units so every dashboard releases its ports
   ansible.builtin.command:
     argv:
@@ -214,8 +247,10 @@
       - restart
       - "ceph-{{ bootwright_ceph_mgr_restart_fsid.stdout | default('') | trim }}@mgr.*"
   changed_when: true
-  delegate_to: "{{ item }}"
-  loop: "{{ bootwright_selected_storage_cluster.hosts | default([]) | map(attribute='inventoryHost') | list }}"
+  delegate_to: "{{ bootwright_ceph_mgr_restart_host }}"
+  loop: "{{ bootwright_ceph_mgr_restart_hosts | default([]) }}"
+  loop_control:
+    loop_var: bootwright_ceph_mgr_restart_host
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_mgr_restart_required | default(false) | bool)
@@ -323,6 +358,9 @@
       after:
       {{ (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
       | map(attribute='container_id', default='') | list }}.
+      The manager systemd units were restarted on
+      {{ bootwright_ceph_mgr_restart_hosts | default([]) | join(', ')
+         | default('(no declared storage node matched a live manager daemon hostname)', true) }}.
       Restart the ceph-<fsid>@mgr.* systemd units on the manager hosts, confirm
       `ceph mgr services` reports the dashboard on
       http://<mgr>:{{ bootwright_ceph_dashboard_http_port | default(8081) }}/, and

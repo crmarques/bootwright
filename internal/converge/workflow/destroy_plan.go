@@ -27,6 +27,8 @@ const DestroyMachineScopeExtraVar = "bootwright_destroy_machine_scope"
 
 const DestroyClusterOrderExtraVar = "bootwright_destroy_cluster_order"
 
+const DestroyClusterLevelsExtraVar = "bootwright_destroy_cluster_levels"
+
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	if destroyMachineScoped(extraVars) {
 		return destroyChain(state, limit, extraVars, infraMachineDestroySteps(), storageWorkNames)
@@ -226,12 +228,15 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		taskExtraVars := append([]string(nil), extraVars...)
 		if step.kind == DestroyTaskKindMachineInfra {
 			taskLimit = machineInfraDestroyLimit()
-			order, err := machineInfraDestroyOrder(state)
+			levels, err := machineInfraDestroyLevels(state)
 			if err != nil {
 				return nil, err
 			}
-			if len(order) > 0 {
-				taskExtraVars = append(taskExtraVars, DestroyClusterOrderExtraVar+"="+strings.Join(order, ","))
+			if order := flattenDestroyLevels(levels); len(order) > 0 {
+				taskExtraVars = append(taskExtraVars,
+					DestroyClusterOrderExtraVar+"="+strings.Join(order, ","),
+					DestroyClusterLevelsExtraVar+"="+joinDestroyLevels(levels),
+				)
 			}
 		}
 		tasks = append(tasks, ApplyTask{
@@ -308,7 +313,63 @@ func destroyStepForks(state v1alpha1.State, step destroyStep, taskLimit string) 
 	return forks
 }
 
-func machineInfraDestroyOrder(state v1alpha1.State) ([]string, error) {
+func flattenDestroyLevels(levels [][]string) []string {
+	var out []string
+	for _, level := range levels {
+		out = append(out, level...)
+	}
+	return out
+}
+
+func joinDestroyLevels(levels [][]string) string {
+	joined := make([]string, 0, len(levels))
+	for _, level := range levels {
+		joined = append(joined, strings.Join(level, ","))
+	}
+	return strings.Join(joined, ";")
+}
+
+func machineInfraDestroyLevels(state v1alpha1.State) ([][]string, error) {
+	names, parents := machineInfraDestroyGraph(state)
+	incoming := make(map[string]int, len(names))
+	for name := range names {
+		incoming[name] = 0
+	}
+	for _, hosts := range parents {
+		for parent := range hosts {
+			incoming[parent]++
+		}
+	}
+	var levels [][]string
+	placed := 0
+	for placed < len(names) {
+		var level []string
+		for name := range names {
+			if incoming[name] == 0 {
+				level = append(level, name)
+			}
+		}
+		if len(level) == 0 {
+			return nil, fmt.Errorf("cannot plan machine infrastructure destroy: KubeVirt hostClusterRef dependency cycle")
+		}
+		sort.Strings(level)
+		for _, name := range level {
+			incoming[name] = -1
+		}
+		for _, name := range level {
+			for parent := range parents[name] {
+				if incoming[parent] > 0 {
+					incoming[parent]--
+				}
+			}
+		}
+		levels = append(levels, level)
+		placed += len(level)
+	}
+	return levels, nil
+}
+
+func machineInfraDestroyGraph(state v1alpha1.State) (map[string]bool, map[string]map[string]bool) {
 	names := map[string]bool{}
 	for _, cluster := range state.ContainerClusters {
 		names[cluster.Metadata.Name] = true
@@ -325,10 +386,6 @@ func machineInfraDestroyOrder(state v1alpha1.State) ([]string, error) {
 		providers[provider.Metadata.Name] = provider
 	}
 	parents := map[string]map[string]bool{}
-	incoming := map[string]int{}
-	for name := range names {
-		incoming[name] = 0
-	}
 	for _, cluster := range state.ContainerClusters {
 		child := cluster.Metadata.Name
 		for _, node := range cluster.Spec.Nodes {
@@ -347,40 +404,10 @@ func machineInfraDestroyOrder(state v1alpha1.State) ([]string, error) {
 			if parents[child] == nil {
 				parents[child] = map[string]bool{}
 			}
-			if parents[child][parent] {
-				continue
-			}
 			parents[child][parent] = true
-			incoming[parent]++
 		}
 	}
-	var ready []string
-	for name, count := range incoming {
-		if count == 0 {
-			ready = append(ready, name)
-		}
-	}
-	sort.Strings(ready)
-	order := make([]string, 0, len(names))
-	for len(ready) > 0 {
-		name := ready[0]
-		ready = ready[1:]
-		order = append(order, name)
-		var next []string
-		for parent := range parents[name] {
-			incoming[parent]--
-			if incoming[parent] == 0 {
-				next = append(next, parent)
-			}
-		}
-		sort.Strings(next)
-		ready = append(ready, next...)
-		sort.Strings(ready)
-	}
-	if len(order) != len(names) {
-		return nil, fmt.Errorf("cannot plan machine infrastructure destroy: KubeVirt hostClusterRef dependency cycle")
-	}
-	return order, nil
+	return names, parents
 }
 
 func destroyStepClusters(state v1alpha1.State, kind string) []string {

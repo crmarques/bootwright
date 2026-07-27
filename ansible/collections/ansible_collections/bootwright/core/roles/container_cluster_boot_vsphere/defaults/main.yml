@@ -4,4 +4,6 @@ bootwright_vsphere_node_ready_timeout_seconds: 1800
 bootwright_vsphere_node_ready_ssh_connect_timeout_seconds: 10
 bootwright_vsphere_node_ready_ssh_auth_retries: 60
 bootwright_vsphere_node_ready_ssh_auth_delay_seconds: 10
+bootwright_vsphere_boot_stage_wait_timeout: 1800
+bootwright_vsphere_boot_stage_wait_interval_seconds: 5
 bootwright_vsphere_python: "{{ ansible_playbook_python }}"

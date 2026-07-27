@@ -135,6 +135,7 @@ type ApplyTask struct {
 	DesiredHashVars    any
 	StructuralHashVars any
 	Extension          *extensionplan.ExtensionPlan
+	hashes             *applyTaskHashCache
 }
 
 type applyTaskResult struct {

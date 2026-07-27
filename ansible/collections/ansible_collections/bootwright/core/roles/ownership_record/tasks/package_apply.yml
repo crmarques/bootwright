@@ -7,15 +7,6 @@
       - bootwright_ownership_required_by | default('') | length > 0
     fail_msg: "package ownership apply needs packages, required_by, and bootwright_ownership_dir"
 
-- name: Gather installed package facts before ownership apply
-  ansible.builtin.package_facts:
-    manager: auto
-
-- name: Install owned packages
-  ansible.builtin.package:
-    name: "{{ bootwright_ownership_packages }}"
-    state: present
-
 - name: Create package ownership directory
   ansible.builtin.file:
     path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
@@ -24,9 +15,85 @@
     group: root
     mode: "0700"
 
-- name: Write package ownership records
-  ansible.builtin.include_tasks: package_apply_one.yml
-  loop: "{{ bootwright_ownership_packages }}"
-  loop_control:
-    loop_var: bootwright_ownership_package_name
-    label: "{{ bootwright_ownership_package_name }}"
+- name: Find existing package ownership records
+  ansible.builtin.find:
+    paths: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
+    patterns: "*.json"
+    file_type: file
+  register: bootwright_ownership_package_records_found
+
+- name: Read existing package ownership records
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}/{{ item }}.json"
+  loop: >-
+    {{
+      bootwright_ownership_packages
+      | map('regex_replace', '[^A-Za-z0-9_.-]', '_')
+      | list
+      | intersect(bootwright_ownership_package_records_present)
+    }}
+  vars:
+    bootwright_ownership_package_records_present: >-
+      {{
+        bootwright_ownership_package_records_found.files
+        | default([])
+        | map(attribute='path')
+        | map('basename')
+        | map('regex_replace', '\.json$', '')
+        | list
+      }}
+  register: bootwright_ownership_package_record_slurps
+
+- name: Index existing package ownership records
+  ansible.builtin.set_fact:
+    bootwright_ownership_package_index: "{{ dict(bootwright_ownership_package_record_names | zip(bootwright_ownership_package_record_values)) }}"
+  vars:
+    bootwright_ownership_package_record_results: "{{ bootwright_ownership_package_record_slurps.results | default([]) }}"
+    bootwright_ownership_package_record_names: >-
+      {{
+        bootwright_ownership_package_record_results
+        | map(attribute='item')
+        | list
+      }}
+    bootwright_ownership_package_record_values: >-
+      {{
+        bootwright_ownership_package_record_results
+        | map(attribute='content')
+        | map('b64decode')
+        | map('from_json')
+        | list
+      }}
+  changed_when: false
+
+- name: Resolve packages without recorded preexisting attribution
+  ansible.builtin.set_fact:
+    bootwright_ownership_packages_unattributed: >-
+      {{
+        bootwright_ownership_packages
+        | map('regex_replace', '[^A-Za-z0-9_.-]', '_')
+        | list
+        | difference(bootwright_ownership_packages_attributed)
+      }}
+  vars:
+    bootwright_ownership_packages_attributed: >-
+      {{
+        bootwright_ownership_package_index
+        | dict2items
+        | selectattr('value.preexisting', 'defined')
+        | map(attribute='key')
+        | list
+      }}
+  changed_when: false
+
+- name: Gather installed package facts before ownership apply
+  ansible.builtin.package_facts:
+    manager: auto
+  when: bootwright_ownership_packages_unattributed | length > 0
+
+- name: Install owned packages
+  ansible.builtin.package:
+    name: "{{ bootwright_ownership_packages }}"
+    state: present
+
+- name: Write ownership records for owned packages
+  ansible.builtin.include_tasks: package_records_write.yml

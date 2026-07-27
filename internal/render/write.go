@@ -108,7 +108,11 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 				}
 			}
 			if asset.ApplyScriptPath != "" {
-				if err := writeScript(fs, asset.ApplyScriptPath, ceph.CephApplyScript(state, cluster, scriptOptionsFor(asset, state, cluster))); err != nil {
+				script, err := ceph.CephApplyScript(state, cluster, scriptOptionsFor(asset, state, cluster))
+				if err != nil {
+					return err
+				}
+				if err := writeScript(fs, asset.ApplyScriptPath, script); err != nil {
 					return err
 				}
 			}

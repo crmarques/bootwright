@@ -610,8 +610,8 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 	}
 	machineTasks := nestedAnsibleTasks(t, plays[1], "tasks")
 	machineDestroy := machineTasks[findAnsibleTask(t, machineTasks, "Destroy machine substrate in dependency order")]
-	if got := fmt.Sprint(machineDestroy["loop"]); !strings.Contains(got, "bootwright_destroy_cluster_order") {
-		t.Fatalf("parallel machine infra destroy must consume the planner's dependency order, got loop=%v", machineDestroy["loop"])
+	if got := fmt.Sprint(machineDestroy["loop"]); !strings.Contains(got, "bootwright_destroy_cluster_levels") {
+		t.Fatalf("parallel machine infra destroy must consume the planner's dependency levels, got loop=%v", machineDestroy["loop"])
 	}
 	machineWhen := fmt.Sprint(machineDestroy["when"])
 	for _, want := range []string{
@@ -1156,7 +1156,7 @@ func TestOwnershipDestroyReadsPreRenameVMediaAttrs(t *testing.T) {
 func TestOwnershipHelperWritesTimezoneQualifiedTimestamps(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/resource.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_apply_one.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_records_write.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_remove_one.yml",
 	} {
 		body := readRepoFile(t, path)

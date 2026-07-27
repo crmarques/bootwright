@@ -88,7 +88,7 @@ func extraVarValue(pairs []string, name string) string {
 	return ""
 }
 
-func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, runtimeSecretsDir string, clusters []string, fn func(map[string]string) error) error {
+func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, hostKubeconfigDir string, clusters []string, fn func(map[string]string) error) error {
 	if fn == nil {
 		return errors.New("KubeVirt host kubeconfig callback is nil")
 	}
@@ -111,7 +111,7 @@ func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, runtimeSe
 		}
 		cluster := clusters[index]
 		store := secret.NewContextStore(contextName, ClusterSecretsDir(clustersDir, cluster))
-		return store.WithMaterialized(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}, runtimeSecretsDir, func(path string) error {
+		return store.WithMaterialized(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}, hostKubeconfigDir, func(path string) error {
 			paths[cluster] = path
 			defer delete(paths, cluster)
 			return materialize(index + 1)

@@ -78,6 +78,64 @@ func TestLeaseLiveness(t *testing.T) {
 	}
 }
 
+func TestRunLedgerTaskLookupUsesIndexAndSurvivesLoadedLedgers(t *testing.T) {
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	entries := []TaskLedgerEntry{
+		{ID: "a", Kind: ApplyTaskKindProvider, Label: "a"},
+		{ID: "b", Kind: ApplyTaskKindProvider, Label: "b"},
+		{ID: "c", Kind: ApplyTaskKindProvider, Label: "c"},
+	}
+	ledger := NewRunLedger("run-1", "all", "", ConcurrencyLimits{Parallelism: 1}, entries, now)
+	if ledger.taskIndex == nil {
+		t.Fatal("NewRunLedger must build a task index so dispatch stops linear-scanning")
+	}
+	for _, id := range []string{"a", "b", "c"} {
+		entry, ok := ledger.Task(id)
+		if !ok || entry.ID != id {
+			t.Fatalf("Task(%q) = %+v ok=%v", id, entry, ok)
+		}
+	}
+	if _, ok := ledger.Task("missing"); ok {
+		t.Fatal("Task must not resolve an unknown id")
+	}
+	ledger.MarkOK("b", now)
+	if entry, _ := ledger.Task("b"); entry.Status != TaskStatusOK {
+		t.Fatalf("indexed update did not land on b: %+v", entry)
+	}
+
+	dir := t.TempDir()
+	if err := SaveRunLedger(dir, ledger); err != nil {
+		t.Fatalf("SaveRunLedger: %v", err)
+	}
+	loaded, _, err := LoadRunLedger(dir)
+	if err != nil {
+		t.Fatalf("LoadRunLedger: %v", err)
+	}
+	if loaded.taskIndex != nil {
+		t.Fatal("a ledger decoded from disk has no index; lookup must fall back to a scan")
+	}
+	if entry, ok := loaded.Task("c"); !ok || entry.ID != "c" {
+		t.Fatalf("loaded ledger lookup = %+v ok=%v", entry, ok)
+	}
+	loaded.MarkSkipped("c", "reason", now)
+	if entry, _ := loaded.Task("c"); entry.Status != TaskStatusSkipped {
+		t.Fatalf("index-less update did not land on c: %+v", entry)
+	}
+
+	stale := ledger
+	stale.Tasks = []TaskLedgerEntry{{ID: "c", Kind: ApplyTaskKindProvider}, {ID: "a", Kind: ApplyTaskKindProvider}}
+	if entry, ok := stale.Task("a"); !ok || entry.ID != "a" {
+		t.Fatalf("a stale index must never resolve to the wrong task: got %+v ok=%v", entry, ok)
+	}
+	stale.MarkFailed("a", "boom", now)
+	if entry, _ := stale.Task("a"); entry.Failure != "boom" {
+		t.Fatalf("stale-index update landed on the wrong entry: %+v", stale.Tasks)
+	}
+	if stale.Tasks[0].Failure != "" {
+		t.Fatalf("stale-index update corrupted an unrelated task: %+v", stale.Tasks[0])
+	}
+}
+
 func TestRunLedgerRoundTrip(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := NewRunLedger("run-1", "all", "cluster-a", ConcurrencyLimits{

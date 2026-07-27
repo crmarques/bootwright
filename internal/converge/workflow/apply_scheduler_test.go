@@ -1,14 +1,123 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 )
+
+type gatedApplyRunner struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (r *gatedApplyRunner) Run(ctx context.Context, _ ansible.RunSpec) error {
+	r.once.Do(func() { close(r.entered) })
+	select {
+	case <-r.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *gatedApplyRunner) Command(ansible.RunSpec) []string {
+	return []string{"ansible-playbook"}
+}
+
+func schedulerRunOptions(dir string) RunOptions {
+	return RunOptions{
+		State:              minimalState(),
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}
+}
+
+func TestRunApplyTaskGraphPersistsRunningWhileTaskIsInFlight(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	state := minimalState()
+	runner := &gatedApplyRunner{entered: make(chan struct{}), release: make(chan struct{})}
+	task := ApplyTask{
+		Entry:    TaskLedgerEntry{ID: "boot.demo.node-0", Kind: ApplyTaskKindNodeBoot, Label: "boot node-0", Status: TaskStatusPending},
+		Playbook: applyBootMachinePlaybook,
+		State:    state,
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, schedulerRunOptions(dir),
+			ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", []ApplyTask{task},
+			ConcurrencyLimits{Parallelism: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		done <- err
+	}()
+	select {
+	case <-runner.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("task never started")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		ledger, found, err := LoadRunLedger(runsDir)
+		if err != nil {
+			t.Fatalf("LoadRunLedger: %v", err)
+		}
+		if found {
+			if entry, ok := ledger.Task(task.Entry.ID); ok && entry.Status == TaskStatusRunning {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a task that already forked ansible against real hardware was still not persisted as running; after a crash it would read as pending and the machine would look untouched")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	close(runner.release)
+	if err := <-done; err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+}
+
+func TestRunApplyTaskGraphArchivesTheSameBytesItSaves(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	state := minimalState()
+	runner := &recordingApplyRunner{}
+	task := ApplyTask{
+		Entry:    TaskLedgerEntry{ID: "provider.service-host", Kind: ApplyTaskKindProvider, Label: "provider services", Status: TaskStatusPending},
+		Playbook: applyProviderPlaybook,
+		State:    state,
+	}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, schedulerRunOptions(dir),
+		ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", []ApplyTask{task},
+		ConcurrencyLimits{Parallelism: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	current, err := os.ReadFile(LedgerPath(runsDir))
+	if err != nil {
+		t.Fatalf("read current ledger: %v", err)
+	}
+	archived, err := os.ReadFile(ArchivedRunLedgerPath(runsDir, ledger.RunID))
+	if err != nil {
+		t.Fatalf("read archived ledger: %v", err)
+	}
+	if !bytes.Equal(current, archived) {
+		t.Fatalf("the archived run ledger must be the same document the finish step persisted:\ncurrent=%s\narchived=%s", current, archived)
+	}
+}
 
 func TestRunApplyTaskGraphRecordsReadyAtAndBlockedOnForHostSlotContention(t *testing.T) {
 	dir := t.TempDir()

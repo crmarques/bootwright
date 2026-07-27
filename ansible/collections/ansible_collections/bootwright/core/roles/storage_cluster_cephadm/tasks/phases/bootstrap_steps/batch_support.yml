@@ -1,0 +1,42 @@
+---
+- name: Probe the Ceph container for the batched operation interpreter
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - bash
+      - -c
+      - command -v python3 >/dev/null 2>&1
+  register: bootwright_ceph_batch_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - (bootwright_ceph_batch_files | default([])) | length > 0
+    - (bootwright_apply_mode | default('continue')) != 'override'
+
+- name: Decide whether the rendered Ceph operations run one container per phase
+  ansible.builtin.set_fact:
+    bootwright_ceph_batch_enabled: >-
+      {{
+        ((bootwright_ceph_batch_files | default([])) | length > 0)
+        and ((bootwright_apply_mode | default('continue')) != 'override')
+        and ((bootwright_ceph_batch_probe.rc | default(1) | int) == 0)
+      }}
+  changed_when: false
+
+- name: Report that the rendered Ceph operations run one container per operation
+  ansible.builtin.debug:
+    msg: >-
+      Running the rendered Ceph operations for
+      {{ bootwright_selected_storage_cluster.name }} one cephadm shell per operation:
+      {{
+        'the --converge-drifted rebuild path evaluates every operation against the live cluster'
+        if (bootwright_apply_mode | default('continue')) == 'override'
+        else (
+          'the Ceph container has no python3 on PATH, so the batched operation scripts cannot guard themselves'
+          if ((bootwright_ceph_batch_files | default([])) | length > 0)
+          else 'no batchable operation is rendered for this cluster'
+        )
+      }}.
+  when: not (bootwright_ceph_batch_enabled | default(false) | bool)

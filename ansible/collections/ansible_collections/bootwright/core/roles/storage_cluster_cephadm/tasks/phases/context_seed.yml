@@ -10,15 +10,18 @@
 - name: Resolve managed Ceph provider context on the seed host
   ansible.builtin.include_tasks: context_provider.yml
 
-- name: Load rendered Ceph operations
+- name: Load the rendered Ceph operation manifest
   ansible.builtin.set_fact:
-    bootwright_ceph_operations: >-
-      {{
-        (lookup('ansible.builtin.file', bootwright_selected_storage_cluster.ceph.operationsPath)
-        | from_yaml).operations | default([])
-      }}
+    bootwright_ceph_operation_manifest: >-
+      {{ lookup('ansible.builtin.file', bootwright_selected_storage_cluster.ceph.operationsPath) | from_yaml }}
   delegate_to: localhost
   become: false
+
+- name: Resolve rendered Ceph operations, execution plan and batch scripts
+  ansible.builtin.set_fact:
+    bootwright_ceph_operations: "{{ bootwright_ceph_operation_manifest.operations | default([]) }}"
+    bootwright_ceph_plan: "{{ bootwright_ceph_operation_manifest.plan | default([]) }}"
+    bootwright_ceph_batch_files: "{{ bootwright_ceph_operation_manifest.batchFiles | default([]) }}"
 
 - name: Load cephadm registry credentials on the seed host
   ansible.builtin.include_role:

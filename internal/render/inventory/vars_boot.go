@@ -35,7 +35,7 @@ func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vMediaPort 
 }
 
 func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
-	return machineBootVarsWithISO(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName), ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint)
+	return machineBootVarsForMedia(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName), ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint, ci.Machines)
 }
 
 func sshReadinessVars() map[string]any {
@@ -49,6 +49,10 @@ func sshReadinessVars() map[string]any {
 }
 
 func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef) map[string]any {
+	return machineBootVarsForMedia(state, ci, m, clusterName, isoBasename, redfishVirtualMedia, nil)
+}
+
+func machineBootVarsForMedia(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, sharing []v1alpha1.InstallMachine) map[string]any {
 	provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
@@ -63,7 +67,7 @@ func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m 
 		case provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil:
 			return emulatedBootVars(state, ci, m, provider.Spec.Libvirt, clusterName, isoBasename)
 		case provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil:
-			return vsphereBootVars(provider.Spec.VSphere, profile, m, isoBasename)
+			return vsphereBootVars(state, provider.Spec.VSphere, profile, m, isoBasename, sharing)
 		}
 		return nil
 	}
@@ -145,21 +149,77 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	}
 }
 
-func vsphereBootVars(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.MachineProfile, m v1alpha1.InstallMachine, isoBasename string) map[string]any {
+func vsphereBootVars(state v1alpha1.State, spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.MachineProfile, m v1alpha1.InstallMachine, isoBasename string, sharing []v1alpha1.InstallMachine) map[string]any {
 	fd, ok := stateview.VSphereProfileFailureDomain(spec, profile)
 	if !ok {
 		return nil
 	}
-	staging := vSphereISOStagingVars(spec, fd)
-	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/vsphere/%s/vmedia", m.Source.ProviderRef.Name)
+	target := vsphereMediaTarget{machine: m.Name, server: fd.Server}
+	target.stagePath, target.fetchURL = vsphereAgentISOPaths(spec, fd, m.Source.ProviderRef.Name, isoBasename)
+	stageElected, uploadElected := vsphereMediaElection(state, sharing, target, isoBasename)
 	return map[string]any{
 		"readiness": sshReadinessVars(),
 		"agentIso": map[string]any{
-			"stageHost": "localhost",
-			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
-			"fetchUrl":  fmt.Sprintf("[%s] %s/%s/%s", staging["datastore"], staging["folder"], agentISOPublishTokenExpr, isoBasename),
+			"stageHost":     "localhost",
+			"stagePath":     target.stagePath,
+			"fetchUrl":      target.fetchURL,
+			"stageElected":  stageElected,
+			"uploadElected": uploadElected,
 		},
 	}
+}
+
+func vsphereAgentISOPaths(spec *v1alpha1.InfraProviderVSphere, fd v1alpha1.VSphereFailureDomain, providerName, isoBasename string) (stagePath, fetchURL string) {
+	staging := vSphereISOStagingVars(spec, fd)
+	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/vsphere/%s/vmedia", providerName)
+	stagePath = fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename)
+	fetchURL = fmt.Sprintf("[%s] %s/%s/%s", staging["datastore"], staging["folder"], agentISOPublishTokenExpr, isoBasename)
+	return stagePath, fetchURL
+}
+
+type vsphereMediaTarget struct {
+	machine   string
+	server    string
+	stagePath string
+	fetchURL  string
+}
+
+func vsphereMediaTargetFor(state v1alpha1.State, m v1alpha1.InstallMachine, isoBasename string) (vsphereMediaTarget, bool) {
+	provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
+	if !ok || provider.Spec.Type != v1alpha1.ProvisionerVSphere || provider.Spec.VSphere == nil {
+		return vsphereMediaTarget{}, false
+	}
+	profile, ok := stateview.MachineProfile(provider, m.Source.ProfileRef.Name)
+	if !ok {
+		return vsphereMediaTarget{}, false
+	}
+	fd, ok := stateview.VSphereProfileFailureDomain(provider.Spec.VSphere, profile)
+	if !ok {
+		return vsphereMediaTarget{}, false
+	}
+	target := vsphereMediaTarget{machine: m.Name, server: fd.Server}
+	target.stagePath, target.fetchURL = vsphereAgentISOPaths(provider.Spec.VSphere, fd, m.Source.ProviderRef.Name, isoBasename)
+	return target, true
+}
+
+func vsphereMediaElection(state v1alpha1.State, sharing []v1alpha1.InstallMachine, target vsphereMediaTarget, isoBasename string) (stageElected, uploadElected bool) {
+	stageElected, uploadElected = true, true
+	for _, peer := range sharing {
+		if peer.Name == target.machine {
+			continue
+		}
+		other, ok := vsphereMediaTargetFor(state, peer, isoBasename)
+		if !ok || other.machine >= target.machine {
+			continue
+		}
+		if other.stagePath == target.stagePath {
+			stageElected = false
+		}
+		if other.server == target.server && other.fetchURL == target.fetchURL {
+			uploadElected = false
+		}
+	}
+	return stageElected, uploadElected
 }
 
 func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, server v1alpha1.Machine, isoBasename string) map[string]any {

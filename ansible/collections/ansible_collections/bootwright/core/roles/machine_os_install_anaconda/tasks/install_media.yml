@@ -77,10 +77,10 @@
         group: root
         mode: "0644"
       register: bootwright_os_source_copy
-      throttle: 1
       when:
         - bootwright_component.osInstall.image.kind in ['media', 'file']
         - not (bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool)
+        - bootwright_os_source_stage_host == inventory_hostname
 
     - name: Download managed ISO source on provider host
       ansible.builtin.get_url:
@@ -91,14 +91,26 @@
         group: root
         mode: "0644"
       register: bootwright_os_source_download
-      throttle: 1
-      when: bootwright_component.osInstall.image.kind == 'url'
+      when:
+        - bootwright_component.osInstall.image.kind == 'url'
+        - bootwright_os_source_stage_host == inventory_hostname
 
     - name: Stat managed ISO source
       ansible.builtin.stat:
         path: "{{ bootwright_os_source_iso_effective }}"
         get_checksum: false
       register: bootwright_os_source_stat
+
+    - name: Assert managed ISO source is staged
+      ansible.builtin.assert:
+        that:
+          - bootwright_os_source_stat.stat.exists | default(false) | bool
+        fail_msg: >-
+          managed install source {{ bootwright_os_source_iso_effective }} is missing on
+          provider host {{ bootwright_machine_task_provider_host_name | default(inventory_hostname) }}
+          for machine {{ bootwright_component.name }}. Each source is staged once per
+          provider host and source id, by {{ bootwright_os_source_stage_host }};
+          check that host's staging result and re-run apply.
 
     - name: Record managed ISO source identity
       ansible.builtin.copy:
@@ -120,6 +132,35 @@
         mode: "0644"
       register: bootwright_os_source_identity
 
+    - name: Resolve managed ISO source change key
+      ansible.builtin.set_fact:
+        bootwright_os_source_change_key: >-
+          {{
+            bootwright_os_source_stage_key
+            if (
+              bootwright_os_source_copy.changed | default(false)
+              or bootwright_os_source_download.changed | default(false)
+              or bootwright_os_source_identity.changed | default(false)
+            )
+            else ''
+          }}
+      changed_when: false
+
+    - name: Resolve managed ISO checksum verification owner
+      ansible.builtin.set_fact:
+        bootwright_os_source_verify_required: >-
+          {{
+            (bootwright_os_source_stage_host == inventory_hostname)
+            and (
+              ansible_play_hosts
+              | map('extract', hostvars, 'bootwright_os_source_change_key')
+              | map('default', '')
+              | select('equalto', bootwright_os_source_stage_key)
+              | list | length
+            ) > 0
+          }}
+      changed_when: false
+
     - name: Verify managed ISO checksum
       ansible.builtin.command:
         argv:
@@ -129,9 +170,7 @@
       changed_when: false
       when:
         - (bootwright_component.osInstall.image.checksum | default('') | length) > 0
-        - bootwright_os_source_copy.changed | default(false)
-          or bootwright_os_source_download.changed | default(false)
-          or bootwright_os_source_identity.changed | default(false)
+        - bootwright_os_source_verify_required | bool
 
     - name: Assert managed ISO checksum
       ansible.builtin.assert:

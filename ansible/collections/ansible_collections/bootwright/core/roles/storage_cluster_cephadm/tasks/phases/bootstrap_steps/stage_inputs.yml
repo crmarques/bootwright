@@ -36,6 +36,16 @@
     dest: "{{ bootwright_ceph_remote_operations }}"
     mode: "0600"
 
+- name: Stage the batched Ceph operation scripts
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ceph_remote_work_dir }}/{{ bootwright_ceph_batch_file.file }}"
+    content: "{{ bootwright_ceph_batch_file.content }}"
+    mode: "0600"
+  loop: "{{ bootwright_ceph_batch_files | default([]) }}"
+  loop_control:
+    loop_var: bootwright_ceph_batch_file
+    label: "{{ bootwright_ceph_batch_file.file }}"
+
 - name: Copy cephadm registry JSON
   ansible.builtin.copy:
     dest: "{{ bootwright_ceph_remote_registry_json }}"

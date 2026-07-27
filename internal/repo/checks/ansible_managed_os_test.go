@@ -648,6 +648,118 @@ func TestManagedOSKickstartTemplateNoCommandGluedToBlockTag(t *testing.T) {
 	}
 }
 
+func TestManagedOSSourceStagingElectedPerProviderHostAndSourceID(t *testing.T) {
+	base := bootwrightCollectionRoleRoot + "/machine_os_install_anaconda/tasks/"
+	main := readAnsibleTasks(t, base+"main.yml")
+	probeIdx := findAnsibleTask(t, main, "Probe existing managed OS state")
+	keyIdx := findAnsibleTask(t, main, "Resolve managed OS source staging key")
+	electIdx := findAnsibleTask(t, main, "Elect managed OS source staging host")
+	mediaIdx := findAnsibleTask(t, main, "Install managed OS media when needed")
+	if !(probeIdx < keyIdx && keyIdx < electIdx && electIdx < mediaIdx) {
+		t.Fatalf("the staging key must be published for every host, and the election resolved from it, before any host stages media")
+	}
+	for _, idx := range []int{keyIdx, electIdx} {
+		if _, ok := main[idx]["run_once"]; ok {
+			t.Fatalf("%s must not use run_once: it binds the source path, kind and condition to the first host while the image is a per-machine fact", main[idx]["name"])
+		}
+		if _, ok := main[idx]["when"]; ok {
+			t.Fatalf("%s must run for every host so hostvars carry a staging key for the whole play, got when=%v", main[idx]["name"], main[idx]["when"])
+		}
+	}
+
+	key, ok := main[keyIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", main[keyIdx]["name"])
+	}
+	keyExpr := fmt.Sprint(key["bootwright_os_source_stage_key"])
+	for _, want := range []string{"bootwright_machine_task_provider_host_name", "bootwright_os_source_iso", "bootwright_managed_os_install_required"} {
+		if !strings.Contains(keyExpr, want) {
+			t.Fatalf("the staging key must combine %q so machines that share a provider host and source id elect one stager, got %q", want, keyExpr)
+		}
+	}
+	if !strings.Contains(keyExpr, "else ''") {
+		t.Fatalf("a host that is not installing must publish an empty staging key so it can never be elected to stage a source it never fetches, got %q", keyExpr)
+	}
+
+	elect, ok := main[electIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", main[electIdx]["name"])
+	}
+	if got := fmt.Sprint(elect["bootwright_os_source_stage_host"]); !strings.Contains(got, "bootwright_os_source_stage_hosts[bootwright_os_source_stage_key]") {
+		t.Fatalf("%s must resolve one stager per key, got %q", main[electIdx]["name"], got)
+	}
+	electVars := fmt.Sprint(main[electIdx]["vars"])
+	for _, want := range []string{"ansible_play_hosts", "hostvars", "bootwright_os_source_stage_key"} {
+		if !strings.Contains(electVars, want) {
+			t.Fatalf("%s must elect from the play's own published keys, missing %q: %s", main[electIdx]["name"], want, electVars)
+		}
+	}
+
+	media := readAnsibleTasks(t, base+"install_media.yml")
+	tasks := nestedAnsibleTasks(t, media[findAnsibleTask(t, media, "Install managed OS from virtual media")], "block")
+	ownerCondition := "bootwright_os_source_stage_host == inventory_hostname"
+	for _, name := range []string{"Copy managed ISO source to provider host", "Download managed ISO source on provider host"} {
+		idx := findAnsibleTask(t, tasks, name)
+		if !stringListContains(tasks[idx]["when"], ownerCondition) {
+			t.Fatalf("%s must run only on the elected stager so peers neither re-transfer nor re-checksum the shared source, got when=%v", name, tasks[idx]["when"])
+		}
+		if got, ok := tasks[idx]["throttle"]; ok {
+			t.Fatalf("%s must rely on the per-source election instead of serializing every provider host, got throttle=%v", name, got)
+		}
+		if _, ok := tasks[idx]["run_once"]; ok {
+			t.Fatalf("%s must not use run_once: the source id and image kind are per-machine facts", name)
+		}
+	}
+
+	statIdx := findAnsibleTask(t, tasks, "Stat managed ISO source")
+	stagedIdx := findAnsibleTask(t, tasks, "Assert managed ISO source is staged")
+	identityIdx := findAnsibleTask(t, tasks, "Record managed ISO source identity")
+	changeIdx := findAnsibleTask(t, tasks, "Resolve managed ISO source change key")
+	verifyOwnerIdx := findAnsibleTask(t, tasks, "Resolve managed ISO checksum verification owner")
+	verifyIdx := findAnsibleTask(t, tasks, "Verify managed ISO checksum")
+	assertIdx := findAnsibleTask(t, tasks, "Assert managed ISO checksum")
+	if !(statIdx < stagedIdx && stagedIdx < identityIdx && identityIdx < changeIdx && changeIdx < verifyOwnerIdx && verifyOwnerIdx < verifyIdx && verifyIdx < assertIdx) {
+		t.Fatalf("a host that delegated staging must prove the source landed before recording identity, and the change keys of all peers must be published before the verification owner is resolved")
+	}
+	staged, ok := tasks[stagedIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an assert task", tasks[stagedIdx]["name"])
+	}
+	if !stringListItemContains(staged["that"], "bootwright_os_source_stat.stat.exists") {
+		t.Fatalf("%s must fail closed when the elected stager did not leave a source behind, got that=%v", tasks[stagedIdx]["name"], staged["that"])
+	}
+
+	change, ok := tasks[changeIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", tasks[changeIdx]["name"])
+	}
+	changeExpr := fmt.Sprint(change["bootwright_os_source_change_key"])
+	for _, want := range []string{"bootwright_os_source_stage_key", "bootwright_os_source_copy.changed", "bootwright_os_source_download.changed", "bootwright_os_source_identity.changed"} {
+		if !strings.Contains(changeExpr, want) {
+			t.Fatalf("the change key must publish %q so no host's staging change is lost when it is not the stager, got %q", want, changeExpr)
+		}
+	}
+	verifyOwner, ok := tasks[verifyOwnerIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", tasks[verifyOwnerIdx]["name"])
+	}
+	verifyExpr := fmt.Sprint(verifyOwner["bootwright_os_source_verify_required"])
+	for _, want := range []string{ownerCondition, "ansible_play_hosts", "bootwright_os_source_change_key", "bootwright_os_source_stage_key"} {
+		if !strings.Contains(verifyExpr, want) {
+			t.Fatalf("the elected stager must checksum whenever any peer sharing its source changed, missing %q: %s", want, verifyExpr)
+		}
+	}
+	if !stringListContains(tasks[verifyIdx]["when"], "bootwright_os_source_verify_required | bool") {
+		t.Fatalf("%s must be gated on the single shared verification, got when=%v", tasks[verifyIdx]["name"], tasks[verifyIdx]["when"])
+	}
+	if !stringListContains(tasks[verifyIdx]["when"], "(bootwright_component.osInstall.image.checksum | default('') | length) > 0") {
+		t.Fatalf("%s must still only run for a declared checksum, got when=%v", tasks[verifyIdx]["name"], tasks[verifyIdx]["when"])
+	}
+	if !stringListContains(tasks[assertIdx]["when"], "not (bootwright_os_source_sha256.skipped | default(false) | bool)") {
+		t.Fatalf("%s must stay skipped on hosts that delegated verification, got when=%v", tasks[assertIdx]["name"], tasks[assertIdx]["when"])
+	}
+}
+
 func managedOSAnacondaTasks(t *testing.T) []map[string]any {
 	t.Helper()
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/"

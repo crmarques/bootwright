@@ -36,10 +36,26 @@
     - ansible_facts['os_family'] == 'RedHat'
     - bootwright_machine_base_yum_conf.stat.exists | bool
 
+- name: Probe installed base host packages
+  ansible.builtin.command:
+    argv: "{{ ['rpm', '--query', '--quiet'] + bootwright_machine_base_packages }}"
+  register: bootwright_machine_base_package_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Resolve base host package presence
+  ansible.builtin.set_fact:
+    bootwright_machine_base_packages_present: >-
+      {{ (bootwright_machine_base_package_probe.rc | default(1) | int) == 0 }}
+  changed_when: false
+
 - name: Install base host packages
   ansible.builtin.package:
     name: "{{ bootwright_machine_base_packages }}"
     state: present
+  when: not (bootwright_machine_base_packages_present | bool)
 
 - name: Probe host firewalld availability
   ansible.builtin.include_tasks: firewalld_probe.yml

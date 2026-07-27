@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -244,11 +246,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if !stateHasContainerCluster(state, name) {
 			continue
 		}
-		hash, err := clusterInstallDesiredHashForContext(contextName, state, name, secretsDir)
-		if err != nil {
-			return out, installedMatching, err
-		}
-		structuralHash, err := clusterInstallStructuralHashForContext(contextName, state, name, secretsDir)
+		hash, structuralHash, err := clusterInstallHashes(contextName, state, name, secretsDir)
 		if err != nil {
 			return out, installedMatching, err
 		}
@@ -691,32 +689,65 @@ func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.Stat
 	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, false)
 }
 
-func clusterInstallStructuralHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
-	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, true)
+type clusterInstallHashInputs struct {
+	clusterState    v1alpha1.State
+	ocp             v1alpha1.ContainerCluster
+	installConfig   map[string]any
+	agentConfig     map[string]any
+	manifests       []render.InstallerManifest
+	scopedState     v1alpha1.State
+	structuralState v1alpha1.State
 }
 
-func clusterInstallHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string, projectDay2 bool) (string, error) {
-	contextName = effectiveContextName(contextName)
+var clusterInstallHashInputCache = struct {
+	mu      sync.Mutex
+	entries map[string]*clusterInstallHashInputs
+}{}
+
+func clusterInstallHashInputCacheKey(contextName, clusterName, secretsDir string) string {
+	return contextName + "\x00" + clusterName + "\x00" + secretsDir
+}
+
+func clusterInstallHashInputsFor(contextName string, state v1alpha1.State, clusterName, secretsDir string) (*clusterInstallHashInputs, error) {
 	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
 	if len(clusterState.ContainerClusters) != 1 {
-		return "", fmt.Errorf("ContainerCluster/%s does not resolve to exactly one selected cluster", clusterName)
+		return nil, fmt.Errorf("ContainerCluster/%s does not resolve to exactly one selected cluster", clusterName)
+	}
+	key := clusterInstallHashInputCacheKey(contextName, clusterName, secretsDir)
+	clusterInstallHashInputCache.mu.Lock()
+	defer clusterInstallHashInputCache.mu.Unlock()
+	if cached := clusterInstallHashInputCache.entries[key]; cached != nil && reflect.DeepEqual(cached.clusterState, clusterState) {
+		return cached, nil
 	}
 	ocp := clusterState.ContainerClusters[0]
 	installConfig, err := render.InstallerConfig(clusterState, ocp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	agentConfig, err := render.AgentConfig(clusterState, ocp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	secretInputs, err := render.InstallerSecretInputStatsForContext(contextName, clusterState, ocp, secretsDir)
-	if err != nil {
-		return "", err
+	inputs := &clusterInstallHashInputs{
+		clusterState:    clusterState,
+		ocp:             ocp,
+		installConfig:   installConfig,
+		agentConfig:     agentConfig,
+		manifests:       render.InstallerManifests(ocp, render.PlaceholderInstallerSecrets(clusterState, ocp)),
+		scopedState:     hashScopedState(clusterState),
+		structuralState: containerClusterInstallStructuralHashVars(clusterState),
 	}
-	embedState := hashScopedState(clusterState)
+	if clusterInstallHashInputCache.entries == nil {
+		clusterInstallHashInputCache.entries = map[string]*clusterInstallHashInputs{}
+	}
+	clusterInstallHashInputCache.entries[key] = inputs
+	return inputs, nil
+}
+
+func finishClusterInstallHash(clusterName string, inputs *clusterInstallHashInputs, secretInputs []render.InstallerSecretInputStat, projectDay2 bool) (string, error) {
+	embedState := inputs.scopedState
 	if projectDay2 {
-		embedState = containerClusterInstallStructuralHashVars(clusterState)
+		embedState = inputs.structuralState
 	}
 	payload := struct {
 		APIVersion    string                            `json:"apiVersion"`
@@ -730,9 +761,9 @@ func clusterInstallHashForContext(contextName string, state v1alpha1.State, clus
 		APIVersion:    v1alpha1.APIVersion,
 		Cluster:       clusterName,
 		State:         embedState,
-		InstallConfig: installConfig,
-		AgentConfig:   agentConfig,
-		Manifests:     render.InstallerManifests(ocp, render.PlaceholderInstallerSecrets(clusterState, ocp)),
+		InstallConfig: inputs.installConfig,
+		AgentConfig:   inputs.agentConfig,
+		Manifests:     inputs.manifests,
 		SecretInputs:  secretInputs,
 	}
 	data, err := json.Marshal(payload)
@@ -741,6 +772,27 @@ func clusterInstallHashForContext(contextName string, state v1alpha1.State, clus
 	}
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func clusterInstallHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string, projectDay2 bool) (string, error) {
+	contextName = effectiveContextName(contextName)
+	inputs, secretInputs, err := clusterInstallHashParts(contextName, state, clusterName, secretsDir)
+	if err != nil {
+		return "", err
+	}
+	return finishClusterInstallHash(clusterName, inputs, secretInputs, projectDay2)
+}
+
+func clusterInstallHashParts(contextName string, state v1alpha1.State, clusterName, secretsDir string) (*clusterInstallHashInputs, []render.InstallerSecretInputStat, error) {
+	inputs, err := clusterInstallHashInputsFor(contextName, state, clusterName, secretsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	secretInputs, err := render.InstallerSecretInputStatsForContext(contextName, inputs.clusterState, inputs.ocp, secretsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return inputs, secretInputs, nil
 }
 
 func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
@@ -754,11 +806,16 @@ func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash
 }
 
 func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, err error) {
-	hash, err = clusterInstallDesiredHashForContext(contextName, state, clusterName, secretsDir)
+	contextName = effectiveContextName(contextName)
+	inputs, secretInputs, err := clusterInstallHashParts(contextName, state, clusterName, secretsDir)
 	if err != nil {
 		return "", "", err
 	}
-	structuralHash, err = clusterInstallStructuralHashForContext(contextName, state, clusterName, secretsDir)
+	hash, err = finishClusterInstallHash(clusterName, inputs, secretInputs, false)
+	if err != nil {
+		return "", "", err
+	}
+	structuralHash, err = finishClusterInstallHash(clusterName, inputs, secretInputs, true)
 	if err != nil {
 		return "", "", err
 	}

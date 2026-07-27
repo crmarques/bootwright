@@ -7,12 +7,12 @@ next task assumes.
 
 **Skipped set_fact leaves the previous value.** A `set_fact` whose `when` is
 false does NOT reset the fact — the prior value survives. In a tasks file
-included once per loop item this bleeds one iteration's data into the next:
-`ownership_record/tasks/package_apply_one.yml` seeds
-`bootwright_ownership_existing_package_record: {}` at the top of every
-inclusion because a skipped `Decode existing package ownership record` would
-otherwise leave the previous package's record in place, giving a record-less
-package the prior package's `requiredBy`/`preexisting`.
+included once per loop item this bleeds one iteration's data into the next.
+`ownership_record/tasks/package_apply_one.yml` therefore sets
+`bootwright_ownership_package_index` in one unconditional `set_fact` that
+resolves to `{}` when the record is absent, instead of a conditional decode a
+skip would leave holding the previous package's record — which would give a
+record-less package the prior package's `requiredBy`/`preexisting`.
 
 **Registers only written on some loop paths persist across iterations.** A
 `register` that only some branches of a per-item include ever execute keeps

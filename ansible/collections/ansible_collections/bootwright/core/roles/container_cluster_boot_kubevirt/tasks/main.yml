@@ -7,6 +7,7 @@
     bootwright_kubevirt_storage_class: "{{ bootwright_component.kubevirt.storageClassRef | default('') }}"
     bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-agent-iso"
+    bootwright_kubevirt_iso_source_dv_name: "{{ bootwright_current_cluster.name }}-agent-iso-source"
     bootwright_kubevirt_context_name: "{{ bootwright_clusters_dir | dirname | basename }}"
     bootwright_kubevirt_machine_record_path: >-
       {{ bootwright_ownership_dir }}/resources/kubevirt-machine/{{
@@ -27,15 +28,61 @@
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
+- name: Read agent ISO generation token
+  ansible.builtin.slurp:
+    src: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+  register: bootwright_kubevirt_agent_iso_token_file
+  delegate_to: localhost
+  become: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+
+- name: Set KubeVirt agent ISO generation
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_generation: >-
+      {{ ((bootwright_kubevirt_agent_iso_token_file.content | b64decode | trim) | hash('sha256'))[:32] }}
+  changed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+
 - name: Validate KubeVirt boot inputs
   ansible.builtin.assert:
     that:
       - bootwright_kubevirt_kubeconfig | length > 0
       - bootwright_kubevirt_namespace | length > 0
       - bootwright_kubevirt_agent_iso_path | length > 0
+      - bootwright_kubevirt_iso_generation | length == 32
     fail_msg: >-
       KubeVirt boot for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
-      is missing kubeconfig, namespace, or generated agent ISO path.
+      is missing kubeconfig, namespace, generated agent ISO path, or agent ISO generation.
+
+- name: Resolve KubeVirt agent ISO sharing group
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_machines: >-
+      {{
+        bootwright_current_cluster.components
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('bootApplyRole', 'defined')
+        | selectattr('bootApplyRole', 'equalto', bootwright_component.bootApplyRole)
+        | selectattr('kubevirt', 'defined')
+        | selectattr('kubevirt.kubeconfig', 'defined')
+        | selectattr('kubevirt.kubeconfig', 'equalto', bootwright_kubevirt_kubeconfig)
+        | selectattr('kubevirt.namespace', 'defined')
+        | selectattr('kubevirt.namespace', 'equalto', bootwright_kubevirt_namespace)
+        | map(attribute='name')
+        | sort
+        | list
+      }}
+  changed_when: false
+
+- name: Resolve KubeVirt agent ISO source election
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_shared: "{{ (bootwright_kubevirt_iso_source_machines | length) > 1 }}"
+    bootwright_kubevirt_iso_source_actor: >-
+      {{
+        (bootwright_kubevirt_iso_source_machines | length) > 1
+        and (bootwright_kubevirt_iso_source_machines | first) == bootwright_component.name
+      }}
+    bootwright_kubevirt_iso_source_signature: "bootwright|{{ bootwright_kubevirt_context_name }}|{{ bootwright_current_cluster.name }}||agent-iso-source|{{ bootwright_kubevirt_iso_generation }}|Succeeded"
+  changed_when: false
 
 - name: Read KubeVirt boot VirtualMachine identity
   ansible.builtin.command:
@@ -276,6 +323,232 @@
     mode: "0600"
   when: bootwright_kubevirt_host_cluster_ref | length > 0
 
+- name: Read existing KubeVirt agent ISO source DataVolume identity
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_source_dv_name }}"
+      - -o
+      - json
+  register: bootwright_kubevirt_iso_source_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_kubevirt_iso_source_shared | bool
+
+- name: Require a conclusive KubeVirt agent ISO source DataVolume probe
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bootwright_kubevirt_iso_source_probe.rc | default(1)) == 0
+        or 'NotFound' in (bootwright_kubevirt_iso_source_probe.stderr | default(''))
+    fail_msg: >-
+      Could not determine whether DataVolume {{ bootwright_kubevirt_iso_source_dv_name }}
+      exists in namespace {{ bootwright_kubevirt_namespace }}:
+      {{ bootwright_kubevirt_iso_source_probe.stderr | default('kubectl get failed with no detail') }}.
+      Refusing to replace the shared agent ISO media because ownership cannot be proven.
+  when: bootwright_kubevirt_iso_source_shared | bool
+
+- name: Resolve KubeVirt agent ISO source DataVolume identity
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_live: >-
+      {{
+        (bootwright_kubevirt_iso_source_probe.stdout | from_json)
+        if (bootwright_kubevirt_iso_source_probe.rc | default(1)) == 0
+        else {}
+      }}
+  changed_when: false
+  when: bootwright_kubevirt_iso_source_shared | bool
+
+- name: Resolve KubeVirt agent ISO source DataVolume ownership
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_exists: "{{ (bootwright_kubevirt_iso_source_probe.rc | default(1)) == 0 }}"
+    bootwright_kubevirt_iso_source_owned: >-
+      {{
+        (bootwright_kubevirt_iso_source_probe.rc | default(1)) != 0
+        or (
+          bootwright_kubevirt_iso_source_live.get('metadata', {}).get('labels', {}).get('bootwright.io/managed-by', '') == 'bootwright'
+          and bootwright_kubevirt_iso_source_live.get('metadata', {}).get('labels', {}).get('bootwright.io/context', '') == bootwright_kubevirt_context_name
+          and bootwright_kubevirt_iso_source_live.get('metadata', {}).get('labels', {}).get('bootwright.io/cluster', '') == bootwright_current_cluster.name
+          and bootwright_kubevirt_iso_source_live.get('metadata', {}).get('labels', {}).get('bootwright.io/role', '') == 'agent-iso-source'
+          and 'bootwright.io/node' not in bootwright_kubevirt_iso_source_live.get('metadata', {}).get('labels', {})
+        )
+      }}
+  changed_when: false
+  when: bootwright_kubevirt_iso_source_shared | bool
+
+- name: Resolve KubeVirt agent ISO source DataVolume currency
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_current: >-
+      {{
+        (bootwright_kubevirt_iso_source_probe.rc | default(1)) == 0
+        and bootwright_kubevirt_iso_source_owned | bool
+        and bootwright_kubevirt_iso_source_live.get('metadata', {}).get('labels', {}).get('bootwright.io/agent-iso-generation', '') == bootwright_kubevirt_iso_generation
+        and bootwright_kubevirt_iso_source_live.get('status', {}).get('phase', '') == 'Succeeded'
+      }}
+  changed_when: false
+  when: bootwright_kubevirt_iso_source_shared | bool
+
+- name: Enforce KubeVirt agent ISO source DataVolume apply mode
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: apply_mode_gate.yml
+  vars:
+    bootwright_gate_object: >-
+      KubeVirt DataVolume {{ bootwright_kubevirt_namespace }}/{{ bootwright_kubevirt_iso_source_dv_name }}
+    bootwright_gate_exists: "{{ bootwright_kubevirt_iso_source_exists | default(false) }}"
+    bootwright_gate_owned: "{{ bootwright_kubevirt_iso_source_owned | default(false) }}"
+  when: bootwright_kubevirt_iso_source_actor | default(false) | bool
+
+- name: Remove stale KubeVirt agent ISO source DataVolume
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - delete
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_source_dv_name }}"
+      - --ignore-not-found=true
+  register: bootwright_kubevirt_iso_source_delete
+  changed_when: "'deleted' in (bootwright_kubevirt_iso_source_delete.stdout | default(''))"
+  when:
+    - bootwright_kubevirt_iso_source_actor | default(false) | bool
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+
+- name: Build KubeVirt agent ISO source upload command
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_source_upload_argv: >-
+      {{
+        [
+          'virtctl',
+          '--kubeconfig', bootwright_kubevirt_kubeconfig,
+          'image-upload',
+          'dv', bootwright_kubevirt_iso_source_dv_name,
+          '--namespace', bootwright_kubevirt_namespace,
+          '--image-path', bootwright_kubevirt_agent_iso_path,
+          '--size', bootwright_kubevirt_agent_iso_size | string,
+          '--force-bind',
+          '--wait-secs', bootwright_kubevirt_boot_iso_timeout | string
+        ]
+        + (
+          ['--storage-class', bootwright_kubevirt_storage_class]
+          if (bootwright_kubevirt_storage_class | length) > 0
+          else []
+        )
+        + (
+          ['--insecure']
+          if (bootwright_kubevirt_virtctl_insecure_upload | bool)
+          else []
+        )
+      }}
+  changed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - bootwright_kubevirt_iso_source_actor | default(false) | bool
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+
+- name: Upload KubeVirt agent ISO source DataVolume
+  ansible.builtin.command:
+    argv: "{{ bootwright_kubevirt_source_upload_argv }}"
+  register: bootwright_kubevirt_iso_source_upload
+  changed_when: bootwright_kubevirt_iso_source_upload.rc == 0
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  environment: >-
+    {{
+      (bootwright_proxy_env | default({}))
+      | combine({'SSL_CERT_FILE': (bootwright_kubevirt_kubeconfig | dirname) ~ '/host-ingress-ca.crt'})
+      if (bootwright_kubevirt_host_cluster_ref | length) > 0
+      else (bootwright_proxy_env | default({}))
+    }}
+  when:
+    - bootwright_kubevirt_iso_source_actor | default(false) | bool
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+
+- name: Label KubeVirt agent ISO source DataVolume as Bootwright-managed
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - label
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_source_dv_name }}"
+      - bootwright.io/managed-by=bootwright
+      - "bootwright.io/context={{ bootwright_kubevirt_context_name }}"
+      - "bootwright.io/cluster={{ bootwright_current_cluster.name }}"
+      - bootwright.io/role=agent-iso-source
+      - "bootwright.io/agent-iso-generation={{ bootwright_kubevirt_iso_generation }}"
+      - --overwrite
+  register: bootwright_kubevirt_iso_source_label
+  changed_when: bootwright_kubevirt_iso_source_label.rc == 0
+  when:
+    - bootwright_kubevirt_iso_source_actor | default(false) | bool
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+    - (bootwright_kubevirt_iso_source_upload.rc | default(1)) == 0
+
+- name: Wait for the shared KubeVirt agent ISO source DataVolume
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_source_dv_name }}"
+      - -o
+      - >-
+        jsonpath={.metadata.labels.bootwright\.io/managed-by}|{.metadata.labels.bootwright\.io/context}|{.metadata.labels.bootwright\.io/cluster}|{.metadata.labels.bootwright\.io/node}|{.metadata.labels.bootwright\.io/role}|{.metadata.labels.bootwright\.io/agent-iso-generation}|{.status.phase}
+  register: bootwright_kubevirt_iso_source_wait
+  changed_when: false
+  failed_when: false
+  until: >-
+    (bootwright_kubevirt_iso_source_wait.rc | default(1)) == 0
+    and (bootwright_kubevirt_iso_source_wait.stdout | default('') | trim) == bootwright_kubevirt_iso_source_signature
+  retries: "{{ bootwright_kubevirt_iso_source_wait_retries }}"
+  delay: "{{ bootwright_kubevirt_iso_source_wait_delay }}"
+  when:
+    - bootwright_kubevirt_iso_source_shared | bool
+    - not (bootwright_kubevirt_iso_source_actor | default(false) | bool)
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+
+- name: Resolve KubeVirt agent ISO source DataVolume readiness
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_ready: >-
+      {{
+        (bootwright_kubevirt_iso_source_shared | bool)
+        and (
+          (bootwright_kubevirt_iso_source_current | default(false) | bool)
+          or ((bootwright_kubevirt_iso_source_upload | default({})).rc | default(1)) == 0
+          or (
+            ((bootwright_kubevirt_iso_source_wait | default({})).rc | default(1)) == 0
+            and ((bootwright_kubevirt_iso_source_wait | default({})).stdout | default('') | trim) == bootwright_kubevirt_iso_source_signature
+          )
+        )
+      }}
+  changed_when: false
+
+- name: Report unavailable shared KubeVirt agent ISO media
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: shared agent ISO
+      DataVolume {{ bootwright_kubevirt_iso_source_dv_name }} did not reach the current
+      generation on this run; falling back to a direct virtctl image-upload for this machine.
+  when:
+    - bootwright_kubevirt_iso_source_shared | bool
+    - not (bootwright_kubevirt_iso_source_ready | bool)
+
 - name: Stop KubeVirt VirtualMachine before replacing the agent ISO
   ansible.builtin.command:
     argv:
@@ -311,6 +584,82 @@
   register: bootwright_kubevirt_iso_delete
   changed_when: "'deleted' in (bootwright_kubevirt_iso_delete.stdout | default(''))"
 
+- name: Clone KubeVirt agent ISO DataVolume from the shared source
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - apply
+      - -f
+      - "-"
+    stdin: "{{ lookup('ansible.builtin.template', 'datavolume-agent-iso.yaml.j2') }}"
+  register: bootwright_kubevirt_iso_clone_apply
+  changed_when: "'unchanged' not in (bootwright_kubevirt_iso_clone_apply.stdout | default(''))"
+  when: bootwright_kubevirt_iso_source_ready | bool
+
+- name: Wait for the KubeVirt agent ISO DataVolume clone
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_dv_name }}"
+      - -o
+      - 'jsonpath={.status.phase}'
+  register: bootwright_kubevirt_iso_clone_phase
+  changed_when: false
+  failed_when: false
+  until: >-
+    (bootwright_kubevirt_iso_clone_phase.rc | default(1)) != 0
+    or (bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim) in ['Succeeded', 'Failed']
+  retries: "{{ bootwright_kubevirt_iso_clone_retries }}"
+  delay: "{{ bootwright_kubevirt_iso_clone_delay }}"
+  when: bootwright_kubevirt_iso_source_ready | bool
+
+- name: Resolve KubeVirt agent ISO DataVolume clone outcome
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_cloned: >-
+      {{
+        (bootwright_kubevirt_iso_source_ready | bool)
+        and ((bootwright_kubevirt_iso_clone_phase | default({})).rc | default(1)) == 0
+        and ((bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('') | trim) == 'Succeeded'
+      }}
+  changed_when: false
+
+- name: Report KubeVirt agent ISO clone fallback to direct upload
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: cloning the agent ISO
+      from shared DataVolume {{ bootwright_kubevirt_iso_source_dv_name }} did not reach Succeeded
+      (phase {{ (bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('<unavailable>') | trim }});
+      falling back to a direct virtctl image-upload for this machine.
+  when:
+    - bootwright_kubevirt_iso_source_ready | bool
+    - not (bootwright_kubevirt_iso_cloned | bool)
+
+- name: Remove the failed KubeVirt agent ISO DataVolume clone
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - delete
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_dv_name }}"
+      - --ignore-not-found=true
+  register: bootwright_kubevirt_iso_clone_delete
+  changed_when: "'deleted' in (bootwright_kubevirt_iso_clone_delete.stdout | default(''))"
+  when:
+    - bootwright_kubevirt_iso_source_ready | bool
+    - not (bootwright_kubevirt_iso_cloned | bool)
+
 - name: Build virtctl image-upload command
   ansible.builtin.set_fact:
     bootwright_kubevirt_upload_argv: >-
@@ -339,6 +688,7 @@
       }}
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when: not (bootwright_kubevirt_iso_cloned | bool)
 
 - name: Upload KubeVirt agent ISO DataVolume
   ansible.builtin.command:
@@ -353,6 +703,7 @@
       if (bootwright_kubevirt_host_cluster_ref | length) > 0
       else (bootwright_proxy_env | default({}))
     }}
+  when: not (bootwright_kubevirt_iso_cloned | bool)
 
 - name: Label KubeVirt agent ISO DataVolume as Bootwright-managed
   ansible.builtin.command:

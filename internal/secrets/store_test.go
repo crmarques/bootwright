@@ -147,6 +147,93 @@ func TestMaterializeRuntimeRemovesPartialPlaintextOnError(t *testing.T) {
 	}
 }
 
+func TestMaterializeRuntimeDecryptsMaterialsEncryptedUnderDifferentKeys(t *testing.T) {
+	store := NewContextStore("lab", t.TempDir())
+	older := MaterialKey{Name: "aaa-older", Role: MaterialPrimary}
+	newer := MaterialKey{Name: "zzz-newer", Role: MaterialPrimary}
+	if err := store.Write(older, []byte("older-secret\n")); err != nil {
+		t.Fatalf("Write older: %v", err)
+	}
+	metadata, err := store.ensureInitialized()
+	if err != nil {
+		t.Fatalf("ensureInitialized: %v", err)
+	}
+	rotatedKeyID, err := store.createKey()
+	if err != nil {
+		t.Fatalf("createKey: %v", err)
+	}
+	metadata.ActiveKeyID = rotatedKeyID
+	if err := store.writeMetadata(metadata); err != nil {
+		t.Fatalf("writeMetadata: %v", err)
+	}
+	if err := store.Write(newer, []byte("newer-secret\n")); err != nil {
+		t.Fatalf("Write newer: %v", err)
+	}
+	olderStatus, err := store.Inspect(older)
+	if err != nil {
+		t.Fatalf("Inspect older: %v", err)
+	}
+	newerStatus, err := store.Inspect(newer)
+	if err != nil {
+		t.Fatalf("Inspect newer: %v", err)
+	}
+	if olderStatus.KeyID == newerStatus.KeyID {
+		t.Fatalf("expected two distinct key IDs, both are %s", olderStatus.KeyID)
+	}
+	if olderStatus.env == nil || newerStatus.env == nil {
+		t.Fatal("Inspect must carry the parsed envelope so materialization does not re-read it")
+	}
+
+	targetDir := filepath.Join(t.TempDir(), "runtime-secrets")
+	if err := store.MaterializeRuntime(targetDir); err != nil {
+		t.Fatalf("MaterializeRuntime: %v", err)
+	}
+	for _, want := range []struct {
+		name    string
+		content string
+	}{{name: older.Name, content: "older-secret\n"}, {name: newer.Name, content: "newer-secret\n"}} {
+		data, readErr := os.ReadFile(filepath.Join(targetDir, want.name))
+		if readErr != nil {
+			t.Fatalf("read materialized %s: %v", want.name, readErr)
+		}
+		if string(data) != want.content {
+			t.Fatalf("materialized %s = %q, want %q", want.name, data, want.content)
+		}
+	}
+}
+
+func TestDecryptSessionZeroesCachedKeysOnClose(t *testing.T) {
+	store := NewContextStore("lab", t.TempDir())
+	key := MaterialKey{Name: "token", Role: MaterialPrimary}
+	if err := store.Write(key, []byte("value\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	session, err := store.newDecryptSession()
+	if err != nil {
+		t.Fatalf("newDecryptSession: %v", err)
+	}
+	status, err := store.Inspect(key)
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if _, err := session.readMaterial(status); err != nil {
+		t.Fatalf("readMaterial: %v", err)
+	}
+	cached := session.keys[status.KeyID]
+	if len(cached) != keySizeBytes {
+		t.Fatalf("cached key length = %d, want %d", len(cached), keySizeBytes)
+	}
+	session.close()
+	if len(session.keys) != 0 {
+		t.Fatalf("session retained %d cached key(s) after close", len(session.keys))
+	}
+	for i, b := range cached {
+		if b != 0 {
+			t.Fatalf("cached key byte %d = %d after close, want zeroed", i, b)
+		}
+	}
+}
+
 func TestContextStoreWithMaterializedDecryptsAndCleansUp(t *testing.T) {
 	store := NewContextStore("lab", t.TempDir())
 	runtimeDir := t.TempDir()

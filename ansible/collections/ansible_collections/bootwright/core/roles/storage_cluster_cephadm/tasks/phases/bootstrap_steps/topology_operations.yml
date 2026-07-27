@@ -1,12 +1,21 @@
 ---
-- name: Run rendered Ceph topology and storage operations
+- name: Run rendered Ceph topology and storage operations one container per operation
   ansible.builtin.include_tasks: ../../operations/run.yml
   loop: "{{ bootwright_ceph_operations }}"
   loop_control:
     loop_var: bootwright_ceph_op
     label: "{{ bootwright_ceph_op.name | default('<unnamed>') }}"
   when:
+    - not (bootwright_ceph_batch_enabled | default(false) | bool)
     - >-
       (bootwright_ceph_op.command | default([]) | length > 0)
       or (bootwright_ceph_op.idempotency.kind | default('') == 'stretch-crush-rule')
     - bootwright_ceph_op.phase | default('storage') in ['topology', 'storage']
+
+- name: Run rendered Ceph topology and storage operations in batches
+  ansible.builtin.include_tasks: ../../operations/step.yml
+  loop: "{{ bootwright_ceph_plan | default([]) | selectattr('group', 'equalto', 'main') | list }}"
+  loop_control:
+    loop_var: bootwright_ceph_step
+    label: "{{ bootwright_ceph_step.batch | default('operation ' ~ (bootwright_ceph_step.operation | default('') | string)) }}"
+  when: bootwright_ceph_batch_enabled | default(false) | bool

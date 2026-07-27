@@ -8,6 +8,31 @@
 - name: Probe existing managed OS state
   ansible.builtin.import_tasks: probe_existing.yml
 
+- name: Resolve managed OS source staging key
+  ansible.builtin.set_fact:
+    bootwright_os_source_stage_key: >-
+      {{
+        ((bootwright_machine_task_provider_host_name | default(inventory_hostname)) ~ '|' ~ bootwright_os_source_iso)
+        if (bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool)
+        else ''
+      }}
+  changed_when: false
+
+- name: Elect managed OS source staging host
+  ansible.builtin.set_fact:
+    bootwright_os_source_stage_host: "{{ bootwright_os_source_stage_hosts[bootwright_os_source_stage_key] }}"
+  vars:
+    bootwright_os_source_stage_keys: >-
+      {{
+        ansible_play_hosts
+        | map('extract', hostvars, 'bootwright_os_source_stage_key')
+        | map('default', '')
+        | reverse | list
+      }}
+    bootwright_os_source_stage_hosts: >-
+      {{ dict(bootwright_os_source_stage_keys | zip(ansible_play_hosts | reverse | list)) }}
+  changed_when: false
+
 - name: Install managed OS media when needed
   ansible.builtin.include_tasks: install_media.yml
   when: bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool

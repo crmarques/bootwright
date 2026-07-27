@@ -16,14 +16,20 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	ops = append(ops, cephObjectGatewayOperations(state, cluster)...)
 	ops = append(ops, nfsExportOperations(state, cluster)...)
 	ops = append(ops, cephStretchInternalPoolOperations(cluster)...)
-	return map[string]any{
+	plan, files := cephOperationPlan(ops)
+	doc := map[string]any{
 		"apiVersion": "bootwright.io/v1alpha1",
 		"kind":       "StorageOperations",
 		"metadata": map[string]any{
 			"name": cluster.Metadata.Name,
 		},
 		"operations": ops,
+		"plan":       plan,
 	}
+	if len(files) > 0 {
+		doc["batchFiles"] = files
+	}
+	return doc
 }
 
 func sortedKeys[V any](m map[string]V) []string {

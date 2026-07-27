@@ -3,3 +3,12 @@ bootwright_kubevirt_boot_iso_timeout: 1800
 bootwright_kubevirt_boot_vmi_timeout: 600
 bootwright_kubevirt_virtctl_insecure_upload: false
 bootwright_kubevirt_agent_iso_size: 4Gi
+bootwright_kubevirt_iso_source_wait_delay: 5
+bootwright_kubevirt_iso_source_wait_retries: >-
+  {{
+    (((bootwright_kubevirt_boot_iso_timeout | int) + 60)
+     / (bootwright_kubevirt_iso_source_wait_delay | int))
+    | round(0, 'ceil') | int
+  }}
+bootwright_kubevirt_iso_clone_retries: 120
+bootwright_kubevirt_iso_clone_delay: 5

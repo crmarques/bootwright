@@ -982,7 +982,7 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 		t.Fatalf("rgw export fsal = %v", fsal)
 	}
 
-	script := CephApplyScript(state, cluster, CephScriptOptions{LibFile: "lib.sh"})
+	script := mustApplyScript(t, state, cluster, CephScriptOptions{LibFile: "lib.sh"})
 	if !strings.Contains(script, "ceph nfs export apply nfs1 -i -") || !strings.Contains(script, "<<'BW_STDIN'") {
 		t.Fatalf("reproduction script must feed the export spec to a declarative apply via heredoc")
 	}
@@ -1151,11 +1151,53 @@ func TestStretchTiebreakerOmitsCRUSHLocation(t *testing.T) {
 	}
 }
 
+func TestWriteOperationRefusesToRenderAnOperationItCannotExpress(t *testing.T) {
+	op := operationWithIdempotency("storage", "reconcile-something-structural", "something-structural", "thing")
+	var b strings.Builder
+	err := writeOperation(&b, op)
+	if err == nil {
+		t.Fatalf("an operation with no native command must fail the render instead of emitting a silent no-op:\n%s", b.String())
+	}
+	for _, want := range []string{"reconcile-something-structural", "something-structural"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("render error must name the operation and its idempotency kind, got %v", err)
+		}
+	}
+}
+
+func TestWriteOperationKeepsTheGuardOnAStdinCarryingOperation(t *testing.T) {
+	op := operationWithIdempotency("object-gateway", "create-nfs-export-share", "nfs-export", "nfs|/share",
+		"ceph", "nfs", "export", "apply", "nfs", "-i", "-")
+	op["stdin"] = `{"pseudo":"/share"}`
+	var b strings.Builder
+	if err := writeOperation(&b, op); err != nil {
+		t.Fatalf("writeOperation: %v", err)
+	}
+	line := b.String()
+	if !strings.Contains(line, "bw_guarded nfs-export") {
+		t.Fatalf("a guarded operation must keep its guard when it also carries stdin:\n%s", line)
+	}
+	if !strings.Contains(line, "<<'BW_STDIN'\n{\"pseudo\":\"/share\"}\nBW_STDIN\n") {
+		t.Fatalf("a guarded operation must still receive its stdin document:\n%s", line)
+	}
+}
+
+func mustApplyScript(t *testing.T, state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) string {
+	t.Helper()
+	script, err := CephApplyScript(state, cluster, opts)
+	if err != nil {
+		t.Fatalf("CephApplyScript: %v", err)
+	}
+	return script
+}
+
 func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
 	op := operationWithIdempotency("object-gateway", "create-nfs-export-lab-nfs-shared", "nfs-export", "lab-nfs|/shared",
 		"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", "lab-nfs", "--pseudo-path", "/shared", "--fsname", "cephfs", "--path", "/")
 	var b strings.Builder
-	writeOperation(&b, op)
+	if err := writeOperation(&b, op); err != nil {
+		t.Fatalf("writeOperation: %v", err)
+	}
 	line := b.String()
 	if strings.Contains(line, "bw_guarded nfs-export lab-nfs|/shared") {
 		t.Fatalf("nfs-export guard key '|' is unquoted and parses as a shell pipe:\n%s", line)
@@ -1181,14 +1223,14 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 		}},
 	}
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
-	script := CephApplyScript(state, cluster, CephScriptOptions{LibFile: "lib.sh", BootstrapSpecFile: "spec.yaml", LateServicesSpecFile: "late.yaml"})
+	script := mustApplyScript(t, state, cluster, CephScriptOptions{LibFile: "lib.sh", BootstrapSpecFile: "spec.yaml", LateServicesSpecFile: "late.yaml"})
 	if !strings.Contains(script, "[todo]") || !strings.Contains(script, "mgmt-gateway") {
 		t.Fatalf("apply.sh must warn about the omitted secret-bearing mgmt-gateway:\n%s", script)
 	}
 
 	plainCluster := cluster
 	plainCluster.Spec.Ceph.Management = &v1alpha1.StorageCephManagement{DNSName: "dash.example.com", Ingress: mgmt.Ingress}
-	plain := CephApplyScript(v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{plainCluster}}, plainCluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
+	plain := mustApplyScript(t, v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{plainCluster}}, plainCluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
 	if strings.Contains(plain, "[todo]") && strings.Contains(plain, "mgmt-gateway") {
 		t.Fatalf("no warning must fire when the gateway is secret-free and in the bundle:\n%s", plain)
 	}

@@ -6,6 +6,8 @@
     bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_kubevirt_root_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root"
     bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-agent-iso"
+    bootwright_kubevirt_iso_source_dv_name: "{{ bootwright_current_cluster.name }}-agent-iso-source"
+    bootwright_kubevirt_cluster_scope_teardown: "{{ bootwright_destroy_machine_scope is not defined }}"
   changed_when: false
 
 - name: Validate KubeVirt destroy inputs
@@ -167,9 +169,15 @@
           - "{{ item }}"
           - -o
           - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
-      loop:
-        - "{{ bootwright_kubevirt_root_dv_name }}"
-        - "{{ bootwright_kubevirt_iso_dv_name }}"
+      loop: >-
+        {{
+          [bootwright_kubevirt_root_dv_name, bootwright_kubevirt_iso_dv_name]
+          + (
+            [bootwright_kubevirt_iso_source_dv_name]
+            if (bootwright_kubevirt_cluster_scope_teardown | bool)
+            else []
+          )
+        }}
       register: bootwright_kubevirt_dv_owner
       changed_when: false
       failed_when: false
@@ -240,6 +248,29 @@
         | selectattr('rc', 'defined')
         | selectattr('rc', 'equalto', 0)
         | list | length > 0
+
+    - name: Delete the shared KubeVirt agent ISO source DataVolume
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - delete
+          - datavolume
+          - "{{ bootwright_kubevirt_iso_source_dv_name }}"
+          - --ignore-not-found=true
+      register: bootwright_kubevirt_iso_source_delete
+      changed_when: "'deleted' in (bootwright_kubevirt_iso_source_delete.stdout | default(''))"
+      when:
+        - bootwright_kubevirt_cluster_scope_teardown | bool
+        - >-
+          bootwright_kubevirt_dv_owner.results
+          | selectattr('item', 'equalto', bootwright_kubevirt_iso_source_dv_name)
+          | selectattr('rc', 'defined')
+          | selectattr('rc', 'equalto', 0)
+          | list | length > 0
 
 - name: Remove KubeVirt machine ownership record
   ansible.builtin.include_role:

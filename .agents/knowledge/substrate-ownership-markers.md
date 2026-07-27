@@ -62,6 +62,28 @@ dispatches each machine's `bootwright_managed_os_component.substrateDestroyRole`
 `bootwright_destroy_cluster_scope`. Role destroys are idempotent, so substrates
 also covered by recorded resources (libvirt) tolerate the double pass.
 
+**A cluster-scoped gate inside a per-machine role never fires:** the libvirt
+network `bw-<cluster>` is one object shared by every machine of the cluster, but
+`machine_substrate_libvirt/tasks/destroy.yml` is dispatched once per machine-task
+host. While the probe, ownership refusal, removal, and record deletion lived
+there, whichever host won removed the network first; every later host's
+`virsh net-dumpxml` then returned "Network not found", which the conclusive-probe
+assert legitimately ACCEPTS, so `bootwright_libvirt_network_present` was false and
+the ownership refusal was SKIPPED rather than evaluated — a fail-closed gate that
+never ran on the pass that actually removed the network. The probe and both
+asserts now run once per cluster in
+`playbooks/tasks/machine_infra/prepare_destroy_cluster.yml` (pre-substrate,
+`strategy: linear`, so a refusal fails the host before any teardown), and only
+that gate may append to `bootwright_libvirt_network_removals`, which the
+POST-substrate records play consumes. The removal cannot move into the
+preparation play: the domains are still defined and attached at that point.
+Guarded by TestLibvirtNetworkDestroyGateIsClusterScoped and
+TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown. Because the
+preparation play only iterates clusters the host holds machines for, its
+component/cluster resolution must span `bootwright_clusters` AND
+`bootwright_managed_os_install_groups` or a libvirt-hosted storage cluster loses
+the gate entirely.
+
 **Bastion containers: ownership by live labels, not per-context records:** the
 bastion runs ONE global podman store shared by every context while ownership
 dirs are per-context, so the infra-component apply-mode gate

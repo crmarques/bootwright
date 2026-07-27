@@ -1,0 +1,28 @@
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: {{ bootwright_kubevirt_iso_dv_name }}
+  namespace: {{ bootwright_kubevirt_namespace }}
+  annotations:
+    cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+  labels:
+    bootwright.io/context: {{ bootwright_kubevirt_context_name }}
+    bootwright.io/cluster: {{ bootwright_current_cluster.name }}
+    bootwright.io/node: {{ bootwright_component.name }}
+    bootwright.io/role: agent-iso
+    bootwright.io/managed-by: bootwright
+spec:
+  source:
+    pvc:
+      namespace: {{ bootwright_kubevirt_namespace }}
+      name: {{ bootwright_kubevirt_iso_source_dv_name }}
+  pvc:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: {{ bootwright_kubevirt_agent_iso_size }}
+{% if bootwright_kubevirt_storage_class | default('') | length > 0 %}
+    storageClassName: {{ bootwright_kubevirt_storage_class }}
+{% endif %}

@@ -77,6 +77,8 @@ type RunLedger struct {
 	EndedAt   *time.Time        `json:"endedAt,omitempty"`
 	Limits    ConcurrencyLimits `json:"limits"`
 	Tasks     []TaskLedgerEntry `json:"tasks"`
+
+	taskIndex map[string]int
 }
 
 type RunLease struct {
@@ -139,6 +141,12 @@ func NewRunLedger(runID, target, scope string, limits ConcurrencyLimits, tasks [
 			entries[i].Status = TaskStatusPending
 		}
 	}
+	index := make(map[string]int, len(entries))
+	for i := range entries {
+		if _, seen := index[entries[i].ID]; !seen {
+			index[entries[i].ID] = i
+		}
+	}
 	return RunLedger{
 		RunID:     runID,
 		Target:    target,
@@ -147,6 +155,7 @@ func NewRunLedger(runID, target, scope string, limits ConcurrencyLimits, tasks [
 		StartedAt: now.UTC(),
 		Limits:    limits,
 		Tasks:     entries,
+		taskIndex: index,
 	}
 }
 
@@ -317,29 +326,42 @@ func AcquireRunLease(runsDir string, lease RunLease, now time.Time) error {
 	return nil
 }
 
-func SaveRunLedger(runsDir string, ledger RunLedger) error {
-	path := LedgerPath(runsDir)
+func runLedgerBytes(ledger RunLedger) ([]byte, error) {
 	data, err := json.MarshalIndent(ledger, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
+}
+
+func SaveRunLedger(runsDir string, ledger RunLedger) error {
+	data, err := runLedgerBytes(ledger)
 	if err != nil {
 		return fmt.Errorf("encode apply ledger: %w", err)
 	}
-	data = append(data, '\n')
-	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
+	return saveRunLedgerBytes(runsDir, data)
+}
+
+func saveRunLedgerBytes(runsDir string, data []byte) error {
+	if err := safefs.WriteFileEnsuringDir(LedgerPath(runsDir), data, 0o600); err != nil {
 		return fmt.Errorf("write apply ledger: %w", err)
 	}
 	return nil
 }
 
 func ArchiveRunLedger(runsDir string, ledger RunLedger) error {
-	if strings.TrimSpace(ledger.RunID) == "" {
-		return fmt.Errorf("archive run ledger: run id is empty")
-	}
-	path := filepath.Join(runsDir, "history", ledger.RunID, "ledger.json")
-	data, err := json.MarshalIndent(ledger, "", "  ")
+	data, err := runLedgerBytes(ledger)
 	if err != nil {
 		return fmt.Errorf("encode run ledger archive: %w", err)
 	}
-	data = append(data, '\n')
+	return archiveRunLedgerBytes(runsDir, ledger.RunID, data)
+}
+
+func archiveRunLedgerBytes(runsDir, runID string, data []byte) error {
+	if strings.TrimSpace(runID) == "" {
+		return fmt.Errorf("archive run ledger: run id is empty")
+	}
+	path := filepath.Join(runsDir, "history", runID, "ledger.json")
 	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("write run ledger archive: %w", err)
 	}
@@ -501,12 +523,22 @@ func (l RunLedger) ProgressCounts() []ProgressCount {
 }
 
 func (l RunLedger) Task(id string) (TaskLedgerEntry, bool) {
-	for _, task := range l.Tasks {
-		if task.ID == id {
-			return task, true
-		}
+	if i, ok := l.taskPosition(id); ok {
+		return l.Tasks[i], true
 	}
 	return TaskLedgerEntry{}, false
+}
+
+func (l RunLedger) taskPosition(id string) (int, bool) {
+	if i, ok := l.taskIndex[id]; ok && i >= 0 && i < len(l.Tasks) && l.Tasks[i].ID == id {
+		return i, true
+	}
+	for i := range l.Tasks {
+		if l.Tasks[i].ID == id {
+			return i, true
+		}
+	}
+	return -1, false
 }
 
 func (l *RunLedger) MarkReady(id string) {
@@ -664,11 +696,8 @@ func (l RunLedger) tasksByStatus(status TaskStatus) []TaskLedgerEntry {
 }
 
 func (l *RunLedger) updateTask(id string, fn func(*TaskLedgerEntry)) {
-	for i := range l.Tasks {
-		if l.Tasks[i].ID == id {
-			fn(&l.Tasks[i])
-			return
-		}
+	if i, ok := l.taskPosition(id); ok {
+		fn(&l.Tasks[i])
 	}
 }
 

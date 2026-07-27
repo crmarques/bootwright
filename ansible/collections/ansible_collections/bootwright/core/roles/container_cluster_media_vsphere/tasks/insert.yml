@@ -95,6 +95,19 @@
       ansible.builtin.stat:
         path: "{{ bootwright_vsphere_media_uploaded_marker_path }}"
       register: bootwright_vsphere_media_uploaded_marker
+      when: bootwright_vsphere_media_upload_elected | bool
+
+    - name: Resolve vSphere virtual media upload requirement
+      ansible.builtin.set_fact:
+        bootwright_vsphere_media_upload_required: >-
+          {{
+            (bootwright_vsphere_media_upload_elected | bool)
+            and (
+              not (bootwright_vsphere_media_uploaded_marker.stat.exists | default(false))
+              or ((bootwright_vsphere_media_stage_stat.stat.mtime | default(0)) > (bootwright_vsphere_media_uploaded_marker.stat.mtime | default(0)))
+            )
+          }}
+      changed_when: false
 
     - name: Upload vSphere virtual media to the datastore
       community.vmware.vsphere_copy:
@@ -112,9 +125,7 @@
         ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
       throttle: 1
       no_log: "{{ bootwright_no_log | default(true) | bool }}"
-      when: >-
-        not (bootwright_vsphere_media_uploaded_marker.stat.exists | default(false))
-        or ((bootwright_vsphere_media_stage_stat.stat.mtime | default(0)) > (bootwright_vsphere_media_uploaded_marker.stat.mtime | default(0)))
+      when: bootwright_vsphere_media_upload_required | bool
 
     - name: Mark vSphere virtual media uploaded
       ansible.builtin.copy:
@@ -123,9 +134,35 @@
         owner: root
         group: root
         mode: "0600"
-      when: >-
-        not (bootwright_vsphere_media_uploaded_marker.stat.exists | default(false))
-        or ((bootwright_vsphere_media_stage_stat.stat.mtime | default(0)) > (bootwright_vsphere_media_uploaded_marker.stat.mtime | default(0)))
+      when: bootwright_vsphere_media_upload_required | bool
+
+    - name: Wait for the elected uploader to publish the vSphere datastore media
+      ansible.builtin.wait_for:
+        path: "{{ bootwright_vsphere_media_uploaded_marker_path }}"
+        state: present
+        timeout: "{{ bootwright_vsphere_media_upload_wait_timeout }}"
+        sleep: "{{ bootwright_vsphere_media_upload_wait_interval_seconds }}"
+      when: not (bootwright_vsphere_media_upload_elected | bool)
+
+    - name: Probe the published vSphere datastore media marker
+      ansible.builtin.stat:
+        path: "{{ bootwright_vsphere_media_uploaded_marker_path }}"
+      register: bootwright_vsphere_media_published_marker
+      when: not (bootwright_vsphere_media_upload_elected | bool)
+
+    - name: Assert the published vSphere datastore media is not older than the staged media
+      ansible.builtin.assert:
+        that:
+          - bootwright_vsphere_media_published_marker.stat.exists | default(false)
+          - (bootwright_vsphere_media_published_marker.stat.mtime | default(0)) >= (bootwright_vsphere_media_stage_stat.stat.mtime | default(0))
+        fail_msg: >-
+          The upload marker {{ bootwright_vsphere_media_uploaded_marker_path }} for
+          [{{ bootwright_vsphere_media_datastore }}] {{ bootwright_vsphere_media_datastore_path }}
+          is older than the staged media {{ bootwright_vsphere_media_stage_path }}, so the
+          datastore copy this machine would boot is stale. The machine elected to upload
+          for this datastore is re-uploading or failed; re-run the boot stage once it
+          finishes instead of attaching superseded media.
+      when: not (bootwright_vsphere_media_upload_elected | bool)
 
     - name: Record vSphere virtual media ownership
       ansible.builtin.include_role:

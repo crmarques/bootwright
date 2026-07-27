@@ -106,10 +106,14 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	finishRun := func(status RunStatus) error {
 		stopLeaseHeartbeat()
 		ledger.Finish(status, time.Now())
-		if err := SaveRunLedger(runsDir, ledger); err != nil {
+		data, err := runLedgerBytes(ledger)
+		if err != nil {
+			return fmt.Errorf("encode apply ledger: %w", err)
+		}
+		if err := saveRunLedgerBytes(runsDir, data); err != nil {
 			return err
 		}
-		if err := ArchiveRunLedger(runsDir, ledger); err != nil {
+		if err := archiveRunLedgerBytes(runsDir, ledger.RunID, data); err != nil {
 			return err
 		}
 		if err := RemoveRunLeaseIfOwner(runsDir, runID); err != nil && !isLeaseNotOwned(err) {
@@ -142,7 +146,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	parallelism := limits.Parallelism
 	redfishLimit := limits.ParallelismRedfish
 	perHostLimit := limits.ParallelismPerHost
-	events := make(chan applyTaskResult)
+	events := make(chan applyTaskResult, len(tasks))
 	started := map[string]bool{}
 	runningResources := map[string]int{}
 	runningHostSlots := map[string]int{}
@@ -188,10 +192,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			logPath := TaskLogPath(runsDir, ledger.RunID, task.Entry.ID)
 			ledger.MarkReady(task.Entry.ID)
 			ledger.MarkRunning(task.Entry.ID, logPath, time.Now())
-			if err := SaveRunLedger(runsDir, ledger); err != nil && fatalErr == nil {
-				fatalErr = err
-				cancel()
-			}
 			if cluster := task.Entry.Cluster; cluster != "" && !clusterInitiated[cluster] {
 				clusterInitiated[cluster] = true
 				logs.writeRunLine(applyClusterInitiatedLine(time.Now(), cluster, ApplyClusterLogPath(runsDir, ledger.RunID, cluster)))
@@ -208,6 +208,10 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
 				events <- executor(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
+			if err := SaveRunLedger(runsDir, ledger); err != nil && fatalErr == nil {
+				fatalErr = err
+				cancel()
+			}
 		}
 		if fatalErr != nil && running == 0 {
 			break

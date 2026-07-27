@@ -68,13 +68,22 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		}
 	}
 	expandedStorage := map[string]bool{}
-	for _, task := range tasks {
+	for i := range tasks {
+		task := tasks[i]
 		kind, key, label := objectIdentity(task)
-		class, err := classifyApplyTaskState(task, runsDir)
+		desiredHash, err := (&tasks[i]).DesiredHash()
 		if err != nil {
 			return nil, err
 		}
-		reconcilable, err := taskDriftReconcilable(task, runsDir, class)
+		record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+		if err != nil {
+			return nil, err
+		}
+		class := ConvergeSafetyMissing
+		if found {
+			class = ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner)
+		}
+		reconcilable, err := taskDriftReconcilableWithRecord(task, record, found, class, desiredHash)
 		if err != nil {
 			return nil, err
 		}
@@ -111,20 +120,33 @@ func taskDriftReconcilable(task ApplyTask, runsDir string, class ConvergeSafetyC
 	if overrideReconfigureOnlyKinds[task.Entry.Kind] {
 		return true, nil
 	}
-	return applyTaskReconcilableDrift(task, runsDir)
-}
-
-func applyTaskReconcilableDrift(task ApplyTask, runsDir string) (bool, error) {
-	structuralHash, err := ApplyTaskStructuralHash(task)
-	if err != nil {
+	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+	if err != nil || !found {
 		return false, err
 	}
 	desiredHash, err := ApplyTaskDesiredHash(task)
 	if err != nil {
 		return false, err
 	}
-	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
-	if err != nil || !found {
+	return applyTaskReconcilableDrift(task, record, desiredHash)
+}
+
+func taskDriftReconcilableWithRecord(task ApplyTask, record ConvergeSafetyRecord, found bool, class ConvergeSafetyClassification, desiredHash string) (bool, error) {
+	if class != ConvergeSafetyDrift {
+		return false, nil
+	}
+	if overrideReconfigureOnlyKinds[task.Entry.Kind] {
+		return true, nil
+	}
+	if !found {
+		return false, nil
+	}
+	return applyTaskReconcilableDrift(task, record, desiredHash)
+}
+
+func applyTaskReconcilableDrift(task ApplyTask, record ConvergeSafetyRecord, desiredHash string) (bool, error) {
+	structuralHash, err := ApplyTaskStructuralHash(task)
+	if err != nil {
 		return false, err
 	}
 	if structuralHash == "" {

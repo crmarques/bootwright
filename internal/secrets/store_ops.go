@@ -264,6 +264,15 @@ func (s *ContextStore) MaterializeSelected(targetDir string, names []string) (er
 	})
 }
 
+func (s *ContextStore) MaterializeReferenced(targetDir string, referenced func(string) bool) error {
+	if referenced == nil {
+		return errors.New("materialized secret reference predicate is nil")
+	}
+	return s.materialize(targetDir, func(material MaterialStatus) bool {
+		return referenced(material.Key.Name)
+	})
+}
+
 func (s *ContextStore) WithMaterialized(key MaterialKey, parentDir string, fn func(string) error) error {
 	data, err := s.Read(key)
 	if err != nil {
@@ -328,6 +337,12 @@ func (s *ContextStore) materialize(targetDir string, include func(MaterialStatus
 			_ = os.RemoveAll(targetDir)
 		}
 	}()
+	var session *decryptSession
+	defer func() {
+		if session != nil {
+			session.close()
+		}
+	}()
 	for _, material := range materials {
 		if material.State == MaterialStateMissing || !include(material) {
 			continue
@@ -335,13 +350,20 @@ func (s *ContextStore) materialize(targetDir string, include func(MaterialStatus
 		if material.State != MaterialStateEncrypted {
 			return fmt.Errorf("refusing to materialize %s material at %s: %s", material.State, material.Path, material.Message)
 		}
-		data, err := s.Read(material.Key)
-		if err != nil {
-			return err
+		if session == nil {
+			opened, openErr := s.newDecryptSession()
+			if openErr != nil {
+				return openErr
+			}
+			session = opened
+		}
+		data, readErr := session.readMaterial(material)
+		if readErr != nil {
+			return readErr
 		}
 		target := contextMaterialPath(material.Key.Name, targetDir, material.Key.Role)
-		if err := safefs.AtomicWriteFile(target, data, 0o600); err != nil {
-			return err
+		if writeErr := safefs.AtomicWriteFile(target, data, 0o600); writeErr != nil {
+			return writeErr
 		}
 	}
 	return nil

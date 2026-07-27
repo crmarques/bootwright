@@ -118,6 +118,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/step.yml",
 	}
 	for _, path := range paths {
 		lines := strings.Split(readRepoFile(t, path), "\n")
@@ -136,6 +137,9 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		t.Fatalf("rendered Ceph operations must run inside cephadm shell")
 	}
 	for path, mountedPaths := range map[string][]string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/step.yml": {
+			"/mnt/{{ bootwright_ceph_step.batch }}",
+		},
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml": {
 			"/mnt/stretch-crushmap.bin",
 			"/mnt/stretch-crushmap-new.bin",
@@ -164,6 +168,227 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 				t.Fatalf("%s must address staged input as %s inside cephadm shell", path, mountedPath)
 			}
 		}
+	}
+}
+
+func TestStorageOperationBatchesNeverReplaceTheOverridePath(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
+	support := readAnsibleTasks(t, base+"phases/bootstrap_steps/batch_support.yml")
+	probe := support[findAnsibleTask(t, support, "Probe the Ceph container for the batched operation interpreter")]
+	if got := fmt.Sprint(probe["ansible.builtin.command"]); !strings.Contains(got, "command -v python3") {
+		t.Fatalf("the batch path must preflight the interpreter its guards need, got %v", probe["ansible.builtin.command"])
+	}
+	if probe["failed_when"] != false || probe["changed_when"] != false {
+		t.Fatalf("the interpreter preflight must be a read-only probe, got changed_when=%v failed_when=%v", probe["changed_when"], probe["failed_when"])
+	}
+	decide := support[findAnsibleTask(t, support, "Decide whether the rendered Ceph operations run one container per phase")]
+	facts, ok := decide["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("batch enablement must be a set_fact, got %v", decide)
+	}
+	enabled := fmt.Sprint(facts["bootwright_ceph_batch_enabled"])
+	for _, want := range []string{"!= 'override'", "bootwright_ceph_batch_probe.rc", "bootwright_ceph_batch_files"} {
+		if !strings.Contains(enabled, want) {
+			t.Fatalf("batching must be withheld from the --converge-drifted rebuild path and from a container without python3 (missing %q), got %v", want, enabled)
+		}
+	}
+
+	for _, item := range []struct {
+		file    string
+		perOp   string
+		batched string
+		group   string
+		phases  []string
+	}{
+		{
+			file:    "phases/bootstrap_steps/topology_operations.yml",
+			perOp:   "Run rendered Ceph topology and storage operations one container per operation",
+			batched: "Run rendered Ceph topology and storage operations in batches",
+			group:   "'main'",
+			phases:  []string{"topology", "storage"},
+		},
+		{
+			file:    "phases/bootstrap_steps/late_operations.yml",
+			perOp:   "Run rendered Ceph late operations one container per operation",
+			batched: "Run rendered Ceph late operations in batches",
+			group:   "'late'",
+			phases:  []string{"object-gateway", "late-topology"},
+		},
+	} {
+		tasks := readAnsibleTasks(t, base+item.file)
+		perOp := tasks[findAnsibleTask(t, tasks, item.perOp)]
+		if got := fmt.Sprint(perOp["when"]); !strings.Contains(got, "not (bootwright_ceph_batch_enabled") {
+			t.Fatalf("%s: the per-operation loop must remain the fallback path, got when=%v", item.file, perOp["when"])
+		}
+		for _, phase := range item.phases {
+			if got := fmt.Sprint(perOp["when"]); !strings.Contains(got, phase) {
+				t.Fatalf("%s: the per-operation loop must keep its phase filter %q, got when=%v", item.file, phase, perOp["when"])
+			}
+		}
+		batched := tasks[findAnsibleTask(t, tasks, item.batched)]
+		if got := fmt.Sprint(batched["when"]); !strings.Contains(got, "bootwright_ceph_batch_enabled") || strings.Contains(got, "not (bootwright_ceph_batch_enabled") {
+			t.Fatalf("%s: the batched path must run only when batching is enabled, got when=%v", item.file, batched["when"])
+		}
+		loop := fmt.Sprint(batched["loop"])
+		if !strings.Contains(loop, "bootwright_ceph_plan") || !strings.Contains(loop, item.group) {
+			t.Fatalf("%s: the batched path must walk the rendered plan for its own phase group, got loop=%v", item.file, batched["loop"])
+		}
+	}
+
+	step := readAnsibleTasks(t, base+"operations/step.yml")
+	batch := step[findAnsibleTask(t, step, "Run a batch of rendered Ceph operations")]
+	if got := fmt.Sprint(batch["when"]); !strings.Contains(got, "bootwright_ceph_step.batch is defined") {
+		t.Fatalf("a plan step must dispatch on whether it names a batch, got when=%v", batch["when"])
+	}
+	inner := nestedAnsibleTasks(t, batch, "block")
+	run := inner[findAnsibleTask(t, inner, "Run the staged batch of rendered Ceph operations")]
+	if run["failed_when"] != false {
+		t.Fatalf("the batch must be evaluated by the assertion that names the failing operation, got failed_when=%v", run["failed_when"])
+	}
+	assertion, ok := inner[findAnsibleTask(t, inner, "Require every operation in the batch to have applied")]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the batch must fail closed through an assertion")
+	}
+	if got := fmt.Sprint(assertion["that"]); !strings.Contains(got, "bootwright_ceph_batch_run.rc") {
+		t.Fatalf("the batch assertion must fail on a non-zero batch exit, got that=%v", assertion["that"])
+	}
+	if got := fmt.Sprint(assertion["fail_msg"]); !strings.Contains(got, "BOOTWRIGHT_CEPH_OP_FAILED") {
+		t.Fatalf("the batch assertion must name the failing operation from the marker the batch echoes, got fail_msg=%v", got)
+	}
+	unbatched := step[findAnsibleTask(t, step, "Run a rendered Ceph operation that must not be batched")]
+	if got := fmt.Sprint(unbatched["ansible.builtin.include_tasks"]); !strings.Contains(got, "run.yml") {
+		t.Fatalf("an unbatched plan step must go through the per-operation runner, got %v", unbatched)
+	}
+	if got := fmt.Sprint(unbatched["vars"]); !strings.Contains(got, "bootwright_ceph_operations[bootwright_ceph_step.operation") {
+		t.Fatalf("an unbatched plan step must resolve its operation from the rendered list, got vars=%v", unbatched["vars"])
+	}
+
+	stage := readAnsibleTasks(t, base+"phases/bootstrap_steps/stage_inputs.yml")
+	staged := stage[findAnsibleTask(t, stage, "Stage the batched Ceph operation scripts")]
+	copyTask, ok := staged["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("batch scripts must be staged with copy, got %v", staged)
+	}
+	if got := fmt.Sprint(copyTask["dest"]); !strings.Contains(got, "bootwright_ceph_remote_work_dir") {
+		t.Fatalf("batch scripts must be staged into the work directory the cleanup step removes, got dest=%v", copyTask["dest"])
+	}
+	if got := fmt.Sprint(staged["loop"]); !strings.Contains(got, "bootwright_ceph_batch_files") {
+		t.Fatalf("batch scripts must come from the rendered manifest, got loop=%v", staged["loop"])
+	}
+}
+
+func TestStorageManagementRestartsOnlyTheHostsRunningAManager(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	dump := tasks[findAnsibleTask(t, tasks, "Read the Ceph configuration database for the dashboard settings")]
+	if got := fmt.Sprint(dump["ansible.builtin.command"]); !strings.Contains(got, "dump") {
+		t.Fatalf("the dashboard SSL and port settings must come from one configuration read, got %v", dump["ansible.builtin.command"])
+	}
+	for _, gone := range []string{"Check current Ceph dashboard SSL setting", "Check current Ceph dashboard HTTP port setting"} {
+		if findAnsibleTaskIndex(tasks, gone) >= 0 {
+			t.Fatalf("%q must be served by the merged configuration read, not its own container", gone)
+		}
+	}
+	resolve, ok := tasks[findAnsibleTask(t, tasks, "Resolve the live Ceph dashboard SSL and HTTP port settings")]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the merged configuration read must resolve both settings in a set_fact")
+	}
+	for name, want := range map[string]string{
+		"bootwright_ceph_dashboard_ssl_current":  "mgr/dashboard/ssl",
+		"bootwright_ceph_dashboard_port_current": "mgr/dashboard/server_port",
+	} {
+		if got := fmt.Sprint(resolve[name]); !strings.Contains(got, want) {
+			t.Fatalf("%s must be read from %q, got %v", name, want, resolve[name])
+		}
+	}
+
+	hosts, ok := tasks[findAnsibleTask(t, tasks, "Resolve the storage nodes that actually run a Ceph manager daemon")]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the manager restart must resolve its hosts in a set_fact")
+	}
+	expr := fmt.Sprint(hosts["bootwright_ceph_mgr_restart_hosts"])
+	for _, want := range []string{"cephHostname", "inventoryHost", "bootwright_ceph_mgr_daemon_hosts"} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("manager hosts must be derived by matching declared nodes against the live manager daemons (missing %q), got %v", want, expr)
+		}
+	}
+	restart := tasks[findAnsibleTask(t, tasks, "Restart the Ceph manager systemd units so every dashboard releases its ports")]
+	if got := fmt.Sprint(restart["loop"]); !strings.Contains(got, "bootwright_ceph_mgr_restart_hosts") {
+		t.Fatalf("the manager restart must iterate only the hosts that run a manager, got loop=%v", restart["loop"])
+	}
+	if got := fmt.Sprint(restart["loop"]); strings.Contains(got, "bootwright_selected_storage_cluster.hosts") {
+		t.Fatalf("the manager restart must not iterate every storage node, got loop=%v", restart["loop"])
+	}
+
+	findAnsibleTask(t, tasks, "Check which endpoint the Ceph dashboard currently serves")
+	turnover, ok := tasks[findAnsibleTask(t, tasks, "Assert every Ceph manager daemon restarted onto the new dashboard settings")]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the manager turnover assertion must survive the narrowed restart loop")
+	}
+	if got := fmt.Sprint(turnover["that"]); !strings.Contains(got, "bootwright_ceph_mgr_restart_complete") {
+		t.Fatalf("the manager turnover assertion must still gate on the recorded verdict, got that=%v", turnover["that"])
+	}
+	if got := fmt.Sprint(turnover["fail_msg"]); !strings.Contains(got, "bootwright_ceph_mgr_restart_hosts") {
+		t.Fatalf("a narrowed restart that matched no host must be visible in the failure, got fail_msg=%v", got)
+	}
+}
+
+func TestStoragePreflightRefusesUnprobeableDevicesFromPerDeviceExitStatus(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/main.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	sweep := tasks[findAnsibleTask(t, tasks, "Probe declared storage OSD devices for signatures")]
+	shell, ok := sweep["ansible.builtin.shell"].(map[string]any)
+	if !ok {
+		t.Fatalf("the device sweep must be a shell loop, got %v", sweep)
+	}
+	cmd := fmt.Sprint(shell["cmd"])
+	for _, want := range []string{
+		`for device in "${devices[@]}"`,
+		`wipefs --no-act --noheadings "$device"`,
+		"rc=$?",
+		`"$device" "$rc"`,
+	} {
+		if !strings.Contains(cmd, want) {
+			t.Fatalf("the device sweep must emit a per-device exit status (missing %q): one exit status for a set of devices turns \"could not probe\" into \"clean\" and a refusal into a wipe:\n%s", want, cmd)
+		}
+	}
+	if strings.Contains(cmd, `wipefs --no-act --noheadings "${devices[@]}"`) {
+		t.Fatalf("wipefs must never be handed the whole device set: its single exit status cannot say which device could not be probed:\n%s", cmd)
+	}
+	if _, looped := sweep["loop"]; looped {
+		t.Fatalf("the device sweep must not also loop in ansible, got loop=%v", sweep["loop"])
+	}
+
+	classify, ok := tasks[findAnsibleTask(t, tasks, "Classify the declared storage OSD device probes")]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the sweep output must be classified in a set_fact")
+	}
+	if got := fmt.Sprint(classify["bootwright_preflight_storage_device_probes"]); !strings.Contains(got, "from_json") {
+		t.Fatalf("each probed device must be recovered as its own record, got %v", classify["bootwright_preflight_storage_device_probes"])
+	}
+	unprobeable, ok := tasks[findAnsibleTask(t, tasks, "Resolve declared storage OSD devices that could not be probed")]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("unprobeable devices must be resolved in a set_fact")
+	}
+	if got := fmt.Sprint(unprobeable["bootwright_preflight_unprobeable_probes"]); !strings.Contains(got, "rejectattr('rc', 'equalto', 0)") {
+		t.Fatalf("a device whose probe did not exit zero must land in the unprobeable list, got %v", unprobeable["bootwright_preflight_unprobeable_probes"])
+	}
+	refuse, ok := tasks[findAnsibleTask(t, tasks, "Refuse declared storage OSD devices that could not be probed")]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("unprobeable devices must trip an assertion")
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_preflight_unprobeable_probes") || !strings.Contains(got, "length == 0") {
+		t.Fatalf("the refusal must fail closed on any unprobeable device, got that=%v", refuse["that"])
+	}
+
+	repos := tasks[findAnsibleTask(t, tasks, "Check storage package repositories")]
+	if got := fmt.Sprint(repos["ansible.builtin.command"]); strings.Contains(got, "--cacheonly") {
+		t.Fatalf("the repository check exit status IS the reachability gate; --cacheonly downgrades it to \"a repo file exists\", got %v", repos["ansible.builtin.command"])
+	}
+	if _, ok := repos["failed_when"]; ok {
+		t.Fatalf("the repository check must keep failing on its own exit status, got failed_when=%v", repos["failed_when"])
 	}
 }
 
@@ -1398,9 +1623,19 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	seedContextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_seed.yml")
 	seedGatherIdx := findAnsibleTask(t, seedContextTasks, "Gather seed OS facts for provider rendering")
 	seedProviderIdx := findAnsibleTask(t, seedContextTasks, "Resolve managed Ceph provider context on the seed host")
-	operationsIdx := findAnsibleTask(t, seedContextTasks, "Load rendered Ceph operations")
-	if !(seedGatherIdx < seedProviderIdx && seedProviderIdx < operationsIdx) {
+	manifestIdx := findAnsibleTask(t, seedContextTasks, "Load the rendered Ceph operation manifest")
+	operationsIdx := findAnsibleTask(t, seedContextTasks, "Resolve rendered Ceph operations, execution plan and batch scripts")
+	if !(seedGatherIdx < seedProviderIdx && seedProviderIdx < manifestIdx && manifestIdx < operationsIdx) {
 		t.Fatalf("seed context must gather OS facts before provider templates, then load bootstrap operations")
+	}
+	operationFacts, ok := seedContextTasks[operationsIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("rendered operation resolution must be a set_fact, got %v", seedContextTasks[operationsIdx])
+	}
+	for _, want := range []string{"bootwright_ceph_operations", "bootwright_ceph_plan", "bootwright_ceph_batch_files"} {
+		if _, ok := operationFacts[want]; !ok {
+			t.Fatalf("seed context must resolve %q from the rendered operation manifest, got %v", want, operationFacts)
+		}
 	}
 	seedCredentials := seedContextTasks[findAnsibleTask(t, seedContextTasks, "Load cephadm registry credentials on the seed host")]
 	if got := fmt.Sprint(seedCredentials["when"]); !strings.Contains(got, "is not defined") {
@@ -1720,9 +1955,9 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("Call Home opt-out must deny consent even when the module is already disabled, got when=%v", disableCallHome["when"])
 	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph OSD service spec")
-	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")
+	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations one container per operation")
 	lateIdx := findAnsibleTask(t, block, "Apply Ceph late service spec")
-	lateOpsIdx := findAnsibleTask(t, block, "Run rendered Ceph late operations")
+	lateOpsIdx := findAnsibleTask(t, block, "Run rendered Ceph late operations one container per operation")
 	if !(coreIdx < topologyIdx && topologyIdx < lateIdx && lateIdx < lateOpsIdx) {
 		t.Fatalf("storage operations must be ordered core -> topology/storage -> late services -> late operations")
 	}
@@ -1806,6 +2041,7 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 		base+"registry_login.yml",
 		base+"dashboard_secret.yml",
 		base+"service_specs.yml",
+		base+"batch_support.yml",
 		base+"topology_operations.yml",
 		base+"late_service_specs.yml",
 		base+"management_services.yml",

@@ -1,0 +1,46 @@
+---
+- name: Run a batch of rendered Ceph operations
+  when: bootwright_ceph_step.batch is defined
+  block:
+    - name: Run the staged batch of rendered Ceph operations
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
+          - bash
+          - "/mnt/{{ bootwright_ceph_step.batch }}"
+      register: bootwright_ceph_batch_run
+      changed_when: true
+      failed_when: false
+
+    - name: Require every operation in the batch to have applied
+      ansible.builtin.assert:
+        that:
+          - (bootwright_ceph_batch_run.rc | default(1) | int) == 0
+        fail_msg: >-
+          Ceph operation
+          {{
+            ((bootwright_ceph_batch_run.stderr_lines | default([]))
+             + (bootwright_ceph_batch_run.stdout_lines | default([])))
+            | select('search', '^BOOTWRIGHT_CEPH_OP_FAILED ')
+            | map('regex_replace', '^BOOTWRIGHT_CEPH_OP_FAILED ', '')
+            | list | join(', ')
+            | default('(the batch script exited before naming an operation)', true)
+          }}
+          failed on storage cluster {{ bootwright_selected_storage_cluster.name }}
+          while applying the batch {{ bootwright_ceph_step.batch }}
+          (exit status {{ bootwright_ceph_batch_run.rc | default('unknown') }}).
+          The batch stops at the first failing operation, so the operations after it
+          in {{ bootwright_ceph_step.operations | default([]) | join(', ') }} did not run.
+          Ceph reported: {{ (bootwright_ceph_batch_run.stderr | default('') | trim) | default(bootwright_ceph_batch_run.stdout | default('') | trim, true) }}
+        success_msg: >-
+          Applied the rendered Ceph operations in {{ bootwright_ceph_step.batch }}.
+
+- name: Run a rendered Ceph operation that must not be batched
+  ansible.builtin.include_tasks: run.yml
+  vars:
+    bootwright_ceph_op: "{{ bootwright_ceph_operations[bootwright_ceph_step.operation | int] }}"
+  when: bootwright_ceph_step.operation is defined

@@ -1,3 +1,5 @@
 ---
 bootwright_vsphere_media_upload_timeout: 1800
+bootwright_vsphere_media_upload_wait_timeout: 3600
+bootwright_vsphere_media_upload_wait_interval_seconds: 5
 bootwright_vsphere_python: "{{ ansible_playbook_python }}"

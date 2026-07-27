@@ -15,6 +15,7 @@
     bootwright_vsphere_boot: "{{ bootwright_component.vsphere | default({}) }}"
     bootwright_vsphere_boot_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_vsphere_boot_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
+    bootwright_vsphere_boot_stage_elected: "{{ bootwright_component.boot.agentIso.stageElected | default(true) | bool }}"
   changed_when: false
 
 - name: Validate vSphere boot inputs

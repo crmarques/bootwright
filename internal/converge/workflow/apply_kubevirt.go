@@ -371,7 +371,7 @@ func applyNodeBootResourceKeys(state v1alpha1.State, clusterName string, machine
 			continue
 		}
 		if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {
-			out = appendUniqueString(out, vsphereResourceKey(provider, machine))
+			out = appendUniqueString(out, vsphereResourceKey(provider, machine, clusterName))
 			continue
 		}
 		out = appendUniqueString(out, applyNodeRedfishResource(state, clusterName, machineName))

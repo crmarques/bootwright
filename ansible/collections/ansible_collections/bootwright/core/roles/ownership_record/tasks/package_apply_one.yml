@@ -3,7 +3,6 @@
   ansible.builtin.set_fact:
     bootwright_ownership_package_safe: "{{ bootwright_ownership_package_name | regex_replace('[^A-Za-z0-9_.-]', '_') }}"
     bootwright_ownership_package_record_path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}/{{ bootwright_ownership_package_name | regex_replace('[^A-Za-z0-9_.-]', '_') }}.json"
-    bootwright_ownership_existing_package_record: {}
   changed_when: false
 
 - name: Stat existing package ownership record
@@ -17,38 +16,18 @@
   register: bootwright_ownership_existing_package_record_slurp
   when: bootwright_ownership_existing_package_record_stat.stat.exists | default(false)
 
-- name: Decode existing package ownership record
+- name: Index existing package ownership record
   ansible.builtin.set_fact:
-    bootwright_ownership_existing_package_record: "{{ bootwright_ownership_existing_package_record_slurp.content | b64decode | from_json }}"
-  changed_when: false
-  when: bootwright_ownership_existing_package_record_stat.stat.exists | default(false)
-
-- name: Coerce existing package requiredBy to a list
-  ansible.builtin.include_tasks: coerce_required_by.yml
-  vars:
-    bootwright_ownership_required_by_raw: "{{ bootwright_ownership_existing_package_record.requiredBy | default([]) }}"
-
-- name: Resolve package ownership apply record
-  ansible.builtin.set_fact:
-    bootwright_ownership_package_record: "{{ bootwright_ownership_package_record_next }}"
-  vars:
-    bootwright_ownership_package_record_next:
-      apiVersion: bootwright.io/ownership/v1alpha1
-      kind: package
-      name: "{{ inventory_hostname }}-{{ bootwright_ownership_package_safe }}"
-      owner: bootwright
-      context: "{{ bootwright_clusters_dir | dirname | basename }}"
-      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
-      package: "{{ bootwright_ownership_package_name }}"
-      requiredBy: "{{ (bootwright_ownership_required_by_list + [bootwright_ownership_required_by]) | unique | list }}"
-      preexisting: "{{ bootwright_ownership_existing_package_record.preexisting | default(bootwright_ownership_package_name in (ansible_facts.packages | default({}))) | bool }}"
-      updatedAt: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"
+    bootwright_ownership_package_index: >-
+      {{
+        {bootwright_ownership_package_safe: (bootwright_ownership_existing_package_record_slurp.content | b64decode | from_json)}
+        if (bootwright_ownership_existing_package_record_stat.stat.exists | default(false))
+        else {}
+      }}
   changed_when: false
 
 - name: Write package ownership record
-  ansible.builtin.copy:
-    dest: "{{ bootwright_ownership_package_record_path }}"
-    owner: root
-    group: root
-    mode: "0600"
-    content: "{{ bootwright_ownership_package_record | to_nice_json }}\n"
+  ansible.builtin.include_tasks: package_records_write.yml
+  vars:
+    bootwright_ownership_packages:
+      - "{{ bootwright_ownership_package_name }}"

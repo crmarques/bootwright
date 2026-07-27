@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -210,7 +211,90 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 	return SaveConvergeSafetyRecord(runsDir, record)
 }
 
+type applyTaskHashCache struct {
+	mu            sync.Mutex
+	identity      string
+	desired       string
+	desiredErr    error
+	desiredSet    bool
+	structural    string
+	structuralErr error
+	structuralSet bool
+}
+
+func applyTaskHashIdentity(task ApplyTask) string {
+	return strings.Join(append([]string{
+		task.Entry.ID,
+		task.Entry.Kind,
+		task.Entry.Cluster,
+		task.Entry.ClusterKind,
+		task.Entry.Node,
+		task.Entry.Host,
+		task.Playbook,
+		task.Limit,
+	}, task.Entry.ResourceKeys...), "\x00")
+}
+
+func (t *ApplyTask) hashCache() *applyTaskHashCache {
+	if t.hashes == nil {
+		t.hashes = &applyTaskHashCache{identity: applyTaskHashIdentity(*t)}
+	}
+	return t.hashes
+}
+
+func (c *applyTaskHashCache) reuseFor(task ApplyTask) bool {
+	return c != nil && c.identity == applyTaskHashIdentity(task)
+}
+
+func (t *ApplyTask) DesiredHash() (string, error) {
+	cache := t.hashCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if !cache.desiredSet {
+		cache.desired, cache.desiredErr = computeApplyTaskDesiredHash(*t)
+		cache.desiredSet = true
+	}
+	return cache.desired, cache.desiredErr
+}
+
+func (t *ApplyTask) StructuralHash() (string, error) {
+	cache := t.hashCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if !cache.structuralSet {
+		cache.structural, cache.structuralErr = computeApplyTaskStructuralHash(*t)
+		cache.structuralSet = true
+	}
+	return cache.structural, cache.structuralErr
+}
+
 func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
+	if cache := task.hashes; cache.reuseFor(task) {
+		cache.mu.Lock()
+		defer cache.mu.Unlock()
+		if !cache.desiredSet {
+			cache.desired, cache.desiredErr = computeApplyTaskDesiredHash(task)
+			cache.desiredSet = true
+		}
+		return cache.desired, cache.desiredErr
+	}
+	return computeApplyTaskDesiredHash(task)
+}
+
+func ApplyTaskStructuralHash(task ApplyTask) (string, error) {
+	if cache := task.hashes; cache.reuseFor(task) {
+		cache.mu.Lock()
+		defer cache.mu.Unlock()
+		if !cache.structuralSet {
+			cache.structural, cache.structuralErr = computeApplyTaskStructuralHash(task)
+			cache.structuralSet = true
+		}
+		return cache.structural, cache.structuralErr
+	}
+	return computeApplyTaskStructuralHash(task)
+}
+
+func computeApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	payload := struct {
 		APIVersion   string          `json:"apiVersion"`
 		TaskID       string          `json:"taskID"`
@@ -254,7 +338,7 @@ func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func ApplyTaskStructuralHash(task ApplyTask) (string, error) {
+func computeApplyTaskStructuralHash(task ApplyTask) (string, error) {
 	if task.StructuralHashVars == nil {
 		return "", nil
 	}

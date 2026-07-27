@@ -35,6 +35,41 @@ func AllWithOwnershipRecordsAndPathOptions(renderedDir, clustersDir string, path
 	return allOn(defaultFS, renderedDir, clustersDir, paths, state, records)
 }
 
+func RunInputs(renderDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
+	return runInputsOn(defaultFS, renderDir, paths, state, records)
+}
+
+func runInputsOn(fs FileSystem, baseDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
+	if err := checkResolvedNames(state); err != nil {
+		return Result{}, err
+	}
+	result := Result{
+		InventoryPath: filepath.Join(baseDir, "ansible", "inventory.yaml"),
+		VarsPath:      filepath.Join(baseDir, "ansible", "vars.yaml"),
+		ArtifactsDir:  filepath.Join(baseDir, "ansible", "artifacts"),
+		StorageAssets: ceph.StorageAssets(baseDir, state),
+	}
+	dirs := []string{baseDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
+	for _, asset := range result.StorageAssets {
+		dirs = append(dirs, asset.Directories()...)
+	}
+	for _, dir := range dirs {
+		if err := ensureLocalDir(fs, dir); err != nil {
+			return result, err
+		}
+	}
+	if err := writeYAML(fs, result.InventoryPath, inventory.InventoryWithOwnershipRecordsAndPathOptions(state, paths, records)); err != nil {
+		return result, err
+	}
+	if err := writeYAML(fs, result.VarsPath, inventory.VarsWithPathOptionsAndOwnership(state, paths, records)); err != nil {
+		return result, err
+	}
+	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func Effective(renderedDir string, state v1alpha1.State) (Result, error) {
 	return EffectiveOn(defaultFS, renderedDir, state)
 }

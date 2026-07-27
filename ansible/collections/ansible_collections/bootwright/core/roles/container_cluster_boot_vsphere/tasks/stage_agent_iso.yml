@@ -1,11 +1,18 @@
 ---
+- name: Resolve vSphere staging marker path
+  ansible.builtin.set_fact:
+    bootwright_vsphere_boot_stage_marker_path: "{{ bootwright_vsphere_boot_stage_path }}.staged"
+  changed_when: false
+
 - name: Probe staged vSphere boot media
   ansible.builtin.stat:
     path: "{{ bootwright_vsphere_boot_stage_path }}"
   register: bootwright_vsphere_boot_stage_stat
 
 - name: Stage generated agent ISO for vSphere upload
-  when: not (bootwright_vsphere_boot_stage_stat.stat.exists | default(false))
+  when:
+    - bootwright_vsphere_boot_stage_elected | bool
+    - not (bootwright_vsphere_boot_stage_stat.stat.exists | default(false))
   block:
     - name: Read generated agent ISO path
       ansible.builtin.slurp:
@@ -37,3 +44,37 @@
         owner: root
         group: root
         mode: "0600"
+
+    - name: Mark generated agent ISO staged
+      ansible.builtin.copy:
+        dest: "{{ bootwright_vsphere_boot_stage_marker_path }}"
+        content: "{{ bootwright_vsphere_boot_stage_path | basename }}\n"
+        owner: root
+        group: root
+        mode: "0600"
+
+- name: Wait for the elected machine to stage the agent ISO
+  ansible.builtin.wait_for:
+    path: "{{ bootwright_vsphere_boot_stage_marker_path }}"
+    state: present
+    timeout: "{{ bootwright_vsphere_boot_stage_wait_timeout }}"
+    sleep: "{{ bootwright_vsphere_boot_stage_wait_interval_seconds }}"
+  when:
+    - not (bootwright_vsphere_boot_stage_elected | bool)
+    - not (bootwright_vsphere_boot_stage_stat.stat.exists | default(false))
+
+- name: Confirm the shared staged agent ISO is present
+  ansible.builtin.stat:
+    path: "{{ bootwright_vsphere_boot_stage_path }}"
+  register: bootwright_vsphere_boot_shared_stage_stat
+  when: not (bootwright_vsphere_boot_stage_elected | bool)
+
+- name: Assert the shared staged agent ISO is present
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_boot_shared_stage_stat.stat.exists | default(false)
+    fail_msg: >-
+      The machine elected to stage {{ bootwright_vsphere_boot_stage_path }} reported the
+      staging marker {{ bootwright_vsphere_boot_stage_marker_path }} but the staged agent
+      ISO is missing, so this machine has nothing to upload to the datastore.
+  when: not (bootwright_vsphere_boot_stage_elected | bool)

@@ -11,7 +11,10 @@
   vars:
     bootwright_host_machine_components: >-
       {{
-        bootwright_clusters | default([])
+        (
+          (bootwright_clusters | default([]))
+          + (bootwright_managed_os_install_groups | default([]))
+        )
         | map(attribute='components') | flatten
         | selectattr('kind', 'equalto', 'machines')
         | selectattr('machineRef', 'defined')
@@ -31,7 +34,10 @@
         {{
           (bootwright_destroy_cluster_order.split(','))
           if (bootwright_destroy_cluster_order | default('') | length > 0)
-          else (bootwright_clusters | map(attribute='name') | list)
+          else (
+            (bootwright_clusters | default([]) | map(attribute='name') | list)
+            + (bootwright_managed_os_install_groups | default([]) | map(attribute='name') | list)
+          )
         }}
       loop_control:
         loop_var: bootwright_cluster_name
@@ -44,6 +50,7 @@
 - name: Destroy machine substrate
   hosts: bootwright_machine_task_hosts
   strategy: linear
+  throttle: "{{ bootwright_destroy_machine_task_throttle | default(8) | int }}"
   gather_facts: false
   become: true
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
@@ -51,22 +58,24 @@
   tasks:
     - name: Destroy machine substrate in dependency order
       ansible.builtin.include_tasks: tasks/machine_infra/destroy_machine.yml
+      vars:
+        bootwright_cluster_name: "{{ bootwright_machine_task_cluster_name }}"
       loop: >-
         {{
-          (bootwright_destroy_cluster_order.split(','))
-          if (bootwright_destroy_cluster_order | default('') | length > 0)
+          (bootwright_destroy_cluster_levels.split(';'))
+          if (bootwright_destroy_cluster_levels | default('') | length > 0)
           else (
             (bootwright_clusters | default([]) | map(attribute='name') | list)
             + (bootwright_managed_os_install_groups | default([]) | map(attribute='name') | list)
           )
         }}
       loop_control:
-        loop_var: bootwright_cluster_name
+        loop_var: bootwright_destroy_cluster_level
       when:
-        - bootwright_cluster_name == bootwright_machine_task_cluster_name
+        - bootwright_machine_task_cluster_name in bootwright_destroy_cluster_level.split(',')
         - >-
           bootwright_destroy_cluster_scope is not defined
-          or bootwright_cluster_name in bootwright_destroy_cluster_scope.split(',')
+          or bootwright_machine_task_cluster_name in bootwright_destroy_cluster_scope.split(',')
         - >-
           bootwright_destroy_machine_scope is not defined
           or bootwright_machine_task_machine_name in bootwright_destroy_machine_scope.split(',')
@@ -97,6 +106,36 @@
       }}
 
   tasks:
+    - name: List surviving machine infrastructure ownership record files
+      ansible.builtin.find:
+        paths:
+          - "{{ bootwright_ownership_dir }}/resources"
+        patterns:
+          - "*.json"
+        file_type: file
+        recurse: true
+      register: bootwright_infra_ownership_record_files
+      changed_when: false
+      when: bootwright_host_infra_ownership_records | length > 0
+
+    - name: Resolve surviving machine infrastructure ownership record keys
+      ansible.builtin.set_fact:
+        bootwright_infra_ownership_store_readable: >-
+          {{
+            bootwright_infra_ownership_record_files.files is defined
+            and (bootwright_infra_ownership_record_files.skipped_paths | default({}) | length) == 0
+          }}
+        bootwright_infra_ownership_records_present: >-
+          {{
+            bootwright_infra_ownership_record_files.files | default([])
+            | map(attribute='path')
+            | map('regex_replace', '^.*/resources/', '')
+            | map('regex_replace', '[.]json$', '')
+            | map('regex_replace', '@[^/]*$', '')
+            | list
+          }}
+      changed_when: false
+
     - name: Destroy recorded machine infrastructure resources
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
@@ -108,11 +147,38 @@
       when:
         - bootwright_ownership_record.kind in ['libvirt-domain', 'libvirt-network', 'managed-os-install']
         - >-
+          not (bootwright_infra_ownership_store_readable | bool)
+          or (bootwright_ownership_record.kind ~ '/' ~ bootwright_ownership_record.name)
+             in bootwright_infra_ownership_records_present
+        - >-
           bootwright_destroy_cluster_scope is not defined
           or bootwright_ownership_record.cluster | default('') in bootwright_destroy_cluster_scope.split(',')
         - >-
           bootwright_destroy_machine_scope is not defined
           or bootwright_ownership_record.machine | default('') in bootwright_destroy_machine_scope.split(',')
+
+    - name: Remove authorized cluster libvirt networks
+      community.libvirt.virt_net:
+        name: "{{ bootwright_libvirt_network_removal.network }}"
+        state: absent
+        uri: "{{ bootwright_libvirt_network_removal.uri }}"
+      failed_when: false
+      loop: "{{ bootwright_libvirt_network_removals | default([]) }}"
+      loop_control:
+        loop_var: bootwright_libvirt_network_removal
+        label: "{{ bootwright_libvirt_network_removal.network }}"
+
+    - name: Remove authorized cluster libvirt network ownership records
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: remove_resource.yml
+      vars:
+        bootwright_ownership_kind: libvirt-network
+        bootwright_ownership_name: "{{ bootwright_libvirt_network_removal.cluster }}"
+      loop: "{{ bootwright_libvirt_network_removals | default([]) }}"
+      loop_control:
+        loop_var: bootwright_libvirt_network_removal
+        label: "{{ bootwright_libvirt_network_removal.cluster }}"
 
     - name: Sweep current-context libvirt domains
       ansible.builtin.include_role:

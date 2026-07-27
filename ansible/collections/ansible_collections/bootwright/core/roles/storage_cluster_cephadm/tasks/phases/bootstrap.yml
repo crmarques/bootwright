@@ -69,6 +69,9 @@
              | default([]) | map(attribute='name') | list)
       when: bootwright_ceph_stretch_tiebreaker | length > 0
 
+    - name: Decide how the rendered Ceph operations execute
+      ansible.builtin.include_tasks: bootstrap_steps/batch_support.yml
+
     - name: Run Ceph topology and storage operations
       ansible.builtin.include_tasks: bootstrap_steps/topology_operations.yml
 

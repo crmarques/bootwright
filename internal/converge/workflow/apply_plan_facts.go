@@ -53,11 +53,28 @@ func applyMachineNeedsSubstratePrepare(state v1alpha1.State, machineName string)
 }
 
 func applyMachineHostSlotKey(state v1alpha1.State, machineName string) string {
-	host := applyMachineHost(state, machineName)
-	if host == "" || applyMachineProviderType(state, machineName) != v1alpha1.ProvisionerLibvirt {
+	machine, ok := stateview.Machine(state, machineName)
+	if !ok {
 		return ""
 	}
-	return "host:" + host + ":machine"
+	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+	if !ok {
+		return ""
+	}
+	switch provider.Spec.Type {
+	case v1alpha1.ProvisionerLibvirt:
+		host := applyMachineHost(state, machineName)
+		if host == "" {
+			return ""
+		}
+		return "host:" + host + ":machine"
+	case v1alpha1.ProvisionerVSphere:
+		if provider.Spec.VSphere == nil {
+			return ""
+		}
+		return vsphereHostSlotKey(provider, machine)
+	}
+	return ""
 }
 
 func applyMachineExclusiveResourceKeys(state v1alpha1.State, clusterName, machineName string) []string {
@@ -70,7 +87,7 @@ func applyMachineExclusiveResourceKeys(state v1alpha1.State, clusterName, machin
 		return []string{kubeVirtResourceKey(provider.Spec.KubeVirt, clusterName, machineName)}
 	}
 	if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {
-		return []string{vsphereResourceKey(provider, machine)}
+		return []string{vsphereResourceKey(provider, machine, clusterName)}
 	}
 	if machine.Spec.Hardware.Management.BMC.Address != "" {
 		return []string{applyNodeRedfishResource(state, clusterName, machineName)}

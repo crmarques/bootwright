@@ -17,6 +17,7 @@
     bootwright_vsphere_media_record_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_vsphere_media_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
     bootwright_vsphere_media_fetch: "{{ bootwright_component.boot.agentIso.fetchUrl | default('') }}"
+    bootwright_vsphere_media_upload_elected: "{{ bootwright_component.boot.agentIso.uploadElected | default(true) | bool }}"
   changed_when: false
 
 - name: Validate vSphere virtual media inputs

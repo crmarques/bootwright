@@ -4,7 +4,10 @@
   ansible.builtin.set_fact:
     bootwright_current_cluster: >-
       {{
-        bootwright_clusters
+        (
+          (bootwright_clusters | default([]))
+          + (bootwright_managed_os_install_groups | default([]))
+        )
         | selectattr('name', 'equalto', bootwright_cluster_name)
         | first
       }}
@@ -17,3 +20,97 @@
   when:
     - bootwright_destroy_machine_scope is not defined
     - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | selectattr('machineRef', 'equalto', bootwright_host_name) | list | length > 0
+
+- name: Resolve this host's libvirt machines in the current cluster
+  ansible.builtin.set_fact:
+    bootwright_libvirt_cluster_machines: >-
+      {{
+        bootwright_current_cluster.components | default([])
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('libvirt', 'defined')
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Gate the cluster libvirt network before destroy
+  when:
+    - bootwright_destroy_machine_scope is not defined
+    - bootwright_libvirt_cluster_machines | length > 0
+  block:
+    - name: Resolve libvirt network destroy identifiers
+      ansible.builtin.set_fact:
+        bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
+        bootwright_libvirt_network_uri: >-
+          {{
+            (bootwright_libvirt_cluster_machines | first).libvirt.uri
+            | default('qemu:///system', true)
+          }}
+      changed_when: false
+
+    - name: Read libvirt network definition
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - "{{ bootwright_libvirt_network_uri }}"
+          - net-dumpxml
+          - "{{ bootwright_libvirt_network_name }}"
+      register: bootwright_libvirt_destroy_network_xml
+      changed_when: false
+      failed_when: false
+
+    - name: Require a conclusive libvirt network probe before destroy
+      ansible.builtin.assert:
+        that:
+          - >-
+            bootwright_libvirt_destroy_network_xml.rc | default(1) == 0
+            or (bootwright_libvirt_destroy_network_xml.stderr | default('')) is search('(Network not found|no network with matching name)')
+        fail_msg: >-
+          Could not determine whether libvirt network {{ bootwright_libvirt_network_name }}
+          exists on {{ bootwright_libvirt_network_uri }}:
+          {{ bootwright_libvirt_destroy_network_xml.stderr | default('virsh net-dumpxml failed with no detail') }}.
+          Refusing to tear down or delete anything Bootwright cannot conclusively
+          probe — the network and its ownership record would be removed while the
+          network may still serve other machines. Fix libvirtd/connection access
+          and re-run destroy.
+
+    - name: Resolve libvirt network ownership for destroy
+      ansible.builtin.set_fact:
+        bootwright_libvirt_network_present: "{{ bootwright_libvirt_destroy_network_xml.rc | default(1) == 0 }}"
+        bootwright_libvirt_network_owned: >-
+          {{
+            ((bootwright_libvirt_destroy_network_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
+             and (bootwright_libvirt_destroy_network_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?cluster>' ~ (bootwright_current_cluster.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?cluster>'))
+            or (bootwright_ownership_records | default([])
+                | selectattr('kind', 'equalto', 'libvirt-network')
+                | selectattr('name', 'equalto', bootwright_current_cluster.name)
+                | list | length > 0)
+          }}
+      changed_when: false
+
+    - name: Refuse to remove a non-Bootwright libvirt network
+      ansible.builtin.assert:
+        that:
+          - bootwright_libvirt_network_owned | bool
+        fail_msg: >-
+          Refusing to remove libvirt network {{ bootwright_libvirt_network_name }}:
+          it carries no Bootwright ownership metadata for this context/cluster and
+          this context holds no ownership record for it, so it may belong to another
+          context whose VMs would lose networking. Verify and remove it manually,
+          or pass --include-unowned to remove it anyway.
+      when:
+        - bootwright_libvirt_network_present | bool
+        - not (bootwright_destroy_force_unowned | default(false) | bool)
+
+    - name: Authorize cluster libvirt network removal
+      ansible.builtin.set_fact:
+        bootwright_libvirt_network_removals: >-
+          {{
+            (bootwright_libvirt_network_removals | default([]))
+            + [{'cluster': bootwright_current_cluster.name,
+                'network': bootwright_libvirt_network_name,
+                'uri': bootwright_libvirt_network_uri}]
+          }}
+      changed_when: false
