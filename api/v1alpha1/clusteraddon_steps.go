@@ -6,6 +6,8 @@ type ClusterAddonStep struct {
 	Gates   string `yaml:"gates,omitempty" json:"gates,omitempty"`
 	Follows string `yaml:"follows,omitempty" json:"follows,omitempty"`
 
+	Source *PlaybookSource `yaml:"source,omitempty" json:"source,omitempty"`
+
 	Playbook        string `yaml:"playbook,omitempty" json:"playbook,omitempty"`
 	RolesPath       string `yaml:"rolesPath,omitempty" json:"rolesPath,omitempty"`
 	CollectionsPath string `yaml:"collectionsPath,omitempty" json:"collectionsPath,omitempty"`

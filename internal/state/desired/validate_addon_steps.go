@@ -38,16 +38,21 @@ func validateClusterAddonSteps(state v1alpha1.State, extension v1alpha1.ClusterA
 		if hook.Playbook == "" && len(hook.Manifests) == 0 {
 			errs = append(errs, prefix+" must set at least one of playbook or manifests")
 		}
+		errs = append(errs, validatePlaybookSource(prefix, hook.Source)...)
 		if hook.Playbook != "" {
-			errs = append(errs, validateContainedFile(prefix+".playbook", baseDir, hook.Playbook, true)...)
-			if !hookPathHasSegment(hook.Playbook, "playbooks") {
-				errs = append(errs, fmt.Sprintf("%s.playbook %q must live under a playbooks/ directory so the loader does not parse it as desired state", prefix, hook.Playbook))
-			}
-			if hook.RolesPath != "" {
-				errs = append(errs, validateContainedDir(prefix+".rolesPath", baseDir, hook.RolesPath)...)
-			}
-			if hook.CollectionsPath != "" {
-				errs = append(errs, validateContainedDir(prefix+".collectionsPath", baseDir, hook.CollectionsPath)...)
+			if v1alpha1.PlaybookSourceIsSet(hook.Source) {
+				errs = append(errs, validateSourcedContent(prefix, hook.Source, hook.Playbook, hook.RolesPath, hook.CollectionsPath)...)
+			} else {
+				errs = append(errs, validateContainedFile(prefix+".playbook", baseDir, hook.Playbook, true)...)
+				if !hookPathHasSegment(hook.Playbook, "playbooks") {
+					errs = append(errs, fmt.Sprintf("%s.playbook %q must live under a playbooks/ directory so the loader does not parse it as desired state", prefix, hook.Playbook))
+				}
+				if hook.RolesPath != "" {
+					errs = append(errs, validateContainedDir(prefix+".rolesPath", baseDir, hook.RolesPath)...)
+				}
+				if hook.CollectionsPath != "" {
+					errs = append(errs, validateContainedDir(prefix+".collectionsPath", baseDir, hook.CollectionsPath)...)
+				}
 			}
 			errs = append(errs, validateHookTarget(prefix, extension, hook, machines, containers, storage)...)
 		} else {

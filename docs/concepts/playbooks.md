@@ -66,7 +66,42 @@ spec:
   onFailure: fail
 ```
 
-On disk, the object sits beside its Ansible content:
+## External Ansible content
+
+By default the Ansible content sits beside the object and travels with the
+context snapshot. To point at content you maintain elsewhere — a checkout you
+already manage, shared by several environments — set `spec.source.path` to an
+absolute directory:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Playbook
+metadata:
+  name: os-hardening
+spec:
+  follows: machines
+  source:
+    path: /srv/ansible/os-hardening   # absolute, outside the input tree
+  playbook: playbooks/site.yml        # relative to the source directory
+  rolesPath: roles
+  target:
+    hostGroups: [bootwright_infra_hosts]
+```
+
+`playbook`, `rolesPath`, and `collectionsPath` then resolve against that
+directory, and the `playbooks/` layout rule below does not apply — the loader
+never walks an external directory, so there is nothing for it to mis-parse.
+Paths must still stay inside the source directory.
+
+!!! warning "External content is not snapshotted"
+    `context init`/`update` copies the input tree, not `spec.source.path`. The
+    directory must exist and be readable on the controller at apply time, and
+    `run: onChange` digests whatever is there when the run is planned. Content
+    that must travel with the context belongs beside the object instead.
+
+The same `source` block is available on `ClusterAddon.spec.steps[]`.
+
+On disk, an object without `source` sits beside its Ansible content:
 
 ```text
 input/

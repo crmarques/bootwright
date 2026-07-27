@@ -14,7 +14,7 @@ import (
 )
 
 func ContentDigest(addonSourcePath string, hook v1alpha1.ClusterAddonStep) (string, error) {
-	base := filepath.Dir(addonSourcePath)
+	base := StepContentRoot(addonSourcePath, hook)
 	sum := sha256.New()
 	digestPath := func(rel string) error {
 		if strings.TrimSpace(rel) == "" {

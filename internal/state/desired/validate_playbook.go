@@ -39,16 +39,21 @@ func validatePlaybooks(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s.onFailure %q must be %q or %q", prefix, p.Spec.OnFailure, v1alpha1.PlaybookFailureFail, v1alpha1.PlaybookFailureContinue))
 		}
 
-		baseDir := filepath.Dir(p.SourcePath)
-		errs = append(errs, validateContainedFile(prefix+".playbook", baseDir, p.Spec.Playbook, true)...)
-		if p.Spec.Playbook != "" && !hookPathHasSegment(p.Spec.Playbook, "playbooks") {
-			errs = append(errs, fmt.Sprintf("%s.playbook %q must live under a playbooks/ directory so the loader does not parse it as desired state", prefix, p.Spec.Playbook))
-		}
-		if p.Spec.RolesPath != "" {
-			errs = append(errs, validateContainedDir(prefix+".rolesPath", baseDir, p.Spec.RolesPath)...)
-		}
-		if p.Spec.CollectionsPath != "" {
-			errs = append(errs, validateContainedDir(prefix+".collectionsPath", baseDir, p.Spec.CollectionsPath)...)
+		errs = append(errs, validatePlaybookSource(prefix, p.Spec.Source)...)
+		if v1alpha1.PlaybookSourceIsSet(p.Spec.Source) {
+			errs = append(errs, validateSourcedContent(prefix, p.Spec.Source, p.Spec.Playbook, p.Spec.RolesPath, p.Spec.CollectionsPath)...)
+		} else {
+			baseDir := filepath.Dir(p.SourcePath)
+			errs = append(errs, validateContainedFile(prefix+".playbook", baseDir, p.Spec.Playbook, true)...)
+			if p.Spec.Playbook != "" && !hookPathHasSegment(p.Spec.Playbook, "playbooks") {
+				errs = append(errs, fmt.Sprintf("%s.playbook %q must live under a playbooks/ directory so the loader does not parse it as desired state", prefix, p.Spec.Playbook))
+			}
+			if p.Spec.RolesPath != "" {
+				errs = append(errs, validateContainedDir(prefix+".rolesPath", baseDir, p.Spec.RolesPath)...)
+			}
+			if p.Spec.CollectionsPath != "" {
+				errs = append(errs, validateContainedDir(prefix+".collectionsPath", baseDir, p.Spec.CollectionsPath)...)
+			}
 		}
 
 		errs = append(errs, validatePlaybookTarget(prefix, p, machines, containers, storage)...)

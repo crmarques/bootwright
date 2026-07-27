@@ -1493,9 +1493,18 @@ Rules:
   tasks hard-depend on it, so the phase does not start until the playbook
   succeeds. `gates` may not be combined with `onFailure: continue`: a gate that
   lets the phase proceed on failure is not a gate.
+- `spec.source.path` optionally names an **absolute directory outside the input
+  tree** holding the Ansible content. When set, `playbook`, `rolesPath`, and
+  `collectionsPath` resolve against that directory instead of the object's own,
+  and the `playbooks/` directory rule does not apply (the loader never walks an
+  external directory, so there is nothing to mis-parse). The directory must
+  exist, be a directory, and not be a symlink; the content paths must still stay
+  within it. The same field is available on `ClusterAddon.spec.steps[]`.
+  Content outside the context snapshot is **not** copied by `context init`, so
+  it must remain present and readable on the controller at apply time.
 - `spec.playbook` is required, a `.yml`/`.yaml` file path relative to the
-  `Playbook` file, contained within its directory (no absolute paths,
-  `..`, or symlinks) — the `ClusterAddon` `manifestSet.path` rules. `rolesPath`
+  `Playbook` file (or to `spec.source.path`), contained within that directory (no
+  absolute paths, `..`, or symlinks) — the `ClusterAddon` `manifestSet.path` rules. `rolesPath`
   and `collectionsPath` are optional relative directories under the same rules,
   and must not be named `vendor` or `node_modules` (directories `context init`'s
   tree copy skips, so the vendored content would silently vanish).

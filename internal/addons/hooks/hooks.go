@@ -1,6 +1,17 @@
 package hooks
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"path/filepath"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+func StepContentRoot(addonSourcePath string, step v1alpha1.ClusterAddonStep) string {
+	if v1alpha1.PlaybookSourceIsSet(step.Source) {
+		return step.Source.Path
+	}
+	return filepath.Dir(addonSourcePath)
+}
 
 func At(addon v1alpha1.ClusterAddon, anchor string) []v1alpha1.ClusterAddonStep {
 	var out []v1alpha1.ClusterAddonStep

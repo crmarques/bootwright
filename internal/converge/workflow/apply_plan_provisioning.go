@@ -100,6 +100,7 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 			continue
 		}
 		id := "playbook." + p.Metadata.Name
+		contentRoot := playbookContentRoot(p)
 		hashVars, err := provisioningDesiredHashVars(p)
 		if err != nil {
 			return fmt.Errorf("Playbook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
@@ -121,10 +122,10 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 					Cluster: provisioningPlaybookCluster(p, orderClusters),
 					Status:  TaskStatusPending,
 				},
-				Playbook:          provisioningPlaybookPath(p),
+				Playbook:          provisioningPlaybookPath(p, contentRoot),
 				Limit:             limit,
-				RolesPath:         provisioningVendoredPath(p, p.Spec.RolesPath),
-				CollectionsPath:   provisioningVendoredPath(p, p.Spec.CollectionsPath),
+				RolesPath:         provisioningVendoredPath(contentRoot, p.Spec.RolesPath),
+				CollectionsPath:   provisioningVendoredPath(contentRoot, p.Spec.CollectionsPath),
 				ExtraVarPairs:     extraVarPairs,
 				State:             state,
 				DesiredHashVars:   hashVars,
@@ -374,15 +375,22 @@ func provisioningPlaybookCluster(p v1alpha1.Playbook, orderClusters []string) st
 	return ""
 }
 
-func provisioningPlaybookPath(p v1alpha1.Playbook) string {
-	return filepath.Join(filepath.Dir(p.SourcePath), p.Spec.Playbook)
+func playbookContentRoot(p v1alpha1.Playbook) string {
+	if v1alpha1.PlaybookSourceIsSet(p.Spec.Source) {
+		return p.Spec.Source.Path
+	}
+	return filepath.Dir(p.SourcePath)
 }
 
-func provisioningVendoredPath(p v1alpha1.Playbook, rel string) string {
+func provisioningPlaybookPath(p v1alpha1.Playbook, root string) string {
+	return filepath.Join(root, p.Spec.Playbook)
+}
+
+func provisioningVendoredPath(root, rel string) string {
 	if strings.TrimSpace(rel) == "" {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(p.SourcePath), rel)
+	return filepath.Join(root, rel)
 }
 
 func provisioningExtraVarPairs(p v1alpha1.Playbook, anchor string, gating bool) ([]string, error) {
@@ -466,7 +474,7 @@ func provisioningDesiredHashVars(p v1alpha1.Playbook) (provisioningPlaybookHashV
 }
 
 func provisioningContentDigest(p v1alpha1.Playbook) (string, error) {
-	base := filepath.Dir(p.SourcePath)
+	base := playbookContentRoot(p)
 	h := sha256.New()
 	digestPath := func(rel string) error {
 		if strings.TrimSpace(rel) == "" {

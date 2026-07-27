@@ -93,14 +93,15 @@ func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.Cl
 	if e.runnerFactory != nil {
 		runner = e.runnerFactory(e.stdout, e.stderr)
 	}
-	playbookPath := filepath.Join(filepath.Dir(e.plan.Addon.SourcePath), hook.Playbook)
+	stepRoot := hooks.StepContentRoot(e.plan.Addon.SourcePath, hook)
+	playbookPath := filepath.Join(stepRoot, hook.Playbook)
 	collectionsPath := filepath.Join(e.opts.BundleDir, bundle.CollectionsRelPath)
 	if hook.CollectionsPath != "" {
-		collectionsPath = collectionsPath + string(os.PathListSeparator) + filepath.Join(filepath.Dir(e.plan.Addon.SourcePath), hook.CollectionsPath)
+		collectionsPath = collectionsPath + string(os.PathListSeparator) + filepath.Join(stepRoot, hook.CollectionsPath)
 	}
 	rolesPath := ""
 	if hook.RolesPath != "" {
-		rolesPath = filepath.Join(filepath.Dir(e.plan.Addon.SourcePath), hook.RolesPath)
+		rolesPath = filepath.Join(stepRoot, hook.RolesPath)
 	}
 	newSpec := func(limit string, index int) ansible.RunSpec {
 		return ansible.RunSpec{
