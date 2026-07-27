@@ -57,35 +57,19 @@ func (r *destroyReporter) PromptGap() {
 }
 
 func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
-	steps := make([]output.Step, 0, len(ledger.Tasks))
-	for _, task := range ledger.Tasks {
-		steps = append(steps, output.Step{
-			ID:     task.ID,
-			Label:  task.Label,
-			Status: applyStepStatus(task.Status),
-			Detail: destroyStepDetail(task, ledger),
-		})
-	}
-	return output.RunFrame{
-		BarLabel: "Teardown",
-		Done:     status.ApplyProgressDone(ledger),
-		Total:    len(ledger.Tasks),
-		Counts:   applyProgressFields(ledger),
-		Groups:   []output.StepGroup{{Steps: steps}},
-	}
+	return newRunFrame("Teardown", destroyStepGroups(ledger))
 }
 
-func destroyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger) string {
-	covered := strings.Join(task.ResourceKeys, ", ")
-	reason := applyStepDetail(task, ledger)
-	switch {
-	case covered != "" && reason != "":
-		return covered + " — " + reason
-	case covered != "":
-		return covered
-	default:
-		return reason
+func destroyPlanGroups(tasks []workflow.TaskLedgerEntry) []output.StepGroup {
+	return destroyStepGroups(workflow.RunLedger{Tasks: tasks})
+}
+
+func destroyStepGroups(ledger workflow.RunLedger) []output.StepGroup {
+	steps := runPhaseSteps("", ledger.Tasks, ledger, phaseDetailOptions{resources: true})
+	if len(steps) == 0 {
+		return nil
 	}
+	return []output.StepGroup{{Steps: steps}}
 }
 
 func printDestroyRunStart(stdout io.Writer, runsDir string, ledger workflow.RunLedger) {

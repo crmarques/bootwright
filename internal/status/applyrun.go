@@ -1,7 +1,6 @@
 package status
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -30,44 +29,16 @@ func ApplyClusterKind(tasks []workflow.TaskLedgerEntry) string {
 }
 
 func ApplyClusterPhases(ledger workflow.RunLedger, cluster string) []ApplyPhase {
-	tasks := ledger.TasksForCluster(cluster)
-	switch ApplyClusterKind(tasks) {
-	case v1alpha1.KindStorageCluster:
-		return []ApplyPhase{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindStorageNodeAccess, workflow.ApplyTaskKindStorageInfra))},
-			{Label: "Provision", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster))},
-		}
-	case v1alpha1.KindContainerCluster:
-		return []ApplyPhase{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindMachineInfraFinalize))},
-			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot))},
-			{Label: "Install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindInstallWait))},
-			{Label: "Post-install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindNodeConfigApply))},
-		}
-	default:
-		return []ApplyPhase{{Label: "Work", Status: applyPhaseStatus(tasks)}}
+	phases := RunPhases(ledger.TasksForCluster(cluster))
+	out := make([]ApplyPhase, 0, len(phases))
+	for _, phase := range phases {
+		out = append(out, ApplyPhase{Label: phase.Label, Status: phase.Status})
 	}
+	return out
 }
 
-func ApplyFailedPhase(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
-	for _, phase := range ApplyClusterPhases(ledger, task.Cluster) {
-		switch phase.Status {
-		case workflow.TaskStatusFailed, workflow.TaskStatusBlocked, workflow.TaskStatusCancelled:
-			return phase.Label
-		}
-	}
-	return "Work"
-}
-
-func ApplyProgressDone(ledger workflow.RunLedger) int {
-	done := 0
-	for _, task := range ledger.Tasks {
-		switch task.Status {
-		case workflow.TaskStatusOK, workflow.TaskStatusSkipped, workflow.TaskStatusFailed, workflow.TaskStatusBlocked, workflow.TaskStatusCancelled:
-			done++
-		}
-	}
-	return done
+func ApplyFailedPhase(_ workflow.RunLedger, task workflow.TaskLedgerEntry) string {
+	return TaskPhaseLabel(task)
 }
 
 func ApplyFailureReason(failure string) string {
@@ -115,21 +86,6 @@ func ApplyBlockingRoot(ledger workflow.RunLedger, task workflow.TaskLedgerEntry)
 		}
 	}
 	return fallback, haveFallback
-}
-
-func filterApplyTasksByKind(tasks []workflow.TaskLedgerEntry, kinds ...string) []workflow.TaskLedgerEntry {
-	kindSet := map[string]bool{}
-	for _, kind := range kinds {
-		kindSet[kind] = true
-	}
-	var out []workflow.TaskLedgerEntry
-	for _, task := range tasks {
-		if kindSet[task.Kind] {
-			out = append(out, task)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
 }
 
 func applyPhaseStatus(tasks []workflow.TaskLedgerEntry) workflow.TaskStatus {

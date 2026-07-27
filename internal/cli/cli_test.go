@@ -645,7 +645,7 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		{
 			name: "apply stage infra dry-run",
 			args: []string{"apply", "--stage", "infra", "--dry-run", "--ask-become-pass=false"},
-			want: []string{"Bootwright: infra apply", "Apply plan", "planned task(s)", "Provider services", "Infra component services", "Rendered artifacts", "Bundle"},
+			want: []string{"Bootwright: infra apply", "Apply plan", "planned task(s)", "Infrastructure", "Shared services", "Rendered artifacts", "Bundle"},
 		},
 	}
 	for _, tc := range tests {
@@ -4073,7 +4073,7 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"Current apply", "apply-test", "Progress", "[DONE] Provider services", "[RUNNING] Boot sno-libvirt nodes", "[PENDING] Install sno-libvirt", "bootwright status --watch"} {
+	for _, want := range []string{"Current apply", "apply-test", "Progress", "Shared services", "Prerequisites", "[RUNNING] Cluster install", "bootwright status --watch"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("status output missing %q:\n%s", want, stdout)
 		}

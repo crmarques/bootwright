@@ -212,7 +212,7 @@ func progressBarLine(label string, done int, total int, fields []ProgressField) 
 	if len(parts) == 0 {
 		parts = append(parts, "0 tasks")
 	}
-	return fmt.Sprintf("%s  [%s] %d/%d %s", label, bar, done, total, strings.Join(parts, "  "))
+	return fmt.Sprintf("%s  [%s] %d/%d  %s", label, bar, done, total, strings.Join(parts, "  "))
 }
 
 func (p *Printer) Tasks(items []TaskLine) {
@@ -225,6 +225,26 @@ func (p *Printer) Tasks(items []TaskLine) {
 			continue
 		}
 		fmt.Fprintf(p.w, "  %s %s: %s\n", p.statusLabel(item.Status), item.Label, item.Detail)
+	}
+	p.wrote = true
+}
+
+func (p *Printer) Steps(groups []StepGroup) {
+	if p == nil || p.w == nil || len(groups) == 0 {
+		return
+	}
+	width := stepLabelWidth(groups)
+	for _, group := range groups {
+		if group.Title != "" {
+			fmt.Fprintf(p.w, "  %s\n", p.style(group.Title, color.Bold))
+		}
+		for _, step := range group.Steps {
+			if step.Detail == "" {
+				fmt.Fprintf(p.w, "    - %s\n", step.Label)
+				continue
+			}
+			fmt.Fprintf(p.w, "    - %s  %s\n", pad(step.Label, width), step.Detail)
+		}
 	}
 	p.wrote = true
 }
@@ -533,6 +553,8 @@ func (p *Printer) RenderFrame(frame RunFrame, width int, collapse bool) int {
 		fmt.Fprintln(p.w, line)
 		rows += physicalRows(line, width)
 	}
+	statusWidth := p.stepStatusWidth(frame.Groups)
+	labelWidth := stepLabelWidth(frame.Groups)
 	emit("")
 	emit("  " + progressBarLine(frame.BarLabel, frame.Done, frame.Total, frame.Counts))
 	emit("")
@@ -548,7 +570,7 @@ func (p *Printer) RenderFrame(frame RunFrame, width int, collapse bool) int {
 			emit("  " + p.style(group.Title, color.Bold))
 		}
 		for _, step := range group.Steps {
-			emit(p.stepLine(step))
+			emit(p.stepLine(step, statusWidth, labelWidth))
 		}
 	}
 	p.wrote = true
@@ -589,12 +611,47 @@ func finishedGroupSummary(group StepGroup) (string, bool) {
 	return "(" + strings.Join(parts, ", ") + ")", true
 }
 
-func (p *Printer) stepLine(step Step) string {
-	label := step.Label
-	if step.Detail != "" {
-		label += ": " + step.Detail
+func (p *Printer) stepLine(step Step, statusWidth int, labelWidth int) string {
+	token := pad(p.statusLabel(step.Status), statusWidth)
+	if step.Detail == "" {
+		return "    " + token + " " + step.Label
 	}
-	return "    " + p.statusLabel(step.Status) + " " + label
+	return "    " + token + " " + pad(step.Label, labelWidth) + "  " + step.Detail
+}
+
+func (p *Printer) stepStatusWidth(groups []StepGroup) int {
+	width := 0
+	for _, group := range groups {
+		for _, step := range group.Steps {
+			if w := visibleWidth(p.statusLabel(step.Status)); w > width {
+				width = w
+			}
+		}
+	}
+	return width
+}
+
+func stepLabelWidth(groups []StepGroup) int {
+	width := 0
+	for _, group := range groups {
+		for _, step := range group.Steps {
+			if step.Detail == "" {
+				continue
+			}
+			if w := visibleWidth(step.Label); w > width {
+				width = w
+			}
+		}
+	}
+	return width
+}
+
+func pad(value string, width int) string {
+	gap := width - visibleWidth(value)
+	if gap <= 0 {
+		return value
+	}
+	return value + strings.Repeat(" ", gap)
 }
 
 func newBufferPrinter(colored bool) (*Printer, *bytes.Buffer) {

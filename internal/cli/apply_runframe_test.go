@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
@@ -18,17 +19,20 @@ func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
 
 	frame := applyRunFrame(ledger, nil)
 
-	if frame.BarLabel != "Provisioning Progress" || frame.Total != 4 {
-		t.Fatalf("bar label/total = %q/%d, want Provisioning Progress/4", frame.BarLabel, frame.Total)
+	if frame.BarLabel != "Provisioning" || frame.Total != 4 {
+		t.Fatalf("bar label/total = %q/%d, want Provisioning/4 (one line per high-level phase)", frame.BarLabel, frame.Total)
+	}
+	if frame.Done != 2 {
+		t.Fatalf("done = %d, want 2 settled phases", frame.Done)
 	}
 	if len(frame.Groups) != 3 {
-		t.Fatalf("groups = %d, want 3 (infra, foo, bar): %+v", len(frame.Groups), frame.Groups)
+		t.Fatalf("groups = %d, want 3 (infrastructure, foo, bar): %+v", len(frame.Groups), frame.Groups)
 	}
-	if frame.Groups[0].Title != "infra" {
-		t.Fatalf("first group = %q, want infra", frame.Groups[0].Title)
+	if frame.Groups[0].Title != runGroupInfrastructure {
+		t.Fatalf("first group = %q, want %q", frame.Groups[0].Title, runGroupInfrastructure)
 	}
-	if got := frame.Groups[0].Steps[0]; got.Label != "Provider services" || got.Status != output.StatusDone {
-		t.Fatalf("infra step = %+v, want Provider services DONE", got)
+	if got := frame.Groups[0].Steps[0]; got.Label != status.PhaseSharedServices || got.Status != output.StatusDone {
+		t.Fatalf("infra step = %+v, want %q DONE", got, status.PhaseSharedServices)
 	}
 	if frame.Groups[1].Title != "bar (StorageCluster)" {
 		t.Fatalf("second group = %q, want bar (StorageCluster)", frame.Groups[1].Title)
@@ -36,26 +40,38 @@ func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
 	if frame.Groups[2].Title != "foo (ContainerCluster)" {
 		t.Fatalf("third group = %q, want foo (ContainerCluster)", frame.Groups[2].Title)
 	}
-	if got := frame.Groups[1].Steps[0]; got.Status != output.StatusPending {
-		t.Fatalf("storage step status = %q, want PENDING", got.Status)
+	if got := frame.Groups[1].Steps[0]; got.Label != status.PhaseClusterInstall || got.Status != output.StatusPending {
+		t.Fatalf("storage step = %+v, want %q PENDING", got, status.PhaseClusterInstall)
 	}
 }
 
-func TestApplyRunFrameOrdersClusterStepsByDependencies(t *testing.T) {
+func TestApplyRunFrameCollapsesTasksIntoHighLevelPhases(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "storage.ceph", Kind: workflow.ApplyTaskKindStorageCluster, Label: "storage ceph", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning, Dependencies: []string{"storageinfra.ceph"}},
-		{ID: "storageinfra.ceph", Kind: workflow.ApplyTaskKindStorageInfra, Label: "storage infra ceph", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
+		{ID: "infraprepare.ocp.host", Kind: workflow.ApplyTaskKindMachineInfraPrepare, Label: "machine infra prepare ocp on host", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
+		{ID: "infra.ocp.node01", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machine node01", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK, Dependencies: []string{"infraprepare.ocp.host"}},
+		{ID: "infra.ocp.node02", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machine node02", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning, Dependencies: []string{"infraprepare.ocp.host"}},
+		{ID: "iso.ocp", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso ocp", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"infra.ocp.node02"}},
+		{ID: "boot.ocp", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot ocp nodes", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"iso.ocp"}},
+		{ID: "wait.ocp", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install ocp", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"boot.ocp"}},
+		{ID: "addon.ocp.df", Kind: workflow.ApplyTaskKindClusterAddon, Label: "addon df", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"wait.ocp"}},
 	}, time.Now())
 
-	frame := applyRunFrame(ledger, nil)
-
-	if len(frame.Groups) != 1 || len(frame.Groups[0].Steps) != 2 {
-		t.Fatalf("groups = %+v, want one group with two steps", frame.Groups)
+	steps := applyRunFrame(ledger, nil).Groups[0].Steps
+	got := make([]string, 0, len(steps))
+	for _, step := range steps {
+		got = append(got, step.Label)
 	}
-	got := []string{frame.Groups[0].Steps[0].Label, frame.Groups[0].Steps[1].Label}
-	want := []string{"Provision infra ceph", "Provision ceph"}
-	if got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("step order = %v, want %v", got, want)
+	want := []string{status.PhaseMachines, status.PhasePrerequisites, status.PhaseClusterInstall, status.PhaseAddOns}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %v, want the four high-level phases %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("steps = %v, want %v", got, want)
+		}
+	}
+	if steps[0].Status != output.StatusRunning || steps[0].Detail != "2/3" {
+		t.Fatalf("machines step = %+v, want RUNNING 2/3", steps[0])
 	}
 }
 
@@ -65,117 +81,45 @@ func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
 	}, time.Now())
 
 	frame := applyRunFrame(ledger, nil)
-	if len(frame.Groups) != 1 || frame.Groups[0].Title != "infra" {
-		t.Fatalf("groups = %+v, want a single infra group", frame.Groups)
+	if len(frame.Groups) != 1 || frame.Groups[0].Title != runGroupInfrastructure {
+		t.Fatalf("groups = %+v, want a single %q group", frame.Groups, runGroupInfrastructure)
 	}
 	if frame.Groups[0].Steps[0].Status != output.StatusRunning {
 		t.Fatalf("step status = %q, want RUNNING", frame.Groups[0].Steps[0].Status)
 	}
 }
 
-func TestApplyRunFrameCollapsesProvisioningPlaybooks(t *testing.T) {
-	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "managedos.ceph-prd", Kind: workflow.ApplyTaskKindManagedMachineOS, Label: "managed OS ceph-prd machines", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "storageinfra.ceph-prd", Kind: workflow.ApplyTaskKindStorageInfra, Label: "storage infra ceph-prd", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "playbook.os-customizations", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook os-customizations (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "playbook.tuning", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook tuning (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning},
-		{ID: "storage.ceph-prd", Kind: workflow.ApplyTaskKindStorageCluster, Label: "storage ceph-prd", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusPending},
-	}, time.Now())
-
-	frame := applyRunFrame(ledger, nil)
-	if len(frame.Groups) != 1 {
-		t.Fatalf("groups = %d, want 1: %+v", len(frame.Groups), frame.Groups)
-	}
-	steps := frame.Groups[0].Steps
-	var playbookSteps []output.Step
-	for _, step := range steps {
-		if step.Label == "Custom playbooks (after machines)" {
-			playbookSteps = append(playbookSteps, step)
-		}
-	}
-	if len(playbookSteps) != 1 {
-		t.Fatalf("custom playbook steps = %d, want 1 collapsed line: %+v", len(playbookSteps), steps)
-	}
-	if playbookSteps[0].Status != output.StatusRunning {
-		t.Fatalf("collapsed status = %q, want RUNNING", playbookSteps[0].Status)
-	}
-	if playbookSteps[0].ID != "playbooks:ceph-prd:after machines" {
-		t.Fatalf("collapsed id = %q, want playbooks:ceph-prd:after machines", playbookSteps[0].ID)
-	}
-	if len(steps) != 4 {
-		t.Fatalf("steps = %d, want 4 (managed OS, storage infra, custom playbooks, provision): %+v", len(steps), steps)
-	}
-}
-
-func TestApplyRunFrameSeparatesPlaybooksByHookPoint(t *testing.T) {
+func TestApplyRunFrameKeepsPlaybookHookPointsSeparate(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "playbook.pre", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook pre (before machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
 		{ID: "playbook.post", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook post (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
+		{ID: "playbook.post2", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook tuning (after machines)", Cluster: "ceph-prd", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning},
 	}, time.Now())
 
-	frame := applyRunFrame(ledger, nil)
-	labels := map[string]bool{}
-	for _, step := range frame.Groups[0].Steps {
-		labels[step.Label] = true
+	steps := applyRunFrame(ledger, nil).Groups[0].Steps
+	if len(steps) != 2 {
+		t.Fatalf("steps = %+v, want one line per hook point", steps)
 	}
-	if !labels["Custom playbooks (before machines)"] || !labels["Custom playbooks (after machines)"] {
-		t.Fatalf("hook points not separated: %+v", frame.Groups[0].Steps)
+	if steps[0].Label != status.PhaseCustomPlaybooks+" (before machines)" || steps[1].Label != status.PhaseCustomPlaybooks+" (after machines)" {
+		t.Fatalf("hook points not separated: %+v", steps)
+	}
+	if steps[1].Status != output.StatusRunning {
+		t.Fatalf("aggregated hook status = %q, want RUNNING", steps[1].Status)
 	}
 }
 
-func TestApplyRunFrameCollapsedPlaybookSurfacesFailure(t *testing.T) {
+func TestApplyRunFramePhaseSurfacesFailingTask(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "playbook.ok", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook ok (after base)", Cluster: "sno", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
-		{ID: "playbook.bad", Kind: workflow.ApplyTaskKindProvisioningPlaybook, Label: "playbook bad (after base)", Cluster: "sno", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusFailed, Failure: "failure: role failed"},
+		{ID: "infra.sno.node01", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machine node01", Cluster: "sno", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
+		{ID: "infra.sno.node02", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machine node02", Cluster: "sno", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusFailed, Failure: "failure: libvirt define failed"},
 	}, time.Now())
 
-	frame := applyRunFrame(ledger, nil)
-	got := frame.Groups[0].Steps[0]
-	if got.Status != output.StatusFailed || got.Detail != "role failed" {
-		t.Fatalf("collapsed failed step = %+v, want FAILED role failed", got)
+	got := applyRunFrame(ledger, nil).Groups[0].Steps[0]
+	if got.Status != output.StatusFailed {
+		t.Fatalf("phase status = %q, want FAILED", got.Status)
 	}
-}
-
-func TestAggregateProvisioningStatus(t *testing.T) {
-	entry := func(status workflow.TaskStatus) workflow.TaskLedgerEntry {
-		return workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindProvisioningPlaybook, Status: status}
-	}
-	cases := []struct {
-		name     string
-		statuses []workflow.TaskStatus
-		want     output.Status
-	}{
-		{"done-and-skipped-reads-done", []workflow.TaskStatus{workflow.TaskStatusOK, workflow.TaskStatusSkipped}, output.StatusDone},
-		{"done-and-pending-stays-running", []workflow.TaskStatus{workflow.TaskStatusOK, workflow.TaskStatusPending}, output.StatusRunning},
-		{"all-skipped-reads-skipped", []workflow.TaskStatus{workflow.TaskStatusSkipped, workflow.TaskStatusSkipped}, output.StatusSkipped},
-		{"all-pending-reads-pending", []workflow.TaskStatus{workflow.TaskStatusPending, workflow.TaskStatusPending}, output.StatusPending},
-		{"any-failed-reads-failed", []workflow.TaskStatus{workflow.TaskStatusOK, workflow.TaskStatusFailed}, output.StatusFailed},
-		{"blocked-over-running", []workflow.TaskStatus{workflow.TaskStatusRunning, workflow.TaskStatusBlocked}, output.StatusBlocked},
-		{"running-over-pending", []workflow.TaskStatus{workflow.TaskStatusRunning, workflow.TaskStatusPending}, output.StatusRunning},
-	}
-	for _, tc := range cases {
-		tasks := make([]workflow.TaskLedgerEntry, 0, len(tc.statuses))
-		for _, s := range tc.statuses {
-			tasks = append(tasks, entry(s))
-		}
-		if got := aggregateProvisioningStatus(tasks); got != tc.want {
-			t.Fatalf("%s: aggregate = %q, want %q", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestApplyTaskDisplayLabelProvisioningPlaybook(t *testing.T) {
-	if got := applyTaskDisplayLabel("playbook os-customizations (after machines)"); got != "Custom playbook os-customizations (after machines)" {
-		t.Fatalf("display label = %q", got)
-	}
-}
-
-func TestProvisioningHookPoint(t *testing.T) {
-	if got := provisioningHookPoint("playbook os-customizations (after machines)"); got != "after machines" {
-		t.Fatalf("hook point = %q, want after machines", got)
-	}
-	if got := provisioningHookPoint("playbook noparen"); got != "" {
-		t.Fatalf("hook point = %q, want empty", got)
+	if got.Detail != "Provision machine node02: libvirt define failed" {
+		t.Fatalf("phase detail = %q, want the failing task named with its reason", got.Detail)
 	}
 }
 

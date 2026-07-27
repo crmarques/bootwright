@@ -28,19 +28,45 @@ func TestApplyClusterPhasesAggregateContainerAndStorageStates(t *testing.T) {
 	}
 
 	container := ApplyClusterPhases(ledger, "cluster-a")
-	requireApplyPhase(t, "cluster-a", container, "Infrastructure", workflow.TaskStatusOK)
-	requireApplyPhase(t, "cluster-a", container, "Prepare", workflow.TaskStatusRunning)
-	requireApplyPhase(t, "cluster-a", container, "Install", workflow.TaskStatusPending)
-	requireApplyPhase(t, "cluster-a", container, "Post-install", workflow.TaskStatusBlocked)
+	requireApplyPhase(t, "cluster-a", container, PhaseMachines, workflow.TaskStatusOK)
+	requireApplyPhase(t, "cluster-a", container, PhasePrerequisites, workflow.TaskStatusOK)
+	requireApplyPhase(t, "cluster-a", container, PhaseClusterInstall, workflow.TaskStatusRunning)
+	requireApplyPhase(t, "cluster-a", container, PhaseAddOns, workflow.TaskStatusBlocked)
 
 	storage := ApplyClusterPhases(ledger, "ceph-a")
-	requireApplyPhase(t, "ceph-a", storage, "Infrastructure", workflow.TaskStatusOK)
-	requireApplyPhase(t, "ceph-a", storage, "Provision", workflow.TaskStatusOK)
-	if phasePresent(storage, "Prepare") {
-		t.Fatalf("storage cluster should not expose a duplicate Prepare phase: %+v", storage)
+	requireApplyPhase(t, "ceph-a", storage, PhasePrerequisites, workflow.TaskStatusOK)
+	requireApplyPhase(t, "ceph-a", storage, PhaseClusterInstall, workflow.TaskStatusOK)
+	if phasePresent(storage, PhaseMachines) {
+		t.Fatalf("a phase with no planned task must not be listed: %+v", storage)
 	}
-	if phasePresent(storage, "Publish") {
-		t.Fatalf("storage cluster should not expose a Publish phase: %+v", storage)
+	if phasePresent(storage, PhaseAddOns) {
+		t.Fatalf("a phase with no planned task must not be listed: %+v", storage)
+	}
+}
+
+func TestApplyFailedPhaseNamesTheTaskOwnPhase(t *testing.T) {
+	task := workflow.TaskLedgerEntry{ID: "boot.a", Kind: workflow.ApplyTaskKindNodeBoot, Cluster: "a", Status: workflow.TaskStatusFailed}
+	if got := ApplyFailedPhase(workflow.RunLedger{Tasks: []workflow.TaskLedgerEntry{task}}, task); got != PhaseClusterInstall {
+		t.Fatalf("failed phase = %q, want %q", got, PhaseClusterInstall)
+	}
+}
+
+func TestRunPhasesFoldDestroyPlumbingIntoLifecyclePhases(t *testing.T) {
+	phases := RunPhases([]workflow.TaskLedgerEntry{
+		{ID: "destroy.machine-registration", Kind: workflow.DestroyTaskKindMachineRegistration, Status: workflow.TaskStatusOK},
+		{ID: "destroy.infra-components", Kind: workflow.DestroyTaskKindInfraComponents, Status: workflow.TaskStatusOK},
+		{ID: "destroy.machine-infra", Kind: workflow.DestroyTaskKindMachineInfra, Status: workflow.TaskStatusRunning},
+		{ID: "destroy.provider-services", Kind: workflow.DestroyTaskKindProviderServices, Status: workflow.TaskStatusPending},
+		{ID: "destroy.storage-node-access", Kind: workflow.DestroyTaskKindStorageNodeAccess, Status: workflow.TaskStatusPending},
+	})
+	if len(phases) != 2 {
+		t.Fatalf("phases = %+v, want Machines and Shared services only", phases)
+	}
+	if phases[0].Label != PhaseMachines || phases[0].Status != workflow.TaskStatusRunning {
+		t.Fatalf("first phase = %+v, want %s running", phases[0], PhaseMachines)
+	}
+	if phases[1].Label != PhaseSharedServices || phases[1].Status != workflow.TaskStatusRunning {
+		t.Fatalf("second phase = %+v, want %s running", phases[1], PhaseSharedServices)
 	}
 }
 

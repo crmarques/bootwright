@@ -349,7 +349,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if reclaimDevices != "" {
 				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by the data-loss acknowledgement (--confirm-data-loss or interactive confirm)")
 			}
-			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
+			planEntries := workflow.TaskLedgerEntries(dryRunTasks)
+			reporter.DryRunTasks(runCommandLabel, planEntries, limits, applyPlanGroups(planEntries, buildClusterDisplays(state)))
 			var reinstallDrift []string
 			if mode == workflow.ApplyModeOverride {
 				reinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)

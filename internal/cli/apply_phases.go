@@ -69,14 +69,6 @@ func applyOutputStatusPriority(status output.Status) int {
 	}
 }
 
-func applyProgressFields(ledger workflow.RunLedger) []output.ProgressField {
-	fields := make([]output.ProgressField, 0, len(ledger.ProgressCounts()))
-	for _, count := range ledger.ProgressCounts() {
-		fields = append(fields, output.ProgressField{Label: string(count.Status), Count: count.Count})
-	}
-	return fields
-}
-
 func applyBlockedReason(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
 	if dep, ok := status.ApplyBlockingRoot(ledger, task); ok {
 		label := applyTaskDisplayLabel(dep.Label)

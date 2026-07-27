@@ -95,11 +95,11 @@ func TestRenderFrameFormat(t *testing.T) {
 
 	want := "" +
 		"\n" +
-		"  Fleet  [##########----------] 1/2 1 OK  1 RUNNING\n" +
+		"  Fleet  [##########----------] 1/2  1 OK  1 RUNNING\n" +
 		"\n" +
 		"  infra\n" +
-		"    [DONE] Provider services\n" +
-		"    [RUNNING] Machine infra: 0m12s\n"
+		"    [DONE]    Provider services\n" +
+		"    [RUNNING] Machine infra  0m12s\n"
 	if buf.String() != want {
 		t.Fatalf("frame format:\n%q\nwant:\n%q", buf.String(), want)
 	}
@@ -128,7 +128,7 @@ func TestRenderFrameCollapsesFinishedGroups(t *testing.T) {
 	if !strings.Contains(got, "done-cluster  (1 done, 1 skipped)") {
 		t.Fatalf("finished group not collapsed:\n%s", got)
 	}
-	if strings.Contains(got, "[DONE] Install") {
+	if strings.Contains(got, "[DONE]    Install") {
 		t.Fatalf("collapsed group should not list steps:\n%s", got)
 	}
 	if !strings.Contains(got, "[RUNNING] Install") {
@@ -137,7 +137,7 @@ func TestRenderFrameCollapsesFinishedGroups(t *testing.T) {
 
 	p2, buf2 := newBufferPrinter(false)
 	p2.RenderFrame(frame, 0, false)
-	if !strings.Contains(buf2.String(), "[DONE] Install") {
+	if !strings.Contains(buf2.String(), "[DONE]    Install") {
 		t.Fatalf("collapse=false must list finished steps:\n%s", buf2.String())
 	}
 }

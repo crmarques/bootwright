@@ -55,25 +55,10 @@ func (r *workflowReporter) DryRunCommand(label string, command []string) {
 	r.printer.CommandLine("dry-run ansible command ["+label+"]", command)
 }
 
-func (r *workflowReporter) DryRunTasks(label string, tasks []workflow.TaskLedgerEntry, limits workflow.ConcurrencyLimits) {
+func (r *workflowReporter) DryRunTasks(label string, tasks []workflow.TaskLedgerEntry, limits workflow.ConcurrencyLimits, groups []output.StepGroup) {
 	r.ensure()
 	r.printer.Status(output.StatusOK, label, fmt.Sprintf("%d planned task(s), parallelism %d", len(tasks), limits.Parallelism))
-	lines := make([]output.TaskLine, 0, len(tasks))
-	for _, task := range tasks {
-		detail := task.Kind
-		if task.Cluster != "" {
-			detail += " cluster=" + task.Cluster
-		}
-		if len(task.Dependencies) > 0 {
-			detail += " after " + fmt.Sprint(task.Dependencies)
-		}
-		lines = append(lines, output.TaskLine{
-			Status: output.StatusSkip,
-			Label:  applyTaskDisplayLabel(task.Label),
-			Detail: detail,
-		})
-	}
-	r.printer.Tasks(lines)
+	r.printer.Steps(groups)
 }
 
 func (r *workflowReporter) SkipNoHosts(label string, limit string) {

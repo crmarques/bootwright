@@ -8,24 +8,49 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
-func TestDestroyRunFrameListsTeardownSteps(t *testing.T) {
-	ledger := workflow.NewRunLedger("destroy-test", "infra destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "destroy.machine-infra", Kind: workflow.DestroyTaskKindMachineInfra, Label: "Machine infrastructure", Status: workflow.TaskStatusOK},
-		{ID: "destroy.infra-components", Kind: workflow.DestroyTaskKindInfraComponents, Label: "Infra component services", Status: workflow.TaskStatusRunning},
+func TestDestroyRunFrameListsHighLevelTeardownPhasesOnly(t *testing.T) {
+	ledger := workflow.NewRunLedger("destroy-test", "destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "destroy.storage-clusters", Kind: workflow.DestroyTaskKindStorageCluster, Label: "Storage clusters", ResourceKeys: []string{"ceph-prd-01"}, Status: workflow.TaskStatusOK},
+		{ID: "destroy.machine-registration", Kind: workflow.DestroyTaskKindMachineRegistration, Label: "Machine registration", Status: workflow.TaskStatusOK},
+		{ID: "destroy.infra-components", Kind: workflow.DestroyTaskKindInfraComponents, Label: "Infra component services", Status: workflow.TaskStatusOK},
+		{ID: "destroy.machine-infra", Kind: workflow.DestroyTaskKindMachineInfra, Label: "Machine infrastructure", Status: workflow.TaskStatusRunning},
+		{ID: "destroy.container-clusters", Kind: workflow.DestroyTaskKindContainerCluster, Label: "Container clusters", ResourceKeys: []string{"ocp-prd-01", "ocp-prd-02"}, Status: workflow.TaskStatusPending},
 		{ID: "destroy.provider-services", Kind: workflow.DestroyTaskKindProviderServices, Label: "Provider services", Status: workflow.TaskStatusPending},
+		{ID: "destroy.storage-node-access", Kind: workflow.DestroyTaskKindStorageNodeAccess, Label: "Storage node access", ResourceKeys: []string{"ceph-prd-01"}, Status: workflow.TaskStatusPending},
 	}, time.Now())
 
 	frame := destroyRunFrame(ledger)
-	if frame.BarLabel != "Teardown" || frame.Total != 3 {
-		t.Fatalf("bar = %q total = %d, want Teardown/3", frame.BarLabel, frame.Total)
+	if frame.BarLabel != "Teardown" || frame.Total != 4 {
+		t.Fatalf("bar = %q total = %d, want Teardown/4 (machine registration, node access and per-service playbooks fold into their phase)", frame.BarLabel, frame.Total)
 	}
-	if len(frame.Groups) != 1 || len(frame.Groups[0].Steps) != 3 {
-		t.Fatalf("want one group of three steps: %+v", frame.Groups)
+	if len(frame.Groups) != 1 {
+		t.Fatalf("want one flat group: %+v", frame.Groups)
 	}
-	if frame.Groups[0].Steps[0].Status != output.StatusDone || frame.Groups[0].Steps[1].Status != output.StatusRunning {
-		t.Fatalf("step statuses = %+v", frame.Groups[0].Steps)
+	steps := frame.Groups[0].Steps
+	got := make([]string, 0, len(steps))
+	for _, step := range steps {
+		got = append(got, step.Label)
+	}
+	want := []string{status.PhaseStorageClusters, status.PhaseMachines, status.PhaseSharedServices, status.PhaseContainerClusters}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("steps = %v, want %v", got, want)
+		}
+	}
+	if steps[0].Status != output.StatusDone || steps[1].Status != output.StatusRunning || steps[3].Status != output.StatusPending {
+		t.Fatalf("phase statuses = %+v", steps)
+	}
+	if steps[1].Detail != "" {
+		t.Fatalf("machines detail = %q; machine teardown spans the whole work set, so per-task resource keys must not be presented as its scope", steps[1].Detail)
+	}
+	if steps[3].Detail != "ocp-prd-01, ocp-prd-02" {
+		t.Fatalf("container clusters detail = %q", steps[3].Detail)
 	}
 }
 

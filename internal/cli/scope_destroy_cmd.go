@@ -321,7 +321,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, terr)
 			}
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight to validate secrets, tools, and remote readiness")
-			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(tasks), workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks))
+			planEntries := workflow.TaskLedgerEntries(tasks)
+			reporter.DryRunTasks(runCommandLabel, planEntries, workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks), destroyPlanGroups(planEntries))
 			result, rerr := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 			if rerr != nil {
 				return failErr(1, rerr)
