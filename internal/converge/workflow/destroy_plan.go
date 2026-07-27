@@ -217,8 +217,14 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		declared[step.id] = step.orderingDependencies
 	}
 	for _, step := range planned {
+		declared[step.id] = step.orderingDependencies
+	}
+	for _, step := range planned {
 		base := step.base()
 		emitted[base] = append(emitted[base], step.id)
+		if step.id != base {
+			emitted[step.id] = []string{step.id}
+		}
 	}
 	tasks := make([]ApplyTask, 0, len(planned))
 	for _, step := range planned {
@@ -258,7 +264,64 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			State:         state,
 		})
 	}
+	if err := detectDestroyTaskCycle(tasks); err != nil {
+		return nil, err
+	}
 	return tasks, nil
+}
+
+func detectDestroyTaskCycle(tasks []ApplyTask) error {
+	known := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		known[task.Entry.ID] = true
+	}
+	edges := make(map[string][]string, len(tasks))
+	dependents := map[string][]string{}
+	for _, task := range tasks {
+		var deps []string
+		for _, dep := range append(append([]string(nil), task.Entry.Dependencies...), task.Entry.OrderingDependencies...) {
+			if known[dep] {
+				deps = appendUniqueString(deps, dep)
+			}
+		}
+		edges[task.Entry.ID] = deps
+	}
+	remaining := make(map[string]int, len(tasks))
+	for id, deps := range edges {
+		remaining[id] = len(deps)
+		for _, dep := range deps {
+			dependents[dep] = append(dependents[dep], id)
+		}
+	}
+	ready := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		if remaining[task.Entry.ID] == 0 {
+			ready = append(ready, task.Entry.ID)
+		}
+	}
+	settled := 0
+	for len(ready) > 0 {
+		id := ready[0]
+		ready = ready[1:]
+		settled++
+		for _, dependent := range dependents[id] {
+			remaining[dependent]--
+			if remaining[dependent] == 0 {
+				ready = append(ready, dependent)
+			}
+		}
+	}
+	if settled == len(tasks) {
+		return nil
+	}
+	var members []string
+	for _, task := range tasks {
+		if remaining[task.Entry.ID] > 0 {
+			members = append(members, task.Entry.ID)
+		}
+	}
+	sort.Strings(members)
+	return fmt.Errorf("cannot plan destroy: task dependency cycle among %s", strings.Join(members, ", "))
 }
 
 func plannedDestroySteps(state v1alpha1.State, steps []destroyStep, storageWorkNames []string) []destroyStep {
@@ -464,27 +527,12 @@ func machineInfraDestroyGraph(state v1alpha1.State) (map[string]bool, map[string
 	for _, cluster := range state.StorageClusters {
 		names[cluster.Metadata.Name] = true
 	}
-	machines := make(map[string]v1alpha1.Machine, len(state.Machines))
-	for _, machine := range state.Machines {
-		machines[machine.Metadata.Name] = machine
-	}
-	providers := make(map[string]v1alpha1.InfraProvider, len(state.InfraProviders))
-	for _, provider := range state.InfraProviders {
-		providers[provider.Metadata.Name] = provider
-	}
 	parents := map[string]map[string]bool{}
-	for _, cluster := range state.ContainerClusters {
-		child := cluster.Metadata.Name
-		for _, node := range cluster.Spec.Nodes {
-			machine, ok := machines[node.MachineRef.Name]
-			if !ok {
-				continue
-			}
-			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
-			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil {
-				continue
-			}
-			parent := provider.Spec.KubeVirt.HostClusterRef.Name
+	for child, hosts := range KubeVirtHostParentsByChild(state) {
+		if !names[child] {
+			continue
+		}
+		for parent := range hosts {
 			if !names[parent] {
 				continue
 			}

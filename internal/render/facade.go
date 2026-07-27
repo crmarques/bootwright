@@ -95,6 +95,10 @@ func ManagedOSGroupName(clusterName string) string {
 	return inventory.ManagedOSGroupName(clusterName)
 }
 
+func MachineInfraGroupName(clusterName string) string {
+	return inventory.MachineInfraGroupName(clusterName)
+}
+
 func ManagedOSHostName(clusterName, machineName string) string {
 	return inventory.ManagedOSHostName(clusterName, machineName)
 }

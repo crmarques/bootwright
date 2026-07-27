@@ -11,7 +11,6 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 type KubeVirtTenantConflict struct {
@@ -146,25 +145,7 @@ func ValidateKubeVirtClusterSelection(state v1alpha1.State, containerNames []str
 }
 
 func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
-	out := map[string][]string{}
-	for _, cluster := range state.ContainerClusters {
-		for _, node := range cluster.Spec.Nodes {
-			machine, ok := stateview.Machine(state, node.MachineRef.Name)
-			if !ok {
-				continue
-			}
-			provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
-			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil {
-				continue
-			}
-			parent := provider.Spec.KubeVirt.HostClusterRef.Name
-			if parent == "" {
-				continue
-			}
-			out[cluster.Metadata.Name] = appendUniqueClusterName(out[cluster.Metadata.Name], parent)
-		}
-	}
-	return out
+	return workflow.KubeVirtHostParentNames(state)
 }
 
 func kubeVirtParentReady(state v1alpha1.State, clustersDir string, parent string) (bool, error) {
