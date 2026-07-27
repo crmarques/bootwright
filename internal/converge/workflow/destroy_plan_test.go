@@ -59,15 +59,15 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs := []string{"destroy.machine-registration", "destroy.infra-components", "destroy.machine-infra", "destroy.provider-services"}
+	wantIDs := []string{"destroy.machine-registration", "destroy.machine-infra", "destroy.infra-components", "destroy.provider-services"}
 	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
-		t.Fatalf("infra destroy plan = %v, want %v", got, wantIDs)
+		t.Fatalf("infra destroy plan = %v, want %v; teardown is the inverse of build-up, where every machines-phase task depends on the fabric services, so fabric teardown comes last", got, wantIDs)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
 		"destroy.machine-registration": nil,
-		"destroy.infra-components":     {"destroy.machine-registration"},
-		"destroy.machine-infra":        {"destroy.infra-components"},
-		"destroy.provider-services":    {"destroy.machine-infra"},
+		"destroy.machine-infra":        {"destroy.machine-registration"},
+		"destroy.infra-components":     {"destroy.machine-infra", "destroy.machine-registration"},
+		"destroy.provider-services":    {"destroy.machine-infra", "destroy.infra-components"},
 	})
 	for i, task := range tasks {
 		wantLimit := limit
@@ -117,26 +117,26 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs := []string{"destroy.storage-clusters", "destroy.container-clusters", "destroy.storage-node-access"}
-	if len(tasks) != len(wantIDs) {
-		t.Fatalf("clusters chain = %+v, want %v", tasks, wantIDs)
+	wantIDs := []string{"destroy.cluster-runtime", "destroy.storage-clusters", "destroy.container-clusters", "destroy.storage-node-access"}
+	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
+		t.Fatalf("clusters chain = %v, want %v", got, wantIDs)
 	}
-	for i, id := range wantIDs {
-		if tasks[i].Entry.ID != id {
-			t.Fatalf("clusters chain = %+v, want %v", tasks, wantIDs)
+	assertDestroyOrderingEdges(t, tasks, map[string][]string{
+		"destroy.cluster-runtime":     nil,
+		"destroy.storage-clusters":    nil,
+		"destroy.container-clusters":  {"destroy.cluster-runtime", "destroy.storage-clusters"},
+		"destroy.storage-node-access": {"destroy.container-clusters"},
+	})
+	if got := destroyTaskByID(t, tasks, "destroy.cluster-runtime").Entry.Kind; got != DestroyTaskKindContainerClusterRuntime {
+		t.Fatalf("cluster runtime teardown must carry its own kind so it is not folded into the records half, got %q", got)
+	}
+	if got := destroyTaskByID(t, tasks, "destroy.storage-node-access").Entry.Kind; got != DestroyTaskKindStorageNodeAccess {
+		t.Fatalf("storage node access revoke must carry its own distinct kind, got %q", got)
+	}
+	for _, task := range tasks {
+		if len(task.Entry.Dependencies) != 0 {
+			t.Fatalf("the clusters chain plans no machine teardown, so nothing in it may be hard-gated: %q has %v", task.Entry.ID, task.Entry.Dependencies)
 		}
-	}
-	if len(tasks[1].Entry.OrderingDependencies) != 1 || tasks[1].Entry.OrderingDependencies[0] != wantIDs[0] {
-		t.Fatalf("container destroy must be ordering-sequenced after storage destroy: %v", tasks[1].Entry.OrderingDependencies)
-	}
-	if len(tasks[2].Entry.OrderingDependencies) != 1 || tasks[2].Entry.OrderingDependencies[0] != wantIDs[1] {
-		t.Fatalf("storage node access revoke must be ordering-sequenced last: %v", tasks[2].Entry.OrderingDependencies)
-	}
-	if tasks[2].Entry.Kind != DestroyTaskKindStorageNodeAccess {
-		t.Fatalf("storage node access revoke must carry its own distinct kind, got %q", tasks[2].Entry.Kind)
-	}
-	if len(tasks[1].Entry.Dependencies) != 0 {
-		t.Fatalf("destroy steps must not carry hard deps (ordering only): %v", tasks[1].Entry.Dependencies)
 	}
 }
 
@@ -148,25 +148,36 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantIDs := []string{
+		"destroy.cluster-runtime",
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
 		"destroy.storage-node-access",
-		"destroy.infra-components",
 		"destroy.machine-infra",
 		"destroy.container-clusters",
+		"destroy.infra-components",
 		"destroy.provider-services",
 	}
 	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
 		t.Fatalf("full destroy plan = %v, want %v", got, wantIDs)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
+		"destroy.cluster-runtime":      nil,
 		"destroy.storage-clusters":     nil,
 		"destroy.machine-registration": {"destroy.storage-clusters"},
-		"destroy.storage-node-access":  {"destroy.machine-registration"},
-		"destroy.infra-components":     {"destroy.storage-node-access"},
-		"destroy.machine-infra":        {"destroy.infra-components"},
-		"destroy.container-clusters":   {"destroy.machine-infra"},
-		"destroy.provider-services":    {"destroy.machine-infra", "destroy.container-clusters"},
+		"destroy.storage-node-access":  {"destroy.machine-registration", "destroy.storage-clusters"},
+		"destroy.machine-infra": {
+			"destroy.cluster-runtime",
+			"destroy.storage-node-access",
+			"destroy.machine-registration",
+			"destroy.storage-clusters",
+		},
+		"destroy.container-clusters": {"destroy.cluster-runtime", "destroy.storage-clusters"},
+		"destroy.infra-components": {
+			"destroy.machine-infra",
+			"destroy.storage-node-access",
+			"destroy.machine-registration",
+		},
+		"destroy.provider-services": {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
 	})
 	for i, task := range tasks {
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
@@ -184,20 +195,30 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 	registration := slices.Index(wantIDs, "destroy.machine-registration")
 	storage := slices.Index(wantIDs, "destroy.storage-clusters")
 	machineInfra := slices.Index(wantIDs, "destroy.machine-infra")
+	runtime := slices.Index(wantIDs, "destroy.cluster-runtime")
 	if !(storage < registration && registration < nodeAccess) {
 		t.Fatalf("every step that connects to bootwright_storage_hosts with the run's statically rendered ansible_user must precede the node-access revoke: %v", wantIDs)
 	}
 	if nodeAccess > machineInfra {
 		t.Fatalf("node-access revoke must precede machine teardown: once the substrate deletes the VMs, task_storage_node_access_destroy.yml ends every host on the unreachable probe and revocation silently no-ops while still reporting success; got %v", wantIDs)
 	}
+	if runtime > storage || runtime > machineInfra {
+		t.Fatalf("cluster runtime teardown is the inverse of the terminal add-ons phase, so it is the graph root and must precede both storage and machine teardown: %v", wantIDs)
+	}
+	if machineInfra > slices.Index(wantIDs, "destroy.infra-components") {
+		t.Fatalf("apply makes every machines-phase task depend on the fabric services, so the inverse tears the fabric down after the machines it serves: %v", wantIDs)
+	}
 	if got := destroyTaskByID(t, tasks, "destroy.container-clusters").Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
-		t.Fatalf("container runtime cleanup must require successful machine teardown so KubeVirt host credentials and retry evidence survive a failed guest deletion, got %v", got)
+		t.Fatalf("the records half must require successful machine teardown: kubeVirtHostClustersForRun materialises every KubeVirt host kubeconfig for each machine-infra task, so deleting one while any machine teardown is still runnable strands the guests; got %v", got)
 	}
 	if got := destroyTaskByID(t, tasks, "destroy.machine-registration").Entry.OrderingDependencies; slices.Contains(got, "destroy.infra-components") {
 		t.Fatalf("RHSM deregistration runs through bootwright_proxy_env, so the proxy InfraComponent must still exist: %v", got)
 	}
+	if got := destroyTaskByID(t, tasks, "destroy.infra-components").Entry.OrderingDependencies; !slices.Contains(got, "destroy.machine-registration") {
+		t.Fatalf("the proxy InfraComponent carries RHSM egress, so deregistration must complete before the fabric is torn down; got %v", got)
+	}
 	if got := destroyTaskByID(t, tasks, "destroy.provider-services").Entry.OrderingDependencies; !slices.Contains(got, "destroy.container-clusters") {
-		t.Fatalf("provider services must stay serialised behind container-cluster teardown: container_cluster_agent_install/tasks/destroy.yml restarts systemd-resolved on the controller that every other destroy play resolves its SSH targets through; got %v", got)
+		t.Fatalf("provider services must stay serialised behind container-cluster teardown: container_cluster_agent_install/tasks/destroy_records.yml restarts systemd-resolved on the controller that every other destroy play resolves its SSH targets through; got %v", got)
 	}
 }
 
@@ -207,11 +228,11 @@ func TestPlanDestroyTasksRelinksOrderingAcrossSkippedSteps(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
-		"destroy.machine-registration": nil,
-		"destroy.infra-components":     {"destroy.machine-registration"},
-		"destroy.machine-infra":        {"destroy.infra-components"},
-		"destroy.container-clusters":   {"destroy.machine-infra"},
-		"destroy.provider-services":    {"destroy.machine-infra", "destroy.container-clusters"},
+		"destroy.cluster-runtime":    nil,
+		"destroy.machine-infra":      {"destroy.cluster-runtime"},
+		"destroy.container-clusters": {"destroy.cluster-runtime"},
+		"destroy.infra-components":   {"destroy.machine-infra"},
+		"destroy.provider-services":  {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
 	})
 
 	clusters, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "limit", nil, []string{})
@@ -219,7 +240,8 @@ func TestPlanDestroyTasksRelinksOrderingAcrossSkippedSteps(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertDestroyOrderingEdges(t, clusters, map[string][]string{
-		"destroy.container-clusters": nil,
+		"destroy.cluster-runtime":    nil,
+		"destroy.container-clusters": {"destroy.cluster-runtime"},
 	})
 }
 
@@ -541,30 +563,59 @@ func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantIDs := []string{
+		"destroy.cluster-runtime",
 		"destroy.storage-clusters.ceph-a",
 		"destroy.storage-clusters.ceph-b",
-		"destroy.machine-registration",
+		"destroy.machine-registration.ceph-a",
+		"destroy.machine-registration.ceph-b",
 		"destroy.storage-node-access.ceph-a",
 		"destroy.storage-node-access.ceph-b",
-		"destroy.infra-components",
 		"destroy.machine-infra",
 		"destroy.container-clusters",
+		"destroy.infra-components",
 		"destroy.provider-services",
 	}
 	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
 		t.Fatalf("fanned destroy plan = %v, want %v", got, wantIDs)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
-		"destroy.storage-clusters.ceph-a":    nil,
-		"destroy.storage-clusters.ceph-b":    nil,
-		"destroy.machine-registration":       {"destroy.storage-clusters.ceph-a", "destroy.storage-clusters.ceph-b"},
-		"destroy.storage-node-access.ceph-a": {"destroy.machine-registration"},
-		"destroy.storage-node-access.ceph-b": {"destroy.machine-registration"},
-		"destroy.infra-components":           {"destroy.storage-node-access.ceph-a", "destroy.storage-node-access.ceph-b"},
-		"destroy.machine-infra":              {"destroy.infra-components"},
-		"destroy.container-clusters":         {"destroy.machine-infra"},
-		"destroy.provider-services":          {"destroy.machine-infra", "destroy.container-clusters"},
+		"destroy.cluster-runtime":             nil,
+		"destroy.storage-clusters.ceph-a":     nil,
+		"destroy.storage-clusters.ceph-b":     nil,
+		"destroy.machine-registration.ceph-a": {"destroy.storage-clusters.ceph-a"},
+		"destroy.machine-registration.ceph-b": {"destroy.storage-clusters.ceph-b"},
+		"destroy.storage-node-access.ceph-a":  {"destroy.machine-registration.ceph-a", "destroy.storage-clusters.ceph-a"},
+		"destroy.storage-node-access.ceph-b":  {"destroy.machine-registration.ceph-b", "destroy.storage-clusters.ceph-b"},
+		"destroy.machine-infra": {
+			"destroy.cluster-runtime",
+			"destroy.storage-node-access.ceph-a",
+			"destroy.storage-node-access.ceph-b",
+			"destroy.machine-registration.ceph-a",
+			"destroy.machine-registration.ceph-b",
+			"destroy.storage-clusters.ceph-a",
+			"destroy.storage-clusters.ceph-b",
+		},
+		"destroy.container-clusters": {
+			"destroy.cluster-runtime",
+			"destroy.storage-clusters.ceph-a",
+			"destroy.storage-clusters.ceph-b",
+		},
+		"destroy.infra-components": {
+			"destroy.machine-infra",
+			"destroy.storage-node-access.ceph-a",
+			"destroy.storage-node-access.ceph-b",
+			"destroy.machine-registration.ceph-a",
+			"destroy.machine-registration.ceph-b",
+		},
+		"destroy.provider-services": {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
 	})
+	for _, cluster := range []string{"ceph-a", "ceph-b"} {
+		other := map[string]string{"ceph-a": "ceph-b", "ceph-b": "ceph-a"}[cluster]
+		got := destroyTaskByID(t, tasks, "destroy.storage-node-access."+cluster).Entry.OrderingDependencies
+		if slices.Contains(got, "destroy.machine-registration."+other) {
+			t.Fatalf("per-cluster storage edges must not cross clusters, or one cluster's failure serialises an unrelated one: %v", got)
+		}
+	}
 	if got := destroyTaskByID(t, tasks, "destroy.container-clusters").Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
 		t.Fatalf("fanning storage out must keep the container-cluster hard dependency on machine teardown, got %v", got)
 	}
@@ -712,16 +763,13 @@ func TestDestroyChainSetsForksForEveryStep(t *testing.T) {
 		"destroy.machine-registration": bounded(storageHosts),
 		"destroy.storage-node-access":  bounded(storageHosts),
 		"destroy.infra-components":     bounded(hostCount(render.GroupInfraComponentHosts)),
-		"destroy.container-clusters":   bounded(hostCount(render.GroupOCPHosts)),
 		"destroy.provider-services":    bounded(hostCount(render.GroupProviderHosts)),
 		"destroy.machine-infra":        bounded(hostCount(render.GroupMachineTaskHosts, render.GroupProviderHosts, render.GroupInfraHosts)),
 	}
+	ocpForks := bounded(hostCount(render.GroupOCPHosts))
 	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(tasks) != len(want) {
-		t.Fatalf("planned %v, want forks for %d steps", destroyTaskIDs(tasks), len(want))
 	}
 	for _, task := range tasks {
 		if task.Forks < 1 {
@@ -730,8 +778,30 @@ func TestDestroyChainSetsForksForEveryStep(t *testing.T) {
 		if task.Forks > destroyMaxForks {
 			t.Fatalf("task %q forks = %d, want at most %d", task.Entry.ID, task.Forks, destroyMaxForks)
 		}
-		if got := task.Forks; got != want[task.Entry.ID] {
-			t.Fatalf("task %q forks = %d, want %d (one worker per host the step's own play targets)", task.Entry.ID, got, want[task.Entry.ID])
+		switch {
+		case task.Entry.Kind == DestroyTaskKindContainerCluster || task.Entry.Kind == DestroyTaskKindContainerClusterRuntime:
+			if task.Forks != ocpForks {
+				t.Fatalf("task %q forks = %d, want %d (one worker per OCP host)", task.Entry.ID, task.Forks, ocpForks)
+			}
+			continue
+		case task.Entry.ID == "destroy.machine-infra-records":
+			if got, expected := task.Forks, bounded(hostCount(render.GroupProviderHosts)); got != expected {
+				t.Fatalf("records sweep forks = %d, want %d; it targets only the provider and infra hosts, never the machine task hosts", got, expected)
+			}
+			continue
+		case strings.HasPrefix(task.Entry.ID, "destroy.machine-infra."):
+			cluster := strings.TrimPrefix(task.Entry.ID, "destroy.machine-infra.")
+			if got, expected := task.Forks, bounded(hostCount(destroyMachineInfraClusterGroup(state, cluster))); got != expected {
+				t.Fatalf("task %q forks = %d, want %d (one worker per machine task host of its own cluster)", task.Entry.ID, got, expected)
+			}
+			continue
+		}
+		expected, ok := want[task.Entry.ID]
+		if !ok {
+			t.Fatalf("task %q has no expected fork count; every planned step must claim one", task.Entry.ID)
+		}
+		if task.Forks != expected {
+			t.Fatalf("task %q forks = %d, want %d (one worker per host the step's own play targets)", task.Entry.ID, task.Forks, expected)
 		}
 	}
 	for _, id := range []string{"destroy.storage-clusters", "destroy.machine-registration", "destroy.storage-node-access"} {

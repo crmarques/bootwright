@@ -12,13 +12,14 @@ import (
 )
 
 const (
-	DestroyTaskKindMachineRegistration = "destroyMachineRegistration"
-	DestroyTaskKindMachineInfra        = "destroyMachineInfra"
-	DestroyTaskKindInfraComponents     = "destroyInfraComponents"
-	DestroyTaskKindProviderServices    = "destroyProviderServices"
-	DestroyTaskKindStorageCluster      = "destroyStorageCluster"
-	DestroyTaskKindContainerCluster    = "destroyContainerCluster"
-	DestroyTaskKindStorageNodeAccess   = "destroyStorageNodeAccess"
+	DestroyTaskKindMachineRegistration     = "destroyMachineRegistration"
+	DestroyTaskKindMachineInfra            = "destroyMachineInfra"
+	DestroyTaskKindInfraComponents         = "destroyInfraComponents"
+	DestroyTaskKindProviderServices        = "destroyProviderServices"
+	DestroyTaskKindStorageCluster          = "destroyStorageCluster"
+	DestroyTaskKindContainerCluster        = "destroyContainerCluster"
+	DestroyTaskKindContainerClusterRuntime = "destroyContainerClusterRuntime"
+	DestroyTaskKindStorageNodeAccess       = "destroyStorageNodeAccess"
 )
 
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
@@ -29,20 +30,38 @@ const DestroyClusterOrderExtraVar = "bootwright_destroy_cluster_order"
 
 const DestroyClusterLevelsExtraVar = "bootwright_destroy_cluster_levels"
 
+const DestroyClusterScopeExtraVar = "bootwright_destroy_cluster_scope"
+
+const InfraDestroyContextSweepExtraVar = "bootwright_infra_destroy_context_sweep"
+
+const DestroyContainerClusterExtraVar = "bootwright_destroy_container_cluster"
+
+const ContainerClusterRecordsOnlyExtraVar = "bootwright_container_cluster_records_only"
+
+const MachineInfraRecordsOnlyExtraVar = "bootwright_machine_infra_records_only"
+
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	if destroyMachineScoped(extraVars) {
-		return destroyChain(state, limit, extraVars, infraMachineDestroySteps(), storageWorkNames)
+		return destroyChain(state, limit, extraVars, infraMachineDestroySteps())
 	}
+	facts := destroyGraphFactsFor(state)
+	work := destroyStorageWorkFor(state, storageWorkNames)
+	var steps []destroyStep
+	var err error
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
-		return destroyChain(state, limit, extraVars, infraDestroySteps(), storageWorkNames)
+		steps, err = infraDestroySteps(state, facts, work)
 	case "clusters":
-		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), storageNodeAccessDestroySteps()...), storageWorkNames)
+		steps, err = clusterDestroySteps(state, facts, work)
 	case "all":
-		return destroyChain(state, limit, extraVars, fullDestroySteps(), storageWorkNames)
+		steps, err = fullDestroySteps(state, facts, work)
 	default:
 		return nil, fmt.Errorf("granular destroy is only supported for the infra, clusters, and all stages, not %q", scopeName)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return destroyChain(state, limit, extraVars, steps)
 }
 
 const (
@@ -50,73 +69,145 @@ const (
 	destroyMachineRegistrationTaskID = "destroy.machine-registration"
 	destroyInfraComponentsTaskID     = "destroy.infra-components"
 	destroyMachineInfraTaskID        = "destroy.machine-infra"
+	destroyMachineInfraRecordsTaskID = "destroy.machine-infra-records"
+	destroyClusterRuntimeTaskID      = "destroy.cluster-runtime"
 	destroyContainerClustersTaskID   = "destroy.container-clusters"
 	destroyProviderServicesTaskID    = "destroy.provider-services"
 )
 
 const destroyMaxForks = 20
 
-func infraDestroySteps() []destroyStep {
-	return []destroyStep{
-		machineRegistrationDestroyStep(nil),
-		infraComponentsDestroyStep([]string{destroyMachineRegistrationTaskID}),
-		machineInfraDestroyStep([]string{destroyInfraComponentsTaskID}),
-		providerServicesDestroyStep([]string{destroyMachineInfraTaskID}),
+func infraDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destroyStorageWork) ([]destroyStep, error) {
+	steps := storageFamilySteps(state, work, machineRegistrationFamily(work, false))
+	placementFirst := destroyPlacementFirst(facts)
+	machineSteps, err := machineInfraFamilySteps(state, facts, func(cluster string) []string {
+		out := appendUniqueStrings(nil, work.allIDs(destroyMachineRegistrationTaskID)...)
+		if destroyOrdersInfraComponentsFirst(facts, placementFirst, cluster) {
+			out = appendUniqueString(out, destroyInfraComponentsTaskID)
+		}
+		return out
+	})
+	if err != nil {
+		return nil, err
 	}
+	steps = append(steps, machineSteps...)
+	steps = append(steps, infraComponentsDestroyStep(destroyInfraComponentsOrdering(facts, work, placementFirst)))
+	steps = append(steps, providerServicesDestroyStep(destroyProviderServicesOrdering(facts, false)))
+	return steps, nil
 }
 
 func infraMachineDestroySteps() []destroyStep {
 	return []destroyStep{
-		machineRegistrationDestroyStep(nil),
-		machineInfraDestroyStep([]string{destroyMachineRegistrationTaskID}),
+		{
+			id:         destroyMachineRegistrationTaskID,
+			kind:       DestroyTaskKindMachineRegistration,
+			label:      "Machine registration",
+			playbook:   roles.PlaybookTaskMachineRegistrationDeregister,
+			limit:      render.GroupStorageHosts,
+			forksLimit: render.GroupStorageHosts,
+		},
+		{
+			id:                   destroyMachineInfraTaskID,
+			kind:                 DestroyTaskKindMachineInfra,
+			label:                "Machine infrastructure",
+			playbook:             roles.PlaybookTaskMachineInfraDestroy,
+			limit:                machineInfraDestroyLimit(),
+			orderingDependencies: []string{destroyMachineRegistrationTaskID},
+		},
 	}
 }
 
-func fullDestroySteps() []destroyStep {
-	return []destroyStep{
-		storageClusterDestroyStep(nil),
-		machineRegistrationDestroyStep([]string{DestroyStorageClustersTaskID}),
-		storageNodeAccessDestroyStep([]string{destroyMachineRegistrationTaskID}),
-		infraComponentsDestroyStep([]string{destroyStorageNodeAccessTaskID}),
-		machineInfraDestroyStep([]string{destroyInfraComponentsTaskID}),
-		containerClustersDestroyStep([]string{destroyMachineInfraTaskID}, []string{destroyMachineInfraTaskID}),
-		providerServicesDestroyStep([]string{destroyMachineInfraTaskID, destroyContainerClustersTaskID}),
-	}
+func clusterDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destroyStorageWork) ([]destroyStep, error) {
+	steps := containerClusterFamilySteps(facts, destroyClusterRuntimeTaskID, DestroyTaskKindContainerClusterRuntime,
+		"Cluster runtime", roles.PlaybookTaskContainerClusterRuntimeDestroy, nil, nil, false)
+	steps = append(steps, storageFamilySteps(state, work, storageClusterFamily(facts, work, true))...)
+	steps = append(steps, containerClusterFamilySteps(facts, destroyContainerClustersTaskID, DestroyTaskKindContainerCluster,
+		"Container clusters", roles.PlaybookTaskContainerClusterAgentDestroy, nil,
+		destroyContainerRecordsOrdering(facts, work), true)...)
+	steps = append(steps, storageFamilySteps(state, work, storageNodeAccessFamily(work, false, func(cluster string) []string {
+		return facts.containerAllIDs(destroyContainerClustersTaskID)
+	}))...)
+	return steps, nil
 }
 
-func storageClusterDestroyStep(ordering []string) destroyStep {
-	return destroyStep{
-		id:                   DestroyStorageClustersTaskID,
-		kind:                 DestroyTaskKindStorageCluster,
-		label:                "Storage clusters",
-		playbook:             roles.PlaybookTaskStorageClusterDestroy,
-		limit:                render.GroupStorageHosts,
-		forksLimit:           render.GroupStorageHosts,
-		orderingDependencies: ordering,
+func fullDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destroyStorageWork) ([]destroyStep, error) {
+	steps := containerClusterFamilySteps(facts, destroyClusterRuntimeTaskID, DestroyTaskKindContainerClusterRuntime,
+		"Cluster runtime", roles.PlaybookTaskContainerClusterRuntimeDestroy, nil, nil, false)
+	steps = append(steps, storageFamilySteps(state, work, storageClusterFamily(facts, work, true))...)
+	steps = append(steps, storageFamilySteps(state, work, machineRegistrationFamily(work, true))...)
+	steps = append(steps, storageFamilySteps(state, work, storageNodeAccessFamily(work, true, nil))...)
+
+	placementFirst := destroyPlacementFirst(facts)
+	machineSteps, err := machineInfraFamilySteps(state, facts, func(cluster string) []string {
+		var out []string
+		if cluster == "" || facts.isContainerCluster(cluster) {
+			out = appendUniqueStrings(out, facts.containerAllIDs(destroyClusterRuntimeTaskID)...)
+		}
+		if cluster == "" || work.nameSet[cluster] {
+			out = appendUniqueStrings(out, work.stepIDsFor(cluster,
+				destroyStorageNodeAccessTaskID, destroyMachineRegistrationTaskID, DestroyStorageClustersTaskID)...)
+		}
+		if destroyOrdersInfraComponentsFirst(facts, placementFirst, cluster) {
+			out = appendUniqueString(out, destroyInfraComponentsTaskID)
+		}
+		return out
+	})
+	if err != nil {
+		return nil, err
 	}
+	steps = append(steps, machineSteps...)
+	steps = append(steps, containerClusterFamilySteps(facts, destroyContainerClustersTaskID, DestroyTaskKindContainerCluster,
+		"Container clusters", roles.PlaybookTaskContainerClusterAgentDestroy,
+		[]string{destroyMachineInfraTaskID}, destroyContainerRecordsOrdering(facts, work), true)...)
+	steps = append(steps, infraComponentsDestroyStep(destroyInfraComponentsOrdering(facts, work, placementFirst)))
+	steps = append(steps, providerServicesDestroyStep(destroyProviderServicesOrdering(facts, true)))
+	return steps, nil
 }
 
-func machineRegistrationDestroyStep(ordering []string) destroyStep {
-	return destroyStep{
-		id:                   destroyMachineRegistrationTaskID,
-		kind:                 DestroyTaskKindMachineRegistration,
-		label:                "Machine registration",
-		playbook:             roles.PlaybookTaskMachineRegistrationDeregister,
-		limit:                render.GroupStorageHosts,
-		forksLimit:           render.GroupStorageHosts,
-		orderingDependencies: ordering,
-	}
+func destroyPlacementFirst(facts destroyGraphFacts) bool {
+	return !facts.machineInfraFanned() && len(facts.placement) > 0
 }
 
-func storageNodeAccessDestroyStep(ordering []string) destroyStep {
-	return destroyStep{
-		id:                   destroyStorageNodeAccessTaskID,
-		kind:                 DestroyTaskKindStorageNodeAccess,
-		label:                "Storage node access",
-		playbook:             roles.PlaybookTaskStorageNodeAccessDestroy,
-		limit:                render.GroupStorageHosts,
-		forksLimit:           render.GroupStorageHosts,
-		orderingDependencies: ordering,
+func destroyOrdersInfraComponentsFirst(facts destroyGraphFacts, placementFirst bool, cluster string) bool {
+	if cluster == "" {
+		return placementFirst
+	}
+	return facts.placement[cluster]
+}
+
+func destroyInfraComponentsOrdering(facts destroyGraphFacts, work destroyStorageWork, placementFirst bool) []string {
+	var out []string
+	if facts.machineInfraFanned() {
+		for _, cluster := range facts.machineInfraFan {
+			if facts.placement[cluster] {
+				continue
+			}
+			out = appendUniqueString(out, facts.machineInfraID(cluster))
+		}
+		out = appendUniqueString(out, destroyMachineInfraRecordsTaskID)
+	} else if !placementFirst {
+		out = appendUniqueString(out, destroyMachineInfraTaskID)
+	}
+	out = appendUniqueStrings(out, work.allIDs(destroyStorageNodeAccessTaskID)...)
+	out = appendUniqueStrings(out, work.allIDs(destroyMachineRegistrationTaskID)...)
+	return out
+}
+
+func destroyProviderServicesOrdering(facts destroyGraphFacts, withContainers bool) []string {
+	out := []string{destroyMachineInfraTaskID}
+	if facts.machineInfraFanned() {
+		out = append(out, destroyMachineInfraRecordsTaskID)
+	}
+	if withContainers {
+		out = append(out, destroyContainerClustersTaskID)
+	}
+	return append(out, destroyInfraComponentsTaskID)
+}
+
+func destroyContainerRecordsOrdering(facts destroyGraphFacts, work destroyStorageWork) func(cluster string) []string {
+	return func(cluster string) []string {
+		out := appendUniqueStrings(nil, facts.containerStepID(destroyClusterRuntimeTaskID, cluster))
+		return appendUniqueStrings(out, work.allIDs(DestroyStorageClustersTaskID)...)
 	}
 }
 
@@ -127,28 +218,6 @@ func infraComponentsDestroyStep(ordering []string) destroyStep {
 		label:                "Infra component services",
 		playbook:             roles.PlaybookTaskInfraComponentServicesDestroy,
 		forksLimit:           render.GroupInfraComponentHosts,
-		orderingDependencies: ordering,
-	}
-}
-
-func machineInfraDestroyStep(ordering []string) destroyStep {
-	return destroyStep{
-		id:                   destroyMachineInfraTaskID,
-		kind:                 DestroyTaskKindMachineInfra,
-		label:                "Machine infrastructure",
-		playbook:             roles.PlaybookTaskMachineInfraDestroy,
-		orderingDependencies: ordering,
-	}
-}
-
-func containerClustersDestroyStep(hard, ordering []string) destroyStep {
-	return destroyStep{
-		id:                   destroyContainerClustersTaskID,
-		kind:                 DestroyTaskKindContainerCluster,
-		label:                "Container clusters",
-		playbook:             roles.PlaybookTaskContainerClusterAgentDestroy,
-		forksLimit:           render.GroupOCPHosts,
-		dependencies:         hard,
 		orderingDependencies: ordering,
 	}
 }
@@ -176,19 +245,6 @@ func destroyMachineScoped(extraVars []string) bool {
 
 const DestroyStorageClustersTaskID = "destroy.storage-clusters"
 
-func clusterDestroySteps() []destroyStep {
-	return []destroyStep{
-		storageClusterDestroyStep(nil),
-		containerClustersDestroyStep(nil, []string{DestroyStorageClustersTaskID}),
-	}
-}
-
-func storageNodeAccessDestroySteps() []destroyStep {
-	return []destroyStep{
-		storageNodeAccessDestroyStep([]string{destroyContainerClustersTaskID}),
-	}
-}
-
 type destroyStep struct {
 	id                   string
 	baseID               string
@@ -197,9 +253,12 @@ type destroyStep struct {
 	playbook             string
 	limit                string
 	forksLimit           string
+	hostSlotKey          string
 	resourceKeys         []string
 	dependencies         []string
 	orderingDependencies []string
+	extraVarOverrides    []string
+	dropExtraVarNames    []string
 }
 
 func (s destroyStep) base() string {
@@ -209,14 +268,11 @@ func (s destroyStep) base() string {
 	return s.id
 }
 
-func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep, storageWorkNames []string) ([]ApplyTask, error) {
-	planned := plannedDestroySteps(state, steps, storageWorkNames)
+func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps []destroyStep) ([]ApplyTask, error) {
+	planned := steps
 	declared := make(map[string][]string, len(steps))
 	emitted := make(map[string][]string, len(planned))
 	for _, step := range steps {
-		declared[step.id] = step.orderingDependencies
-	}
-	for _, step := range planned {
 		declared[step.id] = step.orderingDependencies
 	}
 	for _, step := range planned {
@@ -241,26 +297,18 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		if step.limit != "" {
 			taskLimit = step.limit
 		}
-		taskExtraVars := append([]string(nil), extraVars...)
-		if step.kind == DestroyTaskKindMachineInfra {
-			taskLimit = machineInfraDestroyLimit()
-			levels, err := machineInfraDestroyLevels(state)
-			if err != nil {
-				return nil, err
-			}
-			if order := flattenDestroyLevels(levels); len(order) > 0 {
-				taskExtraVars = append(taskExtraVars,
-					DestroyClusterOrderExtraVar+"="+strings.Join(order, ","),
-					DestroyClusterLevelsExtraVar+"="+joinDestroyLevels(levels),
-				)
-			}
+		entry.HostSlotKey = step.hostSlotKey
+		if step.hostSlotKey != "" {
+			entry.HostSlotCount = 1
 		}
 		tasks = append(tasks, ApplyTask{
 			Entry:         entry,
 			Playbook:      step.playbook,
 			Limit:         taskLimit,
 			Forks:         destroyStepForks(state, step, taskLimit),
-			ExtraVarPairs: taskExtraVars,
+			ExtraVarPairs: destroyTaskExtraVars(extraVars, step),
+			HostSlotKey:   step.hostSlotKey,
+			HostSlotCount: destroyStepHostSlotCount(step),
 			State:         state,
 		})
 	}
@@ -268,6 +316,34 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		return nil, err
 	}
 	return tasks, nil
+}
+
+func destroyStepHostSlotCount(step destroyStep) int {
+	if step.hostSlotKey == "" {
+		return 0
+	}
+	return 1
+}
+
+func destroyTaskExtraVars(runVars []string, step destroyStep) []string {
+	drop := make(map[string]bool, len(step.dropExtraVarNames)+len(step.extraVarOverrides))
+	for _, name := range step.dropExtraVarNames {
+		drop[name] = true
+	}
+	for _, pair := range step.extraVarOverrides {
+		if name, _, ok := strings.Cut(pair, "="); ok {
+			drop[name] = true
+		}
+	}
+	out := make([]string, 0, len(runVars)+len(step.extraVarOverrides))
+	for _, pair := range runVars {
+		name, _, _ := strings.Cut(pair, "=")
+		if drop[name] {
+			continue
+		}
+		out = append(out, pair)
+	}
+	return append(out, step.extraVarOverrides...)
 }
 
 func detectDestroyTaskCycle(tasks []ApplyTask) error {
@@ -322,47 +398,6 @@ func detectDestroyTaskCycle(tasks []ApplyTask) error {
 	}
 	sort.Strings(members)
 	return fmt.Errorf("cannot plan destroy: task dependency cycle among %s", strings.Join(members, ", "))
-}
-
-func plannedDestroySteps(state v1alpha1.State, steps []destroyStep, storageWorkNames []string) []destroyStep {
-	planned := make([]destroyStep, 0, len(steps))
-	for _, step := range steps {
-		clusters := destroyStepClusters(state, step.kind)
-		if destroyStepIsStorageScoped(step.kind) && storageWorkNames != nil {
-			if len(storageWorkNames) == 0 {
-				continue
-			}
-			clusters = append([]string(nil), storageWorkNames...)
-			sort.Strings(clusters)
-		}
-		if destroyStepIsStorageScoped(step.kind) {
-			if fannable := destroyFanOutClusters(state, clusters); len(fannable) > 1 {
-				planned = append(planned, fanOutDestroyStep(state, step, fannable)...)
-				continue
-			}
-		}
-		step.resourceKeys = clusters
-		planned = append(planned, step)
-	}
-	return planned
-}
-
-func destroyStepIsStorageScoped(kind string) bool {
-	return kind == DestroyTaskKindStorageCluster || kind == DestroyTaskKindStorageNodeAccess
-}
-
-func destroyFanOutClusters(state v1alpha1.State, clusters []string) []string {
-	grouped := destroyStorageInventoryGroupClusters(state)
-	out := make([]string, 0, len(clusters))
-	for _, name := range clusters {
-		if grouped[name] {
-			out = append(out, name)
-		}
-	}
-	if len(out) != len(clusters) {
-		return nil
-	}
-	return out
 }
 
 func destroyStorageInventoryGroupClusters(state v1alpha1.State) map[string]bool {

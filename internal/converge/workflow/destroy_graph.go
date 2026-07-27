@@ -5,7 +5,99 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
+
+type destroyGraphFacts struct {
+	containerClusters  []string
+	storageClusters    []string
+	machineInfraFan    []string
+	machineInfraFanSet map[string]bool
+	parents            map[string]map[string]bool
+	guestsByHost       map[string][]string
+	placement          map[string]bool
+	consumersByStorage map[string][]string
+}
+
+func destroyGraphFactsFor(state v1alpha1.State) destroyGraphFacts {
+	facts := destroyGraphFacts{
+		parents:            KubeVirtHostParentsByChild(state),
+		consumersByStorage: stategraph.StorageConsumersByCluster(state),
+		machineInfraFanSet: map[string]bool{},
+	}
+	for _, cluster := range state.ContainerClusters {
+		facts.containerClusters = append(facts.containerClusters, cluster.Metadata.Name)
+	}
+	for _, cluster := range state.StorageClusters {
+		facts.storageClusters = append(facts.storageClusters, cluster.Metadata.Name)
+	}
+	sort.Strings(facts.containerClusters)
+	sort.Strings(facts.storageClusters)
+	facts.machineInfraFan = destroyMachineInfraFanOutClusters(state)
+	for _, name := range facts.machineInfraFan {
+		facts.machineInfraFanSet[name] = true
+	}
+	facts.guestsByHost = destroyGuestsByHost(facts.parents)
+	facts.placement = destroyPlacementClosure(state, facts.parents)
+	return facts
+}
+
+func destroyGuestsByHost(parents map[string]map[string]bool) map[string][]string {
+	out := map[string][]string{}
+	for child, hosts := range parents {
+		for host := range hosts {
+			out[host] = append(out[host], child)
+		}
+	}
+	for host := range out {
+		sort.Strings(out[host])
+	}
+	return out
+}
+
+func destroyClusterOwnerByMachine(state v1alpha1.State) map[string]string {
+	out := map[string]string{}
+	for _, cluster := range state.ContainerClusters {
+		for _, node := range cluster.Spec.Nodes {
+			if node.MachineRef.Name != "" {
+				out[node.MachineRef.Name] = cluster.Metadata.Name
+			}
+		}
+	}
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if node.MachineRef.Name != "" {
+				out[node.MachineRef.Name] = cluster.Metadata.Name
+			}
+		}
+	}
+	return out
+}
+
+func destroyPlacementClosure(state v1alpha1.State, parents map[string]map[string]bool) map[string]bool {
+	owner := destroyClusterOwnerByMachine(state)
+	out := map[string]bool{}
+	for _, host := range render.HostGroupMembers(state)[render.GroupInfraComponentHosts] {
+		if cluster := owner[host]; cluster != "" {
+			out[cluster] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for child := range out {
+			for parent := range parents[child] {
+				if !out[parent] {
+					out[parent] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return out
+}
 
 func KubeVirtHostParentsByChild(state v1alpha1.State) map[string]map[string]bool {
 	machines := make(map[string]v1alpha1.Machine, len(state.Machines))
@@ -93,16 +185,8 @@ func destroyMachineInfraFanOutClusters(state v1alpha1.State) []string {
 		}
 		out = append(out, cluster)
 	}
-	if len(out) == 0 {
+	if len(out) < 2 {
 		return nil
-	}
-	for _, cluster := range clusters {
-		if len(ClusterSubstrateMachineNames(state, cluster)) == 0 {
-			continue
-		}
-		if len(groups[destroyMachineInfraClusterGroup(state, cluster)]) == 0 {
-			return nil
-		}
 	}
 	return out
 }

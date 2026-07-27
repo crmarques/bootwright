@@ -14,6 +14,7 @@ const (
 	PhaseAddOns            = "Add-ons"
 	PhaseCustomPlaybooks   = "Custom playbooks"
 	PhaseStorageClusters   = "Storage clusters"
+	PhaseClusterRuntime    = "Cluster runtime"
 	PhaseContainerClusters = "Container clusters"
 	PhaseWork              = "Work"
 )
@@ -66,6 +67,8 @@ func TaskPhaseLabel(task workflow.TaskLedgerEntry) string {
 		return PhaseCustomPlaybooks
 	case workflow.DestroyTaskKindStorageCluster:
 		return PhaseStorageClusters
+	case workflow.DestroyTaskKindContainerClusterRuntime:
+		return PhaseClusterRuntime
 	case workflow.DestroyTaskKindContainerCluster:
 		return PhaseContainerClusters
 	default:

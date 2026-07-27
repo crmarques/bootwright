@@ -1042,12 +1042,13 @@ func TestDestroyFullDryRunJSONPlansDependencySafeLifecycle(t *testing.T) {
 		t.Fatalf("full destroy dry-run report missing destroy plan: %+v", report)
 	}
 	wantIDs := []string{
+		"destroy.cluster-runtime",
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
 		"destroy.storage-node-access",
-		"destroy.infra-components",
 		"destroy.machine-infra",
 		"destroy.container-clusters",
+		"destroy.infra-components",
 		"destroy.provider-services",
 	}
 	gotIDs := make([]string, 0, len(report.DestroyPlan.Tasks))

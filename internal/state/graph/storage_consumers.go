@@ -12,12 +12,7 @@ type StorageConsumerConflict struct {
 	ConsumingClusters []string
 }
 
-func StorageConsumerDestroyConflicts(state v1alpha1.State, selectedStorage, selectedContainer []string) []StorageConsumerConflict {
-	destroying := nameSet(selectedStorage)
-	if len(destroying) == 0 {
-		return nil
-	}
-	inScope := nameSet(selectedContainer)
+func StorageConsumersByCluster(state v1alpha1.State) map[string][]string {
 	exportCluster := map[string]string{}
 	for _, export := range state.StorageExports {
 		exportCluster[export.Metadata.Name] = export.Spec.StorageClusterRef.Name
@@ -26,11 +21,11 @@ func StorageConsumerDestroyConflicts(state v1alpha1.State, selectedStorage, sele
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input).Name
 		storageCluster := exportCluster[exportRef]
-		if storageCluster == "" || !destroying[storageCluster] {
+		if storageCluster == "" {
 			continue
 		}
 		consumer := effect.Binding.Spec.ClusterRef.Name
-		if consumer == "" || inScope[consumer] {
+		if consumer == "" {
 			continue
 		}
 		if consumers[storageCluster] == nil {
@@ -38,13 +33,39 @@ func StorageConsumerDestroyConflicts(state v1alpha1.State, selectedStorage, sele
 		}
 		consumers[storageCluster][consumer] = true
 	}
-	var conflicts []StorageConsumerConflict
+	out := make(map[string][]string, len(consumers))
 	for storageCluster, set := range consumers {
 		clusters := make([]string, 0, len(set))
 		for name := range set {
 			clusters = append(clusters, name)
 		}
 		sort.Strings(clusters)
+		out[storageCluster] = clusters
+	}
+	return out
+}
+
+func StorageConsumerDestroyConflicts(state v1alpha1.State, selectedStorage, selectedContainer []string) []StorageConsumerConflict {
+	destroying := nameSet(selectedStorage)
+	if len(destroying) == 0 {
+		return nil
+	}
+	inScope := nameSet(selectedContainer)
+	var conflicts []StorageConsumerConflict
+	for storageCluster, all := range StorageConsumersByCluster(state) {
+		if !destroying[storageCluster] {
+			continue
+		}
+		var clusters []string
+		for _, consumer := range all {
+			if inScope[consumer] {
+				continue
+			}
+			clusters = append(clusters, consumer)
+		}
+		if len(clusters) == 0 {
+			continue
+		}
 		conflicts = append(conflicts, StorageConsumerConflict{StorageCluster: storageCluster, ConsumingClusters: clusters})
 	}
 	sort.SliceStable(conflicts, func(i, j int) bool {

@@ -101,7 +101,7 @@ func runPhaseDetail(phase status.RunPhase, ledger workflow.RunLedger, opts phase
 
 func phaseNamesItsResources(phase status.RunPhase) bool {
 	switch phase.Label {
-	case status.PhaseStorageClusters, status.PhaseContainerClusters:
+	case status.PhaseStorageClusters, status.PhaseClusterRuntime, status.PhaseContainerClusters:
 		return true
 	default:
 		return false
