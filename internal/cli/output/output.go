@@ -123,6 +123,16 @@ func (p *Printer) Fields(fields []Field) {
 	p.wrote = true
 }
 
+func (p *Printer) SubFields(fields []Field) {
+	if p == nil || p.w == nil || len(fields) == 0 {
+		return
+	}
+	for _, field := range fields {
+		fmt.Fprintf(p.w, "    %s: %s\n", field.Key, field.Value)
+	}
+	p.wrote = true
+}
+
 func (p *Printer) FieldList(key string, items []string) {
 	if p == nil || p.w == nil || len(items) == 0 {
 		return

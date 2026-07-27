@@ -20,7 +20,7 @@ func printApplySummary(w io.Writer, selected []converge.Phase, askBecomePass boo
 }
 
 func printDestroySummary(w io.Writer, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
-	printWorkflowSummary(w, "", selected, askBecomePass, dryRun, noRemoteWork, false)
+	printWorkflowSummary(w, "Notes", selected, askBecomePass, dryRun, noRemoteWork, false)
 }
 
 func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool, listStages bool) {
@@ -33,22 +33,29 @@ func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, 
 		}
 		names = append(names, phase.Name)
 	}
-	if listStages && len(names) > 0 {
-		p.Section(title)
+	warning := ""
+	if !noRemoteWork && rootPhases > 0 {
+		switch {
+		case dryRun:
+			warning = "this run needs sudo; a dry run executes nothing"
+		case !askBecomePass && currentEUID() != 0:
+			warning = "--ask-become-pass=false requires passwordless sudo or an already-root connection user"
+		}
+	}
+	stages := listStages && len(names) > 0
+	if !stages && warning == "" {
+		return
+	}
+	p.Section(title)
+	if stages {
 		detail := strings.Join(names, " → ")
 		if rootPhases > 0 {
 			detail += "  (root)"
 		}
 		p.Status(output.StatusInfo, "selected", detail)
 	}
-	if noRemoteWork || rootPhases == 0 {
-		return
-	}
-	switch {
-	case dryRun:
-		p.Warning("root escalation", "this run needs sudo; a dry run executes nothing")
-	case !askBecomePass && currentEUID() != 0:
-		p.Warning("root escalation", "--ask-become-pass=false requires passwordless sudo or an already-root connection user")
+	if warning != "" {
+		p.Warning("root escalation", warning)
 	}
 }
 

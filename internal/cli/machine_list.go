@@ -222,7 +222,7 @@ func printMachineList(stdout io.Writer, entries []machineListEntry) {
 	for _, entry := range entries {
 		p.Status(machineListStatus(entry), entry.Name, machineListDetail(entry))
 		if fields := machineListFields(entry); len(fields) > 0 {
-			p.Fields(fields)
+			p.SubFields(fields)
 		}
 	}
 }

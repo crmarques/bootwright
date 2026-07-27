@@ -219,7 +219,7 @@ func printClusterList(stdout io.Writer, summaries []clusteraccess.ClusterSummary
 			detail += " · " + sd
 		}
 		p.Status(clusterAccessStatus(summary), summary.Name, detail)
-		p.Fields([]cliout.Field{
+		p.SubFields([]cliout.Field{
 			{Key: "API", Value: emptyAccessValue(summary.APIURL)},
 			{Key: "Console", Value: emptyAccessValue(summary.ConsoleURL)},
 			{Key: "Kubeconfig", Value: accessArtifactDetail(summary.Kubeconfig)},
@@ -236,7 +236,7 @@ func printClusterList(stdout io.Writer, summaries []clusteraccess.ClusterSummary
 		}
 		p.Status(cliout.StatusOK, cluster.Name, detail)
 		if cluster.DashboardPassword.Path != "" {
-			p.Fields([]cliout.Field{
+			p.SubFields([]cliout.Field{
 				{Key: "Dashboard password", Value: accessArtifactDetail(cluster.DashboardPassword)},
 			})
 		}
