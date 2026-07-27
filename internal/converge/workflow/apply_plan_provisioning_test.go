@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -118,17 +119,48 @@ func TestPlanProvisioningPlaybookSkippedOutOfStage(t *testing.T) {
 	assertTaskMissing(t, tasks, "playbook.machines-hook")
 }
 
-func TestPlanProvisioningPlaybookSkippedWhenTargetOutOfScope(t *testing.T) {
+func TestPlanProvisioningPlaybookErrorsWhenTargetResolvesToNoHosts(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.ProvisioningPlaybooks = []v1alpha1.ProvisioningPlaybook{
 		provisioningPlaybook("ghost", v1alpha1.ProvisioningStageBase, v1alpha1.ProvisioningPlaybookTimingAfter,
 			v1alpha1.ProvisioningPlaybookTarget{Clusters: []string{"does-not-exist"}}),
 	}
-	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
-	if err != nil {
-		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	_, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err == nil {
+		t.Fatal("expected an error rather than a silently dropped playbook")
 	}
-	assertTaskMissing(t, tasks, "playbook.ghost")
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Fatalf("error should name the playbook, got: %v", err)
+	}
+}
+
+func TestResolveProvisioningTargetDefersOutOfScopeStorageCluster(t *testing.T) {
+	playbook := provisioningPlaybook("ceph-hook", v1alpha1.ProvisioningStageDeps, v1alpha1.ProvisioningPlaybookTimingBefore,
+		v1alpha1.ProvisioningPlaybookTarget{Clusters: []string{"ceph-a"}})
+	target := ApplyTarget{Name: "all", StorageClusterNames: []string{"ceph-b"}}
+
+	limit, _, _, inScope, err := resolveProvisioningTarget(v1alpha1.State{}, target, playbook,
+		map[string]bool{}, map[string]bool{"ceph-a": true})
+	if err != nil {
+		t.Fatalf("a storage cluster outside the run scope must not be an error: %v", err)
+	}
+	if inScope {
+		t.Fatalf("expected the playbook to be skipped, got limit %q", limit)
+	}
+}
+
+func TestResolveProvisioningTargetErrorsOnMachineWithoutInventoryHost(t *testing.T) {
+	playbook := provisioningPlaybook("bastion-hook", v1alpha1.ProvisioningStageMachines, v1alpha1.ProvisioningPlaybookTimingAfter,
+		v1alpha1.ProvisioningPlaybookTarget{Machines: []string{"bastion-01"}})
+
+	_, _, _, _, err := resolveProvisioningTarget(v1alpha1.State{}, applyAllTarget(), playbook,
+		map[string]bool{}, map[string]bool{})
+	if err == nil {
+		t.Fatal("expected an error for a machine with no inventory host")
+	}
+	if !strings.Contains(err.Error(), "bastion-01") || !strings.Contains(err.Error(), "hostGroups") {
+		t.Fatalf("error should name the machine and the remedy, got: %v", err)
+	}
 }
 
 func TestPlanProvisioningPlaybookDisabledNotPlanned(t *testing.T) {

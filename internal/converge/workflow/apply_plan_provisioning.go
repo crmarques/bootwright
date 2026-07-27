@@ -92,8 +92,11 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 		if !phaseSet[stage] {
 			continue
 		}
-		limit, orderClusters, fleetWide, ok := resolveProvisioningTarget(state, target, p, containers, storage)
-		if !ok {
+		limit, orderClusters, fleetWide, inScope, err := resolveProvisioningTarget(state, target, p, containers, storage)
+		if err != nil {
+			return err
+		}
+		if !inScope {
 			continue
 		}
 		timing := v1alpha1.ProvisioningPlaybookTiming(p)
@@ -101,6 +104,10 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 		hashVars, err := provisioningDesiredHashVars(p)
 		if err != nil {
 			return fmt.Errorf("ProvisioningPlaybook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
+		}
+		extraVarPairs, err := provisioningExtraVarPairs(p, stage, timing)
+		if err != nil {
+			return err
 		}
 
 		activity := Activity{
@@ -119,7 +126,7 @@ func planProvisioningPlaybookActivities(graph *ActivityGraph, state v1alpha1.Sta
 				Limit:             limit,
 				RolesPath:         provisioningVendoredPath(p, p.Spec.RolesPath),
 				CollectionsPath:   provisioningVendoredPath(p, p.Spec.CollectionsPath),
-				ExtraVarPairs:     provisioningExtraVarPairs(p, stage, timing),
+				ExtraVarPairs:     extraVarPairs,
 				State:             state,
 				DesiredHashVars:   hashVars,
 				SkipWhenConverged: v1alpha1.ProvisioningPlaybookRun(p) == v1alpha1.ProvisioningPlaybookRunOnChange,
@@ -265,8 +272,10 @@ func clusterKindSets(state v1alpha1.State) (containers, storage map[string]bool)
 	return containers, storage
 }
 
-func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alpha1.ProvisioningPlaybook, containers, storage map[string]bool) (limit string, orderClusters []string, fleetWide bool, ok bool) {
+func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alpha1.ProvisioningPlaybook, containers, storage map[string]bool) (limit string, orderClusters []string, fleetWide bool, inScope bool, err error) {
 	var tokens []string
+	var unresolvedMachines []string
+	deferredByScope := false
 	clusterSet := map[string]bool{}
 	addCluster := func(name string) {
 		if !clusterSet[name] {
@@ -279,7 +288,11 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 		case containers[name]:
 			tokens = append(tokens, render.AgentNodeGroupName(name))
 			addCluster(name)
-		case storage[name] && storageClusterSelectedForTarget(target, name):
+		case storage[name]:
+			if !storageClusterSelectedForTarget(target, name) {
+				deferredByScope = true
+				continue
+			}
 			tokens = append(tokens, render.StorageClusterGroupName(name))
 			addCluster(name)
 		}
@@ -287,6 +300,7 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 	for _, name := range p.Spec.Target.Machines {
 		hosts := render.MachineInventoryHosts(state, name)
 		if len(hosts) == 0 {
+			unresolvedMachines = append(unresolvedMachines, name)
 			continue
 		}
 		tokens = append(tokens, hosts...)
@@ -305,11 +319,21 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 		tokens = append(tokens, p.Spec.Target.HostGroups...)
 		fleetWide = true
 	}
+	if len(unresolvedMachines) > 0 {
+		return "", nil, false, false, fmt.Errorf(
+			"ProvisioningPlaybook/%s spec.target.machines %s resolve to no inventory host because they are not nodes of any container cluster or managed storage cluster; target them with spec.target.hostGroups instead, or remove them",
+			p.Metadata.Name, strings.Join(unresolvedMachines, ", "))
+	}
 	tokens = dedupeStrings(tokens)
 	if len(tokens) == 0 {
-		return "", nil, false, false
+		if deferredByScope {
+			return "", nil, false, false, nil
+		}
+		return "", nil, false, false, fmt.Errorf(
+			"ProvisioningPlaybook/%s spec.target resolves to no hosts; refusing to run it with an empty --limit, which would target every host in the fleet",
+			p.Metadata.Name)
 	}
-	return strings.Join(tokens, ":"), orderClusters, fleetWide, true
+	return strings.Join(tokens, ":"), orderClusters, fleetWide, true, nil
 }
 
 func machineOwningClusters(state v1alpha1.State, machine string) []string {
@@ -363,18 +387,20 @@ func provisioningVendoredPath(p v1alpha1.ProvisioningPlaybook, rel string) strin
 	return filepath.Join(filepath.Dir(p.SourcePath), rel)
 }
 
-func provisioningExtraVarPairs(p v1alpha1.ProvisioningPlaybook, stage, timing string) []string {
+func provisioningExtraVarPairs(p v1alpha1.ProvisioningPlaybook, stage, timing string) ([]string, error) {
 	pairs := []string{
 		"bootwright_playbook_name=" + p.Metadata.Name,
 		"bootwright_playbook_stage=" + stage,
 		"bootwright_playbook_timing=" + timing,
 	}
 	if len(p.Spec.ExtraVars) > 0 {
-		if data, err := json.Marshal(p.Spec.ExtraVars); err == nil {
-			pairs = append(pairs, string(data))
+		data, err := json.Marshal(p.Spec.ExtraVars)
+		if err != nil {
+			return nil, fmt.Errorf("ProvisioningPlaybook/%s spec.extraVars cannot be encoded: %w", p.Metadata.Name, err)
 		}
+		pairs = append(pairs, string(data))
 	}
-	return pairs
+	return pairs, nil
 }
 
 func provisioningProvidesCapabilities(p v1alpha1.ProvisioningPlaybook, timing string) []CapabilityRef {
