@@ -96,7 +96,10 @@ func (e *addonHookExecutor) Run(ctx context.Context, lifecycle string) ([]string
 }
 
 func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAddonHook) ([]string, error) {
-	digest := e.hookDigest(hook)
+	digest, err := e.hookDigest(hook)
+	if err != nil {
+		return nil, err
+	}
 	if v1alpha1.ClusterAddonHookRun(hook) == v1alpha1.ProvisioningPlaybookRunOnChange && e.hookConverged(hook.Name, digest) {
 		return nil, nil
 	}
@@ -125,7 +128,11 @@ func (e *addonHookExecutor) runHook(ctx context.Context, hook v1alpha1.ClusterAd
 	})
 }
 
-func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) string {
+func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) (string, error) {
+	content, err := hooks.ContentDigest(e.plan.Addon.SourcePath, hook)
+	if err != nil {
+		return "", fmt.Errorf("ClusterAddon/%s hook %s: %w; fix or remove the unreadable content so bootwright can prove what would run", e.plan.Name, hook.Name, err)
+	}
 	projection := struct {
 		Content    string                              `json:"content"`
 		Inputs     []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
@@ -135,7 +142,7 @@ func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) string {
 		SecretRefs []v1alpha1.SecretRef                `json:"secretRefs,omitempty"`
 		Outputs    []v1alpha1.ClusterAddonHookOutput   `json:"outputs,omitempty"`
 	}{
-		Content:    hooks.ContentDigest(e.plan.Addon.SourcePath, hook),
+		Content:    content,
 		Inputs:     e.inputs,
 		Target:     hook.Target,
 		Manifests:  hook.Manifests,
@@ -143,9 +150,12 @@ func (e *addonHookExecutor) hookDigest(hook v1alpha1.ClusterAddonHook) string {
 		SecretRefs: hook.SecretRefs,
 		Outputs:    hook.Outputs,
 	}
-	data, _ := json.Marshal(projection)
+	data, err := json.Marshal(projection)
+	if err != nil {
+		return "", fmt.Errorf("encode ClusterAddon/%s hook %s digest input: %w", e.plan.Name, hook.Name, err)
+	}
 	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func (e *addonHookExecutor) hookConverged(name, digest string) bool {

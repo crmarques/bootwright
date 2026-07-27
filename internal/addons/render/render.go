@@ -151,6 +151,10 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
+	hookDigest, err := hookContentDigest(extension)
+	if err != nil {
+		return "", err
+	}
 	payload := struct {
 		APIVersion string                              `json:"apiVersion"`
 		Extension  v1alpha1.ClusterAddon               `json:"extension"`
@@ -169,7 +173,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 			ContinueOnError: policy.ContinueOnError,
 		},
 		Inputs:     inputs,
-		HookDigest: hookContentDigest(extension),
+		HookDigest: hookDigest,
 	}
 	switch extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLM:
@@ -251,18 +255,22 @@ func stringValue(value any) string {
 	return s
 }
 
-func hookContentDigest(extension v1alpha1.ClusterAddon) string {
+func hookContentDigest(extension v1alpha1.ClusterAddon) (string, error) {
 	if len(extension.Spec.Hooks) == 0 {
-		return ""
+		return "", nil
 	}
 	sum := sha256.New()
 	for _, hook := range extension.Spec.Hooks {
+		digest, err := hooks.ContentDigest(extension.SourcePath, hook)
+		if err != nil {
+			return "", fmt.Errorf("ClusterAddon/%s hook %s: %w", extension.Metadata.Name, hook.Name, err)
+		}
 		sum.Write([]byte(hook.Name))
 		sum.Write([]byte{0})
-		sum.Write([]byte(hooks.ContentDigest(extension.SourcePath, hook)))
+		sum.Write([]byte(digest))
 		sum.Write([]byte{0})
 	}
-	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
+	return "sha256:" + hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 func ManifestPath(extension v1alpha1.ClusterAddon, manifest v1alpha1.ClusterAddonManifestRef) string {
