@@ -99,8 +99,8 @@ spec:
 | `ceph.osSubscriptionRef` | No | — | Names a `redhat-rhel` `Entitlement` supplying the RHEL subscription for provided-OS Ceph nodes (managed-OS nodes name it on their `MachineInstallProfile.spec.subscription` instead). Must resolve to a `redhat-rhel` entitlement. Chiefly paired with `distribution: ibm`, whose product entitlement does not itself entitle RHEL. See [Secrets](secrets.md#entitlements). |
 | `ceph.ibm.callHome` | When `ibm` | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. License acceptance enables Call Home by default, so omission is rejected. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
-| `ceph.cephadm.clusterSSH.user` | No | `cephadm` when any node `Machine` sets `access.rootLogin: revoke`; otherwise `root` | The cluster's **post-install** account: the OS user cephadm manages every host as (`--ssh-user`), and the account Bootwright itself connects as once that node revokes root login. A non-root value is provisioned by Bootwright on every topology node; see [Revoking root SSH on Ceph nodes](#revoking-root-ssh-on-ceph-nodes). |
-| `ceph.cephadm.clusterSSH.keyRef` | No (required when a node revokes root) | the first topology node's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Set it to decouple the cluster identity from how Bootwright connects to each node. |
+| `ceph.cephadm.clusterSSH.user` | No | `cephadm` when any node `Machine` sets `access.rootLogin: revoke`; otherwise `root` | The cluster's **post-install** account: the OS user cephadm manages every host as (`--ssh-user`), and the account Bootwright itself connects as once that node revokes root login. A non-root value is provisioned by Bootwright on every topology node, or reconciled in place when it equals that node's `access.ssh.user`. Rejected as `root` when a node's `access.ssh.user` is non-root. See [Revoking root SSH on Ceph nodes](#revoking-root-ssh-on-ceph-nodes). |
+| `ceph.cephadm.clusterSSH.keyRef` | No (required when `clusterSSH.user` is non-root) | the first topology node's `access.ssh` key | Names the `sshKeyPair` secret cephadm uses as its cluster identity — the key Bootwright authorizes on, and cephadm reaches, every host. Must be a different `Secret` from the nodes' `access.ssh.keyRef`, so the key Bootwright drives the machines with never enters the Ceph mon config-key store. |
 | `ceph.cephadm.bootstrap.node` | Yes | — | Topology node that cephadm bootstraps on, named by its node name (FQDN or short label). A machine name is rejected with guidance naming the node. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the node machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.cephadm.bootstrap.singleHostDefaults` | No | `false` | Renders cephadm's `--single-host-defaults` at bootstrap (relaxed defaults for a one-node cluster). Valid only for a **single-host, non-stretch** topology and requires at least two declared OSDs. It owns `osd_pool_default_size`, `osd_pool_default_min_size`, and `osd_crush_chooseleaf_type` at bootstrap, so those keys are rejected in `ceph.config[global]`. Referenced by the [`StoragePool`](#storagepool) cross-field rules. |
@@ -210,9 +210,20 @@ does not permit an arbitrary image repository below the namespace.
 ### Revoking root SSH on Ceph nodes
 
 By default Bootwright reaches Ceph nodes as `root` and cephadm orchestrates
-them as `root`. If your policy forbids standing root SSH, declare a dedicated
-orchestration account on the cluster and revoke root on the nodes. Two fields,
-on two objects:
+them as `root`. If your policy forbids standing root SSH there are two shapes,
+and which one fits depends on whether the nodes are already installed.
+
+**Nodes already installed as `root`** keep `root` as their install-window
+identity and gain a separate orchestration account, which Bootwright provisions
+and then uses to revoke root. That is the rest of this section.
+
+**Nodes not yet installed** can carry the orchestration account from their first
+boot instead, so root SSH is never enabled at all — see
+[Orchestrating as the install-window identity](#orchestrating-as-the-install-window-identity)
+below.
+
+For the retrofit shape, declare a dedicated orchestration account on the cluster
+and revoke root on the nodes. Two fields, on two objects:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -276,12 +287,13 @@ To reverse it, set `rootLogin: keep` and re-apply: the sshd drop-in is removed
 and root is re-authorized. The orchestration account is not deleted by that —
 change `clusterSSH.user` back to `root` as a separate, deliberate step.
 
-!!! warning "Never repoint `access.ssh.user` at the new account"
+!!! warning "Do not repoint `access.ssh.user` on an *installed* node"
     `Machine.spec.access.ssh.user` is the *install-window* identity — the
-    account Bootwright installs and probes the machine as. Changing it makes an
-    installed node read as not-installed and **reinstalls it**. Hardening is
-    expressed by `access.rootLogin` and `clusterSSH.user`, which leave the
-    install-window identity untouched. See
+    account Bootwright installs and probes the machine as. Changing it on a node
+    that is already installed makes the ownership probe fail closed, and the
+    next apply **refuses** that machine until the account exists on it.
+    Retrofitting an installed fleet is expressed by `access.rootLogin` and
+    `clusterSSH.user`, which leave the install-window identity untouched. See
     [Machines → Root login posture](machines.md#root-login-posture).
 
 !!! note "What this buys, precisely"
@@ -295,6 +307,96 @@ change `clusterSSH.user` back to `root` as a separate, deliberate step.
     in [`specs/security.md`](https://github.com/crmarques/bootwright/blob/main/specs/security.md)
     and the rationale in
     [ADR 0019](https://github.com/crmarques/bootwright/blob/main/specs/adr/0019-node-root-posture-and-orchestration-identity.md).
+
+### Orchestrating as the install-window identity
+
+On nodes Bootwright has not installed yet, name the orchestration account in
+`Machine.spec.access.ssh.user` as well. The kickstart then creates it at install
+time — machine access key authorized, passwordless `sudo`, root password locked,
+no `PermitRootLogin yes` — so the node never accepts a root login at any point
+and there is no second account to provision:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+  access:
+    ssh:
+      user: cephadm
+      addressRef: ip
+      keyRef: lab-machine-key
+    rootLogin: revoke
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-oss
+spec:
+  type: ceph
+  ceph:
+    cephadm:
+      clusterSSH:
+        user: cephadm
+        keyRef: ceph-cluster-ssh-key
+```
+
+`clusterSSH.keyRef` is still required and still must be a different `Secret`
+from `access.ssh.keyRef` — more so in this shape, since the machine access key
+now opens the passwordless-sudo account directly and must never reach the Ceph
+mon config-key store.
+
+`rootLogin: revoke` remains worth setting: the posture is already implicit here,
+and `revoke` is what turns it into a declared `PermitRootLogin no` that Bootwright
+verifies and reconciles.
+
+Apply reconciles rather than creates: it finds the account present, writes
+`/etc/sudoers.d/60-bootwright-cephadm`, drops the account's install-time `wheel`
+membership *after* that grant is in place, locks its password, proves
+`sudo -n true`, revokes root, and stamps the marker.
+
+#### Preparing a provided-OS node
+
+A node with `os.provided: true` — a stretch-mode arbiter, say — is not installed
+by Bootwright, so the account has to exist before the first apply. Prepare it
+with your own credentials; Bootwright never needs them, and never stores them.
+Its own key is generated, and only the **public** half leaves the context:
+
+```sh
+bootwright secret generate
+bootwright secret show --name lab-machine-key --part public
+```
+
+Then, on the node, as an operator with `sudo`:
+
+```sh
+sudo useradd --create-home --user-group --shell /bin/bash cephadm
+sudo passwd --lock cephadm
+sudo install -d -m 0700 -o cephadm -g cephadm /home/cephadm/.ssh
+printf '%s\n' '<the public key>' | sudo tee /home/cephadm/.ssh/authorized_keys >/dev/null
+sudo chown cephadm:cephadm /home/cephadm/.ssh/authorized_keys
+sudo chmod 0600 /home/cephadm/.ssh/authorized_keys
+sudo restorecon -R /home/cephadm/.ssh
+printf '%s\n' 'Defaults:cephadm !requiretty' 'cephadm ALL=(ALL) NOPASSWD: ALL' \
+  | sudo tee /etc/sudoers.d/60-bootwright-cephadm.tmp >/dev/null
+sudo chmod 0440 /etc/sudoers.d/60-bootwright-cephadm.tmp
+sudo visudo -cf /etc/sudoers.d/60-bootwright-cephadm.tmp \
+  && sudo mv -f /etc/sudoers.d/60-bootwright-cephadm.tmp /etc/sudoers.d/60-bootwright-cephadm
+```
+
+Finally record the node's host key so the probe pins it:
+
+```sh
+bootwright machine trust ceph-arbiter
+```
+
+Apply then reconciles this node exactly like the installed ones. If the account
+does not answer, the run refuses the node and names it rather than guessing
+another identity.
 
 ### Monitoring
 

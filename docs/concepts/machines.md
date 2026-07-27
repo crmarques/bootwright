@@ -177,22 +177,28 @@ needs no SSH address or key.
 
 `access.ssh.user` is the machine's **install-window identity** — the account
 Bootwright authenticates as to install the OS, probe that the machine is
-already installed, and prove it owns it. Treat it as fixed for the life of the
-machine.
+already installed, and prove it owns it. Choose it before the machine is
+installed and treat it as fixed for the life of the machine.
 
-!!! danger "Changing `access.ssh.user` on an installed machine reinstalls it"
+It does not have to be `root`. On a `os.provided: false` machine the kickstart
+creates whatever account you name here, authorizes the machine access key for
+it, gives it passwordless `sudo`, and leaves the root password locked with no
+`PermitRootLogin yes` — so a machine installed that way never accepts a root
+login. On an `os.provided: true` machine the account is whatever the operator
+prepared.
+
+!!! danger "Changing `access.ssh.user` on an installed machine blocks the next apply"
     The managed-OS readiness probe decides "this node is already installed" by
-    SSH-authenticating as `access.ssh.user`. Point it at a different account and
-    that authentication fails, the node reads as *not installed*, and the two
-    guards that would normally refuse to touch a foreign or drifted host are
-    skipped along with it — because both are conditioned on the node having
-    answered. The next `apply` reinstalls the machine, wiping it. The user also
-    feeds the install-marker hash, so even a node that still answers is seen as
-    drifted.
+    SSH-authenticating as `access.ssh.user`. Point it at an account the
+    installed node does not carry and the probe fails closed: the machine is
+    *refused*, naming the remedy, rather than adopted or reinstalled. The user
+    also feeds the install-marker hash, so even a node that still answers is
+    seen as drifted. Switching an installed fleet to a different account means
+    creating that account on every node first, or reinstalling them.
 
-Hardening the node is therefore a *different* field. `access.rootLogin: revoke`
-turns off root SSH after installation without touching the install-window
-identity:
+Hardening an *installed* node is therefore a *different* field.
+`access.rootLogin: revoke` turns off root SSH after installation without
+touching the install-window identity:
 
 ```yaml
 spec:

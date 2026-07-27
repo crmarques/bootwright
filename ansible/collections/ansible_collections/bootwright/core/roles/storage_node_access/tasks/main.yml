@@ -11,7 +11,7 @@
     - name: Ensure the storage node orchestration account
       ansible.builtin.include_tasks: account.yml
 
-    - name: Ensure the storage node orchestration sudoers grant
+    - name: Ensure the storage node orchestration sudo policy
       ansible.builtin.include_tasks: sudoers.yml
 
     - name: Authorize the machine access key for the storage node orchestration account

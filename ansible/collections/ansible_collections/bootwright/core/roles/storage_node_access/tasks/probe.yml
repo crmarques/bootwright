@@ -21,17 +21,22 @@
   ansible.builtin.fail:
     msg: >-
       Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} at
-      {{ bootwright_node_access.address }} answered neither the Ceph orchestration account
-      {{ bootwright_node_access.user }} (with passwordless sudo) nor the install account
-      {{ bootwright_node_access.installUser }}, using the Machine access key
-      {{ bootwright_node_access.installPrivateKeyPath }}. Bootwright refuses to guess a
-      third identity, so the node is untouched. Restore one of the two: power the node on
-      and confirm sshd is running, then re-authorize that key for
-      {{ bootwright_node_access.installUser }} (or, once root login is already revoked, for
-      {{ bootwright_node_access.user }}) and confirm {{ bootwright_node_access.user }} still
-      holds its NOPASSWD grant in {{ bootwright_node_access.sudoersPath }}. Re-apply after
-      one identity answers; if the node was reinstalled out of band, destroy the storage
-      cluster and re-apply instead.
+      {{ bootwright_node_access.address }} did not answer as
+      {{ bootwright_node_access_identities | join(' or ') }}, using the Machine access key
+      {{ bootwright_node_access.installPrivateKeyPath }}. Bootwright refuses to guess
+      another identity, so the node is untouched. Power the node on and confirm sshd is
+      running, then re-authorize that key for one of those accounts and confirm
+      {{ bootwright_node_access.user }} still holds its NOPASSWD grant in
+      {{ bootwright_node_access.sudoersPath }}.
+      {% if bootwright_node_access.installIdentity | default(false) | bool %}
+      This cluster orchestrates as its install-window identity
+      ({{ bootwright_node_access.user }} is both spec.access.ssh.user and
+      spec.ceph.cephadm.clusterSSH.user), so there is no second account to fall back to: on
+      a Machine with spec.os.provided true that account is prepared out of band, and on a
+      Bootwright-installed Machine the kickstart creates it.
+      {% endif %}
+      Re-apply after one identity answers; if the node was reinstalled out of band, destroy
+      the storage cluster and re-apply instead.
   delegate_to: localhost
   become: false
   when:

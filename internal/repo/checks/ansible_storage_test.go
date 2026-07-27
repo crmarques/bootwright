@@ -52,6 +52,50 @@ func TestStorageNodeAccessDestroyToleratesMissingOrchestrationAccount(t *testing
 	}
 }
 
+func TestStorageNodeAccessGrantsSudoBeforeDroppingWheel(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	const wheelTask = "Remove the storage node orchestration account from wheel"
+
+	account := readAnsibleTasks(t, base+"account.yml")
+	for _, task := range account {
+		if task["name"] == wheelTask {
+			t.Fatal("account.yml must not drop wheel membership: when the orchestration account IS the install-window identity, wheel is the only thing making the connection Bootwright is already using privileged, and the named sudoers grant has not been written yet")
+		}
+	}
+
+	sudoers := readAnsibleTasks(t, base+"sudoers.yml")
+	reconcileIdx := findAnsibleTask(t, sudoers, "Reconcile the storage node orchestration sudoers grant")
+	wheelIdx := findAnsibleTask(t, sudoers, wheelTask)
+	if reconcileIdx >= wheelIdx {
+		t.Fatalf("the named sudoers grant must be installed before wheel is dropped (reconcile=%d wheel=%d)", reconcileIdx, wheelIdx)
+	}
+
+	main := readAnsibleTasks(t, base+"main.yml")
+	block := nestedAnsibleTasks(t, main[0], "block")
+	accountIdx := findAnsibleTask(t, block, "Ensure the storage node orchestration account")
+	sudoIdx := findAnsibleTask(t, block, "Ensure the storage node orchestration sudo policy")
+	verifyIdx := findAnsibleTask(t, block, "Verify the storage node orchestration account")
+	revokeIdx := findAnsibleTask(t, block, "Revoke root SSH on the storage node")
+	if !(accountIdx < sudoIdx && sudoIdx < verifyIdx && verifyIdx < revokeIdx) {
+		t.Fatalf("node access must reconcile the account, then sudo, then verify, then revoke (account=%d sudo=%d verify=%d revoke=%d)", accountIdx, sudoIdx, verifyIdx, revokeIdx)
+	}
+}
+
+func TestStorageNodeAccessAcceptsTheInstallIdentityAsTheAccount(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	context := readRepoFile(t, base+"context.yml")
+	if strings.Contains(context, "bootwright_node_access.user != bootwright_node_access.installUser") {
+		t.Fatal("the node-access context must not assert the two identities differ; a Machine whose access.ssh.user IS the orchestration account is a supported shape (ADR 0019) and would fail this assert at apply time while passing bootwright validate")
+	}
+	if !strings.Contains(context, "bootwright_node_access.installIdentity") {
+		t.Fatalf("%scontext.yml must resolve the identities to probe from installIdentity, so a collapsed identity is not reported as a second account to fall back to", base)
+	}
+	probe := readRepoFile(t, base+"probe.yml")
+	if !strings.Contains(probe, "bootwright_node_access_identities") {
+		t.Fatalf("%sprobe.yml must name the identities it actually tried when refusing", base)
+	}
+}
+
 func TestStorageNodeTeardownConnectionSelectorRepairsCanonicalTrust(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/select_connection.yml"
 	tasks := readAnsibleTasks(t, path)

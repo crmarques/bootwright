@@ -912,19 +912,22 @@ Rules:
   on every topology node — locked password, no `wheel` membership, the machine
   access public key authorized, and a per-user sudoers drop-in at
   `/etc/sudoers.d/60-bootwright-<user>` carrying `Defaults:<user> !requiretty`
-  and `<user> ALL=(ALL) NOPASSWD: ALL`. On a node that revokes root the account
-  name must differ from that node's `access.ssh.user`.
+  and `<user> ALL=(ALL) NOPASSWD: ALL`. The name may equal that node's
+  `access.ssh.user`, which declares that the account is the machine's
+  install-window identity and already exists; Bootwright then reconciles the
+  account instead of creating it. A `root` resolution is rejected when any
+  topology node's `access.ssh.user` is non-root.
 - `cephadm.clusterSSH.keyRef`, when set, names the `sshKeyPair` `Secret` that
   becomes cephadm's own cluster management identity — the key Bootwright
   authorizes on, and cephadm distributes to and uses to reach, every host. It is
   independent of each `Machine`'s `access.ssh.keyRef` and must resolve to a
   declared `sshKeyPair` `Secret`. Omitted, the cluster SSH identity defaults to
   the first topology host's `access.ssh` key, which requires every node to share
-  that one access key. It is **required** when any topology node revokes root:
-  without it `cephadm bootstrap --ssh-private-key` would persist Bootwright's
-  controller-held machine access key into the Ceph mon config-key store, where
-  it would open a passwordless-sudo account (`security.md`, Node Login Identity
-  and Privilege).
+  that one access key. It is **required** whenever `clusterSSH.user` resolves to
+  a non-root name: without it `cephadm bootstrap --ssh-private-key` would
+  persist Bootwright's controller-held machine access key into the Ceph mon
+  config-key store, where it would open a passwordless-sudo account
+  (`security.md`, Node Login Identity and Privilege).
 - `cephadm.bootstrap.node` names a storage topology host by its node name
   (the FQDN or its short label); a machine name is rejected with guidance
   naming the node. The rendered cephadm `--mon-ip` is always an address of

@@ -5,7 +5,7 @@ root SSH (`Machine.spec.access.rootLogin`, `StorageCluster.spec.ceph.cephadm.clu
 ADR 0019). Three things about that path are non-obvious and expensive to
 rediscover.
 
-## 1. Changing `access.ssh.user` silently reinstalls the machine
+## 1. `access.ssh.user` is chosen before install, never changed after
 
 **Root cause:** `Machine.spec.access.ssh.user` is not merely "how we log in". It
 is the identity `machine_os_install_anaconda/tasks/probe_existing.yml` uses to
@@ -26,21 +26,44 @@ bootwright_managed_os_install_required = (not already_ready) or force_rebuild
 ```
 
 So repointing `access.ssh.user` at an account that does not yet exist makes the
-probe fail authentication, `already_ready` false, **both refusals skipped
-because they are conditioned on the node having answered**, and
-`install_required` true. The next apply reinstalls — wipes — an installed node
-with no refusal and no `--converge-drifted`. The field is additionally folded
-into the install-marker desired hash
+probe fail authentication and `already_ready` false. Since the 2026-07-23
+fail-closed hardening that lands on the *unverifiable* refusal (reachable, no
+identity authenticated) rather than a silent reinstall — but before it, both
+mode refusals were skipped (they are conditioned on the node having answered)
+and `install_required` became true, which wiped the node. The field is
+additionally folded into the install-marker desired hash
 (`internal/render/inventory/vars_machine_os_marker.go`), so even a node that
 still answers is classified as drifted.
 
 **Contract:** `access.ssh.user` is the *install-window* identity and is fixed
-for the life of the machine. The post-install account lives on the cluster
-(`cephadm.clusterSSH.user`) and is provisioned *in addition to* the
-install-window identity, never in place of it. Validation rejects a storage node
-whose `access.ssh.user` already equals `clusterSSH.user` while
-`rootLogin: revoke` — that state means the install-window identity was
-redefined. Do not "simplify" the two-altitude split into one field.
+for the life of the machine — but its *name* is a pre-install choice, not
+necessarily `root`:
+
+- **Retrofit shape** (nodes already installed as `root`): `access.ssh.user`
+  stays `root` and `cephadm.clusterSSH.user` names a second account Bootwright
+  provisions *in addition*. This is what `rootLogin: revoke` exists for.
+- **Collapsed shape** (nodes not yet installed): both fields name the same
+  account. `ks.cfg.j2` creates a non-root `ssh_user` with the machine access key
+  authorized, `wheel`, and `%wheel NOPASSWD: ALL`, and emits neither
+  `PermitRootLogin yes` nor an unlocked `rootpw` — so the account exists before
+  the first probe and root SSH is never enabled. `os.provided: true` nodes get
+  the same account prepared out of band.
+
+Validation therefore does **not** reject `access.ssh.user == clusterSSH.user`;
+`v1alpha1.StorageClusterNodeAccountIsInstallIdentity` reports the collapsed
+shape and the renderer passes it to the role as
+`bootwright_node_access.installIdentity`. What it *does* reject is
+`clusterSSH.user` resolving to `root` while a node's `access.ssh.user` is
+non-root — cephadm would orchestrate as an account the node does not carry.
+
+**The ordering that makes the collapsed shape safe:** in that shape Bootwright
+is *already connected as* the orchestration account, and its only privilege is
+the kickstart's `wheel` membership. `storage_node_access` must therefore install
+`/etc/sudoers.d/60-bootwright-<user>` **before** `gpasswd --delete <user> wheel`
+— which is why the wheel-removal tasks live at the end of `sudoers.yml`, not in
+`account.yml` where they read more naturally. Moving them back cuts off sudo
+mid-role and strands the node. The order is harmless in the retrofit shape,
+where `useradd` never put the account in `wheel`.
 
 ## 2. The `User` line in the cephadm ssh_config needs a two-space indent
 
@@ -88,7 +111,8 @@ key-only auth, and a cluster credential revocable without touching root.
 
 ## Related invariants
 
-- `clusterSSH.keyRef` is **required** when any node revokes root: without it the
+- `clusterSSH.keyRef` is **required** whenever `clusterSSH.user` is non-root
+  (not merely when a node revokes root): without it the
   cluster identity falls back to node[0]'s `Machine` access key, and
   `cephadm bootstrap --ssh-private-key` persists that controller-held key into
   the Ceph mon config-key store — where it would open a passwordless-sudo

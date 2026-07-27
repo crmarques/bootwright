@@ -82,6 +82,33 @@ func TestStorageNodeEntryConnectsAsProvisionedAccount(t *testing.T) {
 	}
 }
 
+func TestStorageNodeEntryFlagsADistinctOrchestrationAccount(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginRevoke)
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SecretsDir: "/ctx/secrets"}, locality.Policy{})
+	access := entry["bootwright_node_access"].(map[string]any)
+	if access["installIdentity"] != false {
+		t.Fatalf("installIdentity = %v, want false when the account is provisioned alongside a separate install-window identity", access["installIdentity"])
+	}
+}
+
+func TestStorageNodeEntryFlagsTheInstallIdentityAsTheAccount(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginRevoke)
+	state.Machines[0].Spec.Access.SSH.User = "cephadm"
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SecretsDir: "/ctx/secrets"}, locality.Policy{})
+	access := entry["bootwright_node_access"].(map[string]any)
+	if access["installIdentity"] != true {
+		t.Fatalf("installIdentity = %v, want true so the role reconciles the account instead of reporting a second identity it could fall back to", access["installIdentity"])
+	}
+	if access["installUser"] != "cephadm" {
+		t.Fatalf("installUser = %v, want the install-window identity even when it is the orchestration account", access["installUser"])
+	}
+	if entry["ansible_user"] != "cephadm" {
+		t.Fatalf("ansible_user = %v, want the single account every flow connects as", entry["ansible_user"])
+	}
+}
+
 func TestStorageNodeEntryDoesNotManageExplicitSSHTrust(t *testing.T) {
 	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginRevoke)
 	state.Machines[0].Spec.Access.SSH.KnownHostsRef = v1alpha1.SecretRef{Name: "ceph-known-hosts"}

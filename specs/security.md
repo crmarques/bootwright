@@ -69,11 +69,14 @@ must not be conflated (ADR 0019).
 
 `Machine.spec.access.ssh.user` is the **install-window identity** — the account
 Bootwright authenticates as to install, probe, and take ownership of the
-machine, normally `root`. It is load-bearing beyond connectivity: it feeds the
-managed-OS install-marker hash and it is the identity the pre-install readiness
-probe authenticates as, so a machine that no longer answers as that user reads
-as not-installed and is reinstalled. It must therefore stay the pre-existing
-identity for the life of the machine; hardening never rewrites it.
+machine. It is load-bearing beyond connectivity: it feeds the managed-OS
+install-marker hash and it is the identity the pre-install readiness probe
+authenticates as. It must therefore stay fixed for the life of the machine;
+hardening never rewrites it, and a machine that stops answering as that user
+fails the ownership probe closed rather than being reinstalled. The name itself
+is a choice made before install: `root`, or a non-root account the kickstart
+creates (`spec.os.provided: false`) or the operator prepared
+(`spec.os.provided: true`).
 
 `StorageCluster.spec.ceph.cephadm.clusterSSH.user` is the **post-install
 identity** — the account cephadm orchestrates every host as
@@ -84,8 +87,16 @@ because a flow that does not provision the account first (destroy, a scoped
 apply) must not connect as an account that may not exist yet. It is
 cluster-scoped because cephadm holds exactly one such value per cluster. It
 defaults to `cephadm` when any topology node's `Machine` sets
-`spec.access.rootLogin: revoke`, and to `root` otherwise. On a revoking node
-the two names must differ; validation rejects the collision.
+`spec.access.rootLogin: revoke`, and to `root` otherwise.
+
+The two names may be the same account. They differ on a fleet installed as
+`root`, where Bootwright provisions the orchestration account afterwards. They
+are equal on a fleet whose nodes carry that account from their first boot — the
+kickstart creates it for a `spec.os.provided: false` machine, the operator
+prepares it for a `spec.os.provided: true` one — and such a node never accepts a
+root login at any point. `clusterSSH.user` resolving to `root` while a node's
+`access.ssh.user` is non-root is refused: cephadm would orchestrate as an
+account that node does not carry.
 
 `Machine.spec.access.rootLogin` is the machine's OS posture: `keep` (default)
 or `revoke`. `revoke` writes `/etc/ssh/sshd_config.d/01-bootwright-access.conf`

@@ -81,3 +81,27 @@
           then re-apply.
       delegate_to: localhost
       become: false
+
+- name: Probe the storage node orchestration account group membership
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      id -nG {{ bootwright_node_access.user | quote }}
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_groups_probe
+  changed_when: false
+  failed_when: false
+
+- name: Remove the storage node orchestration account from wheel
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      {{ bootwright_node_access_sudo }} gpasswd --delete
+      {{ bootwright_node_access.user | quote }} wheel
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: "'wheel' in (bootwright_node_access_groups_probe.stdout | default('') | split())"

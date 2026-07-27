@@ -111,7 +111,7 @@ principal, key-only authentication, and a credential that can be revoked
 without touching root. It is **not** privilege separation — the account can
 become root on demand.
 
-### `clusterSSH.keyRef` is required when any node revokes root
+### `clusterSSH.keyRef` is required whenever `clusterSSH.user` is not root
 
 Without it, cephadm's cluster identity falls back to the first topology
 node's `Machine` access key. `cephadm bootstrap --ssh-private-key` then
@@ -131,13 +131,45 @@ before `PermitRootLogin no` is written on any of them, and is re-proved after
 the `sshd` reload. A node whose account does not answer stops the run with
 root still reachable.
 
-### The two identities must differ
+### The two identities may be the same account, but only from the start
 
-On a node that revokes root, `access.ssh.user` and `clusterSSH.user` must not
-be the same name: if they were, the account Bootwright is provisioning would
-be the one it is already connecting with, and the install-window identity
-would have been silently redefined. Validation rejects the collision and says
-to leave `access.ssh.user` as the pre-existing identity.
+The install-window identity is fixed for the life of the machine. It does not
+have to be `root`.
+
+A fleet that has already been installed as `root` keeps the two names distinct:
+`access.ssh.user` stays `root`, `clusterSSH.user` is the account Bootwright
+provisions afterwards. Repointing `access.ssh.user` at the orchestration
+account *on such a fleet* is still the trap described in the Context, and is
+still the reason hardening is expressed with `rootLogin` rather than by
+rewriting the field.
+
+A fleet whose nodes carry the orchestration account from their first boot may
+instead name it in both places. `ks.cfg.j2` already creates a non-root
+`access.ssh.user` with the machine access key authorized, `wheel` membership,
+and a `NOPASSWD` grant, and it never writes `PermitRootLogin yes` or an
+unlocked root password in that shape — so the account exists before the first
+probe, the install-window identity never changes, and the node never accepts a
+root login at all. On a `spec.os.provided: true` machine the same account is
+prepared out of band; Bootwright reconciles rather than creates it.
+
+Bootwright therefore does not reject the collision. What protects the fleet is
+the runtime gate, not a static rule: an installed node that stops answering as
+its `access.ssh.user` fails the ownership probe **closed** — it is refused, not
+reinstalled — so redefining the identity on a live fleet blocks the apply
+instead of wiping it.
+
+The role adapts rather than branching into a second code path. When the two
+names are equal there is no account to create, so `account.yml` finds it
+present; the named sudoers grant is written **before** `wheel` membership is
+dropped, because in that shape `wheel` is the only thing making the connection
+Bootwright is already using privileged. That ordering is safe for the distinct
+shape too, where the freshly created account was never in `wheel`.
+
+### `clusterSSH.user` must match a non-root node account
+
+If any topology node's `access.ssh.user` is non-root while `clusterSSH.user`
+resolves to `root`, cephadm would orchestrate every host as an account the
+node does not carry. Validation refuses and names the account to set.
 
 ### Recorded node access state
 
@@ -150,7 +182,14 @@ reconciliation idempotent.
 
 - Hardening never touches the install-window identity, so it cannot trigger a
   managed-OS reinstall. This is the whole reason the lever is a new field
-  rather than a new value for `access.ssh.user`.
+  rather than a new value for `access.ssh.user`. Naming the orchestration
+  account in `access.ssh.user` is a decision taken *before* a machine is
+  installed, not a hardening step applied to one that already is.
+- A cluster whose nodes are installed with the orchestration account as their
+  install-window identity never enables root SSH at any point, and needs no
+  second account. `rootLogin: revoke` remains meaningful there: it is what
+  turns the implicit posture (root password locked, no authorized key) into a
+  declared `PermitRootLogin no`.
 - The break is authored-schema-only: no shipped example authors either retired
   field, so the rename costs no example edits. Any operator state that authors
   `clusterSSHKeyRef` or `clusterSSHUser` fails to decode with a named field

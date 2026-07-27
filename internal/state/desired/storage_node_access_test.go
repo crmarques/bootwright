@@ -86,6 +86,45 @@ func TestRevokedRootLoginRejectsRootClusterSSHUser(t *testing.T) {
 	}
 }
 
+func setStorageMachineSSHUser(state *v1alpha1.State, user string) {
+	for i := range state.Machines {
+		if state.Machines[i].Spec.Access.SSH != nil {
+			state.Machines[i].Spec.Access.SSH.User = user
+		}
+	}
+}
+
+func TestClusterSSHUserMayBeTheInstallWindowIdentity(t *testing.T) {
+	state := storageValidationState()
+	setStorageMachineSSHUser(&state, "cephadm")
+	revokeRootOnStorageMachines(&state)
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.KeyRef = v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"}
+	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
+	state.Secrets = append(state.Secrets, clusterSSHSecret("ceph-cluster-key", v1alpha1.SecretTypeSSHKeyPair))
+	Normalize(&state)
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("a node installed with the orchestration account as its install-window identity must validate; the kickstart creates that account before the first probe, got: %v", errs)
+	}
+}
+
+func TestRootClusterSSHUserRejectedWhenNodesInstallNonRoot(t *testing.T) {
+	state := storageValidationState()
+	setStorageMachineSSHUser(&state, "cephadm")
+	errs := validateStorage(state)
+	if !containsSubstring(errs, "an account that machine does not install") {
+		t.Fatalf("expected rejection of a root orchestration user over non-root node accounts, got: %v", errs)
+	}
+}
+
+func TestNonRootClusterSSHUserRequiresClusterKeyWithoutRevoke(t *testing.T) {
+	state := storageValidationState()
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User = v1alpha1.StorageCephadmDefaultSSHUser
+	errs := validateStorage(state)
+	if !containsSubstring(errs, "clusterSSH.keyRef is required") {
+		t.Fatalf("a non-root orchestration account needs its own key whether or not root is revoked; cephadm bootstrap would otherwise persist the machine access key into the mon store, got: %v", errs)
+	}
+}
+
 func TestClusterSSHUserMustBeAPOSIXName(t *testing.T) {
 	state := storageValidationState()
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User = "Ceph Admin"

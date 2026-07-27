@@ -35,6 +35,10 @@ func StorageClusterManagesNodeAccount(cluster StorageCluster) bool {
 	return StorageClusterCephadmSSHUser(cluster) != RootSSHUser
 }
 
+func StorageClusterNodeAccountIsInstallIdentity(cluster StorageCluster, machine Machine) bool {
+	return StorageClusterManagesNodeAccount(cluster) && StorageClusterCephadmSSHUser(cluster) == MachineSSHUser(machine)
+}
+
 func StorageClusterRevokesRootLogin(cluster StorageCluster, state State) bool {
 	if cluster.Spec.Ceph == nil {
 		return false

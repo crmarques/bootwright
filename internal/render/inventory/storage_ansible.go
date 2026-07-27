@@ -116,6 +116,7 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	out := map[string]any{
 		"user":              user,
 		"installUser":       v1alpha1.MachineSSHUser(machine),
+		"installIdentity":   v1alpha1.StorageClusterNodeAccountIsInstallIdentity(cluster, machine),
 		"rootLogin":         machine.Spec.Access.RootLogin,
 		"sudoersPath":       v1alpha1.NodeAccessSudoersPath(user),
 		"sshdDropInPath":    v1alpha1.NodeAccessSSHDDropIn,
