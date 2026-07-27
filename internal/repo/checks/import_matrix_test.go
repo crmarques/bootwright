@@ -31,7 +31,7 @@ var allowedImports = map[string][]string{
 	},
 	"internal/cli/output": {},
 
-	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
+	"internal/state/desired":  {"api/v1alpha1", "internal/addons/hooks", "internal/host/gitcontent", "internal/addons/inputs", "internal/addons/nativecatalog", "internal/entitlements", "internal/infra/artifacts", "internal/infra/media", "internal/nmstate", "internal/roles", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
 	"internal/state/graph":    {"api/v1alpha1", "internal/addons/inputs", "internal/infra/artifacts", "internal/roles", "internal/state/view"},
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},
@@ -53,6 +53,7 @@ var allowedImports = map[string][]string{
 	"internal/nmstate":      {},
 
 	"internal/host/become":      {"internal/host/safefs"},
+	"internal/host/gitcontent":  {"internal/host/shellquote"},
 	"internal/host/callerio":    {"internal/host/localroot"},
 	"internal/host/execution":   {},
 	"internal/host/localroot":   {"internal/host/execution"},
@@ -66,7 +67,7 @@ var allowedImports = map[string][]string{
 	"internal/render/installer": {"api/v1alpha1", "internal/infra/artifacts", "internal/infra/proxy", "internal/nmstate", "internal/secrets", "internal/state/view"},
 	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
 
-	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/storage/cephstate", "internal/workspace"},
+	"internal/converge":                   {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/converge/ansible", "internal/converge/bundle", "internal/converge/workflow", "internal/host/gitcontent", "internal/secrets", "internal/infra/locality", "internal/ownership", "internal/render", "internal/roles", "internal/state/desired", "internal/state/view", "internal/storage/cephstate", "internal/workspace"},
 	"internal/converge/ansible":           {"internal/host/callerio", "internal/host/localroot", "internal/host/ptyexec"},
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
 	"internal/converge/bastion":           {"api/v1alpha1", "internal/host/execution", "internal/render", "internal/roles"},

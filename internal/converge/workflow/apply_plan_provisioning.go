@@ -100,8 +100,11 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 			continue
 		}
 		id := "playbook." + p.Metadata.Name
-		contentRoot := playbookContentRoot(p)
-		hashVars, err := provisioningDesiredHashVars(p)
+		contentRoot, resolved := playbookContentRoot(p, target.GitSourceRoots)
+		if !resolved {
+			continue
+		}
+		hashVars, err := provisioningDesiredHashVars(p, contentRoot)
 		if err != nil {
 			return fmt.Errorf("Playbook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
 		}
@@ -375,12 +378,20 @@ func provisioningPlaybookCluster(p v1alpha1.Playbook, orderClusters []string) st
 	return ""
 }
 
-func playbookContentRoot(p v1alpha1.Playbook) string {
-	if v1alpha1.PlaybookSourceIsSet(p.Spec.Source) {
-		return p.Spec.Source.Path
+func playbookContentRoot(p v1alpha1.Playbook, gitRoots map[string]string) (string, bool) {
+	if v1alpha1.PlaybookSourceIsGit(p.Spec.Source) {
+		root, ok := gitRoots[GitSourceRootKeyForPlaybook(p.Metadata.Name)]
+		return root, ok
 	}
-	return filepath.Dir(p.SourcePath)
+	if v1alpha1.PlaybookSourceIsSet(p.Spec.Source) {
+		return p.Spec.Source.Path, true
+	}
+	return filepath.Dir(p.SourcePath), true
 }
+
+func GitSourceRootKeyForPlaybook(name string) string { return "playbook/" + name }
+
+func GitSourceRootKeyForStep(addon, step string) string { return "step/" + addon + "/" + step }
 
 func provisioningPlaybookPath(p v1alpha1.Playbook, root string) string {
 	return filepath.Join(root, p.Spec.Playbook)
@@ -445,12 +456,12 @@ type provisioningPlaybookHashVars struct {
 	ContentDigest   string                  `json:"contentDigest,omitempty"`
 }
 
-func provisioningDesiredHashVars(p v1alpha1.Playbook) (provisioningPlaybookHashVars, error) {
+func provisioningDesiredHashVars(p v1alpha1.Playbook, contentRoot string) (provisioningPlaybookHashVars, error) {
 	secretNames := make([]string, 0, len(p.Spec.SecretRefs))
 	for _, ref := range p.Spec.SecretRefs {
 		secretNames = append(secretNames, ref.Name)
 	}
-	digest, err := provisioningContentDigest(p)
+	digest, err := provisioningContentDigest(p, contentRoot)
 	if err != nil {
 		return provisioningPlaybookHashVars{}, err
 	}
@@ -473,8 +484,8 @@ func provisioningDesiredHashVars(p v1alpha1.Playbook) (provisioningPlaybookHashV
 	}, nil
 }
 
-func provisioningContentDigest(p v1alpha1.Playbook) (string, error) {
-	base := playbookContentRoot(p)
+func provisioningContentDigest(p v1alpha1.Playbook, contentRoot string) (string, error) {
+	base := contentRoot
 	h := sha256.New()
 	digestPath := func(rel string) error {
 		if strings.TrimSpace(rel) == "" {

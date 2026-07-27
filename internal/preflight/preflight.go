@@ -129,6 +129,9 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contex
 			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright bastion setup", deps),
 		)
 	}
+	if statePlaybooksNeedGit(state) {
+		checks = append(checks, binaryCheck(checkGroupControllerTools, "git", nil, "install git on PATH, or replace spec.source.git with spec.source.path", deps))
+	}
 	if phaseInScope("machines", selected, hasState) && stateNeedsKubeVirt(state, secretScope) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
@@ -185,6 +188,15 @@ func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
 			if hook.Playbook != "" {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func statePlaybooksNeedGit(state v1alpha1.State) bool {
+	for _, playbook := range state.Playbooks {
+		if v1alpha1.PlaybookIsEnabled(playbook) && v1alpha1.PlaybookSourceIsGit(playbook.Spec.Source) {
+			return true
 		}
 	}
 	return false

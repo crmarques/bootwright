@@ -80,6 +80,11 @@ rather than run fleet-wide (an empty `--limit` would target every host).
 ### Deliberately not done
 
 - Galaxy `requirements.yml` network install.
+
+Superseded in part by [ADR 0021](0021-external-playbook-content.md): vendored
+trees are no longer the only supported delivery — `spec.source` may name an
+external directory or a pinned git repository. The deferral of Galaxy
+`requirements.yml` installs in the apply path stands.
 - A `ClusterAddonProfile`/`Binding`-style reuse trio (a playbook is self-contained
   with its own target and inputs).
 - A `--playbook <name>` single-object CLI filter or an imperative `run-playbook`

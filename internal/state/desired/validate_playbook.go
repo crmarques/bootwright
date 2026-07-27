@@ -25,6 +25,7 @@ func validatePlaybooks(state v1alpha1.State) []string {
 	machines := indexMachines(state.Machines)
 	containers := indexContainerClusters(state.ContainerClusters)
 	storage := indexStorageClusters(state.StorageClusters)
+	secrets := indexSecrets(state.Secrets)
 
 	for _, p := range state.Playbooks {
 		prefix := fmt.Sprintf("Playbook/%s spec", p.Metadata.Name)
@@ -39,7 +40,7 @@ func validatePlaybooks(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s.onFailure %q must be %q or %q", prefix, p.Spec.OnFailure, v1alpha1.PlaybookFailureFail, v1alpha1.PlaybookFailureContinue))
 		}
 
-		errs = append(errs, validatePlaybookSource(prefix, p.Spec.Source)...)
+		errs = append(errs, validatePlaybookSource(prefix, p.Spec.Source, secrets)...)
 		if v1alpha1.PlaybookSourceIsSet(p.Spec.Source) {
 			errs = append(errs, validateSourcedContent(prefix, p.Spec.Source, p.Spec.Playbook, p.Spec.RolesPath, p.Spec.CollectionsPath)...)
 		} else {

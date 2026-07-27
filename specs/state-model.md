@@ -1493,6 +1493,19 @@ Rules:
   tasks hard-depend on it, so the phase does not start until the playbook
   succeeds. `gates` may not be combined with `onFailure: continue`: a gate that
   lets the phase proceed on failure is not a gate.
+- `spec.source.git` optionally fetches the Ansible content from a git repository:
+  `url` (an `https`, `ssh`, or `file://` URL, or an absolute local repository
+  path), `ref` (commit, tag, or branch), optional `subdir`, and optional
+  `secretRef`. Exactly one of `source.path` and `source.git` may be set. The
+  fetch happens once per resolved commit under the run directory, only on the
+  `apply` path — `plan`, `diff`, and `destroy` omit git-sourced playbooks rather
+  than reaching the network. `secretRef` must name a `Secret` whose type matches
+  the transport (`sshKeyPair` for `ssh`; `token` or `usernamePassword` for
+  `https`); a local repository takes no secret. Authentication is explicit and is
+  never inherited from the operator's ssh-agent or git configuration. A branch
+  `ref` is allowed, and because `run: onChange` digests the fetched content, the
+  playbook re-runs whenever that branch advances. `source.git` is rejected on
+  `ClusterAddon.spec.steps[]`, whose content ships with its add-on package.
 - `spec.source.path` optionally names an **absolute directory outside the input
   tree** holding the Ansible content. When set, `playbook`, `rolesPath`, and
   `collectionsPath` resolve against that directory instead of the object's own,

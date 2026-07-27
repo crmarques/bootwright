@@ -21,6 +21,10 @@ func indexMachines(items []v1alpha1.Machine) map[string]v1alpha1.Machine {
 	return indexByName(items, func(m v1alpha1.Machine) string { return m.Metadata.Name })
 }
 
+func indexSecrets(items []v1alpha1.Secret) map[string]v1alpha1.Secret {
+	return indexByName(items, func(s v1alpha1.Secret) string { return s.Metadata.Name })
+}
+
 func indexMachineImages(items []v1alpha1.MachineImage) map[string]v1alpha1.MachineImage {
 	return indexByName(items, func(i v1alpha1.MachineImage) string { return i.Metadata.Name })
 }

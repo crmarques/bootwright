@@ -93,6 +93,59 @@ directory, and the `playbooks/` layout rule below does not apply — the loader
 never walks an external directory, so there is nothing for it to mis-parse.
 Paths must still stay inside the source directory.
 
+### From a git repository
+
+`spec.source.git` fetches the content instead. `url` accepts `https`, `ssh`, a
+`file://` URL, or an absolute path to a local repository; `ref` is a commit, tag,
+or branch; `subdir` optionally selects a directory inside the repository.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Playbook
+metadata:
+  name: os-hardening
+spec:
+  follows: machines
+  source:
+    git:
+      url: ssh://git@git.corp.example/infra/os-hardening.git
+      ref: v1.4.0
+      subdir: bootwright
+      secretRef: git-deploy-key
+  playbook: playbooks/site.yml
+  rolesPath: roles
+  target:
+    hostGroups: [bootwright_infra_hosts]
+```
+
+The fetch runs once per resolved commit, into the run directory, with
+`core.hooksPath=/dev/null`, `protocol.ext.allow=never`, and
+`--no-recurse-submodules`, so a fetched repository cannot execute code during
+the fetch. Only `apply` fetches — `plan`, `diff`, and `destroy` never open a
+socket, and simply omit git-sourced playbooks from their view.
+
+**Authentication** is explicit, never inherited from the operator's ssh-agent or
+`~/.gitconfig`. `secretRef` names a `Secret` whose type must match the
+transport: `sshKeyPair` for an `ssh` url, `token` or `usernamePassword` for an
+`https` url. Credentials reach `git` through a temporary `GIT_ASKPASS` helper or
+`GIT_SSH_COMMAND`, never on the command line. A local repository needs no
+secret.
+
+!!! tip "Air-gapped sites"
+    A local repository — `url: /srv/git/os-hardening.git` — resolves and checks
+    out entirely offline while still pinning a tag or commit. Mirror upstream to
+    the controller and `apply` never needs the network.
+
+!!! warning "A branch ref moves"
+    `ref: main` is allowed, but `run: onChange` digests the *fetched content*, so
+    the playbook re-runs whenever the branch advances — with nothing changing in
+    your input files. Pin a tag or commit when you want re-runs to be driven by
+    your own edits.
+
+A git source is not available on `ClusterAddon.spec.steps[]`: a step's content
+ships with its add-on package. Use `source.path` there, or move the work to a
+`Playbook`.
+
 !!! warning "External content is not snapshotted"
     `context init`/`update` copies the input tree, not `spec.source.path`. The
     directory must exist and be readable on the controller at apply time, and

@@ -105,6 +105,7 @@ type ApplyTarget struct {
 	ClusterKind         string
 	MachineProvision    map[string]bool
 	FabricHosts         map[string]bool
+	GitSourceRoots      map[string]string
 }
 
 func (t ApplyTarget) MachineScoped() bool { return len(t.MachineProvision) > 0 }

@@ -196,7 +196,11 @@ func OverrideStorageDeviceGateApplies(selectionActive bool, selectedStorage map[
 	return false
 }
 
-func PlanScopedApply(runScope Scope, plan *WorkflowPlan, fullState v1alpha1.State, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, machineProvision, fabricHosts map[string]bool, limits workflow.ConcurrencyLimits, runsDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
+func PlanScopedApply(cmdCtx context.Context, runScope Scope, plan *WorkflowPlan, fullState v1alpha1.State, mode workflow.ApplyMode, selectedStorageNames []string, clusterSelectionActive bool, machineProvision, fabricHosts map[string]bool, limits workflow.ConcurrencyLimits, runsDir, contextName, secretsDir string) (workflow.ApplyTarget, []workflow.ApplyTask, workflow.ConcurrencyLimits, []workflow.ApplyTask, error) {
+	gitSourceRoots, err := ResolveGitSources(cmdCtx, plan.State, contextName, secretsDir, GitSourceCacheDir(runsDir))
+	if err != nil {
+		return workflow.ApplyTarget{}, nil, workflow.ConcurrencyLimits{}, nil, err
+	}
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_apply_mode="+string(mode))
 	applyTarget := runScope.ApplyTarget()
 	if clusterSelectionActive {
@@ -204,6 +208,7 @@ func PlanScopedApply(runScope Scope, plan *WorkflowPlan, fullState v1alpha1.Stat
 	}
 	applyTarget.MachineProvision = machineProvision
 	applyTarget.FabricHosts = fabricHosts
+	applyTarget.GitSourceRoots = gitSourceRoots
 	tasks, err := workflow.PlanApplyTasksCheckedWithHashState(applyTarget, plan.State, fullState)
 	if err != nil {
 		return workflow.ApplyTarget{}, nil, workflow.ConcurrencyLimits{}, nil, err
